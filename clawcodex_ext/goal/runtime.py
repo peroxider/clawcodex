@@ -1,0 +1,439 @@
+"""Goal runtime lifecycle hooks and idle continuation."""
+
+from __future__ import annotations
+
+import threading
+import uuid
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Any, Iterator
+
+from clawcodex_ext.types.messages import UserMessage
+
+from .accounting import BudgetLimitedGoalDisposition, GoalAccountingState
+from .gate import goal_enabled
+from .model import ThreadGoal, ThreadGoalStatus
+from .observability import (
+    GoalObserver,
+    record_continuation_skipped,
+)
+from .service import GoalService, GoalServiceError
+from .steering import (
+    BUDGET_LIMIT_STEERING_MARKER,
+    CONTINUATION_STEERING_MARKER,
+    OBJECTIVE_UPDATED_STEERING_MARKER,
+    budget_limit_steering_message,
+    continuation_steering_message,
+    objective_updated_steering_message,
+)
+from .tools import UPDATE_GOAL_TOOL_NAME
+
+
+@dataclass(frozen=True)
+class AccountedGoalProgress:
+    goal: ThreadGoal
+    goal_id: str
+
+
+@dataclass(frozen=True)
+class GoalContinuationRequest:
+    expected_goal_id: str
+    messages: list[UserMessage]
+
+
+class GoalRuntime:
+    """Per-thread goal runtime state and lifecycle hooks."""
+
+    def __init__(
+        self,
+        *,
+        thread_id: str,
+        service: GoalService,
+        tools_available_for_thread: bool = True,
+        is_enabled: Any = goal_enabled,
+        accounting_state: GoalAccountingState | None = None,
+        observer: GoalObserver | None = None,
+    ) -> None:
+        self.thread_id = thread_id
+        self.service = service
+        self.tools_available_for_thread = tools_available_for_thread
+        self._is_enabled = is_enabled
+        self.accounting_state = accounting_state or GoalAccountingState()
+        self._goal_state_lock = threading.RLock()
+        self._plan_mode = False
+        self._pending_steering_messages: list[UserMessage] = []
+        self.observer = observer if observer is not None else getattr(service, "observer", None)
+
+    def is_enabled(self) -> bool:
+        return bool(self._is_enabled())
+
+    def tools_visible(self) -> bool:
+        return self.is_enabled() and self.tools_available_for_thread
+
+    @contextmanager
+    def goal_state_permit(self) -> Iterator[None]:
+        self._goal_state_lock.acquire()
+        try:
+            yield
+        finally:
+            self._goal_state_lock.release()
+
+    def set_plan_mode(self, plan_mode: bool) -> None:
+        self._plan_mode = bool(plan_mode)
+
+    def next_turn_id(self) -> str:
+        return f"{self.thread_id}:turn:{uuid.uuid4().hex}"
+
+    def restore_after_resume(self) -> None:
+        if not self.is_enabled():
+            return
+        goal = self.service.get_goal(self.thread_id)
+        if goal is not None and goal.status is ThreadGoalStatus.ACTIVE:
+            self.accounting_state.mark_idle_goal_active(goal.goal_id)
+        else:
+            self.accounting_state.clear_active_goal()
+
+    def prepare_external_goal_mutation(self) -> None:
+        if not self.is_enabled():
+            return
+        turn_id = self.accounting_state.current_turn_id()
+        if turn_id is not None:
+            self.account_active_goal_progress(
+                turn_id,
+                BudgetLimitedGoalDisposition.CLEAR_ACTIVE,
+            )
+            return
+        self.account_idle_goal_progress(BudgetLimitedGoalDisposition.CLEAR_ACTIVE)
+
+    def apply_external_goal_set(
+        self,
+        goal: ThreadGoal,
+        previous_goal: ThreadGoal | None,
+    ) -> None:
+        if not self.is_enabled():
+            return
+        current_turn_id = self.accounting_state.current_turn_id()
+        if (
+            current_turn_id is not None
+            and previous_goal is not None
+            and previous_goal.objective != goal.objective
+            and goal.status is ThreadGoalStatus.ACTIVE
+        ):
+            self._pending_steering_messages.append(objective_updated_steering_message(goal))
+        if goal.status is ThreadGoalStatus.ACTIVE:
+            if current_turn_id is not None:
+                self.accounting_state.mark_current_turn_goal_active(goal.goal_id)
+            else:
+                self.accounting_state.mark_idle_goal_active(goal.goal_id)
+            return
+        if goal.status is ThreadGoalStatus.BUDGET_LIMITED:
+            if self.accounting_state.current_turn_id() is None:
+                self.accounting_state.clear_active_goal()
+            return
+        self.accounting_state.clear_active_goal()
+
+    def apply_external_goal_clear(self, goal: ThreadGoal) -> None:
+        del goal
+        if self.is_enabled():
+            self.accounting_state.clear_active_goal()
+
+    def on_turn_start(self, turn_id: str | None = None, *, plan_mode: bool = False) -> str:
+        turn_id = turn_id or self.next_turn_id()
+        self.set_plan_mode(plan_mode)
+        if not self.is_enabled():
+            return turn_id
+        self.accounting_state.start_turn(turn_id, plan_mode=plan_mode)
+        if plan_mode:
+            self.accounting_state.clear_current_turn_goal()
+            return turn_id
+        goal = self.service.get_goal(self.thread_id)
+        if goal is not None and goal.status in {
+            ThreadGoalStatus.ACTIVE,
+            ThreadGoalStatus.BUDGET_LIMITED,
+        }:
+            self.accounting_state.mark_turn_goal_active(turn_id, goal.goal_id)
+        return turn_id
+
+    def on_token_usage(self, turn_id: str, usage: dict[str, Any] | None) -> None:
+        if self.is_enabled():
+            self.accounting_state.record_token_usage(turn_id, usage or {})
+
+    def on_tool_finish(
+        self,
+        turn_id: str,
+        *,
+        tool_name: str,
+        call_id: str,
+        handler_executed: bool,
+    ) -> list[UserMessage]:
+        del call_id
+        if (
+            not self.is_enabled()
+            or not handler_executed
+            or tool_name == UPDATE_GOAL_TOOL_NAME
+        ):
+            return []
+        progress = self.account_active_goal_progress(
+            turn_id,
+            BudgetLimitedGoalDisposition.KEEP_ACTIVE,
+        )
+        if progress is None or progress.goal.status is not ThreadGoalStatus.BUDGET_LIMITED:
+            return []
+        if not self.accounting_state.mark_budget_limit_reported_if_new(progress.goal_id):
+            return []
+        return [budget_limit_steering_message(progress.goal)]
+
+    def on_turn_stop(self, turn_id: str) -> None:
+        if not self.is_enabled():
+            return
+        self.account_active_goal_progress(
+            turn_id,
+            BudgetLimitedGoalDisposition.CLEAR_ACTIVE,
+        )
+        self._pending_steering_messages.clear()
+        self.accounting_state.finish_turn(turn_id)
+
+    def on_turn_abort(self, turn_id: str) -> None:
+        if not self.is_enabled():
+            return
+        with self.goal_state_permit():
+            self.account_active_goal_progress(
+                turn_id,
+                BudgetLimitedGoalDisposition.CLEAR_ACTIVE,
+            )
+            goal = self.service.get_goal(self.thread_id)
+            if goal is not None and goal.status is ThreadGoalStatus.ACTIVE:
+                self.service.update_goal_from_runtime(
+                    self.thread_id,
+                    ThreadGoalStatus.PAUSED,
+                    expected_goal_id=goal.goal_id,
+                )
+            self._pending_steering_messages.clear()
+            self.accounting_state.finish_turn(turn_id)
+
+    def on_turn_error(self, turn_id: str, error: BaseException) -> None:
+        if not self.is_enabled():
+            return
+        with self.goal_state_permit():
+            if not self.accounting_state.turn_is_current_active_goal(turn_id):
+                self._pending_steering_messages.clear()
+                self.accounting_state.finish_turn(turn_id)
+                return
+            self.account_active_goal_progress(
+                turn_id,
+                BudgetLimitedGoalDisposition.CLEAR_ACTIVE,
+            )
+            goal = self.service.get_goal(self.thread_id)
+            if goal is None:
+                self.accounting_state.clear_active_goal()
+                self.accounting_state.finish_turn(turn_id)
+                return
+            status = (
+                ThreadGoalStatus.USAGE_LIMITED
+                if _is_usage_limit_error(error)
+                else ThreadGoalStatus.BLOCKED
+            )
+            if goal.status is ThreadGoalStatus.ACTIVE or (
+                goal.status is ThreadGoalStatus.BUDGET_LIMITED
+                and status is ThreadGoalStatus.USAGE_LIMITED
+            ):
+                self.service.update_goal_from_runtime(
+                    self.thread_id,
+                    status,
+                    expected_goal_id=goal.goal_id,
+                )
+            self.accounting_state.clear_active_goal()
+            self._pending_steering_messages.clear()
+            self.accounting_state.finish_turn(turn_id)
+
+    def account_active_goal_progress(
+        self,
+        turn_id: str,
+        budget_limited_goal_disposition: BudgetLimitedGoalDisposition,
+    ) -> AccountedGoalProgress | None:
+        with self.accounting_state.progress_accounting_permit():
+            snapshot = self.accounting_state.progress_snapshot(turn_id)
+            if snapshot is None:
+                return None
+            goal = self.service.account_usage(
+                self.thread_id,
+                expected_goal_id=snapshot.expected_goal_id,
+                token_delta=snapshot.token_delta,
+                elapsed_seconds=snapshot.time_delta_seconds,
+            )
+            if goal is None:
+                self.accounting_state.clear_active_goal()
+                return None
+            self.accounting_state.mark_progress_accounted_for_status(
+                turn_id,
+                snapshot,
+                goal.status,
+                budget_limited_goal_disposition,
+            )
+            return AccountedGoalProgress(goal=goal, goal_id=goal.goal_id)
+
+    def account_idle_goal_progress(
+        self,
+        budget_limited_goal_disposition: BudgetLimitedGoalDisposition,
+    ) -> AccountedGoalProgress | None:
+        with self.accounting_state.progress_accounting_permit():
+            snapshot = self.accounting_state.idle_progress_snapshot()
+            if snapshot is None:
+                return None
+            goal = self.service.account_usage(
+                self.thread_id,
+                expected_goal_id=snapshot.expected_goal_id,
+                token_delta=0,
+                elapsed_seconds=snapshot.time_delta_seconds,
+            )
+            if goal is None:
+                self.accounting_state.reset_idle_progress_baseline_and_clear_active_goal()
+                return None
+            self.accounting_state.mark_idle_progress_accounted_for_status(
+                snapshot,
+                goal.status,
+                budget_limited_goal_disposition,
+            )
+            return AccountedGoalProgress(goal=goal, goal_id=goal.goal_id)
+
+    def continue_if_idle(self) -> GoalContinuationRequest | None:
+        if not self.tools_visible():
+            reason = "feature_disabled" if not self.is_enabled() else "no_live_session"
+            record_continuation_skipped(
+                self.observer,
+                thread_id=self.thread_id,
+                reason=reason,
+            )
+            self.accounting_state.clear_active_goal()
+            return None
+        with self.goal_state_permit():
+            if self._plan_mode or self.accounting_state.current_turn_id() is not None:
+                record_continuation_skipped(
+                    self.observer,
+                    thread_id=self.thread_id,
+                    reason="plan_mode" if self._plan_mode else "not_idle",
+                )
+                return None
+            goal = self.service.get_goal(self.thread_id)
+            if goal is None:
+                record_continuation_skipped(
+                    self.observer,
+                    thread_id=self.thread_id,
+                    reason="no_active_goal",
+                )
+                self.accounting_state.clear_active_goal()
+                return None
+            if goal.status is not ThreadGoalStatus.ACTIVE:
+                record_continuation_skipped(
+                    self.observer,
+                    thread_id=self.thread_id,
+                    reason="paused" if goal.status is ThreadGoalStatus.PAUSED else goal.status.value,
+                    goal=goal,
+                )
+                self.accounting_state.clear_active_goal()
+                return None
+            self.accounting_state.mark_idle_goal_active(goal.goal_id)
+            return GoalContinuationRequest(
+                expected_goal_id=goal.goal_id,
+                messages=[continuation_steering_message(goal)],
+            )
+
+    def claim_continuation(self, request: GoalContinuationRequest) -> bool:
+        with self.goal_state_permit():
+            if self._plan_mode or self.accounting_state.current_turn_id() is not None:
+                return False
+            goal = self.service.get_goal(self.thread_id)
+            return (
+                goal is not None
+                and goal.status is ThreadGoalStatus.ACTIVE
+                and goal.goal_id == request.expected_goal_id
+            )
+
+    def consume_pending_steering_messages(self) -> list[UserMessage]:
+        with self.goal_state_permit():
+            messages = list(self._pending_steering_messages)
+            self._pending_steering_messages.clear()
+            return messages
+
+
+def goal_runtime_for_context(context: Any) -> GoalRuntime | None:
+    if not goal_enabled() or context is None:
+        return None
+    thread_id = _persistent_thread_id(context)
+    if thread_id is None:
+        return None
+    runtime = getattr(context, "goal_runtime", None)
+    if isinstance(runtime, GoalRuntime) and runtime.thread_id == thread_id:
+        runtime.set_plan_mode(bool(getattr(context, "plan_mode", False)))
+        return runtime
+    service = getattr(context, "goal_service", None)
+    if service is None:
+        service = GoalService()
+        try:
+            context.goal_service = service
+        except Exception:
+            pass
+    runtime = GoalRuntime(
+        thread_id=thread_id,
+        service=service,
+        tools_available_for_thread=not _is_review_subagent_context(context),
+    )
+    runtime.set_plan_mode(bool(getattr(context, "plan_mode", False)))
+    service.register_runtime(runtime)
+    try:
+        context.goal_runtime = runtime
+    except Exception:
+        pass
+    return runtime
+
+
+def _persistent_thread_id(context: Any) -> str | None:
+    explicit = _non_empty_str(getattr(context, "goal_thread_id", None))
+    if explicit is not None:
+        return explicit
+    return _non_empty_str(getattr(context, "session_id", None))
+
+
+def _is_review_subagent_context(context: Any) -> bool:
+    agent_type = (_non_empty_str(getattr(context, "agent_type", None)) or "").lower()
+    if agent_type in {"review", "code-reviewer"}:
+        return True
+    options = getattr(context, "options", None)
+    query_source = (_non_empty_str(getattr(options, "query_source", None)) or "").lower()
+    return query_source in {
+        "agent:builtin:review",
+        "agent:template:review",
+        "agent:builtin:code-reviewer",
+    }
+
+
+def _is_usage_limit_error(error: BaseException) -> bool:
+    text = str(error).lower()
+    return any(
+        needle in text
+        for needle in (
+            "usage limit",
+            "rate limit",
+            "quota",
+            "insufficient_quota",
+            "billing hard limit",
+        )
+    )
+
+
+def _non_empty_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+__all__ = [
+    "BUDGET_LIMIT_STEERING_MARKER",
+    "CONTINUATION_STEERING_MARKER",
+    "OBJECTIVE_UPDATED_STEERING_MARKER",
+    "AccountedGoalProgress",
+    "GoalContinuationRequest",
+    "GoalRuntime",
+    "goal_runtime_for_context",
+]

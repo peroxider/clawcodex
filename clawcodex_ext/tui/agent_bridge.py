@@ -497,28 +497,6 @@ class AgentBridge:
                 self._state.usage["advisor_output_tokens"] = adv_out
         except Exception:
             pass
-        # F-9 / `/goal`: refresh the goal pill on the AppState so the
-        # ``StatusLine`` reactively redraws. Built lazily per-call so
-        # the controller doesn't have to be threaded through the
-        # bridge constructor; the goal registry is a process-level
-        # singleton so the lookup is O(1) regardless of how many
-        # transient controllers exist.
-        try:
-            from clawcodex_ext.goal.controller import GoalController
-            from clawcodex_ext.goal.registry import get_goal_registry
-
-            _sid = getattr(self._tool_context, "session_id", None)
-            if _sid:
-                get_goal_registry().record_usage(  # keep budget clock warm
-                    _sid,
-                    self._state.usage,
-                )
-                ctrl = GoalController(session_id=_sid)
-                self._state.goal = ctrl.get_pill_state()
-        except Exception:
-            # Goal plumbing is best-effort; never let it mask the
-            # actual response from the model.
-            pass
         self._post(
             AgentRunFinished(
                 response_text=result.response_text,

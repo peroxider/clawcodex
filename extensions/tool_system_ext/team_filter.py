@@ -1,12 +1,13 @@
 """Team-only tool visibility filter.
 
 When ``ToolContext.team`` is not an active team (i.e. the session has
-no team context), drop tools that can only do useful work inside a
-team: ``SendMessage`` (inter-agent messaging / broadcast), and the
-team-management tools ``TeamCreate`` / ``TeamDelete``. The model's
-self-introduction in single-user REPL sessions used to mis-call
-``SendMessage { to: "*" }`` as a way of "replying"; hiding the tool
-from the API schemas removes that path entirely.
+no team context), drop tools that can only do useful work inside an
+existing team: ``SendMessage`` (inter-agent messaging / broadcast) and
+``TeamDelete``. ``TeamCreate`` stays visible as the bootstrap entry
+that can create the first team context. The model's self-introduction
+in single-user REPL sessions used to mis-call ``SendMessage { to: "*" }``
+as a way of "replying"; hiding that tool from the API schemas removes
+the path entirely.
 
 This module is pure (no I/O, no globals, no upstream-tool mutation)
 so it can be unit-tested in isolation and reused anywhere upstream
@@ -17,20 +18,18 @@ from __future__ import annotations
 
 from typing import Iterable, TypeVar
 
-# Mirrors the "team-only" subset of
-# ``src.coordinator.mode.INTERNAL_WORKER_TOOLS``. We intentionally do
-# not import that constant: coordinator mode is a separate axis (env
-# var), and we want this filter to be usable in any context.
+# Tools that require an already-active team context. We intentionally do
+# not mirror coordinator ``INTERNAL_WORKER_TOOLS`` exactly: ``TeamCreate``
+# is a bootstrap tool and must remain visible before a team exists.
 TEAM_ONLY_TOOL_NAMES: frozenset[str] = frozenset(
     {
-        "SendMessage",
-        "TeamCreate",
-        "TeamDelete",
+        'SendMessage',
+        'TeamDelete',
     }
 )
 
 
-_T = TypeVar("_T")
+_T = TypeVar('_T')
 
 
 def has_team_context(team: object) -> bool:
@@ -48,7 +47,7 @@ def filter_team_only_tools(
     tools: Iterable[_T],
     has_team: bool,
     *,
-    name_attr: str = "name",
+    name_attr: str = 'name',
 ) -> list[_T]:
     """Return ``tools`` minus any team-only entries when no team is active.
 
@@ -72,7 +71,7 @@ def filter_team_only_tools(
 
 
 __all__ = [
-    "TEAM_ONLY_TOOL_NAMES",
-    "has_team_context",
-    "filter_team_only_tools",
+    'TEAM_ONLY_TOOL_NAMES',
+    'has_team_context',
+    'filter_team_only_tools',
 ]

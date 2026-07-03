@@ -202,6 +202,13 @@ def init() -> None:
                 mutex_with=[],
                 description="Run tool executions in an isolated sandbox",
             ),
+            FeatureFlag(
+                name="goals",
+                default=True,
+                deps=[],
+                mutex_with=[],
+                description="Enable upstream-compatible /goal mode",
+            ),
         ]
         for feat in _builtin_features:
             try:

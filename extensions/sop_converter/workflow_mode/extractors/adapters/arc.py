@@ -40,8 +40,8 @@ logger = logging.getLogger(__name__)
 # ARC-specific paths
 # ---------------------------------------------------------------------------
 
-_ARC_STAGE_DIR_NAMES = ("stage_impls", "stages", "steps", "pipeline")
-_ARC_WORKFLOW_MARKER = ".arc-workflow"
+_ARC_STAGE_DIR_NAMES = ('stage_impls', 'stages', 'steps', 'pipeline')
+_ARC_WORKFLOW_MARKER = '.arc-workflow'
 
 
 class ArcExtractor(WorkflowExtractorBase):
@@ -60,7 +60,7 @@ class ArcExtractor(WorkflowExtractorBase):
         self,
         scan=None,
         *,
-        mode: str = "fwa",
+        mode: str = 'fwa',
         allow_coarse: bool = False,
     ) -> None:
         super().__init__(scan=scan, mode=mode, allow_coarse=allow_coarse)
@@ -83,7 +83,7 @@ class ArcExtractor(WorkflowExtractorBase):
     def _is_arc_project(self, source_dir: Path) -> bool:
         """Check if the source directory is an ARC project."""
         name_lower = source_dir.name.lower()
-        if "autoresearch" in name_lower or "arc" in name_lower:
+        if 'autoresearch' in name_lower or 'arc' in name_lower:
             return True
         if (source_dir / _ARC_WORKFLOW_MARKER).is_file():
             return True
@@ -130,9 +130,7 @@ class ArcExtractor(WorkflowExtractorBase):
                         continue
                     members = get_enum_members(cls)
                     doc = extract_docstring_first_para(cls)
-                    for idx, (member_name, member_value) in enumerate(
-                        members.items()
-                    ):
+                    for idx, (member_name, member_value) in enumerate(members.items()):
                         stages.append(
                             ExtractedStage(
                                 id=len(stages) + 1,
@@ -141,7 +139,7 @@ class ArcExtractor(WorkflowExtractorBase):
                                 source_class=cls.name,
                                 source_value=member_value,
                                 file_path=str(py_file),
-                                description=doc or "",
+                                description=doc or '',
                                 inferred=False,
                             )
                         )
@@ -152,21 +150,21 @@ class ArcExtractor(WorkflowExtractorBase):
                 stage_dir = source_dir / stage_dir_name
                 if not stage_dir.is_dir():
                     continue
-                for py_file in sorted(stage_dir.glob("*.py")):
-                    if py_file.name.startswith("_"):
+                for py_file in sorted(stage_dir.glob('*.py')):
+                    if py_file.name.startswith('_'):
                         continue
                     tree = parse_ast(py_file)
-                    doc = ""
+                    doc = ''
                     if tree:
                         doc = extract_docstring_first_para(tree)
                     stages.append(
                         ExtractedStage(
                             id=len(stages) + 1,
                             name=py_file.stem,
-                            label=py_file.stem.replace("_", " ").title(),
+                            label=py_file.stem.replace('_', ' ').title(),
                             source_class=None,
                             file_path=str(py_file),
-                            description=doc or "",
+                            description=doc or '',
                             inferred=False,
                         )
                     )
@@ -207,8 +205,8 @@ class ArcExtractor(WorkflowExtractorBase):
             if stage.id < len(stages):
                 gates[stage.id] = GateSpec(
                     stage_id=stage.id,
-                    approval_mode="manual",
-                    description=f"Gate before {stage.label}",
+                    approval_mode='manual',
+                    description=f'Gate before {stage.label}',
                 )
         return gates
 
@@ -239,9 +237,9 @@ class ArcExtractor(WorkflowExtractorBase):
             if contract_dict:
                 contracts[stage.id] = StageContract(
                     stage_id=stage.id,
-                    input_files=contract_dict.get("input_files", []),
-                    output_files=contract_dict.get("output_files", []),
-                    dod=contract_dict.get("dod", ""),
+                    input_files=contract_dict.get('input_files', []),
+                    output_files=contract_dict.get('output_files', []),
+                    dod=contract_dict.get('dod', ''),
                     source_class=stage.source_class,
                 )
 

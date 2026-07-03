@@ -91,6 +91,31 @@ def _apply_feature_gate_overrides(args: object) -> None:
         pass
 
 
+def _apply_agent_debug_if_requested(argv: list[str]) -> None:
+    if '--agent-debug' not in argv[1:]:
+        return
+    try:
+        from clawcodex_ext.debug.agent_debug import apply_agent_debug_environment
+
+        apply_agent_debug_environment(os.environ)
+    except Exception:
+        os.environ['CLAWCODEX_AGENT_DEBUG'] = '1'
+
+
+def _is_provider_free_goal_summary_print(args: object) -> bool:
+    """Return True for the narrow `-p /goal` read-only fast path."""
+    if not getattr(args, 'print', False):
+        return False
+    if getattr(args, 'input_format', 'text') != 'text':
+        return False
+    if getattr(args, 'output_format', 'text') != 'text':
+        return False
+    prompt = getattr(args, 'prompt', None)
+    if not isinstance(prompt, str):
+        return False
+    return prompt.strip().lower() in {'/goal', '/g'}
+
+
 def _maybe_argcomplete_top_level(argv: list[str]) -> None:
     """If argcomplete is active, expose the fast-path subcommand nouns.
 
@@ -159,6 +184,8 @@ def run_cli(argv: list[str] | None = None) -> int:
 
     if argv is None:
         argv = sys.argv
+
+    _apply_agent_debug_if_requested(argv)
 
     # F-97: emit session_start as early as possible. The session id
     # is best-effort and never blocks the CLI; failures are swallowed
@@ -437,6 +464,14 @@ def run_cli(argv: list[str] | None = None) -> int:
     # over env-vars and config-file values.
     _apply_feature_gate_overrides(args)
 
+    if getattr(args, 'agent_debug', False):
+        try:
+            from clawcodex_ext.debug.agent_debug import apply_agent_debug_environment
+
+            apply_agent_debug_environment(os.environ)
+        except Exception:
+            os.environ['CLAWCODEX_AGENT_DEBUG'] = '1'
+
     # Plan-phase-1 wiring (ch02-bootstrap-refactoring-plan.md P1.5):
     # ``run_pre_action(args)`` is the Python analog of Commander's
     # ``preAction`` hook. It runs the memoized ``init()`` (chapter
@@ -514,6 +549,38 @@ def run_cli(argv: list[str] | None = None) -> int:
         gateway_sock=getattr(args, 'gateway_sock', None),
         bundle_path=bundle_path,
     )
+    if _is_provider_free_goal_summary_print(args):
+        from src.entrypoints.headless import HeadlessOptions, run_headless
+
+        rc = run_headless(
+            HeadlessOptions(
+                prompt=runtime_opts.prompt,
+                output_format=runtime_opts.output_format,
+                input_format=runtime_opts.input_format,
+                provider_name=runtime_opts.provider_name,
+                model=runtime_opts.model,
+                max_turns=runtime_opts.max_turns,
+                permission_mode=runtime_opts.permission_mode,
+                is_bypass_permissions_mode_available=runtime_opts.is_bypass_permissions_mode_available,
+                skip_permissions=runtime_opts.skip_permissions,
+                allowed_tools=runtime_opts.allowed_tools,
+                disallowed_tools=runtime_opts.disallowed_tools,
+                include_partial_messages=runtime_opts.include_partial_messages,
+                verbose=runtime_opts.verbose,
+                workspace_root=runtime_opts.workspace_root or Path.cwd(),
+                append_system_prompt=runtime_opts.append_system_prompt,
+                startup_agent=runtime_opts.startup_agent,
+            )
+        )
+        _telemetry_record_end(
+            session_id=_telemetry_session_id,
+            command_name='print',
+            mode='non_interactive',
+            success=(rc == 0),
+            duration_s=time.monotonic() - _telemetry_start,
+            exit_status=rc,
+        )
+        return rc
     try:
         ctx = RuntimeContext.build(runtime_opts)
     except RuntimeError as exc:

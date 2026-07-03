@@ -27,6 +27,11 @@ Examples:
     parser.add_argument('--version', action='store_true', help='Show version information')
     parser.add_argument('--config', action='store_true', help='Show current configuration')
     parser.add_argument('--stream', action='store_true', help='Enable live rendering in REPL')
+    parser.add_argument(
+        '--agent-debug',
+        action='store_true',
+        help='Enable external-agent REPL debug markers and sandbox-safe local state',
+    )
 
     # ---- Interactive UI selection ----
     #

@@ -1388,7 +1388,14 @@ def _resolve_effective_tools(
         or ""
     )
 
-    return filter_tools_for_request(base_tools, model, messages)
+    filtered = filter_tools_for_request(base_tools, model, messages)
+    try:
+        from clawcodex_ext.goal.tools import filter_goal_model_tools_for_context
+
+        filtered = filter_goal_model_tools_for_context(filtered, tool_use_context)
+    except Exception:
+        pass
+    return filtered
 
 
 async def query(
@@ -1424,6 +1431,61 @@ async def query(
         max_output_tokens_override=params.max_output_tokens_override,
     )
     config = build_query_config()
+    goal_runtime = None
+    goal_turn_id: str | None = None
+
+    def _goal_start_turn(tool_use_context: ToolContext) -> None:
+        nonlocal goal_runtime, goal_turn_id
+        try:
+            from clawcodex_ext.goal.runtime import goal_runtime_for_context
+
+            goal_runtime = goal_runtime_for_context(tool_use_context)
+        except Exception:
+            goal_runtime = None
+        if goal_runtime is None:
+            goal_turn_id = None
+            return
+        goal_turn_id = goal_runtime.on_turn_start(
+            plan_mode=bool(getattr(tool_use_context, "plan_mode", False))
+        )
+
+    def _goal_record_usage(assistant_messages: list[AssistantMessage]) -> None:
+        if goal_runtime is None or goal_turn_id is None:
+            return
+        for assistant in assistant_messages:
+            goal_runtime.on_token_usage(goal_turn_id, getattr(assistant, "usage", None) or {})
+
+    def _goal_finish_tools(
+        tool_use_blocks: list[ToolUseBlock],
+        *,
+        handler_executed: bool,
+    ) -> list[UserMessage]:
+        if goal_runtime is None or goal_turn_id is None:
+            return []
+        steering: list[UserMessage] = []
+        for block in tool_use_blocks:
+            steering.extend(
+                goal_runtime.on_tool_finish(
+                    goal_turn_id,
+                    tool_name=block.name,
+                    call_id=block.id,
+                    handler_executed=handler_executed,
+                )
+            )
+        return steering
+
+    def _goal_finish_turn(kind: str, error: BaseException | None = None) -> None:
+        nonlocal goal_turn_id
+        if goal_runtime is None or goal_turn_id is None:
+            return
+        turn_id = goal_turn_id
+        goal_turn_id = None
+        if kind == "error" and error is not None:
+            goal_runtime.on_turn_error(turn_id, error)
+        elif kind == "abort":
+            goal_runtime.on_turn_abort(turn_id)
+        else:
+            goal_runtime.on_turn_stop(turn_id)
 
     while True:
         messages = state.messages
@@ -1438,6 +1500,7 @@ async def query(
                 state.transition.reason if state.transition else "initial",
             )
         tool_use_context = state.tool_use_context
+        _goal_start_turn(tool_use_context)
         # WI-5.1: reset the per-message aggregate counter at each turn
         # boundary. The 200K cap is PER USER MESSAGE (the next batch of
         # tool_result blocks the model will see), not per session. Without
@@ -1555,6 +1618,7 @@ async def query(
                     natural_termination,
                     Terminal(reason="blocking_limit"),
                 )
+                _goal_finish_turn("error", RuntimeError("context blocking limit"))
                 return
 
             # B.4 (hard blocking limit). Mirrors TS query.ts:683-696.
@@ -1574,6 +1638,7 @@ async def query(
                     natural_termination,
                     Terminal(reason="blocking_limit"),
                 )
+                _goal_finish_turn("error", RuntimeError("context blocking limit"))
                 return
 
         assistant_messages: list[AssistantMessage] = []
@@ -1597,6 +1662,7 @@ async def query(
             assistant_messages = returned_assistants
             tool_use_blocks = returned_tool_blocks
             needs_follow_up = len(tool_use_blocks) > 0
+            _goal_record_usage(assistant_messages)
 
             # P102-D: post_llm hook — LLM 响应返回后、工具执行前
             hook_result = _call_hooks_if_enabled("post_llm", assistant_messages, tool_use_blocks, state=state, params=params)
@@ -1636,6 +1702,7 @@ async def query(
 
             yield _create_assistant_api_error_message(content=error_message)
             set_terminal(holder, natural_termination, Terminal(reason="model_error", error=e))
+            _goal_finish_turn("error", e)
             return
 
         if params.abort_controller.signal.aborted:
@@ -1647,6 +1714,7 @@ async def query(
             if params.abort_controller.signal.reason != "interrupt":
                 yield _create_user_interruption_message(tool_use=False)
             set_terminal(holder, natural_termination, Terminal(reason="aborted_streaming"))
+            _goal_finish_turn("abort")
             return
 
         if not needs_follow_up:
@@ -1697,6 +1765,7 @@ async def query(
                                 natural_termination,
                                 Terminal(reason="image_error"),
                             )
+                            _goal_finish_turn("error", RuntimeError("image error"))
                         else:
                             set_terminal(
                                 holder,
@@ -1707,6 +1776,12 @@ async def query(
                                     else "completed"
                                 ),
                             )
+                            _goal_finish_turn(
+                                "error" if error_type == "prompt_too_long" else "stop",
+                                RuntimeError("prompt too long")
+                                if error_type == "prompt_too_long"
+                                else None,
+                            )
                         return
                 # 如果没有任何策略适用，yield last_message 并 fallthrough
                 if not strategy_applied and last_message is not None:
@@ -1714,9 +1789,11 @@ async def query(
 
             if last_message and getattr(last_message, "isApiErrorMessage", False):
                 set_terminal(holder, natural_termination, Terminal(reason="completed"))
+                _goal_finish_turn("stop")
                 return
 
             set_terminal(holder, natural_termination, Terminal(reason="completed"))
+            _goal_finish_turn("stop")
             return
 
         for block in tool_use_blocks:
@@ -1788,6 +1865,18 @@ async def query(
         # P102-D: post_tool hook — 在工具执行之后允许外部策略修改 tool_results
         hook_result = _call_hooks_if_enabled("post_tool", tool_results, state=state, params=params)
         tool_results = hook_result[0]
+        goal_steering_messages = _goal_finish_tools(
+            tool_use_blocks,
+            handler_executed=not params.abort_controller.signal.aborted,
+        )
+        if goal_runtime is not None:
+            try:
+                goal_steering_messages = [
+                    *goal_runtime.consume_pending_steering_messages(),
+                    *goal_steering_messages,
+                ]
+            except Exception:
+                pass
 
         if _diag:
             logger.warning(
@@ -1818,6 +1907,7 @@ async def query(
             if params.abort_controller.signal.reason != "interrupt":
                 yield _create_user_interruption_message(tool_use=True)
             set_terminal(holder, natural_termination, Terminal(reason="aborted_tools"))
+            _goal_finish_turn("abort")
             return
 
         # Ch5/round2 — hook_stopped terminal mapping. Mirrors TS at
@@ -1841,6 +1931,7 @@ async def query(
                 natural_termination,
                 Terminal(reason="hook_stopped"),
             )
+            _goal_finish_turn("stop")
             return
 
         next_turn_count = turn_count + 1
@@ -1852,6 +1943,7 @@ async def query(
                 natural_termination,
                 Terminal(reason="max_turns", turn_count=next_turn_count),
             )
+            _goal_finish_turn("error", RuntimeError("max turns reached"))
             return
 
         # Chapter-10 / Chunk D / WI-3.3 — pending-messages drain at the
@@ -1861,7 +1953,10 @@ async def query(
         # information."* We drain AFTER tool_results have been appended
         # but BEFORE the next API call, so the model sees the queued
         # messages on the next turn alongside the tool results.
-        injected_messages = _drain_pending_user_messages(tool_use_context)
+        injected_messages = [
+            *goal_steering_messages,
+            *_drain_pending_user_messages(tool_use_context),
+        ]
         for inj in injected_messages:
             yield inj
 
@@ -1870,6 +1965,7 @@ async def query(
             cb(state)
         # P102-D: on_turn_end hook
         call_hooks("on_turn_end", state, params=params)
+        _goal_finish_turn("stop")
 
         state = QueryState(
             messages=[*messages, *assistant_messages, *tool_results, *injected_messages],

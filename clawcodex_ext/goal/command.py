@@ -1,28 +1,8 @@
-"""User-facing ``/goal`` slash command.
-
-Implemented as a :class:`clawcodex_ext.command_system.InteractiveCommand`
-(the Python analogue of upstream's TS ``local-jsx``) so that:
-
-* ``/goal <objective>`` with an existing non-complete goal can pop
-  the spec-mandated replace-confirm dialog via ``ctx.ui.select``.
-* ``/goal`` itself (no args) is rejected by
-  :func:`is_bridge_safe_command` at the *type* level (the bridge
-  gate blocks all ``InteractiveCommand`` instances — see
-  ``src/command_system/safe_commands.py:48-53``), matching the
-  spec's "`/goal` 命令不是 ``bridgeSafe``" rule.
-
-The command does not own state. It constructs a transient
-:class:`GoalController` bound to the current ``session_id`` (read
-from ``context.tool_context.session_id`` when available, falling
-back to ``context.config['session_id']``) and delegates every
-transition to the in-memory registry / persistence layer.
-"""
+"""Upstream-compatible `/goal` user command."""
 
 from __future__ import annotations
 
-import logging
-from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from clawcodex_ext.command_system.types import (
     InteractiveCommand,
@@ -30,369 +10,288 @@ from clawcodex_ext.command_system.types import (
     UIOption,
 )
 
-from . import prompts
-from .controller import GoalController
-from .state_machine import GoalObjectiveTooLong, GoalStateError
-from .types import MAX_OBJECTIVE_CHARS, GoalState, GoalStatus
-
-logger = logging.getLogger(__name__)
-
-
-# Recognised subcommand tokens. Comparison is case-insensitive.
-_STATUS = "status"
-_CLEAR = "clear"
-_PAUSE = "pause"
-_RESUME = "resume"
-_CONTINUE = "continue"
-_COMPLETE = "complete"
-
-# Dialog choices for the replace-confirm prompt (FEATURE_PLAN.md
-# §2.6.1: "若已存在非 complete 的目标，必须弹出 GoalReplaceConfirmDialog").
-_REPLACE_OPTION = "replace"
-_KEEP_OPTION = "keep"
-
-_REPLACE_OPTIONS = (
-    UIOption(
-        value=_REPLACE_OPTION,
-        label="Replace existing goal",
-        description="Discard current progress and start the new objective.",
-    ),
-    UIOption(
-        value=_KEEP_OPTION,
-        label="Keep current goal",
-        description="Drop the new objective and keep working on the existing one.",
-    ),
+from .gate import goal_enabled
+from .files import objective_text_for_edit
+from .model import ThreadGoalStatus
+from .protocol import (
+    ThreadGoalClearParams,
+    ThreadGoalDTO,
+    ThreadGoalGetParams,
+    ThreadGoalProtocol,
+    ThreadGoalSetParams,
 )
+from .service import KEEP_TOKEN_BUDGET, GoalServiceError, goal_thread_id_from_context
+
+GOAL_USAGE = "/goal [<objective>|clear|edit|pause|resume]"
 
 
-@dataclass(frozen=True)
 class GoalCommand(InteractiveCommand):
-    """``/goal`` slash command.
-
-    Args grammar::
-
-        /goal                       # show status (alias for /goal status)
-        /goal status                # show status
-        /goal <objective>           # set new objective
-        /goal clear                 # clear + tombstone
-        /goal pause                 # pause auto-continuation
-        /goal resume                # resume from paused / max_turns
-        /goal continue              # reset turns counter after max_turns
-        /goal complete              # mark complete
-    """
+    """Feature-gated upstream-compatible `/goal` command."""
 
     async def run(self, args: str, context: Any) -> InteractiveOutcome:
-        controller = self._make_controller(context)
-        session_id = controller.session_id
-        if not session_id:
-            return InteractiveOutcome(
-                message=(
-                    "No active session — /goal requires a session. "
-                    "Start the REPL or resume an existing session first."
-                ),
-                display="system",
-            )
+        if not goal_enabled():
+            return InteractiveOutcome(message="Goal mode is disabled.", display="system")
 
-        subcommand, rest = _parse_subcommand(args)
-        # ``/goal   `` (whitespace-only, non-empty args) is treated as
-        # a usage hint rather than the implicit "show status" branch.
-        # The two paths are indistinguishable after ``_parse_subcommand``
-        # strips, so we look at the *raw* args here: empty string
-        # means the user typed ``/goal`` (status), non-empty-but-blank
-        # means they typed garbage.
-        if subcommand is None and args and not args.strip():
-            return InteractiveOutcome(
-                message=(
-                    "Usage: `/goal <objective>` (or `/goal status`/`/goal clear`/etc)."
-                ),
-                display="system",
-            )
+        api = _goal_api_from_context(context)
+        thread_id = goal_thread_id_from_context(context)
+        command = args.strip()
+
         try:
-            if subcommand is None or subcommand == _STATUS:
-                return self._show_status(controller)
-            if subcommand == _CLEAR:
-                return self._do_clear(controller)
-            if subcommand == _PAUSE:
-                return self._do_pause(controller)
-            if subcommand == _RESUME:
-                return self._do_resume(controller)
-            if subcommand == _CONTINUE:
-                return self._do_continue(controller)
-            if subcommand == _COMPLETE:
-                return self._do_complete(controller)
-            # Anything else is treated as the literal objective text.
-            return await self._set_objective(
-                controller,
-                subcommand + (" " + rest if rest else ""),
-                context,
-            )
-        except GoalObjectiveTooLong as exc:
-            return InteractiveOutcome(
-                message=(
-                    f"Objective is {exc.length} characters; the cap is "
-                    f"{exc.max_length}. Write the detail to a file and reference it "
-                    "with a short summary, then re-run `/goal <short summary>`."
-                ),
-                display="system",
-            )
-        except GoalStateError as exc:
+            if not command:
+                return _goal_summary(api, thread_id, context)
+
+            lowered = command.lower()
+            if lowered == "clear":
+                return _clear_goal(api, thread_id, context)
+            if lowered == "pause":
+                return _set_goal_status(api, thread_id, ThreadGoalStatus.PAUSED, context)
+            if lowered == "resume":
+                return _set_goal_status(api, thread_id, ThreadGoalStatus.ACTIVE, context)
+            if lowered == "edit":
+                return await _edit_goal(api, thread_id, context)
+
+            return await _set_goal_objective(api, thread_id, command, context)
+        except GoalServiceError as exc:
             return InteractiveOutcome(message=str(exc), display="system")
 
-    # ---- helpers ----
 
-    @staticmethod
-    def _make_controller(context: Any) -> GoalController:
-        """Construct a controller bound to the current session.
-
-        Resolution order:
-
-        1. ``context.tool_context.session_id`` (REPL/TUI surfaces)
-        2. ``context.config['session_id']`` (SDK callers)
-        3. ``None`` — the resulting controller is read-only.
-        """
-        session_id: Optional[str] = None
-        tool_ctx = getattr(context, "tool_context", None)
-        if tool_ctx is not None:
-            session_id = getattr(tool_ctx, "session_id", None)
-        if session_id is None:
-            config = getattr(context, "config", None) or {}
-            session_id = config.get("session_id") if isinstance(config, dict) else None
-        ctrl = GoalController(session_id=session_id)
-        if session_id:
-            ctrl.bind(session_id)
-        return ctrl
-
-    @staticmethod
-    def _show_status(controller: GoalController) -> InteractiveOutcome:
-        state = controller.get_state()
-        body = prompts.format_status_for_display(state)
-        title = "Current goal status" if state is not None else "No active goal"
-        # ``ctx.ui.display`` is read-only — it never raises.
-        try:
-            ctx_ui = _get_ui(controller)
-        except Exception:
-            ctx_ui = None
-        if ctx_ui is not None:
-            # Fire-and-forget; the title and body are surfaced for the
-            # user-visible status pane.
-            try:
-                import asyncio
-
-                asyncio.create_task(ctx_ui.display(title, body))
-            except Exception:
-                pass
-        # Also return the body as the outcome message so headless
-        # callers (non-interactive surfaces) still get the text.
-        return InteractiveOutcome(message=body, display="system")
-
-    @staticmethod
-    def _do_clear(controller: GoalController) -> InteractiveOutcome:
-        previous = controller.get_state()
-        controller.clear()
-        return InteractiveOutcome(
-            message=(
-                "Goal cleared." if previous is not None
-                else "No goal was set; nothing to clear."
-            ),
-            display="system",
-        )
-
-    @staticmethod
-    def _do_pause(controller: GoalController) -> InteractiveOutcome:
-        if controller.get_state() is None:
-            return InteractiveOutcome(
-                message="No goal to pause.", display="system"
-            )
-        controller.pause()
-        return InteractiveOutcome(
-            message="Goal paused. Use `/goal resume` to continue.",
-            display="system",
-        )
-
-    @staticmethod
-    def _do_resume(controller: GoalController) -> InteractiveOutcome:
-        state = controller.get_state()
-        if state is None:
-            return InteractiveOutcome(
-                message="No goal to resume.", display="system"
-            )
-        if state.status not in (GoalStatus.PAUSED, GoalStatus.MAX_TURNS):
-            return InteractiveOutcome(
-                message=f"Goal is in status {state.status.value!r}; nothing to resume.",
-                display="system",
-            )
-        controller.resume()
-        return InteractiveOutcome(
-            message="Goal resumed.",
-            display="system",
-            should_query=True,
-        )
-
-    @staticmethod
-    def _do_continue(controller: GoalController) -> InteractiveOutcome:
-        state = controller.get_state()
-        if state is None:
-            return InteractiveOutcome(
-                message="No goal to continue.", display="system"
-            )
-        if state.status != GoalStatus.MAX_TURNS:
-            return InteractiveOutcome(
-                message=(
-                    f"Goal is in status {state.status.value!r}; "
-                    "/goal continue only applies after max-turns."
-                ),
-                display="system",
-            )
-        controller.continue_from_max_turns()
-        return InteractiveOutcome(
-            message="Goal counter reset; auto-continuation resumed.",
-            display="system",
-            should_query=True,
-        )
-
-    @staticmethod
-    def _do_complete(controller: GoalController) -> InteractiveOutcome:
-        if controller.get_state() is None:
-            return InteractiveOutcome(
-                message="No goal to complete.", display="system"
-            )
-        controller.complete()
-        return InteractiveOutcome(
-            message="Goal marked complete.",
-            display="system",
-        )
-
-    @staticmethod
-    async def _set_objective(
-        controller: GoalController,
-        objective: str,
-        context: Any = None,
-    ) -> InteractiveOutcome:
-        text = objective.strip()
-        if not text:
-            return InteractiveOutcome(
-                message=(
-                    "Usage: `/goal <objective>` (or `/goal status`/`/goal clear`/etc)."
-                ),
-                display="system",
-            )
-        if len(text) > MAX_OBJECTIVE_CHARS:
-            raise GoalObjectiveTooLong(len(text), MAX_OBJECTIVE_CHARS)
-        existing = controller.get_state()
-        # If a non-complete goal is in flight, ask before clobbering it
-        # (FEATURE_PLAN.md §2.6.1). COMPLETE goals are *replaced freely*
-        # so the user can chain a new objective onto a finished run
-        # without first clearing.
-        if existing is not None and not existing.is_terminal() or (
-            existing is not None and existing.status == GoalStatus.MAX_TURNS
-        ):
-            # MAX_TURNS is not strictly terminal but represents "we
-            # paused because the cap ran out" — still confirm.
-            decision = await _confirm_replace(controller, context)
-            if decision is None:
-                return InteractiveOutcome.skip()
-            if decision == _KEEP_OPTION:
-                return InteractiveOutcome(
-                    message="Keeping the existing goal.", display="system"
-                )
-        controller.set_new_goal(text)
-        return InteractiveOutcome(
-            message=(
-                f"Goal set: {text[:80]}{'…' if len(text) > 80 else ''}\n"
-                "Auto-continuation engaged; the model will keep working "
-                "until the goal is complete, paused, or the budget runs out."
-            ),
-            display="system",
-            should_query=True,
-        )
-
-
-async def _confirm_replace(
-    controller: GoalController, context: Any = None
-) -> Optional[str]:
-    """Pop the replace-confirm dialog. Returns the chosen value or
-    ``None`` on cancel.
-
-    The active ``UIHost`` is resolved from the supplied ``context``
-    first (``context.ui``), then the engine-bridge global fallback
-    (``engine._CURRENT_UI``). Headless callers with no UI get
-    ``_REPLACE_OPTION`` so the explicit user input is honored.
-    """
-    ctx_ui = _resolve_ui(context)
-    if ctx_ui is None:
-        # Headless surface — fall back to "replace" (the user typed
-        # the new objective explicitly).
-        return _REPLACE_OPTION
-    existing = controller.get_state()
-    if existing is None:
-        return _REPLACE_OPTION
-    preview = (
-        f"Current objective: {existing.objective[:120]}"
-        f"{'…' if len(existing.objective) > 120 else ''}\n"
-        f"Status: {existing.status.value}"
-    )
-    try:
-        await ctx_ui.display("Replace existing goal?", preview)
-        picked = await ctx_ui.select(
-            "An active goal already exists. Replace it?",
-            _REPLACE_OPTIONS,
-            current=_KEEP_OPTION,
-        )
-    except Exception:
-        logger.exception("replace-confirm dialog failed; defaulting to replace")
-        return _REPLACE_OPTION
-    return picked
-
-
-def _resolve_ui(context: Any = None):  # pragma: no cover — trivial
-    """Return the active ``UIHost`` for the current invocation.
-
-    Resolution order: ``context.ui`` (the per-call surface passed by
-    the command engine) → ``engine._CURRENT_UI`` (the legacy
-    bridge-global set by the REPL installer). Returns ``None`` when
-    neither is registered so headless callers get a deterministic
-    "replace" default.
-    """
-    if context is not None:
-        ui = getattr(context, "ui", None)
-        if ui is not None:
-            return ui
-    try:
-        from clawcodex_ext.command_system import engine as engine_mod
-        ui = getattr(engine_mod, "_CURRENT_UI", None)
-        if ui is not None:
-            return ui
-    except Exception:
-        pass
-    return None
-
-
-def _parse_subcommand(args: str) -> tuple[Optional[str], str]:
-    """Split ``args`` into ``(head, rest)``.
-
-    The ``head`` is the first whitespace-delimited token, lower-cased.
-    ``rest`` is the remainder with surrounding whitespace stripped.
-    """
-    text = (args or "").strip()
-    if not text:
-        return None, ""
-    head, _, rest = text.partition(" ")
-    return head.lower(), rest.strip()
-
-
-# The exported command instance wired into ``get_builtin_commands``.
 GOAL_COMMAND = GoalCommand(
     name="goal",
-    description=(
-        "Set, view, or control a long-running goal that the system will "
-        "auto-continue working on until completion, pause, or budget limit."
-    ),
-    argument_hint=(
-        "[status | clear | pause | resume | continue | complete | <objective>]"
-    ),
-    aliases=["g"],  # convenience; matches common REPL convention
-    is_enabled=lambda: True,
+    description="Manage an upstream-compatible long-running goal.",
+    argument_hint="[<objective>|clear|edit|pause|resume]",
+    aliases=["g"],
+    is_enabled=goal_enabled,
 )
 
+def _goal_api_from_context(context: Any) -> ThreadGoalProtocol:
+    api = getattr(context, "goal_api", None)
+    tool_context = getattr(context, "tool_context", None)
+    if api is None:
+        service = getattr(context, "goal_service", None) or getattr(
+            tool_context,
+            "goal_service",
+            None,
+        )
+        events = getattr(context, "goal_events", None)
+        kwargs: dict[str, Any] = {}
+        if service is not None:
+            kwargs["service"] = service
+        if events is not None:
+            kwargs["events"] = events
+        api = ThreadGoalProtocol(**kwargs)
 
-__all__ = ["GOAL_COMMAND", "GoalCommand"]
+    try:
+        context.goal_api = api
+        context.goal_service = api.service
+        context.goal_events = api.events
+    except Exception:
+        pass
+    if tool_context is not None:
+        try:
+            tool_context.goal_service = api.service
+        except Exception:
+            pass
+    return api
+
+
+def _goal_summary(
+    api: ThreadGoalProtocol,
+    thread_id: str,
+    context: Any | None = None,
+) -> InteractiveOutcome:
+    response = api.thread_goal_get(ThreadGoalGetParams(thread_id=thread_id))
+    if response.goal is None:
+        _sync_app_goal_status(None, context)
+        return InteractiveOutcome(
+            message=f"{GOAL_USAGE}\nNo goal is currently set.",
+            display="system",
+        )
+    _sync_app_goal_status(response.goal, context)
+    return InteractiveOutcome(
+        message=_format_goal_summary(response.goal),
+        display="system",
+    )
+
+
+async def _set_goal_objective(
+    api: ThreadGoalProtocol,
+    thread_id: str,
+    objective: str,
+    context: Any,
+) -> InteractiveOutcome:
+    current = api.thread_goal_get(ThreadGoalGetParams(thread_id=thread_id)).goal
+    if current is not None:
+        if current.status is not ThreadGoalStatus.COMPLETE:
+            choice = await context.ui.select(
+                "Replace goal?",
+                [
+                    UIOption(
+                        "replace",
+                        "Replace current goal",
+                        "Set the new objective and start it now",
+                    ),
+                    UIOption("cancel", "Cancel", "Keep the current goal"),
+                ],
+            )
+            if choice != "replace":
+                return InteractiveOutcome.skip()
+        api.thread_goal_clear(ThreadGoalClearParams(thread_id=thread_id))
+
+    response = api.thread_goal_set(
+        ThreadGoalSetParams(
+            thread_id=thread_id,
+            objective=objective,
+            status=ThreadGoalStatus.ACTIVE,
+        )
+    )
+    return _goal_status_outcome(response.goal, context)
+
+
+async def _edit_goal(
+    api: ThreadGoalProtocol,
+    thread_id: str,
+    context: Any,
+) -> InteractiveOutcome:
+    current = api.thread_goal_get(ThreadGoalGetParams(thread_id=thread_id)).goal
+    if current is None:
+        return InteractiveOutcome(
+            message=f"No goal is currently set.\n{GOAL_USAGE}",
+            display="system",
+        )
+
+    edited = await context.ui.prompt_text(
+        "Edit goal",
+        default=objective_text_for_edit(
+            current.objective,
+            codex_home=getattr(api.service, "codex_home", None),
+        ),
+        placeholder="Type a goal objective and press Enter",
+    )
+    if edited is None:
+        return InteractiveOutcome.skip()
+
+    if current.status in {
+        ThreadGoalStatus.BUDGET_LIMITED,
+        ThreadGoalStatus.COMPLETE,
+    }:
+        api.thread_goal_clear(ThreadGoalClearParams(thread_id=thread_id))
+        response = api.thread_goal_set(
+            ThreadGoalSetParams(
+                thread_id=thread_id,
+                objective=edited,
+                status=ThreadGoalStatus.ACTIVE,
+                token_budget=current.token_budget,
+            )
+        )
+    else:
+        response = api.thread_goal_set(
+            ThreadGoalSetParams(
+                thread_id=thread_id,
+                objective=edited,
+                status=current.status,
+                token_budget=current.token_budget,
+            )
+        )
+    return _goal_status_outcome(response.goal, context)
+
+
+def _clear_goal(
+    api: ThreadGoalProtocol,
+    thread_id: str,
+    context: Any | None = None,
+) -> InteractiveOutcome:
+    response = api.thread_goal_clear(ThreadGoalClearParams(thread_id=thread_id))
+    if response.cleared:
+        _sync_app_goal_status(None, context)
+        return InteractiveOutcome(message="Goal cleared", display="system")
+    return InteractiveOutcome(
+        message="No goal to clear\nThis thread does not currently have a goal.",
+        display="system",
+    )
+
+
+def _set_goal_status(
+    api: ThreadGoalProtocol,
+    thread_id: str,
+    status: ThreadGoalStatus,
+    context: Any | None = None,
+) -> InteractiveOutcome:
+    response = api.thread_goal_set(
+        ThreadGoalSetParams(
+            thread_id=thread_id,
+            status=status,
+            token_budget=KEEP_TOKEN_BUDGET,
+        )
+    )
+    return _goal_status_outcome(response.goal, context)
+
+
+def _goal_status_outcome(
+    goal: ThreadGoalDTO,
+    context: Any | None = None,
+) -> InteractiveOutcome:
+    _sync_app_goal_status(goal, context)
+    return InteractiveOutcome(
+        message=f"Goal {_goal_status_label(goal.status)}\n{_goal_usage_summary(goal)}",
+        display="system",
+        should_query=goal.status is ThreadGoalStatus.ACTIVE,
+    )
+
+
+def _format_goal_summary(goal: ThreadGoalDTO) -> str:
+    lines = [
+        "Goal",
+        f"Status: {_goal_status_label(goal.status)}",
+        f"Objective: {goal.objective}",
+        f"Time used: {goal.time_used_seconds}s",
+        f"Tokens used: {goal.tokens_used}",
+    ]
+    if goal.token_budget is not None:
+        lines.append(f"Token budget: {goal.token_budget}")
+    lines.append("")
+    lines.append(f"Commands: {_goal_commands_for_status(goal.status)}")
+    return "\n".join(lines)
+
+
+def _goal_usage_summary(goal: ThreadGoalDTO) -> str:
+    if goal.token_budget is not None:
+        return f"{goal.tokens_used} / {goal.token_budget} tokens"
+    return f"{goal.time_used_seconds}s"
+
+
+def _goal_commands_for_status(status: ThreadGoalStatus) -> str:
+    if status is ThreadGoalStatus.ACTIVE:
+        return "/goal edit, /goal pause, /goal clear"
+    if status in {
+        ThreadGoalStatus.PAUSED,
+        ThreadGoalStatus.BLOCKED,
+        ThreadGoalStatus.USAGE_LIMITED,
+    }:
+        return "/goal edit, /goal resume, /goal clear"
+    return "/goal edit, /goal clear"
+
+
+def _goal_status_label(status: ThreadGoalStatus) -> str:
+    return {
+        ThreadGoalStatus.ACTIVE: "active",
+        ThreadGoalStatus.PAUSED: "paused",
+        ThreadGoalStatus.BLOCKED: "blocked",
+        ThreadGoalStatus.USAGE_LIMITED: "usage limited",
+        ThreadGoalStatus.BUDGET_LIMITED: "limited by budget",
+        ThreadGoalStatus.COMPLETE: "complete",
+    }[status]
+
+
+def _sync_app_goal_status(goal: ThreadGoalDTO | None, context: Any | None) -> None:
+    if context is None:
+        return
+    app_state = getattr(context, "app_state", None)
+    if app_state is None:
+        return
+    setter = getattr(app_state, "set_goal_status", None)
+    if not callable(setter):
+        return
+    setter(goal.to_dict() if goal is not None else None)
+
+
+__all__ = ["GOAL_COMMAND", "GOAL_USAGE", "GoalCommand"]

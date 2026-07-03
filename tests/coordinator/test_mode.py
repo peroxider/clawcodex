@@ -3,7 +3,7 @@
 Covers:
 * ``is_coordinator_mode`` env-var gating + ``match_session_mode`` flip.
 * ``INTERNAL_WORKER_TOOLS`` set shape + filter behavior.
-* ``filter_coordinator_tools`` returns exactly 3 tools.
+* ``filter_coordinator_tools`` returns the coordinator delegation/read tool set.
 * ``filter_worker_tools`` excludes ``INTERNAL_WORKER_TOOLS``, keeps
   everything else (incl. MCP).
 * ``get_coordinator_user_context`` activation gate + content shape.
@@ -39,7 +39,7 @@ def _clear_env_vars():
     teardown. Using manual save/restore rather than monkeypatch so
     direct env-var writes don't leak between tests."""
     saved = {}
-    for var in ("CLAUDE_CODE_COORDINATOR_MODE", "CLAUDE_CODE_SIMPLE"):
+    for var in ('CLAUDE_CODE_COORDINATOR_MODE', 'CLAUDE_CODE_SIMPLE'):
         saved[var] = os.environ.pop(var, None)
     try:
         yield
@@ -59,19 +59,19 @@ def test_is_coordinator_mode_false_when_env_unset() -> None:
     assert is_coordinator_mode() is False
 
 
-@pytest.mark.parametrize("truthy", ["1", "true", "TRUE", "yes", "on"])
+@pytest.mark.parametrize('truthy', ['1', 'true', 'TRUE', 'yes', 'on'])
 def test_is_coordinator_mode_true_for_truthy_env(
     truthy: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", truthy)
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', truthy)
     assert is_coordinator_mode() is True
 
 
-@pytest.mark.parametrize("falsy", ["0", "false", "no", "off", "", "  "])
+@pytest.mark.parametrize('falsy', ['0', 'false', 'no', 'off', '', '  '])
 def test_is_coordinator_mode_false_for_falsy_env(
     falsy: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", falsy)
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', falsy)
     assert is_coordinator_mode() is False
 
 
@@ -79,35 +79,35 @@ def test_match_session_mode_no_op_when_session_mode_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Sessions stored before mode tracking existed pass None."""
-    monkeypatch.delenv("CLAUDE_CODE_COORDINATOR_MODE", raising=False)
+    monkeypatch.delenv('CLAUDE_CODE_COORDINATOR_MODE', raising=False)
     assert match_session_mode(None) is None
 
 
 def test_match_session_mode_no_op_when_already_matching(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
-    assert match_session_mode("coordinator") is None
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
+    assert match_session_mode('coordinator') is None
     assert is_coordinator_mode() is True
 
 
 def test_match_session_mode_enters_coordinator(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("CLAUDE_CODE_COORDINATOR_MODE", raising=False)
-    banner = match_session_mode("coordinator")
+    monkeypatch.delenv('CLAUDE_CODE_COORDINATOR_MODE', raising=False)
+    banner = match_session_mode('coordinator')
     assert banner is not None
-    assert "Entered coordinator mode" in banner
+    assert 'Entered coordinator mode' in banner
     assert is_coordinator_mode() is True
 
 
 def test_match_session_mode_exits_coordinator(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
-    banner = match_session_mode("normal")
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
+    banner = match_session_mode('normal')
     assert banner is not None
-    assert "Exited coordinator mode" in banner
+    assert 'Exited coordinator mode' in banner
     assert is_coordinator_mode() is False
 
 
@@ -120,10 +120,10 @@ def test_internal_worker_tools_contains_chapter_listed_names() -> None:
     """Per ``coordinatorMode.ts:29-34`` and the chapter §"Tool Restrictions"."""
     assert INTERNAL_WORKER_TOOLS == frozenset(
         {
-            "TeamCreate",
-            "TeamDelete",
-            "SendMessage",
-            "StructuredOutput",
+            'TeamCreate',
+            'TeamDelete',
+            'SendMessage',
+            'StructuredOutput',
         }
     )
 
@@ -139,18 +139,18 @@ def test_filter_worker_tools_excludes_internal_set() -> None:
     """Workers get standard tools (Read, Bash, etc.) but lose the four
     coordination tools that only the coordinator uses."""
     tools = [
-        _StubTool("Read"),
-        _StubTool("Bash"),
-        _StubTool("Edit"),
-        _StubTool("TeamCreate"),
-        _StubTool("TeamDelete"),
-        _StubTool("SendMessage"),
-        _StubTool("StructuredOutput"),
-        _StubTool("Agent"),
-        _StubTool("TaskStop"),
-        _StubTool("Grep"),
-        _StubTool("WebSearch"),
-        _StubTool("Skill"),
+        _StubTool('Read'),
+        _StubTool('Bash'),
+        _StubTool('Edit'),
+        _StubTool('TeamCreate'),
+        _StubTool('TeamDelete'),
+        _StubTool('SendMessage'),
+        _StubTool('StructuredOutput'),
+        _StubTool('Agent'),
+        _StubTool('TaskStop'),
+        _StubTool('Grep'),
+        _StubTool('WebSearch'),
+        _StubTool('Skill'),
     ]
     worker = filter_worker_tools(tools)
     worker_names = {t.name for t in worker}
@@ -158,21 +158,21 @@ def test_filter_worker_tools_excludes_internal_set() -> None:
     # And Agent / TaskStop / standard tools survive (Agent is for
     # delegation; chapter notes workers don't spawn sub-teams via
     # TeamCreate but Agent itself isn't on the internal-worker list).
-    assert {"Read", "Bash", "Edit", "Grep", "WebSearch", "Skill", "Agent"} <= worker_names
+    assert {'Read', 'Bash', 'Edit', 'Grep', 'WebSearch', 'Skill', 'Agent'} <= worker_names
 
 
 def test_filter_worker_tools_preserves_mcp_tools() -> None:
     """MCP-server tools aren't on ``INTERNAL_WORKER_TOOLS``; they
     pass through to workers (chapter §"Worker Context")."""
     tools = [
-        _StubTool("Read"),
-        _StubTool("mcp__github__create_pr"),
-        _StubTool("mcp__sentry__search_issues"),
+        _StubTool('Read'),
+        _StubTool('mcp__github__create_pr'),
+        _StubTool('mcp__sentry__search_issues'),
     ]
     worker = filter_worker_tools(tools)
     names = {t.name for t in worker}
-    assert "mcp__github__create_pr" in names
-    assert "mcp__sentry__search_issues" in names
+    assert 'mcp__github__create_pr' in names
+    assert 'mcp__sentry__search_issues' in names
 
 
 # ---------------------------------------------------------------------------
@@ -188,41 +188,41 @@ def test_user_context_empty_when_not_in_coordinator_mode() -> None:
 def test_user_context_returns_worker_tools_block(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
     ctx = get_coordinator_user_context()
-    assert "workerToolsContext" in ctx
-    assert "Workers spawned via Agent" in ctx["workerToolsContext"]
+    assert 'workerToolsContext' in ctx
+    assert 'Workers spawned via Agent' in ctx['workerToolsContext']
 
 
 def test_user_context_includes_mcp_servers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
 
     class _MCPClient:
         def __init__(self, name: str) -> None:
             self.name = name
 
-    ctx = get_coordinator_user_context([_MCPClient("github"), _MCPClient("sentry")])
-    assert "github" in ctx["workerToolsContext"]
-    assert "sentry" in ctx["workerToolsContext"]
+    ctx = get_coordinator_user_context([_MCPClient('github'), _MCPClient('sentry')])
+    assert 'github' in ctx['workerToolsContext']
+    assert 'sentry' in ctx['workerToolsContext']
 
 
 def test_user_context_omits_mcp_section_when_no_servers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
     ctx = get_coordinator_user_context()
-    assert "MCP servers" not in ctx["workerToolsContext"]
+    assert 'MCP servers' not in ctx['workerToolsContext']
 
 
 def test_user_context_includes_scratchpad_when_provided(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
-    ctx = get_coordinator_user_context(scratchpad_dir="/tmp/scratch")
-    assert "/tmp/scratch" in ctx["workerToolsContext"]
-    assert "Scratchpad" in ctx["workerToolsContext"]
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
+    ctx = get_coordinator_user_context(scratchpad_dir='/tmp/scratch')
+    assert '/tmp/scratch' in ctx['workerToolsContext']
+    assert 'Scratchpad' in ctx['workerToolsContext']
 
 
 def test_user_context_worker_tools_matches_async_allowed_tools(
@@ -236,19 +236,19 @@ def test_user_context_worker_tools_matches_async_allowed_tools(
     it stays in sync."""
     from clawcodex_ext.agent.constants import ASYNC_AGENT_ALLOWED_TOOLS
 
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
     ctx = get_coordinator_user_context()
-    body = ctx["workerToolsContext"]
+    body = ctx['workerToolsContext']
     for tool_name in ASYNC_AGENT_ALLOWED_TOOLS:
         # Skip ``StructuredOutput`` — it's in ASYNC_AGENT_ALLOWED_TOOLS
         # for non-coordinator paths but coordinator mode adds it to
         # INTERNAL_WORKER_TOOLS so workers don't see it.
-        if tool_name == "StructuredOutput":
+        if tool_name == 'StructuredOutput':
             continue
         assert tool_name in body, (
-            f"Coordinator user context lost {tool_name!r} from "
-            f"ASYNC_AGENT_ALLOWED_TOOLS — update prompt.py / mode.py "
-            f"to keep them in sync."
+            f'Coordinator user context lost {tool_name!r} from '
+            f'ASYNC_AGENT_ALLOWED_TOOLS — update prompt.py / mode.py '
+            f'to keep them in sync.'
         )
 
 
@@ -264,16 +264,16 @@ def test_user_context_simple_branch_three_tools(
     """SIMPLE branch returns exactly ``Bash, Edit, Read`` (sorted)
     — the literal three-tool list from TS ``coordinatorMode.ts:88-91``.
     Larger-list tools must NOT appear in SIMPLE mode."""
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
-    monkeypatch.setenv("CLAUDE_CODE_SIMPLE", "1")
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
+    monkeypatch.setenv('CLAUDE_CODE_SIMPLE', '1')
     ctx = get_coordinator_user_context()
-    body = ctx["workerToolsContext"]
-    assert "Bash, Edit, Read" in body
+    body = ctx['workerToolsContext']
+    assert 'Bash, Edit, Read' in body
     # Tools that exist in ASYNC_AGENT_ALLOWED_TOOLS but not SIMPLE must
     # NOT leak through.
-    assert "WebSearch" not in body
-    assert "TodoWrite" not in body
-    assert "Glob" not in body
+    assert 'WebSearch' not in body
+    assert 'TodoWrite' not in body
+    assert 'Glob' not in body
 
 
 def test_user_context_default_branch_sorted(
@@ -281,14 +281,14 @@ def test_user_context_default_branch_sorted(
 ) -> None:
     """Default branch must render tools alphabetically sorted —
     matches TS ``.sort().join(', ')`` at ``coordinatorMode.ts:94``."""
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
-    monkeypatch.delenv("CLAUDE_CODE_SIMPLE", raising=False)
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
+    monkeypatch.delenv('CLAUDE_CODE_SIMPLE', raising=False)
     ctx = get_coordinator_user_context()
-    body = ctx["workerToolsContext"]
-    line = next(l for l in body.splitlines() if "Workers spawned" in l)
-    tools_part = line.split(":", 1)[1].strip()
-    tools = [t.strip() for t in tools_part.split(",")]
-    assert tools == sorted(tools), f"Worker tools must be alphabetically sorted; got: {tools}"
+    body = ctx['workerToolsContext']
+    line = next(l for l in body.splitlines() if 'Workers spawned' in l)
+    tools_part = line.split(':', 1)[1].strip()
+    tools = [t.strip() for t in tools_part.split(',')]
+    assert tools == sorted(tools), f'Worker tools must be alphabetically sorted; got: {tools}'
 
 
 def test_user_context_default_branch_matches_async_allowed_exactly(
@@ -309,19 +309,19 @@ def test_user_context_default_branch_matches_async_allowed_exactly(
     """
     from clawcodex_ext.agent.constants import ASYNC_AGENT_ALLOWED_TOOLS
 
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
-    monkeypatch.delenv("CLAUDE_CODE_SIMPLE", raising=False)
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
+    monkeypatch.delenv('CLAUDE_CODE_SIMPLE', raising=False)
     ctx = get_coordinator_user_context()
-    body = ctx["workerToolsContext"]
-    line = next(l for l in body.splitlines() if "Workers spawned" in l)
-    rendered = set(t.strip() for t in line.split(":", 1)[1].strip().split(","))
+    body = ctx['workerToolsContext']
+    line = next(l for l in body.splitlines() if 'Workers spawned' in l)
+    rendered = set(t.strip() for t in line.split(':', 1)[1].strip().split(','))
     expected = ASYNC_AGENT_ALLOWED_TOOLS - INTERNAL_WORKER_TOOLS
     assert rendered == expected, (
-        f"Worker tools drift detected.\n"
-        f"  Rendered: {sorted(rendered)}\n"
-        f"  Expected: {sorted(expected)}\n"
-        f"  Missing : {sorted(expected - rendered)}\n"
-        f"  Extra   : {sorted(rendered - expected)}"
+        f'Worker tools drift detected.\n'
+        f'  Rendered: {sorted(rendered)}\n'
+        f'  Expected: {sorted(expected)}\n'
+        f'  Missing : {sorted(expected - rendered)}\n'
+        f'  Extra   : {sorted(rendered - expected)}'
     )
 
 
@@ -330,14 +330,14 @@ def test_user_context_simple_off_returns_full_list(
 ) -> None:
     """Sanity: flipping ``CLAUDE_CODE_SIMPLE`` off reverts to the full
     async-allowed list — confirms the branch is live, not stuck."""
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
-    monkeypatch.setenv("CLAUDE_CODE_SIMPLE", "1")
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
+    monkeypatch.setenv('CLAUDE_CODE_SIMPLE', '1')
     ctx_simple = get_coordinator_user_context()
-    monkeypatch.delenv("CLAUDE_CODE_SIMPLE", raising=False)
+    monkeypatch.delenv('CLAUDE_CODE_SIMPLE', raising=False)
     ctx_default = get_coordinator_user_context()
     assert ctx_simple != ctx_default
-    assert "WebSearch" not in ctx_simple["workerToolsContext"]
-    assert "WebSearch" in ctx_default["workerToolsContext"]
+    assert 'WebSearch' not in ctx_simple['workerToolsContext']
+    assert 'WebSearch' in ctx_default['workerToolsContext']
 
 
 def test_user_context_simple_snapshot(
@@ -347,11 +347,11 @@ def test_user_context_simple_snapshot(
     """Byte-exact snapshot pin for SIMPLE branch. Breaking this test
     is the deliberate review gate for any change to the SIMPLE-mode
     worker tools list — same pattern the prompt.py snapshots use."""
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
-    monkeypatch.setenv("CLAUDE_CODE_SIMPLE", "1")
-    body = get_coordinator_user_context()["workerToolsContext"]
-    snap_path = Path(request.path).parent / "__snapshots__" / "user_context_simple.snap.txt"
-    expected = snap_path.read_text().rstrip("\n")
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
+    monkeypatch.setenv('CLAUDE_CODE_SIMPLE', '1')
+    body = get_coordinator_user_context()['workerToolsContext']
+    snap_path = Path(request.path).parent / '__snapshots__' / 'user_context_simple.snap.txt'
+    expected = snap_path.read_text().rstrip('\n')
     assert body == expected
 
 
@@ -362,11 +362,11 @@ def test_user_context_default_snapshot(
     """Byte-exact snapshot pin for the default branch. Updates require
     a deliberate snapshot refresh (mirrors the prompt.py snapshot
     discipline at ``test_prompt.py``)."""
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
-    monkeypatch.delenv("CLAUDE_CODE_SIMPLE", raising=False)
-    body = get_coordinator_user_context()["workerToolsContext"]
-    snap_path = Path(request.path).parent / "__snapshots__" / "user_context_default.snap.txt"
-    expected = snap_path.read_text().rstrip("\n")
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
+    monkeypatch.delenv('CLAUDE_CODE_SIMPLE', raising=False)
+    body = get_coordinator_user_context()['workerToolsContext']
+    snap_path = Path(request.path).parent / '__snapshots__' / 'user_context_default.snap.txt'
+    expected = snap_path.read_text().rstrip('\n')
     assert body == expected
 
 
@@ -376,19 +376,19 @@ def test_user_context_simple_with_mcp_and_scratchpad(
     """SIMPLE branch composes correctly with MCP servers + scratchpad —
     confirms the SIMPLE branch only swaps the tools list and leaves
     the rest of the structure intact."""
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
-    monkeypatch.setenv("CLAUDE_CODE_SIMPLE", "1")
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
+    monkeypatch.setenv('CLAUDE_CODE_SIMPLE', '1')
 
     class _MCPClient:
         def __init__(self, name: str) -> None:
             self.name = name
 
-    ctx = get_coordinator_user_context([_MCPClient("github")], scratchpad_dir="/tmp/scratch")
-    body = ctx["workerToolsContext"]
-    assert "Bash, Edit, Read" in body
-    assert "WebSearch" not in body  # SIMPLE doesn't leak default tools
-    assert "github" in body
-    assert "/tmp/scratch" in body
+    ctx = get_coordinator_user_context([_MCPClient('github')], scratchpad_dir='/tmp/scratch')
+    body = ctx['workerToolsContext']
+    assert 'Bash, Edit, Read' in body
+    assert 'WebSearch' not in body  # SIMPLE doesn't leak default tools
+    assert 'github' in body
+    assert '/tmp/scratch' in body
 
 
 # ---------------------------------------------------------------------------
@@ -405,9 +405,9 @@ def test_fork_subagent_disabled_under_coordinator_mode(
     from src.agent.fork_subagent import is_fork_subagent_enabled
 
     # Both flags would normally enable fork...
-    monkeypatch.setenv("CLAUDE_FORK_SUBAGENT", "1")
+    monkeypatch.setenv('CLAUDE_FORK_SUBAGENT', '1')
     # ...but coordinator mode trumps.
-    monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
+    monkeypatch.setenv('CLAUDE_CODE_COORDINATOR_MODE', '1')
     assert is_fork_subagent_enabled() is False
 
 
@@ -419,13 +419,13 @@ def test_fork_subagent_enabled_when_coordinator_mode_off(
     additive, not an unconditional disable."""
     from src.agent.fork_subagent import is_fork_subagent_enabled
 
-    monkeypatch.setenv("CLAUDE_FORK_SUBAGENT", "1")
-    monkeypatch.delenv("CLAUDE_CODE_COORDINATOR_MODE", raising=False)
+    monkeypatch.setenv('CLAUDE_FORK_SUBAGENT', '1')
+    monkeypatch.delenv('CLAUDE_CODE_COORDINATOR_MODE', raising=False)
     # Interactive flag — patch the helper.
     from unittest.mock import patch
 
     with patch(
-        "clawcodex_ext.agent.fork_subagent.get_is_non_interactive_session",
+        'clawcodex_ext.agent.fork_subagent.get_is_non_interactive_session',
         return_value=False,
     ):
         assert is_fork_subagent_enabled() is True

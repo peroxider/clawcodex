@@ -174,6 +174,20 @@ def test_repl_extension_starts_forecast_idle_timer(monkeypatch) -> None:
     assert repl.command_registry.has("forecast")
 
 
+def test_repl_extension_does_not_install_removed_goal_controller(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "clawcodex_ext.away_summary.registration.load_away_summary_config",
+        lambda: AwaySummaryConfig(recap_command_enabled=True),
+    )
+
+    from clawcodex_ext.frontend.repl_extensions import install_repl_extensions
+
+    repl = _Repl()
+    install_repl_extensions(repl, repl.runtime_context)
+
+    assert getattr(repl, "_goal_controller", None) is None
+
+
 def test_repl_auto_recap_display_prints_immediately(monkeypatch) -> None:
     monkeypatch.setattr(
         "clawcodex_ext.away_summary.registration.load_away_summary_config",

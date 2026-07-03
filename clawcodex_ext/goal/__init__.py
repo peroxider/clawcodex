@@ -1,78 +1,121 @@
-"""F-9 `/goal` goal-management subsystem.
+"""Spec-1 goal boundary.
 
-A long-running task driver: the user sets an objective via the
-``/goal <objective>`` slash command, and the system auto-continues
-working on it until completion, token exhaustion, or explicit
-pause/clear. Goal state is keyed by ``session_id`` and persisted to
-the JSONL transcript as ``{"type": "goal", ...}`` /
-``{"type": "goal-cleared", ...}`` entries so ``--resume`` rehydrates
-it.
-
-This package provides:
-
-* :class:`GoalState`, :class:`GoalStatus` — the data model
-  (see :mod:`clawcodex_ext.goal.types`).
-* :func:`state machine transitions <clawcodex_ext.goal.state_machine>`
-  — pure functions that return a new ``GoalState``.
-* :class:`GoalStateRegistry` — process-wide ``dict[session_id, GoalState]``
-  with an RLock so the in-memory state is consistent under
-  concurrent reads/writes (see :mod:`clawcodex_ext.goal.registry`).
-* :class:`GoalController` — the glue between the REPL turn-completion
-  hook, the model-side token usage, the transcript persistence, and
-  the in-memory registry (see :mod:`clawcodex_ext.goal.controller`).
-* :class:`GoalCommand` — the user-facing ``/goal`` slash command
-  (see :mod:`clawcodex_ext.goal.command`).
-* :class:`GoalTool` — the model-callable ``get``/``update`` tool
-  (see :mod:`clawcodex_ext.goal.tool`).
-
-Reference: ``docs/FEATURE_PLAN.md`` §2.6 (F-9), modelled on upstream
-``claude-code-best@3e3e1de81bf89857``.
+Old goal v1 modules and the legacy model-callable `Goal` tool are not part
+of this package anymore. Later F-122 specs will rebuild the upstream
+contract in place.
 """
 
 from __future__ import annotations
 
-from .types import (
-    BLOCKED_CONSECUTIVE_THRESHOLD,
-    MAX_GOAL_TURNS,
-    MAX_OBJECTIVE_CHARS,
-    GoalState,
-    GoalStatus,
+from .command import GOAL_COMMAND, GoalCommand
+from .gate import GOALS_FEATURE, ensure_goals_feature_registered, goal_enabled
+from .model import ThreadGoal, ThreadGoalStatus
+from .protocol import (
+    GoalEventLog,
+    ThreadGoalClearParams,
+    ThreadGoalClearResponse,
+    ThreadGoalClearedNotification,
+    ThreadGoalDTO,
+    ThreadGoalGetParams,
+    ThreadGoalGetResponse,
+    ThreadGoalProtocol,
+    ThreadGoalSetParams,
+    ThreadGoalSetResponse,
+    ThreadGoalUpdatedNotification,
 )
-from .registry import GoalStateRegistry, get_goal_registry, reset_goal_registry_for_tests
-from .state_machine import (
-    clear_goal,
-    complete_goal,
-    compute_active_elapsed_ms,
-    continue_from_max_turns,
-    increment_turns,
-    mark_budget_limited,
-    mark_usage_limited,
-    pause_goal,
-    record_blocker,
-    resume_goal,
-    set_goal,
-    update_tokens,
+from .accounting import (
+    BudgetLimitedGoalDisposition,
+    GoalAccountingState,
+    GoalProgressSnapshot,
+    IdleGoalProgressSnapshot,
+    goal_token_delta_for_usage,
+)
+from .files import (
+    GOAL_FILE_NAME,
+    MAX_THREAD_GOAL_OBJECTIVE_CHARS,
+    materialize_goal_objective,
+    objective_text_for_edit,
+)
+from .observability import (
+    GoalObservation,
+    GoalObservationRecorder,
+)
+from .runtime import (
+    BUDGET_LIMIT_STEERING_MARKER,
+    CONTINUATION_STEERING_MARKER,
+    OBJECTIVE_UPDATED_STEERING_MARKER,
+    GoalContinuationRequest,
+    GoalRuntime,
+    goal_runtime_for_context,
+)
+from .steering import (
+    budget_limit_steering_message,
+    continuation_steering_message,
+    objective_updated_steering_message,
+)
+from .service import GoalService, GoalServiceError
+from .store import GoalStore, GoalUpdate, current_goal_thread_id, goals_db_filename, goals_db_path
+from .tools import (
+    CREATE_GOAL_TOOL_NAME,
+    GET_GOAL_TOOL_NAME,
+    GOAL_MODEL_TOOL_NAMES,
+    UPDATE_GOAL_TOOL_NAME,
+    filter_goal_model_tools_for_context,
+    goal_model_tools_visible,
+    make_goal_model_tools,
 )
 
 __all__ = [
-    "BLOCKED_CONSECUTIVE_THRESHOLD",
-    "GoalState",
-    "GoalStateRegistry",
-    "GoalStatus",
-    "MAX_GOAL_TURNS",
-    "MAX_OBJECTIVE_CHARS",
-    "clear_goal",
-    "complete_goal",
-    "compute_active_elapsed_ms",
-    "continue_from_max_turns",
-    "get_goal_registry",
-    "increment_turns",
-    "mark_budget_limited",
-    "mark_usage_limited",
-    "pause_goal",
-    "record_blocker",
-    "reset_goal_registry_for_tests",
-    "resume_goal",
-    "set_goal",
-    "update_tokens",
+    "GOAL_COMMAND",
+    "GOALS_FEATURE",
+    "CREATE_GOAL_TOOL_NAME",
+    "BUDGET_LIMIT_STEERING_MARKER",
+    "BudgetLimitedGoalDisposition",
+    "CONTINUATION_STEERING_MARKER",
+    "GET_GOAL_TOOL_NAME",
+    "GOAL_FILE_NAME",
+    "GoalAccountingState",
+    "GoalContinuationRequest",
+    "GoalObservation",
+    "GoalObservationRecorder",
+    "GoalProgressSnapshot",
+    "GoalRuntime",
+    "GoalStore",
+    "GoalEventLog",
+    "GoalUpdate",
+    "GoalCommand",
+    "GoalService",
+    "GoalServiceError",
+    "GOAL_MODEL_TOOL_NAMES",
+    "MAX_THREAD_GOAL_OBJECTIVE_CHARS",
+    "OBJECTIVE_UPDATED_STEERING_MARKER",
+    "ThreadGoal",
+    "ThreadGoalClearParams",
+    "ThreadGoalClearResponse",
+    "ThreadGoalClearedNotification",
+    "ThreadGoalDTO",
+    "ThreadGoalGetParams",
+    "ThreadGoalGetResponse",
+    "ThreadGoalProtocol",
+    "ThreadGoalSetParams",
+    "ThreadGoalSetResponse",
+    "ThreadGoalStatus",
+    "ThreadGoalUpdatedNotification",
+    "UPDATE_GOAL_TOOL_NAME",
+    "budget_limit_steering_message",
+    "current_goal_thread_id",
+    "continuation_steering_message",
+    "ensure_goals_feature_registered",
+    "filter_goal_model_tools_for_context",
+    "goal_enabled",
+    "goal_model_tools_visible",
+    "goal_runtime_for_context",
+    "goal_token_delta_for_usage",
+    "goals_db_filename",
+    "goals_db_path",
+    "IdleGoalProgressSnapshot",
+    "make_goal_model_tools",
+    "materialize_goal_objective",
+    "objective_text_for_edit",
+    "objective_updated_steering_message",
 ]

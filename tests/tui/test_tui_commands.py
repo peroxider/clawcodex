@@ -59,11 +59,13 @@ _KNOWN_HANDLED_COMMANDS: set[str] = {
     "/diff", "/mcp", "/tasks", "/rewind", "/resume", "/permission",
     "/forecast",
     # Handled by dispatch_registry_command (NOT by dispatch_local_command)
-    "/init", "/model", "/provider", "/recap",
+    "/init", "/model", "/provider", "/recap", "/btw",
     "/advisor", "/buddy", "/compact", "/context", "/cron-list",
     "/cron-delete", "/cron-run", "/cron-runs", "/cron-status",
     "/goal", "/export", "/output-style", "/security-review",
-    "/statusline", "/telemetry",
+    "/statusline", "/telemetry", "/copy", "/doctor", "/logo",
+    "/memory", "/permissions", "/release-notes", "/rename",
+    "/stickers", "/vim", "/voice", "/workflows", "/deep-research",
     "/render-last", "/skills",
 }
 

@@ -114,7 +114,7 @@ class _PasteAwareInput(Input):
         for _ in range(8):  # bounded walk; the tree is always shallow.
             if node is None:
                 break
-            handler = getattr(node, "handle_paste", None)
+            handler = getattr(node, 'handle_paste', None)
             if callable(handler):
                 handler(event.text)
                 # ``prevent_default`` is what stops Textual's MRO
@@ -126,7 +126,7 @@ class _PasteAwareInput(Input):
                 event.prevent_default()
                 event.stop()
                 return
-            node = getattr(node, "parent", None)
+            node = getattr(node, 'parent', None)
         # Fallback to the stock behaviour if we've been re-parented
         # outside a :class:`PromptInput` host.
         super()._on_paste(event)
@@ -140,7 +140,7 @@ _MAX_VISIBLE_SUGGESTIONS = 6
 # dumping raw content into the single-line buffer.
 _PASTE_CHARS_THRESHOLD = 800
 _PASTE_NEWLINES_THRESHOLD = 2
-_PASTE_PLACEHOLDER_RE = re.compile(r"\[Pasted text #(\d+)(?: \+(\d+) lines)?\]")
+_PASTE_PLACEHOLDER_RE = re.compile(r'\[Pasted text #(\d+)(?: \+(\d+) lines)?\]')
 
 
 class _SlashSuggestions(OptionList):
@@ -254,7 +254,7 @@ def _current_at_token(text_before_cursor: str) -> str | None:
 
 # Regex to detect ``@agent-<partial>`` mention tokens for the TUI.
 # Same pattern used by the prompt_toolkit ``AgentMentionCompleter``.
-_AGENT_COMPLETE_RE = re.compile(r"(?:^|(?<=\s))@(agent-[\w:.@\-]*)$")
+_AGENT_COMPLETE_RE = re.compile(r'(?:^|(?<=\s))@(agent-[\w:.@\-]*)$')
 
 
 def _current_agent_token(text_before_cursor: str) -> str | None:
@@ -271,7 +271,7 @@ def _current_agent_token(text_before_cursor: str) -> str | None:
     if at_pos > 0 and not text_before_cursor[at_pos - 1].isspace():
         return None
     token = match.group(1)  # e.g. "agent-explor" or "agent-"
-    return token[len("agent-") :]  # e.g. "explor" or ""
+    return token[len('agent-') :]  # e.g. "explor" or ""
 
 
 class PromptInput(Vertical):
@@ -305,7 +305,7 @@ class PromptInput(Vertical):
     """
 
     BINDINGS = [
-        ("ctrl+l", "clear_draft", "Clear draft"),
+        ('ctrl+l', 'clear_draft', 'Clear draft'),
     ]
 
     def __init__(
@@ -318,7 +318,7 @@ class PromptInput(Vertical):
         files_provider: Callable[[], list[str]] | None = None,
         cwd: str | os.PathLike[str] | None = None,
         vim_mode: bool = False,
-        accept_suggestion_key: str = "c-e",
+        accept_suggestion_key: str = 'c-e',
         accept_suggestion_tab_alias: bool = True,
         initial_history: list[str] | None = None,
     ) -> None:
@@ -334,29 +334,29 @@ class PromptInput(Vertical):
         # entries first, so ↑/↓ order matches submit order).
         self._history: list[str] = list(initial_history or [])
         self._history_pos: int | None = None
-        self._input = _PasteAwareInput(placeholder="Type a prompt, or / for commands")
-        self._suggestions = _SlashSuggestions(classes="-hidden")
-        self._message_suggestions = _MessageSuggestions(classes="-hidden")
-        self._at_file_suggestions = _AtFileSuggestions(classes="-hidden")
-        self._agent_suggestions = _AgentSuggestions(classes="-hidden")
-        self._ghost_suggestion = Static("", id="ghost-suggestion", classes="-hidden")
-        self._ghost_suggestion.renderable = ""
+        self._input = _PasteAwareInput(placeholder='Type a prompt, or / for commands')
+        self._suggestions = _SlashSuggestions(classes='-hidden')
+        self._message_suggestions = _MessageSuggestions(classes='-hidden')
+        self._at_file_suggestions = _AtFileSuggestions(classes='-hidden')
+        self._agent_suggestions = _AgentSuggestions(classes='-hidden')
+        self._ghost_suggestion = Static('', id='ghost-suggestion', classes='-hidden')
+        self._ghost_suggestion.renderable = ''
         self._ultraplan_trigger_preview = Static(
-            "",
-            id="ultraplan-trigger-preview",
-            classes="-hidden",
+            '',
+            id='ultraplan-trigger-preview',
+            classes='-hidden',
             markup=False,
         )
-        self._ultraplan_trigger_preview.renderable = ""
+        self._ultraplan_trigger_preview.renderable = ''
         self._vim = VimState(enabled=vim_mode)
         # Configured ghost-suggestion accept key. Stored in two forms:
         # ``_accept_key_raw`` is the canonical prompt_toolkit spelling
         # (used to render the hint) and ``_accept_key_textual`` is the
         # Textual event.key form (used in ``on_key`` to dispatch).
-        self._accept_key_raw: str = accept_suggestion_key or "c-e"
+        self._accept_key_raw: str = accept_suggestion_key or 'c-e'
         self._accept_key_textual: str = to_textual_key(self._accept_key_raw)
         self._accept_tab_alias: bool = bool(accept_suggestion_tab_alias)
-        self._yank_buffer: str = ""
+        self._yank_buffer: str = ''
         # Round 2 / WI-R2.5: most-recent bracketed paste classification.
         # Test seam — the host reads :class:`PromptPasted` instead.
         self._last_paste: PasteInfo | None = None
@@ -377,7 +377,7 @@ class PromptInput(Vertical):
         self._file_cache_built_at: float = 0.0
         # ---- suggest mode: tracks which popup type is active for
         #      unified key handling (F-38 Enter/Tab separation) ----
-        self._suggest_mode: str = ""  # "slash" | "at_file" | "at_agent" | "message" | ""
+        self._suggest_mode: str = ''  # "slash" | "at_file" | "at_agent" | "message" | ""
 
     def compose(self) -> ComposeResult:
         yield self._mode_indicator
@@ -398,7 +398,7 @@ class PromptInput(Vertical):
         self._input.focus()
 
     def clear(self) -> None:
-        self._input.value = ""
+        self._input.value = ''
         self._hide_suggestions()
         self._hide_message_suggestions()
         self._hide_ghost_suggestion()
@@ -407,7 +407,7 @@ class PromptInput(Vertical):
     def set_value(self, value: str) -> None:
         """Replace the draft text in the prompt (used by /history)."""
 
-        self._input.value = value or ""
+        self._input.value = value or ''
         self._hide_suggestions()
         self._hide_message_suggestions()
         self._hide_ghost_suggestion()
@@ -439,15 +439,15 @@ class PromptInput(Vertical):
         self._last_paste = info
         if not info.is_empty:
             inp = self._input
-            value = inp.value or ""
+            value = inp.value or ''
             pos = max(0, min(inp.cursor_position, len(value)))
             if info.length > _PASTE_CHARS_THRESHOLD or info.line_count > _PASTE_NEWLINES_THRESHOLD:
                 # Large paste: store blob, show placeholder
                 self._paste_counter += 1
                 blob_id = self._paste_counter
                 self._paste_blobs[blob_id] = info.text
-                extra = f" +{info.line_count} lines" if info.line_count > 1 else ""
-                placeholder = f"[Pasted text #{blob_id}{extra}]"
+                extra = f' +{info.line_count} lines' if info.line_count > 1 else ''
+                placeholder = f'[Pasted text #{blob_id}{extra}]'
                 new_value = value[:pos] + placeholder + value[pos:]
                 inp.value = new_value
                 inp.cursor_position = pos + len(placeholder)
@@ -477,12 +477,14 @@ class PromptInput(Vertical):
         the full pasted text, not the ``[Pasted text #N]`` placeholder.
         Unknown / expired blob IDs are left as-is (defensive).
         """
+
         def _replace(m: re.Match) -> str:
             blob_id = int(m.group(1))
             orig = self._paste_blobs.get(blob_id)
             if orig is not None:
                 return orig
             return m.group(0)  # unknown blob — leave placeholder intact
+
         return _PASTE_PLACEHOLDER_RE.sub(_replace, text)
 
     def _splice_at_mention(self, selected_id: str) -> None:
@@ -495,7 +497,7 @@ class PromptInput(Vertical):
         at the end of the replacement so the user can keep typing.
         """
         inp = self._input
-        value = inp.value or ""
+        value = inp.value or ''
         pos = inp.cursor_position
         # Walk backward from cursor to find the start of the @token
         start = pos
@@ -546,8 +548,8 @@ class PromptInput(Vertical):
 
     # ---- input events ----
     def on_input_changed(self, event: Input.Changed) -> None:
-        self.post_message(PromptDraftChanged(text=event.value or ""))
-        self._refresh_ultraplan_trigger_preview(event.value or "")
+        self.post_message(PromptDraftChanged(text=event.value or ''))
+        self._refresh_ultraplan_trigger_preview(event.value or '')
         # When the user is navigating the in-session history with
         # Up/Down, :meth:`_navigate_history` programmatically sets the
         # input value to a previous prompt. Because Textual fires
@@ -581,17 +583,17 @@ class PromptInput(Vertical):
         self._refresh_suggestions(event.value, event.input.cursor_position)
         # Show ghost-text suggestion from history when no popup is open.
         if (
-            self._suggestions.has_class("-hidden")
-            and self._message_suggestions.has_class("-hidden")
-            and self._at_file_suggestions.has_class("-hidden")
-            and self._agent_suggestions.has_class("-hidden")
+            self._suggestions.has_class('-hidden')
+            and self._message_suggestions.has_class('-hidden')
+            and self._at_file_suggestions.has_class('-hidden')
+            and self._agent_suggestions.has_class('-hidden')
         ):
-            self._refresh_ghost_suggestion(event.value or "")
+            self._refresh_ghost_suggestion(event.value or '')
         else:
             self._hide_ghost_suggestion()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
-        raw = (event.value or "").strip()
+        raw = (event.value or '').strip()
         text = self.expand_pastes(raw)
         if not text:
             return
@@ -613,7 +615,7 @@ class PromptInput(Vertical):
         self._hide_message_suggestions()
         self._hide_ghost_suggestion()
         self._hide_ultraplan_trigger_preview()
-        self._input.value = ""
+        self._input.value = ''
         ## _log(f'[prompt_input] posting PromptSubmitted: {text}')
         self.post_message(PromptSubmitted(text=text))
 
@@ -627,8 +629,8 @@ class PromptInput(Vertical):
                     suggestions = self._suggestions_provider() or []
                     for s in suggestions:
                         if isinstance(s, CommandSuggestion) and s.slash == selected_text:
-                            if s.takes_args and not selected_text.endswith(" "):
-                                selected_text += " "
+                            if s.takes_args and not selected_text.endswith(' '):
+                                selected_text += ' '
                             break
                 except Exception:
                     pass
@@ -654,7 +656,7 @@ class PromptInput(Vertical):
         # even when the Input child has focus (Textual's default focus
         # navigation would otherwise consume the key before the screen
         # binding fires).
-        if key == "shift+tab":
+        if key == 'shift+tab':
             self.post_message(PermissionModeCycleRequested())
             event.stop()
             return
@@ -668,19 +670,19 @@ class PromptInput(Vertical):
                 event.stop()
                 return
 
-        if key == "escape" and not self._suggestions.has_class("-hidden"):
+        if key == 'escape' and not self._suggestions.has_class('-hidden'):
             self._hide_suggestions()
             event.stop()
             return
-        if key == "escape" and not self._message_suggestions.has_class("-hidden"):
+        if key == 'escape' and not self._message_suggestions.has_class('-hidden'):
             self._hide_message_suggestions()
             event.stop()
             return
-        if key == "escape" and not self._at_file_suggestions.has_class("-hidden"):
+        if key == 'escape' and not self._at_file_suggestions.has_class('-hidden'):
             self._hide_at_file_suggestions()
             event.stop()
             return
-        if key == "escape":
+        if key == 'escape':
             # Bubble up to the app; it decides whether to actually
             # cancel based on whether the agent bridge is busy.
             # Mirrors the TS reference's chat:cancel keybinding.
@@ -693,7 +695,7 @@ class PromptInput(Vertical):
         # ``ctrl+e``) — mirrors REPL's AutoSuggestFromHistory accept key
         # ⌃E. Only fires when the suggestion is visible.
         if key == self._accept_key_textual:
-            if not self._ghost_suggestion.has_class("-hidden"):
+            if not self._ghost_suggestion.has_class('-hidden'):
                 self._accept_ghost_suggestion()
                 event.stop()
                 return
@@ -704,93 +706,93 @@ class PromptInput(Vertical):
         # let the event bubble up to the App's default ``focus_next``
         # binding — crucially we do NOT call ``event.stop()`` in that
         # case so widget-to-widget focus navigation still works.
-        if key == "tab" and self._accept_tab_alias:
+        if key == 'tab' and self._accept_tab_alias:
             if self._suggest_mode:
                 accepted = self._accept_suggestion()
                 if accepted:
                     event.stop()
                     return
-            if not self._ghost_suggestion.has_class("-hidden"):
+            if not self._ghost_suggestion.has_class('-hidden'):
                 self._accept_ghost_suggestion()
                 event.stop()
                 return
 
-        if key in ("up", "down"):
+        if key in ('up', 'down'):
             # @ file suggestions take top priority
-            if not self._at_file_suggestions.has_class("-hidden"):
-                if key == "up":
+            if not self._at_file_suggestions.has_class('-hidden'):
+                if key == 'up':
                     self._at_file_suggestions.action_cursor_up()
                 else:
                     self._at_file_suggestions.action_cursor_down()
                 event.stop()
                 return
             # Message-history popup takes second priority
-            if not self._message_suggestions.has_class("-hidden"):
-                if key == "up":
+            if not self._message_suggestions.has_class('-hidden'):
+                if key == 'up':
                     self._message_suggestions.action_cursor_up()
                 else:
                     self._message_suggestions.action_cursor_down()
                 event.stop()
                 return
-            if not self._suggestions.has_class("-hidden"):
+            if not self._suggestions.has_class('-hidden'):
                 self._suggestions.focus()
-                if key == "up":
+                if key == 'up':
                     self._suggestions.action_cursor_up()
                 else:
                     self._suggestions.action_cursor_down()
                 event.stop()
                 return
-            self._navigate_history(1 if key == "up" else -1)
+            self._navigate_history(1 if key == 'up' else -1)
             event.stop()
             return
 
     # ---- vim action application ----
     def _apply_vim_action(self, action: str) -> None:
         inp = self._input
-        value = inp.value or ""
+        value = inp.value or ''
         pos = inp.cursor_position
-        if action == "insert-before":
+        if action == 'insert-before':
             return
-        if action == "insert-after":
+        if action == 'insert-after':
             inp.cursor_position = min(len(value), pos + 1)
-        elif action == "insert-line-start":
+        elif action == 'insert-line-start':
             inp.cursor_position = 0
-        elif action == "insert-line-end":
+        elif action == 'insert-line-end':
             inp.cursor_position = len(value)
-        elif action == "move-left":
+        elif action == 'move-left':
             inp.cursor_position = max(0, pos - 1)
-        elif action == "move-right":
+        elif action == 'move-right':
             inp.cursor_position = min(len(value), pos + 1)
-        elif action == "move-start":
+        elif action == 'move-start':
             inp.cursor_position = 0
-        elif action == "move-end":
+        elif action == 'move-end':
             inp.cursor_position = len(value)
-        elif action == "move-word-next":
+        elif action == 'move-word-next':
             inp.cursor_position = _next_word(value, pos)
-        elif action == "move-word-prev":
+        elif action == 'move-word-prev':
             inp.cursor_position = _prev_word(value, pos)
-        elif action == "delete-char":
+        elif action == 'delete-char':
             if pos < len(value):
                 inp.value = value[:pos] + value[pos + 1 :]
-        elif action == "delete-line":
+        elif action == 'delete-line':
             self._yank_buffer = value
-            inp.value = ""
-        elif action == "yank-line":
+            inp.value = ''
+        elif action == 'yank-line':
             self._yank_buffer = value
-        elif action == "paste-after":
+        elif action == 'paste-after':
             if self._yank_buffer:
                 inp.value = value[: pos + 1] + self._yank_buffer + value[pos + 1 :]
                 inp.cursor_position = pos + 1 + len(self._yank_buffer)
-        elif action == "paste-before":
+        elif action == 'paste-before':
             if self._yank_buffer:
                 inp.value = value[:pos] + self._yank_buffer + value[pos:]
                 inp.cursor_position = pos + len(self._yank_buffer)
-        elif action == "submit":
+        elif action == 'submit':
             text = value.strip()
             if text:
                 self._history.append(text)
                 self._history_pos = None
-                inp.value = ""
+                inp.value = ''
                 self.post_message(PromptSubmitted(text=text))
 
     # ---- ghost-text suggestion from history ----
@@ -814,22 +816,22 @@ class PromptInput(Vertical):
             # as a context-aware secondary accept key unless the user
             # has already remapped the primary key to ``tab`` itself.
             base = display_key(self._accept_key_raw)
-            if self._accept_tab_alias and to_prompt_toolkit_key(self._accept_key_raw) != "tab":
-                base = f"{base} or {display_key('tab')}"
+            if self._accept_tab_alias and to_prompt_toolkit_key(self._accept_key_raw) != 'tab':
+                base = f'{base} or {display_key("tab")}'
             hint = Text()
-            hint.append(suffix, style="dim")
-            hint.append(f" ({base} to accept)", style="dim cyan")
+            hint.append(suffix, style='dim')
+            hint.append(f' ({base} to accept)', style='dim cyan')
             self._ghost_suggestion.renderable = hint
             self._ghost_suggestion.update(hint)
-            self._ghost_suggestion.remove_class("-hidden")
+            self._ghost_suggestion.remove_class('-hidden')
         else:
             self._hide_ghost_suggestion()
 
     def _hide_ghost_suggestion(self) -> None:
-        if not self._ghost_suggestion.has_class("-hidden"):
-            self._ghost_suggestion.add_class("-hidden")
-            self._ghost_suggestion.renderable = ""
-            self._ghost_suggestion.update("")
+        if not self._ghost_suggestion.has_class('-hidden'):
+            self._ghost_suggestion.add_class('-hidden')
+            self._ghost_suggestion.renderable = ''
+            self._ghost_suggestion.update('')
 
     def _refresh_ultraplan_trigger_preview(self, text: str) -> None:
         if not text or not is_ultraplan_rainbow_enabled():
@@ -840,21 +842,21 @@ class PromptInput(Vertical):
         if not hits or hits[0].start != leading:
             self._hide_ultraplan_trigger_preview()
             return
-        rendered = Text("ultraplan: ", style="dim")
+        rendered = Text('ultraplan: ', style='dim')
         rendered.append_text(highlight_triggers(text, hits))
         self._ultraplan_trigger_preview.renderable = rendered
         self._ultraplan_trigger_preview.update(rendered)
-        self._ultraplan_trigger_preview.remove_class("-hidden")
+        self._ultraplan_trigger_preview.remove_class('-hidden')
 
     def _hide_ultraplan_trigger_preview(self) -> None:
-        if not self._ultraplan_trigger_preview.has_class("-hidden"):
-            self._ultraplan_trigger_preview.add_class("-hidden")
-            self._ultraplan_trigger_preview.renderable = ""
-            self._ultraplan_trigger_preview.update("")
+        if not self._ultraplan_trigger_preview.has_class('-hidden'):
+            self._ultraplan_trigger_preview.add_class('-hidden')
+            self._ultraplan_trigger_preview.renderable = ''
+            self._ultraplan_trigger_preview.update('')
 
     def _accept_ghost_suggestion(self) -> None:
         """Accept the ghost-text suggestion, appending it to the input."""
-        text = self._input.value or ""
+        text = self._input.value or ''
         match = self._find_history_suggestion(text)
         if match is not None:
             self._input.value = match
@@ -874,13 +876,13 @@ class PromptInput(Vertical):
             options = self._build_suggestion_options(partial)
             if not options:
                 self._hide_suggestions()
-                self._suggest_mode = ""
+                self._suggest_mode = ''
                 return
             self._suggestions.clear_options()
             self._suggestions.add_options(options)
             self._suggestions.highlighted = 0
-            self._suggestions.remove_class("-hidden")
-            self._suggest_mode = "slash"
+            self._suggestions.remove_class('-hidden')
+            self._suggest_mode = 'slash'
             return
 
         # Check for ``@agent-<type>`` mention token (takes priority over
@@ -929,11 +931,11 @@ class PromptInput(Vertical):
         return _options_from_words(words, partial)
 
     def _hide_suggestions(self) -> None:
-        if not self._suggestions.has_class("-hidden"):
-            self._suggestions.add_class("-hidden")
+        if not self._suggestions.has_class('-hidden'):
+            self._suggestions.add_class('-hidden')
             self._suggestions.clear_options()
-        if self._suggest_mode == "slash":
-            self._suggest_mode = ""
+        if self._suggest_mode == 'slash':
+            self._suggest_mode = ''
 
     def _refresh_message_suggestions(self, text: str, cursor: int) -> None:
         """Refresh message-history completions when not in slash mode.
@@ -983,21 +985,21 @@ class PromptInput(Vertical):
 
         self._message_suggestions.clear_options()
         for full_msg in ranked:
-            display = full_msg[:100] + ("..." if len(full_msg) > 100 else "")
+            display = full_msg[:100] + ('...' if len(full_msg) > 100 else '')
             # Textual 0.79 的 OptionList.add_option 不再接受 id=
             # kwarg；通过 Option 包装传入。id 是选中后回填到 input
             # 的全文（display 仅作展示截断）。
             self._message_suggestions.add_option(Option(display, id=full_msg))
         self._message_suggestions.highlighted = 0
-        self._message_suggestions.remove_class("-hidden")
-        self._suggest_mode = "message"
+        self._message_suggestions.remove_class('-hidden')
+        self._suggest_mode = 'message'
 
     def _hide_message_suggestions(self) -> None:
-        if not self._message_suggestions.has_class("-hidden"):
-            self._message_suggestions.add_class("-hidden")
+        if not self._message_suggestions.has_class('-hidden'):
+            self._message_suggestions.add_class('-hidden')
             self._message_suggestions.clear_options()
-        if self._suggest_mode == "message":
-            self._suggest_mode = ""
+        if self._suggest_mode == 'message':
+            self._suggest_mode = ''
 
     # ---- unified suggestion accept ----
 
@@ -1010,7 +1012,7 @@ class PromptInput(Vertical):
         and Tab (F-38) — the caller decides whether to stop the key event.
         """
         # Slash command popup
-        if not self._suggestions.has_class("-hidden"):
+        if not self._suggestions.has_class('-hidden'):
             idx = self._suggestions.highlighted
             if idx is not None:
                 option = self._suggestions.get_option_at_index(idx)
@@ -1019,17 +1021,23 @@ class PromptInput(Vertical):
                     # if so, append a trailing space so the user can type
                     # args immediately (F-38 _arg_lookup).
                     selected_text = option.id
+                    current_text = (self._input.value or '').strip()
+                    takes_args = False
                     # Check suggestions_provider for takes_args info
                     if self._suggestions_provider is not None:
                         try:
                             suggestions = self._suggestions_provider() or []
                             for s in suggestions:
                                 if isinstance(s, CommandSuggestion) and s.slash == selected_text:
-                                    if s.takes_args and not selected_text.endswith(" "):
-                                        selected_text += " "
+                                    takes_args = bool(s.takes_args)
                                     break
                         except Exception:
                             pass
+                    if current_text == selected_text and not takes_args:
+                        self._hide_suggestions()
+                        return False
+                    if takes_args and not selected_text.endswith(' '):
+                        selected_text += ' '
                     self._input.value = selected_text
                     self._input.cursor_position = len(selected_text)
                     self._hide_suggestions()
@@ -1037,7 +1045,7 @@ class PromptInput(Vertical):
             return False
 
         # @ file suggestions → splice
-        if not self._at_file_suggestions.has_class("-hidden"):
+        if not self._at_file_suggestions.has_class('-hidden'):
             idx = self._at_file_suggestions.highlighted
             if idx is not None:
                 option = self._at_file_suggestions.get_option_at_index(idx)
@@ -1048,7 +1056,7 @@ class PromptInput(Vertical):
             return False
 
         # @ agent suggestions → splice
-        if not self._agent_suggestions.has_class("-hidden"):
+        if not self._agent_suggestions.has_class('-hidden'):
             idx = self._agent_suggestions.highlighted
             if idx is not None:
                 option = self._agent_suggestions.get_option_at_index(idx)
@@ -1059,7 +1067,7 @@ class PromptInput(Vertical):
             return False
 
         # Message-history suggestions → fill input
-        if not self._message_suggestions.has_class("-hidden"):
+        if not self._message_suggestions.has_class('-hidden'):
             idx = self._message_suggestions.highlighted
             if idx is not None:
                 option = self._message_suggestions.get_option_at_index(idx)
@@ -1120,10 +1128,10 @@ class PromptInput(Vertical):
                 return
             self._at_file_suggestions.clear_options()
             for path in matches:
-                self._at_file_suggestions.add_option(Option(path, id="@" + path))
+                self._at_file_suggestions.add_option(Option(path, id='@' + path))
             self._at_file_suggestions.highlighted = 0
-            self._at_file_suggestions.remove_class("-hidden")
-            self._suggest_mode = "at_file"
+            self._at_file_suggestions.remove_class('-hidden')
+            self._suggest_mode = 'at_file'
             return
 
         if _is_path_like_token(query):
@@ -1136,11 +1144,11 @@ class PromptInput(Vertical):
                 # Textual 0.79: id= kwarg 不再被 add_option 接受，
                 # 改用 Option 包装。
                 self._at_file_suggestions.add_option(
-                    Option(entry.display, id="@" + entry.text),
+                    Option(entry.display, id='@' + entry.text),
                 )
             self._at_file_suggestions.highlighted = 0
-            self._at_file_suggestions.remove_class("-hidden")
-            self._suggest_mode = "at_file"
+            self._at_file_suggestions.remove_class('-hidden')
+            self._suggest_mode = 'at_file'
             return
 
         candidates, bitmaps = self._get_cached_file_list()
@@ -1162,17 +1170,17 @@ class PromptInput(Vertical):
         for path in matches:
             # Textual 0.79: id= kwarg 不再被 add_option 接受，
             # 改用 Option 包装。
-            self._at_file_suggestions.add_option(Option(path, id="@" + path))
+            self._at_file_suggestions.add_option(Option(path, id='@' + path))
         self._at_file_suggestions.highlighted = 0
-        self._at_file_suggestions.remove_class("-hidden")
-        self._suggest_mode = "at_file"
+        self._at_file_suggestions.remove_class('-hidden')
+        self._suggest_mode = 'at_file'
 
     def _hide_at_file_suggestions(self) -> None:
-        if not self._at_file_suggestions.has_class("-hidden"):
-            self._at_file_suggestions.add_class("-hidden")
+        if not self._at_file_suggestions.has_class('-hidden'):
+            self._at_file_suggestions.add_class('-hidden')
             self._at_file_suggestions.clear_options()
-        if self._suggest_mode == "at_file":
-            self._suggest_mode = ""
+        if self._suggest_mode == 'at_file':
+            self._suggest_mode = ''
 
     def _refresh_agent_suggestions(self, query: str) -> None:
         """Refresh the ``@agent-<type>`` suggestion popup.
@@ -1197,17 +1205,17 @@ class PromptInput(Vertical):
         matches: list[tuple[str, str]] = []  # (agent_type, name)
 
         for agent in agents:
-            agent_type = getattr(agent, "agent_type", None) or (
-                agent.get("agent_type") if isinstance(agent, dict) else None
+            agent_type = getattr(agent, 'agent_type', None) or (
+                agent.get('agent_type') if isinstance(agent, dict) else None
             )
             if not isinstance(agent_type, str) or not agent_type:
                 continue
             if query_lower not in agent_type.lower():
                 continue
-            name = getattr(agent, "name", None) or (
-                agent.get("name", "") if isinstance(agent, dict) else ""
+            name = getattr(agent, 'name', None) or (
+                agent.get('name', '') if isinstance(agent, dict) else ''
             )
-            matches.append((agent_type, str(name) if name else ""))
+            matches.append((agent_type, str(name) if name else ''))
 
         if not matches:
             self._hide_agent_suggestions()
@@ -1215,20 +1223,20 @@ class PromptInput(Vertical):
 
         self._agent_suggestions.clear_options()
         for agent_type, name in matches:
-            display = f"{agent_type}  — {name}" if name else agent_type
+            display = f'{agent_type}  — {name}' if name else agent_type
             self._agent_suggestions.add_option(
-                Option(display, id=f"@agent-{agent_type}"),
+                Option(display, id=f'@agent-{agent_type}'),
             )
         self._agent_suggestions.highlighted = 0
-        self._agent_suggestions.remove_class("-hidden")
-        self._suggest_mode = "at_agent"
+        self._agent_suggestions.remove_class('-hidden')
+        self._suggest_mode = 'at_agent'
 
     def _hide_agent_suggestions(self) -> None:
-        if not self._agent_suggestions.has_class("-hidden"):
-            self._agent_suggestions.add_class("-hidden")
+        if not self._agent_suggestions.has_class('-hidden'):
+            self._agent_suggestions.add_class('-hidden')
             self._agent_suggestions.clear_options()
-        if self._suggest_mode == "at_agent":
-            self._suggest_mode = ""
+        if self._suggest_mode == 'at_agent':
+            self._suggest_mode = ''
 
     def _navigate_history(self, direction: int) -> None:
         """``direction`` = +1 means older (Up); -1 means newer (Down)."""
@@ -1245,7 +1253,7 @@ class PromptInput(Vertical):
             self._history_pos += 1
             if self._history_pos >= len(self._history):
                 self._history_pos = None
-                self._input.value = ""
+                self._input.value = ''
                 return
         self._input.value = self._history[self._history_pos]
         self._input.cursor_position = len(self._input.value)
@@ -1289,7 +1297,7 @@ def _options_from_words(words: list[Any], partial: str) -> list[Option]:
     matches: list[str] = []
     seen: set[str] = set()
     for word in words:
-        if not isinstance(word, str) or not word.startswith("/"):
+        if not isinstance(word, str) or not word.startswith('/'):
             continue
         key = word[1:].lower()
         if key in seen:
@@ -1315,21 +1323,21 @@ def _render_suggestion_row(
     background on the selected entry (see ``_SlashSuggestions``).
     """
 
-    alias_text = f" ({matched_alias})" if matched_alias else ""
-    name_segment = f"{sugg.slash}{alias_text}"
+    alias_text = f' ({matched_alias})' if matched_alias else ''
+    name_segment = f'{sugg.slash}{alias_text}'
     if len(name_segment) > _NAME_COLUMN_WIDTH - 1:
-        name_segment = name_segment[: _NAME_COLUMN_WIDTH - 2] + "…"
+        name_segment = name_segment[: _NAME_COLUMN_WIDTH - 2] + '…'
     pad = max(1, _NAME_COLUMN_WIDTH - len(name_segment))
 
-    row = Text(no_wrap=True, overflow="ellipsis", style="dim")
-    row.append(name_segment, style="bold")
-    row.append(" " * pad)
+    row = Text(no_wrap=True, overflow='ellipsis', style='dim')
+    row.append(name_segment, style='bold')
+    row.append(' ' * pad)
     if sugg.tag:
-        row.append(f"[{sugg.tag}] ", style="italic cyan")
+        row.append(f'[{sugg.tag}] ', style='italic cyan')
     if sugg.description:
         # Collapse internal whitespace so multi-line descriptions render
         # cleanly on a single row (the OptionList truncates with "…").
-        row.append(" ".join(sugg.description.split()))
+        row.append(' '.join(sugg.description.split()))
     return row
 
 

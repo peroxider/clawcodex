@@ -45,7 +45,7 @@ class QueryEngineConfig:
     append_system_prompt: str | None = None
     max_turns: int | None = None
     initial_messages: list[Message] | None = None
-    query_source: str = "repl_main_thread"
+    query_source: str = 'repl_main_thread'
     user_context: dict[str, str] | None = None
     system_context: dict[str, str] | None = None
     # WI-2.3 (critic M1): MCP servers loaded for this session. Threaded into
@@ -69,7 +69,7 @@ class QueryEngine:
         # tools (especially subagent dispatches) ignore the user's
         # interrupt until they finish naturally.
         self._config.tool_context.abort_controller = self._abort_controller
-        self._total_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
+        self._total_usage: dict[str, int] = {'input_tokens': 0, 'output_tokens': 0}
         self._session_id: str = uuid4().hex
         # Ch5/B.5 prereq — the autocompact circuit-breaker counter must
         # survive across submit_message calls so 3 consecutive failures
@@ -93,18 +93,17 @@ class QueryEngine:
     def _check_goal_active(self) -> bool:
         """Check whether a goal is active for the current session.
 
-        Best-effort lookup via the process-level ``GoalStateRegistry``.
-        Returns ``False`` when no registry or no goal exists, so the
-        compression pipeline never errors on a missing goal.
+        Best-effort lookup via ``GoalService``. Returns ``False`` when no
+        goal exists, so the compression pipeline never errors on a missing
+        goal.
         """
         try:
-            from clawcodex_ext.goal.registry import get_goal_registry
+            from clawcodex_ext.goal.model import ThreadGoalStatus
+            from clawcodex_ext.goal.service import GoalService
 
-            state = get_goal_registry().get(self._session_id)
-            if state is not None:
-                from clawcodex_ext.goal.types import GoalStatus
-
-                return state.status == GoalStatus.ACTIVE
+            goal = GoalService().get_goal(self._session_id)
+            if goal is not None:
+                return goal.status is ThreadGoalStatus.ACTIVE
         except Exception:
             pass
         return False
@@ -154,10 +153,10 @@ class QueryEngine:
                 # opt out of the section taxonomy. Return list-shape with one
                 # block so downstream typing is uniform.
                 blocks: list[dict[str, Any]] = [
-                    {"type": "text", "text": self._config.custom_system_prompt}
+                    {'type': 'text', 'text': self._config.custom_system_prompt}
                 ]
                 if self._config.append_system_prompt:
-                    blocks.append({"type": "text", "text": self._config.append_system_prompt})
+                    blocks.append({'type': 'text', 'text': self._config.append_system_prompt})
                 # Append git-status etc. as a final uncached block.
                 system_prompt = append_system_context_blocks(blocks, parts.system_context)
                 return system_prompt, parts.user_context, parts.system_context
@@ -216,21 +215,23 @@ class QueryEngine:
                     cwd=self._config.tool_context.cwd,
                 )
             except Exception:
-                context_prompt = ""
+                context_prompt = ''
             return context_prompt, {}, {}
 
     async def submit_message(
         self,
-        prompt: str | list[ContentBlock],
+        prompt: str | list[ContentBlock] | UserMessage,
         *,
         on_message: Callable[[Message | StreamEvent], None] | None = None,
+        on_text_chunk: Callable[[str], None] | None = None,
         on_thinking_chunk: Callable[[str], None] | None = None,
     ) -> AsyncGenerator[Message | StreamEvent, None]:
         # ``MessageContent = str | list[ContentBlock]`` already supports
         # both shapes; the list form lets callers attach image/document
         # content blocks alongside the text prompt (e.g. from @image.png
-        # @-mentions in the REPL).
-        user_msg = UserMessage(content=prompt)
+        # @-mentions in the REPL). Goal continuation supplies a prebuilt
+        # meta UserMessage so the steering keeps its system-injection shape.
+        user_msg = prompt if isinstance(prompt, UserMessage) else UserMessage(content=prompt)
         self._mutable_messages.append(user_msg)
 
         system_prompt, user_context, system_context = await self._build_system_prompt_parts()
@@ -253,13 +254,13 @@ class QueryEngine:
         try:
             for path, fp in self._config.tool_context.read_file_fingerprints.items():
                 # fp is (mtime, size) or (mtime, size, partial)
-                read_file_state[str(path)] = {"timestamp": fp[0]}
+                read_file_state[str(path)] = {'timestamp': fp[0]}
         except Exception:
             pass
 
         pipeline_config = PipelineConfig(
             provider=self._config.provider,
-            model=getattr(self._config.provider, "model", "") or "",
+            model=getattr(self._config.provider, 'model', '') or '',
             read_file_state=read_file_state or None,
             # Ch5/B.5 — thread the session-scoped tracking instance so
             # the autocompact circuit-breaker can count consecutive
@@ -284,6 +285,7 @@ class QueryEngine:
             user_context=user_context,
             system_context=system_context,
             pipeline_config=pipeline_config,
+            on_text_chunk=on_text_chunk,
             on_thinking_chunk=on_thinking_chunk,
         )
 
@@ -325,7 +327,7 @@ class QueryEngine:
             # here. Mirrored by repl/core.py for session.conversation.
             if (
                 isinstance(message, AssistantMessage)
-                and getattr(message, "_api_error", None) == "image_unsupported"
+                and getattr(message, '_api_error', None) == 'image_unsupported'
             ):
                 from clawcodex_ext.context_system.microcompact import (
                     strip_images_from_typed_messages,
@@ -336,7 +338,7 @@ class QueryEngine:
             yield message
 
     def interrupt(self) -> None:
-        self._abort_controller.abort("user_interrupt")
+        self._abort_controller.abort('user_interrupt')
 
     def get_messages(self) -> list[Message]:
         return list(self._mutable_messages)

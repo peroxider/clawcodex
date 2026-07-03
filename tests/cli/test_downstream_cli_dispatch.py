@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import os
 
 
 def test_run_cli_version_short_circuit(monkeypatch):
@@ -125,6 +126,33 @@ def test_run_cli_permission_flags_resolved(monkeypatch):
     assert built_options[0].is_bypass_permissions_mode_available is True
 
 
+def test_run_cli_print_goal_summary_skips_runtime_provider(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    from clawcodex_ext.cli.dispatch import run_cli
+
+    monkeypatch.setenv("CLAWCODEX_HOME", str(tmp_path / "clawcodex-home"))
+    monkeypatch.setattr("src.init.run_pre_action", lambda args: None)
+
+    def _runtime_must_not_be_built(cls, options):
+        raise RuntimeError("runtime provider should not be built for /goal summary")
+
+    monkeypatch.setattr(
+        "clawcodex_ext.runtime.context.RuntimeContext.build",
+        classmethod(_runtime_must_not_be_built),
+    )
+
+    rc = run_cli(["clawcodex", "-p", "/goal"])
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "/goal [<objective>|clear|edit|pause|resume]" in captured.out
+    assert "No goal is currently set." in captured.out
+    assert "runtime provider should not be built" not in captured.err
+
+
 def test_run_cli_provider_model_fast_paths_skip_pre_action(monkeypatch, capsys):
     from clawcodex_ext.cli.dispatch import run_cli
 
@@ -203,6 +231,47 @@ def test_build_parser_produces_functional_parser():
     args = parser.parse_args(['--dangerously-skip-permissions', '--permission-mode', 'plan'])
     assert args.dangerously_skip_permissions is True
     assert args.permission_mode == 'plan'
+
+
+def test_build_parser_accepts_agent_debug_flag():
+    from clawcodex_ext.cli.parser import build_parser
+
+    parser = build_parser()
+    args = parser.parse_args(['--agent-debug'])
+
+    assert args.agent_debug is True
+
+
+def test_run_cli_agent_debug_sets_debug_environment(monkeypatch):
+    from clawcodex_ext.cli.dispatch import run_cli
+    import src.entrypoints.tui as tui_module
+
+    for name in (
+        'CLAWCODEX_AGENT_DEBUG',
+        'CLAWCODEX_AGENT_DEBUG_DIR',
+        'CLAWCODEX_HISTORY_FILE',
+        'CLAWCODEX_SESSIONS_DIR',
+        'CLAW_TELEMETRY_STORAGE_DIR',
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    monkeypatch.setattr('src.init.run_pre_action', lambda args: None)
+    monkeypatch.setattr('clawcodex_ext.cli.permissions.resolve_permission_state', lambda args: None)
+    monkeypatch.setattr(tui_module, 'should_use_tui', lambda explicit: False)
+
+    class FakeFrontend:
+        def run(self, ctx, args):
+            return 0
+
+    monkeypatch.setattr('clawcodex_ext.frontend.get_frontend', lambda name: FakeFrontend())
+
+    rc = run_cli(['clawcodex', '--agent-debug'])
+
+    assert rc == 0
+    assert os.environ['CLAWCODEX_AGENT_DEBUG'] == '1'
+    assert os.environ['CLAWCODEX_HISTORY_FILE'].endswith('/history')
+    assert os.environ['CLAWCODEX_SESSIONS_DIR'].endswith('/sessions')
+    assert os.environ['CLAW_TELEMETRY_STORAGE_DIR'].endswith('/telemetry')
 
 
 def test_build_parser_handles_allow_dangerously_skip(monkeypatch):

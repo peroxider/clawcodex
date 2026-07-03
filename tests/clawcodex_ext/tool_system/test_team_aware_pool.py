@@ -41,52 +41,51 @@ def _build_registry_with(*tool_names: str) -> ToolRegistry:
 
 
 def test_get_team_aware_tool_list_drops_send_message_when_no_team() -> None:
-    registry = _build_registry_with("Read", "Bash", "SendMessage", "Edit")
+    registry = _build_registry_with('Read', 'Bash', 'SendMessage', 'TeamCreate', 'Edit')
     result = get_team_aware_tool_list(registry, team=None)
-    assert [t.name for t in result] == ["Read", "Bash", "Edit"]
+    assert [t.name for t in result] == ['Read', 'Bash', 'TeamCreate', 'Edit']
 
 
 def test_get_team_aware_tool_list_keeps_all_when_team_active() -> None:
     registry = _build_registry_with(
-        "Read",
-        "Bash",
-        "SendMessage",
-        "TeamCreate",
-        "TeamDelete",
-        "Edit",
+        'Read',
+        'Bash',
+        'SendMessage',
+        'TeamCreate',
+        'TeamDelete',
+        'Edit',
     )
-    team = {"team_name": "t", "lead_agent_id": "lead-1"}
+    team = {'team_name': 't', 'lead_agent_id': 'lead-1'}
     result = get_team_aware_tool_list(registry, team=team)
     assert [t.name for t in result] == [
-        "Read",
-        "Bash",
-        "SendMessage",
-        "TeamCreate",
-        "TeamDelete",
-        "Edit",
+        'Read',
+        'Bash',
+        'SendMessage',
+        'TeamCreate',
+        'TeamDelete',
+        'Edit',
     ]
 
 
 def test_get_team_aware_tool_list_keeps_all_when_team_is_empty_dict() -> None:
     # Empty dict is "no team active" per has_team_context — drops
-    # team-only tools.
-    registry = _build_registry_with("Read", "SendMessage")
+    # active-team-only tools but keeps TeamCreate as the bootstrap entry.
+    registry = _build_registry_with('Read', 'SendMessage', 'TeamCreate')
     result = get_team_aware_tool_list(registry, team={})
-    assert [t.name for t in result] == ["Read"]
+    assert [t.name for t in result] == ['Read', 'TeamCreate']
 
 
-def test_get_team_aware_tool_list_drops_team_create_delete_when_no_team() -> None:
-    # ``TeamCreate`` / ``TeamDelete`` only make sense once a team
-    # exists; the filter drops them so the model can't accidentally
-    # call them out of order.
+def test_get_team_aware_tool_list_keeps_team_create_when_no_team() -> None:
+    # ``TeamCreate`` is the bootstrap tool for creating the active team
+    # context; ``TeamDelete`` still only makes sense once a team exists.
     registry = _build_registry_with(
-        "Read",
-        "TeamCreate",
-        "TeamDelete",
-        "Bash",
+        'Read',
+        'TeamCreate',
+        'TeamDelete',
+        'Bash',
     )
     result = get_team_aware_tool_list(registry, team=None)
-    assert [t.name for t in result] == ["Read", "Bash"]
+    assert [t.name for t in result] == ['Read', 'TeamCreate', 'Bash']
 
 
 def test_get_team_aware_tool_list_empty_registry() -> None:
@@ -97,6 +96,6 @@ def test_get_team_aware_tool_list_empty_registry() -> None:
 
 def test_get_team_aware_tool_list_returns_list_type() -> None:
     # The downstream QueryParams expects a list (it indexes + iterates).
-    registry = _build_registry_with("Read")
+    registry = _build_registry_with('Read')
     result = get_team_aware_tool_list(registry, team=None)
     assert isinstance(result, list)

@@ -158,6 +158,7 @@ NO_PERMISSION_TOOLS: frozenset[str] = frozenset({
     "ClipboardRead",
     # Bookkeeping / harness state (no external side effects)
     "TodoWrite", "ClipboardWrite", "Sleep",
+    "get_goal", "create_goal", "update_goal",
     "TaskCreate", "TaskGet", "TaskList", "TaskUpdate", "TaskOutput", "TaskStop",
     # Orchestration / coordination — every sub-action they spawn is itself
     # permission-checked, so the spawn is not the gate.

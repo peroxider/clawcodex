@@ -2,7 +2,7 @@
 
 > 本目录是 ClawCodex **特性规划与进度**的唯一事实源。
 > 融合自 `FEATURE_PLAN.md`、`PROGRESS.md`、`ARCHIVED_FEATURES.md`、`ARCHIVED_PROGRESS.md` 四份文档。
-> 融合日期: 2026-06-24 | 参照: [MERGE_GUIDE.md](./MERGE_GUIDE.md)
+> 融合日期: 2026-06-24 | 参照: MERGE_GUIDE.md
 
 ## 目录结构
 
@@ -83,23 +83,23 @@ docs/feature_plan/
 | F-73 | CI/CD 流水线 | 🔄 | [f-73-cicd.md](06-ccb-benchmark/f-73-cicd.md) |
 | F-74 | Sandbox 沙箱远程执行 | 📋 | [f-74-sandbox.md](06-ccb-benchmark/f-74-sandbox.md) |
 | F-82 | Remote Control 远程控制 | 🔄 | [f-82-remote-control.md](06-ccb-benchmark/f-82-remote-control.md) |
-| F-83 | 远程 Triggers（AGENT_TRIGGERS_REMOTE） | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-83-远程-triggersagent_triggers_remote) |
+| F-83 | 远程 Triggers（AGENT_TRIGGERS_REMOTE） | 📋 | [f-83-triggers.md](06-ccb-benchmark/f-83-triggers.md) |
 | F-84 | Daemon 后台守护 | 📋 | [f-84-daemon.md](06-ccb-benchmark/f-84-daemon.md) |
 | F-85 | Pipe IPC 命令族（UDS + LAN_PIPES） | 📋 | [f-85-pipe-ipc.md](06-ccb-benchmark/f-85-pipe-ipc.md) |
-| F-86 | Computer Use 跨平台 Executor | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-86-computer-use-跨平台-executor) |
-| F-87 | /ultraplan LLM 驱动 + CLI 完整实现 | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-87-ultraplan-llm-驱动--cli-完整实现) |
+| F-86 | Computer Use 跨平台 Executor | 📋 | [f-86-computer-use.md](06-ccb-benchmark/f-86-computer-use.md) |
+| F-87 | /ultraplan LLM 驱动 + CLI 完整实现 | 📋 | [f-87-ultraplan.md](06-ccb-benchmark/f-87-ultraplan.md) |
 | F-88 | Monitor 后台监控 + MonitorTool | 📋 | [f-88-monitor.md](06-ccb-benchmark/f-88-monitor.md) |
-| F-89 | Proactive 自主模式 + KAIROS Tick 集成 | ✅ | [06-ccb-benchmark/f-89-proactive.md](06-ccb-benchmark/f-89-proactive.md) |
-| F-91 | MCP Skills 自动发现 | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
-| F-92 | experimental_skill_search TF-IDF | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
-| F-93 | TeamMem 共享记忆 | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
-| F-94 | BG_SESSIONS 后台会话 | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
-| F-95 | TEMPLATES 模板系统 | 🔄 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
-| F-96 | PROMPT_CACHE_BREAK_DETECTION | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
-| F-97 | LODESTONE 深度链接 | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
-| F-98 | SSH_REMOTE 远程模式 | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
-| F-99 | DIRECT_CONNECT 直连模式 | 🔄 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
-| — | **CCB ↔ ClawCodex 缺口分析** | ✅ | [gap-analysis-2026q2.md](06-ccb-benchmark/gap-analysis-2026q2.md) |
+| F-89 | Proactive 自主模式 + KAIROS Tick 集成 | ✅ | [f-89-proactive.md](06-ccb-benchmark/f-89-proactive.md) |
+| F-91 | MCP Skills 自动发现 | 📋 | [f-91-mcp-skill-discovery.md](06-ccb-benchmark/f-91-mcp-skill-discovery.md) |
+| F-92 | experimental_skill_search TF-IDF | 📋 | [f-92-skill-search.md](06-ccb-benchmark/f-92-skill-search.md) |
+| F-93 | TeamMem 共享记忆 | 📋 | [f-93-team-memory.md](06-ccb-benchmark/f-93-team-memory.md) |
+| F-94 | BG_SESSIONS 后台会话 | 📋 | [f-94-bg-sessions.md](06-ccb-benchmark/f-94-bg-sessions.md) |
+| F-95 | TEMPLATES 模板系统 | 🔄 | [f-95-templates.md](06-ccb-benchmark/f-95-templates.md) |
+| F-96 | PROMPT_CACHE_BREAK_DETECTION | 📋 | [f-96-cache-break-detection.md](06-ccb-benchmark/f-96-cache-break-detection.md) |
+| F-97 | LODESTONE 深度链接 | 📋 | [f-97-lodestone.md](06-ccb-benchmark/f-97-lodestone.md) |
+| F-98 | SSH_REMOTE 远程模式 | 📋 | [f-98-ssh-remote.md](06-ccb-benchmark/f-98-ssh-remote.md) |
+| F-99 | DIRECT_CONNECT 直连模式 | 🔄 | [f-99-direct-connect.md](06-ccb-benchmark/f-99-direct-connect.md) |
+| — | **CCB ↔ ClawCodex 缺口分析** | ✅ | [06-ccb-benchmark/README.md](06-ccb-benchmark/README.md) |
 
 ### 解耦方案（独立规划）
 

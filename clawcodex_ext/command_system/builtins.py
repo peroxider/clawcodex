@@ -37,7 +37,6 @@ from clawcodex_ext.command_system.voice_command import VOICE_COMMAND
 from clawcodex_ext.command_system.tts_command import TTS_COMMAND
 from clawcodex_ext.command_system.statusline import STATUSLINE_COMMAND
 from clawcodex_ext.command_system.security_review import SECURITY_REVIEW_COMMAND
-from clawcodex_ext.goal.command import GOAL_COMMAND
 from clawcodex_ext.command_system.btw_command import BTW_COMMAND
 
 # Upstream 0573f4c new slash commands. The implementations live in
@@ -173,15 +172,15 @@ def clear_command_call(args: str, context: CommandContext) -> LocalCommandResult
     Returns:
         LocalCommandResult
     """
-    if hasattr(context.conversation, "clear"):
+    if hasattr(context.conversation, 'clear'):
         context.conversation.clear()
 
-    if hasattr(context.history, "events"):
+    if hasattr(context.history, 'events'):
         context.history.events.clear()
 
     return LocalCommandResult(
-        type="text",
-        value="Conversation cleared.",
+        type='text',
+        value='Conversation cleared.',
     )
 
 
@@ -204,21 +203,21 @@ def help_command_call(args: str, context: CommandContext) -> LocalCommandResult:
         header = f"Commands matching '{query}':"
     else:
         commands = registry.list_commands(include_hidden=False)
-        header = "Available commands:"
+        header = 'Available commands:'
 
-    lines = [header, ""]
+    lines = [header, '']
 
     for cmd in commands:
-        alias_str = f" (aliases: {', '.join(cmd.aliases)})" if cmd.aliases else ""
-        lines.append(f"  /{cmd.name}{alias_str}")
-        lines.append(f"      {cmd.description}")
+        alias_str = f' (aliases: {", ".join(cmd.aliases)})' if cmd.aliases else ''
+        lines.append(f'  /{cmd.name}{alias_str}')
+        lines.append(f'      {cmd.description}')
         if cmd.argument_hint:
-            lines.append(f"      Usage: /{cmd.name} {cmd.argument_hint}")
-        lines.append("")
+            lines.append(f'      Usage: /{cmd.name} {cmd.argument_hint}')
+        lines.append('')
 
     return LocalCommandResult(
-        type="text",
-        value="\n".join(lines),
+        type='text',
+        value='\n'.join(lines),
     )
 
 
@@ -243,21 +242,21 @@ def skills_command_call(args: str, context: CommandContext) -> LocalCommandResul
 
     if not skills:
         return LocalCommandResult(
-            type="text",
-            value="No skills available. Add skills to ~/.clawcodex/skills/ or ./.clawcodex/skills/.",
+            type='text',
+            value='No skills available. Add skills to ~/.clawcodex/skills/ or ./.clawcodex/skills/.',
         )
 
-    lines = ["Available skills:", ""]
+    lines = ['Available skills:', '']
     for skill in skills:
-        lines.append(f"  {skill.name}")
-        lines.append(f"      {skill.description}")
+        lines.append(f'  {skill.name}')
+        lines.append(f'      {skill.description}')
         if skill.when_to_use:
-            lines.append(f"      When to use: {skill.when_to_use}")
-        lines.append("")
+            lines.append(f'      When to use: {skill.when_to_use}')
+        lines.append('')
 
     return LocalCommandResult(
-        type="text",
-        value="\n".join(lines),
+        type='text',
+        value='\n'.join(lines),
     )
 
 
@@ -273,8 +272,8 @@ def exit_command_call(args: str, context: CommandContext) -> LocalCommandResult:
         LocalCommandResult
     """
     return LocalCommandResult(
-        type="text",
-        value="Goodbye!",
+        type='text',
+        value='Goodbye!',
     )
 
 
@@ -283,59 +282,59 @@ def _call_cron_tool(
     name: str,
     tool_input: dict[str, Any],
 ) -> Any:
-    registry = getattr(context, "tool_registry", None)
-    tool_context = getattr(context, "tool_context", None)
+    registry = getattr(context, 'tool_registry', None)
+    tool_context = getattr(context, 'tool_context', None)
     if registry is None or tool_context is None:
-        raise ValueError("Cron runtime is not available in this command context")
+        raise ValueError('Cron runtime is not available in this command context')
 
     from clawcodex_ext.tool_system.protocol import ToolCall
 
     result = registry.dispatch(ToolCall(name=name, input=tool_input), tool_context)
     if result.is_error:
         output = result.output
-        if isinstance(output, dict) and output.get("error"):
-            raise ValueError(str(output["error"]))
-        raise ValueError(f"{name} failed")
+        if isinstance(output, dict) and output.get('error'):
+            raise ValueError(str(output['error']))
+        raise ValueError(f'{name} failed')
     return result.output
 
 
 def _has_cron_tool_runtime(context: CommandContext) -> bool:
     return (
-        getattr(context, "tool_registry", None) is not None
-        and getattr(context, "tool_context", None) is not None
+        getattr(context, 'tool_registry', None) is not None
+        and getattr(context, 'tool_context', None) is not None
     )
 
 
 def _cron_runtime_required_result(action: str) -> LocalCommandResult:
     return LocalCommandResult(
-        type="text",
-        value=f"Cron runtime is required to {action}; no changes were made.",
+        type='text',
+        value=f'Cron runtime is required to {action}; no changes were made.',
     )
 
 
 def _cron_session_store(context: CommandContext) -> Any:
-    tool_context = getattr(context, "tool_context", None)
-    return getattr(tool_context, "crons", None)
+    tool_context = getattr(context, 'tool_context', None)
+    return getattr(tool_context, 'crons', None)
 
 
 from clawcodex_ext.query.outbox_types import CronPromptEvent
 
 
 def _cron_deep_arg(args: str) -> bool:
-    return "--deep" in (args or "").split()
+    return '--deep' in (args or '').split()
 
 
 def _append_cron_outbox(context: CommandContext, run: dict[str, Any]) -> bool:
-    tool_context = getattr(context, "tool_context", None)
-    outbox = getattr(tool_context, "outbox", None)
-    if not hasattr(outbox, "append"):
+    tool_context = getattr(context, 'tool_context', None)
+    outbox = getattr(tool_context, 'outbox', None)
+    if not hasattr(outbox, 'append'):
         return False
     try:
         outbox.append(
             CronPromptEvent(
-                prompt=run["prompt"],
-                task_id=run["task_id"],
-                run_id=run["id"],
+                prompt=run['prompt'],
+                task_id=run['task_id'],
+                run_id=run['id'],
             )
         )
     except Exception:
@@ -344,16 +343,16 @@ def _append_cron_outbox(context: CommandContext, run: dict[str, Any]) -> bool:
 
 
 def _format_cron_job(job: dict[str, Any]) -> str:
-    kind = "recurring" if job.get("recurring") else "one-shot"
-    durable = "durable" if job.get("durable") else "session"
-    next_fire = job.get("nextFireAt")
-    next_fire_text = str(next_fire) if next_fire is not None else "not scheduled"
-    prompt = str(job.get("prompt") or "").replace("\n", " ").strip()
+    kind = 'recurring' if job.get('recurring') else 'one-shot'
+    durable = 'durable' if job.get('durable') else 'session'
+    next_fire = job.get('nextFireAt')
+    next_fire_text = str(next_fire) if next_fire is not None else 'not scheduled'
+    prompt = str(job.get('prompt') or '').replace('\n', ' ').strip()
     if len(prompt) > 80:
-        prompt = f"{prompt[:77]}..."
+        prompt = f'{prompt[:77]}...'
     return (
-        f"{job.get('id', '')}  {job.get('cron', '')}  {kind}  "
-        f"{durable}  next={next_fire_text}  {prompt}"
+        f'{job.get("id", "")}  {job.get("cron", "")}  {kind}  '
+        f'{durable}  next={next_fire_text}  {prompt}'
     )
 
 
@@ -361,46 +360,46 @@ def cron_list_command_call(args: str, context: CommandContext) -> LocalCommandRe
     if not _has_cron_tool_runtime(context):
         from clawcodex_ext.cron_system.status import build_schedule_list
 
-        return LocalCommandResult(type="text", value=build_schedule_list(context.workspace_root))
+        return LocalCommandResult(type='text', value=build_schedule_list(context.workspace_root))
 
-    output = _call_cron_tool(context, "CronList", {})
-    jobs = output.get("jobs", []) if isinstance(output, dict) else []
+    output = _call_cron_tool(context, 'CronList', {})
+    jobs = output.get('jobs', []) if isinstance(output, dict) else []
     if not jobs:
-        return LocalCommandResult(type="text", value="No scheduled cron jobs.")
+        return LocalCommandResult(type='text', value='No scheduled cron jobs.')
 
-    lines = ["Scheduled cron jobs:", ""]
+    lines = ['Scheduled cron jobs:', '']
     for job in jobs:
         if isinstance(job, dict):
             lines.append(_format_cron_job(job))
-    return LocalCommandResult(type="text", value="\n".join(lines))
+    return LocalCommandResult(type='text', value='\n'.join(lines))
 
 
 def cron_delete_command_call(args: str, context: CommandContext) -> LocalCommandResult:
-    cron_id = (args or "").strip()
+    cron_id = (args or '').strip()
     if not cron_id:
         return LocalCommandResult(
-            type="text",
-            value="Usage: /cron-delete <id>",
+            type='text',
+            value='Usage: /cron-delete <id>',
         )
 
     if _has_cron_tool_runtime(context):
-        output = _call_cron_tool(context, "CronDelete", {"id": cron_id})
+        output = _call_cron_tool(context, 'CronDelete', {'id': cron_id})
         deleted_id = cron_id
-        if isinstance(output, dict) and output.get("id"):
-            deleted_id = str(output["id"])
+        if isinstance(output, dict) and output.get('id'):
+            deleted_id = str(output['id'])
         return LocalCommandResult(
-            type="text",
-            value=f"Deleted scheduled cron job {deleted_id}.",
+            type='text',
+            value=f'Deleted scheduled cron job {deleted_id}.',
         )
 
-    return _cron_runtime_required_result("delete scheduled cron jobs")
+    return _cron_runtime_required_result('delete scheduled cron jobs')
 
 
 def cron_status_command_call(args: str, context: CommandContext) -> LocalCommandResult:
     from clawcodex_ext.cron_system.status import build_autonomy_status
 
     return LocalCommandResult(
-        type="text",
+        type='text',
         value=build_autonomy_status(context.workspace_root, deep=_cron_deep_arg(args)),
     )
 
@@ -409,42 +408,42 @@ def cron_runs_command_call(args: str, context: CommandContext) -> LocalCommandRe
     from clawcodex_ext.cron_system.status import build_autonomy_runs
 
     return LocalCommandResult(
-        type="text",
+        type='text',
         value=build_autonomy_runs(context.workspace_root, deep=_cron_deep_arg(args)),
     )
 
 
 def cron_run_command_call(args: str, context: CommandContext) -> LocalCommandResult:
-    cron_id = (args or "").strip()
+    cron_id = (args or '').strip()
     if not cron_id:
-        return LocalCommandResult(type="text", value="Usage: /cron-run <id>")
+        return LocalCommandResult(type='text', value='Usage: /cron-run <id>')
     if not _has_cron_tool_runtime(context):
-        return _cron_runtime_required_result("manually fire scheduled cron jobs")
+        return _cron_runtime_required_result('manually fire scheduled cron jobs')
 
-    output = _call_cron_tool(context, "CronRun", {"id": cron_id})
-    if isinstance(output, dict) and output.get("disabled"):
+    output = _call_cron_tool(context, 'CronRun', {'id': cron_id})
+    if isinstance(output, dict) and output.get('disabled'):
         return LocalCommandResult(
-            type="text", value=str(output.get("message") or "Cron is disabled.")
+            type='text', value=str(output.get('message') or 'Cron is disabled.')
         )
-    if isinstance(output, dict) and output.get("not_found"):
+    if isinstance(output, dict) and output.get('not_found'):
         return LocalCommandResult(
-            type="text",
+            type='text',
             value=f"No scheduled cron job found with id '{cron_id}'.",
         )
 
-    run = output.get("run") if isinstance(output, dict) else None
+    run = output.get('run') if isinstance(output, dict) else None
     if not isinstance(run, dict):
         return LocalCommandResult(
-            type="text",
-            value=f"Trigger {cron_id} was not fired because a previous run is still queued or running.",
+            type='text',
+            value=f'Trigger {cron_id} was not fired because a previous run is still queued or running.',
         )
 
-    value = f"Trigger {cron_id} fired.\nRun ID: {run['id']}"
+    value = f'Trigger {cron_id} fired.\nRun ID: {run["id"]}'
     if _append_cron_outbox(context, run):
-        value = f"{value}\nQueued for execution in this session."
+        value = f'{value}\nQueued for execution in this session.'
     else:
-        value = f"{value}\nQueued, but no active cron outbox is available in this context."
-    return LocalCommandResult(type="text", value=value)
+        value = f'{value}\nQueued, but no active cron outbox is available in this context.'
+    return LocalCommandResult(type='text', value=value)
 
 
 def cost_command_call(args: str, context: CommandContext) -> LocalCommandResult:
@@ -461,22 +460,22 @@ def cost_command_call(args: str, context: CommandContext) -> LocalCommandResult:
     tracker = context.cost_tracker
     if tracker is None:
         return LocalCommandResult(
-            type="text",
-            value="Cost tracking not available.",
+            type='text',
+            value='Cost tracking not available.',
         )
 
-    lines = ["Session Cost:", ""]
-    lines.append(f"  Total units: {tracker.total_units}")
+    lines = ['Session Cost:', '']
+    lines.append(f'  Total units: {tracker.total_units}')
 
     if tracker.events:
-        lines.append("")
-        lines.append("  Recent events:")
+        lines.append('')
+        lines.append('  Recent events:')
         for event in tracker.events[-10:]:
-            lines.append(f"    - {event}")
+            lines.append(f'    - {event}')
 
     return LocalCommandResult(
-        type="text",
-        value="\n".join(lines),
+        type='text',
+        value='\n'.join(lines),
     )
 
 
@@ -494,29 +493,29 @@ def context_command_call(args: str, context: CommandContext) -> LocalCommandResu
     try:
         # Get conversation messages in API format
         conversation_api: list[dict[str, Any]] = []
-        if hasattr(context.conversation, "get_messages"):
+        if hasattr(context.conversation, 'get_messages'):
             conversation_api = context.conversation.get_messages()
-        elif hasattr(context.conversation, "messages"):
+        elif hasattr(context.conversation, 'messages'):
             # Fall back for simple mock conversations
             for msg in context.conversation.messages:
-                role = getattr(msg, "role", "unknown")
-                content = getattr(msg, "content", "")
-                conversation_api.append({"role": role, "content": content})
+                role = getattr(msg, 'role', 'unknown')
+                content = getattr(msg, 'content', '')
+                conversation_api.append({'role': role, 'content': content})
 
         # Get system prompt from config
-        system_prompt = context.config.get("system_prompt", "")
+        system_prompt = context.config.get('system_prompt', '')
 
         # Get tool schemas from config
-        tool_schemas = context.config.get("tool_schemas", [])
+        tool_schemas = context.config.get('tool_schemas', [])
 
         # Get MCP tools info from config
-        mcp_tools = context.config.get("mcp_tools", [])
+        mcp_tools = context.config.get('mcp_tools', [])
 
         # Get custom agents info from config
-        custom_agents = context.config.get("custom_agents", [])
+        custom_agents = context.config.get('custom_agents', [])
 
         # Get CLAUDE.md content
-        claude_md_content = ""
+        claude_md_content = ''
         try:
             import asyncio
             from src.context_system.claude_md import get_claude_mds, get_memory_files
@@ -540,20 +539,20 @@ def context_command_call(args: str, context: CommandContext) -> LocalCommandResu
             pass
 
         # Get model from config
-        model = context.config.get("model", "claude-sonnet-4-6")
+        model = context.config.get('model', 'claude-sonnet-4-6')
 
         # Get skills info from config
-        skills_frontmatter_tokens = context.config.get("skills_tokens", 0)
-        skills_count = context.config.get("skills_count", 0)
+        skills_frontmatter_tokens = context.config.get('skills_tokens', 0)
+        skills_count = context.config.get('skills_count', 0)
 
         # Get API usage from cost tracker
         api_usage = None
-        if hasattr(context.cost_tracker, "last_usage"):
+        if hasattr(context.cost_tracker, 'last_usage'):
             api_usage = context.cost_tracker.last_usage
 
         # Get auto-compact info from config
-        auto_compact_threshold = context.config.get("auto_compact_threshold")
-        is_auto_compact_enabled = context.config.get("is_auto_compact_enabled", False)
+        auto_compact_threshold = context.config.get('auto_compact_threshold')
+        is_auto_compact_enabled = context.config.get('is_auto_compact_enabled', False)
 
         data = analyze_context(
             conversation_api_messages=conversation_api,
@@ -571,38 +570,38 @@ def context_command_call(args: str, context: CommandContext) -> LocalCommandResu
         )
 
         markdown = format_context_as_markdown(data)
-        return LocalCommandResult(type="text", value=markdown)
+        return LocalCommandResult(type='text', value=markdown)
     except Exception as e:
-        logger.exception("context analysis failed")
-        return LocalCommandResult(type="text", value=f"Context analysis failed: {e}")
+        logger.exception('context analysis failed')
+        return LocalCommandResult(type='text', value=f'Context analysis failed: {e}')
 
 
 async def _compact_async(args: str, context: CommandContext) -> LocalCommandResult:
     """
     Async implementation of compact command.
     """
-    if not hasattr(context.conversation, "messages"):
+    if not hasattr(context.conversation, 'messages'):
         return LocalCommandResult(
-            type="text",
-            value="No conversation to compact.",
+            type='text',
+            value='No conversation to compact.',
         )
 
     messages = context.conversation.messages
     if len(messages) < 2:
         return LocalCommandResult(
-            type="text",
-            value=f"Nothing to compact: only {len(messages)} messages.",
+            type='text',
+            value=f'Nothing to compact: only {len(messages)} messages.',
         )
 
     # Get provider from config
-    provider = context.config.get("provider")
+    provider = context.config.get('provider')
     if provider is None:
         return LocalCommandResult(
-            type="text",
-            value="Compact requires an LLM provider (not available in this context).",
+            type='text',
+            value='Compact requires an LLM provider (not available in this context).',
         )
 
-    model = context.config.get("model", "claude-sonnet-4-6")
+    model = context.config.get('model', 'claude-sonnet-4-6')
     custom_instructions = args.strip() or None
 
     try:
@@ -614,11 +613,11 @@ async def _compact_async(args: str, context: CommandContext) -> LocalCommandResu
             provider=provider,
             model=model,
             custom_instructions=custom_instructions,
-            trigger="manual",
+            trigger='manual',
         )
         return LocalCommandResult(
-            type="compact",
-            value=result.user_display_message or "Conversation compacted.",
+            type='compact',
+            value=result.user_display_message or 'Conversation compacted.',
             compaction_result=CompactionResult(
                 pre_compact_count=result.pre_compact_count,
                 post_compact_count=result.post_compact_count,
@@ -630,12 +629,12 @@ async def _compact_async(args: str, context: CommandContext) -> LocalCommandResu
             ),
         )
     except ValueError as e:
-        return LocalCommandResult(type="text", value=str(e))
+        return LocalCommandResult(type='text', value=str(e))
     except Exception as e:
-        logger.exception("compact failed")
+        logger.exception('compact failed')
         return LocalCommandResult(
-            type="text",
-            value=f"Compact failed: {e}",
+            type='text',
+            value=f'Compact failed: {e}',
         )
 
 
@@ -647,11 +646,11 @@ def _read_current_advisor_model(context: CommandContext) -> str | None:
     without a settings-cache roundtrip), and falls back to the
     persisted settings — the source of truth on every restart.
     """
-    store = getattr(context, "app_state_store", None)
+    store = getattr(context, 'app_state_store', None)
     if store is not None:
         try:
             state = store.get_state()
-            value = getattr(state, "advisor_model", None)
+            value = getattr(state, 'advisor_model', None)
             if value:
                 return value
         except Exception:
@@ -659,7 +658,7 @@ def _read_current_advisor_model(context: CommandContext) -> str | None:
     try:
         from src.settings.settings import get_settings
 
-        configured = (get_settings().advisor_model or "").strip()
+        configured = (get_settings().advisor_model or '').strip()
         return configured or None
     except Exception:
         return None
@@ -675,7 +674,7 @@ def _write_advisor_model(context: CommandContext, value: str | None) -> None:
     store is absent (the current TUI configuration), we update settings
     directly via the same chokepoint the handler uses.
     """
-    store = getattr(context, "app_state_store", None)
+    store = getattr(context, 'app_state_store', None)
     if store is not None:
         from src.state.app_state import replace_state
 
@@ -691,11 +690,11 @@ def _write_advisor_model(context: CommandContext, value: str | None) -> None:
 
     mgr = cfg_mod._get_default_manager()
     cfg = mgr.load_global()
-    settings_section = cfg.get("settings")
+    settings_section = cfg.get('settings')
     if not isinstance(settings_section, dict):
         settings_section = {}
-    settings_section["advisor_model"] = value or ""
-    cfg["settings"] = settings_section
+    settings_section['advisor_model'] = value or ''
+    cfg['settings'] = settings_section
     mgr.save_global(cfg)
     invalidate_settings_cache()
 
@@ -704,27 +703,27 @@ def _read_current_advisor_provider(context: CommandContext) -> str:
     """Resolve the current advisor_provider (store preferred, settings
     fallback). Empty string = unset.
     Mirrors ``_read_current_advisor_model``."""
-    store = getattr(context, "app_state_store", None)
+    store = getattr(context, 'app_state_store', None)
     if store is not None:
         try:
-            v = getattr(store.get_state(), "advisor_provider", None)
-            return (v or "").strip()
+            v = getattr(store.get_state(), 'advisor_provider', None)
+            return (v or '').strip()
         except Exception:
             pass
     try:
         from src.settings.settings import get_settings
 
-        return (getattr(get_settings(), "advisor_provider", "") or "").strip()
+        return (getattr(get_settings(), 'advisor_provider', '') or '').strip()
     except Exception:
-        return ""
+        return ''
 
 
 def _write_advisor_provider(context: CommandContext, value: str | None) -> None:
     """Persist advisor_provider (store preferred, settings fallback).
     Mirrors ``_write_advisor_model`` — same dual-path persistence.
     Empty / None clears the field."""
-    normalized = (value or "").strip()
-    store = getattr(context, "app_state_store", None)
+    normalized = (value or '').strip()
+    store = getattr(context, 'app_state_store', None)
     if store is not None:
         from src.state.app_state import replace_state
 
@@ -735,11 +734,11 @@ def _write_advisor_provider(context: CommandContext, value: str | None) -> None:
 
     mgr = cfg_mod._get_default_manager()
     cfg = mgr.load_global()
-    settings_section = cfg.get("settings")
+    settings_section = cfg.get('settings')
     if not isinstance(settings_section, dict):
         settings_section = {}
-    settings_section["advisor_provider"] = normalized
-    cfg["settings"] = settings_section
+    settings_section['advisor_provider'] = normalized
+    cfg['settings'] = settings_section
     mgr.save_global(cfg)
     invalidate_settings_cache()
 
@@ -753,7 +752,7 @@ def _list_configured_providers() -> list[str]:
 
         mgr = cfg_mod._get_default_manager()
         cfg = mgr.load_global()
-        providers = cfg.get("providers")
+        providers = cfg.get('providers')
         if isinstance(providers, dict):
             return sorted(providers.keys())
     except Exception:
@@ -765,16 +764,16 @@ def _read_current_advisor_client_mode(context: CommandContext) -> bool:
     """Resolve the user's current advisor_client_mode flag (reactive
     store preferred, settings fallback). Mirrors
     ``_read_current_advisor_model``."""
-    store = getattr(context, "app_state_store", None)
+    store = getattr(context, 'app_state_store', None)
     if store is not None:
         try:
-            return bool(getattr(store.get_state(), "advisor_client_mode", False))
+            return bool(getattr(store.get_state(), 'advisor_client_mode', False))
         except Exception:
             pass
     try:
         from src.settings.settings import get_settings
 
-        return bool(getattr(get_settings(), "advisor_client_mode", False))
+        return bool(getattr(get_settings(), 'advisor_client_mode', False))
     except Exception:
         return False
 
@@ -782,7 +781,7 @@ def _read_current_advisor_client_mode(context: CommandContext) -> bool:
 def _write_advisor_client_mode(context: CommandContext, value: bool) -> None:
     """Persist advisor_client_mode (store-preferred, settings fallback).
     Mirrors ``_write_advisor_model`` — same dual-path persistence."""
-    store = getattr(context, "app_state_store", None)
+    store = getattr(context, 'app_state_store', None)
     if store is not None:
         from src.state.app_state import replace_state
 
@@ -793,11 +792,11 @@ def _write_advisor_client_mode(context: CommandContext, value: bool) -> None:
 
     mgr = cfg_mod._get_default_manager()
     cfg = mgr.load_global()
-    settings_section = cfg.get("settings")
+    settings_section = cfg.get('settings')
     if not isinstance(settings_section, dict):
         settings_section = {}
-    settings_section["advisor_client_mode"] = bool(value)
-    cfg["settings"] = settings_section
+    settings_section['advisor_client_mode'] = bool(value)
+    cfg['settings'] = settings_section
     mgr.save_global(cfg)
     invalidate_settings_cache()
 
@@ -840,44 +839,44 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
         decide_advisor_mode,
     )
 
-    provider = getattr(context, "provider", None)
+    provider = getattr(context, 'provider', None)
 
     # Hard-reject only when env-disabled (the user would silently
     # configure a value that no request can use).
     if not can_user_configure_advisor(provider):
         return LocalCommandResult(
-            type="text",
-            value=("Advisor is disabled by the CLAUDE_CODE_DISABLE_ADVISOR_TOOL env var."),
+            type='text',
+            value=('Advisor is disabled by the CLAUDE_CODE_DISABLE_ADVISOR_TOOL env var.'),
         )
 
     # Tokenize raw args so flag handling is order-insensitive. A
     # trailing or leading ``--client`` / ``--no-client`` should peel
     # off cleanly without breaking the model identifier.
-    raw_tokens = (args or "").strip().split()
+    raw_tokens = (args or '').strip().split()
     force_client_flag: bool | None = None  # None = no flag passed
     rest_tokens: list[str] = []
     for tok in raw_tokens:
-        if tok == "--client":
+        if tok == '--client':
             force_client_flag = True
-        elif tok == "--no-client":
+        elif tok == '--no-client':
             force_client_flag = False
         else:
             rest_tokens.append(tok)
-    arg = " ".join(rest_tokens).strip()
+    arg = ' '.join(rest_tokens).strip()
     arg_lower = arg.lower()
 
     current_advisor = _read_current_advisor_model(context)
     current_provider = _read_current_advisor_provider(context)
     current_client_mode = _read_current_advisor_client_mode(context)
 
-    main_loop_model = ""
+    main_loop_model = ''
     if provider is not None:
-        main_loop_model = getattr(provider, "model", "") or ""
+        main_loop_model = getattr(provider, 'model', '') or ''
     if not main_loop_model:
-        store = getattr(context, "app_state_store", None)
+        store = getattr(context, 'app_state_store', None)
         if store is not None:
             try:
-                main_loop_model = getattr(store.get_state(), "main_loop_model", "") or ""
+                main_loop_model = getattr(store.get_state(), 'main_loop_model', '') or ''
             except Exception:
                 pass
 
@@ -886,17 +885,17 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
         if not current_advisor or not current_provider:
             # Either field missing → effectively unset. Show what's
             # there (if anything) so users can fix a partial config.
-            partial = ""
+            partial = ''
             if current_advisor and not current_provider:
                 partial = (
-                    f"\n(Found advisor_model={current_advisor!r} but no "
-                    "advisor_provider — clear with /advisor unset then "
-                    "re-run with the explicit syntax.)"
+                    f'\n(Found advisor_model={current_advisor!r} but no '
+                    'advisor_provider — clear with /advisor unset then '
+                    're-run with the explicit syntax.)'
                 )
             elif current_provider and not current_advisor:
                 partial = (
-                    f"\n(Found advisor_provider={current_provider!r} but "
-                    "no advisor_model — clear with /advisor unset.)"
+                    f'\n(Found advisor_provider={current_provider!r} but '
+                    'no advisor_model — clear with /advisor unset.)'
                 )
             # Critic C1: surface advisor_client_mode even on partial
             # configs so the user sees stored state that would silently
@@ -904,20 +903,20 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
             if current_client_mode:
                 partial += (
                     "\n(advisor_client_mode is ON but won't engage "
-                    "until both advisor_model and advisor_provider "
-                    "are set.)"
+                    'until both advisor_model and advisor_provider '
+                    'are set.)'
                 )
             providers = _list_configured_providers()
-            providers_hint = f"Configured providers: {', '.join(providers)}.\n" if providers else ""
+            providers_hint = f'Configured providers: {", ".join(providers)}.\n' if providers else ''
             return (
-                "Advisor: not set\n"
-                f"{providers_hint}"
+                'Advisor: not set\n'
+                f'{providers_hint}'
                 'Use "/advisor <provider>:<model>" to enable, e.g.:\n'
-                "  /advisor anthropic:claude-opus-4-7   (direct Anthropic)\n"
-                "  /advisor openai:claude-opus-4-7      (via openai-compat, "
-                "e.g. litellm)\n"
-                "  /advisor openrouter:anthropic/claude-opus-4.1"
-                f"{partial}"
+                '  /advisor anthropic:claude-opus-4-7   (direct Anthropic)\n'
+                '  /advisor openai:claude-opus-4-7      (via openai-compat, '
+                'e.g. litellm)\n'
+                '  /advisor openrouter:anthropic/claude-opus-4.1'
+                f'{partial}'
             )
         mode = decide_advisor_mode(
             provider,
@@ -927,34 +926,34 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
             advisor_provider=current_provider,
         )
         mode_label = {
-            ADVISOR_MODE_SERVER_SIDE: "active (server-side)",
-            ADVISOR_MODE_CLIENT_SIDE: "active (client-side)",
-            ADVISOR_MODE_INACTIVE: "inactive",
-        }.get(mode, "inactive")
-        suffix = ""
+            ADVISOR_MODE_SERVER_SIDE: 'active (server-side)',
+            ADVISOR_MODE_CLIENT_SIDE: 'active (client-side)',
+            ADVISOR_MODE_INACTIVE: 'inactive',
+        }.get(mode, 'inactive')
+        suffix = ''
         if current_client_mode:
-            suffix = " [--client forced]"
+            suffix = ' [--client forced]'
         return (
-            f"Advisor: {current_provider}:{current_advisor} — {mode_label}{suffix}\n"
+            f'Advisor: {current_provider}:{current_advisor} — {mode_label}{suffix}\n'
             'Use "/advisor unset" to disable or '
             '"/advisor <provider>:<model>" to change.'
         )
 
     # No model arg, no flags → status only.
     if not arg and force_client_flag is None:
-        return LocalCommandResult(type="text", value=_render_status())
+        return LocalCommandResult(type='text', value=_render_status())
 
     # --no-client alone (no model) → just clear the forced-client flag.
     if not arg and force_client_flag is False:
         if not current_client_mode:
             return LocalCommandResult(
-                type="text",
-                value="Advisor client mode already off.",
+                type='text',
+                value='Advisor client mode already off.',
             )
         _write_advisor_client_mode(context, False)
         return LocalCommandResult(
-            type="text",
-            value=("Advisor client mode disabled. Server-side will be used when applicable."),
+            type='text',
+            value=('Advisor client mode disabled. Server-side will be used when applicable.'),
         )
 
     # --client alone (no model) → just turn on the forced-client flag.
@@ -963,28 +962,28 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
     if not arg and force_client_flag is True:
         if not current_advisor or not current_provider:
             return LocalCommandResult(
-                type="text",
+                type='text',
                 value=(
-                    "Cannot force client mode: advisor is not fully "
+                    'Cannot force client mode: advisor is not fully '
                     'configured. Use "/advisor <provider>:<model> '
                     '--client" together.'
                 ),
             )
         if current_client_mode:
             return LocalCommandResult(
-                type="text",
-                value="Advisor client mode already on.",
+                type='text',
+                value='Advisor client mode already on.',
             )
         _write_advisor_client_mode(context, True)
         return LocalCommandResult(
-            type="text",
+            type='text',
             value=(
-                "Advisor client mode enabled. The advisor will run via "
-                "client-side dispatch on every request."
+                'Advisor client mode enabled. The advisor will run via '
+                'client-side dispatch on every request.'
             ),
         )
 
-    if arg_lower in ("unset", "off"):
+    if arg_lower in ('unset', 'off'):
         previous_model = current_advisor
         previous_provider = current_provider
         if previous_model:
@@ -995,41 +994,41 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
             _write_advisor_client_mode(context, False)
         if previous_model or previous_provider:
             prior = (
-                f"{previous_provider}:{previous_model}"
+                f'{previous_provider}:{previous_model}'
                 if previous_provider and previous_model
-                else (previous_model or previous_provider or "?")
+                else (previous_model or previous_provider or '?')
             )
             return LocalCommandResult(
-                type="text",
-                value=f"Advisor disabled (was {prior}).",
+                type='text',
+                value=f'Advisor disabled (was {prior}).',
             )
         return LocalCommandResult(
-            type="text",
-            value="Advisor already unset.",
+            type='text',
+            value='Advisor already unset.',
         )
 
     # Parse <provider>:<model> — provider must be a known config key.
     raw = arg
-    if ":" not in raw:
+    if ':' not in raw:
         providers = _list_configured_providers()
-        providers_hint = f" Configured providers: {', '.join(providers)}." if providers else ""
+        providers_hint = f' Configured providers: {", ".join(providers)}.' if providers else ''
         return LocalCommandResult(
-            type="text",
+            type='text',
             value=(
-                "Advisor requires explicit <provider>:<model> syntax.\n"
-                f"Got: {raw!r}.{providers_hint}\n"
-                "Example: /advisor anthropic:claude-opus-4-7"
+                'Advisor requires explicit <provider>:<model> syntax.\n'
+                f'Got: {raw!r}.{providers_hint}\n'
+                'Example: /advisor anthropic:claude-opus-4-7'
             ),
         )
-    provider_part, model_part = raw.split(":", 1)
+    provider_part, model_part = raw.split(':', 1)
     provider_part = provider_part.strip()
     model_part = model_part.strip()
     if not provider_part or not model_part:
         return LocalCommandResult(
-            type="text",
+            type='text',
             value=(
-                "Invalid syntax. Expected <provider>:<model> with both "
-                f"halves non-empty. Got: {raw!r}."
+                'Invalid syntax. Expected <provider>:<model> with both '
+                f'halves non-empty. Got: {raw!r}.'
             ),
         )
     # Critic S3: validate against the configured providers list
@@ -1040,24 +1039,24 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
     configured = _list_configured_providers()
     if provider_part not in configured:
         return LocalCommandResult(
-            type="text",
+            type='text',
             value=(
-                f"Unknown provider {provider_part!r}. Configured: "
-                f"{', '.join(configured) or '(none — check ~/.clawcodex/config.json)'}. "
-                "Configure new providers in ~/.clawcodex/config.json."
+                f'Unknown provider {provider_part!r}. Configured: '
+                f'{", ".join(configured) or "(none — check ~/.clawcodex/config.json)"}. '
+                'Configure new providers in ~/.clawcodex/config.json.'
             ),
         )
     try:
         resolved = resolve_model(model_part)
     except Exception as e:
         return LocalCommandResult(
-            type="text",
-            value=f"Invalid advisor model: {e}",
+            type='text',
+            value=f'Invalid advisor model: {e}',
         )
     if not validate_model_name(resolved):
         return LocalCommandResult(
-            type="text",
-            value=f"Unknown model: {model_part} ({resolved})",
+            type='text',
+            value=f'Unknown model: {model_part} ({resolved})',
         )
 
     normalized = canonical_model_name(resolved)
@@ -1082,17 +1081,17 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
         advisor_provider=provider_part,
     )
     if chosen_mode == ADVISOR_MODE_SERVER_SIDE:
-        mode_msg = "Will run server-side (Anthropic beta path)."
+        mode_msg = 'Will run server-side (Anthropic beta path).'
     elif chosen_mode == ADVISOR_MODE_CLIENT_SIDE:
-        mode_msg = "Will run client-side (separate API call)."
+        mode_msg = 'Will run client-side (separate API call).'
     else:
         mode_msg = (
-            "Note: advisor is currently inactive (no path applies for "
-            f"main loop {main_loop_model!r} + advisor {normalized!r})."
+            'Note: advisor is currently inactive (no path applies for '
+            f'main loop {main_loop_model!r} + advisor {normalized!r}).'
         )
     return LocalCommandResult(
-        type="text",
-        value=f"Advisor set to {provider_part}:{normalized}. {mode_msg}",
+        type='text',
+        value=f'Advisor set to {provider_part}:{normalized}. {mode_msg}',
     )
 
 
@@ -1118,20 +1117,20 @@ def compact_command_call(args: str, context: CommandContext) -> LocalCommandResu
         try:
             return asyncio.run(_compact_async(args, context))
         except Exception:
-            logger.exception("compact (asyncio.run fallback) failed")
+            logger.exception('compact (asyncio.run fallback) failed')
             return _sync_compact_fallback(context)
 
 
 def _sync_compact_fallback(context: CommandContext) -> LocalCommandResult:
     """Synchronous fallback when async provider is not available."""
-    if not hasattr(context.conversation, "messages"):
-        return LocalCommandResult(type="text", value="No conversation to compact.")
+    if not hasattr(context.conversation, 'messages'):
+        return LocalCommandResult(type='text', value='No conversation to compact.')
 
     messages = context.conversation.messages
     if len(messages) < 2:
         return LocalCommandResult(
-            type="text",
-            value=f"Nothing to compact: only {len(messages)} messages.",
+            type='text',
+            value=f'Nothing to compact: only {len(messages)} messages.',
         )
 
     # Get messages after last boundary
@@ -1147,8 +1146,8 @@ def _sync_compact_fallback(context: CommandContext) -> LocalCommandResult:
         after_boundary = get_messages_after_boundary(messages)
         if len(after_boundary) < 2:
             return LocalCommandResult(
-                type="text",
-                value=f"Nothing to compact: only {len(after_boundary)} messages after boundary.",
+                type='text',
+                value=f'Nothing to compact: only {len(after_boundary)} messages after boundary.',
             )
 
         # Count tokens
@@ -1169,12 +1168,12 @@ def _sync_compact_fallback(context: CommandContext) -> LocalCommandResult:
 
         # Create simple text summary
         summary_parts = [
-            f"Conversation had {len(after_boundary)} messages ({pre_tokens:,} tokens)."
+            f'Conversation had {len(after_boundary)} messages ({pre_tokens:,} tokens).'
         ]
-        summary_text = "\n".join(summary_parts)
+        summary_text = '\n'.join(summary_parts)
 
         boundary = create_compact_boundary_message(
-            trigger="manual",
+            trigger='manual',
             pre_compact_token_count=pre_tokens,
         )
         summary = create_compact_summary_message(summary_text)
@@ -1190,13 +1189,13 @@ def _sync_compact_fallback(context: CommandContext) -> LocalCommandResult:
             context.conversation.messages.append(summary)
 
         return LocalCommandResult(
-            type="compact",
-            value=f"Compacted: removed {len(after_boundary) - 2} messages ({pre_tokens:,} tokens → ~{saved} saved).",
+            type='compact',
+            value=f'Compacted: removed {len(after_boundary) - 2} messages ({pre_tokens:,} tokens → ~{saved} saved).',
             compaction_result=CompactionResult(
                 pre_compact_count=len(messages),
                 post_compact_count=len(context.conversation.messages),
                 tokens_saved=saved,
-                trigger="manual",
+                trigger='manual',
                 summary_preview=summary_text[:200],
             ),
         )
@@ -1206,18 +1205,18 @@ def _sync_compact_fallback(context: CommandContext) -> LocalCommandResult:
         if original_count > 10:
             context.conversation.messages = list(messages[-10:])
             return LocalCommandResult(
-                type="compact",
-                value=f"Compacted: removed {original_count - 10} messages (fallback mode).",
+                type='compact',
+                value=f'Compacted: removed {original_count - 10} messages (fallback mode).',
                 compaction_result=CompactionResult(
                     pre_compact_count=original_count,
                     post_compact_count=10,
                     tokens_saved=0,
-                    trigger="manual",
+                    trigger='manual',
                 ),
             )
         return LocalCommandResult(
-            type="text",
-            value="Nothing to compact.",
+            type='text',
+            value='Nothing to compact.',
         )
 
 
@@ -1256,16 +1255,16 @@ def telemetry_command_call(args: str, context: CommandContext) -> LocalCommandRe
         exit_code = _telemetry_main(argv)
     except ImportError:
         return LocalCommandResult(
-            type="text",
+            type='text',
             value=(
-                "Telemetry package not available. "
-                "Ensure ``telemetry`` is installed and on the Python path."
+                'Telemetry package not available. '
+                'Ensure ``telemetry`` is installed and on the Python path.'
             ),
         )
     except Exception as exc:
         return LocalCommandResult(
-            type="text",
-            value=f"Telemetry command failed: {exc}",
+            type='text',
+            value=f'Telemetry command failed: {exc}',
         )
     finally:
         sys.stdout = real_stdout
@@ -1273,12 +1272,12 @@ def telemetry_command_call(args: str, context: CommandContext) -> LocalCommandRe
 
     output = buf.getvalue().strip()
     if not output:
-        output = "(no output)"
+        output = '(no output)'
 
     if exit_code != 0:
-        output = f"(exit code {exit_code})\n{output}"
+        output = f'(exit code {exit_code})\n{output}'
 
-    return LocalCommandResult(type="text", value=output)
+    return LocalCommandResult(type='text', value=output)
 
 
 def resume_command_call(args: str, context: CommandContext) -> LocalCommandResult:
@@ -1289,7 +1288,7 @@ def resume_command_call(args: str, context: CommandContext) -> LocalCommandResul
     """
     from src.services.session_storage import SessionStorage
 
-    session_id = args.strip() if args else ""
+    session_id = args.strip() if args else ''
 
     if session_id:
         # Validate session exists
@@ -1298,15 +1297,15 @@ def resume_command_call(args: str, context: CommandContext) -> LocalCommandResul
         session_path = SESSIONS_DIR / session_id
         if not session_path.is_dir():
             return LocalCommandResult(
-                type="text",
-                value=f"Session not found: {session_id}\n"
-                f"  Use /resume without arguments to browse available sessions.",
+                type='text',
+                value=f'Session not found: {session_id}\n'
+                f'  Use /resume without arguments to browse available sessions.',
             )
         return LocalCommandResult(
-            type="text",
-            value=f"Session found: {session_id}\n"
-            f"  Use ``clawcodex --resume {session_id}`` or\n"
-            f"  use /load {session_id} to restore it in this session.",
+            type='text',
+            value=f'Session found: {session_id}\n'
+            f'  Use ``clawcodex --resume {session_id}`` or\n'
+            f'  use /load {session_id} to restore it in this session.',
         )
 
     # No session ID — show interactive browser
@@ -1316,35 +1315,31 @@ def resume_command_call(args: str, context: CommandContext) -> LocalCommandResul
         selected_id = browse_sessions_interactive()
         if selected_id:
             return LocalCommandResult(
-                type="text",
-                value=f"Session selected: {selected_id}\n"
-                f"  Use ``clawcodex --resume {selected_id}`` or\n"
-                f"  use /load {selected_id} to restore it in this session.",
+                type='text',
+                value=f'Session selected: {selected_id}\n'
+                f'  Use ``clawcodex --resume {selected_id}`` or\n'
+                f'  use /load {selected_id} to restore it in this session.',
             )
-        return LocalCommandResult(type="text", value="Session selection cancelled.")
+        return LocalCommandResult(type='text', value='Session selection cancelled.')
     except Exception as exc:
         # Fallback: list sessions as text
         try:
             metas = SessionStorage.list_sessions(limit=50)
             if not metas:
-                return LocalCommandResult(
-                    type="text", value="No past sessions found."
-                )
-            lines = ["Available sessions (use /resume <session_id> to resume):\n"]
+                return LocalCommandResult(type='text', value='No past sessions found.')
+            lines = ['Available sessions (use /resume <session_id> to resume):\n']
             for i, m in enumerate(metas, 1):
                 sid = m.session_id
-                preview = getattr(m, "title", "") or getattr(m, "last_user_input", "") or ""
+                preview = getattr(m, 'title', '') or getattr(m, 'last_user_input', '') or ''
                 if preview:
                     preview = preview[:60]
-                lines.append(f"  {i:>3}. {sid[:12]}…  {preview}")
-            lines.append(
-                "\n  Use /resume <session_id> or /load <session_id> to restore a session."
-            )
-            return LocalCommandResult(type="text", value="\n".join(lines))
+                lines.append(f'  {i:>3}. {sid[:12]}…  {preview}')
+            lines.append('\n  Use /resume <session_id> or /load <session_id> to restore a session.')
+            return LocalCommandResult(type='text', value='\n'.join(lines))
         except Exception:
             return LocalCommandResult(
-                type="text",
-                value="No past sessions found. Interactive browser unavailable.",
+                type='text',
+                value='No past sessions found. Interactive browser unavailable.',
             )
 
 
@@ -1353,119 +1348,119 @@ def resume_command_call(args: str, context: CommandContext) -> LocalCommandResul
 from src.utils.advisor import can_user_configure_advisor as _can_user_configure_advisor
 
 ADVISOR_COMMAND = LocalCommand(
-    name="advisor",
-    description="Configure the advisor model (server-side on 1P Anthropic, client-side on any provider)",
-    argument_hint="[<model> [--client] | --no-client | off]",
+    name='advisor',
+    description='Configure the advisor model (server-side on 1P Anthropic, client-side on any provider)',
+    argument_hint='[<model> [--client] | --no-client | off]',
     supports_non_interactive=True,
     is_enabled=lambda: _can_user_configure_advisor(None),
 )
 
 CLEAR_COMMAND = LocalCommand(
-    name="clear",
-    description="Clear conversation history",
-    aliases=["reset", "new"],
+    name='clear',
+    description='Clear conversation history',
+    aliases=['reset', 'new'],
     supports_non_interactive=False,
 )
 
 COMPACT_COMMAND = LocalCommand(
-    name="compact",
-    description="Compact conversation to save context space",
-    argument_hint="",
+    name='compact',
+    description='Compact conversation to save context space',
+    argument_hint='',
     supports_non_interactive=True,
 )
 
 CONTEXT_COMMAND = LocalCommand(
-    name="context",
-    description="Show current workspace context",
-    argument_hint="",
+    name='context',
+    description='Show current workspace context',
+    argument_hint='',
     supports_non_interactive=True,
 )
 
 COST_COMMAND = LocalCommand(
-    name="cost",
-    description="Show session cost and usage",
-    argument_hint="",
+    name='cost',
+    description='Show session cost and usage',
+    argument_hint='',
     supports_non_interactive=True,
 )
 
 CRON_LIST_COMMAND = LocalCommand(
-    name="cron-list",
-    description="List scheduled cron jobs",
-    argument_hint="",
+    name='cron-list',
+    description='List scheduled cron jobs',
+    argument_hint='',
     supports_non_interactive=True,
 )
 
 CRON_DELETE_COMMAND = LocalCommand(
-    name="cron-delete",
-    description="Delete a scheduled cron job",
-    argument_hint="<id>",
+    name='cron-delete',
+    description='Delete a scheduled cron job',
+    argument_hint='<id>',
     supports_non_interactive=True,
 )
 
 CRON_STATUS_COMMAND = LocalCommand(
-    name="cron-status",
-    description="Show cron autonomy status",
-    argument_hint="[--deep]",
+    name='cron-status',
+    description='Show cron autonomy status',
+    argument_hint='[--deep]',
     supports_non_interactive=True,
 )
 
 CRON_RUNS_COMMAND = LocalCommand(
-    name="cron-runs",
-    description="Show scheduled-task run history",
-    argument_hint="[--deep]",
+    name='cron-runs',
+    description='Show scheduled-task run history',
+    argument_hint='[--deep]',
     supports_non_interactive=True,
 )
 
 CRON_RUN_COMMAND = LocalCommand(
-    name="cron-run",
-    description="Manually fire a scheduled cron job",
-    aliases=["cron-fire"],
-    argument_hint="<id>",
+    name='cron-run',
+    description='Manually fire a scheduled cron job',
+    aliases=['cron-fire'],
+    argument_hint='<id>',
     supports_non_interactive=True,
 )
 
 EXIT_COMMAND = LocalCommand(
-    name="exit",
-    description="Exit the application",
-    aliases=["quit", "q"],
+    name='exit',
+    description='Exit the application',
+    aliases=['quit', 'q'],
     supports_non_interactive=True,
 )
 
 HELP_COMMAND = LocalCommand(
-    name="help",
-    description="Show available commands",
-    aliases=["?"],
-    argument_hint="[search_query]",
+    name='help',
+    description='Show available commands',
+    aliases=['?'],
+    argument_hint='[search_query]',
     supports_non_interactive=True,
 )
 
 INIT_COMMAND = PromptCommand(
-    name="init",
-    description="Initialize new CLAUDE.md file(s) and optional skills/hooks with codebase documentation",
+    name='init',
+    description='Initialize new CLAUDE.md file(s) and optional skills/hooks with codebase documentation',
     markdown_content=NEW_INIT_PROMPT,
-    progress_message="analyzing your codebase",
+    progress_message='analyzing your codebase',
     content_length=0,
-    source="builtin",
+    source='builtin',
 )
 
 SKILLS_COMMAND = LocalCommand(
-    name="skills",
-    description="List available skills",
-    argument_hint="",
+    name='skills',
+    description='List available skills',
+    argument_hint='',
     supports_non_interactive=True,
 )
 
 TELEMETRY_COMMAND = LocalCommand(
-    name="telemetry",
-    description="Show & manage telemetry (stats collection & error reporting)",
-    argument_hint="[status|preview|flush|enable|disable]",
+    name='telemetry',
+    description='Show & manage telemetry (stats collection & error reporting)',
+    argument_hint='[status|preview|flush|enable|disable]',
     supports_non_interactive=True,
 )
 
 RESUME_COMMAND = LocalCommand(
-    name="resume",
-    description="List past sessions and resume one interactively, or /resume <session_id>",
-    argument_hint="[session_id]",
+    name='resume',
+    description='List past sessions and resume one interactively, or /resume <session_id>',
+    argument_hint='[session_id]',
     supports_non_interactive=True,
 )
 RESUME_COMMAND.set_call(resume_command_call)
@@ -1491,17 +1486,17 @@ def execute_command_sync(
                 break
 
     if cmd is None:
-        return False, None, f"Unknown command: {cmd_name}"
+        return False, None, f'Unknown command: {cmd_name}'
     if cmd.command_type != CommandType.LOCAL:
-        return False, None, f"Command not implemented for sync execution: {cmd_name}"
+        return False, None, f'Command not implemented for sync execution: {cmd_name}'
     if isinstance(cmd, LocalCommand) and cmd.run_in_thread:
-        return False, None, f"Command requires async execution: {cmd_name}"
+        return False, None, f'Command requires async execution: {cmd_name}'
 
     try:
         if isinstance(cmd, LocalCommand) and cmd._call_impl is not None:
             result = cmd._call_impl(args, context)
         else:
-            return False, None, f"Command not implemented for sync execution: {cmd_name}"
+            return False, None, f'Command not implemented for sync execution: {cmd_name}'
 
         return True, result.value, None
     except Exception as e:
@@ -1527,6 +1522,8 @@ TELEMETRY_COMMAND.set_call(telemetry_command_call)
 
 def get_builtin_commands() -> list[Command]:
     """Get all built-in commands."""
+    from clawcodex_ext.goal.command import GOAL_COMMAND
+
     cmds: list[Command] = [
         ADVISOR_COMMAND,
         CLEAR_COMMAND,
@@ -1673,10 +1670,10 @@ async def execute_command_async(
     cmd = registry.get(cmd_name)
 
     if cmd is None:
-        return CommandResult.error(cmd_name, f"Unknown command: {cmd_name}")
+        return CommandResult.error(cmd_name, f'Unknown command: {cmd_name}')
 
     if not cmd.is_enabled():
-        return CommandResult.error(cmd_name, f"Command {cmd_name} is disabled")
+        return CommandResult.error(cmd_name, f'Command {cmd_name} is disabled')
 
     engine = CommandEngine(
         registry=registry,
@@ -1685,8 +1682,8 @@ async def execute_command_async(
     )
 
     # Create a fake command input string for the engine
-    command_input = f"/{cmd_name}"
+    command_input = f'/{cmd_name}'
     if args:
-        command_input += f" {args}"
+        command_input += f' {args}'
 
     return await engine.execute(command_input)
