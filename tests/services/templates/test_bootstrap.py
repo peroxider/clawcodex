@@ -6,12 +6,12 @@ discovery paths (user / project / managed) plus the P85-E built-in
 catalogue. Uses ``tmp_path`` and ``monkeypatch`` to isolate the
 filesystem from the host environment and from other tests.
 
-P85-E: ``bootstrap_default_templates`` now registers the 5 built-in
-canonical templates (general-purpose / explore / plan / fix / review)
-BEFORE walking the user / project / managed dirs. The constant
-:data:`_BUILT_IN_COUNT` captures that baseline so the count assertions
-below can be expressed as ``_BUILT_IN_COUNT + N`` instead of bare
-``N`` — keeping the tests honest about the post-P85-E contract
+P85-E/F-95: ``bootstrap_default_templates`` now registers the 5 built-in
+canonical agent templates plus 4 built-in orchestrator templates BEFORE
+walking the user / project / managed dirs. The constant
+:data:`_BOOTSTRAP_BASE_COUNT` captures that baseline so the count assertions
+below can be expressed as ``_BOOTSTRAP_BASE_COUNT + N`` instead of bare
+``N`` - keeping the tests honest about the post-P85-E/F-95 contract
 without sprinkling magic numbers through the file.
 """
 
@@ -36,11 +36,9 @@ from src.services.templates import (
     reset_default_template_registry,
 )
 
-# Number of built-in canonical templates registered by
-# :func:`bootstrap_default_templates` before any on-disk source.
-# If P85-E's catalogue grows, bump this constant — the count-based
-# assertions below will pick the new value up automatically.
-_BUILT_IN_COUNT: int = len(get_built_in_templates())
+# Number of canonical templates registered by :func:`bootstrap_default_templates`
+# before any on-disk source: 5 agent templates plus 4 orchestrator templates.
+_BOOTSTRAP_BASE_COUNT: int = len(get_built_in_templates()) + 4
 
 
 @pytest.fixture(autouse=True)
@@ -111,7 +109,7 @@ def test_bootstrap_loads_user_dir_templates(
     monkeypatch.setenv(CLAWCODEX_CONFIG_DIR_ENV, str(user_dir))
 
     n = bootstrap_default_templates()
-    assert n == _BUILT_IN_COUNT + 1
+    assert n == _BOOTSTRAP_BASE_COUNT + 1
     registry = get_default_template_registry()
     assert "user_tpl" in registry
     assert registry.get("user_tpl").source == SOURCE_USER
@@ -126,7 +124,7 @@ def test_bootstrap_loads_project_dir_templates(
     _write_template(tpl_dir / "proj_tpl.yml", id_="proj_tpl", title="From project")
 
     n = bootstrap_default_templates(cwd=proj)
-    assert n == _BUILT_IN_COUNT + 1
+    assert n == _BOOTSTRAP_BASE_COUNT + 1
     registry = get_default_template_registry()
     assert "proj_tpl" in registry
     assert registry.get("proj_tpl").source == SOURCE_PROJECT
@@ -142,7 +140,7 @@ def test_bootstrap_loads_managed_dir_templates(
     monkeypatch.setenv(CLAWCODEX_MANAGED_CONFIG_DIR_ENV, str(mgr_dir))
 
     n = bootstrap_default_templates()
-    assert n == _BUILT_IN_COUNT + 1
+    assert n == _BOOTSTRAP_BASE_COUNT + 1
     registry = get_default_template_registry()
     assert "mgr_tpl" in registry
     assert registry.get("mgr_tpl").source == SOURCE_MANAGED
@@ -162,7 +160,7 @@ def test_bootstrap_loads_from_all_three_sources(
     monkeypatch.setenv(CLAWCODEX_MANAGED_CONFIG_DIR_ENV, str(mgr_dir))
 
     n = bootstrap_default_templates(cwd=proj)
-    assert n == _BUILT_IN_COUNT + 3
+    assert n == _BOOTSTRAP_BASE_COUNT + 3
     registry = get_default_template_registry()
     assert {"u", "p", "m"}.issubset(set(registry.list_ids()))
 
@@ -252,7 +250,7 @@ def test_managed_overrides_user_same_id(
 
 
 # ---------------------------------------------------------------------------
-# Missing dirs — must NOT raise
+# Missing dirs - must NOT raise
 # ---------------------------------------------------------------------------
 
 
@@ -260,30 +258,30 @@ def test_bootstrap_silent_when_user_dir_missing(
     clean_env: None,
     fake_home: Path,
 ) -> None:
-    """No CLAWCODEX_CONFIG_DIR and no ~/.clawcodex/templates/ → only built-ins."""
+    """No CLAWCODEX_CONFIG_DIR and no ~/.clawcodex/templates/ -> only built-ins."""
     n = bootstrap_default_templates()
-    assert n == _BUILT_IN_COUNT
-    assert len(get_default_template_registry()) == _BUILT_IN_COUNT
+    assert n == _BOOTSTRAP_BASE_COUNT
+    assert len(get_default_template_registry()) == _BOOTSTRAP_BASE_COUNT
 
 
 def test_bootstrap_silent_when_project_dir_missing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """cwd has no .clawcodex/templates at any ancestor → only built-ins."""
+    """cwd has no .clawcodex/templates at any ancestor -> only built-ins."""
     proj = tmp_path / "proj"
     proj.mkdir()
     n = bootstrap_default_templates(cwd=proj)
-    assert n == _BUILT_IN_COUNT
+    assert n == _BOOTSTRAP_BASE_COUNT
 
 
 def test_bootstrap_silent_when_managed_dir_missing(
     clean_env: None,
 ) -> None:
     """No CLAWCODEX_MANAGED_CONFIG_DIR and no /etc/clawcodex/templates/
-    → built-ins still register (no raise even if /etc is not writable)."""
+    -> built-ins still register (no raise even if /etc is not writable)."""
     n = bootstrap_default_templates()
-    assert n == _BUILT_IN_COUNT
+    assert n == _BOOTSTRAP_BASE_COUNT
 
 
 def test_bootstrap_silent_when_all_dirs_missing(
@@ -291,12 +289,12 @@ def test_bootstrap_silent_when_all_dirs_missing(
     fake_home: Path,
     tmp_path: Path,
 ) -> None:
-    """All three sources absent → only built-ins register, no raise."""
+    """All three sources absent -> only built-ins register, no raise."""
     proj = tmp_path / "proj"
     proj.mkdir()
     n = bootstrap_default_templates(cwd=proj)
-    assert n == _BUILT_IN_COUNT
-    assert len(get_default_template_registry()) == _BUILT_IN_COUNT
+    assert n == _BOOTSTRAP_BASE_COUNT
+    assert len(get_default_template_registry()) == _BOOTSTRAP_BASE_COUNT
 
 
 # ---------------------------------------------------------------------------
@@ -314,9 +312,9 @@ def test_bootstrap_idempotent(
 
     first = bootstrap_default_templates()
     second = bootstrap_default_templates()
-    assert first == _BUILT_IN_COUNT + 1
-    assert second == _BUILT_IN_COUNT + 1  # not double-counted
-    assert len(get_default_template_registry()) == _BUILT_IN_COUNT + 1
+    assert first == _BOOTSTRAP_BASE_COUNT + 1
+    assert second == _BOOTSTRAP_BASE_COUNT + 1  # not double-counted
+    assert len(get_default_template_registry()) == _BOOTSTRAP_BASE_COUNT + 1
 
 
 def test_bootstrap_tags_source_attribute(
@@ -461,7 +459,7 @@ def test_bootstrap_returns_total_count(
     monkeypatch.setenv(CLAWCODEX_CONFIG_DIR_ENV, str(user_dir))
 
     n = bootstrap_default_templates()
-    assert n == _BUILT_IN_COUNT + 3
+    assert n == _BOOTSTRAP_BASE_COUNT + 3
     assert n == len(get_default_template_registry())
 
 
@@ -470,7 +468,7 @@ def test_bootstrap_returns_count_includes_pre_existing(
     tmp_path: Path,
 ) -> None:
     """Pre-existing entries in the default registry count toward the
-    returned total — bootstrap does NOT clear first.
+    returned total - bootstrap does NOT clear first.
     """
     registry = get_default_template_registry()
     registry.register(_template(id_="preset", title="preset"))
@@ -481,7 +479,7 @@ def test_bootstrap_returns_count_includes_pre_existing(
     monkeypatch.setenv(CLAWCODEX_CONFIG_DIR_ENV, str(user_dir))
 
     n = bootstrap_default_templates()
-    assert n == _BUILT_IN_COUNT + 2
+    assert n == _BOOTSTRAP_BASE_COUNT + 2
     assert {"preset", "fresh"}.issubset(set(registry.list_ids()))
 
 
@@ -504,7 +502,7 @@ def test_bootstrap_loads_bundle_file(
     monkeypatch.setenv(CLAWCODEX_CONFIG_DIR_ENV, str(user_dir))
 
     n = bootstrap_default_templates()
-    assert n == _BUILT_IN_COUNT + 3
+    assert n == _BOOTSTRAP_BASE_COUNT + 3
     assert {"alpha", "beta", "gamma"}.issubset(set(get_default_template_registry().list_ids()))
 
 
@@ -525,6 +523,6 @@ def test_bootstrap_skips_corrupt_files(
     monkeypatch.setenv(CLAWCODEX_CONFIG_DIR_ENV, str(user_dir))
 
     n = bootstrap_default_templates()
-    assert n == _BUILT_IN_COUNT + 1
+    assert n == _BOOTSTRAP_BASE_COUNT + 1
     assert "good" in get_default_template_registry()
     assert "bad" not in get_default_template_registry()

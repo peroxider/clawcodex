@@ -44,7 +44,25 @@ TEMPLATE_SCHEMA_VERSION: str = "1.0"
 """Bumped on any breaking change to the template file format."""
 
 TEMPLATE_TOP_LEVEL_KEYS: frozenset[str] = frozenset(
-    {"id", "title", "description", "fields", "metadata", "source"}
+    {
+        "id",
+        "title",
+        "description",
+        "fields",
+        "metadata",
+        "source",
+        # F-95 convenience keys. They are normalized into metadata/fields
+        # before constructing Template so the storage model remains stable.
+        "kind",
+        "variables",
+        "tags",
+        "category",
+        "schema_version",
+        "min_clawcodex_version",
+        "output_path_template",
+        "content_template",
+        "content_template_ref",
+    }
 )
 """The only keys allowed at the top of a template mapping."""
 
@@ -153,8 +171,29 @@ def parse_template_payload(
             f"template payload must be a mapping (got {type(data).__name__})"
         )
     _check_strict_keys(data, TEMPLATE_TOP_LEVEL_KEYS, strict=strict, what="template")
+    normalized = dict(data)
+    metadata = dict(normalized.get("metadata") or {})
+    fields = dict(normalized.get("fields") or {})
+    for key in (
+        "kind",
+        "variables",
+        "tags",
+        "category",
+        "schema_version",
+        "min_clawcodex_version",
+        "output_path_template",
+    ):
+        if key in normalized:
+            metadata.setdefault(key, normalized.pop(key))
+    for key in ("content_template", "content_template_ref"):
+        if key in normalized:
+            fields.setdefault(key, normalized.pop(key))
+    if metadata:
+        normalized["metadata"] = metadata
+    if fields:
+        normalized["fields"] = fields
     try:
-        return Template.from_dict(dict(data))
+        return Template.from_dict(normalized)
     except ValueError as exc:
         # Per-field validation (id pattern, title length, etc.) bubbles
         # up as ValueError from Template.__post_init__. Wrap so callers

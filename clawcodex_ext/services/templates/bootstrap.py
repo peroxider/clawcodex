@@ -39,6 +39,7 @@ from .discovery import (
 from .exceptions import TemplateAlreadyExistsError
 from .registry import TemplateRegistry, get_default_template_registry
 from .built_in import SOURCE_BUILT_IN, register_built_in_templates
+from .models import Template
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,86 @@ logger = logging.getLogger(__name__)
 SOURCE_USER = "user"
 SOURCE_PROJECT = "project"
 SOURCE_MANAGED = "managed"
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def _register_orchestrator_templates(
+    registry: TemplateRegistry,
+    *,
+    overwrite: bool,
+) -> int:
+    root = _repo_root()
+    templates_dir = root / "extensions" / "orchestrator" / "templates"
+    specs = (
+        (
+            "orchestrator-workflow",
+            "Orchestrator Workflow",
+            "workflow",
+            "workflow.md",
+            "workflow.template.md",
+        ),
+        (
+            "orchestrator-workflow-local",
+            "Orchestrator Local Workflow",
+            "workflow",
+            "workflow-local.md",
+            "workflow-local.template.md",
+        ),
+        (
+            "orchestrator-workflow-yaml",
+            "Orchestrator YAML Workflow",
+            "workflow",
+            "workflow.yaml",
+            "workflow.yaml.template",
+        ),
+        (
+            "orchestrator-issue-card",
+            "Orchestrator Issue Card",
+            "issue",
+            ".clawcodex_local_issues/{{ identifier }}.md",
+            "issue-card.template.md",
+        ),
+    )
+    added = 0
+    for template_id, title, kind, output_path, filename in specs:
+        ref = templates_dir / filename
+        if not ref.is_file():
+            continue
+        metadata: dict[str, object] = {
+            "kind": kind,
+            "category": "orchestrator",
+            "tags": ["orchestrator", kind],
+            "schema_version": "1",
+            "output_path_template": output_path,
+        }
+        if template_id == "orchestrator-issue-card":
+            metadata["variables"] = [
+                {
+                    "name": "identifier",
+                    "description": "Issue identifier used in the generated filename.",
+                    "required": True,
+                    "pattern": r"^[A-Za-z0-9._-]+$",
+                }
+            ]
+        template = Template(
+            id=template_id,
+            title=title,
+            description=f"Built-in orchestrator {kind} template.",
+            fields={"content_template_ref": str(ref)},
+            metadata=metadata,
+            source=SOURCE_BUILT_IN,
+        )
+        before = len(registry)
+        try:
+            registry.register(template, overwrite=overwrite)
+        except TemplateAlreadyExistsError:
+            continue
+        if len(registry) > before:
+            added += 1
+    return added
 
 
 def _load_source(
@@ -124,6 +205,7 @@ def bootstrap_default_templates(
     # user-named template shadowing a built-in wins automatically —
     # no flag is needed to override the defaults.
     register_built_in_templates(registry, overwrite=overwrite)
+    _register_orchestrator_templates(registry, overwrite=overwrite)
 
     user_dir = get_user_templates_dir()
     project_dirs = get_project_templates_dirs(cwd)

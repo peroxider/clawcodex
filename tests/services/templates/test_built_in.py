@@ -233,10 +233,10 @@ def test_register_built_in_templates_skips_already_exists_silently() -> None:
 
 
 def test_bootstrap_registers_built_ins_first(monkeypatch, tmp_path) -> None:
-    """With all sources absent, only the 5 built-ins are present."""
+    """With all sources absent, the built-in agent + orchestrator templates are present."""
     reset_default_template_registry()
     n = bootstrap_default_templates(cwd=tmp_path)
-    assert n == 5
+    assert n == 9
     registry = get_default_template_registry()
     assert {t.id for t in registry.list_templates(source=SOURCE_BUILT_IN)} == {
         "general-purpose",
@@ -244,6 +244,10 @@ def test_bootstrap_registers_built_ins_first(monkeypatch, tmp_path) -> None:
         "plan",
         "fix",
         "review",
+        "orchestrator-workflow",
+        "orchestrator-workflow-local",
+        "orchestrator-workflow-yaml",
+        "orchestrator-issue-card",
     }
 
 
@@ -283,7 +287,10 @@ def test_bootstrap_built_ins_tagged_as_built_in(monkeypatch, tmp_path) -> None:
     bootstrap_default_templates(cwd=tmp_path)
     registry = get_default_template_registry()
     built_ins = registry.list_templates(source=SOURCE_BUILT_IN)
-    assert len(built_ins) == 5
+    assert len(built_ins) == 9
+    assert {"orchestrator-workflow", "orchestrator-issue-card"}.issubset(
+        {template.id for template in built_ins}
+    )
 
 
 def test_bootstrap_returns_total_including_built_ins(monkeypatch, tmp_path) -> None:
@@ -298,8 +305,8 @@ def test_bootstrap_returns_total_including_built_ins(monkeypatch, tmp_path) -> N
 
     reset_default_template_registry()
     n = bootstrap_default_templates()
-    # 5 built-ins + 1 user template.
-    assert n == 6
+    # 5 agent built-ins + 4 orchestrator templates + 1 user template.
+    assert n == 10
     assert n == len(get_default_template_registry())
 
 
@@ -308,10 +315,10 @@ def test_bootstrap_idempotent_with_built_ins(monkeypatch, tmp_path) -> None:
     reset_default_template_registry()
     first = bootstrap_default_templates(cwd=tmp_path)
     second = bootstrap_default_templates(cwd=tmp_path)
-    # The built-in count stays at 5 across re-runs because of overwrite.
-    assert first == 5
-    assert second == 5
-    assert len(get_default_template_registry()) == 5
+    # The built-in count stays stable across re-runs because of overwrite.
+    assert first == 9
+    assert second == 9
+    assert len(get_default_template_registry()) == 9
 
 
 # ---------------------------------------------------------------------------

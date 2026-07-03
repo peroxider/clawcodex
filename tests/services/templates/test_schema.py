@@ -39,7 +39,23 @@ def test_schema_version_is_set() -> None:
 
 def test_top_level_keys_are_canonical_set() -> None:
     assert TEMPLATE_TOP_LEVEL_KEYS == frozenset(
-        {"id", "title", "description", "fields", "metadata", "source"}
+        {
+            "id",
+            "title",
+            "description",
+            "fields",
+            "metadata",
+            "source",
+            "kind",
+            "variables",
+            "tags",
+            "category",
+            "schema_version",
+            "min_clawcodex_version",
+            "output_path_template",
+            "content_template",
+            "content_template_ref",
+        }
     )
 
 
@@ -78,6 +94,23 @@ def test_parse_payload_full() -> None:
     assert tpl.fields["tools"] == ["Read"]
     assert tpl.metadata["category"] == "test"
     assert tpl.source == "user"
+
+
+def test_parse_payload_normalizes_f95_top_level_keys() -> None:
+    tpl = parse_template_payload(
+        {
+            "id": "skill-demo",
+            "title": "Skill Demo",
+            "kind": "skill",
+            "variables": [{"name": "skill_name", "description": "Name"}],
+            "output_path_template": ".claude/skills/{{ skill_name }}/SKILL.md",
+            "content_template": "# {{ skill_name }}",
+        }
+    )
+    assert tpl.metadata["kind"] == "skill"
+    assert tpl.metadata["variables"] == [{"name": "skill_name", "description": "Name"}]
+    assert tpl.metadata["output_path_template"] == ".claude/skills/{{ skill_name }}/SKILL.md"
+    assert tpl.fields["content_template"] == "# {{ skill_name }}"
 
 
 def test_parse_payload_rejects_non_mapping() -> None:
