@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 #  install.ps1 — One-click installer for clawcodex on Windows / PowerShell
 # ----------------------------------------------------------------------------
 #  PowerShell counterpart of install.sh.  Mirrors its subcommand set, flags,
@@ -112,7 +112,8 @@ $script:RepoUrl           = 'https://gitcode.com/chadwweng/clawcodex'
 $script:DefaultInstallDir = Join-Path $env:USERPROFILE '.clawcodex\clawcodex'
 $script:DefaultConfigDir  = Join-Path $env:USERPROFILE '.clawcodex'
 $script:LocalBin          = Join-Path $env:USERPROFILE '.local\bin'
-$script:PythonMinVersion  = '3.10'
+$script:PythonMinVersion  = '3.11'
+$script:PythonMaxSupported = '3.13'
 $script:EntryPoint        = 'clawcodex-dev'   # the single registered entry in pyproject.toml
 $script:RcMarker          = '# clawcodex installer — managed by install.ps1'
 $script:SponsorScript     = if ($MyInvocation.MyCommand.Path -and
@@ -395,7 +396,7 @@ function script:Install-Uv {
 }
 
 # ============================================================================
-#  Python 3.10+ provisioning (via uv)
+#  Python 3.11+ provisioning (via uv)
 # ============================================================================
 function script:Ensure-Python {
     if ($DryRun) {
@@ -420,7 +421,7 @@ function script:Ensure-Python {
         Die-With-Help "Failed to install Python $PythonMinVersion via uv." `
             "Retry:    $SponsorScript" `
             "Manual:   uv python install $PythonMinVersion" `
-            'Or:       install Python 3.10+ from https://python.org'
+            'Or:       install Python 3.11+ from https://python.org'
     }
 
     $py = & uv python find $PythonMinVersion 2>$null
@@ -431,6 +432,84 @@ function script:Ensure-Python {
     }
     $ver = & $py --version 2>&1
     Log-Ok "$ver"
+}
+
+# ============================================================================
+#  Python 3.14+ pyo3-ffi compatibility guard
+#  Detects Python >= 3.14 (too new for pyo3-ffi used by outlines-core) and
+#  auto-mitigates by switching to a compatible version (3.11 - 3.13).
+#  If no compatible version is found, fails with actionable instructions.
+# ============================================================================
+function script:Ensure-Python-Pyo3Compat {
+    if ($DryRun) {
+        ScriptP1
+        Write-Host "[DRY-RUN] would check Python <= $PythonMaxSupported for pyo3-ffi compatibility"
+        return
+    }
+
+    $py = $null
+    try { $py = & uv python find $PythonMinVersion 2>$null } catch { $py = $null }
+    if (-not $py -or -not (Test-Path $py)) { return }
+
+    $verStr = & $py --version 2>&1
+    if ($verStr -match 'Python\s+(\d+)\.(\d+)') {
+        $major = [int]$matches[1]
+        $minor = [int]$matches[2]
+    } else {
+        return
+    }
+
+    # No mitigation needed for Python <= 3.13
+    if ($major -lt 3 -or ($major -eq 3 -and $minor -le 13)) { return }
+
+    Log-Warn "Python $major.$minor detected, but pyo3-ffi (used by outlines-core) only supports up to $PythonMaxSupported"
+    Log-Info "Searching for a compatible Python ($PythonMinVersion - $PythonMaxSupported)..."
+
+    foreach ($target in @('3.13', '3.12', '3.11')) {
+        $compatPy = $null
+        try { $compatPy = & uv python find $target 2>$null } catch { $compatPy = $null }
+        if ($compatPy -and (Test-Path $compatPy)) {
+            $compatVer = & $compatPy --version 2>&1
+            Log-Ok "Found compatible Python: $compatPy ($compatVer)"
+            $env:UV_PYTHON = $compatPy
+            return
+        }
+    }
+
+    # No compatible interpreter locally — try uv provisioning
+    Log-Info "No compatible Python found locally — provisioning Python $PythonMaxSupported via uv..."
+    $installed = $false
+    try {
+        if (-not $DryRun) {
+            & uv python install $PythonMaxSupported 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { $installed = $true }
+        } else {
+            $installed = $true
+        }
+    } catch { $installed = $false }
+
+    if ($installed) {
+        $compatPy = $null
+        try { $compatPy = & uv python find $PythonMaxSupported 2>$null } catch { $compatPy = $null }
+        if ($compatPy -and (Test-Path $compatPy)) {
+            $compatVer = & $compatPy --version 2>&1
+            Log-Ok "Python $PythonMaxSupported installed via uv ($compatPy)"
+            $env:UV_PYTHON = $compatPy
+            return
+        }
+    }
+
+    # Auto-mitigation failed — defensive error with clear next steps
+    Die-With-Help "Python $major.$minor is incompatible with clawcodex dependencies" `
+        "The detected Python ($major.$minor) is too new for pyo3-ffi (max $PythonMaxSupported)." `
+        "outlines-core will fail to compile with Rust errors." `
+        "" `
+        "Recommended fixes (pick one):" `
+        "  1. uv python install 3.13   (then re-run install.ps1)" `
+        "  2. pyenv install 3.13 && pyenv local 3.13" `
+        "  3. Install Python 3.11-3.13 from https://python.org" `
+        "  4. Set `$env:PYO3_USE_ABI3_FORWARD_COMPATIBILITY = 1` and retry (risky)" `
+        "The installer attempted to auto-provision a compatible Python but failed."
 }
 
 # ============================================================================
@@ -977,7 +1056,7 @@ function script:Invoke-Doctor {
     }
 
     # 3. Python
-    Write-Host "[3/10] Python >= $PythonMinVersion"
+    Write-Host "[3/10] Python $PythonMinVersion - $PythonMaxSupported"
     $uv = Get-Command uv -ErrorAction SilentlyContinue
     if ($uv) {
         $py = $null
@@ -1328,7 +1407,7 @@ function script:Show-Help {
         "    Git ref      : $RepoRef  (override with -Ref)"
         "    Install path : $DefaultInstallDir  (override with -InstallDir)"
         "    Config path  : $DefaultConfigDir  (override with -ConfigDir)"
-        "    Python       : >= $PythonMinVersion  (provisioned by uv if missing)"
+        "    Python       : $PythonMinVersion - $PythonMaxSupported  (provisioned by uv if missing)"
         "    Tooling      : uv (Astral's package manager — installed user-local, no admin)"
         ""
         "EXAMPLES"
@@ -1381,6 +1460,15 @@ function script:Show-Help {
         "            $SponsorScript -LogFile C:\Temp\out.log"
         "        Diagnose:  $SponsorScript doctor"
         "        Clean reinstall:  $SponsorScript uninstall ; $SponsorScript"
+        ""
+        '    "Python 3.14+ detected — pyo3-ffi version mismatch"'
+        "        Python 3.14 is not yet supported by the pyo3-ffi dependency"
+        "        used by outlines-core. The installer auto-detects this and"
+        "        attempts to provision Python 3.13. If it fails, manually"
+        "        install 3.11-3.13:"
+        "            uv python install 3.13"
+        "            pyenv install 3.13 && pyenv local 3.13"
+        "        Or set `$env:PYO3_USE_ABI3_FORWARD_COMPATIBILITY = 1` and retry (risky)."
         ""
         '    "clawcodex-dev: command not found" after install'
         "        Your shell hasn't picked up the new PATH yet.  Either:"
@@ -1474,7 +1562,7 @@ function script:Show-HelpZh {
         "    Git 引用  ：$RepoRef  （用 -Ref 覆盖）"
         "    安装路径  ：$DefaultInstallDir  （用 -InstallDir 覆盖）"
         "    配置路径  ：$DefaultConfigDir  （用 -ConfigDir 覆盖）"
-        "    Python    ：>= $PythonMinVersion  （缺失时由 uv 自动提供）"
+        "    Python    ：$PythonMinVersion - $PythonMaxSupported  （缺失时由 uv 自动提供）"
         "    工具链    ：uv（Astral 的包管理器——用户级安装，无需管理员权限）"
         ""
         "示例"
@@ -1527,6 +1615,14 @@ function script:Show-HelpZh {
         "            $SponsorScript -LogFile C:\Temp\out.log"
         "        诊断：$SponsorScript doctor"
         "        干净重装：$SponsorScript uninstall ; $SponsorScript"
+        ""
+        '    "检测到 Python 3.14+ — pyo3-ffi 版本不兼容"'
+        "        Python 3.14 尚不被 outlines-core 依赖的 pyo3-ffi 支持。"
+        "        安装脚本会自动检测并尝试安装 Python 3.13。如果自动修复失败，"
+        "        请手动安装 3.11-3.13："
+        "            uv python install 3.13"
+        "            pyenv install 3.13 && pyenv local 3.13"
+        "        或者设置 `$env:PYO3_USE_ABI3_FORWARD_COMPATIBILITY = 1` 后重试（有风险）。"
         ""
         '    安装后提示 "clawcodex-dev: command not found"'
         "        当前 shell 还没加载新的 PATH。请："
@@ -1597,6 +1693,7 @@ function script:Install-Main {
 
     Log-Step "3/9  Provisioning Python $PythonMinVersion+"
     Ensure-Python
+    Ensure-Python-Pyo3Compat
 
     Log-Step '4/9  Cloning / updating repository'
     Clone-OrUpdate-Repo

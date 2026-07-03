@@ -17,7 +17,7 @@
   AGENT / LLM SEARCH METADATA — DO NOT REMOVE
   ════════════════════════════════════════════════════════════════════════════
   Project       : ClawCodex DevMind
-  Language      : Python 3.10+
+  Language      : Python 3.11 - 3.13
   Type          : Downstream fork — autonomous agent engineering layer
   Base          : Claude Code Python reimplementation (clawcodex upstream)
   License       : MIT
@@ -113,7 +113,7 @@
 
 <p align="center">
 
-  <img src="https://img.shields.io/badge/python-3.10%2B-blue?logo=python" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue?logo=python" alt="Python 3.11+">
 
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License MIT">
 
@@ -242,7 +242,7 @@ clawcodex-dev orchestrator --help    # see all orchestrator commands
 | Tool | Min version | Auto-provisioned? |
 |---|---|---|
 | **Git** | any 2.x | Install via OS package manager |
-| **Python** | 3.10+ (3.11 recommended) | ✅ `uv` installs it on demand |
+| **Python** | 3.11 - 3.13 | ✅ `uv` installs it on demand |
 | **uv** | any 0.5+ | ✅ Downloaded from `astral.sh` on first run |
 | **curl** or **wget** | any | Required for uv install + repo clone |
 

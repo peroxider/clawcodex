@@ -77,7 +77,8 @@ readonly REPO_URL="https://gitcode.com/chadwweng/clawcodex"
 readonly DEFAULT_INSTALL_DIR="$HOME/.clawcodex/clawcodex"
 readonly DEFAULT_CONFIG_DIR="$HOME/.clawcodex"
 readonly LOCAL_BIN="$HOME/.local/bin"
-readonly PYTHON_MIN_VERSION="3.10"
+readonly PYTHON_MIN_VERSION="3.11"
+readonly PYTHON_MAX_SUPPORTED="3.13"
 readonly ENTRY_POINT="clawcodex-dev"   # the single registered entry in pyproject.toml
 readonly RC_MARKER="# clawcodex installer — managed by install.sh"
 
@@ -313,6 +314,72 @@ ensure_python() {
                       "Diagnose: $0 doctor"
     fi
     log_ok "Python $($py --version 2>&1 | awk '{print $1, $2}')"
+}
+
+# ============================================================================
+#  Python 3.14+ pyo3-ffi compatibility guard
+#  Detects Python >= 3.14 (too new for pyo3-ffi used by outlines-core) and
+#  auto-mitigates by switching to a compatible version (3.11 - 3.13).
+#  If no compatible version is found, fails with actionable instructions.
+# ============================================================================
+ensure_python_pyo3_compat() {
+    if [[ "${DRY_RUN:-0}" -eq 1 ]]; then
+        _script_p1
+        echo "[DRY-RUN] would check Python <= $PYTHON_MAX_SUPPORTED for pyo3-ffi compatibility"
+        return 0
+    fi
+
+    local py
+    py=$(uv python find "$PYTHON_MIN_VERSION" 2>/dev/null || true)
+    if [[ -z "$py" || ! -x "$py" ]]; then return 0; fi
+
+    local ver major minor
+    ver=$($py -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+    major=$(echo "$ver" | cut -d. -f1)
+    minor=$(echo "$ver" | cut -d. -f2)
+
+    # No mitigation needed for Python <= 3.13
+    if [[ "$major" -lt 3 ]] || { [[ "$major" -eq 3 && "$minor" -le 13 ]]; }; then
+        return 0
+    fi
+
+    log_warn "Python $ver detected, but pyo3-ffi (used by outlines-core) only supports up to $PYTHON_MAX_SUPPORTED"
+    log_info "Searching for a compatible Python ($PYTHON_MIN_VERSION - $PYTHON_MAX_SUPPORTED)..."
+
+    local compat_py compat_ver
+    for target in 3.13 3.12 3.11; do
+        compat_py=$(uv python find "$target" 2>/dev/null || true)
+        if [[ -n "$compat_py" && -x "$compat_py" ]]; then
+            compat_ver=$($compat_py -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+            log_ok "Found compatible Python: $compat_py ($compat_ver)"
+            export UV_PYTHON="$compat_py"
+            return 0
+        fi
+    done
+
+    # No compatible interpreter locally — try uv provisioning
+    log_info "No compatible Python found locally — provisioning Python $PYTHON_MAX_SUPPORTED via uv..."
+    if run_or_dry uv python install "$PYTHON_MAX_SUPPORTED"; then
+        compat_py=$(uv python find "$PYTHON_MAX_SUPPORTED" 2>/dev/null || true)
+        if [[ -n "$compat_py" && -x "$compat_py" ]]; then
+            compat_ver=$($compat_py -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+            log_ok "Python $PYTHON_MAX_SUPPORTED installed via uv ($compat_py)"
+            export UV_PYTHON="$compat_py"
+            return 0
+        fi
+    fi
+
+    # Auto-mitigation failed — defensive error with clear next steps
+    die_with_help "Python $ver is incompatible with clawcodex dependencies" \
+        "The detected Python ($ver) is too new for pyo3-ffi (max $PYTHON_MAX_SUPPORTED)." \
+        "outlines-core will fail to compile with Rust errors." \
+        "" \
+        "Recommended fixes (pick one):" \
+        "  1. uv python install 3.13   (then re-run install.sh)" \
+        "  2. pyenv install 3.13 && pyenv local 3.13" \
+        "  3. Install Python 3.11-3.13 from https://python.org" \
+        "  4. Set PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 and retry (risky)" \
+        "The installer attempted to auto-provision a compatible Python but failed."
 }
 
 # ============================================================================
@@ -1133,7 +1200,7 @@ DEFAULTS
     Git ref      : ${REPO_REF}  (override with --ref)
     Install path : ${DEFAULT_INSTALL_DIR}  (override with --install-dir)
     Config path  : ${DEFAULT_CONFIG_DIR}  (override with --config-dir)
-    Python       : >= ${PYTHON_MIN_VERSION}  (provisioned by uv if missing)
+    Python       : ${PYTHON_MIN_VERSION} - ${PYTHON_MAX_SUPPORTED}  (provisioned by uv if missing)
     Tooling      : uv (Astral's package manager — installed user-local, no sudo)
 
 EXAMPLES
@@ -1184,6 +1251,14 @@ TROUBLESHOOTING
         Re-run with --log-file to capture full output: $0 --log-file /tmp/out.log
         Diagnose: $0 doctor
         Clean reinstall: $0 uninstall && $0
+
+    "Python 3.14+ detected — pyo3-ffi version mismatch"
+        Python 3.14 is not yet supported by the pyo3-ffi dependency used
+        by outlines-core. The installer auto-detects this and attempts to
+        provision Python 3.13. If it fails, manually install 3.11-3.13:
+            uv python install 3.13
+            pyenv install 3.13 && pyenv local 3.13
+        Or set PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 and retry (risky).
 
     "clawcodex-dev: command not found" after install
         Your shell hasn't picked up the new PATH yet. Run:
@@ -1282,7 +1357,7 @@ clawcodex 安装脚本 v${INSTALLER_VERSION}  (安装 clawcodex v${CLAWCODEX_VER
     Git 引用  ：${REPO_REF}  （用 --ref 覆盖）
     安装路径  ：${DEFAULT_INSTALL_DIR}  （用 --install-dir 覆盖）
     配置路径  ：${DEFAULT_CONFIG_DIR}  （用 --config-dir 覆盖）
-    Python    ：>= ${PYTHON_MIN_VERSION}  （缺失时由 uv 自动提供）
+    Python    ：${PYTHON_MIN_VERSION} - ${PYTHON_MAX_SUPPORTED}  （缺失时由 uv 自动提供）
     工具链    ：uv（Astral 的包管理器——用户级安装，无需 sudo）
 
 示例
@@ -1333,6 +1408,14 @@ clawcodex 安装脚本 v${INSTALLER_VERSION}  (安装 clawcodex v${CLAWCODEX_VER
         重新运行并用 --log-file 捕获完整输出：$0 --log-file /tmp/out.log
         诊断：$0 doctor
         干净重装：$0 uninstall && $0
+
+    "检测到 Python 3.14+ — pyo3-ffi 版本不兼容"
+        Python 3.14 尚不被 outlines-core 依赖的 pyo3-ffi 支持。
+        安装脚本会自动检测并尝试安装 Python 3.13。如果自动修复失败，
+        请手动安装 3.11-3.13：
+            uv python install 3.13
+            pyenv install 3.13 && pyenv local 3.13
+        或者设置 PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 后重试（有风险）。
 
     安装后提示 "clawcodex-dev: command not found"
         当前 shell 还没加载新的 PATH。运行：
@@ -1410,6 +1493,7 @@ install_main() {
 
     log_step "3/9  Provisioning Python $PYTHON_MIN_VERSION+"
     ensure_python
+    ensure_python_pyo3_compat
 
     log_step "4/9  Cloning / updating repository"
     clone_or_update_repo
@@ -1557,7 +1641,7 @@ if [[ "$OS" == "unknown" ]] && [[ -n "${COMSPEC:-}" || -n "${WINDIR:-}" ]]; then
          bash install.sh
 
   Option C — Install manually from source:
-    1. Install Git, Python 3.10+, and curl
+    1. Install Git, Python 3.11+, and curl
     2. Run:
          git clone https://gitcode.com/chadwweng/clawcodex /tmp/clawcodex
          cd /tmp/clawcodex
