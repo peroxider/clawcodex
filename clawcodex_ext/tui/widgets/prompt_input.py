@@ -47,6 +47,9 @@ from ..paste import PasteInfo, classify_paste
 from ..vim import VimState
 from .prompt_input_footer import PromptInputFooter
 from .prompt_input_mode_indicator import PromptInputModeIndicator
+from ..rainbow_highlight import highlight_triggers
+from clawcodex_ext.services.ultraplan.feature_gates import is_ultraplan_rainbow_enabled
+from clawcodex_ext.services.ultraplan.keyword_detector import find_ultraplan_trigger_positions
 
 from clawcodex_ext.utils.completers import (
     current_slash_token,
@@ -291,6 +294,14 @@ class PromptInput(Vertical):
     PromptInput > #ghost-suggestion.-hidden {
         display: none;
     }
+    PromptInput > #ultraplan-trigger-preview {
+        height: auto;
+        padding: 0 2;
+        color: $text 70%;
+    }
+    PromptInput > #ultraplan-trigger-preview.-hidden {
+        display: none;
+    }
     """
 
     BINDINGS = [
@@ -330,6 +341,13 @@ class PromptInput(Vertical):
         self._agent_suggestions = _AgentSuggestions(classes="-hidden")
         self._ghost_suggestion = Static("", id="ghost-suggestion", classes="-hidden")
         self._ghost_suggestion.renderable = ""
+        self._ultraplan_trigger_preview = Static(
+            "",
+            id="ultraplan-trigger-preview",
+            classes="-hidden",
+            markup=False,
+        )
+        self._ultraplan_trigger_preview.renderable = ""
         self._vim = VimState(enabled=vim_mode)
         # Configured ghost-suggestion accept key. Stored in two forms:
         # ``_accept_key_raw`` is the canonical prompt_toolkit spelling
@@ -364,6 +382,7 @@ class PromptInput(Vertical):
     def compose(self) -> ComposeResult:
         yield self._mode_indicator
         yield self._input
+        yield self._ultraplan_trigger_preview
         yield self._ghost_suggestion
         yield self._suggestions
         yield self._message_suggestions
@@ -383,6 +402,7 @@ class PromptInput(Vertical):
         self._hide_suggestions()
         self._hide_message_suggestions()
         self._hide_ghost_suggestion()
+        self._hide_ultraplan_trigger_preview()
 
     def set_value(self, value: str) -> None:
         """Replace the draft text in the prompt (used by /history)."""
@@ -391,6 +411,7 @@ class PromptInput(Vertical):
         self._hide_suggestions()
         self._hide_message_suggestions()
         self._hide_ghost_suggestion()
+        self._refresh_ultraplan_trigger_preview(self._input.value)
 
     # ---- bracketed paste ----
     def handle_paste(self, text: str) -> PasteInfo:
@@ -526,6 +547,7 @@ class PromptInput(Vertical):
     # ---- input events ----
     def on_input_changed(self, event: Input.Changed) -> None:
         self.post_message(PromptDraftChanged(text=event.value or ""))
+        self._refresh_ultraplan_trigger_preview(event.value or "")
         # When the user is navigating the in-session history with
         # Up/Down, :meth:`_navigate_history` programmatically sets the
         # input value to a previous prompt. Because Textual fires
@@ -554,6 +576,7 @@ class PromptInput(Vertical):
                 self._hide_at_file_suggestions()
                 self._hide_agent_suggestions()
                 self._hide_ghost_suggestion()
+                self._hide_ultraplan_trigger_preview()
                 return
         self._refresh_suggestions(event.value, event.input.cursor_position)
         # Show ghost-text suggestion from history when no popup is open.
@@ -589,6 +612,7 @@ class PromptInput(Vertical):
         self._hide_agent_suggestions()
         self._hide_message_suggestions()
         self._hide_ghost_suggestion()
+        self._hide_ultraplan_trigger_preview()
         self._input.value = ""
         ## _log(f'[prompt_input] posting PromptSubmitted: {text}')
         self.post_message(PromptSubmitted(text=text))
@@ -806,6 +830,27 @@ class PromptInput(Vertical):
             self._ghost_suggestion.add_class("-hidden")
             self._ghost_suggestion.renderable = ""
             self._ghost_suggestion.update("")
+
+    def _refresh_ultraplan_trigger_preview(self, text: str) -> None:
+        if not text or not is_ultraplan_rainbow_enabled():
+            self._hide_ultraplan_trigger_preview()
+            return
+        hits = find_ultraplan_trigger_positions(text)
+        leading = len(text) - len(text.lstrip())
+        if not hits or hits[0].start != leading:
+            self._hide_ultraplan_trigger_preview()
+            return
+        rendered = Text("ultraplan: ", style="dim")
+        rendered.append_text(highlight_triggers(text, hits))
+        self._ultraplan_trigger_preview.renderable = rendered
+        self._ultraplan_trigger_preview.update(rendered)
+        self._ultraplan_trigger_preview.remove_class("-hidden")
+
+    def _hide_ultraplan_trigger_preview(self) -> None:
+        if not self._ultraplan_trigger_preview.has_class("-hidden"):
+            self._ultraplan_trigger_preview.add_class("-hidden")
+            self._ultraplan_trigger_preview.renderable = ""
+            self._ultraplan_trigger_preview.update("")
 
     def _accept_ghost_suggestion(self) -> None:
         """Accept the ghost-text suggestion, appending it to the input."""
