@@ -55,6 +55,14 @@ class TimelineBuilder:
         if viz.tool_events_path:
             tool_bars = self.tool_events_parser.parse_file(viz.tool_events_path)
             viz.timeline.extend(tool_bars)
+            # Exact spawn attribution: the Agent tool records
+            # {ts, agent_id, description} at each spawn moment
+            # (``agent_spawns.ndjson``, mirrored next to events.ndjson).
+            # Join those ids onto the Agent spawn bars so downstream
+            # pairing is exact instead of time-guessed.
+            self._attach_spawn_ids(
+                tool_bars, Path(viz.tool_events_path).parent / "agent_spawns.ndjson"
+            )
 
         # Parse agent tree — discover sub-agents from the new layout
         # (flat ``~/.clawcodex/transcripts/*.jsonl`` and nested
@@ -153,7 +161,23 @@ class TimelineBuilder:
                 (item for item in unused if explicit and item.agent_id == str(explicit)), None
             )
             if node is None and unused:
-                node = unused[0]
+                # Time-proximity fallback (mirrors AgentTreeLayout._match_node):
+                # a worker's transcript starts right after its spawn call, so
+                # prefer the un-consumed node with the earliest start_ts at or
+                # after this bar. Blind ``unused[0]`` paired chronological
+                # spawns with glob-ordered transcripts — wrong lane labels on
+                # every multi-worker session.
+                spawn_time = bar.start_time
+                after = [
+                    ((item.metadata or {}).get("start_ts", 0.0) - spawn_time, item)
+                    for item in unused
+                    if isinstance((item.metadata or {}).get("start_ts"), (int, float))
+                    and (item.metadata or {}).get("start_ts", 0.0) >= spawn_time
+                ]
+                if after:
+                    node = min(after, key=lambda pair: pair[0])[1]
+                else:
+                    node = unused[0]
             if node is None:
                 continue
             unused.remove(node)
@@ -165,6 +189,59 @@ class TimelineBuilder:
             elif isinstance(description, str) and description:
                 node.name = description[:60]
             node.metadata["spawn_bar_id"] = bar.id
+
+    @staticmethod
+    def _attach_spawn_ids(tool_bars: list[TimelineBar], spawns_path: Path) -> None:
+        """Join agent_spawns.ndjson records onto Agent spawn bars.
+
+        Each record carries the exact ``agent_id`` minted at the spawn
+        moment plus the ``description`` passed to the Agent tool. Bars
+        are matched by description with nearest-timestamp disambiguation
+        (duplicate descriptions are common — e.g. two "Run tests" spawns),
+        so every spawn bar ends up with the precise child id and the
+        agent-tree layout can attribute connectors without guessing.
+        Best-effort: silently no-ops when the file is absent (pre-fix
+        runs) or malformed.
+        """
+        import json as _json
+
+        if not spawns_path.is_file():
+            return
+        records: list[dict[str, Any]] = []
+        try:
+            with open(spawns_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = _json.loads(line)
+                    except _json.JSONDecodeError:
+                        continue
+                    if rec.get("agent_id"):
+                        records.append(rec)
+        except OSError:
+            return
+        if not records:
+            return
+        unused = list(records)
+        spawn_bars = [
+            bar
+            for bar in tool_bars
+            if (bar.detail or {}).get("is_agent_invocation")
+            and not (bar.detail or {}).get("agent_id")
+        ]
+        for bar in sorted(spawn_bars, key=lambda b: b.start_time):
+            desc = (bar.detail or {}).get("description") or ""
+            pool = [r for r in unused if (r.get("description") or "") == desc] or unused
+            best = min(
+                pool,
+                key=lambda r: abs(float(r.get("ts") or 0) - bar.start_time),
+            )
+            unused.remove(best)
+            bar.detail["agent_id"] = str(best["agent_id"])
+            if not unused:
+                break
 
     def build_for_sessions(self, session_ids: list[str]) -> list[SessionVizData]:
         """Build viz data for multiple sessions."""

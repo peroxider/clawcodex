@@ -471,6 +471,38 @@ def make_agent_tool(
         start_time = time.time()
         is_async = run_in_background
 
+        # Spawn-attribution record: the Agent tool is the ONLY place that
+        # knows both the child's ``agent_id`` and the ``description`` at
+        # the spawn moment. Persist the mapping so the visualizer can
+        # attach each spawn bar to its exact sub-agent lane (the F-45
+        # call row cannot carry the id — it's minted here, after the
+        # event is emitted — and the result event only carries rendered
+        # text). Best-effort; never affects the spawn.
+        try:
+            import json as _json
+            from pathlib import Path as _Path
+
+            workspace_root = getattr(context, "workspace_root", None)
+            if workspace_root:
+                _reports = _Path(workspace_root) / ".reports"
+                _reports.mkdir(parents=True, exist_ok=True)
+                with open(
+                    _reports / "agent_spawns.ndjson", "a", encoding="utf-8"
+                ) as _f:
+                    _f.write(
+                        _json.dumps(
+                            {
+                                "ts": start_time,
+                                "agent_id": agent_id,
+                                "description": description or "",
+                            },
+                            ensure_ascii=False,
+                        )
+                        + "\n"
+                    )
+        except Exception:
+            pass
+
         if provider is None:
             return ToolResult(
                 name=AGENT_TOOL_NAME,
