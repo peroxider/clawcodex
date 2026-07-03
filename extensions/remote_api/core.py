@@ -156,6 +156,7 @@ class RemoteAPIService:
                 "run_stop": False,
                 "sessions_api": False,
                 "cron_jobs": False,
+                "automation_state": True,
             },
         }
 
@@ -997,7 +998,7 @@ def _responses_base_payload(
         "truncation": "disabled",
         "usage": usage,
         "user": None,
-        "metadata": {},
+        "metadata": _response_metadata(),
     }
     if conversation:
         payload["conversation"] = {"id": conversation}
@@ -1272,6 +1273,15 @@ def _resolve_query_model(request_model: Any, service_model: str | None) -> str |
     if service_model and service_model != API_MODEL_NAME:
         return service_model
     return None
+
+
+def _response_metadata() -> dict[str, Any]:
+    try:
+        from .state_reporter import current_automation_state
+
+        return {"automation_state": current_automation_state()}
+    except Exception:
+        return {}
 
 
 __all__ = [

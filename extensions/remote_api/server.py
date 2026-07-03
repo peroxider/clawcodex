@@ -58,6 +58,23 @@ def create_app(config: RemoteAPIConfig) -> FastAPI:
         except RemoteAPIError as exc:
             return _error_response(exc)
 
+    @app.post("/proactive/focus")
+    async def proactive_focus(request: Request):
+        try:
+            _require_auth(app.state.remote_api_service, request)
+            body = await _read_json_object(request)
+            level = body.get("level")
+            if not isinstance(level, str):
+                raise RemoteAPIError(400, "level must be a string")
+            from .state_reporter import set_proactive_focus
+
+            try:
+                return {"automation_state": set_proactive_focus(level)}
+            except ValueError as exc:
+                raise RemoteAPIError(400, str(exc)) from exc
+        except RemoteAPIError as exc:
+            return _error_response(exc)
+
     @app.post("/v1/chat/completions")
     async def chat_completions(request: Request):
         try:
