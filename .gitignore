@@ -79,8 +79,11 @@ credentials.json
 .secrets/
 
 # Claude Code specific
+.agents/
+.agnts/
 .claude/
 .clawcodex/
+/.codex/
 CLAUDE.md
 
 # Session data

@@ -19,17 +19,6 @@ def _resolve_path(p: str | Path) -> Path:
     return Path(p).expanduser().resolve()
 
 
-def _default_goal_registry() -> Any:
-    """Lazy accessor for the F-9 ``/goal`` state registry singleton.
-
-    The import is deferred to call-time so the ``clawcodex_ext.goal``
-    package can transitively import from ``src.tool_system`` without
-    forming an import cycle at module load.
-    """
-    from clawcodex_ext.goal.registry import get_goal_registry
-    return get_goal_registry()
-
-
 def _is_within(child: Path, parent: Path) -> bool:
     try:
         child.relative_to(parent)
@@ -136,18 +125,6 @@ class ToolContext:
     # are per-session totals for UI display.
     advisor_input_tokens: int = 0
     advisor_output_tokens: int = 0
-    # F-9 / `/goal` long-running objective state. Process-level
-    # singleton dict keyed by ``session_id``; see
-    # ``clawcodex_ext/goal/registry.py::get_goal_registry``. The
-    # ``Goal`` tool (``clawcodex_ext/goal/tool.py``) reads and
-    # mutates state through this registry; the ``/goal`` command
-    # constructs a transient :class:`GoalController` bound to the
-    # active session_id and routes transitions through the same
-    # registry so user-side and model-side updates stay consistent.
-    # The default factory shares the process singleton so cross-
-    # context reads (TUI/REPL UI, controller, tool) observe the
-    # same in-memory state without explicit plumbing.
-    goal_state_registry: Any = field(default_factory=_default_goal_registry)
     # Chapter-10 / Chunk F / WI-6.1 — agent-name registry. Maps the
     # human-readable ``name`` (passed via Agent({name: "researcher"}))
     # to the random ``agent_id`` returned by the spawn. SendMessage
@@ -251,6 +228,14 @@ class ToolContext:
     # interpreted as "unknown" by callers; substitutions yield an empty
     # string in that case.
     session_id: str | None = None
+    # F-122 goal-mode model tools. ``session_id`` is the normal persisted
+    # thread id; ``goal_thread_id`` lets tests or protocol adapters pin the
+    # recoverable thread explicitly. ``goal_service`` is injected when a
+    # caller needs an isolated GoalStore, otherwise tools construct the
+    # default service lazily.
+    goal_thread_id: str | None = None
+    goal_service: Any | None = None
+    goal_runtime: Any | None = None
 
     # Chapter-12 / Phase 0 / WI-0.1 — frozen snapshot of hook config.
     # The snapshot is built once at startup by ``HookConfigManager.load()``

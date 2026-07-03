@@ -604,48 +604,8 @@ def _install_intent_forecast_controller(repl: 'ClawcodexREPL') -> None:
 
 
 def _install_goal_controller(repl: 'ClawcodexREPL') -> None:
-    """F-9: wire the ``/goal`` auto-continuation controller onto the REPL.
-
-    The controller is a thin shim over the process-level
-    ``GoalStateRegistry`` singleton (see
-    ``clawcodex_ext/goal/registry.py``). It exposes
-    ``on_run_start`` / ``on_run_finish`` / ``on_assistant_turn_complete``
-    that the overridden ``ClawcodexREPL.chat()`` invokes in its
-    ``finally`` block, mirroring the upstream
-    ``AwaySummaryController`` pattern.
-
-    The controller binds lazily on first call: the REPL's
-    ``session.session_id`` is captured at ``chat()`` time rather than
-    at install time, so a session swap (``/provider``,
-    ``/resume``) does not strand the controller on a stale id.
-    """
-    if getattr(repl, '_goal_controller', None) is not None:
-        return
-
-    def _session_id() -> str | None:
-        return getattr(getattr(repl, 'session', None), 'session_id', None)
-
-    def _display(text: str) -> None:
-        console = getattr(repl, 'console', None)
-        if console is not None:
-            try:
-                console.print(text)
-                return
-            except Exception:
-                pass
-        print_recap = getattr(repl, '_print_local_command_text', None)
-        if callable(print_recap):
-            try:
-                print_recap(text, command='goal')
-            except Exception:
-                pass
-
-    from clawcodex_ext.goal.controller import GoalController
-
-    repl._goal_controller = GoalController(
-        session_id_getter=_session_id,
-        display=_display,
-    )
+    """Legacy GoalController is removed; goal runtime is tool-context based."""
+    repl._goal_controller = None
 
 
 def _register_signal_session_save(repl: 'ClawcodexREPL') -> None:

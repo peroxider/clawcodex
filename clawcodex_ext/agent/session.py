@@ -323,20 +323,6 @@ class Session:
             # removed — the only way to reach None here is "no session
             # exists on disk at all", which is a real failure.
             return None
-        # F-9: hydrate the long-running ``/goal`` state machine from
-        # the JSONL transcript. The goal state is persisted as
-        # ``{"type": "goal", ...}`` / ``{"type": "goal-cleared", ...}``
-        # entries by ``clawcodex_ext/goal/storage.py``; without this
-        # hydration a resumed session would have no idea an active
-        # goal was in flight, and ``/goal status`` would falsely
-        # report "no active goal". Hydration runs after the transcript
-        # backfill so the registry observes the same on-disk shape the
-        # model previously wrote.
-        try:
-            from clawcodex_ext.goal.registry import get_goal_registry
-            get_goal_registry().hydrate_from_transcript(session_id)
-        except Exception:
-            pass  # Best-effort; resume must not fail on missing goal state
         switch_session(SessionId(session_id))
         restore_cost_state_for_session(session_id)
         return loaded

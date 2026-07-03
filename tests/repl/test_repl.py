@@ -68,7 +68,11 @@ class TestREPL(unittest.TestCase):
             with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
                 mock_session.return_value = Mock()
 
-                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
+                with patch("src.providers.get_provider_class") as mock_provider_class, patch(
+                    "clawcodex_ext.repl.core.get_provider_class",
+                    mock_provider_class,
+                    create=True,
+                ):
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
@@ -84,13 +88,70 @@ class TestREPL(unittest.TestCase):
             with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
                 mock_session.return_value = Mock()
 
-                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
+                with patch("src.providers.get_provider_class") as mock_provider_class, patch(
+                    "clawcodex_ext.repl.core.get_provider_class",
+                    mock_provider_class,
+                    create=True,
+                ):
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
 
                     repl = ClawcodexREPL(provider_name="glm", stream=True)
                     self.assertTrue(repl.stream)
+
+    def test_repl_uses_agent_debug_history_file(self):
+        """Agent debug mode keeps prompt history out of the real home dir."""
+        debug_dir = Path(self.temp_dir) / "agent-debug"
+
+        import clawcodex_ext.repl.core as repl_core
+
+        repl_core._load_heavy_runtime()
+
+        with patch.dict(
+            os.environ,
+            {
+                "CLAWCODEX_AGENT_DEBUG": "1",
+                "CLAWCODEX_AGENT_DEBUG_DIR": str(debug_dir),
+                "CLAWCODEX_HISTORY_FILE": "",
+            },
+            clear=False,
+        ):
+            with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+                with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
+                    mock_session.return_value = Mock()
+
+                    with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
+                        mock_provider = Mock()
+                        mock_provider.model = "glm-4.5"
+                        mock_provider_class.return_value = mock_provider
+
+                        repl = ClawcodexREPL(provider_name="glm")
+
+        self.assertEqual(Path(repl._file_history.filename), debug_dir / "history")
+
+    def test_repl_threads_session_id_into_tool_context(self):
+        """Slash commands that persist state need the active session id."""
+        expected_sid = "repl-session-for-goal"
+
+        import clawcodex_ext.repl.core as repl_core
+
+        repl_core._load_heavy_runtime()
+
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
+                mock_session_instance = Mock()
+                mock_session_instance.session_id = expected_sid
+                mock_session.return_value = mock_session_instance
+
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
+                    mock_provider = Mock()
+                    mock_provider.model = "glm-4.5"
+                    mock_provider_class.return_value = mock_provider
+
+                    repl = ClawcodexREPL(provider_name="glm")
+
+        self.assertEqual(repl.tool_context.session_id, expected_sid)
 
     def test_startup_header_contains_logo_and_metadata(self):
         with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
@@ -434,6 +495,154 @@ class TestREPL(unittest.TestCase):
             )
         )
 
+    def test_command_result_with_should_query_starts_goal_continuation(self):
+        from clawcodex_ext.command_system.engine import CommandResult
+
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl.console = Mock()
+        repl._print_local_command_text = Mock()
+        repl._continue_goal_if_idle = Mock(return_value=True)
+
+        handled = repl._handle_command_result(
+            CommandResult(
+                success=True,
+                command_name="goal",
+                result_type="text",
+                text="Goal active\n0s",
+                should_query=True,
+            )
+        )
+
+        self.assertTrue(handled)
+        repl._continue_goal_if_idle.assert_called_once_with()
+
+    def test_handle_command_goal_starts_continuation_without_live_provider(self):
+        goal_home = Path(self.temp_dir) / "goal-home"
+
+        with patch.dict(os.environ, {"CLAWCODEX_HOME": str(goal_home)}, clear=False):
+            with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+                with patch("src.agent.Session.create") as mock_session_factory:
+                    mock_session = Mock()
+                    mock_session.session_id = "repl-goal-session"
+                    mock_session.conversation = Conversation()
+                    mock_session.save_transcript = Mock()
+                    mock_session_factory.return_value = mock_session
+
+                    with patch("src.providers.get_provider_class") as mock_provider_class, patch(
+                        "clawcodex_ext.repl.core.get_provider_class",
+                        mock_provider_class,
+                        create=True,
+                    ):
+                        mock_provider = Mock()
+                        mock_provider.model = "glm-4.5"
+                        mock_provider.chat_stream_response.side_effect = NotImplementedError()
+                        mock_provider.chat.side_effect = [
+                            ChatResponse(
+                                content="Completing the active goal.",
+                                model="test",
+                                usage={"input_tokens": 3, "output_tokens": 2},
+                                finish_reason="tool_use",
+                                tool_uses=[
+                                    {
+                                        "id": "toolu_goal_complete",
+                                        "name": "update_goal",
+                                        "input": {"status": "complete"},
+                                    }
+                                ],
+                            ),
+                            ChatResponse(
+                                content="Goal complete.",
+                                model="test",
+                                usage={"input_tokens": 1, "output_tokens": 1},
+                                finish_reason="end_turn",
+                                tool_uses=None,
+                            ),
+                        ]
+                        mock_provider_class.return_value = Mock(return_value=mock_provider)
+
+                        repl = ClawcodexREPL(provider_name="glm", stream=False)
+                        repl.console.print = Mock()
+
+                        repl.handle_command("/goal implement smoke")
+
+        service = repl.tool_context.goal_service
+        goal = service.get_goal("repl-goal-session")
+        self.assertIsNotNone(goal)
+        self.assertEqual(goal.status.value, "complete")
+        self.assertGreaterEqual(mock_provider.chat.call_count, 2)
+        rendered = "\n".join(
+            args[0].markup if args and isinstance(args[0], Markdown) else str(args[0])
+            for args, _kwargs in repl.console.print.call_args_list
+            if args
+        )
+        self.assertIn("Goal active", rendered)
+        self.assertIn("Goal complete.", rendered)
+
+    def test_handle_command_goal_lifecycle_smoke_without_live_provider(self):
+        goal_home = Path(self.temp_dir) / "goal-lifecycle-home"
+
+        with patch.dict(os.environ, {"CLAWCODEX_HOME": str(goal_home)}, clear=False):
+            with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+                with patch("src.agent.Session.create") as mock_session_factory:
+                    mock_session = Mock()
+                    mock_session.session_id = "repl-goal-lifecycle-session"
+                    mock_session.conversation = Conversation()
+                    mock_session.save_transcript = Mock()
+                    mock_session_factory.return_value = mock_session
+
+                    with patch("src.providers.get_provider_class") as mock_provider_class, patch(
+                        "clawcodex_ext.repl.core.get_provider_class",
+                        mock_provider_class,
+                        create=True,
+                    ):
+                        mock_provider = Mock()
+                        mock_provider.model = "glm-4.5"
+                        mock_provider.chat_stream_response.side_effect = NotImplementedError()
+                        mock_provider.chat.side_effect = [
+                            ChatResponse(
+                                content="Still working.",
+                                model="test",
+                                usage={"input_tokens": 1, "output_tokens": 1},
+                                finish_reason="end_turn",
+                                tool_uses=None,
+                            ),
+                            ChatResponse(
+                                content="Resumed working.",
+                                model="test",
+                                usage={"input_tokens": 1, "output_tokens": 1},
+                                finish_reason="end_turn",
+                                tool_uses=None,
+                            ),
+                        ]
+                        mock_provider_class.return_value = Mock(return_value=mock_provider)
+
+                        repl = ClawcodexREPL(provider_name="glm", stream=False)
+                        repl.console.print = Mock()
+
+                        repl.handle_command("/goal implement lifecycle smoke")
+                        repl.handle_command("/goal")
+                        repl.handle_command("/goal pause")
+                        repl.handle_command("/goal")
+                        repl.handle_command("/goal resume")
+                        repl.handle_command("/goal")
+                        repl.handle_command("/goal clear")
+                        repl.handle_command("/goal")
+
+        service = repl.tool_context.goal_service
+        self.assertIsNone(service.get_goal("repl-goal-lifecycle-session"))
+        self.assertEqual(mock_provider.chat.call_count, 2)
+        rendered = "\n".join(
+            args[0].markup if args and isinstance(args[0], Markdown) else str(args[0])
+            for args, _kwargs in repl.console.print.call_args_list
+            if args
+        )
+        self.assertIn("Goal active", rendered)
+        self.assertIn("Still working.", rendered)
+        self.assertIn("Status: paused", rendered)
+        self.assertIn("Resumed working.", rendered)
+        self.assertIn("Goal cleared", rendered)
+        self.assertIn("No goal is currently set.", rendered)
+
     def test_handle_command_tools_lists_registered_tools(self):
         """/tools must call ToolRegistry.list_tools() and print each name.
 
@@ -512,12 +721,16 @@ class TestREPL(unittest.TestCase):
     def test_chat_uses_true_api_stream_for_simple_prompt(self):
         """Simple prompts should use provider.chat_stream when stream mode is enabled."""
         with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
-            with patch("clawcodex_ext.repl.core.Session.create") as mock_session_factory:
+            with patch("src.agent.Session.create") as mock_session_factory:
                 mock_session = Mock()
                 mock_session.conversation = Conversation()
                 mock_session_factory.return_value = mock_session
 
-                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
+                with patch("src.providers.get_provider_class") as mock_provider_class, patch(
+                    "clawcodex_ext.repl.core.get_provider_class",
+                    mock_provider_class,
+                    create=True,
+                ):
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider.chat_stream.return_value = iter(["你", "好"])
@@ -542,6 +755,97 @@ class TestREPL(unittest.TestCase):
                         self.assertEqual(last_content[0].text, "你好")
                     else:
                         self.assertEqual(last_content, "你好")
+
+    def test_chat_direct_stream_accounts_goal_usage(self):
+        """Direct-stream REPL turns must report provider usage to GoalRuntime."""
+
+        class FakeGoalRuntime:
+            def __init__(self) -> None:
+                self.calls: list[tuple] = []
+
+            def on_turn_start(self, *, plan_mode: bool = False):
+                self.calls.append(("start", plan_mode))
+                return "goal-turn-1"
+
+            def on_token_usage(self, turn_id, usage) -> None:
+                self.calls.append(("usage", turn_id, usage))
+
+            def on_turn_stop(self, turn_id) -> None:
+                self.calls.append(("stop", turn_id))
+
+            def on_turn_abort(self, turn_id) -> None:
+                self.calls.append(("abort", turn_id))
+
+            def on_turn_error(self, turn_id, error) -> None:
+                self.calls.append(("error", turn_id, type(error).__name__))
+
+        fake_goal_runtime = FakeGoalRuntime()
+
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("src.agent.Session.create") as mock_session_factory:
+                mock_session = Mock()
+                mock_session.conversation = Conversation()
+                mock_session.save_transcript = Mock()
+                mock_session_factory.return_value = mock_session
+
+                with patch("src.providers.get_provider_class") as mock_provider_class, patch(
+                    "clawcodex_ext.repl.core.get_provider_class",
+                    mock_provider_class,
+                    create=True,
+                ):
+                    mock_provider = Mock()
+                    mock_provider.model = "glm-4.5"
+                    mock_provider.chat_stream_response.return_value = ChatResponse(
+                        content="goal accounted",
+                        model="test",
+                        usage={"input_tokens": 11, "output_tokens": 7, "total_tokens": 18},
+                        finish_reason="stop",
+                    )
+                    mock_provider_class.return_value = Mock(return_value=mock_provider)
+
+                    repl = ClawcodexREPL(provider_name="glm", stream=True)
+                    repl.console.print = Mock()
+
+                    with patch(
+                        "clawcodex_ext.goal.runtime.goal_runtime_for_context",
+                        return_value=fake_goal_runtime,
+                    ):
+                        repl.chat("hello there")
+
+        self.assertEqual(
+            fake_goal_runtime.calls,
+            [
+                ("start", False),
+                (
+                    "usage",
+                    "goal-turn-1",
+                    {"input_tokens": 11, "output_tokens": 7, "total_tokens": 18},
+                ),
+                ("stop", "goal-turn-1"),
+            ],
+        )
+
+    def test_repl_threads_session_id_into_tool_context(self):
+        """REPL goal commands and runtime accounting must share one thread id."""
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("src.agent.Session.create") as mock_session_factory:
+                mock_session = Mock()
+                mock_session.session_id = "test-session-id"
+                mock_session.conversation = Conversation()
+                mock_session_factory.return_value = mock_session
+
+                with patch("src.providers.get_provider_class") as mock_provider_class, patch(
+                    "clawcodex_ext.repl.core.get_provider_class",
+                    mock_provider_class,
+                    create=True,
+                ):
+                    mock_provider = Mock()
+                    mock_provider.model = "glm-4.5"
+                    mock_provider_class.return_value = Mock(return_value=mock_provider)
+
+                    repl = ClawcodexREPL(provider_name="glm", stream=True)
+
+        self.assertEqual(repl.tool_context.session_id, "test-session-id")
 
     def test_chat_uses_query_engine_for_code_task(self):
         """Code-like prompts use the new QueryEngine path."""

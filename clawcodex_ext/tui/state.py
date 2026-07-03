@@ -123,15 +123,8 @@ class AppState:
     # token warning — cumulative `usage` double-counts as context grows
     # (TS utils/tokens.ts:407-420).
     last_turn_input_tokens: int = 0
+    goal_status: dict[str, Any] | None = None
     last_error: str | None = None
-    # F-9 / `/goal`: mirror of ``GoalController.get_pill_state()``.
-    # ``None`` ⇒ no goal active (segment hidden). When set, the
-    # ``StatusLine`` widget reactively renders the pill on the next
-    # ``watch_goal`` redraw. The field is plain (not a ``reactive``)
-    # because AppState is plain dataclass — the status_line reads it
-    # through the standard Textual ``watch_*`` subscription.
-    goal: dict | None = None
-
     _subscribers: list[Callable[[], None]] = field(default_factory=list, repr=False, compare=False)
     _lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
     _ids: "itertools.count[int]" = field(
@@ -265,6 +258,12 @@ class AppState:
             else:
                 self.verb = "Ready"
                 self.verb_started_at = 0.0
+        self._notify()
+
+    # ---- goal status ----
+    def set_goal_status(self, goal: dict[str, Any] | None) -> None:
+        with self._lock:
+            self.goal_status = dict(goal) if goal is not None else None
         self._notify()
 
     # ---- subscription ----

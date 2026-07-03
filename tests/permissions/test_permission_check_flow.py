@@ -19,6 +19,10 @@ from clawcodex_ext.permissions.types import (
     SafetyCheckDecisionReason,
     ToolPermissionContext,
 )
+from clawcodex_ext.goal.tools import (
+    UPDATE_GOAL_TOOL_NAME,
+    make_goal_model_tools,
+)
 
 
 class _MockTool:
@@ -144,6 +148,27 @@ class TestStep3_PassthroughToAsk(unittest.TestCase):
         result = has_permissions_to_use_tool(tool, {}, ctx)
         self.assertEqual(result.behavior, "ask")
         self.assertIsInstance(result, PermissionAskDecision)
+
+
+class TestGoalToolsPermission(unittest.TestCase):
+    def test_goal_tools_are_session_metadata_and_do_not_prompt_by_default(self) -> None:
+        ctx = ToolPermissionContext(mode="default")
+
+        for tool in make_goal_model_tools():
+            result = has_permissions_to_use_tool(tool, {}, ctx)
+            self.assertEqual(result.behavior, "allow", tool.name)
+
+    def test_user_deny_rule_still_overrides_goal_tool_auto_allow(self) -> None:
+        ctx = ToolPermissionContext(always_deny_rules={"session": [UPDATE_GOAL_TOOL_NAME]})
+        update_goal = next(
+            tool
+            for tool in make_goal_model_tools()
+            if tool.name == UPDATE_GOAL_TOOL_NAME
+        )
+
+        result = has_permissions_to_use_tool(update_goal, {"status": "complete"}, ctx)
+
+        self.assertEqual(result.behavior, "deny")
 
 
 class TestDontAskMode(unittest.TestCase):

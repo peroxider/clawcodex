@@ -93,6 +93,14 @@ MAX_CACHED_SESSION_FILES = 1000
 _session_file_cache: OrderedDict[str, Path] = OrderedDict()
 
 
+def resolve_sessions_dir(environ: dict[str, str] | None = None) -> Path:
+    env = os.environ if environ is None else environ
+    override = str(env.get("CLAWCODEX_SESSIONS_DIR", "")).strip()
+    if override:
+        return Path(override).expanduser()
+    return SESSIONS_DIR
+
+
 def register_session_file(session_id: str, dir_path: Path) -> None:
     """Register a session directory in the LRU cache.
 
@@ -219,7 +227,7 @@ class SessionStorage:
         sessions_dir: Path | None = None,
     ) -> None:
         self.session_id = session_id or str(uuid.uuid4())
-        self.sessions_dir = sessions_dir or SESSIONS_DIR
+        self.sessions_dir = sessions_dir or resolve_sessions_dir()
         self._session_dir = self.sessions_dir / self.session_id
         self._transcript_path = self._session_dir / "transcript.jsonl"
         self._metadata_path = self._session_dir / "metadata.json"
@@ -554,7 +562,7 @@ class SessionStorage:
         When tag_filter is set, only sessions whose tags list contains
         any entry starting with tag_filter are returned.
         """
-        base = sessions_dir or SESSIONS_DIR
+        base = sessions_dir or resolve_sessions_dir()
         if not base.exists():
             return []
 
@@ -586,7 +594,7 @@ class SessionStorage:
         retention_days: int = DEFAULT_RETENTION_DAYS,
     ) -> int:
         """Delete sessions older than retention_days. Returns count deleted."""
-        base = sessions_dir or SESSIONS_DIR
+        base = sessions_dir or resolve_sessions_dir()
         if not base.exists():
             return 0
 

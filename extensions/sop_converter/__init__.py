@@ -44,13 +44,24 @@ from .source_parser import SourceCodeParser, SourceComponent, SourceOperation, P
 from .agent_md_writer import AgentMarkdownWriter, AgentComponentInfo, WorkflowStage
 from .default_agent import resolve_default_agent, resolve_agent_by_type
 from .tool_registry_bridge import register_component_tools
-from .composite_tools import register_composite_tools, emit_composite_workflow_yaml
 from .workflow_mode import (
     WorkflowDiscriminator,
     DiscriminationResult,
     discriminate_and_extract,
     extract_workflow,
 )
+
+
+def register_composite_tools(*args, **kwargs):
+    from .composite_tools import register_composite_tools as _register
+
+    return _register(*args, **kwargs)
+
+
+def emit_composite_workflow_yaml(*args, **kwargs):
+    from .composite_tools import emit_composite_workflow_yaml as _emit
+
+    return _emit(*args, **kwargs)
 
 __all__ = [
     "SdkParser",

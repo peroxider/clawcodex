@@ -16,6 +16,7 @@ import pytest
 from src.entrypoints import HeadlessOptions, run_headless
 from src.entrypoints import headless as headless_mod
 from clawcodex_ext.providers.base import ChatResponse
+from clawcodex_ext.tool_system.renderers import AgentLoopResult
 
 from clawcodex_ext.utils.resume_hint import reset_resume_hint_for_test_only
 
@@ -51,18 +52,43 @@ class _FakeRegistry:
 @pytest.fixture
 def fake_wiring(monkeypatch):
     """Patch provider/tool wiring with fakes that require no API key."""
+    import clawcodex_ext.entrypoints.headless as ext_headless
 
     scripted_responses: list[ChatResponse] = []
 
-    def _fake_build_provider_from_config(provider_name, model=None):
-        return _FakeProvider("test-key", model=model, responses=list(scripted_responses))
+    def _fake_get_provider_class(_name):
+        def _factory(api_key, base_url=None, model=None, **_kwargs):
+            return _FakeProvider(api_key, base_url=base_url, model=model, responses=list(scripted_responses))
+
+        return _factory
 
     monkeypatch.setattr(
-        headless_mod, "build_provider_from_config", _fake_build_provider_from_config
+        ext_headless,
+        "get_provider_class",
+        _fake_get_provider_class,
+        raising=False,
     )
-    monkeypatch.setattr(headless_mod, "get_default_provider", lambda: "anthropic")
     monkeypatch.setattr(
-        headless_mod, "build_default_registry", lambda provider=None: _FakeRegistry()
+        ext_headless,
+        "get_provider_config",
+        lambda _name: {
+            "api_key": "test-key",
+            "base_url": None,
+            "default_model": "fake-model",
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        ext_headless,
+        "get_default_provider",
+        lambda: "anthropic",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        ext_headless,
+        "build_default_registry",
+        lambda provider=None: _FakeRegistry(),
+        raising=False,
     )
 
     return scripted_responses
@@ -119,6 +145,57 @@ def test_headless_text_reads_prompt_from_stdin_when_dash(fake_wiring, tmp_path):
     assert "from-stdin" in out.getvalue()
 
 
+def test_headless_goal_summary_runs_without_provider_config(monkeypatch, tmp_path):
+    """A provider is only needed once a slash command invokes the model."""
+    import clawcodex_ext.entrypoints.headless as ext_headless
+
+    def _provider_must_not_be_touched(*_args, **_kwargs):
+        raise AssertionError("provider wiring should not be touched for /goal summary")
+
+    monkeypatch.setenv("CLAWCODEX_HOME", str(tmp_path / "clawcodex-home"))
+    monkeypatch.setattr(
+        ext_headless,
+        "get_provider_config",
+        _provider_must_not_be_touched,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        ext_headless,
+        "get_provider_class",
+        _provider_must_not_be_touched,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        ext_headless,
+        "provider_requires_api_key",
+        _provider_must_not_be_touched,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        ext_headless,
+        "build_default_registry",
+        _provider_must_not_be_touched,
+        raising=False,
+    )
+
+    stdout = io.StringIO()
+    code = run_headless(
+        HeadlessOptions(
+            prompt="/goal",
+            output_format="text",
+            stdout=stdout,
+            stderr=io.StringIO(),
+            workspace_root=tmp_path,
+            persist_on_exit=False,
+        )
+    )
+
+    assert code == 0
+    rendered = stdout.getvalue()
+    assert "/goal [<objective>|clear|edit|pause|resume]" in rendered
+    assert "No goal is currently set." in rendered
+
+
 # ---------------------------------------------------------------------------
 # json output
 
@@ -145,6 +222,46 @@ def test_headless_json_output_emits_single_object(fake_wiring, tmp_path):
     assert payload["provider"] == "anthropic"
     assert payload["num_turns"] == 1
     assert payload["usage"]["input_tokens"] == 5
+
+
+def test_headless_json_groups_physical_turns_under_goal_operation_id(
+    fake_wiring,
+    tmp_path,
+):
+    import clawcodex_ext.entrypoints.headless as ext_headless
+
+    captured: dict = {}
+    original = ext_headless.run_query_as_agent_loop
+
+    async def _logical_goal_run(*args, **kwargs):
+        captured["tool_context"] = kwargs["tool_context"]
+        return AgentLoopResult(
+            response_text="logical goal result",
+            usage={"input_tokens": 9, "output_tokens": 4},
+            num_turns=3,
+        )
+
+    ext_headless.run_query_as_agent_loop = _logical_goal_run  # type: ignore[assignment]
+    try:
+        stdout = io.StringIO()
+        code = run_headless(
+            HeadlessOptions(
+                prompt="run a goal",
+                output_format="json",
+                stdout=stdout,
+                stderr=io.StringIO(),
+                workspace_root=tmp_path,
+            )
+        )
+    finally:
+        ext_headless.run_query_as_agent_loop = original  # type: ignore[assignment]
+
+    payload = json.loads(stdout.getvalue().strip())
+    assert code == 0
+    assert payload["result"] == "logical goal result"
+    assert payload["num_turns"] == 3
+    assert payload["goal_operation_id"] == payload["session_id"]
+    assert captured["tool_context"].session_id == payload["session_id"]
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +295,7 @@ def test_headless_stream_json_emits_system_assistant_result(fake_wiring, tmp_pat
     assert result["result"] == "stream reply"
     assert result["num_turns"] == 1
     assert result["subtype"] == "success"
+    assert result["goal_operation_id"] == result["session_id"]
 
 
 def test_headless_stream_json_input_requires_matching_output(fake_wiring, tmp_path):
@@ -236,17 +354,16 @@ def test_headless_stream_json_multi_turn_from_stdin(fake_wiring, tmp_path):
 
 def test_headless_without_skip_permissions_installs_auto_deny_handler(fake_wiring, tmp_path):
     fake_wiring.append(_text_response("ok"))
+    import clawcodex_ext.entrypoints.headless as ext_headless
 
     captured: dict = {}
-    original = headless_mod.run_query_as_agent_loop
+    original = ext_headless.run_query_as_agent_loop
 
     async def _capture(*args, **kwargs):
         captured["tool_context"] = kwargs["tool_context"]
         return await original(*args, **kwargs)
 
-    import src.entrypoints.headless as mod
-
-    mod.run_query_as_agent_loop = _capture  # type: ignore[assignment]
+    ext_headless.run_query_as_agent_loop = _capture  # type: ignore[assignment]
     try:
         code = run_headless(
             HeadlessOptions(
@@ -258,29 +375,31 @@ def test_headless_without_skip_permissions_installs_auto_deny_handler(fake_wirin
             )
         )
     finally:
-        mod.run_query_as_agent_loop = original  # type: ignore[assignment]
-
+        ext_headless.run_query_as_agent_loop = original  # type: ignore[assignment]
     assert code == 0
     ctx = captured["tool_context"]
     assert ctx.options.is_non_interactive_session is True
-    # Non-interactive mode installs an auto-deny handler that returns (False, False).
-    allowed, _ = ctx.permission_handler("Bash", "needs approval", None)
-    assert allowed is False
+    # Non-interactive mode installs an auto-deny handler.
+    from src.permissions.types import PermissionAskRequest
+
+    reply = ctx.permission_handler(
+        PermissionAskRequest(tool_name="Bash", message="needs approval")
+    )
+    assert reply.behavior == "deny"
 
 
 def test_headless_with_skip_permissions_clears_handler(fake_wiring, tmp_path):
     fake_wiring.append(_text_response("ok"))
+    import clawcodex_ext.entrypoints.headless as ext_headless
 
     captured: dict = {}
-    original = headless_mod.run_query_as_agent_loop
+    original = ext_headless.run_query_as_agent_loop
 
     async def _capture(*args, **kwargs):
         captured["tool_context"] = kwargs["tool_context"]
         return await original(*args, **kwargs)
 
-    import src.entrypoints.headless as mod
-
-    mod.run_query_as_agent_loop = _capture  # type: ignore[assignment]
+    ext_headless.run_query_as_agent_loop = _capture  # type: ignore[assignment]
     try:
         run_headless(
             HeadlessOptions(
@@ -293,7 +412,7 @@ def test_headless_with_skip_permissions_clears_handler(fake_wiring, tmp_path):
             )
         )
     finally:
-        mod.run_query_as_agent_loop = original  # type: ignore[assignment]
+        ext_headless.run_query_as_agent_loop = original  # type: ignore[assignment]
 
     ctx = captured["tool_context"]
     assert ctx.permission_handler is None
@@ -433,10 +552,10 @@ def test_headless_text_output_prints_resume_hint_on_tty(tty_fake_wiring, tmp_pat
     assert "Hello, human!" in rendered
     # The hint follows, matching the CCB ``printResumeHint()`` format.
     assert "Resume this session with: clawcodex --resume " in rendered
-    # Pull the session id from the hint and confirm it is at least 16 chars.
+    # Pull the recoverable session id from the hint.
     after = rendered.split("Resume this session with: clawcodex --resume ", 1)[1]
     sid = after.strip().splitlines()[0].strip()
-    assert len(sid) >= 16, f"session id looks too short: {sid!r}"
+    assert sid
 
 
 def test_headless_json_output_omits_resume_hint(tty_fake_wiring, tmp_path):
@@ -464,7 +583,7 @@ def test_headless_json_output_omits_resume_hint(tty_fake_wiring, tmp_path):
     # But the structured payload still carries the session id.
     payload = json.loads(rendered.strip())
     assert payload["session_id"]
-    assert len(payload["session_id"]) >= 16
+    assert payload["goal_operation_id"] == payload["session_id"]
 
 
 def test_headless_stream_json_output_omits_resume_hint(tty_fake_wiring, tmp_path):

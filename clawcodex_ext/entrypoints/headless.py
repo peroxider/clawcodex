@@ -59,9 +59,9 @@ from clawcodex_ext.command_system.builtins import (
     execute_command_sync,
     get_builtin_commands,
 )
-from clawcodex_ext.command_system.engine import create_command_context
+from clawcodex_ext.command_system.engine import CommandEngine, create_command_context
 from clawcodex_ext.command_system.input_processing import parse_user_input
-from clawcodex_ext.command_system.registry import get_command_registry
+from clawcodex_ext.command_system.registry import CommandRegistry, get_command_registry
 from clawcodex_ext.command_system.types import LocalCommand
 from clawcodex_ext.query.agent_loop_compat import (
     build_effective_system_prompt,
@@ -72,8 +72,8 @@ from src.tool_system.defaults import build_default_registry
 from src.utils.abort_controller import AbortController, AbortError
 
 
-OUTPUT_FORMATS = ("text", "json", "stream-json")
-INPUT_FORMATS = ("text", "stream-json")
+OUTPUT_FORMATS = ('text', 'json', 'stream-json')
+INPUT_FORMATS = ('text', 'stream-json')
 
 
 @dataclass
@@ -85,8 +85,8 @@ class HeadlessOptions:
     """
 
     prompt: str | None = None
-    output_format: str = "text"
-    input_format: str = "text"
+    output_format: str = 'text'
+    input_format: str = 'text'
     provider_name: str | None = None
     model: str | None = None
     max_turns: int = 20
@@ -97,7 +97,7 @@ class HeadlessOptions:
     # is True we treat it as ``permission_mode='bypassPermissions'`` and
     # ``is_bypass_permissions_mode_available=True``.
     skip_permissions: bool = False
-    permission_mode: str = "default"
+    permission_mode: str = 'default'
     is_bypass_permissions_mode_available: bool = False
     allowed_tools: tuple[str, ...] = ()
     disallowed_tools: tuple[str, ...] = ()
@@ -113,7 +113,7 @@ class HeadlessOptions:
     workspace_root: Path | None = None
 
     # Optional system prompt body to append (from resolved default agent).
-    append_system_prompt: str = ""
+    append_system_prompt: str = ''
     startup_agent: Any | None = None
     bundle_context: Any | None = None
 
@@ -161,16 +161,12 @@ def run_headless(options: HeadlessOptions) -> int:
     """Run one or more prompts in headless mode. Returns the exit code."""
 
     if options.output_format not in OUTPUT_FORMATS:
-        cli_error(
-            f"error: --output-format must be one of {', '.join(OUTPUT_FORMATS)}", 2
-        )
+        cli_error(f'error: --output-format must be one of {", ".join(OUTPUT_FORMATS)}', 2)
     if options.input_format not in INPUT_FORMATS:
+        cli_error(f'error: --input-format must be one of {", ".join(INPUT_FORMATS)}', 2)
+    if options.input_format == 'stream-json' and options.output_format != 'stream-json':
         cli_error(
-            f"error: --input-format must be one of {', '.join(INPUT_FORMATS)}", 2
-        )
-    if options.input_format == "stream-json" and options.output_format != "stream-json":
-        cli_error(
-            "error: --input-format stream-json requires --output-format stream-json",
+            'error: --input-format stream-json requires --output-format stream-json',
             2,
         )
 
@@ -191,11 +187,19 @@ def run_headless(options: HeadlessOptions) -> int:
 
     start_deferred_prefetches(cwd=str(workspace_root))
 
+    provider_free_exit = _try_run_provider_free_goal_summary(
+        options,
+        workspace_root=workspace_root,
+        stdout=stdout,
+    )
+    if provider_free_exit is not None:
+        return provider_free_exit
+
     provider_name = options.provider_name or get_default_provider()
     try:
         provider_cfg = get_provider_config(provider_name)
     except Exception as exc:
-        cli_error(f"error: unable to load provider config: {exc}", 2)
+        cli_error(f'error: unable to load provider config: {exc}', 2)
     # Config api_key wins; fall back to the provider's known env vars (e.g.
     # ``DEEPSEEK_API_KEY``) so a freshly-added provider works without ``login``.
     # Local providers (Ollama / vLLM / SGLang) need no key.
@@ -203,15 +207,15 @@ def run_headless(options: HeadlessOptions) -> int:
     if not api_key and provider_requires_api_key(provider_name):
         cli_error(
             f"error: API key for provider '{provider_name}' is not configured. "
-            "Run `clawcodex login` to set it up.",
+            'Run `clawcodex login` to set it up.',
             2,
         )
 
     provider_cls = get_provider_class(provider_name)
-    model = options.model or provider_cfg.get("default_model")
+    model = options.model or provider_cfg.get('default_model')
     provider = provider_cls(
         api_key=api_key,
-        base_url=provider_cfg.get("base_url"),
+        base_url=provider_cfg.get('base_url'),
         model=model,
     )
 
@@ -244,7 +248,7 @@ def run_headless(options: HeadlessOptions) -> int:
                 2,
             )
     else:
-        session = Session.create(provider_name, getattr(provider, "model", model or ""))
+        session = Session.create(provider_name, getattr(provider, 'model', model or ''))
 
     # F-125 Phase 1: ``resume_session_at`` truncation. Run after session
     # assembly so it applies uniformly to both ``external_session`` and
@@ -264,9 +268,7 @@ def run_headless(options: HeadlessOptions) -> int:
                 f"error: no session found with ID '{options.fork_session_id}'",
                 2,
             )
-        new_session = Session.create(
-            provider_name, getattr(provider, "model", model or "")
-        )
+        new_session = Session.create(provider_name, getattr(provider, 'model', model or ''))
         if old.conversation and old.conversation.messages:
             new_session.conversation.messages = list(old.conversation.messages)
         session = new_session
@@ -279,13 +281,13 @@ def run_headless(options: HeadlessOptions) -> int:
                 session.conversation.messages = session.conversation.messages[: idx + 1]
             elif idx < 0:
                 cli_error(
-                    f"error: --resume-session-at index {idx} is negative",
+                    f'error: --resume-session-at index {idx} is negative',
                     2,
                 )
             else:
                 cli_error(
-                    f"error: --resume-session-at index {idx} out of range "
-                    f"(session has {total} messages)",
+                    f'error: --resume-session-at index {idx} out of range '
+                    f'(session has {total} messages)',
                     2,
                 )
 
@@ -297,8 +299,8 @@ def run_headless(options: HeadlessOptions) -> int:
 
         record_session_start(
             session_id=session.session_id,
-            entrypoint="headless",
-            client_type=os.environ.get("CLAUDE_CODE_ENTRYPOINT", "cli"),
+            entrypoint='headless',
+            client_type=os.environ.get('CLAUDE_CODE_ENTRYPOINT', 'cli'),
             is_non_interactive=True,
         )
     except Exception:
@@ -356,21 +358,23 @@ def run_headless(options: HeadlessOptions) -> int:
             kept_by_name: dict = {}
             for t in kept_tools:
                 kept_by_name[t.name.lower()] = t
-                for alias in getattr(t, "aliases", ()):
+                for alias in getattr(t, 'aliases', ()):
                     kept_by_name[alias.lower()] = t
             tool_registry._tools = kept_tools
             tool_registry._by_name = kept_by_name
             import logging as _logging
+
             _logging.getLogger(__name__).info(
-                "Coordinator mode: tool registry filtered to %d tools: %s",
+                'Coordinator mode: tool registry filtered to %d tools: %s',
                 len(kept_tools),
                 sorted(allowed_names),
             )
     except Exception as _exc:
         # Never block the headless run on coordinator-mode setup failure.
         import logging as _logging
+
         _logging.getLogger(__name__).warning(
-            "Coordinator-mode tool filter setup failed (continuing without): %s",
+            'Coordinator-mode tool filter setup failed (continuing without): %s',
             _exc,
         )
 
@@ -383,10 +387,10 @@ def run_headless(options: HeadlessOptions) -> int:
     # availability so the registry's ``has_permissions_to_use_tool`` check
     # short-circuits to ``allow``.
     if options.skip_permissions:
-        effective_mode: str = "bypassPermissions"
+        effective_mode: str = 'bypassPermissions'
         bypass_available = True
     else:
-        effective_mode = options.permission_mode or "default"
+        effective_mode = options.permission_mode or 'default'
         bypass_available = bool(options.is_bypass_permissions_mode_available)
 
     # Per-session abort controller. SIGINT trips this so the running
@@ -417,9 +421,11 @@ def run_headless(options: HeadlessOptions) -> int:
         abort_controller=abort_controller,
         env=options.env,
         startup_agent=options.startup_agent,
-        agent_type=getattr(options.startup_agent, "agent_type", None),
-        bundle_context=getattr(options, "bundle_context", None),
+        agent_type=getattr(options.startup_agent, 'agent_type', None),
+        bundle_context=getattr(options, 'bundle_context', None),
     )
+    tool_context.session_id = session.session_id
+    tool_context.goal_thread_id = session.session_id
     tool_context.options.is_non_interactive_session = True
 
     # ★ MVP peer-to-peer SendMessage: auto-wire team context for multi-agent
@@ -427,29 +433,31 @@ def run_headless(options: HeadlessOptions) -> int:
     # the environment specifies `CLAUDE_CODE_AGENT_NAME`, populate the
     # tool_context.team dict so the SendMessage tool can route mailbox writes
     # using the right sender name. This lets a peer-to-peer multi-agent demo
-    # work without requiring the agent to call TeamCreate first (which is
-    # excluded from the coordinator-mode tool filter anyway).
+    # work without requiring the agent to call TeamCreate first.
     try:
-        _team_file = workspace_root / ".clawcodex" / "team.json"
-        _agent_name = os.environ.get("CLAUDE_CODE_AGENT_NAME")
+        _team_file = workspace_root / '.clawcodex' / 'team.json'
+        _agent_name = os.environ.get('CLAUDE_CODE_AGENT_NAME')
         if _team_file.exists() and _agent_name:
             import json as _json
-            _team_data = _json.loads(_team_file.read_text(encoding="utf-8"))
-            _team_data["sender_name"] = _agent_name
+
+            _team_data = _json.loads(_team_file.read_text(encoding='utf-8'))
+            _team_data['sender_name'] = _agent_name
             tool_context.team = _team_data
             import logging as _log
+
             _log.getLogger(__name__).info(
-                "MVP peer multi-agent: tool_context.team set "
-                "(team=%s, sender_name=%s)",
-                _team_data.get("team_name"),
+                'MVP peer multi-agent: tool_context.team set (team=%s, sender_name=%s)',
+                _team_data.get('team_name'),
                 _agent_name,
             )
     except Exception as _exc:
         import logging as _log
+
         _log.getLogger(__name__).warning(
-            "Failed to auto-wire team context (non-fatal): %s", _exc,
+            'Failed to auto-wire team context (non-fatal): %s',
+            _exc,
         )
-    if options.skip_permissions or effective_mode == "bypassPermissions":
+    if options.skip_permissions or effective_mode == 'bypassPermissions':
         tool_context.allow_docs = True
         tool_context.permission_handler = None
     else:
@@ -468,20 +476,14 @@ def run_headless(options: HeadlessOptions) -> int:
     # meaningful when a session was resumed; on a fresh session the
     # message list is empty and the call is a no-op.
     if (
-        options.resume_session_id
-        or options.fork_session_id
-        or options.external_session is not None
+        options.resume_session_id or options.fork_session_id or options.external_session is not None
     ) and session is not None:
         try:
             from clawcodex_ext.agent.read_file_seed import (
                 seed_read_file_state_from_history,
             )
 
-            history_msgs = (
-                session.conversation.messages
-                if session.conversation is not None
-                else []
-            )
+            history_msgs = session.conversation.messages if session.conversation is not None else []
             seed_read_file_state_from_history(
                 history_msgs,
                 tool_context,
@@ -489,32 +491,34 @@ def run_headless(options: HeadlessOptions) -> int:
             )
         except Exception:
             import logging as _log
+
             _log.getLogger(__name__).debug(
-                "F-125: read-file-state seeding failed (non-fatal)",
+                'F-125: read-file-state seeding failed (non-fatal)',
                 exc_info=True,
             )
 
     # Build the input iterator.
-    if options.input_format == "stream-json":
+    if options.input_format == 'stream-json':
         inputs: Iterable[UserInputMessage] = StreamJsonReader(stdin)
     else:
         prompt_text = options.prompt
-        if prompt_text is None or prompt_text == "-":
+        if prompt_text is None or prompt_text == '-':
             prompt_text = stdin.read()
-        prompt_text = (prompt_text or "").strip()
+        prompt_text = (prompt_text or '').strip()
         if not prompt_text:
-            cli_error("error: no prompt provided (pass an argument or pipe stdin)", 2)
-        inputs = [UserInputMessage(text=prompt_text, raw={"prompt": prompt_text})]
+            cli_error('error: no prompt provided (pass an argument or pipe stdin)', 2)
+        inputs = [UserInputMessage(text=prompt_text, raw={'prompt': prompt_text})]
 
     writer: StreamJsonWriter | None = None
-    if options.output_format == "stream-json":
+    if options.output_format == 'stream-json':
         writer = StreamJsonWriter(stdout)
         tools = [tool.name for tool in tool_registry.list_tools()]
         writer.write(
             SystemEvent(
-                subtype="init",
+                subtype='init',
                 session_id=session.session_id,
-                model=getattr(provider, "model", None),
+                goal_operation_id=session.session_id,
+                model=getattr(provider, 'model', None),
                 provider=provider_name,
                 cwd=str(workspace_root),
                 tools=tools,
@@ -541,9 +545,7 @@ def run_headless(options: HeadlessOptions) -> int:
     # ``restore_sigint`` runs in the ``finally`` so we don't leak global
     # signal state to embedders.
     in_agent_loop = _InAgentLoopFlag()
-    restore_sigint = _install_sigint_handler(
-        abort_controller, in_agent_loop, stderr
-    )
+    restore_sigint = _install_sigint_handler(abort_controller, in_agent_loop, stderr)
     try:
         # Cancellation is caught at the for-loop level (not per-iteration)
         # so that a SIGINT landing on ANY cancellation point unwinds to one
@@ -578,7 +580,7 @@ def run_headless(options: HeadlessOptions) -> int:
                     if agent_attachments:
                         extra = format_at_mention_attachments(agent_attachments)
                         if extra:
-                            text = f"{extra}\n{text}"
+                            text = f'{extra}\n{text}'
                 except Exception:
                     pass  # best-effort: agent expansion failure is non-fatal
 
@@ -588,13 +590,12 @@ def run_headless(options: HeadlessOptions) -> int:
                 _skip_agent_loop = False
                 try:
                     parsed = parse_user_input(text)
-                    if parsed.input_type == "command":
+                    if parsed.input_type == 'command':
                         cmd = get_command_registry().get(parsed.command_name)
                         if cmd is None:
                             for builtin_cmd in get_builtin_commands():
                                 if (
-                                    builtin_cmd.name.lower()
-                                    == parsed.command_name.lower()
+                                    builtin_cmd.name.lower() == parsed.command_name.lower()
                                     or parsed.command_name.lower()
                                     in [a.lower() for a in builtin_cmd.aliases]
                                 ):
@@ -607,23 +608,23 @@ def run_headless(options: HeadlessOptions) -> int:
                             and not cmd.supports_non_interactive
                         ):
                             err = (
-                                f"Command /{parsed.command_name} is not "
-                                f"available in non-interactive mode"
+                                f'Command /{parsed.command_name} is not '
+                                f'available in non-interactive mode'
                             )
                             if writer is not None:
                                 writer.write(
                                     ResultEvent(
-                                        subtype="error",
+                                        subtype='error',
                                         session_id=session.session_id,
                                         num_turns=0,
-                                        result="",
+                                        result='',
                                         duration_ms=0,
                                         is_error=True,
                                         error=err,
                                     )
                                 )
                             else:
-                                print(f"error: {err}", file=stderr)
+                                print(f'error: {err}', file=stderr)
                             exit_code = 1
                             break
 
@@ -636,13 +637,13 @@ def run_headless(options: HeadlessOptions) -> int:
                         # no TTY viewer in headless, so the flat text is the
                         # final answer.
                         if (
-                            parsed.command_name.lower() == "btw"
+                            parsed.command_name.lower() == 'btw'
                             and cmd is not None
-                            and getattr(cmd, "command_type", None)
-                            and cmd.command_type.value == "interactive"
+                            and getattr(cmd, 'command_type', None)
+                            and cmd.command_type.value == 'interactive'
                         ):
                             btw_text, btw_err = _run_btw_headless(
-                                args=parsed.command_args or "",
+                                args=parsed.command_args or '',
                                 workspace_root=workspace_root,
                                 conversation=session.conversation,
                                 tool_context=tool_context,
@@ -653,17 +654,17 @@ def run_headless(options: HeadlessOptions) -> int:
                                 if writer is not None:
                                     writer.write(
                                         ResultEvent(
-                                            subtype="error",
+                                            subtype='error',
                                             session_id=session.session_id,
                                             num_turns=0,
-                                            result="",
+                                            result='',
                                             duration_ms=0,
                                             is_error=True,
                                             error=btw_err,
                                         )
                                     )
                                 else:
-                                    print(f"error: {btw_err}", file=stderr)
+                                    print(f'error: {btw_err}', file=stderr)
                                 exit_code = 1
                                 break
                             if btw_text:
@@ -684,28 +685,26 @@ def run_headless(options: HeadlessOptions) -> int:
                             )
                             if success:
                                 if writer is not None:
-                                    writer.write(
-                                        AssistantEvent(text=result_text or "")
-                                    )
+                                    writer.write(AssistantEvent(text=result_text or ''))
                                 else:
-                                    aggregate_text.append(result_text or "")
+                                    aggregate_text.append(result_text or '')
                                 _skip_agent_loop = True
                             else:
-                                err = error or f"Command /{parsed.command_name} failed"
+                                err = error or f'Command /{parsed.command_name} failed'
                                 if writer is not None:
                                     writer.write(
                                         ResultEvent(
-                                            subtype="error",
+                                            subtype='error',
                                             session_id=session.session_id,
                                             num_turns=0,
-                                            result="",
+                                            result='',
                                             duration_ms=0,
                                             is_error=True,
                                             error=err,
                                         )
                                     )
                                 else:
-                                    print(f"error: {err}", file=stderr)
+                                    print(f'error: {err}', file=stderr)
                                 exit_code = 1
                                 break
                 except Exception:
@@ -726,14 +725,17 @@ def run_headless(options: HeadlessOptions) -> int:
                 _ext_cb = options.on_event
                 if _ext_cb is not None:
                     _internal_on_event = _on_event
+
                     def on_event(event: ToolEvent) -> None:
                         _internal_on_event(event)
                         try:
                             _ext_cb(event)
                         except Exception:
                             pass
+
                 on_text_chunk = None
                 if writer is not None and options.include_partial_messages:
+
                     def _emit_partial(chunk: str) -> None:
                         writer.write(PartialTextEvent(text=chunk))
 
@@ -753,18 +755,18 @@ def run_headless(options: HeadlessOptions) -> int:
                         # the loop; the adapter doesn't.
                         import asyncio as _asyncio
                         from src.outputStyles import resolve_output_style
+
                         _style_prompt = resolve_output_style(
-                            getattr(tool_context, "output_style_name", None),
-                            getattr(tool_context, "output_style_dir", None),
+                            getattr(tool_context, 'output_style_name', None),
+                            getattr(tool_context, 'output_style_dir', None),
                         ).prompt
-                        effective_system_prompt = (
-                            build_effective_system_prompt(
-                                _style_prompt, tool_context,
-                            )
+                        effective_system_prompt = build_effective_system_prompt(
+                            _style_prompt,
+                            tool_context,
                         )
                         if options.append_system_prompt:
                             effective_system_prompt = (
-                                f"{effective_system_prompt}\n\n{options.append_system_prompt}"
+                                f'{effective_system_prompt}\n\n{options.append_system_prompt}'
                             )
 
                         def _persist(msg: Any) -> None:
@@ -782,42 +784,40 @@ def run_headless(options: HeadlessOptions) -> int:
                                 session.conversation.add_message(msg.role, msg.content)
                             except Exception:
                                 import logging
+
                                 logging.getLogger(__name__).exception(
-                                    "Failed to persist message into "
-                                    "conversation: role=%s",
-                                    getattr(msg, "role", "?"),
+                                    'Failed to persist message into conversation: role=%s',
+                                    getattr(msg, 'role', '?'),
                                 )
                                 raise
 
-                        compat_result = _asyncio.run(run_query_as_agent_loop(
-                            initial_messages=list(session.conversation.messages),
-                            provider=provider,
-                            tool_registry=tool_registry,
-                            tool_context=tool_context,
-                            system_prompt=effective_system_prompt,
-                            max_turns=options.max_turns,
-                            on_event=on_event,
-                            on_text_chunk=on_text_chunk,
-                            on_message=_persist,
-                            # Critic C2: pass the OWNING controller so
-                            # the provider's chat_stream_response listens
-                            # on the same signal the SIGINT handler trips.
-                            # Passing only ``cancel_signal=signal`` would
-                            # force the adapter to mint a fresh controller
-                            # and break the mid-stream tear-down path.
-                            abort_controller=abort_controller,
-                        ))
+                        compat_result = _asyncio.run(
+                            run_query_as_agent_loop(
+                                initial_messages=list(session.conversation.messages),
+                                provider=provider,
+                                tool_registry=tool_registry,
+                                tool_context=tool_context,
+                                system_prompt=effective_system_prompt,
+                                max_turns=options.max_turns,
+                                on_event=on_event,
+                                on_text_chunk=on_text_chunk,
+                                on_message=_persist,
+                                # Critic C2: pass the OWNING controller so
+                                # the provider's chat_stream_response listens
+                                # on the same signal the SIGINT handler trips.
+                                # Passing only ``cancel_signal=signal`` would
+                                # force the adapter to mint a fresh controller
+                                # and break the mid-stream tear-down path.
+                                abort_controller=abort_controller,
+                            )
+                        )
                         # Re-wrap into legacy AgentLoopResult shape so
                         # downstream usage/num_turns/response_text code
                         # stays untouched. ``usage if num_turns > 0
                         # else None`` preserves the dict|None contract.
                         result = AgentLoopResult(
                             response_text=compat_result.response_text,
-                            usage=(
-                                compat_result.usage
-                                if compat_result.num_turns > 0
-                                else None
-                            ),
+                            usage=(compat_result.usage if compat_result.num_turns > 0 else None),
                             num_turns=compat_result.num_turns,
                         )
                     finally:
@@ -848,8 +848,9 @@ def run_headless(options: HeadlessOptions) -> int:
                     if writer is not None:
                         writer.write(
                             ResultEvent(
-                                subtype="error",
+                                subtype='error',
                                 session_id=session.session_id,
+                                goal_operation_id=session.session_id,
                                 num_turns=num_turns_total,
                                 result=str(exc),
                                 duration_ms=int((time.monotonic() - start) * 1000),
@@ -858,7 +859,7 @@ def run_headless(options: HeadlessOptions) -> int:
                             )
                         )
                     else:
-                        print(f"error: {exc}", file=stderr)
+                        print(f'error: {exc}', file=stderr)
                     break
 
                 num_turns_total += result.num_turns
@@ -897,10 +898,11 @@ def run_headless(options: HeadlessOptions) -> int:
             if writer is not None:
                 writer.write(
                     ResultEvent(
-                        subtype="cancelled",
+                        subtype='cancelled',
                         session_id=session.session_id,
+                        goal_operation_id=session.session_id,
                         num_turns=num_turns_total,
-                        result="",
+                        result='',
                         duration_ms=int((time.monotonic() - start) * 1000),
                         is_error=False,
                     )
@@ -922,49 +924,51 @@ def run_headless(options: HeadlessOptions) -> int:
                 import logging
 
                 logging.getLogger(__name__).debug(
-                    "F-125: failed to persist headless session transcript",
+                    'F-125: failed to persist headless session transcript',
                     exc_info=True,
                 )
 
     duration_ms = int((time.monotonic() - start) * 1000)
-    final_text = "\n\n".join(t for t in aggregate_text if t).strip()
+    final_text = '\n\n'.join(t for t in aggregate_text if t).strip()
 
-    if options.output_format == "text":
+    if options.output_format == 'text':
         if final_text:
-            stdout.write(final_text + "\n")
+            stdout.write(final_text + '\n')
             stdout.flush()
         # S-R1: print resume hint to TTY after text output. JSON / stream-json
         # already carry session_id in their structured payload, so skip them.
         from clawcodex_ext.utils.resume_hint import print_resume_hint
 
-        print_resume_hint(getattr(session, "session_id", None), stream=stdout)
-    elif options.output_format == "json":
+        print_resume_hint(getattr(session, 'session_id', None), stream=stdout)
+    elif options.output_format == 'json':
         if exit_code == 0:
-            json_subtype = "success"
+            json_subtype = 'success'
         elif exit_code == 130:
-            json_subtype = "cancelled"
+            json_subtype = 'cancelled'
         else:
-            json_subtype = "error"
+            json_subtype = 'error'
         payload = {
-            "type": "result",
-            "subtype": json_subtype,
-            "session_id": session.session_id,
-            "provider": provider_name,
-            "model": getattr(provider, "model", None),
-            "num_turns": num_turns_total,
-            "result": final_text,
-            "duration_ms": duration_ms,
-            "usage": usage_total or None,
-            "tool_events": aggregate_tool_events,
-            "is_error": exit_code not in (0, 130),
+            'type': 'result',
+            'subtype': json_subtype,
+            'session_id': session.session_id,
+            'goal_operation_id': session.session_id,
+            'provider': provider_name,
+            'model': getattr(provider, 'model', None),
+            'num_turns': num_turns_total,
+            'result': final_text,
+            'duration_ms': duration_ms,
+            'usage': usage_total or None,
+            'tool_events': aggregate_tool_events,
+            'is_error': exit_code not in (0, 130),
         }
-        stdout.write(ndjson_safe_dumps(payload) + "\n")
+        stdout.write(ndjson_safe_dumps(payload) + '\n')
         stdout.flush()
-    elif options.output_format == "stream-json" and writer is not None and exit_code == 0:
+    elif options.output_format == 'stream-json' and writer is not None and exit_code == 0:
         writer.write(
             ResultEvent(
-                subtype="success",
+                subtype='success',
                 session_id=session.session_id,
+                goal_operation_id=session.session_id,
                 num_turns=num_turns_total,
                 result=final_text,
                 duration_ms=duration_ms,
@@ -987,8 +991,8 @@ def run_headless(options: HeadlessOptions) -> int:
         )
         record_command_run(
             session_id=session.session_id,
-            command_name="headless",
-            mode="non_interactive",
+            command_name='headless',
+            mode='non_interactive',
             success=(exit_code == 0),
             duration_s=duration_s,
             exit_status=exit_code,
@@ -1003,6 +1007,105 @@ def run_headless(options: HeadlessOptions) -> int:
 # Helpers
 
 
+def _try_run_provider_free_goal_summary(
+    options: HeadlessOptions,
+    *,
+    workspace_root: Path,
+    stdout: IO[str],
+) -> int | None:
+    """Handle `-p /goal` before provider validation.
+
+    `/goal` with no args is a local status read. It should not fail merely
+    because the default chat provider is not configured. Goal creation and
+    continuation still take the normal provider-backed path.
+    """
+    if options.input_format != 'text' or options.output_format != 'text':
+        return None
+    if options.prompt is None or options.prompt == '-':
+        return None
+
+    prompt_text = options.prompt.strip()
+    if not prompt_text:
+        return None
+
+    parsed = parse_user_input(prompt_text)
+    if parsed.input_type != 'command':
+        return None
+    if parsed.command_name.lower() not in {'goal', 'g'}:
+        return None
+    if parsed.command_args.strip():
+        return None
+
+    command = _find_builtin_or_registered_command(parsed.command_name)
+    if command is None:
+        return None
+
+    import asyncio as _asyncio
+
+    session = Session.create('local', options.model or '')
+    abort_controller = AbortController()
+    tool_context = ToolContext(
+        workspace_root=workspace_root,
+        abort_controller=abort_controller,
+        env=options.env,
+        startup_agent=options.startup_agent,
+        agent_type=getattr(options.startup_agent, 'agent_type', None),
+        bundle_context=getattr(options, 'bundle_context', None),
+    )
+    tool_context.session_id = session.session_id
+    tool_context.goal_thread_id = session.session_id
+    tool_context.options.is_non_interactive_session = True
+
+    command_context = create_command_context(
+        workspace_root=workspace_root,
+        conversation=session.conversation,
+        tool_context=tool_context,
+    )
+    command_registry = CommandRegistry()
+    command_registry.register(command)
+    engine = CommandEngine(
+        registry=command_registry,
+        workspace_root=workspace_root,
+        context=command_context,
+    )
+    result = _asyncio.run(engine.execute(prompt_text))
+    if result.should_query:
+        return None
+
+    exit_code = 0 if result.success else 1
+    final_text = (result.text or '').strip()
+    if final_text:
+        stdout.write(final_text + '\n')
+        stdout.flush()
+    from clawcodex_ext.utils.resume_hint import print_resume_hint
+
+    print_resume_hint(session.session_id, stream=stdout)
+    if options.persist_on_exit:
+        try:
+            session.save()
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).debug(
+                'F-125: failed to persist provider-free headless command session',
+                exc_info=True,
+            )
+    return exit_code
+
+
+def _find_builtin_or_registered_command(command_name: str) -> Any | None:
+    command = get_command_registry().get(command_name)
+    if command is not None:
+        return command
+    lowered = command_name.lower()
+    for builtin_command in get_builtin_commands():
+        if builtin_command.name.lower() == lowered:
+            return builtin_command
+        if lowered in [alias.lower() for alias in builtin_command.aliases]:
+            return builtin_command
+    return None
+
+
 class _InAgentLoopFlag:
     """Mutable shared flag indicating whether ``run_agent_loop`` is in flight.
 
@@ -1015,7 +1118,7 @@ class _InAgentLoopFlag:
     didn't raise, per PEP 475).
     """
 
-    __slots__ = ("value",)
+    __slots__ = ('value',)
 
     def __init__(self) -> None:
         self.value = False
@@ -1084,12 +1187,12 @@ def _install_sigint_handler(
             # the process the usual way) and raise the force-quit.
             _signal.signal(_signal.SIGINT, _signal.default_int_handler)
             raise KeyboardInterrupt
-        controller.abort("user_interrupt")
+        controller.abort('user_interrupt')
         try:
             # Plain ASCII for portability — some legacy Windows code
             # pages can't encode U+2026 and would silently drop the
             # message via the outer except.
-            stderr.write("\nCancelling... (Ctrl-C again to force quit)\n")
+            stderr.write('\nCancelling... (Ctrl-C again to force quit)\n')
             stderr.flush()
         except Exception:
             # A broken stderr (closed pipe etc.) must not stop the
@@ -1134,9 +1237,9 @@ def _filter_registry(registry, *, keep) -> None:
         return
     # First pass: try public ``unregister`` if the registry implements it
     # (forward-compat for future ToolRegistry subclasses that add the API).
-    if hasattr(registry, "unregister") and callable(getattr(registry, "unregister")):
+    if hasattr(registry, 'unregister') and callable(getattr(registry, 'unregister')):
         for tool in entries:
-            name = getattr(tool, "name", "")
+            name = getattr(tool, 'name', '')
             if not keep(name):
                 try:
                     registry.unregister(name)
@@ -1146,11 +1249,11 @@ def _filter_registry(registry, *, keep) -> None:
     # Fallback: ToolRegistry has no ``unregister``; mutate internal
     # storage. Touch only ``_tools`` and ``_by_name`` (both are
     # implementation details but stable in current ToolRegistry).
-    kept_tools = [t for t in entries if keep(getattr(t, "name", ""))]
+    kept_tools = [t for t in entries if keep(getattr(t, 'name', ''))]
     kept_by_name: dict = {}
     for t in kept_tools:
         kept_by_name[t.name.lower()] = t
-        for alias in getattr(t, "aliases", ()):
+        for alias in getattr(t, 'aliases', ()):
             kept_by_name[alias.lower()] = t
     try:
         registry._tools = kept_tools
@@ -1166,15 +1269,15 @@ def _auto_deny_permission_handler(stderr: IO[str]):
 
     def handler(request: PermissionAskRequest) -> PermissionAskReply:
         stderr.write(
-            f"[headless] denying permission for {request.tool_name}: "
-            f"{request.message}"
-            " (pass --dangerously-skip-permissions to bypass)\n"
+            f'[headless] denying permission for {request.tool_name}: '
+            f'{request.message}'
+            ' (pass --dangerously-skip-permissions to bypass)\n'
         )
         try:
             stderr.flush()
         except Exception:
             pass
-        return PermissionAskReply(behavior="deny")
+        return PermissionAskReply(behavior='deny')
 
     return handler
 
@@ -1183,8 +1286,8 @@ def _noop_ask_user(questions):  # type: ignore[override]
     # In non-interactive mode, collapse every question to an empty answer.
     answers: dict = {}
     for q in questions or []:
-        if isinstance(q, dict) and isinstance(q.get("question"), str):
-            answers[q["question"]] = ""
+        if isinstance(q, dict) and isinstance(q.get('question'), str):
+            answers[q['question']] = ''
     return answers
 
 
@@ -1222,7 +1325,7 @@ def _run_btw_headless(
     tool_context: Any,
     provider: Any,
     cwd: Path,
-) -> "tuple[str | None, str | None]":
+) -> 'tuple[str | None, str | None]':
     """Run /btw synchronously in headless mode and return ``(text, error)``.
 
     Returns:
@@ -1237,7 +1340,7 @@ def _run_btw_headless(
 
     if not args.strip():
         return (
-            "Usage: /btw <your question> —— 在不中断工作会话的前提下快速询问",
+            'Usage: /btw <your question> —— 在不中断工作会话的前提下快速询问',
             None,
         )
 
@@ -1250,7 +1353,7 @@ def _run_btw_headless(
         workspace_root=workspace_root,
         conversation=conversation,
         tool_context=tool_context,
-        tool_registry=getattr(tool_context, "tool_registry", None),
+        tool_registry=getattr(tool_context, 'tool_registry', None),
         provider=provider,
         cwd=cwd,
     )
@@ -1258,21 +1361,21 @@ def _run_btw_headless(
     try:
         outcome = asyncio.run(btw_command_run(args, ctx))
     except Exception as exc:  # noqa: BLE001 — surface any failure cleanly
-        return (None, f"Side question failed: {exc}")
+        return (None, f'Side question failed: {exc}')
 
-    if outcome is None or getattr(outcome, "display", None) == "skip":
-        return ("", None)
-    return (outcome.message or "", None)
+    if outcome is None or getattr(outcome, 'display', None) == 'skip':
+        return ('', None)
+    return (outcome.message or '', None)
 
 
 def _build_event_bridge(writer: StreamJsonWriter | None, sink: list[dict]):
     def on_event(event: ToolEvent) -> None:
-        if event.kind == "tool_use":
+        if event.kind == 'tool_use':
             record = {
-                "type": "tool_use",
-                "tool_use_id": event.tool_use_id,
-                "name": event.tool_name,
-                "input": event.tool_input or {},
+                'type': 'tool_use',
+                'tool_use_id': event.tool_use_id,
+                'name': event.tool_name,
+                'input': event.tool_input or {},
             }
             sink.append(record)
             if writer is not None:
@@ -1283,16 +1386,16 @@ def _build_event_bridge(writer: StreamJsonWriter | None, sink: list[dict]):
                         input=dict(event.tool_input or {}),
                     )
                 )
-        elif event.kind in ("tool_result", "tool_error"):
+        elif event.kind in ('tool_result', 'tool_error'):
             record = {
-                "type": "tool_result",
-                "tool_use_id": event.tool_use_id,
-                "name": event.tool_name,
-                "output": _jsonable(event.tool_output),
-                "is_error": bool(event.is_error),
+                'type': 'tool_result',
+                'tool_use_id': event.tool_use_id,
+                'name': event.tool_name,
+                'output': _jsonable(event.tool_output),
+                'is_error': bool(event.is_error),
             }
             if event.error:
-                record["error"] = event.error
+                record['error'] = event.error
             sink.append(record)
             if writer is not None:
                 writer.write(
@@ -1338,9 +1441,7 @@ def _run_resume_checks(
     fresh sessions have no prior state to compare against.
     """
     resumed = (
-        options.resume_session_id
-        or options.fork_session_id
-        or options.external_session is not None
+        options.resume_session_id or options.fork_session_id or options.external_session is not None
     )
     if not resumed or session is None:
         return
@@ -1354,12 +1455,12 @@ def _run_resume_checks(
         # C8 / R10: system-prompt drift.
         history_msgs = (
             session.conversation.messages
-            if getattr(session, "conversation", None) is not None
+            if getattr(session, 'conversation', None) is not None
             else []
         )
         warn_system_prompt_drift(
             history_msgs,
-            getattr(options, "append_system_prompt", "") or "",
+            getattr(options, 'append_system_prompt', '') or '',
             stderr,
         )
 
@@ -1367,11 +1468,9 @@ def _run_resume_checks(
         # model come from the resumed Session's recorded fields (set
         # by ``Session.load`` from the transcript's ``session_init``
         # line or legacy ``session.json``).
-        orig_provider = str(getattr(session, "provider", "") or "")
-        orig_model = str(getattr(session, "model", "") or "")
-        cur_model = str(
-            options.model or getattr(provider, "model", "") or ""
-        )
+        orig_provider = str(getattr(session, 'provider', '') or '')
+        orig_model = str(getattr(session, 'model', '') or '')
+        cur_model = str(options.model or getattr(provider, 'model', '') or '')
         warn_provider_model_mismatch(
             orig_provider,
             orig_model,
@@ -1387,16 +1486,16 @@ def _run_resume_checks(
         source_sid = (
             options.resume_session_id
             or options.fork_session_id
-            or getattr(session, "session_id", None)
+            or getattr(session, 'session_id', None)
         )
         if source_sid:
             agent_name = str(
-                getattr(options.startup_agent, "name", "")
+                getattr(options.startup_agent, 'name', '')
                 if options.startup_agent is not None
-                else ""
+                else ''
             )
             restore_metadata_from_session(
-                target_session_id=getattr(session, "session_id", ""),
+                target_session_id=getattr(session, 'session_id', ''),
                 source_session_id=str(source_sid),
                 agent_name=agent_name,
             )
@@ -1404,7 +1503,7 @@ def _run_resume_checks(
         import logging as _log
 
         _log.getLogger(__name__).debug(
-            "F-125 Phase 3: resume checks failed (non-fatal)",
+            'F-125 Phase 3: resume checks failed (non-fatal)',
             exc_info=True,
         )
 
@@ -1426,22 +1525,20 @@ def _warn_history_tool_conflicts(
     ``conversation`` attribute is silently skipped — headless must never
     block on telemetry-shaped diagnostics.
     """
-    if not (
-        options.allowed_tools or options.disallowed_tools
-    ):
+    if not (options.allowed_tools or options.disallowed_tools):
         return
     if session is None:
         return
-    conversation = getattr(session, "conversation", None)
+    conversation = getattr(session, 'conversation', None)
     if conversation is None:
         return
-    messages = getattr(conversation, "messages", None)
+    messages = getattr(conversation, 'messages', None)
     if not messages:
         return
 
     history_tools: set[str] = set()
     for message in messages:
-        content = getattr(message, "content", None)
+        content = getattr(message, 'content', None)
         if isinstance(content, str) or not isinstance(content, (list, tuple)):
             continue
         for block in content:
@@ -1453,25 +1550,21 @@ def _warn_history_tool_conflicts(
         return
 
     try:
-        registry_names = {
-            str(t.name) for t in tool_registry.list_tools()
-        }
+        registry_names = {str(t.name) for t in tool_registry.list_tools()}
     except Exception:
         return
 
-    missing = sorted(
-        n for n in history_tools if n not in registry_names
-    )
+    missing = sorted(n for n in history_tools if n not in registry_names)
     if not missing:
         return
 
     try:
         print(
-            "warning: --allowed-tools/--disallowed-tools removed tool(s) "
-            f"referenced in resumed history: {', '.join(missing)}. "
-            "The model may see tool_use blocks it cannot re-invoke; "
-            "consider re-running without the filter or re-reading the "
-            "affected files.",
+            'warning: --allowed-tools/--disallowed-tools removed tool(s) '
+            f'referenced in resumed history: {", ".join(missing)}. '
+            'The model may see tool_use blocks it cannot re-invoke; '
+            'consider re-running without the filter or re-reading the '
+            'affected files.',
             file=stderr,
         )
     except Exception:
@@ -1482,12 +1575,12 @@ def _block_tool_use_name(block: Any) -> str | None:
     """Return the ``tool_use`` block's tool name, or ``None`` if not a
     tool_use block / shape is unrecognised."""
     if isinstance(block, dict):
-        if str(block.get("type", "")).lower() != "tool_use":
+        if str(block.get('type', '')).lower() != 'tool_use':
             return None
-        name = block.get("name")
+        name = block.get('name')
         return str(name) if name else None
-    type_attr = getattr(block, "type", None)
-    if type_attr is None or str(type_attr).lower() != "tool_use":
+    type_attr = getattr(block, 'type', None)
+    if type_attr is None or str(type_attr).lower() != 'tool_use':
         return None
-    name = getattr(block, "name", None)
+    name = getattr(block, 'name', None)
     return str(name) if name else None

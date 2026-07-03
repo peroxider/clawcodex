@@ -9,8 +9,8 @@ the ~370-line system prompt body which lives in
 * ``INTERNAL_WORKER_TOOLS`` — frozenset of tool names workers cannot
   use (TeamCreate / TeamDelete / SendMessage / StructuredOutput).
 * ``filter_coordinator_tools`` — produce the coordinator's restricted
-  tool list (``Agent`` / ``SendMessage`` / ``TaskStop`` plus lightweight
-  tools ``Read`` / ``WebSearch`` / ``WebFetch``).
+  tool list (``Agent`` / ``TeamCreate`` / ``SendMessage`` / ``TaskStop``
+  plus lightweight tools ``Read`` / ``WebSearch`` / ``WebFetch``).
 * ``filter_worker_tools`` — produce a worker's tool list (everything
   the parent has, minus ``INTERNAL_WORKER_TOOLS``).
 * ``get_coordinator_user_context`` — produce the
@@ -95,7 +95,7 @@ def match_session_mode(session_mode: SessionMode | None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Tool-set filters — coordinator gets 3 tools; workers lose 4
+# Tool-set filters — coordinator gets delegation/read/goal tools; workers lose 4
 # ---------------------------------------------------------------------------
 
 # Tools workers cannot use. ``"StructuredOutput"`` is the literal
@@ -111,18 +111,24 @@ INTERNAL_WORKER_TOOLS: Final[frozenset[str]] = frozenset(
     }
 )
 
-# The coordinator gets Agent/SendMessage/TaskStop plus three lightweight
-# read-only tools so simple queries (read a file, search the web) don't
-# force a worker spawn. Writing tools (Edit/Write/Bash/Grep) stay off
-# so meaningful work still requires delegation.
+# The coordinator gets Agent/TeamCreate/SendMessage/TaskStop plus
+# lightweight read-only tools so simple queries (read a file, search the
+# web) don't force a worker spawn. Goal tools remain available when goal
+# mode is enabled so a coordinator-backed goal can still inspect and
+# complete its durable objective. Writing tools (Edit/Write/Bash/Grep)
+# stay off so meaningful work still requires delegation.
 _COORDINATOR_ALLOWED_TOOLS: Final[frozenset[str]] = frozenset(
     {
         'Agent',
         'SendMessage',
+        'TeamCreate',
         'TaskStop',
         'Read',
         'WebSearch',
         'WebFetch',
+        'get_goal',
+        'create_goal',
+        'update_goal',
     }
 )
 

@@ -50,6 +50,7 @@ class SystemEvent(HeadlessEvent):
     cwd: str | None = None
     tools: list[str] = field(default_factory=list)
     permission_mode: str | None = None
+    goal_operation_id: str | None = None
 
 
 @dataclass
@@ -90,6 +91,7 @@ class ResultEvent(HeadlessEvent):
     result: str = ""
     duration_ms: int = 0
     usage: dict[str, Any] | None = None
+    goal_operation_id: str | None = None
     is_error: bool = False
     error: str | None = None
 

@@ -2,4 +2,4 @@
 
 from .generator import BridgeGenerator
 
-__all__ = ["BridgeGenerator"]
+__all__ = ['BridgeGenerator']

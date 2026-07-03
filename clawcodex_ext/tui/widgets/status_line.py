@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import Any
 
 from rich.text import Text
 from textual.reactive import reactive
@@ -51,12 +52,6 @@ class StatusLine(Static):
     is_thinking: reactive[bool] = reactive(False)
     queued: reactive[int] = reactive(0)
     permission_mode: reactive[str] = reactive("")
-    # F-9 / `/goal`: an optional pill dict keyed by the
-    # ``GoalController.get_pill_state()`` shape. When ``None`` (the
-    # default) the goal segment is suppressed entirely; ``agent_bridge``
-    # pushes a fresh value after each turn completion so the widget
-    # reactively redraws.
-    goal: reactive[dict | None] = reactive(None)
 
     def __init__(
         self,
@@ -215,6 +210,9 @@ class StatusLine(Static):
         cwd = self._display_cwd()
         middle = f"{spinner} {verb}{elapsed}" if self.is_thinking else verb
         right_bits: list[str] = [f"turn {self.turns}"]
+        goal_segment = _goal_status_segment(getattr(state, "goal_status", None))
+        if goal_segment:
+            right_bits.append(goal_segment)
         if self.queued:
             right_bits.append(f"queued {self.queued}")
         # Real-time token display — shown both during and after a run
@@ -265,17 +263,7 @@ class StatusLine(Static):
             except Exception:
                 pass
         right = " · ".join(right_bits)
-        # F-9 / `/goal`: append the goal pill to the right segment
-        # when an active goal exists. ``goal`` is a dict produced by
-        # ``GoalController.get_pill_state()``; we use the pre-formatted
-        # ``pill`` text the controller embeds so the rendering stays
-        # consistent with the REPL ``_bottom_toolbar``.
-        goal_pill_text = ""
-        if self.goal:
-            pill = self.goal.get("pill")
-            if isinstance(pill, str) and pill:
-                goal_pill_text = f" · {pill}"
-        return Text(f"{left}    {middle}    {cwd}    {right}{goal_pill_text}")
+        return Text(f"{left}    {middle}    {cwd}    {right}")
 
     def _display_cwd(self) -> str:
         try:
@@ -284,3 +272,100 @@ class StatusLine(Static):
             return f"~/{rel}" if str(rel) != "." else "~"
         except Exception:
             return str(self._workspace_root)
+
+
+def _goal_status_segment(goal: dict | None) -> str | None:
+    if not isinstance(goal, dict):
+        return None
+    status = str(goal.get("status") or "")
+    tokens_used = _goal_int(goal.get("tokensUsed", goal.get("tokens_used", 0)))
+    token_budget = goal.get("tokenBudget", goal.get("token_budget"))
+    time_used_seconds = _goal_int(goal.get("timeUsedSeconds", goal.get("time_used_seconds", 0)))
+
+    if status == "active":
+        return f"Pursuing goal ({_goal_active_usage(token_budget, tokens_used, time_used_seconds)})"
+    if status == "paused":
+        return "Goal paused (/goal resume)"
+    if status == "blocked":
+        return "Goal blocked (/goal resume)"
+    if status == "usage_limited":
+        return "Goal hit usage limits (/goal resume)"
+    if status == "budget_limited":
+        usage = _goal_budget_usage(token_budget, tokens_used)
+        return f"Goal unmet ({usage})" if usage else "Goal unmet"
+    if status == "complete":
+        usage = _goal_complete_usage(token_budget, tokens_used, time_used_seconds)
+        return f"Goal achieved ({usage})" if usage else "Goal achieved"
+    return None
+
+
+def _goal_active_usage(
+    token_budget: object,
+    tokens_used: int,
+    time_used_seconds: int,
+) -> str:
+    budget = _optional_goal_int(token_budget)
+    if budget is not None:
+        return f"{_format_goal_tokens(tokens_used)} / {_format_goal_tokens(budget)}"
+    return _format_goal_elapsed_seconds(time_used_seconds)
+
+
+def _goal_budget_usage(token_budget: object, tokens_used: int) -> str | None:
+    budget = _optional_goal_int(token_budget)
+    if budget is None:
+        return None
+    return f"{_format_goal_tokens(tokens_used)} / {_format_goal_tokens(budget)} tokens"
+
+
+def _goal_complete_usage(
+    token_budget: object,
+    tokens_used: int,
+    time_used_seconds: int,
+) -> str | None:
+    if _optional_goal_int(token_budget) is not None:
+        return f"{_format_goal_tokens(tokens_used)} tokens"
+    if time_used_seconds > 0:
+        return _format_goal_elapsed_seconds(time_used_seconds)
+    return None
+
+
+def _goal_int(value: object) -> int:
+    try:
+        return max(int(value or 0), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _optional_goal_int(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        return max(int(value), 0)
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_goal_tokens(value: int) -> str:
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.1f}".rstrip("0").rstrip(".") + "M"
+    if value >= 1_000:
+        return f"{value / 1_000:.1f}".rstrip("0").rstrip(".") + "K"
+    return str(value)
+
+
+def _format_goal_elapsed_seconds(seconds: int) -> str:
+    seconds = max(seconds, 0)
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m"
+    hours = minutes // 60
+    remaining_minutes = minutes % 60
+    if hours >= 24:
+        days = hours // 24
+        remaining_hours = hours % 24
+        return f"{days}d {remaining_hours}h {remaining_minutes}m"
+    if remaining_minutes == 0:
+        return f"{hours}h"
+    return f"{hours}h {remaining_minutes}m"

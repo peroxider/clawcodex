@@ -6,22 +6,21 @@ Called by ``src/tool_system/defaults.py:build_default_registry``.
 
 from __future__ import annotations
 
+from clawcodex_ext.goal.tools import make_goal_model_tools
 from clawcodex_ext.tool_system.build_tool import Tool
-
+from clawcodex_ext.tool_system.tools.bg_session import BgSessionTool
+from clawcodex_ext.tool_system.tools.create_agent_tool import make_create_agent_tool
+from clawcodex_ext.tool_system.tools.lodestone import LodestoneTool
 from clawcodex_ext.tool_system.tools.progress_report import ProgressReportTool
 from clawcodex_ext.tool_system.tools.task_directives import TaskDirectivesTool
 from clawcodex_ext.tool_system.tools.task_inspect import TaskInspectTool
-from clawcodex_ext.goal.tool import GoalTool
-from clawcodex_ext.tool_system.tools.create_agent_tool import make_create_agent_tool
-from clawcodex_ext.tool_system.tools.bg_session import BgSessionTool
-from clawcodex_ext.tool_system.tools.lodestone import LodestoneTool
 
 EXTENSION_TOOLS: list[Tool] = [
+    *make_goal_model_tools(),
     ProgressReportTool,
     TaskDirectivesTool,
     TaskInspectTool,
     make_create_agent_tool(),
-    GoalTool,
     # F-94 BG_SESSIONS — Agent-facing background session query/control.
     # Tool self-gates on CLAWCODEX_BG_SESSIONS (returns {disabled: true}
     # when off), so unconditional registration is safe.
@@ -50,5 +49,5 @@ except Exception:  # noqa: BLE001 — defensive, never break tool registration
     pass
 
 __all__ = [
-    "EXTENSION_TOOLS",
+    'EXTENSION_TOOLS',
 ]

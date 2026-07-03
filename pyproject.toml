@@ -97,6 +97,7 @@ dev = [
     "pre-commit>=4.0.0",
     "mypy>=1.13.0",
     "import-linter>=2.0",
+    "pexpect>=4.9.0",
     "lark-oapi==1.7.0",
     "qrcode==7.4.2",
 ]

@@ -54,20 +54,19 @@ logger = logging.getLogger(__name__)
 class CoordinatorModeRunner:
     """Run one issue with coordinator tool filtering enabled."""
 
-    def __init__(self, agent_runner: "AgentRunner") -> None:
+    def __init__(self, agent_runner: 'AgentRunner') -> None:
         self._agent_runner = agent_runner
 
     async def run(
         self,
-        session: "AgentSession",
-        workflow: "WorkflowConfig",
+        session: 'AgentSession',
+        workflow: 'WorkflowConfig',
         **hooks: Any,
     ) -> Any:
         agent_config = self._agent_runner.agent_config
-        original = bool(getattr(agent_config, "coordinator_mode", False))
+        original = bool(getattr(agent_config, 'coordinator_mode', False))
         logger.info(
-            "CoordinatorModeRunner: enabling coordinator_mode for issue=%s "
-            "(was=%s)",
+            'CoordinatorModeRunner: enabling coordinator_mode for issue=%s (was=%s)',
             session.issue.id,
             original,
         )
@@ -77,11 +76,10 @@ class CoordinatorModeRunner:
         finally:
             agent_config.coordinator_mode = original
             logger.info(
-                "CoordinatorModeRunner: restored coordinator_mode=%s "
-                "after issue=%s",
+                'CoordinatorModeRunner: restored coordinator_mode=%s after issue=%s',
                 original,
                 session.issue.id,
             )
 
 
-__all__ = ["CoordinatorModeRunner"]
+__all__ = ['CoordinatorModeRunner']

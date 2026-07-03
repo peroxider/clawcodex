@@ -54,12 +54,12 @@ def reset_registry() -> FeatureRegistry:
 # Lazy import of CLI handler to avoid circular imports at module scope.
 # The CLI handler imports get_registry(), which is now defined above.
 def __getattr__(name: str):
-    if name == "run_feature_command":
+    if name == 'run_feature_command':
         from .cli import run_feature_command as _rfc
 
-        globals()["run_feature_command"] = _rfc
+        globals()['run_feature_command'] = _rfc
         return _rfc
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
 
 
 # ---------------------------------------------------------------------------
@@ -71,121 +71,127 @@ def __getattr__(name: str):
 _DEFAULT_FLAGS: list[FeatureFlag] = [
     # --- Agent / orchestrator features ---
     FeatureFlag(
-        name="AGENTIC_MODE",
+        name='AGENTIC_MODE',
         default=False,
-        description="Enable agentic multi-step planning mode (F-70 plugin dependent)",
+        description='Enable agentic multi-step planning mode (F-70 plugin dependent)',
         deps=[],
     ),
     FeatureFlag(
-        name="ORCHESTRATOR_LOOP",
+        name='ORCHESTRATOR_LOOP',
         default=False,
-        description="Enable the autonomous orchestrator agent loop",
-        deps=["AGENTIC_MODE"],
+        description='Enable the autonomous orchestrator agent loop',
+        deps=['AGENTIC_MODE'],
     ),
     FeatureFlag(
-        name="HOOK_PRE_LLM",
+        name='HOOK_PRE_LLM',
         default=True,
-        description="Enable pre-LLM agent loop hooks (F-102 prerequisite)",
+        description='Enable pre-LLM agent loop hooks (F-102 prerequisite)',
     ),
     FeatureFlag(
-        name="HOOK_POST_LLM",
+        name='HOOK_POST_LLM',
         default=True,
-        description="Enable post-LLM agent loop hooks",
+        description='Enable post-LLM agent loop hooks',
     ),
     # --- Plugin system ---
     FeatureFlag(
-        name="PLUGIN_SYSTEM",
+        name='PLUGIN_SYSTEM',
         default=False,
-        description="Enable the F-70 plugin loading system",
+        description='Enable the F-70 plugin loading system',
     ),
     # --- Tool gap bridging ---
     FeatureFlag(
-        name="TOOL_GAP_BRIDGE",
+        name='TOOL_GAP_BRIDGE',
         default=False,
-        description="Enable automatic tool-gap bridging for missing capabilities",
-        deps=["PLUGIN_SYSTEM"],
+        description='Enable automatic tool-gap bridging for missing capabilities',
+        deps=['PLUGIN_SYSTEM'],
     ),
     # --- Multi-API provider ---
     FeatureFlag(
-        name="MULTI_API_PROVIDER",
+        name='MULTI_API_PROVIDER',
         default=False,
-        description="Enable multi-API provider routing (F-72)",
+        description='Enable multi-API provider routing (F-72)',
     ),
     # --- Sandbox ---
     FeatureFlag(
-        name="SANDBOX_EXECUTION",
+        name='SANDBOX_EXECUTION',
         default=False,
-        description="Enable sandboxed command execution (F-74)",
+        description='Enable sandboxed command execution (F-74)',
     ),
     # --- Voice mode ---
     FeatureFlag(
-        name="VOICE_MODE",
+        name='VOICE_MODE',
         default=False,
-        description="Enable voice input/output mode (F-64)",
+        description='Enable voice input/output mode (F-64)',
     ),
     # --- Budget mode ---
     FeatureFlag(
-        name="BUDGET_MODE",
+        name='BUDGET_MODE',
         default=False,
-        description="Enable cost-aware budget-limited agent runs (F-69)",
+        description='Enable cost-aware budget-limited agent runs (F-69)',
+    ),
+    # --- Goal mode ---
+    FeatureFlag(
+        name='goals',
+        default=True,
+        description='Enable upstream-compatible /goal mode',
     ),
     # --- ACP protocol ---
     FeatureFlag(
-        name="ACP_PROTOCOL",
+        name='ACP_PROTOCOL',
         default=False,
-        description="Enable ACP (Agent Communication Protocol) for inter-agent messaging (F-66)",
+        description='Enable ACP (Agent Communication Protocol) for inter-agent messaging (F-66)',
     ),
     # --- Native modules ---
     FeatureFlag(
-        name="NATIVE_MODULES",
+        name='NATIVE_MODULES',
         default=False,
-        description="Enable loading of compiled native extension modules (F-81)",
+        description='Enable loading of compiled native extension modules (F-81)',
     ),
     # --- Remote control ---
     FeatureFlag(
-        name="REMOTE_CONTROL",
+        name='REMOTE_CONTROL',
         default=False,
-        description="Enable remote CLI control via TCP/WebSocket (F-82)",
+        description='Enable remote CLI control via TCP/WebSocket (F-82)',
     ),
     # --- Daemon subsystem (F-84) ---
     # Both flags default to False; turning them on enables the
     # ``clawcodex-dev daemon`` CLI surface (P84-H double gate).
     FeatureFlag(
-        name="DAEMON",
+        name='DAEMON',
         default=False,
         description=(
-            "Enable the long-running daemon supervisor that owns "
-            "remoteControl / cron / orchestrator workers (F-84)"
+            'Enable the long-running daemon supervisor that owns '
+            'remoteControl / cron / orchestrator workers (F-84)'
         ),
     ),
     FeatureFlag(
-        name="BRIDGE_MODE",
+        name='BRIDGE_MODE',
         default=False,
         description=(
-            "Enable the multi-session bridge worker kind inside the "
-            "daemon supervisor (F-84 P84-G, F-82 dependency)"
+            'Enable the multi-session bridge worker kind inside the '
+            'daemon supervisor (F-84 P84-G, F-82 dependency)'
         ),
     ),
     # --- CI/CD ---
     FeatureFlag(
-        name="CICD_MODE",
+        name='CICD_MODE',
         default=False,
-        description="Enable CI/CD-optimized mode (batch processing, no TTY) (F-73)",
+        description='Enable CI/CD-optimized mode (batch processing, no TTY) (F-73)',
     ),
     FeatureFlag(
-        name="ULTRAPLAN_LLM_PLANNER",
+        name='ULTRAPLAN_LLM_PLANNER',
         default=True,
-        description="Enable LLM-backed /ultraplan plan generation (F-87)",
+        description='Enable LLM-backed /ultraplan plan generation (F-87)',
     ),
     FeatureFlag(
-        name="ULTRAPLAN_REMOTE",
+        name='ULTRAPLAN_REMOTE',
         default=False,
-        description="Enable /ultraplan remote CCR execution (F-87)",
+        description='Enable /ultraplan remote CCR execution (F-87)',
     ),
     FeatureFlag(
-        name="ULTRAPLAN_RAINBOW",
+        name='ULTRAPLAN_RAINBOW',
         default=True,
-        description="Enable /ultraplan trigger highlighting in prompt input (F-87)",
+        description='Enable /ultraplan trigger highlighting in prompt input (F-87)',
     ),
 ]
 
@@ -210,15 +216,15 @@ register_defaults()
 
 # Re-export everything at package level for convenience.
 __all__ = [
-    "ConfigStore",
-    "FeatureFlag",
-    "FeatureRegistry",
-    "feature_gated",
-    "feature_gated_class",
-    "guarded_call",
-    "guarded_is_enabled",
-    "get_registry",
-    "register_defaults",
-    "reset_registry",
-    "run_feature_command",
+    'ConfigStore',
+    'FeatureFlag',
+    'FeatureRegistry',
+    'feature_gated',
+    'feature_gated_class',
+    'guarded_call',
+    'guarded_is_enabled',
+    'get_registry',
+    'register_defaults',
+    'reset_registry',
+    'run_feature_command',
 ]
