@@ -108,6 +108,13 @@ class PipelineConfig:
     # Token budget: if pipeline frees this many tokens, skip remaining layers
     early_exit_tokens: int = 20_000
 
+    # Goal-aware compression (F-9 / F-38).
+    # When ``goal_active`` is True, the autocompact threshold is raised
+    # (compact less aggressively) and messages containing
+    # ``<goal-steering`` are preserved from compaction so the model
+    # never loses sight of the current objective.
+    goal_active: bool = False
+
 
 class CompressionPipeline:
     """
@@ -251,14 +258,28 @@ class CompressionPipeline:
         # --- Layer 5: Autocompact ---
         autocompact_result = None
         if cfg.provider is not None and cfg.model:
+            # F-9: when a goal is active, raise the autocompact threshold
+            # (compact less aggressively) and pre-filter goal-steering
+            # messages so they survive compaction.
+            effective_threshold = cfg.autocompact_threshold
+            filtered_messages = current_messages
+            if cfg.goal_active:
+                effective_threshold = min(effective_threshold + 0.10, 0.95)
+                # Remove goal-steering messages before the autocompact
+                # check so the token estimate doesn't count them, but
+                # keep them in the final message stream.
+                filtered_messages = [
+                    m for m in current_messages
+                    if not _is_goal_steering_message(m)
+                ]
             try:
                 result = await auto_compact_if_needed(
-                    current_messages,
+                    filtered_messages if cfg.goal_active else current_messages,
                     input_token_count - total_saved,
                     cfg.context_window,
                     cfg.provider,
                     cfg.model,
-                    threshold_fraction=cfg.autocompact_threshold,
+                    threshold_fraction=effective_threshold,
                     tracking=cfg.autocompact_tracking,
                     custom_instructions=cfg.custom_instructions,
                     read_file_state=cfg.read_file_state,
@@ -279,6 +300,26 @@ class CompressionPipeline:
             layers_applied=layers_applied,
             autocompact_result=autocompact_result,
         )
+
+
+def _is_goal_steering_message(message: Message) -> bool:
+    """Check if a message is a goal-steering injection (F-9).
+
+    Goal-steering prompts are wrapped in ``<goal-steering type=...>``
+    XML tags.  These must survive autocompact so the model never loses
+    sight of the active objective.
+    """
+    if not hasattr(message, "content"):
+        return False
+    content = message.content
+    if isinstance(content, str):
+        return "<goal-steering" in content
+    if isinstance(content, list):
+        for block in content:
+            text = getattr(block, "text", None) or getattr(block, "content", None)
+            if isinstance(text, str) and "<goal-steering" in text:
+                return True
+    return False
 
 
 async def run_compression_pipeline(

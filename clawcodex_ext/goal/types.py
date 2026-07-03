@@ -29,6 +29,13 @@ BLOCKED_CONSECUTIVE_THRESHOLD: int = 3
 # short summary (FEATURE_PLAN.md §2.6.1).
 MAX_OBJECTIVE_CHARS: int = 4000
 
+# Number of turns between automatic milestone snapshots for progressive
+# summarization (FEATURE_PLAN.md §2.6.9).  Every INTERVAL turns the
+# continuation prompt asks for a structured progress update, and the
+# milestone is recorded in ``GoalState.milestones`` so the
+# ``<active-goal>`` context block can surface recent work to the model.
+MILESTONE_TURN_INTERVAL: int = 15
+
 
 class GoalStatus(str, Enum):
     """Goal state machine nodes.
@@ -86,6 +93,10 @@ class GoalState:
     created_at_ms: int = 0
     updated_at_ms: int = 0
     turns_executed: int = 0
+    # Progressive summarisation milestones (F-9 / F-38 compat).
+    # Each entry is a dict with keys: turn, tokens_used, summary.
+    # Populated automatically every MILESTONE_TURN_INTERVAL turns.
+    milestones: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to a plain dict suitable for transcript persistence.
@@ -96,6 +107,9 @@ class GoalState:
         """
         data = asdict(self)
         data["status"] = self.status.value
+        # Strip milestone summaries from serialisation (persisted in
+        # transcript separately; milestones are re-derived on resume).
+        data.pop("milestones", None)
         return data
 
     @classmethod
@@ -124,6 +138,9 @@ class GoalState:
             created_at_ms=int(payload.get("created_at_ms", 0) or 0),
             updated_at_ms=int(payload.get("updated_at_ms", 0) or 0),
             turns_executed=int(payload.get("turns_executed", 0) or 0),
+            # Milestones are NOT persisted in transcript JSONL — they
+            # are re-derived from turn intervals on session resume.
+            milestones=list(payload.get("milestones") or []),
         )
 
     def is_terminal(self) -> bool:
@@ -144,4 +161,5 @@ __all__ = [
     "GoalStatus",
     "MAX_GOAL_TURNS",
     "MAX_OBJECTIVE_CHARS",
+    "MILESTONE_TURN_INTERVAL",
 ]

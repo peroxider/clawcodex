@@ -655,6 +655,19 @@ class ClawCodexExtREPL(ClawcodexREPL):
                 goal_controller.on_run_start()
             except Exception:
                 pass
+        # F-9: drain any injection queued outside of chat() (e.g.
+        # from /goal set_new_goal → objective_updated injection)
+        # before the agent turn starts, otherwise on_assistant_turn_complete
+        # will overwrite it and the objective_updated prompt is lost.
+        if goal_controller is not None:
+            try:
+                pre = goal_controller.drain_pending_injection()
+                if pre is not None:
+                    text = pre.get("text", "")
+                    if text.strip():
+                        self._enqueue_prompt(text)
+            except Exception:
+                pass
         try:
             return super().chat(user_input, max_turns=max_turns)
         finally:
@@ -669,7 +682,16 @@ class ClawCodexExtREPL(ClawcodexREPL):
             if goal_controller is not None:
                 try:
                     goal_controller.on_run_finish()
-                    goal_controller.on_assistant_turn_complete()
+                    # F-9: drain the continuation/budget_limit injection
+                    # queued by on_assistant_turn_complete and enqueue it
+                    # so the REPL's main loop feeds it to the next chat()
+                    # call (auto-continuation).
+                    injection = goal_controller.on_assistant_turn_complete()
+                    if injection is not None:
+                        text = injection.get("text", "")
+                        if text.strip():
+                            self._enqueue_prompt(text)
+                        goal_controller.drain_pending_injection()
                 except Exception:
                     pass
             im_reply = getattr(self, "_im_reply_controller", None)

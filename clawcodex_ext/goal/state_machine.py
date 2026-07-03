@@ -11,12 +11,13 @@ entire transition batch (no clock skew between successive fields).
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from .types import (
     BLOCKED_CONSECUTIVE_THRESHOLD,
     MAX_GOAL_TURNS,
     MAX_OBJECTIVE_CHARS,
+    MILESTONE_TURN_INTERVAL,
     GoalState,
     GoalStatus,
 )
@@ -115,6 +116,8 @@ def set_goal(
         created_at_ms=state.created_at_ms if state is not None else now,
         updated_at_ms=now,
         turns_executed=0,
+        # Fresh goal — clear any accumulated milestones
+        milestones=[],
     )
 
 
@@ -218,8 +221,48 @@ def increment_turns(
             created_at_ms=state.created_at_ms,
             updated_at_ms=now,
             turns_executed=min(new_turns, max_turns),
+            milestones=list(state.milestones),
         ),
         hit_max,
+    )
+
+
+def add_milestone(
+    state: GoalState,
+    summary: str,
+    *,
+    now_ms: Optional[int] = None,
+    max_milestones: int = 10,
+) -> GoalState:
+    """Record a progressive-summary milestone for the current turn.
+
+    Appends a ``{"turn": …, "tokens_used": …, "summary": …}`` entry to
+    ``state.milestones``.  Old entries beyond ``max_milestones`` are
+    pruned (oldest first) so the list never grows unbounded.
+
+    Returns a new ``GoalState`` with the appended milestone.
+    """
+    now = _now_ms(now_ms)
+    entry: dict[str, Any] = {
+        "turn": state.turns_executed,
+        "tokens_used": state.tokens_used,
+        "summary": (summary or "").strip(),
+    }
+    pruned = (list(state.milestones) + [entry])[-max_milestones:]
+    return GoalState(
+        objective=state.objective,
+        status=state.status,
+        token_budget=state.token_budget,
+        tokens_used=state.tokens_used,
+        start_time_ms=state.start_time_ms,
+        paused_at_ms=state.paused_at_ms,
+        accumulated_active_ms=state.accumulated_active_ms,
+        blocked_attempts=state.blocked_attempts,
+        last_block_reason=state.last_block_reason,
+        created_at_ms=state.created_at_ms,
+        updated_at_ms=now,
+        turns_executed=state.turns_executed,
+        milestones=pruned,
     )
 
 

@@ -16,6 +16,9 @@ controller and the ``/goal`` command inject into the conversation:
   objective changes (matches upstream's
   ``<goal-objective-updated>${trimmed}</goal-objective-updated>``
   shape).
+* ``<goal-milestones>...</goal-milestones>`` — structured milestone
+  summaries appended to ``<active-goal>`` when the goal has completed
+  milestones (every ``MILESTONE_TURN_INTERVAL`` turns).
 
 XML wrapping is a deliberate model-side affordance: the tag
 boundaries make it trivial for the model to recognise injected
@@ -24,9 +27,9 @@ guidance without colliding with normal text.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
-from .types import GoalState, GoalStatus
+from .types import GoalState, GoalStatus, MILESTONE_TURN_INTERVAL
 
 
 # ---------------------------------------------------------------------------
@@ -34,20 +37,54 @@ from .types import GoalState, GoalStatus
 # ---------------------------------------------------------------------------
 
 
-def continuation_prompt(objective: str) -> str:
+def continuation_prompt(objective: str, *, turn: int = 0, milestones: list[dict[str, Any]] | None = None) -> str:
     """Inject a continuation nudge after each idle round.
 
     The model is told to keep working on the objective, NOT to ask
     the user a clarifying question unless truly blocked. The
     spec's completion-audit instruction is folded in so the model
     doesn't mark itself done prematurely.
+
+    When the current turn crosses a milestone boundary (every
+    ``MILESTONE_TURN_INTERVAL`` turns), a structured progress prompt
+    is inserted so the model writes a milestone summary as part of
+    its response, enabling progressive summarisation across long
+    goal runs.
     """
     text = (objective or "").strip()
+    is_milestone_turn = (
+        turn > 0
+        and turn % MILESTONE_TURN_INTERVAL == 0
+    )
+    extra = ""
+    if is_milestone_turn and milestones:
+        # Show recent milestones so the model knows what was done.
+        recent = milestones[-3:]
+        lines = ["\nRecent milestone summaries:"]
+        for m in recent:
+            t = m.get("turn", "?")
+            s = (m.get("summary") or "").strip()
+            if s:
+                lines.append(f"  Turn {t}: {s}")
+        extra = "\n".join(lines)
+    milestone_header = (
+        "\n\n"
+        "--- Progress Milestone ---\n"
+        "This is a milestone checkpoint. Write a brief summary of "
+        "what you have accomplished in the recent turns — key changes, "
+        "decisions, or blockers — then continue working.\n"
+        f"Objective: {text}\n"
+        "---"
+        if is_milestone_turn
+        else ""
+    )
     return (
         '<goal-steering type="continuation">\n'
         "The active goal is still in progress. Continue working on "
-        f"the objective below:\n\n{text}\n\n"
-        "Do not stop to ask the user a clarifying question unless "
+        f"the objective below:\n\n{text}\n"
+        f"{extra}"
+        f"{milestone_header}"
+        "\nDo not stop to ask the user a clarifying question unless "
         "you are truly blocked. When you believe the objective is "
         "satisfied, perform the Completion Audit (objective "
         "decomposition → authoritative evidence per requirement → "
@@ -103,7 +140,48 @@ def _truncate(text: str, limit: int) -> str:
     return text[: max(0, limit - 1)].rstrip() + "…"
 
 
-def active_goal_context_block(state: GoalState, *, max_objective_chars: int = 240) -> str:
+def _dynamic_objective_chars(state: GoalState) -> int:
+    """Pick a truncation limit proportional to the remaining token budget.
+
+    Returns larger limits when budget is plentiful, shrinking as
+    the goal exhausts its runway so the context block stays compact
+    under pressure.
+
+    No budget set → generous default (480 chars).
+    """
+    remaining = state.budget_remaining()
+    if remaining is None:
+        return 480
+    fraction = remaining / max(state.token_budget or 1, 1)
+    if fraction > 0.60:
+        return 600
+    if fraction > 0.30:
+        return 360
+    if fraction > 0.10:
+        return 240
+    return 160
+
+
+def _format_milestones(state: GoalState, max_milestones: int = 5) -> str:
+    """Render the most recent milestones as a compact XML block.
+
+    Returns an empty string when there are no milestones so the caller
+    can splice it trivially.
+    """
+    if not state.milestones:
+        return ""
+    recent = state.milestones[-max_milestones:]
+    lines = ["<goal-milestones>"]
+    for m in recent:
+        turn = m.get("turn", "?")
+        summary = (m.get("summary") or "").strip()
+        if summary:
+            lines.append(f'  <milestone turn="{turn}">{summary}</milestone>')
+    lines.append("</goal-milestones>")
+    return "\n".join(lines)
+
+
+def active_goal_context_block(state: GoalState, **kwargs) -> str:
     """Compact summary shown in the system prompt while a goal is active.
 
     Per FEATURE_PLAN.md §2.6.8, the pill and context block share the
@@ -111,19 +189,32 @@ def active_goal_context_block(state: GoalState, *, max_objective_chars: int = 24
     transitions (status, elapsed, turns, budget) so the model can
     reason about its current progress without re-deriving it from
     the conversation history.
+
+    When milestones exist (progressive summarisation), they are
+    appended inside ``<goal-milestones>...</goal-milestones>`` so the
+    model sees what was accomplished in earlier turn ranges.
+
+    The ``max_objective_chars`` keyword is deprecated — truncation is
+    now computed dynamically from the token budget (see
+    :func:`_dynamic_objective_chars`).
     """
-    objective = _truncate(state.objective, max_objective_chars)
+    max_chars = _dynamic_objective_chars(state)
+    objective = _truncate(state.objective, max_chars)
     budget = (
         f"{state.tokens_used}/{state.token_budget}"
         if state.token_budget is not None
         else f"{state.tokens_used}/∞"
     )
-    return (
+    milestone_xml = _format_milestones(state)
+    parts = [
         f'<active-goal status="{state.status.value}" '
-        f'turns="{state.turns_executed}" tokens="{budget}">'
-        f"{objective}"
-        "</active-goal>"
-    )
+        f'turns="{state.turns_executed}" tokens="{budget}">',
+        objective,
+        "</active-goal>",
+    ]
+    if milestone_xml:
+        parts.insert(1, milestone_xml)
+    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------

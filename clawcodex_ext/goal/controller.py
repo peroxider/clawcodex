@@ -46,6 +46,7 @@ from .registry import get_goal_registry
 from .state_machine import (
     GoalObjectiveTooLong,
     GoalStateError,
+    add_milestone,
     clear_goal,
     complete_goal,
     continue_from_max_turns,
@@ -62,6 +63,7 @@ from .storage import persist_goal, persist_goal_cleared
 from .types import (
     MAX_GOAL_TURNS,
     MAX_OBJECTIVE_CHARS,
+    MILESTONE_TURN_INTERVAL,
     GoalState,
     GoalStatus,
 )
@@ -302,7 +304,8 @@ class GoalController:
         * ``plan_mode`` → no-op.
         * ``turns_executed >= MAX_GOAL_TURNS`` → flip to ``MAX_TURNS``,
           persist, no injection.
-        * otherwise → increment turns, queue a continuation prompt.
+        * otherwise → increment turns, check milestone boundary, queue
+          a continuation prompt (milestone-aware at interval boundaries).
         """
         if not self._refresh_session_id():
             return None
@@ -328,9 +331,25 @@ class GoalController:
             )
             return None
 
+        # F-9: record a milestone at interval boundaries for progressive
+        # summarisation.  The summary is empty initially — the model
+        # writes it in the milestone continuation response, and the
+        # ``goal`` tool captures it on the next ``update`` action.
+        next_turn = new_state.turns_executed
+        if next_turn > 0 and next_turn % MILESTONE_TURN_INTERVAL == 0:
+            try:
+                self._apply(add_milestone, "")
+            except Exception:
+                pass
+
         # Active after increment_turns → queue continuation.
+        refreshed = self.get_state() or new_state
         self._pending_injection = {
-            "text": prompts.continuation_prompt(new_state.objective),
+            "text": prompts.continuation_prompt(
+                refreshed.objective,
+                turn=next_turn,
+                milestones=refreshed.milestones,
+            ),
             "is_meta": True,
             "kind": "continuation",
         }

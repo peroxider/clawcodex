@@ -176,6 +176,11 @@ class ClawCodexTUI(App):
         self._command_context: Any | None = None
         self._away_summary_controller: AwaySummaryController | None = None
         self._intent_forecast_controller: IntentForecastController | None = None
+        # F-9 / ``/goal``: persistent controller instance wired into
+        # the agent run lifecycle so continuation/budget-limit injections
+        # are drained and enqueued for auto-continuation. Installed by
+        # ``_install_goal_controller`` in ``__init__`` and on session resume.
+        self._goal_controller: Any | None = None
         # Transcript renderables captured at exit time so entry points
         # can dump them back to the main terminal scrollback after the
         # alt-screen tears down. Mirrors the TS ink behaviour where the
@@ -246,6 +251,7 @@ class ClawCodexTUI(App):
             self.tool_context.default_permission_handler = self._agent_bridge._permission_handler
         self._install_away_summary_controller()
         self._install_intent_forecast_controller()
+        self._install_goal_controller()
         self._resume_browse = resume_browse
         # Double-press exit guard: Ctrl+C first press clears draft /
         # arms exit; second press within 0.8s actually quits.
@@ -1332,6 +1338,7 @@ class ClawCodexTUI(App):
             self._agent_bridge._session = resumed
             self._install_away_summary_controller()
             self._install_intent_forecast_controller()
+            self._install_goal_controller()
             if tail is not None:
                 self._agent_bridge._tail_follower = tail
                 self._agent_bridge._start_tail_follower()
@@ -1413,6 +1420,38 @@ class ClawCodexTUI(App):
         )
         if self._command_context is not None:
             self._command_context.intent_forecast_controller = self._intent_forecast_controller
+
+    def _install_goal_controller(self) -> None:
+        """F-9: install a persistent ``GoalController`` for the TUI.
+
+        Mirrors ``clawcodex_ext.frontend.repl_extensions._install_goal_controller``.
+        The controller reads ``session_id`` lazily so it follows session
+        swaps (``/resume``, ``/provider``) without a re-install.
+        """
+        from clawcodex_ext.goal.controller import GoalController
+
+        if getattr(self, "_goal_controller", None) is not None:
+            return
+
+        def _session_id() -> str | None:
+            return getattr(self.session, "session_id", None)
+
+        def _display(text: str) -> None:
+            def _append() -> None:
+                if self._repl_screen is not None:
+                    self._repl_screen.transcript.append_system(
+                        text, style="light", render="markdown"
+                    )
+
+            try:
+                self.call_from_thread(_append)
+            except RuntimeError:
+                _append()
+
+        self._goal_controller = GoalController(
+            session_id_getter=_session_id,
+            display=_display,
+        )
 
     def _schedule_replay_history_MARKER(self) -> None:
         if self._repl_screen is None:

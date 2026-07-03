@@ -90,6 +90,25 @@ class QueryEngine:
     def total_usage(self) -> dict[str, int]:
         return dict(self._total_usage)
 
+    def _check_goal_active(self) -> bool:
+        """Check whether a goal is active for the current session.
+
+        Best-effort lookup via the process-level ``GoalStateRegistry``.
+        Returns ``False`` when no registry or no goal exists, so the
+        compression pipeline never errors on a missing goal.
+        """
+        try:
+            from clawcodex_ext.goal.registry import get_goal_registry
+
+            state = get_goal_registry().get(self._session_id)
+            if state is not None:
+                from clawcodex_ext.goal.types import GoalStatus
+
+                return state.status == GoalStatus.ACTIVE
+        except Exception:
+            pass
+        return False
+
     async def _build_system_prompt_parts(
         self,
     ) -> tuple[str | list[dict[str, Any]], dict[str, str], dict[str, str]]:
@@ -247,6 +266,9 @@ class QueryEngine:
             # failures across user prompts. ``auto_compact_if_needed``
             # mutates ``tracking.consecutive_failures`` in place.
             autocompact_tracking=self._auto_compact_tracking,
+            # F-9: when a goal is active for this session, raise the
+            # compression threshold and protect goal-steering messages.
+            goal_active=self._check_goal_active(),
         )
 
         params = QueryParams(

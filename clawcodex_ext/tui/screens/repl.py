@@ -345,6 +345,14 @@ class REPLScreen(Screen):
         controller = getattr(app, "_away_summary_controller", None)
         if controller is not None:
             controller.on_run_start()
+        # F-9: start the goal controller so it knows a new assistant
+        # turn is about to begin.
+        goal_controller = getattr(app, "_goal_controller", None)
+        if goal_controller is not None:
+            try:
+                goal_controller.on_run_start()
+            except Exception:
+                pass
         forecast = getattr(app, "_intent_forecast_controller", None)
         if forecast is not None:
             forecast.on_run_start()
@@ -398,6 +406,23 @@ class REPLScreen(Screen):
                 )
         elif controller is not None:
             controller.on_assistant_turn_complete()
+        # F-9: drain the goal controller's continuation/budget_limit
+        # injection and enqueue it so the queued-prompt drain feeds it
+        # to the next agent run (auto-continuation).
+        goal_controller = getattr(app, "_goal_controller", None)
+        if goal_controller is not None:
+            try:
+                goal_controller.on_run_finish()
+                injection = goal_controller.on_assistant_turn_complete()
+                if injection is not None:
+                    text = injection.get("text", "")
+                    if text.strip():
+                        app.app_state.queued_prompts.append(text)
+                        from ..messages import QueuedPromptReady
+                        self.post_message(QueuedPromptReady())
+                    goal_controller.drain_pending_injection()
+            except Exception:
+                pass
         self.prompt_input.set_enabled(True)
         self.call_after_refresh(self.prompt_input.focus_input)
 
