@@ -99,6 +99,23 @@ PROMPT_TOO_LONG_ERROR_MESSAGE = (
 )
 
 
+def _mark_proactive_context_blocked_on_error(error: BaseException) -> None:
+    """Block proactive ticks after provider/API errors.
+
+    Proactive ticks are generated without new user intent, so a provider
+    error can otherwise become a tight tick -> error -> tick loop. This
+    hook is best-effort and must never change normal query error handling.
+    """
+    try:
+        from clawcodex_ext.services.proactive import get_default_controller
+
+        ctrl = get_default_controller()
+        if ctrl.is_active():
+            ctrl.set_context_blocked(True)
+    except Exception:
+        logger.debug("failed to mark proactive context blocked", exc_info=True)
+
+
 @dataclass
 class QueryParams:
     messages: list[Message]
@@ -1695,6 +1712,7 @@ async def query(
 
         except Exception as e:
             logger.error("Query error: %s", e)
+            _mark_proactive_context_blocked_on_error(e)
             error_message = str(e)
 
             for err_msg in _yield_missing_tool_result_blocks(assistant_messages, error_message):
