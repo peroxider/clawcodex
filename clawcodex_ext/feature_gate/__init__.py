@@ -172,6 +172,21 @@ _DEFAULT_FLAGS: list[FeatureFlag] = [
         default=False,
         description="Enable CI/CD-optimized mode (batch processing, no TTY) (F-73)",
     ),
+    FeatureFlag(
+        name="ULTRAPLAN_LLM_PLANNER",
+        default=True,
+        description="Enable LLM-backed /ultraplan plan generation (F-87)",
+    ),
+    FeatureFlag(
+        name="ULTRAPLAN_REMOTE",
+        default=False,
+        description="Enable /ultraplan remote CCR execution (F-87)",
+    ),
+    FeatureFlag(
+        name="ULTRAPLAN_RAINBOW",
+        default=True,
+        description="Enable /ultraplan trigger highlighting in prompt input (F-87)",
+    ),
 ]
 
 

@@ -121,6 +121,24 @@ def parse_user_input(text: str, *, cwd: str | None = None) -> ParsedInput:
     )
 
 
+def find_ultraplan_triggers(text: str):
+    """Return F-87 ultraplan trigger hits for UI integrations."""
+
+    from clawcodex_ext.services.ultraplan.keyword_detector import (
+        find_ultraplan_trigger_positions,
+    )
+
+    return find_ultraplan_trigger_positions(text)
+
+
+def is_ultraplan_triggered_submit(text: str) -> bool:
+    """Return True when a submitted line should route to /ultraplan."""
+
+    from clawcodex_ext.services.ultraplan.keyword_detector import is_ultraplan_command
+
+    return is_ultraplan_command(text)
+
+
 def _extract_file_mentions(text: str, cwd: str | None = None) -> list[str]:
     """Extract ``@path`` mentions from text.
 

@@ -1572,6 +1572,12 @@ def get_builtin_commands() -> list[Command]:
         # F-64 P64-E TTS — /tts toggle + TTS backend selection + 试听.
         TTS_COMMAND,
     ]
+    try:
+        from clawcodex_ext.command_system.ultraplan_command import ULTRAPLAN_COMMAND
+
+        cmds.append(ULTRAPLAN_COMMAND)
+    except Exception:
+        pass
     from src.command_system.buddy_command import is_buddy_command_enabled, BUDDY_COMMAND
 
     if is_buddy_command_enabled():
