@@ -890,6 +890,203 @@ def install_automation_state_reporter() -> None:
 - `tests/stability_gate/test_stage5_extensions.py` 增补 proactive 模块 import smoke test
 - 新增 `tests/stability_gate/test_stage10_proactive.py`(轻量,只验证状态机 + listener,实际 TickScheduler 短间隔 1s)
 
+## §1.11 CCB 实现参考与设计修订(2026-07-03)
+
+> 调研来源:`/mnt/c/WorkSpace/claude-code-best/src/proactive/{index.ts, useProactive.ts}`、`src/constants/prompts.ts`、`src/commands/proactive.ts`、`src/commands/compact/compact.ts`、`src/services/goal/{goalState,prompts}.ts`
+> 派工原因:F-89 P0 派工时存在 4 个设计盲点(Q1~Q4),逐项修订如下。优先级排序:**Q1 ≥ Q4 ≥ Q2 > Q3**。
+
+### 1.11.1 Q1 · LLM 怎么知道"当前目标"
+
+**CCB 现状**:`getProactiveSection()`(`src/constants/prompts.ts:795-849`)是**纯静态文本**,不读 goal。Active goal 由独立子系统注入:
+
+| 模块 | 职责 |
+|------|------|
+| `src/services/goal/goalState.ts` | GoalState 单例管理 |
+| `src/services/goal/prompts.ts:138-149` `buildGoalContextBlock()` | `<active-goal>` 块生成 |
+| `src/utils/sessionStorage.ts:546` `currentSessionGoal` | sessionStorage 持久化 |
+| `src/commands/goal/goal.tsx:54/101/113/158` | `/goal` 命令入口 |
+| `useGoalContinuation.ts` `goal-continuation` origin | 注入 prompt queue |
+
+Proactive 与 `/goal` 是**两条独立自动循环,互不感知**。
+
+**F-89 修订(P0)**:在 §1.6.4 的 `clawcodex_ext/services/proactive/prompts.py:696` `get_proactive_section` 中**显式读取** `clawcodex_ext/goal/controller.py` 的当前 goal,降级路径:
+
+```python
+def get_proactive_section(terminal_focus: Literal["full", "medium", "minimal", "off"] = "medium") -> str | None:
+    if terminal_focus == "off":
+        return None
+    ctrl = get_default_controller()
+    state = ctrl.state
+    if not state.is_active:
+        return None
+
+    # 修订 Q1:显式读 active goal(/goal 子系统未落地则降级到 CCB 静态文本)
+    goal_block: str | None = None
+    try:
+        from clawcodex_ext.goal.controller import get_default_controller as get_goal_ctrl
+        gs = get_goal_ctrl().state
+        if gs is not None:
+            goal_block = (
+                f'<active-goal status="{gs.status.value}">\n'
+                f'{gs.objective}\n'
+                f'</active-goal>'
+            )
+    except (ImportError, AttributeError):
+        pass
+
+    next_tick_str = (
+        time.strftime("%H:%M:%S", time.localtime(state.next_tick_at / 1000))
+        if state.next_tick_at is not None else "(not scheduled)"
+    )
+    template = {
+        "full": _PROACTIVE_SECTION_FULL,
+        "medium": _PROACTIVE_SECTION_MEDIUM,
+        "minimal": _PROACTIVE_SECTION_MINIMAL,
+    }[terminal_focus]
+    return template.format(
+        tag=TICK_TAG,
+        goal_block=goal_block or "No active goal — ask the user briefly on first wake-up.",
+        tick_count=state.tick_count,
+        next_tick_at_str=next_tick_str,
+        phase=state.phase,
+    )
+```
+
+模板 `_PROACTIVE_SECTION_{FULL,MEDIUM,MINIMAL}` 同步新增 `{goal_block}` 占位符。
+
+### 1.11.2 Q2 · focus 档位怎么切换
+
+**CCB 现状**:
+
+- 命令枚举**只有 on/off**(`src/commands/proactive.ts:15-25`),无 focus 子命令
+- `terminalFocus` 实际是**布尔两态**(Focused/Unfocused),通过 `userContext` 注入(`src/screens/REPL.tsx:3486-3492`)而非 system prompt —— **精妙设计:避免 prompt cache busting**
+- 无 env var / 配置文件 / 子命令切换入口
+- `bridgeSafe: true`(`proactive.ts:16`)表示 bridge 模式不阻止命令注册
+
+**F-89 修订(P1)**:P89-D `/proactive` 命令签名扩展为支持子命令:
+
+```python
+PROACTIVE_COMMAND: LocalCommand = {
+    "name": "proactive",
+    # /proactive <action> [focus=<level>]
+    # action ∈ { on, off, pause, resume, focus }
+    # focus  ∈ { full, medium, minimal }
+    "args": ["action", "level"],
+    "handler": _handle_proactive_command,
+}
+```
+
+支持的语法:
+
+| 命令 | 行为 | CCB 对应 |
+|------|------|---------|
+| `/proactive on` | 启用,默认 `medium` | `activateProactive('slash_command')` |
+| `/proactive on focus=full` | 启用并指定档位 | CCB 没有 |
+| `/proactive off` | 停用 | `deactivateProactive()` |
+| `/proactive pause` / `resume` | 暂停/恢复 | CCB 同名 API |
+| `/proactive focus minimal` | 运行时切档 | CCB 没有 |
+
+**自动降级**:复用 `clawcodex_ext/away_summary/` 的 `is_terminal_focused()`,若用户在场 → 升 `full`,离场 → 降 `medium`/`minimal`(阈值可在配置)。
+
+**Remote API(P89-H)扩展**:`POST /proactive/focus {level: "minimal"}` 切换档位。
+
+**保留 CCB 精妙设计**:`is_terminal_focused()` 走 `userContext` 而非 system prompt——`get_proactive_section` 只拼 `focus` 档内容到 system prompt;焦点状态走另一通道注入,避免 prompt cache 失效。
+
+### 1.11.3 Q3 · tick 间状态怎么记
+
+**CCB 现状**:进程内 module state 仅 5 字段(`src/proactive/index.ts:15-19`):
+
+```ts
+let active = false; let paused = false; let contextBlocked = false
+let nextTickAt: number | null = null; let activationSource: string | undefined
+```
+
+持久化只有 `runs.json`(`src/utils/autonomyRuns.ts:38-46`),路径 `.claude/autonomy/runs.json`,ring buffer 上限 200 条。**无 `lastTickText` / `lastTickAt`** —— 跨 tick **全靠 LLM conversation history** 推断。
+
+**F-89 修订(P2,可延后)**:F-89 `AutomationState`(`clawcodex_ext/services/proactive/state.py`)已比 CCB 丰富(6 字段含 `tick_count` + `last_sleep_until`)。缺口:**LLM 不知道"上次 tick 干了什么"**。
+
+P89-G 扩展位(落地时间允许时):
+
+```python
+@dataclass(frozen=True)
+class AutomationState:
+    phase: AutomationPhase
+    next_tick_at: float | None = None
+    activation_source: str | None = None
+    last_sleep_until: float | None = None
+    tick_count: int = 0
+    blocked_until: float | None = None
+    # 修订新增(Q3):
+    last_tick_summary: str | None = None   # 上次 tick 1-2 句摘要
+    last_tick_at_ms: float | None = None   # 上次 tick 时间戳
+```
+
+写入位置:`TickEmitter._on_tick_event` 完成后,调 `clawcodex_ext/services/kairos/brief.py` 的 `BriefSummaryBuilder.build_brief()` 截短到 ≤200 token,写入下次 tick prompt 的 `Last tick:` 段(模板扩展)。
+
+### 1.11.4 Q4 · Proactive 主动 compact 触发
+
+**CCB 现状**:
+
+- `/compact` 命令仅接受 free-form `customInstructions`(`src/commands/compact/compact.ts:53,162-179`),无 trigger 参数
+- trigger 枚举只有 `'manual' | 'auto'`(`src/entrypoints/sdk/coreSchemas.ts:580/590`)
+- `autoCompact`(`src/services/compact/autoCompact.ts:189-348`)按 token 阈值检测
+- Proactive **从不主动调 compact**
+- 唯一协同:`setContextBlocked(true)` 在 compact 成功后清零(`src/proactive/index.ts:80-82`,注释:"Cleared on successful response or after compaction")
+
+**F-89 修订(P1)**:在 `clawcodex_ext/services/proactive/tick_emitter.py:502` `_on_tick_event` 插入 `should_compact_first()` 步骤:
+
+```python
+def _on_tick_event(self, event: TickEvent) -> None:
+    if not self._ctrl.should_tick():
+        self._reschedule()
+        return
+    if self._should_skip():
+        self._reschedule()
+        return
+
+    # 修订 Q4:tick 注入前先按 est_tokens 决定是否主动 compact
+    if self._should_compact_first():
+        try:
+            from clawcodex_ext.services.compact.compact import compact_conversation
+            compact_conversation(
+                trigger="proactive_tick",
+                reason="pre-tick proactive compaction",
+            )
+        except Exception:
+            logger.exception("proactive_tick compact failed; blocking tick this round")
+            self._ctrl.set_context_blocked(True)
+            self._reschedule()
+            return
+
+    # 原有逻辑:构造 <tick>HH:MM:SS</tick> 推 prompt queue
+    now_str = datetime.now().strftime("%H:%M:%S")
+    tick_text = f"<{TICK_TAG}>{now_str}</{TICK_TAG}>"
+    ...
+```
+
+`_should_compact_first()` 触发条件:`est_input_tokens > 0.85 * effective_window`(严于现有 `autoCompact` 13K margin,给 proactive tick 留出安全边界)。
+
+`compact_conversation`(`clawcodex_ext/services/compact/compact.py:291`)**新增** `trigger="proactive_tick"` 字符串 —— 与现有 `'manual' | 'auto'` 并列。
+
+### 1.11.5 优先级与落地路径
+
+按风险 × 价值排序:
+
+| 修订 | 优先级 | 落地位置 | 与子特性对应 | 落地时机 |
+|------|:------:|---------|------------|---------|
+| **Q1** goal-aware tick | 🔴 P0 | `prompts.py:696` `get_proactive_section()` | P89-G | P89-G 同步 |
+| **Q4** Proactive 主动 compact | 🟡 P1 | `tick_emitter.py:502` + `compact.py:291` trigger 枚举扩展 | P89-B | P89-B 同步 |
+| **Q2** focus 切换入口 | 🟡 P1 | `/proactive` 命令签名扩展 + `userContext` 注入 | P89-D | P89-D 同步 |
+| **Q3** `last_tick_summary` 字段 | 🟢 P2 | `state.py` `AutomationState` + `TickEmitter` | P89-G 扩展 | 余力时 |
+
+**整体落地顺序**:**Q1 → Q4 → Q2 → Q3**(按优先级)。在 P89-A → P89-I 流水之间穿插。
+
+**为何 Q1 是 P0**:`get_proactive_section` 是 P89-G 的主函数,落地时一起改是顺手的。否则 tick 注入后模型**完全不知道该干啥**,P89-G 的 V-11 虽然通过但实际用户体验等于零。Q1 是把"自主模式"从"自动活时钟"升级为"自动活而知道目标"的**唯一**改动点。
+
+**为何 Q4 是 P1**:30s tick 长跑的真实风险 —— CCB 的 autoCompact 在窗口 ≥ 90% 才触发,proactive 频繁 tick 容易越过这条线后**累积一轮未 compact 的 tick**,导致后续每个 tick 都卡在长上下文。Q4 是兜底。
+
+**为何 Q2 保留 userContext 注入**:遵循 CCB `REPL.tsx:3486` 的精妙设计,焦点状态走 userContext 而非 system prompt,避免每次切档 bust 整个 prompt cache。这与 Q1 的 system prompt 注入互补而**不冲突**。
+
 ## §2 进度跟踪
 
 ### 2.1 已完成
@@ -906,7 +1103,15 @@ def install_automation_state_reporter() -> None:
 
 ### 2.2 下一步计划
 
-按子特性顺序(底层 → 上层):
+按子特性顺序(底层 → 上层,**前置修订穿插见 §1.11**):
+
+0. **前置修订(Q1 → Q4 → Q2 → Q3,详见 §1.11)**,与子特性并行穿插:
+   - **Q1** goal-aware tick:`get_proactive_section` 显式读 `currentSessionGoal`,**P89-G 同步落地(P0)**
+   - **Q4** Proactive 主动 compact:`TickEmitter._on_tick_event` 插入 `should_compact_first()` + `compact_conversation(trigger="proactive_tick")`,**P89-B 同步落地(P1)**
+   - **Q2** focus 切换入口:`/proactive` 命令扩 `<action> [level]`,自动降级走 `away_summary`,**P89-D 同步落地(P1)**
+   - **Q3** `last_tick_summary` 字段:`AutomationState` 新增该字段,留作 P89-G 扩展(P2,可选)
+
+主实施序列:
 1. P89-A `ProactiveController` 状态机(独立,可单测)
 2. P89-G `getProactiveSection()` 系统提示拼装(依赖 A)
 3. P89-I 单元测试(先 A + G,稳定基础)
@@ -996,3 +1201,4 @@ def install_automation_state_reporter() -> None:
 | 日期 | 变更 | 原因 |
 |------|------|------|
 | 2026-06-30 | 初始创建(9 子特性,12 验收项,10 风险) | 派工 F-89 P0 缺口,对接 CCB PROACTIVE + KAIROS 双 flag |
+| 2026-07-03 | 新增 §1.11:基于 CCB (`/mnt/c/WorkSpace/claude-code-best/src/proactive/`) 实现调研,补 4 项设计修订(Q1 goal-aware tick P0 / Q4 Proactive 主动 compact P1 / Q2 focus 切换入口 P1 / Q3 `last_tick_summary` P2);§2.2 同步插入前置步骤 0 | CCB 对标后修订原文档未触及的 4 个设计盲点 |
