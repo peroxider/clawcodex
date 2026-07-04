@@ -16,6 +16,7 @@ docs/feature_plan/
 ├── 05-cron-system/                    ← Cron 系统
 ├── 06-ccb-benchmark/                  ← CCB 对标
 ├── 07-cli-config/                    ← CLI 与配置系统
+├── 08-agent-dashboard/                ← Agent Dashboard 跨系统聚合
 └── ../decoupling/                     ← 三层解耦方案与 P3 整改记录（独立规划）
 ```
 
@@ -28,13 +29,13 @@ docs/feature_plan/
 | F-Number | 名称 | 状态 | 章节路径 |
 |----------|------|:----:|---------|
 | F-54 | 运行期可观测性 | 🔄 | [f-54-observability.md](02-orchestrator/f-54-observability.md) |
-| F-110 | 声明式工作流引擎 | 📋 | [f-110-workflow-engine.md](02-orchestrator/f-110-workflow-engine.md) |
-| F-111 | StageRunner 适配器 | 📋 | [f-111-stage-runner.md](02-orchestrator/f-111-stage-runner.md) |
-| F-112 | GATE 门禁处理器 | 📋 | [f-112-gate-processor.md](02-orchestrator/f-112-gate-processor.md) |
-| F-113 | DECISION 决策处理器 | 📋 | [f-113-decision-processor.md](02-orchestrator/f-113-decision-processor.md) |
-| F-114 | 阶段契约验证器 | 📋 | [f-114-contract-validator.md](02-orchestrator/f-114-contract-validator.md) |
-| F-115 | 检查点与恢复 | 📋 | [f-115-checkpoint-recovery.md](02-orchestrator/f-115-checkpoint-recovery.md) |
-| F-116 | 工作流可观测性集成 | 📋 | [f-116-workflow-observability.md](02-orchestrator/f-116-workflow-observability.md) |
+| F-110 | 声明式工作流引擎 | 🟡 | [f-110-workflow-engine.md](02-orchestrator/f-110-workflow-engine.md) |
+| F-111 | StageRunner 适配器 | 🟡 | [f-111-stage-runner.md](02-orchestrator/f-111-stage-runner.md) |
+| F-112 | GATE 门禁处理器 | 🟡 | [f-112-gate-processor.md](02-orchestrator/f-112-gate-processor.md) |
+| F-113 | DECISION 决策处理器 | 🟡 | [f-113-decision-processor.md](02-orchestrator/f-113-decision-processor.md) |
+| F-114 | 阶段契约验证器 | 🟡 | [f-114-contract-validator.md](02-orchestrator/f-114-contract-validator.md) |
+| F-115 | 检查点与恢复 | 🟡 | [f-115-checkpoint-recovery.md](02-orchestrator/f-115-checkpoint-recovery.md) |
+| F-116 | 工作流可观测性集成 | 🟡 | [f-116-workflow-observability.md](02-orchestrator/f-116-workflow-observability.md) |
 | F-118 | 动态任务分解引擎 | 🔭 | [f-118-dynamic-decomposition.md](02-orchestrator/f-118-dynamic-decomposition.md) |
 | F-121 | PR 代码检视意见规则回灌 | 📋 | [f-121-rules-feedback.md](02-orchestrator/f-121-rules-feedback.md) |
 | F-124 | Issue 澄清器 — 描述不清晰自动检测与澄清闭环 | 📋 | [f-124-issue-clarifier.md](02-orchestrator/f-124-issue-clarifier.md) |
@@ -45,11 +46,10 @@ docs/feature_plan/
 |----------|------|:----:|---------|
 | F-10 | ExecuteExtraTool 延迟工具系统 | 📋 | [f-10-extratool.md](03-agent-core/f-10-extratool.md) |
 | F-100 | Dreaming 后台记忆整合 | 🔄 | [f-100-dreaming.md](03-agent-core/f-100-dreaming.md) |
-| F-102 | Agent Loop Hook 扩展点 | 🔄 | [f-102-hook-extensions.md](03-agent-core/f-102-hook-extensions.md) |
+| F-102 | Agent Loop Hook 扩展点 | ✅ | [f-102-hook-extensions.md](03-agent-core/f-102-hook-extensions.md) |
 | F-107 | PowerShell 支持增强 | 📋 | [f-107-powershell.md](03-agent-core/f-107-powershell.md) |
 | F-108 | Freeze Detection & Auto-Recovery | 📋 | [f-108-freeze-detection.md](03-agent-core/f-108-freeze-detection.md) |
 | F-119 | System Prompt 段落拼装与自迭代基础设施 | 📋 | [f-119-prompt-assembly.md](03-agent-core/f-119-prompt-assembly.md) |
-| F-123 | Intent Forecast 空闲意图预测 | 📋 | [f-123-intent-forecast.md](03-agent-core/f-123-intent-forecast.md) |
 
 ### CLI 与配置系统
 
@@ -58,6 +58,12 @@ docs/feature_plan/
 | F-46 | permission_mode 正交拆分 | 🔄 | [f-46-permission-split.md](07-cli-config/f-46-permission-split.md) |
 | F-53 | Tool 自动暴露为 CLI 斜杠命令 | 📋 | [f-53-tool-to-cli.md](07-cli-config/f-53-tool-to-cli.md) |
 | F-89 | @agent-name 多入口统一支持 | 🔄 | [f-89-agent-name.md](07-cli-config/f-89-agent-name.md) |
+
+### Agent Dashboard
+
+| F-Number | 名称 | 状态 | 章节路径 |
+|----------|------|:----:|---------|
+| F-120 | Agent Dashboard — 跨系统任务进度统一看板 | 📋 | [f-120-agent-dashboard.md](08-agent-dashboard/f-120-agent-dashboard.md) |
 
 ### Architecture & SDK 下沉
 
@@ -77,28 +83,26 @@ docs/feature_plan/
 | F-Number | 名称 | 状态 | 章节路径 |
 |----------|------|:----:|---------|
 | F-64 | Voice Mode 语音输入 | 🔄 | [f-64-voice-mode.md](06-ccb-benchmark/f-64-voice-mode.md) |
-| F-66 | ACP 协议支持 | 📋 | [f-66-acp-protocol.md](06-ccb-benchmark/f-66-acp-protocol.md) |
+| F-66 | ACP 协议支持 | 🚧 | [f-66-acp-protocol.md](06-ccb-benchmark/f-66-acp-protocol.md) |
 | F-69 | Budget/Poor Mode | 🔄 | [f-69-budget-mode.md](06-ccb-benchmark/f-69-budget-mode.md) |
-| F-72 | Multi-API 原生适配器 | 📋 | [f-72-multi-api.md](06-ccb-benchmark/f-72-multi-api.md) |
+| F-72 | Multi-API 原生适配器 | 🔄 | [f-72-multi-api.md](06-ccb-benchmark/f-72-multi-api.md) |
 | F-73 | CI/CD 流水线 | 🔄 | [f-73-cicd.md](06-ccb-benchmark/f-73-cicd.md) |
 | F-74 | Sandbox 沙箱远程执行 | 📋 | [f-74-sandbox.md](06-ccb-benchmark/f-74-sandbox.md) |
 | F-82 | Remote Control 远程控制 | 🔄 | [f-82-remote-control.md](06-ccb-benchmark/f-82-remote-control.md) |
 | F-83 | 远程 Triggers（AGENT_TRIGGERS_REMOTE） | 📋 | [f-83-triggers.md](06-ccb-benchmark/f-83-triggers.md) |
-| F-84 | Daemon 后台守护 | 📋 | [f-84-daemon.md](06-ccb-benchmark/f-84-daemon.md) |
+| F-84 | Daemon 后台守护 | 🔄 | [f-84-daemon.md](06-ccb-benchmark/f-84-daemon.md) |
 | F-85 | Pipe IPC 命令族（UDS + LAN_PIPES） | 📋 | [f-85-pipe-ipc.md](06-ccb-benchmark/f-85-pipe-ipc.md) |
 | F-86 | Computer Use 跨平台 Executor | 📋 | [f-86-computer-use.md](06-ccb-benchmark/f-86-computer-use.md) |
-| F-87 | /ultraplan LLM 驱动 + CLI 完整实现 | 📋 | [f-87-ultraplan.md](06-ccb-benchmark/f-87-ultraplan.md) |
+| F-87 | /ultraplan LLM 驱动 + CLI 完整实现 | 🔄 | [f-87-ultraplan.md](06-ccb-benchmark/f-87-ultraplan.md) |
 | F-88 | Monitor 后台监控 + MonitorTool | 📋 | [f-88-monitor.md](06-ccb-benchmark/f-88-monitor.md) |
-| F-89 | Proactive 自主模式 + KAIROS Tick 集成 | ✅ | [f-89-proactive.md](06-ccb-benchmark/f-89-proactive.md) |
 | F-91 | MCP Skills 自动发现 | 📋 | [f-91-mcp-skill-discovery.md](06-ccb-benchmark/f-91-mcp-skill-discovery.md) |
 | F-92 | experimental_skill_search TF-IDF | 📋 | [f-92-skill-search.md](06-ccb-benchmark/f-92-skill-search.md) |
-| F-93 | TeamMem 共享记忆 | 📋 | [f-93-team-memory.md](06-ccb-benchmark/f-93-team-memory.md) |
-| F-94 | BG_SESSIONS 后台会话 | 📋 | [f-94-bg-sessions.md](06-ccb-benchmark/f-94-bg-sessions.md) |
+| F-94 | BG_SESSIONS 后台会话 | 🚧 | [f-94-bg-sessions.md](06-ccb-benchmark/f-94-bg-sessions.md) |
 | F-95 | TEMPLATES 模板系统 | 🔄 | [f-95-templates.md](06-ccb-benchmark/f-95-templates.md) |
 | F-96 | PROMPT_CACHE_BREAK_DETECTION | 📋 | [f-96-cache-break-detection.md](06-ccb-benchmark/f-96-cache-break-detection.md) |
-| F-97 | LODESTONE 深度链接 | 📋 | [f-97-lodestone.md](06-ccb-benchmark/f-97-lodestone.md) |
 | F-98 | SSH_REMOTE 远程模式 | 📋 | [f-98-ssh-remote.md](06-ccb-benchmark/f-98-ssh-remote.md) |
 | F-99 | DIRECT_CONNECT 直连模式 | 🔄 | [f-99-direct-connect.md](06-ccb-benchmark/f-99-direct-connect.md) |
+| F-125 | Headless 无头模式多轮交互 + `--resume` 冲突分析 | 🚧 | [f-125-headless-multi-turn.md](06-ccb-benchmark/f-125-headless-multi-turn.md) |
 | — | **CCB ↔ ClawCodex 缺口分析** | ✅ | [06-ccb-benchmark/README.md](06-ccb-benchmark/README.md) |
 
 ### 解耦方案（独立规划）
@@ -118,3 +122,4 @@ docs/feature_plan/
 | 2026-06-29 | 新增 `../decoupling/` 解耦方案目录（P3 整改全量文档化） | P3 整改 6 步累计 67+ 迁移 imports / 8 新 facade 完工；解耦方案从 F-Number 体系中独立为目录 |
 | 2026-07-01 | 新增 F-123 Intent Forecast 空闲意图预测规划 | 用户提出 REPL/TUI 2 分钟空闲后预测下一步、`/forecast` 与 CLI 同名、异步 session summary sidecar 的设计需求 |
 | 2026-07-03 | 删除 F-70/F-71/F-81/F-122 已完成特性规划文档 | 代码确认特性已全部落地，移除已完成的规范文档 |
+| 2026-07-04 | 删除 F-89/F-93/F-97/F-123 已完成特性规划文档;同步 master 状态 11 处(F-66 🚧、F-72/F-84/F-87 🔄、F-102 ✅、F-110-F-116 🟡、F-94 🚧);补登 F-125;新增 08-agent-dashboard 章节收录 F-120 | 全量复核 49 个 F-Number 文档 vs 代码层,识别 4 个 ✅ 完全实现特性 + 11 处文档/master 状态不一致 + 1 处遗漏章节 |

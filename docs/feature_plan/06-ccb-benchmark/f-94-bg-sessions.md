@@ -417,4 +417,4 @@ UI 规则:
 
 ---
 
-**关联文档**: [README.md 缺口矩阵](./README.md#a-全特性对照矩阵), [F-93 TeamMem](./f-93-team-memory.md)
+**关联文档**: [README.md 缺口矩阵](./README.md#a-全特性对照矩阵)
