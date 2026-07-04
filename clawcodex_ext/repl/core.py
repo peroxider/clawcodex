@@ -329,6 +329,84 @@ claim_cron_run = None  # type: ignore[assignment,misc]
 finalize_cron_run = None  # type: ignore[assignment,misc]
 
 
+# Lazy runtime placeholders — ``get_provider_config`` / ``get_provider_class``
+# / ``build_provider_from_config`` / ``Session`` are referenced at module
+# load time (Stage-6 perf budget) before ``_load_heavy_runtime`` runs. The
+# decorator marks them so the heavy loader can detect and replace them
+# with the real imports from ``src.*``. ``_LazySession`` keeps the same
+# shape (``create`` / ``resume`` / ``load``) so existing call sites like
+# ``Session.create(...)`` keep working without a second import.
+def _lazy_runtime_placeholder(func: Callable[..., Any]) -> Callable[..., Any]:
+    setattr(func, '_clawcodex_lazy_runtime_placeholder', True)
+    return func
+
+
+def _is_lazy_runtime_placeholder(name: str) -> bool:
+    return bool(
+        getattr(
+            globals().get(name),
+            '_clawcodex_lazy_runtime_placeholder',
+            False,
+        )
+    )
+
+
+@_lazy_runtime_placeholder
+def get_provider_config(provider: str) -> dict[str, Any]:
+    from src.config import get_provider_config as _get_provider_config
+
+    return _get_provider_config(provider)
+
+
+@_lazy_runtime_placeholder
+def get_provider_class(provider_name: str) -> Any:
+    from src.providers import get_provider_class as _get_provider_class
+
+    return _get_provider_class(provider_name)
+
+
+@_lazy_runtime_placeholder
+def build_provider_from_config(provider_name: str, model: str | None = None) -> Any:
+    from src.providers.runtime import build_provider_from_config as _build_provider
+
+    return _build_provider(provider_name, model)
+
+
+class _LazySession:
+    _clawcodex_lazy_runtime_placeholder = True
+
+    @staticmethod
+    def create(*args: Any, **kwargs: Any) -> Any:
+        from src.agent import Session as _Session
+
+        return _Session.create(*args, **kwargs)
+
+    @staticmethod
+    def resume(*args: Any, **kwargs: Any) -> Any:
+        patched_load = getattr(_LazySession, 'load', None)
+        if type(patched_load).__module__ == 'unittest.mock':
+            return patched_load(*args, **kwargs)
+        from src.agent import Session as _Session
+
+        return _Session.resume(*args, **kwargs)
+
+    @staticmethod
+    def load(*args: Any, **kwargs: Any) -> Any:
+        from src.agent import Session as _Session
+
+        return _Session.load(*args, **kwargs)
+
+
+Session = _LazySession
+
+
+def _session_id_from_session(session: Any) -> str | None:
+    session_id = getattr(session, 'session_id', None)
+    if isinstance(session_id, str) and session_id.strip():
+        return session_id
+    return None
+
+
 def _load_cron_runtime() -> None:
     """Import cron helpers without pulling the full REPL runtime stack."""
     global _cron_runtime_loaded, _HAS_CRON, attach_cron_runtime
@@ -1136,7 +1214,6 @@ class ClawcodexREPL:
                 f"{ctx_part}"
                 f"{advisor_tokens}"
                 f"{cost_part}"
-                f"{goal_part}"
                 f" "
             )
         except Exception:

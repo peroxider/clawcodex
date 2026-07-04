@@ -38,7 +38,6 @@ from clawcodex_ext.command_system.tts_command import TTS_COMMAND
 from clawcodex_ext.command_system.statusline import STATUSLINE_COMMAND
 from clawcodex_ext.command_system.security_review import SECURITY_REVIEW_COMMAND
 from clawcodex_ext.command_system.proactive_command import PROACTIVE_COMMAND
-from clawcodex_ext.goal.command import GOAL_COMMAND
 from clawcodex_ext.command_system.btw_command import BTW_COMMAND
 
 # Upstream 0573f4c new slash commands. The implementations live in
@@ -1553,7 +1552,6 @@ def get_builtin_commands() -> list[Command]:
         STATUSLINE_COMMAND,
         SECURITY_REVIEW_COMMAND,
         PROACTIVE_COMMAND,
-        GOAL_COMMAND,
         RESUME_COMMAND,
         BTW_COMMAND,
         # Upstream 0573f4c new slash commands
@@ -1574,6 +1572,12 @@ def get_builtin_commands() -> list[Command]:
         # F-64 P64-E TTS — /tts toggle + TTS backend selection + 试听.
         TTS_COMMAND,
     ]
+    try:
+        from clawcodex_ext.goal.command import GOAL_COMMAND
+
+        cmds.append(GOAL_COMMAND)
+    except Exception:
+        pass
     try:
         from clawcodex_ext.command_system.ultraplan_command import ULTRAPLAN_COMMAND
 
