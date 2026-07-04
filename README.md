@@ -178,6 +178,41 @@ $ clawcodex-dev orchestrator issue inject --id gitcode/AGENTSDK-15 "address revi
 
 ---
 
+## 🎬 项目展示 / Video Showcase
+
+> **1 分钟看完 clawcodex-dev 能干什么** —— 看视频比读文字更直观。
+
+本项目有一份 4 章交互式视频演示（coldopen · orchestrator · sop-compiler · install），配套一个 ~238 KB 的自包含单文件 React SPA（`vite-plugin-singlefile` 构建，JS/CSS 全部 inline，浏览器双击即跑）。
+
+### 看视频
+
+| 渠道 | 链接 | 备注 |
+|---|---|---|
+| 📺 GitCode Pages | [https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html](https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html) | 待仓库 Pages 启用后即可访问 |
+| 📺 GitHub Pages | [https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html](https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html) | 镜像仓库可同步 |
+| 🏃 本地预览 | `cd assets/video-b/presentation && npm install && npm run dev` → [http://localhost:5174](http://localhost:5174) | 需要 Node 18+ |
+| 📦 单文件直开 | [`assets/video-b/presentation/dist/index.html`](assets/video-b/presentation/dist/index.html) | 离线 / 静态托管通用，238 KB |
+
+> GitHub / GitCode 的 README 不允许 `<script>` 内嵌（会被 sanitize 剥离），所以走外链方式跳转。  
+> 静态截图缩略图可在 `assets/video-b/screenshots/` 下重新生成：`python3 scripts/capture_video_b_screenshots.py`。
+
+### 4 个章节速览
+
+| 章节 | 时长 | 聚焦能力 |
+|---|---|---|
+| 1. Cold Open | ~9s | "你睡了，agent 在干活。早上醒来，PR 自己开了。" |
+| 2. Orchestrator | ~52s | 4 个 issue 平台 · 真实日志逐步揭示 · reviewer 评论自动修 · Takeover |
+| 3. SOP Compiler | ~30s | `workflow.md` → 多 agent 团队（agent / skill / 编排图 / 通信） |
+| 4. Install + Metrics | ~39s | 3 平台一键安装 · `doctor` / `--dry-run` 预检 · Hero Metrics（4 / 100+ / 3 行） |
+
+### 源材料（双源原则：口播稿决定节拍，事实底稿决定画面密度）
+
+- 📝 **口播稿**：[`assets/video-b/script.md`](assets/video-b/script.md)
+- 🗒️ **分镜稿**：[`assets/video-b/outline.md`](assets/video-b/outline.md)
+- 📚 **事实底稿**：[`assets/video-b/article.md`](assets/video-b/article.md)
+
+---
+
 ## Quick Start
 
 ### One-Click Install (Linux / macOS / Git Bash / WSL)
