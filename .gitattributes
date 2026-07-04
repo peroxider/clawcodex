@@ -1,1 +1,65 @@
-*.sh text eol=lf
+# ── 默认行为：所有文本文件统一使用 LF ──
+*               text=auto eol=lf
+
+# ── Windows 平台原生脚本：必须 CRLF（PowerShell 依赖 CRLF 解析） ──
+*.ps1           text eol=crlf
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+
+# ── Shell 脚本：强制 LF（兼容 macOS/Linux/WSL） ──
+*.sh            text eol=lf
+*.bash          text eol=lf
+
+# ── 源码 / 配置：显式声明 LF（避免 Git 误判） ──
+*.py            text eol=lf
+*.pyi           text eol=lf
+*.js            text eol=lf
+*.jsx           text eol=lf
+*.mjs           text eol=lf
+*.cjs           text eol=lf
+*.ts            text eol=lf
+*.tsx           text eol=lf
+*.mts           text eol=lf
+*.cts           text eol=lf
+*.json          text eol=lf
+*.jsonc         text eol=lf
+*.json5         text eol=lf
+*.jsonl         text eol=lf
+*.ndjson        text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.toml          text eol=lf
+*.md            text eol=lf
+*.mdx           text eol=lf
+*.html          text eol=lf
+*.xml           text eol=lf
+*.css           text eol=lf
+*.scss          text eol=lf
+*.flow          text eol=lf
+*.j2            text eol=lf
+*.patch         text eol=lf diff
+*.txt           text eol=lf
+*.gitignore     text eol=lf
+*.gitattributes text eol=lf
+.editorconfig   text eol=lf
+
+# ── 二进制资源：禁止 Git 触碰行尾 / 禁止 diff ──
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.webp          binary
+*.woff          binary
+*.woff2         binary
+*.ttf           binary
+*.otf           binary
+*.eot           binary
+*.mp4           binary
+*.webm          binary
+*.mp3           binary
+*.wav           binary
+*.pdf           binary
+*.zip           binary
+*.tar           binary
+*.gz            binary
