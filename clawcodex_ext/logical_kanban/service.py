@@ -16,6 +16,8 @@ from .fuzzy_types import AggregationDecision, CommitDecision, MultiWorldResult
 from .ir_hash import canonical_hash
 from .multiworld_validator import MultiWorldValidator
 from .rule_engine import Layer1RuleEngine
+from .runtime import get_logical_kanban
+from .truth_maintenance import TruthMaintenanceSystem
 from .world_generator import WorldGenerator
 from .types import (
     CommitResult,
@@ -30,7 +32,9 @@ from .types import (
 
 if TYPE_CHECKING:
     from clawcodex_ext.tool_system.context import ToolContext
+    from .fuzzy_types import Clarification, World
     from .ir import CanonicalAssertion
+    from .truth_maintenance import AssumptionRecord
 
 
 _LAYER1_RULESET = {
@@ -296,6 +300,14 @@ class LogicalKanbanService:
             for w in multi_world.worlds
             for a in w.assumptions
         )
+        # Register accepted assumptions in the TMS so later invalidation can
+        # propagate to dependent task conclusions.
+        self._register_assertion_in_tms(
+            context,
+            assertion_id=multi_world.assertion_id,
+            worlds=multi_world.worlds,
+            target_task_id=target_task_id if isinstance(target_task_id, str) else None,
+        )
         return self._accepted(
             proposal,
             task_id=target_task_id if isinstance(target_task_id, str) else None,
@@ -449,6 +461,12 @@ class LogicalKanbanService:
             "completed",
         }:
             return self._accepted(proposal)
+
+        # F-135: a task whose readiness depends on a stale derived fact must
+        # not be allowed to commit a status transition.
+        stale_check = self._check_stale_assumption_for_task(context, task_id)
+        if stale_check is not None:
+            return stale_check
 
         task = (getattr(context, "tasks", {}) or {}).get(task_id)
         if not isinstance(task, dict):
@@ -842,6 +860,7 @@ class LogicalKanbanService:
         proof_trace: tuple[dict[str, Any], ...] | None = None,
         counterexample: dict[str, Any] | None = None,
         repair_suggestions: tuple[RepairSuggestion, ...] | None = None,
+        result: ValidationResult = "fail",
     ) -> ValidationRun:
         if counterexample is None and issues:
             counterexample = self._counterexample_for(
@@ -851,7 +870,7 @@ class LogicalKanbanService:
             )
         return self._make_validation_run(
             proposal,
-            result="fail",
+            result=result,
             task_id=task_id,
             derived_facts=derived_facts,
             proof_trace=proof_trace,
@@ -905,3 +924,120 @@ class LogicalKanbanService:
         incoming = payload.get("metadata")
         incoming_lkb = incoming.get("lkb") if isinstance(incoming, dict) else {}
         return isinstance(incoming_lkb, dict) and bool(incoming_lkb.get("acceptance_proof"))
+
+    def _tms(self, context: "ToolContext") -> TruthMaintenanceSystem:
+        return get_logical_kanban(context).tms
+
+    def _check_stale_assumption_for_task(
+        self,
+        context: "ToolContext",
+        task_id: str,
+    ) -> ValidationRun | None:
+        """Return a stale ValidationRun if task_id depends on a stale assertion."""
+        tms = self._tms(context)
+        if not tms.is_task_affected(task_id):
+            return None
+        stale_assertions = [
+            assertion.assertion_id
+            for assertion in tms.get_assertions_for_task(task_id)
+            if assertion.status == "stale"
+        ]
+        issue = ValidationIssue(
+            code="stale_assumption_blocks_transition",
+            message=(
+                f"Task {task_id} cannot change status because one or more "
+                "assumptions it depends on have been invalidated."
+            ),
+            rule="LKB-TMS-001",
+            task_id=task_id,
+            repair_suggestions=(
+                RepairSuggestion(
+                    action="clarify_assumption",
+                    target=task_id,
+                    message="Clarify or override the invalidated assumptions before transitioning.",
+                ),
+            ),
+        )
+        # Build a minimal proposal-like object for _denied.
+        proposal = Proposal(
+            proposal_id="TMS-STALE",
+            change=ProposedChange(
+                kind="transition_status",
+                payload={"taskId": task_id},
+            ),
+            snapshot_hash="",
+        )
+        return self._denied(
+            proposal,
+            task_id=task_id,
+            issues=(issue,),
+            result="stale",
+            derived_facts=tuple(f"Stale({aid})" for aid in stale_assertions),
+            proof_trace=(
+                {
+                    "rule": "LKB-TMS-001",
+                    "premises": [f"Task({task_id})"] + [f"Stale({aid})" for aid in stale_assertions],
+                    "conclusion": f"Not(CanMoveTo({task_id}, _))",
+                    "solverVersion": self.solver_version,
+                },
+            ),
+        )
+
+    def _register_assertion_in_tms(
+        self,
+        context: "ToolContext",
+        *,
+        assertion_id: str,
+        worlds: tuple["World", ...],
+        target_task_id: str | None,
+    ) -> None:
+        """Register all assumptions from accepted worlds in the TMS."""
+        tms = self._tms(context)
+        task_ids = (target_task_id,) if target_task_id else ()
+        # Each world carries the same set of ambiguities; register assumptions
+        # from the first world as the canonical dependency set.
+        assumptions = worlds[0].assumptions if worlds else ()
+        tms.register_assertion(
+            assertion_id,
+            assumptions=assumptions,
+            derived_from=(),
+            task_ids=task_ids,
+        )
+
+    def clarify_assumption(
+        self,
+        context: "ToolContext",
+        assumption_id: str,
+        clarification: "Clarification",
+    ) -> tuple["AssumptionRecord", "AssumptionRecord" | None, ValidationRun | None]:
+        """Apply a user clarification and revalidate affected tasks.
+
+        Returns the new/old assumption records and, if a single task was
+        affected and the clarification resolves all stale dependencies, a
+        fresh validation run for that task's current transition intent.
+        """
+        from .fuzzy_types import Clarification
+
+        if not isinstance(clarification, Clarification):
+            raise TypeError("clarification must be a Clarification instance")
+        tms = self._tms(context)
+        new_record, old_record = tms.clarify_assumption(assumption_id, clarification)
+        validation_run: ValidationRun | None = None
+
+        affected = tms.get_stale_task_ids()
+        if len(affected) == 0:
+            # No remaining stale tasks; revalidate any previously affected task
+            # that is now ready again.  We use the task linked to the clarified
+            # assumption's assertion if exactly one exists.
+            assertion = tms.get_assertion(new_record.assertion_id)
+            task_ids = assertion.task_ids if assertion else set()
+            if len(task_ids) == 1:
+                task_id = next(iter(task_ids))
+                task = (getattr(context, "tasks", {}) or {}).get(task_id)
+                if isinstance(task, dict) and task.get("status") == "pending":
+                    change = ProposedChange(
+                        kind="transition_status",
+                        payload={"taskId": task_id, "status": "in_progress"},
+                    )
+                    validation_run = self.run(change, context)[1]
+        return new_record, old_record, validation_run

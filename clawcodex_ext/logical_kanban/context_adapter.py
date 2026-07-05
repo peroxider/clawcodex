@@ -17,6 +17,14 @@ if TYPE_CHECKING:
     from clawcodex_ext.tool_system.context import ToolContext
 
 
+def _get_tms(context: "ToolContext"):
+    # Local import avoids a circular import at module load time: runtime
+    # imports service, service imports context_adapter.
+    from clawcodex_ext.logical_kanban.runtime import get_logical_kanban
+    runtime = get_logical_kanban(context)
+    return getattr(runtime, "tms", None)
+
+
 def build_facts_snapshot(context: "ToolContext") -> FactsSnapshot:
     todos = tuple(dict(t) for t in getattr(context, "todos", []) or [])
     raw_tasks = {
@@ -194,9 +202,14 @@ def task_lkb_view(
     validation_run_id = lkb_metadata.get("validation_run_id")
     latest_denial = _latest_denial(context, task_id)
 
+    # F-135: surface tasks whose readiness depends on invalidated assumptions.
+    tms = _get_tms(context)
+    stale_for_task = _stale_assumptions_for_task(tms, task_id)
+    is_tms_stale = bool(stale_for_task)
+
     if blockers:
         derived_status = "blocked"
-    elif task_id in snapshot.cycle_task_ids or warnings:
+    elif task_id in snapshot.cycle_task_ids or warnings or is_tms_stale:
         derived_status = "needs_recheck"
     else:
         derived_status = "ready"
@@ -212,6 +225,12 @@ def task_lkb_view(
     elif warnings:
         blocked_reason = warnings[0].message
         next_actions = ["repair_dependency_metadata"]
+    elif is_tms_stale:
+        stale_ids = sorted(a.assumption_id for a in stale_for_task)
+        blocked_reason = (
+            f"Task depends on invalidated assumption(s): {', '.join(stale_ids)}."
+        )
+        next_actions = ["clarify_assumption"]
     else:
         next_actions = ["start_task"] if task["status"] == "pending" else []
 
@@ -226,6 +245,8 @@ def task_lkb_view(
         "last_validation_run_id": validation_run_id,
         "latestDenialReason": latest_denial,
     }
+    if is_tms_stale:
+        out["staleAssumptions"] = [a.to_dict() for a in stale_for_task]
     if include_proof_trace:
         out["proof_trace"] = []
     return out
@@ -238,6 +259,18 @@ def _latest_denial(context: "ToolContext", task_id: str) -> dict[str, Any] | Non
         return None
     denial = denials.get(task_id)
     return dict(denial) if isinstance(denial, dict) else None
+
+
+def _stale_assumptions_for_task(tms, task_id: str):
+    if tms is None:
+        return ()
+    if not tms.is_task_affected(task_id):
+        return ()
+    return tuple(
+        a
+        for a in tms.assumptions_for_task(task_id)
+        if a.status in ("invalid", "superseded")
+    )
 
 
 def _normalize_task(task_id: str, task: dict[str, Any]) -> dict[str, Any]:

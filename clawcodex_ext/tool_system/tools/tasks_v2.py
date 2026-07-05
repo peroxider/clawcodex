@@ -10,6 +10,8 @@ from ..protocol import ToolResult
 from clawcodex_ext.logical_kanban.context_adapter import task_lkb_view, task_list_view
 from clawcodex_ext.logical_kanban import prepare_task_change
 from clawcodex_ext.logical_kanban.flags import is_logical_kanban_enabled
+from clawcodex_ext.logical_kanban.fuzzy_types import Clarification
+from clawcodex_ext.logical_kanban.runtime import get_logical_kanban
 from src.utils.task_flags import is_todo_v2_enabled
 
 
@@ -20,6 +22,7 @@ _LKB_METADATA_FIELDS = {
     "assertions": list,
     "assumptions": list,
     "validation_run_id": str,
+    "assumption_clarifications": list,
 }
 
 
@@ -171,7 +174,16 @@ def _validate_lkb_metadata(metadata: dict[str, Any]) -> None:
         if value is None:
             continue
         if expected is list:
-            if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+            if key == "assumption_clarifications":
+                if not isinstance(value, list) or not all(
+                    isinstance(x, dict) and "assumption_id" in x and "action" in x
+                    for x in value
+                ):
+                    raise ToolInputError(
+                        "metadata.lkb.assumption_clarifications must be a list of objects "
+                        "with assumption_id and action"
+                    )
+            elif not isinstance(value, list) or not all(isinstance(x, str) for x in value):
                 raise ToolInputError(f"metadata.lkb.{key} must be an array of strings")
         elif not isinstance(value, expected):
             type_name = "boolean" if expected is bool else "string"
@@ -511,15 +523,82 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
         task["metadata"] = existing
         updated_fields.append("metadata")
 
+    out: dict[str, Any] = {
+        "success": True,
+        "taskId": task_id,
+        "updatedFields": updated_fields,
+    }
+
+    # F-135: process assumption clarifications after metadata merge.
+    _process_assumption_clarifications(task_id, task, context, out)
+
     if status_change is not None:
         _bind_lkb_validation(task, lkb)
 
-    out: dict[str, Any] = {"success": True, "taskId": task_id, "updatedFields": updated_fields}
     if status_change is not None:
         out["statusChange"] = status_change
     if lkb is not None:
         out["lkb"] = lkb
     return ToolResult(name="TaskUpdate", output=out)
+
+
+def _process_assumption_clarifications(
+    task_id: str,
+    task: dict[str, Any],
+    context: ToolContext,
+    out: dict[str, Any],
+) -> None:
+    """Apply any assumption clarifications stored in task metadata."""
+    if not is_logical_kanban_enabled():
+        return
+    metadata = task.get("metadata")
+    if not isinstance(metadata, dict):
+        return
+    lkb_metadata = metadata.get("lkb")
+    if not isinstance(lkb_metadata, dict):
+        return
+    clarifications = lkb_metadata.get("assumption_clarifications")
+    if not isinstance(clarifications, list) or not clarifications:
+        return
+
+    runtime = get_logical_kanban(context)
+    service = runtime.service
+    applied: list[dict[str, Any]] = []
+    for raw in clarifications:
+        if not isinstance(raw, dict):
+            continue
+        assumption_id = raw.get("assumption_id")
+        action = raw.get("action")
+        if not isinstance(assumption_id, str) or not isinstance(action, str):
+            continue
+        clarification = Clarification(
+            assumption_id=assumption_id,
+            action=action,
+            new_value=raw.get("new_value", ""),
+        )
+        new_record, old_record, validation_run = service.clarify_assumption(
+            context, assumption_id, clarification
+        )
+        applied.append(
+            {
+                "assumptionId": new_record.assumption_id,
+                "action": action,
+                "newValue": new_record.value,
+                "validationRunId": validation_run.validation_run_id if validation_run else None,
+            }
+        )
+        if validation_run is not None:
+            _bind_lkb_validation(task, {"validationRunId": validation_run.validation_run_id})
+
+    # Clear the clarifications so they are not reprocessed.  _bind_lkb_validation
+    # may have replaced the task's lkb dict, so refresh from the task before
+    # clearing.
+    task_metadata = task.get("metadata")
+    if isinstance(task_metadata, dict):
+        task_lkb = task_metadata.get("lkb")
+        if isinstance(task_lkb, dict):
+            task_lkb["assumption_clarifications"] = []
+    out["assumptionClarificationsApplied"] = applied
 
 
 TaskUpdateTool: Tool = build_tool(

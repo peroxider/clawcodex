@@ -64,6 +64,11 @@ from .predicate_extractor import (
 from .rule_engine import Layer1RuleEngine, RuleEngineResult, evaluate_rules
 from .runtime import LogicalKanbanRuntime, get_logical_kanban
 from .service import LogicalKanbanService
+from .truth_maintenance import (
+    AssumptionRecord,
+    AssertionRecord,
+    TruthMaintenanceSystem,
+)
 from .types import (
     CommitResult,
     FactsSnapshot,
@@ -86,6 +91,7 @@ __all__ = [
     'AssertionKind',
     'AssertionRole',
     'Assumption',
+    'AssumptionRecord',
     'AssumptionSource',
     'BUILT_IN_GLOSSARY',
     'BUILT_IN_PATTERN_LIBRARY',
@@ -120,6 +126,7 @@ __all__ = [
     'RuleEngineResult',
     'SCHEMA_VERSION',
     'Severity',
+    'TruthMaintenanceSystem',
     'ValidationIssue',
     'ValidationResultForWorld',
     'ValidationRun',
