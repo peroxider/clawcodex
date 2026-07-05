@@ -9,9 +9,14 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
+from .ambiguity_detector import AmbiguityDetector
+from .commit_gate_fuzzy import aggregate_world_results, commit_gate_fuzzy_check
 from .context_adapter import active_blockers, build_facts_snapshot, dependency_closure
+from .fuzzy_types import AggregationDecision, CommitDecision, MultiWorldResult
 from .ir_hash import canonical_hash
+from .multiworld_validator import MultiWorldValidator
 from .rule_engine import Layer1RuleEngine
+from .world_generator import WorldGenerator
 from .types import (
     CommitResult,
     FactsSnapshot,
@@ -25,6 +30,7 @@ from .types import (
 
 if TYPE_CHECKING:
     from clawcodex_ext.tool_system.context import ToolContext
+    from .ir import CanonicalAssertion
 
 
 _LAYER1_RULESET = {
@@ -92,6 +98,8 @@ class LogicalKanbanService:
                     },
                 ),
             )
+        if proposal.change.kind == "propose_assertion":
+            return self._validate_propose_assertion(proposal, context)
         if proposal.change.kind == "legacy_todo_replace_all":
             return self._validate_legacy_todo_replace_all(proposal, context)
         if proposal.change.kind == "transition_status":
@@ -137,6 +145,170 @@ class LogicalKanbanService:
         validation = self.validate(proposal, context)
         commit = self.commit(proposal, validation, context)
         return proposal, validation, commit
+
+    def evaluate_assertion(
+        self,
+        text: str,
+        base_assertion: "CanonicalAssertion",
+        *,
+        assertion_id: str | None = None,
+        context_facts: tuple[str, ...] = (),
+    ) -> MultiWorldResult:
+        """Detect ambiguities in ``text`` and generate possible worlds.
+
+        This is the entry point for the F-134 fuzzy input layer.  It runs the
+        symbol-based ambiguity detector, builds one CanonicalAssertion per
+        consistent interpretation, and returns a MultiWorldResult.
+        """
+        from .ir import CanonicalAssertion
+
+        assertion_id = assertion_id or _new_id("A-")
+        if not isinstance(base_assertion, CanonicalAssertion):
+            raise TypeError("base_assertion must be a CanonicalAssertion")
+        detector = AmbiguityDetector()
+        report = detector.detect(
+            text,
+            assertion_id=assertion_id,
+            context_facts=context_facts,
+        )
+        worlds = WorldGenerator().generate(report, base_assertion)
+        return MultiWorldResult(
+            assertion_id=assertion_id,
+            ambiguity_report=report,
+            worlds=tuple(worlds),
+        )
+
+    def validate_assertion_proposal(
+        self,
+        multi_world_result: MultiWorldResult,
+        context: "ToolContext",
+        *,
+        target_task_id: str | None = None,
+        target_status: str | None = None,
+        is_irreversible: bool = True,
+    ) -> tuple[AggregationDecision, CommitDecision]:
+        """Validate every world and decide whether the assertion may commit.
+
+        Returns the aggregation decision and the final fuzzy commit decision.
+        """
+        snapshot = self.snapshot(context)
+        validator = MultiWorldValidator(self.engine)
+        world_results = validator.validate(
+            list(multi_world_result.worlds),
+            snapshot,
+            target_task_id=target_task_id,
+            target_status=target_status,
+        )
+        aggregation = aggregate_world_results(world_results)
+        commit_decision = commit_gate_fuzzy_check(
+            list(multi_world_result.worlds),
+            world_results,
+            multi_world_result.ambiguity_report,
+            is_irreversible=is_irreversible,
+        )
+        return aggregation, commit_decision
+
+    def _validate_propose_assertion(
+        self,
+        proposal: Proposal,
+        context: "ToolContext",
+    ) -> ValidationRun:
+        """Validate a natural-language assertion proposal through the fuzzy layer."""
+        from .ir import CanonicalAssertion
+
+        payload = proposal.change.payload
+        text = payload.get("text") if isinstance(payload, dict) else ""
+        base_assertion = payload.get("baseAssertion")
+        target_task_id = payload.get("targetTaskId")
+        target_status = payload.get("targetStatus")
+
+        if not isinstance(text, str) or not text:
+            issue = ValidationIssue(
+                code="missing_assertion_text",
+                message="Assertion proposal must include a non-empty text field.",
+                rule="LKB-ASSERTION-001",
+            )
+            return self._denied(proposal, issues=(issue,))
+
+        if not isinstance(base_assertion, CanonicalAssertion):
+            issue = ValidationIssue(
+                code="missing_base_assertion",
+                message="Assertion proposal must include a base CanonicalAssertion.",
+                rule="LKB-ASSERTION-002",
+            )
+            return self._denied(proposal, issues=(issue,))
+
+        multi_world = self.evaluate_assertion(
+            text,
+            base_assertion,
+            assertion_id=payload.get("assertionId"),
+            context_facts=tuple(payload.get("contextFacts", [])),
+        )
+        aggregation, commit_decision = self.validate_assertion_proposal(
+            multi_world,
+            context,
+            target_task_id=target_task_id if isinstance(target_task_id, str) else None,
+            target_status=target_status if isinstance(target_status, str) else None,
+            is_irreversible=bool(payload.get("isIrreversible", True)),
+        )
+
+        if not commit_decision.commit:
+            issue = ValidationIssue(
+                code=commit_decision.reason,
+                message=commit_decision.human_message.get(
+                    "en", "Fuzzy commit gate denied the assertion."
+                ),
+                rule="LKB-FUZZY-COMMIT-001",
+                task_id=target_task_id if isinstance(target_task_id, str) else None,
+                repair_suggestions=tuple(
+                    RepairSuggestion(
+                        action="clarify_assumption",
+                        target=a.assumption_id,
+                        message=a.clarification_prompt,
+                    )
+                    for w in multi_world.worlds
+                    for a in w.assumptions
+                    if a.needs_clarification
+                ),
+            )
+            derived_facts = tuple(
+                f"Assumes({a.assertion_id}, {a.assumption_id}, {a.assumed_value})"
+                for w in multi_world.worlds
+                for a in w.assumptions
+            )
+            return self._denied(
+                proposal,
+                task_id=target_task_id if isinstance(target_task_id, str) else None,
+                issues=(issue,),
+                derived_facts=derived_facts,
+                proof_trace=(
+                    {
+                        "rule": "LKB-FUZZY-COMMIT-001",
+                        "premises": [a.assumption_id for w in multi_world.worlds for a in w.assumptions],
+                        "conclusion": f"FuzzyCommitDecision({commit_decision.reason})",
+                        "solverVersion": self.solver_version,
+                    },
+                ),
+            )
+
+        derived_facts = tuple(
+            f"Assumes({a.assertion_id}, {a.assumption_id}, {a.assumed_value})"
+            for w in multi_world.worlds
+            for a in w.assumptions
+        )
+        return self._accepted(
+            proposal,
+            task_id=target_task_id if isinstance(target_task_id, str) else None,
+            derived_facts=derived_facts,
+            proof_trace=(
+                {
+                    "rule": "LKB-FUZZY-COMMIT-ALLOW",
+                    "premises": [w.world_id for w in multi_world.worlds],
+                    "conclusion": f"Aggregation({aggregation.strategy})",
+                    "solverVersion": self.solver_version,
+                },
+            ),
+        )
 
     def _validate_legacy_todo_replace_all(
         self,

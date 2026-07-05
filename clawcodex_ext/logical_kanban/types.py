@@ -13,6 +13,7 @@ ChangeKind = Literal[
     "add_dependency",
     "remove_dependency",
     "legacy_todo_replace_all",
+    "propose_assertion",
 ]
 
 
