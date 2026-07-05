@@ -339,6 +339,7 @@ def _print_rule(r: dict[str, Any]) -> None:
     created = r.get('created_at', '')
     updated = r.get('updated_at', '')
     applied = r.get('last_applied', '')
+    conflict = r.get('conflict_with', [])
 
     print(f'Rule #{rid}')
     print(f'  Category:   {cat}')
@@ -349,6 +350,8 @@ def _print_rule(r: dict[str, Any]) -> None:
         print(f'  Body:')
         for line in body.splitlines():
             print(f'    {line}')
+    if conflict:
+        print(f'  Conflicts:  rule(s) #{", #".join(str(c) for c in conflict)}')
     if source:
         print(f'  Source:     {source}')
     print(f'  Created:    {created}')

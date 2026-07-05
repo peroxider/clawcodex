@@ -20,11 +20,27 @@ import re
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import yaml
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# ConflictJudge protocol -- lightweight LLM-based conflict detection
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class ConflictJudge(Protocol):
+    """Judge whether two rules are semantically conflicting."""
+
+    async def are_conflicting(self, rule_a: dict, rule_b: dict) -> bool:
+        ...
+
+
+_DEFAULT_CONFLICT_JUDGE: ConflictJudge | None = None
+
 
 # Regex to find the ## Extracted Rules section in an agent reply.
 _RULES_SECTION_RE = re.compile(
@@ -169,8 +185,8 @@ class RuleStore:
             p = Path(rules_path)
             if p.is_absolute():
                 return str(p)
-            return str(Path(workflow_path).parent / rules_path)
-        return str(Path(workflow_path).parent / RuleStore.DEFAULT_FILENAME)
+            return str((Path(workflow_path).parent / rules_path).resolve())
+        return str((Path(workflow_path).parent / RuleStore.DEFAULT_FILENAME).resolve())
 
     @staticmethod
     def load(path: str) -> dict:
@@ -315,8 +331,9 @@ class RuleEmbedder:
 class RuleEngine:
     """Rule extraction, deduplication, merge, quality scoring, pruning."""
 
-    def __init__(self, store: RuleStore | None = None) -> None:
+    def __init__(self, store: RuleStore | None = None, conflict_judge: ConflictJudge | None = None) -> None:
         self.store = store or RuleStore()
+        self._conflict_judge = conflict_judge
 
     # ------------------------------------------------------------------
     # Extraction
@@ -353,6 +370,7 @@ class RuleEngine:
                     'confidence': 'medium',
                     'created_at': now,
                     'updated_at': now,
+                    'conflict_with': [],
                     'last_applied': now,
                 }
             )
@@ -400,6 +418,7 @@ class RuleEngine:
                     'confidence': 'medium',
                     'created_at': now,
                     'updated_at': now,
+                    'conflict_with': [],
                     'last_applied': now,
                 }
             )
@@ -423,6 +442,7 @@ class RuleEngine:
         existing: list[dict],
         similarity_threshold: float = 0.85,
         enhancement_threshold: float = 0.70,
+        _conflict_pairs: set[tuple[int, int]] | None = None,
     ) -> list[dict]:
         """Phase 2 semantic dedup + merge.
 
@@ -444,16 +464,16 @@ class RuleEngine:
             if key:
                 existing_map[key] = r
 
-        remaining: list[dict] = []
+        remaining: list[tuple[int, dict]] = []
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
-        for c in candidates:
+        for oi, c in enumerate(candidates):
             key = c.get('summary', '').strip().lower()
             if key and key in existing_map:
                 existing_map[key]['support_count'] = existing_map[key].get('support_count', 1) + 1
                 existing_map[key]['updated_at'] = now
             else:
-                remaining.append(c)
+                remaining.append((oi, c))
 
         if not remaining:
             return merged
@@ -461,7 +481,7 @@ class RuleEngine:
         # --- semantic dedup + merge ----------------------------------------------------
         # Collect all texts for embedding
         existing_texts = [RuleEngine._rule_text(r) for r in merged]
-        candidate_texts = [RuleEngine._rule_text(c) for c in remaining]
+        candidate_texts = [RuleEngine._rule_text(c) for _, c in remaining]
         all_texts = existing_texts + candidate_texts
 
         embedder = RuleEmbedder()
@@ -469,8 +489,9 @@ class RuleEngine:
         existing_vecs = vectors[: len(merged)]
         candidate_vecs = vectors[len(merged) :]
 
+        conflict_pairs = _conflict_pairs or set()
         next_id = len(merged) + 1
-        for ci, c in enumerate(remaining):
+        for ci, (oi, c) in enumerate(remaining):
             c_vec = candidate_vecs[ci]
             best_sim = 0.0
             best_ei = -1
@@ -485,6 +506,15 @@ class RuleEngine:
                 target = merged[best_ei]
                 target['support_count'] = target.get('support_count', 1) + 1
                 target['updated_at'] = now
+            if best_ei >= 0 and (oi, best_ei) in conflict_pairs:
+                    # Confirmed conflict -> keep separate, mark with index refs
+                    c['_conflict_with_idx'] = best_ei
+                    merged[best_ei].setdefault('_conflict_with_idx', []).append(len(merged))
+                    c['updated_at'] = now
+                    merged.append(c)
+                    existing_vecs.append(c_vec)
+                    continue
+
             elif best_sim >= enhancement_threshold:
                 # Merge — combine candidate into the closest existing rule
                 target = merged[best_ei]
@@ -614,6 +644,14 @@ class RuleEngine:
         existing_data = RuleStore.load(workflow_rules_path)
         existing = existing_data.get('rules', [])
 
+        # Phase 2.5: LLM-based conflict detection before merge
+        conflict_pairs = await self._find_conflict_pairs(
+            candidates,
+            existing,
+            similarity_threshold=similarity_threshold,
+            enhancement_threshold=enhancement_threshold,
+        )
+
         merged = self._deduplicate_and_merge(
             candidates,
             existing,
@@ -624,6 +662,16 @@ class RuleEngine:
         # Assign/refresh sequential ids after dedup+merge
         for i, r in enumerate(merged, start=1):
             r['id'] = i
+
+
+        # Backfill conflict references from index-based to ID-based
+        for r in merged:
+            conflict_idx = r.pop('_conflict_with_idx', None)
+            if conflict_idx is not None:
+                if isinstance(conflict_idx, list):
+                    r['conflict_with'] = [merged[idx]['id'] for idx in conflict_idx]
+                else:
+                    r['conflict_with'] = [merged[conflict_idx]['id']]
 
         merged = self.prune(merged, max_rules=max_rules)
 
@@ -655,7 +703,52 @@ class RuleEngine:
         )
         return len(candidates)
 
-    @staticmethod
+
+    async def _find_conflict_pairs(
+        self,
+        candidates: list[dict],
+        existing: list[dict],
+        similarity_threshold: float = 0.85,
+        enhancement_threshold: float = 0.70,
+        prefilter_threshold: float = 0.40,
+    ) -> set[tuple[int, int]]:
+        """Find candidate-existing pairs that are semantically conflicting.
+
+        Uses TF-IDF as a lightweight pre-filter: only pairs whose
+        similarity is >= ``prefilter_threshold`` (default 0.40) and
+        < ``similarity_threshold`` (to exclude exact duplicates) are
+        forwarded to the LLM ``ConflictJudge``.
+        """
+        if not self._conflict_judge or not candidates or not existing:
+            return set()
+
+        texts = [RuleEngine._rule_text(c) for c in candidates] + [
+            RuleEngine._rule_text(e) for e in existing
+        ]
+        embedder = RuleEmbedder()
+        vectors = embedder.embed_many(texts)
+        c_vecs = vectors[: len(candidates)]
+        e_vecs = vectors[len(candidates) :]
+
+        pairs: set[tuple[int, int]] = set()
+        for ci, c in enumerate(candidates):
+            c_cat = c.get('category', '')
+            for ei, e in enumerate(existing):
+                if e.get('category', '') != c_cat:
+                    continue
+                sim = RuleEmbedder.cosine_similarity(c_vecs[ci], e_vecs[ei])
+                if prefilter_threshold <= sim < similarity_threshold:
+                    if await self._conflict_judge.are_conflicting(c, e):
+                        pairs.add((ci, ei))
+                        logger.info(
+                            'Conflict detected: candidate #%d "%s" <-> existing #%d "%s"',
+                            ci,
+                            c.get('summary', '')[:40],
+                            e.get('id', ei),
+                            e.get('summary', '')[:40],
+                        )
+        return pairs
+
     def get_rules_path(config: Any, workflow_path: str | None) -> str | None:
         rules_config = getattr(config, 'rules', None)
         if not rules_config or not getattr(rules_config, 'enabled', False):
