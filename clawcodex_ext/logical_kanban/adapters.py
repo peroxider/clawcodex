@@ -6,6 +6,7 @@ from typing import Any
 
 from clawcodex_ext.tool_system.protocol import ToolResult
 
+from .audit import get_audit_log
 from .flags import is_logical_kanban_enabled
 from .runtime import get_logical_kanban
 from .types import ProposedChange
@@ -42,8 +43,10 @@ def prepare_task_change(
     if isinstance(task_id, str) and task_id:
         runtime.latest_denials[task_id] = {
             "validationRunId": validation.validation_id,
+            "proposalId": proposal.proposal_id,
             "reason": commit.reason or {"code": "validation_denied"},
             "message": validation.issues[0].message if validation.issues else "Validation denied.",
+            "timestamp": validation.created_at,
         }
     return _denied_result("TaskUpdate", proposal, validation, commit), None
 

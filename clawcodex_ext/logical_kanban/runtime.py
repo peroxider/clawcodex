@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from .audit import AuditLog
     from .service import LogicalKanbanService
     from .truth_maintenance import TruthMaintenanceSystem
 
@@ -18,6 +19,7 @@ class LogicalKanbanRuntime:
     strict_acceptance_enabled: bool = False
     strict_logical_todo_enabled: bool = False
     latest_denials: dict[str, dict[str, Any]] = field(default_factory=dict)
+    audit_log: "AuditLog | None" = field(default=None)
 
 
 def _make_service() -> "LogicalKanbanService":

@@ -15,13 +15,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field as dc_field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from .fuzzy_types import Assumption, Clarification
 
 
 _AssumptionStatus = str  # active | invalid | superseded
 _AssertionStatus = str  # active | stale
+
+OnInvalidateCallback = Callable[[str, str, str], None]
+"""Callback invoked when an assumption is invalidated: (assumption_id, assertion_id, reason)."""
 
 
 def _utc_now() -> str:
@@ -97,9 +100,21 @@ class AssertionRecord:
 class TruthMaintenanceSystem:
     """In-session truth maintenance for LKB assumptions and derived facts."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        on_invalidate: OnInvalidateCallback | None = None,
+    ) -> None:
         self._assumptions: dict[str, AssumptionRecord] = {}
         self._assertions: dict[str, AssertionRecord] = {}
+        self._on_invalidate = on_invalidate
+
+    @property
+    def on_invalidate(self) -> OnInvalidateCallback | None:
+        return self._on_invalidate
+
+    @on_invalidate.setter
+    def on_invalidate(self, callback: OnInvalidateCallback | None) -> None:
+        self._on_invalidate = callback
 
     # ------------------------------------------------------------------
     # Registration
@@ -172,6 +187,9 @@ class TruthMaintenanceSystem:
         record.status = "invalid"
         record.invalidated_at = _utc_now()
         record.invalidated_reason = reason or "assumption invalidated"
+
+        if self._on_invalidate is not None:
+            self._on_invalidate(assumption_id, record.assertion_id, reason or "assumption invalidated")
 
         for assertion_id in list(record.dependent_assertions):
             self._mark_assertion_stale(

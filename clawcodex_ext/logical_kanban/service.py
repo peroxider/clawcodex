@@ -11,6 +11,15 @@ from typing import TYPE_CHECKING, Any
 
 from .ambiguity_detector import AmbiguityDetector
 from .commit_gate_fuzzy import aggregate_world_results, commit_gate_fuzzy_check
+from .audit import (
+    AuditLog,
+    event_for_assumption_invalidated,
+    event_for_commit,
+    event_for_proposal,
+    event_for_revalidation_requested,
+    event_for_validation_run,
+    get_audit_log,
+)
 from .context_adapter import active_blockers, build_facts_snapshot, dependency_closure
 from .fuzzy_types import AggregationDecision, CommitDecision, MultiWorldResult
 from .ir_hash import canonical_hash
@@ -57,6 +66,14 @@ def _new_id(prefix: str) -> str:
     return f"{prefix}{uuid.uuid4().hex[:12]}"
 
 
+def _session_id(context: "ToolContext") -> str | None:
+    return getattr(context, "session_id", None) or None
+
+
+def _audit_log(context: "ToolContext") -> AuditLog:
+    return get_audit_log(context)
+
+
 class LogicalKanbanService:
     """Internal propose/validate/commit service for task-state changes."""
 
@@ -70,17 +87,23 @@ class LogicalKanbanService:
 
     def propose(self, change: ProposedChange, context: "ToolContext") -> Proposal:
         snapshot = self.snapshot(context)
-        return Proposal(
+        proposal = Proposal(
             proposal_id=_new_id("P-"),
             change=change,
             snapshot_hash=snapshot.hash,
         )
+        _audit_log(context).append(event_for_proposal(proposal, session_id=_session_id(context)))
+        return proposal
 
     def validate(self, proposal: Proposal, context: "ToolContext") -> ValidationRun:
         start = time.perf_counter()
         run = self._do_validate(proposal, context)
         duration_ms = int((time.perf_counter() - start) * 1000)
-        return replace(run, duration_ms=max(duration_ms, 0))
+        run = replace(run, duration_ms=max(duration_ms, 0))
+        _audit_log(context).append(
+            event_for_validation_run(proposal, run, session_id=_session_id(context))
+        )
+        return run
 
     def _do_validate(self, proposal: Proposal, context: "ToolContext") -> ValidationRun:
         if proposal.change.kind == "create_task":
@@ -124,21 +147,58 @@ class LogicalKanbanService:
         context: "ToolContext",
     ) -> CommitResult:
         if validation.accepted:
-            return CommitResult(
+            commit = CommitResult(
                 committed=True,
                 proposal_id=proposal.proposal_id,
                 validation_run_id=validation.validation_run_id,
                 derived_facts=validation.derived_facts,
             )
-        return CommitResult(
-            committed=False,
-            proposal_id=proposal.proposal_id,
-            validation_run_id=validation.validation_run_id,
-            reason={
-                "code": validation.issues[0].code if validation.issues else "validation_denied",
-                "validation": validation.to_dict(),
-            },
+        else:
+            commit = CommitResult(
+                committed=False,
+                proposal_id=proposal.proposal_id,
+                validation_run_id=validation.validation_run_id,
+                reason={
+                    "code": validation.issues[0].code if validation.issues else "validation_denied",
+                    "validation": validation.to_dict(),
+                },
+            )
+        _audit_log(context).append(
+            event_for_commit(proposal, validation, commit, session_id=_session_id(context))
         )
+        if commit.committed:
+            self._persist_accepted_metadata(proposal, validation, context)
+        return commit
+
+    def _persist_accepted_metadata(
+        self,
+        proposal: Proposal,
+        validation: ValidationRun,
+        context: "ToolContext",
+    ) -> None:
+        """Store validation-run metadata in the affected task's metadata.lkb."""
+        task_id = validation.task_id
+        if task_id is None:
+            payload = proposal.change.payload
+            if isinstance(payload, dict):
+                task_id = payload.get("taskId") if isinstance(payload.get("taskId"), str) else None
+        if task_id is None:
+            return
+        tasks = getattr(context, "tasks", None)
+        if not isinstance(tasks, dict):
+            return
+        task = tasks.get(task_id)
+        if not isinstance(task, dict):
+            return
+        metadata = dict(task.get("metadata") or {})
+        lkb = dict(metadata.get("lkb") or {})
+        lkb["validation_run_id"] = validation.validation_run_id
+        lkb["proposal_id"] = proposal.proposal_id
+        lkb["last_decision"] = "committed"
+        lkb["last_result"] = validation.result
+        lkb["validated_at"] = validation.created_at
+        metadata["lkb"] = lkb
+        task["metadata"] = metadata
 
     def run(
         self,
@@ -926,7 +986,26 @@ class LogicalKanbanService:
         return isinstance(incoming_lkb, dict) and bool(incoming_lkb.get("acceptance_proof"))
 
     def _tms(self, context: "ToolContext") -> TruthMaintenanceSystem:
-        return get_logical_kanban(context).tms
+        tms = get_logical_kanban(context).tms
+        if tms.on_invalidate is None:
+            session_id = _session_id(context)
+            audit = _audit_log(context)
+
+            def _on_invalidate(assumption_id: str, assertion_id: str, reason: str) -> None:
+                assertion = tms.get_assertion(assertion_id)
+                task_ids = tuple(assertion.task_ids) if assertion else ()
+                audit.append(
+                    event_for_assumption_invalidated(
+                        assumption_id,
+                        assertion_id,
+                        reason=reason,
+                        task_ids=task_ids,
+                        session_id=session_id,
+                    )
+                )
+
+            tms.on_invalidate = _on_invalidate
+        return tms
 
     def _check_stale_assumption_for_task(
         self,
@@ -1035,6 +1114,15 @@ class LogicalKanbanService:
                 task_id = next(iter(task_ids))
                 task = (getattr(context, "tasks", {}) or {}).get(task_id)
                 if isinstance(task, dict) and task.get("status") == "pending":
+                    _audit_log(context).append(
+                        event_for_revalidation_requested(
+                            task_id,
+                            triggered_by=f"assumption_clarified:{assumption_id}",
+                            previous_validation_run_id=None,
+                            session_id=_session_id(context),
+                            actor=getattr(clarification, "actor", None) or "system",
+                        )
+                    )
                     change = ProposedChange(
                         kind="transition_status",
                         payload={"taskId": task_id, "status": "in_progress"},
