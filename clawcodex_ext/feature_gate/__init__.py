@@ -203,6 +203,14 @@ _DEFAULT_FLAGS: list[FeatureFlag] = [
         default=False,
         description="Enable proactive tick-driven autonomous mode (F-89)",
     ),
+    FeatureFlag(
+        name="logical_kanban",
+        default=False,
+        description=(
+            "Enable Logical Kanban propose/validate/commit gating for "
+            "todo and task status mutations (F-126)"
+        ),
+    ),
 ]
 
 

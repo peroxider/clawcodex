@@ -80,6 +80,7 @@ class ToolContext:
     lsp_client: Any | None = None
     todos: list[dict[str, Any]] = field(default_factory=list)
     tasks: dict[str, dict[str, Any]] = field(default_factory=dict)
+    logical_kanban: Any | None = None
     # Chapter-10 / Chunk B / WI-1.3 — typed runtime-task registry. Houses
     # ``LocalShellTaskState`` / ``LocalAgentTaskState`` / etc. as
     # ``TaskStateBase`` subclasses. Replaces the un-typed

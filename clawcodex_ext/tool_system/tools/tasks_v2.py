@@ -7,6 +7,7 @@ from ..build_tool import Tool, build_tool
 from ..context import ToolContext
 from ..errors import ToolInputError
 from ..protocol import ToolResult
+from clawcodex_ext.logical_kanban import maybe_commit_task_update
 from src.utils.task_flags import is_todo_v2_enabled
 
 
@@ -394,6 +395,9 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
             raise ToolInputError(
                 "status must be pending|in_progress|completed|deleted when provided"
             )
+        denied = maybe_commit_task_update(tool_input=tool_input, context=context)
+        if denied is not None:
+            return denied
         if status == "deleted":
             context.tasks.pop(task_id, None)
             # Cascade delete: remove this task's ID from all other tasks'
