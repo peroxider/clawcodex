@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any
 
 from jinja2 import Environment, StrictUndefined, TemplateError
 
+from clawcodex_ext.agent.agent_definitions import task_v2_guidelines
+
 from .rules_learner import RuleEngine
 from .tracker import PullRequestFeedback, PullRequestRef
 from .workflow_store import get_workflow_store
@@ -305,6 +307,17 @@ class PromptBuilder:
                     f'the rules are **reference examples**, not mandatory requirements.\n'
                     f'---'
                 )
+
+        # F-140: inject Task V2 / Logical Kanban guidance so orchestrator-launched
+        # agents use the same task-loop discipline as interactive sessions.
+        lkb_guidance = task_v2_guidelines()
+        if lkb_guidance:
+            rendered = (
+                f'{rendered}\n\n'
+                f'---\n'
+                f'{lkb_guidance}\n'
+                f'---'
+            )
 
         return rendered
 

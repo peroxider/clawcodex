@@ -96,6 +96,14 @@ from .metrics import (
     register_sink,
     reset_sinks,
 )
+from .orchestrator import (
+    acceptance_proof_required,
+    latest_denial_for_task,
+    read_audit_events_for_run,
+    task_list_summary,
+    task_ready_state,
+    validate_task_transition,
+)
 from .multiworld_validator import MultiWorldValidator
 from .predicate_extractor import (
     PredicateExtraction,
@@ -207,6 +215,7 @@ __all__ = [
     'WorldGenerator',
     'WorldValidationResult',
     'Z3SolverAdapter',
+    'acceptance_proof_required',
     'aggregate_world_results',
     'all_adapters',
     'and_',
@@ -232,6 +241,7 @@ __all__ = [
     'get_audit_log',
     'get_logical_kanban',
     'implies',
+    'latest_denial_for_task',
     'make_canonical',
     'maybe_commit_task_update',
     'maybe_commit_todo_write',
@@ -242,6 +252,7 @@ __all__ = [
     'prepare_task_change',
     'prepare_todo_write',
     'proof_trace_summary',
+    'read_audit_events_for_run',
     'record_adapter_result',
     'record_blocked_tasks',
     'record_commit',
@@ -257,5 +268,8 @@ __all__ = [
     'render_proof_trace',
     'reset_sinks',
     'run_external_solver',
+    'task_list_summary',
+    'task_ready_state',
     'validate_assertion',
+    'validate_task_transition',
 ]

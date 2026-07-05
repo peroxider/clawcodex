@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 
 from clawcodex_ext.permissions.types import PermissionMode
+from clawcodex_ext.logical_kanban.flags import is_logical_kanban_enabled
 
 
 AgentSource = Literal[
@@ -89,12 +90,34 @@ _SHARED_GUIDELINES = (
 )
 
 
+def task_v2_guidelines() -> str:
+    """Return Task V2 / Logical Kanban guidance for multi-step agents.
+
+    This guidance is surfaced only when the Logical Kanban feature flag is
+    enabled, so agents see the same TaskCreate/TaskUpdate semantics whether they
+    are running in an interactive session or were launched by the orchestrator.
+    """
+    if not is_logical_kanban_enabled():
+        return ""
+    return (
+        "\n\nTask tracking guidelines:\n"
+        "- For multi-step work, create structured tasks with TaskCreate and track them "
+        "with TaskList.\n"
+        "- Declare dependencies with TaskUpdate `addBlockedBy` before starting work.\n"
+        "- Only mark a task `in_progress` after TaskGet confirms its `blockedBy` list is empty.\n"
+        "- Only mark a task `completed` when the work is fully done and tests pass. "
+        "When strict acceptance is enabled, attach `metadata.lkb.acceptance_proof` first.\n"
+        "- If a task becomes blocked, use TaskList/TaskGet to read the blocked reason and "
+        "repair suggestions, then act on them."
+    )
+
+
 def _general_purpose_system_prompt(**_kwargs: Any) -> str:
     """Mirrors getGeneralPurposeSystemPrompt() from generalPurposeAgent.ts."""
     return (
         f"{_SHARED_PREFIX} When you complete the task, respond with a concise "
         "report covering what was done and any key findings \u2014 the caller will relay this to "
-        f"the user, so it only needs the essentials.\n\n{_SHARED_GUIDELINES}"
+        f"the user, so it only needs the essentials.\n\n{_SHARED_GUIDELINES}{task_v2_guidelines()}"
     )
 
 
