@@ -54,6 +54,7 @@ ChannelFactory = Callable[[FeishuAppSettings], Any]
 RetrySleep = Callable[[float], Awaitable[None]]
 
 _MARKDOWN_HINT_RE = re.compile(r'(```)|(^#{1,6}\s)|(\*\*.+\*\*)|(^[-*]\s)', re.MULTILINE)
+_FEISHU_SDK_WS_TASK_NAMES = frozenset({'_ping_loop', '_receive_message_loop', '_start_clear_cron'})
 
 _FEISHU_CAPABILITIES = ChannelCapabilitySet.of(
     ChannelCapability.OUTBOUND_TEXT,
@@ -259,8 +260,13 @@ class FeishuAppChannelAdapter(ChannelAdapter):
             self._connect_task = None
         channel = self._channel
         if channel is not None:
+            ws_client = _feishu_sdk_ws_client(channel)
+            ws_loop = _feishu_sdk_ws_loop(ws_client)
+            _prepare_feishu_sdk_ws_shutdown(ws_client)
+            await _cancel_feishu_sdk_ws_tasks(ws_loop)
             with contextlib.suppress(Exception):  # noqa: BLE001
                 await channel.disconnect()
+            await _drain_feishu_sdk_ws_loop(ws_loop)
             self._channel = None
         self._account_status = 'websocket:disconnected'
 
@@ -481,6 +487,147 @@ async def _await_handler(handler: InboundHandler, message: Any) -> None:
     result = handler(message)
     if inspect.isawaitable(result):
         await result
+
+
+def _feishu_sdk_ws_client(channel: Any) -> Any | None:
+    return getattr(channel, '_ws_client', None)
+
+
+def _feishu_sdk_ws_loop(ws_client: Any | None) -> asyncio.AbstractEventLoop | None:
+    if ws_client is None:
+        return None
+    loop = _feishu_sdk_cache_loop(ws_client)
+    if loop is not None:
+        return loop
+    with contextlib.suppress(Exception):  # noqa: BLE001
+        from lark_oapi.ws import client as ws_client_module  # noqa: PLC0415
+
+        module_loop = getattr(ws_client_module, 'loop', None)
+        if isinstance(module_loop, asyncio.AbstractEventLoop):
+            return module_loop
+    return None
+
+
+def _feishu_sdk_cache_loop(ws_client: Any | None) -> asyncio.AbstractEventLoop | None:
+    cron = _feishu_sdk_cache_cron(ws_client)
+    if isinstance(cron, asyncio.Task):
+        return cron.get_loop()
+    return None
+
+
+def _feishu_sdk_cache_cron(ws_client: Any | None) -> asyncio.Task | None:
+    cache = getattr(ws_client, '_cache', None)
+    cron = getattr(cache, '_cron', None)
+    if isinstance(cron, asyncio.Task):
+        return cron
+    return None
+
+
+def _prepare_feishu_sdk_ws_shutdown(ws_client: Any | None) -> None:
+    if ws_client is None:
+        return
+    with contextlib.suppress(Exception):  # noqa: BLE001
+        setattr(ws_client, '_auto_reconnect', False)
+    cron = _feishu_sdk_cache_cron(ws_client)
+    if cron is not None:
+        _cancel_task_on_own_loop(cron)
+
+
+async def _cancel_feishu_sdk_ws_tasks(loop: asyncio.AbstractEventLoop | None) -> None:
+    await _cancel_loop_tasks(loop, predicate=_is_feishu_sdk_ws_task)
+
+
+def _is_feishu_sdk_ws_task(task: asyncio.Task) -> bool:
+    coro = task.get_coro()
+    name = getattr(coro, '__name__', '')
+    return name in _FEISHU_SDK_WS_TASK_NAMES
+
+
+def _cancel_task_on_own_loop(task: asyncio.Task) -> None:
+    if task.done():
+        return
+    loop = task.get_loop()
+    if loop.is_closed():
+        return
+    if loop.is_running():
+        loop.call_soon_threadsafe(task.cancel)
+    else:
+        task.cancel()
+
+
+async def _drain_feishu_sdk_ws_loop(loop: asyncio.AbstractEventLoop | None) -> None:
+    await _cancel_loop_tasks(loop)
+
+
+async def _cancel_loop_tasks(
+    loop: asyncio.AbstractEventLoop | None,
+    *,
+    predicate: Callable[[asyncio.Task], bool] | None = None,
+) -> None:
+    if loop is None or loop.is_closed():
+        return
+    try:
+        running_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        running_loop = None
+    if loop is running_loop:
+        await _cancel_pending_loop_tasks(loop, predicate=predicate)
+        return
+    if loop.is_running():
+        future = asyncio.run_coroutine_threadsafe(
+            _cancel_pending_loop_tasks(loop, predicate=predicate), loop
+        )
+        with contextlib.suppress(Exception):  # noqa: BLE001
+            await asyncio.wait_for(asyncio.wrap_future(future), timeout=2.0)
+        return
+    await asyncio.to_thread(_drain_stopped_loop, loop, predicate)
+
+
+async def _cancel_pending_loop_tasks(
+    loop: asyncio.AbstractEventLoop,
+    *,
+    predicate: Callable[[asyncio.Task], bool] | None = None,
+) -> None:
+    current = asyncio.current_task(loop)
+    tasks = [
+        task
+        for task in asyncio.all_tasks(loop)
+        if task is not current and not task.done() and (predicate is None or predicate(task))
+    ]
+    if not tasks:
+        return
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    for task in tasks:
+        _consume_task_exception(task)
+
+
+def _drain_stopped_loop(
+    loop: asyncio.AbstractEventLoop,
+    predicate: Callable[[asyncio.Task], bool] | None = None,
+) -> None:
+    if loop.is_closed():
+        return
+    tasks = [
+        task
+        for task in asyncio.all_tasks(loop)
+        if not task.done() and (predicate is None or predicate(task))
+    ]
+    if not tasks:
+        return
+    for task in tasks:
+        task.cancel()
+    loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
+    for task in tasks:
+        _consume_task_exception(task)
+
+
+def _consume_task_exception(task: asyncio.Task) -> None:
+    if not task.done() or task.cancelled():
+        return
+    with contextlib.suppress(BaseException):
+        task.exception()
 
 
 def _build_outbound_payload(message: ChannelMessage) -> dict[str, Any]:

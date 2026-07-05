@@ -107,6 +107,38 @@ class _BlockingChannel(_FakeChannel):
         self.connected = True
 
 
+async def _sleep_forever() -> None:
+    await asyncio.sleep(3600)
+
+
+def _drain_test_loop(loop: asyncio.AbstractEventLoop, tasks: list[asyncio.Task]) -> None:
+    for task in tasks:
+        task.cancel()
+    loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
+
+
+class _SdkLikeWsClient:
+    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._auto_reconnect = True
+        self._cache = SimpleNamespace(_cron=loop.create_task(_sleep_forever()))
+        self.ping_task = loop.create_task(_sleep_forever())
+        self.receive_task = loop.create_task(_sleep_forever())
+
+    @property
+    def tasks(self) -> list[asyncio.Task]:
+        return [self._cache._cron, self.ping_task, self.receive_task]
+
+
+class _SdkLikeChannel(_FakeChannel):
+    def __init__(self, ws_client: _SdkLikeWsClient) -> None:
+        super().__init__()
+        self._ws_client = ws_client
+
+    async def disconnect(self) -> None:
+        await super().disconnect()
+        self._ws_client = None
+
+
 class _FakeFeishuSenderStore:
     def __init__(self) -> None:
         self.last_senders: dict[str, str] = {}
@@ -305,6 +337,25 @@ async def test_feishu_app_adapter_stop_disconnects_channel() -> None:
     assert channel.disconnected is True
     health = await adapter.health_check()
     assert health.account_status == 'websocket:disconnected'
+
+
+@pytest.mark.asyncio
+async def test_feishu_app_adapter_stop_drains_sdk_ws_loop_tasks() -> None:
+    sdk_loop = asyncio.new_event_loop()
+    ws_client = _SdkLikeWsClient(sdk_loop)
+    channel = _SdkLikeChannel(ws_client)
+    adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda s: channel)
+    await adapter.start()
+
+    try:
+        await adapter.stop()
+
+        assert channel.disconnected is True
+        assert ws_client._auto_reconnect is False
+        assert all(task.done() for task in ws_client.tasks)
+    finally:
+        await asyncio.to_thread(_drain_test_loop, sdk_loop, ws_client.tasks)
+        sdk_loop.close()
 
 
 @pytest.mark.asyncio
