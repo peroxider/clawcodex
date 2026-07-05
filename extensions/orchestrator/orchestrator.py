@@ -36,7 +36,7 @@ from .modes.pipeline import PipelineModeRunner
 from .modes.single import SingleModeRunner
 from .prompt_builder import PromptBuilder
 from .review_feedback import ReviewFeedbackService, ReviewFollowup
-from .rules_learner import RuleEngine, RuleStore
+from .rules_learner import ConflictJudge, RuleEngine, RuleStore
 from .status_dashboard import SessionStatus, StatusDashboard
 from clawcodex_ext.tool_system.context import ToolContext
 from clawcodex_ext.utils.git import get_default_branch, get_file_status, get_repo_root
@@ -3226,6 +3226,13 @@ class Orchestrator:
                 'Failed to update summary comment issue_id=%s: %s', session.issue.id, exc
             )
 
+    def _get_conflict_judge(self) -> ConflictJudge | None:
+        """Return a ConflictJudge for LLM-based rule conflict detection.
+
+        TODO: wire real LLM callable when available.
+        """
+        return None
+
     async def _apply_review_rules(self, session: AgentSession) -> None:
         """F-121: 从 review follow-up agent 回复中提取规则并持久化。
 
@@ -3238,7 +3245,7 @@ class Orchestrator:
             rules_path = RuleEngine.get_rules_path(self.workflow, self._workflow_path)
             if rules_path:
                 rc = self.workflow.rules
-                await RuleEngine().apply(
+                await RuleEngine(conflict_judge=self._get_conflict_judge()).apply(
                     session.output_text,
                     rules_path,
                     similarity_threshold=rc.similarity_threshold,
