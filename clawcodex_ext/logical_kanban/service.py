@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from .context_adapter import active_blockers, build_facts_snapshot, dependency_closure
 from .types import (
     CommitResult,
     FactsSnapshot,
@@ -27,16 +26,7 @@ class LogicalKanbanService:
     solver_version = "lkb-foundation-sync-v1"
 
     def snapshot(self, context: "ToolContext") -> FactsSnapshot:
-        todos = tuple(dict(t) for t in getattr(context, "todos", []) or [])
-        tasks = {
-            task_id: dict(task)
-            for task_id, task in (getattr(context, "tasks", {}) or {}).items()
-        }
-        payload = {"todos": todos, "tasks": tasks}
-        digest = hashlib.sha256(
-            json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
-        ).hexdigest()
-        return FactsSnapshot(todos=todos, tasks=tasks, hash=f"sha256:{digest}")
+        return build_facts_snapshot(context)
 
     def propose(self, change: ProposedChange, context: "ToolContext") -> Proposal:
         snapshot = self.snapshot(context)
@@ -98,7 +88,47 @@ class LogicalKanbanService:
         if not isinstance(task, dict):
             return self._accepted(proposal)
 
-        blockers = self._active_blockers(task, context)
+        snapshot = self.snapshot(context)
+        cyclic_dependencies = sorted(
+            {task_id, *dependency_closure(snapshot, task_id)} & snapshot.cycle_task_ids
+        )
+        if cyclic_dependencies:
+            issue = ValidationIssue(
+                code="cyclic_dependency_blocks_readiness",
+                message=(
+                    f"Task {task_id} cannot enter in_progress because its readiness "
+                    f"depends on a cyclic dependency chain: {', '.join(cyclic_dependencies)}."
+                ),
+                rule="LKB-CYCLE-001",
+                task_id=task_id,
+                blockers=tuple(cyclic_dependencies),
+                repair_suggestions=(
+                    RepairSuggestion(
+                        action="remove_dependency_cycle",
+                        target=task_id,
+                        message="Remove or rewrite one dependency edge in the cycle.",
+                    ),
+                ),
+            )
+            return ValidationRun(
+                validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
+                proposal_id=proposal.proposal_id,
+                status="denied",
+                issues=(issue, *snapshot.warnings),
+                snapshot_hash=proposal.snapshot_hash,
+                proof_trace=(
+                    {
+                        "rule": "LKB-CYCLE-001",
+                        "premises": [
+                            f"Cycle({cycle_task_id})" for cycle_task_id in cyclic_dependencies
+                        ],
+                        "conclusion": f"NotReady({task_id})",
+                        "solverVersion": self.solver_version,
+                    },
+                ),
+            )
+
+        blockers = list(active_blockers(snapshot, task_id))
         if not blockers:
             return self._accepted(
                 proposal,
@@ -134,7 +164,7 @@ class LogicalKanbanService:
             validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
             proposal_id=proposal.proposal_id,
             status="denied",
-            issues=(issue,),
+            issues=(issue, *snapshot.warnings),
             snapshot_hash=proposal.snapshot_hash,
             proof_trace=tuple(
                 {
@@ -169,13 +199,3 @@ class LogicalKanbanService:
                 },
             ),
         )
-
-    @staticmethod
-    def _active_blockers(task: dict[str, Any], context: "ToolContext") -> list[str]:
-        tasks = getattr(context, "tasks", {}) or {}
-        active: list[str] = []
-        for blocker_id in task.get("blockedBy") or []:
-            blocker = tasks.get(blocker_id)
-            if not isinstance(blocker, dict) or blocker.get("status") != "completed":
-                active.append(str(blocker_id))
-        return active

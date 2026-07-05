@@ -12,6 +12,15 @@ ChangeKind = Literal["todo_write", "task_update"]
 class FactsSnapshot:
     todos: tuple[dict[str, Any], ...] = ()
     tasks: dict[str, dict[str, Any]] = field(default_factory=dict)
+    normalized_tasks: dict[str, dict[str, Any]] = field(default_factory=dict)
+    facts: tuple[str, ...] = ()
+    completed_ids: frozenset[str] = field(default_factory=frozenset)
+    dependency_graph: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    blocked_by: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    ready_ids: frozenset[str] = field(default_factory=frozenset)
+    blocked_ids: frozenset[str] = field(default_factory=frozenset)
+    cycle_task_ids: frozenset[str] = field(default_factory=frozenset)
+    warnings: tuple["ValidationIssue", ...] = ()
     hash: str = ""
 
 
@@ -49,6 +58,7 @@ class ValidationIssue:
     code: str
     message: str
     rule: str
+    severity: Literal["warning", "error"] = "error"
     task_id: str | None = None
     blockers: tuple[str, ...] = ()
     repair_suggestions: tuple[RepairSuggestion, ...] = ()
@@ -58,6 +68,7 @@ class ValidationIssue:
             "code": self.code,
             "message": self.message,
             "rule": self.rule,
+            "severity": self.severity,
             **({"taskId": self.task_id} if self.task_id else {}),
             **({"blockers": list(self.blockers)} if self.blockers else {}),
             "repairSuggestions": [s.to_dict() for s in self.repair_suggestions],

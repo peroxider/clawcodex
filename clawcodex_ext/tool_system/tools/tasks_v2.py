@@ -7,6 +7,7 @@ from ..build_tool import Tool, build_tool
 from ..context import ToolContext
 from ..errors import ToolInputError
 from ..protocol import ToolResult
+from clawcodex_ext.logical_kanban.context_adapter import task_list_view
 from clawcodex_ext.logical_kanban import maybe_commit_task_update
 from src.utils.task_flags import is_todo_v2_enabled
 
@@ -292,38 +293,7 @@ Returns full task details:
 
 
 def _task_list_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
-    # FOLLOW-UP (chapter-10 / Chunk B / critic concern C2): this filter
-    # was scoped out of WI-1.5 (which only migrated ``_task_output_call``).
-    # Post-WI-1.5 ``context.tasks`` no longer hosts runtime-agent entries
-    # (those moved to ``context.runtime_tasks``), so
-    # ``metadata._internal=True`` should never appear here in steady
-    # state. Keep the filter as defense-in-depth against legacy
-    # transcript replays that might introduce such an entry; **drop in a
-    # Phase-2-or-later one-line cleanup** once we have confidence no
-    # such transcripts remain in CI fixtures.
-    all_tasks = [
-        t for t in context.tasks.values() if not (t.get("metadata") or {}).get("_internal")
-    ]
-
-    # Build set of completed task IDs for resolved blocker filtering
-    completed_ids = {t["id"] for t in all_tasks if t.get("status") == "completed"}
-
-    tasks = []
-    for t in all_tasks:
-        # Filter out resolved (completed) blockers from blockedBy
-        raw_blocked_by = list(t.get("blockedBy") or [])
-        active_blocked_by = [bid for bid in raw_blocked_by if bid not in completed_ids]
-        tasks.append(
-            {
-                "id": t["id"],
-                "subject": t["subject"],
-                "status": t["status"],
-                **({"owner": t["owner"]} if t.get("owner") else {}),
-                "blockedBy": active_blocked_by,
-            }
-        )
-    tasks.sort(key=lambda x: x["id"])
-    return ToolResult(name="TaskList", output={"tasks": tasks})
+    return ToolResult(name="TaskList", output={"tasks": task_list_view(context)})
 
 
 TaskListTool: Tool = build_tool(
