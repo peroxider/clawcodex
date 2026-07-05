@@ -15,8 +15,8 @@ from .ir import (
     AssertionRole,
     CanonicalAssertion,
     IROperation,
-    IRPredicate,
     IRNode,
+    IRPredicate,
     IRVariable,
     Quantifier,
     and_,
@@ -33,6 +33,7 @@ from .predicate_extractor import (
     extract_predicates,
     validate_assertion,
 )
+from .rule_engine import Layer1RuleEngine, RuleEngineResult, evaluate_rules
 from .runtime import LogicalKanbanRuntime, get_logical_kanban
 from .service import LogicalKanbanService
 from .types import (
@@ -58,6 +59,7 @@ __all__ = [
     'IRNode',
     'IRPredicate',
     'IRVariable',
+    'Layer1RuleEngine',
     'LogicalKanbanRuntime',
     'LogicalKanbanService',
     'PredicateExtraction',
@@ -65,6 +67,7 @@ __all__ = [
     'ProposedChange',
     'Quantifier',
     'RepairSuggestion',
+    'RuleEngineResult',
     'SCHEMA_VERSION',
     'ValidationIssue',
     'ValidationRun',
@@ -72,6 +75,7 @@ __all__ = [
     'assertion_hash',
     'canonical_hash',
     'canonical_json',
+    'evaluate_rules',
     'extract_predicates',
     'get_logical_kanban',
     'implies',

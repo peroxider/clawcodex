@@ -82,7 +82,7 @@ def test_feature_on_allows_unblocked_task_status_write(
 
     assert result.is_error is False
     assert result.output["success"] is True
-    assert result.output["lkb"]["validationRunId"].startswith("lkb-val-")
+    assert result.output["lkb"]["validationRunId"].startswith("V-")
     assert result.output["lkb"]["decision"] == "committed"
     assert ctx.tasks[task_id]["status"] == "in_progress"
     assert (
@@ -101,13 +101,13 @@ def test_feature_on_task_create_emits_structural_facts(
     result = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx)
     task_id = result.output["task"]["id"]
 
-    assert result.output["lkb"]["validationRunId"].startswith("lkb-val-")
+    assert result.output["lkb"]["validationRunId"].startswith("V-")
     assert result.output["lkb"]["createdFacts"] == [
         f"Task({task_id})",
         f"Pending({task_id})",
         f"Status({task_id}, pending)",
     ]
-    assert ctx.tasks[task_id]["metadata"]["lkb"]["validation_run_id"].startswith("lkb-val-")
+    assert ctx.tasks[task_id]["metadata"]["lkb"]["validation_run_id"].startswith("V-")
 
 
 def test_feature_on_rejects_invalid_lkb_metadata_shape(
@@ -155,7 +155,7 @@ def test_feature_on_denied_mixed_update_does_not_mutate_any_task_fields(
 
     assert result.is_error is True
     assert result.output["lkb"]["decision"] == "denied"
-    assert result.output["lkb"]["validationRunId"].startswith("lkb-val-")
+    assert result.output["lkb"]["validationRunId"].startswith("V-")
     assert ctx.tasks[blocked] == before
 
 
@@ -261,7 +261,7 @@ def test_feature_on_strict_acceptance_allows_completion_with_proof(
     )
 
     assert result.is_error is False
-    assert result.output["lkb"]["validationRunId"].startswith("lkb-val-")
+    assert result.output["lkb"]["validationRunId"].startswith("V-")
     assert "HasAcceptanceProof" in " ".join(result.output["lkb"]["derivedFacts"])
     assert ctx.tasks[task_id]["status"] == "completed"
 
@@ -315,7 +315,7 @@ def test_feature_on_delete_cascades_only_after_validation(
 
     deleted = TaskUpdateTool.call({"taskId": blocker, "status": "deleted"}, ctx)
     assert deleted.output["success"] is True
-    assert deleted.output["lkb"]["validationRunId"].startswith("lkb-val-")
+    assert deleted.output["lkb"]["validationRunId"].startswith("V-")
     assert blocker not in ctx.tasks
     assert blocker not in ctx.tasks[blocked]["blockedBy"]
 
@@ -340,7 +340,7 @@ def test_feature_on_todo_write_success_includes_lkb_metadata(
         "in_progress": 0,
         "completed": 0,
     }
-    assert result.output["lkb"]["validationRunId"].startswith("lkb-val-")
+    assert result.output["lkb"]["validationRunId"].startswith("V-")
     assert ctx.todos == [{"content": "x", "status": "pending", "activeForm": "Doing x"}]
 
 

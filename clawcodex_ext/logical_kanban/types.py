@@ -83,45 +83,113 @@ class ValidationIssue:
         }
 
 
+ValidationResult = Literal[
+    "pass",
+    "fail",
+    "unknown",
+    "timeout",
+    "error",
+    "stale",
+]
+
+
 @dataclass(frozen=True)
 class ValidationRun:
-    validation_id: str
+    """Immutable record of a single LKB validation run (F-133).
+
+    The field names follow the canonical ValidationRun contract so that the
+    structure can be returned to the model, displayed in the TUI, and persisted
+    for audit.  The class is frozen; once created it cannot be mutated.
+    """
+
+    # Canonical F-133 identity
+    validation_run_id: str
     proposal_id: str
-    status: Literal["accepted", "denied"]
-    issues: tuple[ValidationIssue, ...] = ()
-    proof_trace: tuple[dict[str, Any], ...] = ()
+    task_id: str | None = None
+
+    # Reproducibility hashes
+    input_facts_hash: str = ""
+    ruleset_hash: str = ""
+    snapshot_hash: str = ""  # legacy alias kept for internal consumers
+
+    # Engine metadata
+    engine: str = "layer1-python"
+    engine_version: str = ""
+
+    # Result
+    result: ValidationResult = "pass"
+    duration_ms: int = 0
+
+    # Evidence
     derived_facts: tuple[str, ...] = ()
-    snapshot_hash: str = ""
+    proof_trace: tuple[dict[str, Any], ...] = ()
+    counterexample: dict[str, Any] | None = None
+    repair_suggestions: tuple[RepairSuggestion, ...] = ()
+
+    # Human-readable diagnostics (kept for internal adapter use)
+    issues: tuple[ValidationIssue, ...] = ()
+
+    # Audit
+    created_at: str = ""  # ISO-8601 UTC
+    requested_by: str = "system"
+
+    @property
+    def validation_id(self) -> str:
+        """Backwards-compatible alias for :attr:`validation_run_id`."""
+        return self.validation_run_id
+
+    @property
+    def status(self) -> Literal["accepted", "denied"]:
+        """Backwards-compatible status derived from :attr:`result`."""
+        return "accepted" if self.result == "pass" else "denied"
 
     @property
     def accepted(self) -> bool:
-        return self.status == "accepted"
+        return self.result == "pass"
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "validationId": self.validation_id,
+        out: dict[str, Any] = {
+            "validationRunId": self.validation_run_id,
             "proposalId": self.proposal_id,
-            "status": self.status,
-            "issues": [issue.to_dict() for issue in self.issues],
-            "proofTrace": list(self.proof_trace),
-            "derivedFacts": list(self.derived_facts),
+            "taskId": self.task_id,
+            "inputFactsHash": self.input_facts_hash,
+            "rulesetHash": self.ruleset_hash,
             "snapshotHash": self.snapshot_hash,
+            "engine": self.engine,
+            "engineVersion": self.engine_version,
+            "result": self.result,
+            "status": self.status,
+            "durationMs": self.duration_ms,
+            "derivedFacts": list(self.derived_facts),
+            "proofTrace": list(self.proof_trace),
+            "counterexample": self.counterexample,
+            "repairSuggestions": [s.to_dict() for s in self.repair_suggestions],
+            "createdAt": self.created_at,
+            "requestedBy": self.requested_by,
         }
+        if self.issues:
+            out["issues"] = [issue.to_dict() for issue in self.issues]
+        return out
 
 
 @dataclass(frozen=True)
 class CommitResult:
     committed: bool
     proposal_id: str
-    validation_id: str
+    validation_run_id: str
     reason: dict[str, Any] | None = None
     derived_facts: tuple[str, ...] = ()
+
+    @property
+    def validation_id(self) -> str:
+        """Backwards-compatible alias for :attr:`validation_run_id`."""
+        return self.validation_run_id
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "committed": self.committed,
             "proposalId": self.proposal_id,
-            "validationId": self.validation_id,
+            "validationRunId": self.validation_run_id,
             "derivedFacts": list(self.derived_facts),
             **({"reason": self.reason} if self.reason is not None else {}),
         }

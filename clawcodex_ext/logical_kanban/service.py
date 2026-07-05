@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import time
 import uuid
+from dataclasses import replace
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 from .context_adapter import active_blockers, build_facts_snapshot, dependency_closure
+from .ir_hash import canonical_hash
+from .rule_engine import Layer1RuleEngine
 from .types import (
     CommitResult,
     FactsSnapshot,
@@ -14,6 +19,7 @@ from .types import (
     ProposedChange,
     RepairSuggestion,
     ValidationIssue,
+    ValidationResult,
     ValidationRun,
 )
 
@@ -21,10 +27,33 @@ if TYPE_CHECKING:
     from clawcodex_ext.tool_system.context import ToolContext
 
 
+_LAYER1_RULESET = {
+    "name": "lkb-layer1-mvp",
+    "version": "1.0.0",
+    "engine": "layer1-python",
+    "rules": [
+        {"id": "R-001", "description": "Blocked(T) when active prerequisites remain"},
+        {"id": "R-002", "description": "Blocked task cannot enter in_progress"},
+        {"id": "R-003", "description": "Ready(T) when pending and not blocked"},
+        {"id": "R-004", "description": "CanMoveTo(T, in_progress) when Ready(T)"},
+        {"id": "R-005", "description": "Done requires acceptance proof in strict mode"},
+        {"id": "R-006", "description": "Cyclic dependency invalidates readiness"},
+    ],
+}
+_RULESET_HASH = canonical_hash(_LAYER1_RULESET)
+
+
+def _new_id(prefix: str) -> str:
+    return f"{prefix}{uuid.uuid4().hex[:12]}"
+
+
 class LogicalKanbanService:
     """Internal propose/validate/commit service for task-state changes."""
 
     solver_version = "lkb-foundation-sync-v1"
+
+    def __init__(self) -> None:
+        self.engine = Layer1RuleEngine()
 
     def snapshot(self, context: "ToolContext") -> FactsSnapshot:
         return build_facts_snapshot(context)
@@ -32,19 +61,27 @@ class LogicalKanbanService:
     def propose(self, change: ProposedChange, context: "ToolContext") -> Proposal:
         snapshot = self.snapshot(context)
         return Proposal(
-            proposal_id=f"lkb-prop-{uuid.uuid4().hex[:12]}",
+            proposal_id=_new_id("P-"),
             change=change,
             snapshot_hash=snapshot.hash,
         )
 
     def validate(self, proposal: Proposal, context: "ToolContext") -> ValidationRun:
+        start = time.perf_counter()
+        run = self._do_validate(proposal, context)
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        return replace(run, duration_ms=max(duration_ms, 0))
+
+    def _do_validate(self, proposal: Proposal, context: "ToolContext") -> ValidationRun:
         if proposal.change.kind == "create_task":
+            task_id = proposal.change.payload.get("taskId")
             return self._accepted(
                 proposal,
+                task_id=task_id if isinstance(task_id, str) else None,
                 derived_facts=(
-                    f"Task({proposal.change.payload.get('taskId')})",
-                    f"Pending({proposal.change.payload.get('taskId')})",
-                    f"Status({proposal.change.payload.get('taskId')}, pending)",
+                    f"Task({task_id})",
+                    f"Pending({task_id})",
+                    f"Status({task_id}, pending)",
                 ),
                 proof_trace=(
                     {
@@ -78,13 +115,13 @@ class LogicalKanbanService:
             return CommitResult(
                 committed=True,
                 proposal_id=proposal.proposal_id,
-                validation_id=validation.validation_id,
+                validation_run_id=validation.validation_run_id,
                 derived_facts=validation.derived_facts,
             )
         return CommitResult(
             committed=False,
             proposal_id=proposal.proposal_id,
-            validation_id=validation.validation_id,
+            validation_run_id=validation.validation_run_id,
             reason={
                 "code": validation.issues[0].code if validation.issues else "validation_denied",
                 "validation": validation.to_dict(),
@@ -113,12 +150,9 @@ class LogicalKanbanService:
                 message="TodoWrite payload must contain a todos array.",
                 rule="LKB-TODOWRITE-COMPAT-001",
             )
-            return ValidationRun(
-                validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
-                proposal_id=proposal.proposal_id,
-                status="denied",
+            return self._denied(
+                proposal,
                 issues=(issue,),
-                snapshot_hash=proposal.snapshot_hash,
                 proof_trace=(
                     {
                         "rule": "LKB-TODOWRITE-COMPAT-001",
@@ -154,12 +188,9 @@ class LogicalKanbanService:
                 rule="LKB-TODOWRITE-COMPAT-001",
                 blockers=tuple(f"todo:{i}" for i in malformed_indexes),
             )
-            return ValidationRun(
-                validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
-                proposal_id=proposal.proposal_id,
-                status="denied",
+            return self._denied(
+                proposal,
                 issues=(issue,),
-                snapshot_hash=proposal.snapshot_hash,
                 proof_trace=(
                     {
                         "rule": "LKB-TODOWRITE-COMPAT-001",
@@ -202,12 +233,9 @@ class LogicalKanbanService:
                     ),
                 ),
             )
-            return ValidationRun(
-                validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
-                proposal_id=proposal.proposal_id,
-                status="denied",
+            return self._denied(
+                proposal,
                 issues=(issue,),
-                snapshot_hash=proposal.snapshot_hash,
                 derived_facts=tuple(derived_facts),
                 proof_trace=(
                     {
@@ -258,12 +286,10 @@ class LogicalKanbanService:
                 rule="LKB-TRANSITION-001",
                 task_id=task_id,
             )
-            return ValidationRun(
-                validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
-                proposal_id=proposal.proposal_id,
-                status="denied",
+            return self._denied(
+                proposal,
+                task_id=task_id,
                 issues=(issue,),
-                snapshot_hash=proposal.snapshot_hash,
                 proof_trace=(
                     {
                         "rule": "LKB-TRANSITION-001",
@@ -279,6 +305,7 @@ class LogicalKanbanService:
         if current_status == target_status:
             return self._accepted(
                 proposal,
+                task_id=task_id,
                 derived_facts=(f"NoStatusChange({task_id})",),
                 proof_trace=(
                     {
@@ -293,6 +320,7 @@ class LogicalKanbanService:
         if target_status == "pending" and current_status == "completed":
             return self._accepted(
                 proposal,
+                task_id=task_id,
                 derived_facts=(f"Reopened({task_id})",),
                 proof_trace=(
                     {
@@ -304,17 +332,19 @@ class LogicalKanbanService:
                 ),
             )
 
-        if target_status == "completed" and self._strict_acceptance_enabled(
-            context, task, payload
-        ):
-            if not self._has_acceptance_proof(task, payload):
+        if target_status == "completed":
+            engine_result = self.engine.evaluate(
+                snapshot,
+                target_task_id=task_id,
+                target_status="completed",
+                strict_acceptance=self._strict_acceptance_enabled(context, task, payload),
+                acceptance_proof_present=self._has_acceptance_proof(task, payload),
+            )
+            if engine_result.result == "fail":
                 issue = ValidationIssue(
                     code="completed_requires_acceptance_proof",
-                    message=(
-                        f"Task {task_id} cannot enter completed because strict "
-                        "acceptance is enabled and no acceptance proof is present."
-                    ),
-                    rule="LKB-ACCEPTANCE-001",
+                    message=engine_result.message,
+                    rule=engine_result.violated_rule or "R-005",
                     task_id=task_id,
                     repair_suggestions=(
                         RepairSuggestion(
@@ -324,150 +354,79 @@ class LogicalKanbanService:
                         ),
                     ),
                 )
-                return ValidationRun(
-                    validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
-                    proposal_id=proposal.proposal_id,
-                    status="denied",
+                return self._denied(
+                    proposal,
+                    task_id=task_id,
                     issues=(issue, *snapshot.warnings),
-                    snapshot_hash=proposal.snapshot_hash,
-                    proof_trace=(
-                        {
-                            "rule": "LKB-ACCEPTANCE-001",
-                            "premises": [
-                                f"StrictAcceptance({task_id})",
-                                f"Not(HasAcceptanceProof({task_id}))",
-                            ],
-                            "conclusion": f"Not(CanMoveTo({task_id}, completed))",
-                            "solverVersion": self.solver_version,
-                        },
-                    ),
+                    snapshot=snapshot,
+                    derived_facts=engine_result.derived_facts,
+                    proof_trace=engine_result.proof_trace,
                 )
             return self._accepted(
                 proposal,
-                derived_facts=(
-                    f"HasAcceptanceProof({task_id})",
-                    f"CanMoveTo({task_id}, completed)",
-                ),
-                proof_trace=(
-                    {
-                        "rule": "LKB-ACCEPTANCE-001",
-                        "premises": [
-                            f"StrictAcceptance({task_id})",
-                            f"HasAcceptanceProof({task_id})",
-                        ],
-                        "conclusion": f"CanMoveTo({task_id}, completed)",
-                        "solverVersion": self.solver_version,
-                    },
-                ),
-            )
-
-        if target_status != "in_progress":
-            return self._accepted(
-                proposal,
-                derived_facts=(f"CanMoveTo({task_id}, {target_status})",),
-            )
-
-        cyclic_dependencies = sorted(
-            {task_id, *dependency_closure(snapshot, task_id)} & snapshot.cycle_task_ids
-        )
-        if cyclic_dependencies:
-            issue = ValidationIssue(
-                code="cyclic_dependency_blocks_readiness",
-                message=(
-                    f"Task {task_id} cannot enter in_progress because its readiness "
-                    f"depends on a cyclic dependency chain: {', '.join(cyclic_dependencies)}."
-                ),
-                rule="LKB-CYCLE-001",
                 task_id=task_id,
-                blockers=tuple(cyclic_dependencies),
-                repair_suggestions=(
-                    RepairSuggestion(
-                        action="remove_dependency_cycle",
-                        target=task_id,
-                        message="Remove or rewrite one dependency edge in the cycle.",
-                    ),
-                ),
-            )
-            return ValidationRun(
-                validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
-                proposal_id=proposal.proposal_id,
-                status="denied",
-                issues=(issue, *snapshot.warnings),
-                snapshot_hash=proposal.snapshot_hash,
-                derived_facts=(
-                    f"Cycle({task_id})",
-                    f"NotReady({task_id})",
-                    f"Not(CanMoveTo({task_id}, in_progress))",
-                ),
-                proof_trace=(
-                    {
-                        "rule": "LKB-CYCLE-001",
-                        "premises": [
-                            f"Cycle({cycle_task_id})" for cycle_task_id in cyclic_dependencies
-                        ],
-                        "conclusion": f"NotReady({task_id})",
-                        "solverVersion": self.solver_version,
-                    },
-                ),
+                derived_facts=engine_result.derived_facts,
+                proof_trace=engine_result.proof_trace,
             )
 
-        blockers = list(active_blockers(snapshot, task_id))
-        if not blockers:
+        if target_status == "in_progress":
+            engine_result = self.engine.evaluate(
+                snapshot,
+                target_task_id=task_id,
+                target_status="in_progress",
+            )
+            if engine_result.result == "fail":
+                if engine_result.violated_rule == "R-006":
+                    issue = ValidationIssue(
+                        code="cyclic_dependency_blocks_readiness",
+                        message=engine_result.message,
+                        rule=engine_result.violated_rule,
+                        task_id=task_id,
+                        blockers=engine_result.cycle_tasks,
+                        repair_suggestions=(
+                            RepairSuggestion(
+                                action="remove_dependency_cycle",
+                                target=task_id,
+                                message="Remove or rewrite one dependency edge in the cycle.",
+                            ),
+                        ),
+                    )
+                else:
+                    blockers = list(active_blockers(snapshot, task_id))
+                    issue = ValidationIssue(
+                        code="blocked_task_cannot_enter_in_progress",
+                        message=engine_result.message,
+                        rule=engine_result.violated_rule or "R-002",
+                        task_id=task_id,
+                        blockers=tuple(blockers),
+                        repair_suggestions=tuple(
+                            RepairSuggestion(
+                                action="complete_prerequisite",
+                                target=blocker,
+                                message=f"Complete blocker {blocker} before starting {task_id}.",
+                            )
+                            for blocker in blockers
+                        ),
+                    )
+                return self._denied(
+                    proposal,
+                    task_id=task_id,
+                    issues=(issue, *snapshot.warnings),
+                    snapshot=snapshot,
+                    derived_facts=engine_result.derived_facts,
+                    proof_trace=engine_result.proof_trace,
+                )
             return self._accepted(
                 proposal,
-                derived_facts=(
-                    f"Ready({task_id})",
-                    f"CanMoveTo({task_id}, in_progress)",
-                ),
-                proof_trace=(
-                    {
-                        "rule": "LKB-001",
-                        "premises": [f"ActiveBlockers({task_id}) = []"],
-                        "conclusion": f"CanMoveTo({task_id}, in_progress)",
-                        "solverVersion": self.solver_version,
-                    },
-                ),
+                task_id=task_id,
+                derived_facts=engine_result.derived_facts,
+                proof_trace=engine_result.proof_trace,
             )
 
-        issue = ValidationIssue(
-            code="blocked_task_cannot_enter_in_progress",
-            message=(
-                f"Task {task_id} cannot enter in_progress because active "
-                f"blockers remain: {', '.join(blockers)}."
-            ),
-            rule="LKB-001",
+        return self._accepted(
+            proposal,
             task_id=task_id,
-            blockers=tuple(blockers),
-            repair_suggestions=tuple(
-                RepairSuggestion(
-                    action="complete_prerequisite",
-                    target=blocker,
-                    message=f"Complete blocker {blocker} before starting {task_id}.",
-                )
-                for blocker in blockers
-            ),
-        )
-        return ValidationRun(
-            validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
-            proposal_id=proposal.proposal_id,
-            status="denied",
-            issues=(issue, *snapshot.warnings),
-            snapshot_hash=proposal.snapshot_hash,
-            derived_facts=(
-                f"Blocked({task_id})",
-                f"Not(CanMoveTo({task_id}, in_progress))",
-            ),
-            proof_trace=tuple(
-                {
-                    "rule": "LKB-001",
-                    "premises": [
-                        f"BlockedBy({task_id}, {blocker})",
-                        f"NotCompleted({blocker})",
-                    ],
-                    "conclusion": f"Blocked({task_id})",
-                }
-                for blocker in blockers
-            ),
+            derived_facts=(f"CanMoveTo({task_id}, {target_status})",),
         )
 
     def _validate_structural_task_change(
@@ -484,12 +443,10 @@ class LogicalKanbanService:
                 rule="LKB-STRUCTURE-001",
                 task_id=task_id,
             )
-            return ValidationRun(
-                validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
-                proposal_id=proposal.proposal_id,
-                status="denied",
+            return self._denied(
+                proposal,
+                task_id=task_id,
                 issues=(issue,),
-                snapshot_hash=proposal.snapshot_hash,
                 proof_trace=(
                     {
                         "rule": "LKB-STRUCTURE-001",
@@ -502,6 +459,7 @@ class LogicalKanbanService:
         if proposal.change.kind == "delete_task":
             return self._accepted(
                 proposal,
+                task_id=task_id,
                 derived_facts=(f"CanDelete({task_id})", "CascadeDependencyCleanupAfterValidation"),
                 proof_trace=(
                     {
@@ -515,6 +473,7 @@ class LogicalKanbanService:
         if proposal.change.kind == "update_task_fields":
             return self._accepted(
                 proposal,
+                task_id=task_id,
                 derived_facts=(f"CanUpdateTaskFields({task_id})",),
                 proof_trace=(
                     {
@@ -553,12 +512,11 @@ class LogicalKanbanService:
                         ),
                     ),
                 )
-                return ValidationRun(
-                    validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
-                    proposal_id=proposal.proposal_id,
-                    status="denied",
+                return self._denied(
+                    proposal,
+                    task_id=task_id if isinstance(task_id, str) else None,
                     issues=(issue, *snapshot.warnings),
-                    snapshot_hash=snapshot.hash,
+                    snapshot=snapshot,
                     derived_facts=tuple(f"Cycle({cycle_task_id})" for cycle_task_id in task_cycle),
                     proof_trace=(
                         {
@@ -573,6 +531,7 @@ class LogicalKanbanService:
                 )
             return self._accepted(
                 proposal,
+                task_id=task_id,
                 derived_facts=(f"CanMutateDependencies({task_id})",),
                 proof_trace=(
                     {
@@ -585,6 +544,7 @@ class LogicalKanbanService:
             )
         return self._accepted(
             proposal,
+            task_id=task_id,
             derived_facts=(f"CanMutateDependencies({task_id})",),
             proof_trace=(
                 {
@@ -624,18 +584,34 @@ class LogicalKanbanService:
                     task[rel_field] = cur
         return SimpleNamespace(tasks=tasks, todos=getattr(context, "todos", ()))
 
-    def _accepted(
+    def _make_validation_run(
         self,
         proposal: Proposal,
         *,
-        proof_trace: tuple[dict[str, Any], ...] | None = None,
+        result: ValidationResult,
+        task_id: str | None = None,
         derived_facts: tuple[str, ...] = (),
+        proof_trace: tuple[dict[str, Any], ...] | None = None,
+        issues: tuple[ValidationIssue, ...] = (),
+        counterexample: dict[str, Any] | None = None,
+        repair_suggestions: tuple[RepairSuggestion, ...] | None = None,
+        input_facts_hash: str | None = None,
     ) -> ValidationRun:
+        if repair_suggestions is None:
+            suggestions: list[RepairSuggestion] = []
+            for issue in issues:
+                suggestions.extend(issue.repair_suggestions)
+            repair_suggestions = tuple(suggestions)
         return ValidationRun(
-            validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
+            validation_run_id=_new_id("V-"),
             proposal_id=proposal.proposal_id,
-            status="accepted",
+            task_id=task_id,
+            input_facts_hash=input_facts_hash or proposal.snapshot_hash,
+            ruleset_hash=_RULESET_HASH,
             snapshot_hash=proposal.snapshot_hash,
+            engine="layer1-python",
+            engine_version=self.solver_version,
+            result=result,
             derived_facts=derived_facts,
             proof_trace=proof_trace
             or (
@@ -645,6 +621,87 @@ class LogicalKanbanService:
                     "solverVersion": self.solver_version,
                 },
             ),
+            counterexample=counterexample,
+            repair_suggestions=repair_suggestions,
+            issues=issues,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            requested_by=proposal.change.actor or "system",
+        )
+
+    def _counterexample_for(
+        self,
+        issue: ValidationIssue,
+        snapshot: FactsSnapshot,
+        task_id: str | None,
+    ) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "violatedRule": issue.rule,
+            "violatedPredicate": issue.code,
+        }
+        if task_id:
+            out["taskId"] = task_id
+        if issue.blockers:
+            out["activeBlockers"] = list(issue.blockers)
+        if task_id and task_id in snapshot.normalized_tasks:
+            task = snapshot.normalized_tasks[task_id]
+            out["model"] = {
+                f"Status({task_id})": task["status"],
+            }
+            if issue.blockers:
+                out["model"].update(
+                    {
+                        f"Status({blocker})": snapshot.normalized_tasks.get(blocker, {}).get(
+                            "status"
+                        )
+                        for blocker in issue.blockers
+                        if blocker in snapshot.normalized_tasks
+                    }
+                )
+        return out
+
+    def _denied(
+        self,
+        proposal: Proposal,
+        *,
+        task_id: str | None = None,
+        issues: tuple[ValidationIssue, ...] = (),
+        snapshot: FactsSnapshot | None = None,
+        derived_facts: tuple[str, ...] = (),
+        proof_trace: tuple[dict[str, Any], ...] | None = None,
+        counterexample: dict[str, Any] | None = None,
+        repair_suggestions: tuple[RepairSuggestion, ...] | None = None,
+    ) -> ValidationRun:
+        if counterexample is None and issues:
+            counterexample = self._counterexample_for(
+                issues[0],
+                snapshot or build_facts_snapshot(SimpleNamespace(tasks={}, todos=())),  # type: ignore[arg-type]
+                task_id,
+            )
+        return self._make_validation_run(
+            proposal,
+            result="fail",
+            task_id=task_id,
+            derived_facts=derived_facts,
+            proof_trace=proof_trace,
+            issues=issues,
+            counterexample=counterexample,
+            repair_suggestions=repair_suggestions,
+        )
+
+    def _accepted(
+        self,
+        proposal: Proposal,
+        *,
+        task_id: str | None = None,
+        proof_trace: tuple[dict[str, Any], ...] | None = None,
+        derived_facts: tuple[str, ...] = (),
+    ) -> ValidationRun:
+        return self._make_validation_run(
+            proposal,
+            result="pass",
+            task_id=task_id,
+            derived_facts=derived_facts,
+            proof_trace=proof_trace,
         )
 
     def _strict_acceptance_enabled(

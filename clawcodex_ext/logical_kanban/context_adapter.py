@@ -348,27 +348,38 @@ def _build_facts(
 
 
 def _cycle_nodes(graph: dict[str, set[str]]) -> set[str]:
-    visited: set[str] = set()
-    active: set[str] = set()
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {node: WHITE for node in graph}
     cycles: set[str] = set()
 
-    def visit(node: str, path: list[str]) -> None:
-        if node in active:
-            try:
-                cycles.update(path[path.index(node) :])
-            except ValueError:
-                cycles.add(node)
-            return
-        if node in visited:
-            return
-        visited.add(node)
-        active.add(node)
-        for child in graph.get(node, set()):
-            visit(child, [*path, child])
-        active.remove(node)
+    for start in graph:
+        if color[start] != WHITE:
+            continue
+        stack: list[tuple[str, Any]] = [(start, iter(sorted(graph.get(start, set()))))]
+        color[start] = GRAY
+        path: list[str] = [start]
 
-    for node in graph:
-        visit(node, [node])
+        while stack:
+            node, children = stack[-1]
+            try:
+                child = next(children)
+                child_color = color.get(child, WHITE)
+                if child_color == WHITE:
+                    color[child] = GRAY
+                    path.append(child)
+                    stack.append((child, iter(sorted(graph.get(child, set())))))
+                elif child_color == GRAY:
+                    try:
+                        idx = path.index(child)
+                        cycles.update(path[idx:])
+                    except ValueError:
+                        cycles.add(child)
+            except StopIteration:
+                color[node] = BLACK
+                stack.pop()
+                if path and path[-1] == node:
+                    path.pop()
+
     return cycles
 
 

@@ -87,11 +87,19 @@ def _accepted_lkb(
     commit: Any,
 ) -> dict[str, Any]:
     out = {
-        "validationRunId": validation.validation_id,
+        "validationRunId": validation.validation_run_id,
+        "proposalId": validation.proposal_id,
+        "taskId": validation.task_id,
         "decision": "committed",
-        "proposalId": proposal.proposal_id,
+        "result": validation.result,
+        "engine": validation.engine,
+        "engineVersion": validation.engine_version,
+        "inputFactsHash": validation.input_facts_hash,
+        "rulesetHash": validation.ruleset_hash,
+        "durationMs": validation.duration_ms,
         "changeKind": proposal.change.kind,
         "derivedFacts": list(validation.derived_facts),
+        "proofTrace": list(validation.proof_trace),
         "validation": validation.to_dict(),
         "commit": commit.to_dict(),
     }
@@ -107,18 +115,28 @@ def _denied_result(
     validation: Any,
     commit: Any,
 ) -> ToolResult:
-    lkb_payload = {
+    lkb_payload: dict[str, Any] = {
         "decision": "denied",
-        "validationRunId": validation.validation_id,
+        "validationRunId": validation.validation_run_id,
+        "proposalId": validation.proposal_id,
+        "taskId": validation.task_id,
+        "result": validation.result,
+        "engine": validation.engine,
+        "engineVersion": validation.engine_version,
+        "inputFactsHash": validation.input_facts_hash,
+        "rulesetHash": validation.ruleset_hash,
+        "durationMs": validation.duration_ms,
         "humanMessage": (
             validation.issues[0].message if validation.issues else "Validation denied."
         ),
         "proofTrace": list(validation.proof_trace),
+        "counterexample": validation.counterexample,
         "repairSuggestions": [
             suggestion.to_dict()
             for issue in validation.issues
             for suggestion in issue.repair_suggestions
         ],
+        "validation": validation.to_dict(),
     }
     if proposal.change.kind == "legacy_todo_replace_all":
         lkb_payload["compatibilityMode"] = "legacy_todo_write"
