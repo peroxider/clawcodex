@@ -55,6 +55,8 @@ class LogicalKanbanService:
                     },
                 ),
             )
+        if proposal.change.kind == "legacy_todo_replace_all":
+            return self._validate_legacy_todo_replace_all(proposal, context)
         if proposal.change.kind == "transition_status":
             return self._validate_status_transition(proposal, context)
         if proposal.change.kind in {
@@ -98,6 +100,140 @@ class LogicalKanbanService:
         validation = self.validate(proposal, context)
         commit = self.commit(proposal, validation, context)
         return proposal, validation, commit
+
+    def _validate_legacy_todo_replace_all(
+        self,
+        proposal: Proposal,
+        context: "ToolContext",
+    ) -> ValidationRun:
+        todos = proposal.change.payload.get("todos")
+        if not isinstance(todos, list):
+            issue = ValidationIssue(
+                code="malformed_legacy_todo_write",
+                message="TodoWrite payload must contain a todos array.",
+                rule="LKB-TODOWRITE-COMPAT-001",
+            )
+            return ValidationRun(
+                validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
+                proposal_id=proposal.proposal_id,
+                status="denied",
+                issues=(issue,),
+                snapshot_hash=proposal.snapshot_hash,
+                proof_trace=(
+                    {
+                        "rule": "LKB-TODOWRITE-COMPAT-001",
+                        "premises": ["Not(Array(todos))"],
+                        "conclusion": "DenyCommit",
+                        "solverVersion": self.solver_version,
+                    },
+                ),
+            )
+
+        status_counts = {"pending": 0, "in_progress": 0, "completed": 0}
+        malformed_indexes: list[int] = []
+        in_progress_ids: list[str] = []
+        derived_facts: list[str] = []
+        for index, todo in enumerate(todos):
+            todo_id = f"todo:{index}"
+            if not isinstance(todo, dict) or todo.get("status") not in status_counts:
+                malformed_indexes.append(index)
+                continue
+            status = str(todo["status"])
+            status_counts[status] += 1
+            if status == "in_progress":
+                in_progress_ids.append(todo_id)
+            derived_facts.extend((f"Task({todo_id})", f"Status({todo_id}, {status})"))
+
+        if malformed_indexes:
+            issue = ValidationIssue(
+                code="malformed_legacy_todo_write",
+                message=(
+                    "TodoWrite contains malformed todos at indexes: "
+                    f"{', '.join(str(i) for i in malformed_indexes)}."
+                ),
+                rule="LKB-TODOWRITE-COMPAT-001",
+                blockers=tuple(f"todo:{i}" for i in malformed_indexes),
+            )
+            return ValidationRun(
+                validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
+                proposal_id=proposal.proposal_id,
+                status="denied",
+                issues=(issue,),
+                snapshot_hash=proposal.snapshot_hash,
+                proof_trace=(
+                    {
+                        "rule": "LKB-TODOWRITE-COMPAT-001",
+                        "premises": [f"Malformed(todo:{i})" for i in malformed_indexes],
+                        "conclusion": "DenyCommit",
+                        "solverVersion": self.solver_version,
+                    },
+                ),
+            )
+
+        total = len(todos)
+        derived_facts.append(
+            "TodoProgress("
+            f"total={total}, "
+            f"pending={status_counts['pending']}, "
+            f"in_progress={status_counts['in_progress']}, "
+            f"completed={status_counts['completed']}"
+            ")"
+        )
+        if total > 0 and status_counts["completed"] == total:
+            derived_facts.append("AllLegacyTodosCompleted")
+
+        runtime = getattr(context, "logical_kanban", None)
+        if bool(getattr(runtime, "strict_logical_todo_enabled", False)) and len(
+            in_progress_ids
+        ) > 1:
+            issue = ValidationIssue(
+                code="multiple_in_progress_legacy_todo_write",
+                message=(
+                    "TodoWrite cannot set multiple in_progress todos while strict "
+                    f"logical todo mode is enabled: {', '.join(in_progress_ids)}."
+                ),
+                rule="LKB-TODOWRITE-COMPAT-002",
+                blockers=tuple(in_progress_ids),
+                repair_suggestions=(
+                    RepairSuggestion(
+                        action="keep_single_in_progress",
+                        target=in_progress_ids[0],
+                        message="Leave only one todo in_progress and keep the others pending.",
+                    ),
+                ),
+            )
+            return ValidationRun(
+                validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
+                proposal_id=proposal.proposal_id,
+                status="denied",
+                issues=(issue,),
+                snapshot_hash=proposal.snapshot_hash,
+                derived_facts=tuple(derived_facts),
+                proof_trace=(
+                    {
+                        "rule": "LKB-TODOWRITE-COMPAT-002",
+                        "premises": [f"Doing({todo_id})" for todo_id in in_progress_ids],
+                        "conclusion": "DenyCommit",
+                        "solverVersion": self.solver_version,
+                    },
+                ),
+            )
+
+        return self._accepted(
+            proposal,
+            derived_facts=tuple(derived_facts),
+            proof_trace=(
+                {
+                    "rule": "LKB-TODOWRITE-COMPAT-ALLOW",
+                    "premises": [
+                        "LegacyTodoWriteCompatibilityMode",
+                        f"InProgressCount({status_counts['in_progress']})",
+                    ],
+                    "conclusion": "Allow legacy TodoWrite replacement.",
+                    "solverVersion": self.solver_version,
+                },
+            ),
+        )
 
     def _validate_status_transition(
         self,

@@ -86,7 +86,7 @@ def _accepted_lkb(
     validation: Any,
     commit: Any,
 ) -> dict[str, Any]:
-    return {
+    out = {
         "validationRunId": validation.validation_id,
         "decision": "committed",
         "proposalId": proposal.proposal_id,
@@ -95,6 +95,10 @@ def _accepted_lkb(
         "validation": validation.to_dict(),
         "commit": commit.to_dict(),
     }
+    if proposal.change.kind == "legacy_todo_replace_all":
+        out["compatibilityMode"] = "legacy_todo_write"
+        out["progress"] = _legacy_todo_progress(proposal.change.payload)
+    return out
 
 
 def _denied_result(
@@ -103,6 +107,22 @@ def _denied_result(
     validation: Any,
     commit: Any,
 ) -> ToolResult:
+    lkb_payload = {
+        "decision": "denied",
+        "validationRunId": validation.validation_id,
+        "humanMessage": (
+            validation.issues[0].message if validation.issues else "Validation denied."
+        ),
+        "proofTrace": list(validation.proof_trace),
+        "repairSuggestions": [
+            suggestion.to_dict()
+            for issue in validation.issues
+            for suggestion in issue.repair_suggestions
+        ],
+    }
+    if proposal.change.kind == "legacy_todo_replace_all":
+        lkb_payload["compatibilityMode"] = "legacy_todo_write"
+        lkb_payload["progress"] = _legacy_todo_progress(proposal.change.payload)
     return ToolResult(
         name=tool_name,
         is_error=True,
@@ -110,19 +130,7 @@ def _denied_result(
             "success": False,
             "status": "denied",
             "reason": commit.reason or {"code": "validation_denied"},
-            "lkb": {
-                "decision": "denied",
-                "validationRunId": validation.validation_id,
-                "humanMessage": (
-                    validation.issues[0].message if validation.issues else "Validation denied."
-                ),
-                "proofTrace": list(validation.proof_trace),
-                "repairSuggestions": [
-                    suggestion.to_dict()
-                    for issue in validation.issues
-                    for suggestion in issue.repair_suggestions
-                ],
-            },
+            "lkb": lkb_payload,
             "logicalKanban": {
                 "proposal": {
                     "proposalId": proposal.proposal_id,
@@ -134,3 +142,15 @@ def _denied_result(
             },
         },
     )
+
+
+def _legacy_todo_progress(payload: dict[str, Any]) -> dict[str, int]:
+    counts = {"total": 0, "pending": 0, "in_progress": 0, "completed": 0}
+    todos = payload.get("todos")
+    if not isinstance(todos, list):
+        return counts
+    counts["total"] = len(todos)
+    for todo in todos:
+        if isinstance(todo, dict) and todo.get("status") in counts:
+            counts[str(todo["status"])] += 1
+    return counts

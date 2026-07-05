@@ -333,8 +333,87 @@ def test_feature_on_todo_write_success_includes_lkb_metadata(
     )
 
     assert result.output["lkb"]["changeKind"] == "legacy_todo_replace_all"
+    assert result.output["lkb"]["compatibilityMode"] == "legacy_todo_write"
+    assert result.output["lkb"]["progress"] == {
+        "total": 1,
+        "pending": 1,
+        "in_progress": 0,
+        "completed": 0,
+    }
     assert result.output["lkb"]["validationRunId"].startswith("lkb-val-")
     assert ctx.todos == [{"content": "x", "status": "pending", "activeForm": "Doing x"}]
+
+
+def test_feature_on_todo_write_all_completed_still_clears_context_todos(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _set_lkb(monkeypatch, True)
+    ctx = ToolContext(workspace_root=tmp_path)
+    ctx.todos = [{"content": "old", "status": "pending", "activeForm": "Doing old"}]
+
+    result = TodoWriteTool.call(
+        {"todos": [{"content": "x", "status": "completed", "activeForm": "Did x"}]},
+        ctx,
+    )
+
+    assert result.is_error is False
+    assert result.output["lkb"]["compatibilityMode"] == "legacy_todo_write"
+    assert "AllLegacyTodosCompleted" in result.output["lkb"]["derivedFacts"]
+    assert ctx.todos == []
+    assert ctx.tasks == {}
+
+
+def test_feature_on_legacy_todo_write_allows_multiple_in_progress_by_default(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _set_lkb(monkeypatch, True)
+    ctx = ToolContext(workspace_root=tmp_path)
+
+    result = TodoWriteTool.call(
+        {
+            "todos": [
+                {"content": "a", "status": "in_progress", "activeForm": "Doing a"},
+                {"content": "b", "status": "in_progress", "activeForm": "Doing b"},
+            ]
+        },
+        ctx,
+    )
+
+    assert result.is_error is False
+    assert result.output["lkb"]["progress"]["in_progress"] == 2
+    assert [todo["status"] for todo in ctx.todos] == ["in_progress", "in_progress"]
+    assert ctx.tasks == {}
+
+
+def test_feature_on_strict_legacy_todo_write_denies_multiple_in_progress(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from clawcodex_ext.logical_kanban import get_logical_kanban
+
+    _set_lkb(monkeypatch, True)
+    ctx = ToolContext(workspace_root=tmp_path)
+    get_logical_kanban(ctx).strict_logical_todo_enabled = True
+    ctx.todos = [{"content": "old", "status": "pending", "activeForm": "Doing old"}]
+
+    result = TodoWriteTool.call(
+        {
+            "todos": [
+                {"content": "a", "status": "in_progress", "activeForm": "Doing a"},
+                {"content": "b", "status": "in_progress", "activeForm": "Doing b"},
+            ]
+        },
+        ctx,
+    )
+
+    assert result.is_error is True
+    assert result.output["reason"]["code"] == "multiple_in_progress_legacy_todo_write"
+    assert result.output["lkb"]["compatibilityMode"] == "legacy_todo_write"
+    assert result.output["lkb"]["progress"]["in_progress"] == 2
+    assert ctx.todos == [{"content": "old", "status": "pending", "activeForm": "Doing old"}]
+    assert ctx.tasks == {}
 
 
 def test_context_adapter_repairs_blocks_blocked_by_mismatch_for_task_list(

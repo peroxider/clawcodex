@@ -12,6 +12,7 @@ from .service import LogicalKanbanService
 class LogicalKanbanRuntime:
     service: LogicalKanbanService = field(default_factory=LogicalKanbanService)
     strict_acceptance_enabled: bool = False
+    strict_logical_todo_enabled: bool = False
     latest_denials: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
