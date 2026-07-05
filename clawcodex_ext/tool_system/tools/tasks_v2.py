@@ -15,14 +15,14 @@ from clawcodex_ext.logical_kanban.runtime import get_logical_kanban
 from src.utils.task_flags import is_todo_v2_enabled
 
 
-_TASK_STATUSES = {"pending", "in_progress", "completed"}
+_TASK_STATUSES = {'pending', 'in_progress', 'completed'}
 _LKB_METADATA_FIELDS = {
-    "acceptance_proof": str,
-    "strict_acceptance": bool,
-    "assertions": list,
-    "assumptions": list,
-    "validation_run_id": str,
-    "assumption_clarifications": list,
+    'acceptance_proof': str,
+    'strict_acceptance': bool,
+    'assertions': list,
+    'assumptions': list,
+    'validation_run_id': str,
+    'assumption_clarifications': list,
 }
 
 
@@ -39,30 +39,30 @@ def _new_task_id() -> str:
 
 
 def _task_create_classifier_input(input_data: dict) -> str:
-    return (input_data or {}).get("subject", "") or ""
+    return (input_data or {}).get('subject', '') or ''
 
 
 def _task_get_classifier_input(input_data: dict) -> str:
-    return (input_data or {}).get("taskId", "") or ""
+    return (input_data or {}).get('taskId', '') or ''
 
 
 def _task_update_classifier_input(input_data: dict) -> str:
     d = input_data or {}
     parts: list[str] = []
-    tid = d.get("taskId")
+    tid = d.get('taskId')
     if tid:
         parts.append(str(tid))
-    status = d.get("status")
+    status = d.get('status')
     if status:
         parts.append(str(status))
-    subject = d.get("subject")
+    subject = d.get('subject')
     if subject:
         parts.append(str(subject))
-    return " ".join(parts)
+    return ' '.join(parts)
 
 
 def _task_output_classifier_input(input_data: dict) -> str:
-    return (input_data or {}).get("task_id", "") or ""
+    return (input_data or {}).get('task_id', '') or ''
 
 
 # ---------------------------------------------------------------------------
@@ -72,40 +72,40 @@ def _task_output_classifier_input(input_data: dict) -> str:
 
 def _format_task_created(task_id: str, subject: str) -> str:
     """Format TaskCreate result as human-readable text."""
-    return f"Task #{task_id} created successfully: {subject}"
+    return f'Task #{task_id} created successfully: {subject}'
 
 
 def _format_task_detail(task: dict[str, Any] | None) -> str:
     """Format TaskGet result as human-readable text."""
     if task is None:
-        return "Task not found"
+        return 'Task not found'
     lines = [
-        f"Task #{task['id']}: {task['subject']}",
-        f"Status: {task['status']}",
-        f"Description: {task['description']}",
+        f'Task #{task["id"]}: {task["subject"]}',
+        f'Status: {task["status"]}',
+        f'Description: {task["description"]}',
     ]
-    blocked_by = task.get("blockedBy") or []
+    blocked_by = task.get('blockedBy') or []
     if blocked_by:
-        lines.append(f"Blocked by: {', '.join(f'#{bid}' for bid in blocked_by)}")
-    blocks = task.get("blocks") or []
+        lines.append(f'Blocked by: {", ".join(f"#{bid}" for bid in blocked_by)}')
+    blocks = task.get('blocks') or []
     if blocks:
-        lines.append(f"Blocks: {', '.join(f'#{bid}' for bid in blocks)}")
-    return "\n".join(lines)
+        lines.append(f'Blocks: {", ".join(f"#{bid}" for bid in blocks)}')
+    return '\n'.join(lines)
 
 
 def _format_task_list(tasks: list[dict[str, Any]]) -> str:
     """Format TaskList result as human-readable text."""
     if not tasks:
-        return "No tasks found"
+        return 'No tasks found'
     lines = []
     for t in tasks:
-        owner = f" ({t['owner']})" if t.get("owner") else ""
-        blocked_by = t.get("blockedBy") or []
+        owner = f' ({t["owner"]})' if t.get('owner') else ''
+        blocked_by = t.get('blockedBy') or []
         blocked = (
-            f" [blocked by {', '.join(f'#{bid}' for bid in blocked_by)}]" if blocked_by else ""
+            f' [blocked by {", ".join(f"#{bid}" for bid in blocked_by)}]' if blocked_by else ''
         )
-        lines.append(f"#{t['id']} [{t['status']}] {t['subject']}{owner}{blocked}")
-    return "\n".join(lines)
+        lines.append(f'#{t["id"]} [{t["status"]}] {t["subject"]}{owner}{blocked}')
+    return '\n'.join(lines)
 
 
 def _format_task_updated(
@@ -117,8 +117,8 @@ def _format_task_updated(
 ) -> str:
     """Format TaskUpdate result as human-readable text."""
     if not success:
-        return error or f"Task #{task_id} not found"
-    return f"Updated task #{task_id} {', '.join(updated_fields)}"
+        return error or f'Task #{task_id} not found'
+    return f'Updated task #{task_id} {", ".join(updated_fields)}'
 
 
 # ---------------------------------------------------------------------------
@@ -129,65 +129,64 @@ def _format_task_updated(
 def _cascade_delete(task_id: str, context: ToolContext) -> None:
     """Remove *task_id* from blocks/blockedBy lists of every other task."""
     for other in context.tasks.values():
-        blocks = other.get("blocks")
+        blocks = other.get('blocks')
         if blocks and task_id in blocks:
-            other["blocks"] = [x for x in blocks if x != task_id]
-        blocked_by = other.get("blockedBy")
+            other['blocks'] = [x for x in blocks if x != task_id]
+        blocked_by = other.get('blockedBy')
         if blocked_by and task_id in blocked_by:
-            other["blockedBy"] = [x for x in blocked_by if x != task_id]
+            other['blockedBy'] = [x for x in blocked_by if x != task_id]
 
 
 def _task_update_change_kind(tool_input: dict[str, Any]) -> str:
-    status = tool_input.get("status")
-    if status == "deleted":
-        return "delete_task"
+    status = tool_input.get('status')
+    if status == 'deleted':
+        return 'delete_task'
     if status is not None:
-        return "transition_status"
-    if tool_input.get("addBlocks") is not None or tool_input.get("addBlockedBy") is not None:
-        return "add_dependency"
-    return "update_task_fields"
+        return 'transition_status'
+    if tool_input.get('addBlocks') is not None or tool_input.get('addBlockedBy') is not None:
+        return 'add_dependency'
+    return 'update_task_fields'
 
 
 def _bind_lkb_validation(task: dict[str, Any], lkb: dict[str, Any] | None) -> None:
     if lkb is None:
         return
-    validation_run_id = lkb.get("validationRunId")
+    validation_run_id = lkb.get('validationRunId')
     if not validation_run_id:
         return
-    metadata = dict(task.get("metadata") or {})
-    lkb_metadata = dict(metadata.get("lkb") or {})
-    lkb_metadata["validation_run_id"] = validation_run_id
-    metadata["lkb"] = lkb_metadata
-    task["metadata"] = metadata
+    metadata = dict(task.get('metadata') or {})
+    lkb_metadata = dict(metadata.get('lkb') or {})
+    lkb_metadata['validation_run_id'] = validation_run_id
+    metadata['lkb'] = lkb_metadata
+    task['metadata'] = metadata
 
 
 def _validate_lkb_metadata(metadata: dict[str, Any]) -> None:
-    lkb = metadata.get("lkb")
+    lkb = metadata.get('lkb')
     if lkb is None:
         return
     if not isinstance(lkb, dict):
-        raise ToolInputError("metadata.lkb must be an object when provided")
+        raise ToolInputError('metadata.lkb must be an object when provided')
     for key, value in lkb.items():
         expected = _LKB_METADATA_FIELDS.get(key)
         if expected is None:
-            raise ToolInputError(f"metadata.lkb.{key} is not a supported LKB metadata field")
+            raise ToolInputError(f'metadata.lkb.{key} is not a supported LKB metadata field')
         if value is None:
             continue
         if expected is list:
-            if key == "assumption_clarifications":
+            if key == 'assumption_clarifications':
                 if not isinstance(value, list) or not all(
-                    isinstance(x, dict) and "assumption_id" in x and "action" in x
-                    for x in value
+                    isinstance(x, dict) and 'assumption_id' in x and 'action' in x for x in value
                 ):
                     raise ToolInputError(
-                        "metadata.lkb.assumption_clarifications must be a list of objects "
-                        "with assumption_id and action"
+                        'metadata.lkb.assumption_clarifications must be a list of objects '
+                        'with assumption_id and action'
                     )
             elif not isinstance(value, list) or not all(isinstance(x, str) for x in value):
-                raise ToolInputError(f"metadata.lkb.{key} must be an array of strings")
+                raise ToolInputError(f'metadata.lkb.{key} must be an array of strings')
         elif not isinstance(value, expected):
-            type_name = "boolean" if expected is bool else "string"
-            raise ToolInputError(f"metadata.lkb.{key} must be a {type_name}")
+            type_name = 'boolean' if expected is bool else 'string'
+            raise ToolInputError(f'metadata.lkb.{key} must be a {type_name}')
 
 
 # ---------------------------------------------------------------------------
@@ -196,73 +195,73 @@ def _validate_lkb_metadata(metadata: dict[str, Any]) -> None:
 
 
 def _task_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
-    subject = tool_input.get("subject")
-    description = tool_input.get("description")
-    active_form = tool_input.get("activeForm") or ""
-    metadata = tool_input.get("metadata") or {}
+    subject = tool_input.get('subject')
+    description = tool_input.get('description')
+    active_form = tool_input.get('activeForm') or ''
+    metadata = tool_input.get('metadata') or {}
     if not isinstance(subject, str) or not subject.strip():
-        raise ToolInputError("subject must be a non-empty string")
+        raise ToolInputError('subject must be a non-empty string')
     if not isinstance(description, str) or not description.strip():
-        raise ToolInputError("description must be a non-empty string")
+        raise ToolInputError('description must be a non-empty string')
     if not isinstance(active_form, str):
-        raise ToolInputError("activeForm must be a string when provided")
+        raise ToolInputError('activeForm must be a string when provided')
     if not isinstance(metadata, dict):
-        raise ToolInputError("metadata must be an object when provided")
+        raise ToolInputError('metadata must be an object when provided')
     _validate_lkb_metadata(metadata)
 
     task_id = _new_task_id()
     denied, lkb = prepare_task_change(
-        change_kind="create_task",
+        change_kind='create_task',
         tool_input={
-            "taskId": task_id,
-            "subject": subject,
-            "description": description,
-            "activeForm": active_form,
-            "metadata": dict(metadata),
+            'taskId': task_id,
+            'subject': subject,
+            'description': description,
+            'activeForm': active_form,
+            'metadata': dict(metadata),
         },
         context=context,
     )
     if denied is not None:
         return denied
     context.tasks[task_id] = {
-        "id": task_id,
-        "subject": subject,
-        "description": description,
-        "activeForm": active_form,
-        "status": "pending",
-        "owner": None,
-        "blocks": [],
-        "blockedBy": [],
-        "metadata": dict(metadata),
-        "output": "",
+        'id': task_id,
+        'subject': subject,
+        'description': description,
+        'activeForm': active_form,
+        'status': 'pending',
+        'owner': None,
+        'blocks': [],
+        'blockedBy': [],
+        'metadata': dict(metadata),
+        'output': '',
     }
     _bind_lkb_validation(context.tasks[task_id], lkb)
-    output: dict[str, Any] = {"task": {"id": task_id, "subject": subject}}
+    output: dict[str, Any] = {'task': {'id': task_id, 'subject': subject}}
     if lkb is not None:
-        lkb["createdFacts"] = [
-            f"Task({task_id})",
-            f"Pending({task_id})",
-            f"Status({task_id}, pending)",
+        lkb['createdFacts'] = [
+            f'Task({task_id})',
+            f'Pending({task_id})',
+            f'Status({task_id}, pending)',
         ]
-        output["lkb"] = lkb
+        output['lkb'] = lkb
     return ToolResult(
-        name="TaskCreate",
+        name='TaskCreate',
         output=output,
     )
 
 
 TaskCreateTool: Tool = build_tool(
-    name="TaskCreate",
+    name='TaskCreate',
     input_schema={
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "subject": {"type": "string"},
-            "description": {"type": "string"},
-            "activeForm": {"type": "string"},
-            "metadata": {"type": "object"},
+        'type': 'object',
+        'additionalProperties': False,
+        'properties': {
+            'subject': {'type': 'string'},
+            'description': {'type': 'string'},
+            'activeForm': {'type': 'string'},
+            'metadata': {'type': 'object'},
         },
-        "required": ["subject", "description"],
+        'required': ['subject', 'description'],
     },
     call=_task_create_call,
     prompt="""\
@@ -306,7 +305,7 @@ All tasks are created with status `pending`.
 - After creating tasks, use TaskUpdate to set up dependencies (blocks/blockedBy) if needed
 - Check TaskList first to avoid creating duplicate tasks
 """,
-    description="Create a new task in the task list.",
+    description='Create a new task in the task list.',
     strict=True,
     max_result_size_chars=100_000,
     is_read_only=lambda _input: True,
@@ -317,35 +316,35 @@ All tasks are created with status `pending`.
 
 
 def _task_get_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
-    task_id = tool_input.get("taskId")
+    task_id = tool_input.get('taskId')
     if not isinstance(task_id, str) or not task_id.strip():
-        raise ToolInputError("taskId must be a non-empty string")
+        raise ToolInputError('taskId must be a non-empty string')
     task = context.tasks.get(task_id)
     if task is None:
-        return ToolResult(name="TaskGet", output={"task": None})
+        return ToolResult(name='TaskGet', output={'task': None})
     task_data = {
-        "id": task["id"],
-        "subject": task["subject"],
-        "description": task["description"],
-        "status": task["status"],
-        "blocks": list(task.get("blocks") or []),
-        "blockedBy": list(task.get("blockedBy") or []),
+        'id': task['id'],
+        'subject': task['subject'],
+        'description': task['description'],
+        'status': task['status'],
+        'blocks': list(task.get('blocks') or []),
+        'blockedBy': list(task.get('blockedBy') or []),
     }
     if is_logical_kanban_enabled():
-        task_data["lkb"] = task_lkb_view(context, task_id)
+        task_data['lkb'] = task_lkb_view(context, task_id, include_proof_trace=True)
     return ToolResult(
-        name="TaskGet",
-        output={"task": task_data},
+        name='TaskGet',
+        output={'task': task_data},
     )
 
 
 TaskGetTool: Tool = build_tool(
-    name="TaskGet",
+    name='TaskGet',
     input_schema={
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {"taskId": {"type": "string"}},
-        "required": ["taskId"],
+        'type': 'object',
+        'additionalProperties': False,
+        'properties': {'taskId': {'type': 'string'}},
+        'required': ['taskId'],
     },
     call=_task_get_call,
     prompt="""\
@@ -371,7 +370,7 @@ Returns full task details:
 - After fetching a task, verify its blockedBy list is empty before beginning work.
 - Use TaskList to see all tasks in summary form.
 """,
-    description="Get a task by ID from the task list.",
+    description='Get a task by ID from the task list.',
     strict=True,
     max_result_size_chars=100_000,
     is_read_only=lambda _input: True,
@@ -383,14 +382,14 @@ Returns full task details:
 
 def _task_list_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     return ToolResult(
-        name="TaskList",
-        output={"tasks": task_list_view(context, include_lkb=is_logical_kanban_enabled())},
+        name='TaskList',
+        output={'tasks': task_list_view(context, include_lkb=is_logical_kanban_enabled())},
     )
 
 
 TaskListTool: Tool = build_tool(
-    name="TaskList",
-    input_schema={"type": "object", "additionalProperties": False, "properties": {}},
+    name='TaskList',
+    input_schema={'type': 'object', 'additionalProperties': False, 'properties': {}},
     call=_task_list_call,
     prompt="""\
 Use this tool to list all tasks in the task list.
@@ -414,7 +413,7 @@ Returns a summary of each task:
 
 Use TaskGet with a specific task ID to view full details including description and comments.
 """,
-    description="List all tasks in the task list.",
+    description='List all tasks in the task list.',
     strict=True,
     max_result_size_chars=100_000,
     is_read_only=lambda _input: True,
@@ -424,30 +423,30 @@ Use TaskGet with a specific task ID to view full details including description a
 
 
 def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
-    task_id = tool_input.get("taskId")
+    task_id = tool_input.get('taskId')
     if not isinstance(task_id, str) or not task_id.strip():
-        raise ToolInputError("taskId must be a non-empty string")
+        raise ToolInputError('taskId must be a non-empty string')
 
     updated_fields: list[str] = []
     status_change: dict[str, str] | None = None
 
-    if "status" in tool_input and tool_input["status"] is not None:
-        status = tool_input["status"]
-        if not isinstance(status, str) or status not in _TASK_STATUSES and status != "deleted":
+    if 'status' in tool_input and tool_input['status'] is not None:
+        status = tool_input['status']
+        if not isinstance(status, str) or status not in _TASK_STATUSES and status != 'deleted':
             raise ToolInputError(
-                "status must be pending|in_progress|completed|deleted when provided"
+                'status must be pending|in_progress|completed|deleted when provided'
             )
 
-    for input_key in ("addBlocks", "addBlockedBy"):
+    for input_key in ('addBlocks', 'addBlockedBy'):
         if input_key in tool_input and tool_input[input_key] is not None:
             ids = tool_input[input_key]
             if not isinstance(ids, list) or not all(isinstance(x, str) for x in ids):
-                raise ToolInputError(f"{input_key} must be an array of strings when provided")
+                raise ToolInputError(f'{input_key} must be an array of strings when provided')
 
-    if "metadata" in tool_input and tool_input["metadata"] is not None:
-        md = tool_input["metadata"]
+    if 'metadata' in tool_input and tool_input['metadata'] is not None:
+        md = tool_input['metadata']
         if not isinstance(md, dict):
-            raise ToolInputError("metadata must be an object when provided")
+            raise ToolInputError('metadata must be an object when provided')
         _validate_lkb_metadata(md)
 
     denied, lkb = prepare_task_change(
@@ -461,47 +460,47 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
     task = context.tasks.get(task_id)
     if task is None:
         out: dict[str, Any] = {
-            "success": False,
-            "taskId": task_id,
-            "updatedFields": [],
-            "error": "Task not found",
+            'success': False,
+            'taskId': task_id,
+            'updatedFields': [],
+            'error': 'Task not found',
         }
         if lkb is not None:
-            out["lkb"] = lkb
-        return ToolResult(name="TaskUpdate", output=out)
+            out['lkb'] = lkb
+        return ToolResult(name='TaskUpdate', output=out)
 
-    for field in ("subject", "description", "activeForm", "owner"):
+    for field in ('subject', 'description', 'activeForm', 'owner'):
         if field in tool_input and tool_input[field] is not None:
             v = tool_input[field]
             if not isinstance(v, str):
-                raise ToolInputError(f"{field} must be a string when provided")
+                raise ToolInputError(f'{field} must be a string when provided')
             if v != task.get(field):
                 task[field] = v
                 updated_fields.append(field)
 
-    if "status" in tool_input and tool_input["status"] is not None:
-        status = tool_input["status"]
-        if status == "deleted":
+    if 'status' in tool_input and tool_input['status'] is not None:
+        status = tool_input['status']
+        if status == 'deleted':
             context.tasks.pop(task_id, None)
             # Cascade delete: remove this task's ID from all other tasks'
             # blocks and blockedBy arrays to prevent dangling references.
             _cascade_delete(task_id, context)
             return ToolResult(
-                name="TaskUpdate",
+                name='TaskUpdate',
                 output={
-                    "success": True,
-                    "taskId": task_id,
-                    "updatedFields": ["deleted"],
-                    **({"lkb": lkb} if lkb is not None else {}),
+                    'success': True,
+                    'taskId': task_id,
+                    'updatedFields': ['deleted'],
+                    **({'lkb': lkb} if lkb is not None else {}),
                 },
             )
-        if status != task.get("status"):
-            status_change = {"from": str(task.get("status")), "to": status}
-            task["status"] = status
+        if status != task.get('status'):
+            status_change = {'from': str(task.get('status')), 'to': status}
+            task['status'] = status
             _bind_lkb_validation(task, lkb)
-            updated_fields.append("status")
+            updated_fields.append('status')
 
-    for rel_field, input_key in (("blocks", "addBlocks"), ("blockedBy", "addBlockedBy")):
+    for rel_field, input_key in (('blocks', 'addBlocks'), ('blockedBy', 'addBlockedBy')):
         if input_key in tool_input and tool_input[input_key] is not None:
             ids = tool_input[input_key]
             cur = list(task.get(rel_field) or [])
@@ -512,21 +511,21 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
                 task[rel_field] = cur
                 updated_fields.append(rel_field)
 
-    if "metadata" in tool_input and tool_input["metadata"] is not None:
-        md = tool_input["metadata"]
-        existing = dict(task.get("metadata") or {})
+    if 'metadata' in tool_input and tool_input['metadata'] is not None:
+        md = tool_input['metadata']
+        existing = dict(task.get('metadata') or {})
         for k, v in md.items():
             if v is None:
                 existing.pop(k, None)
             else:
                 existing[k] = v
-        task["metadata"] = existing
-        updated_fields.append("metadata")
+        task['metadata'] = existing
+        updated_fields.append('metadata')
 
     out: dict[str, Any] = {
-        "success": True,
-        "taskId": task_id,
-        "updatedFields": updated_fields,
+        'success': True,
+        'taskId': task_id,
+        'updatedFields': updated_fields,
     }
 
     # F-135: process assumption clarifications after metadata merge.
@@ -536,10 +535,10 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
         _bind_lkb_validation(task, lkb)
 
     if status_change is not None:
-        out["statusChange"] = status_change
+        out['statusChange'] = status_change
     if lkb is not None:
-        out["lkb"] = lkb
-    return ToolResult(name="TaskUpdate", output=out)
+        out['lkb'] = lkb
+    return ToolResult(name='TaskUpdate', output=out)
 
 
 def _process_assumption_clarifications(
@@ -551,13 +550,13 @@ def _process_assumption_clarifications(
     """Apply any assumption clarifications stored in task metadata."""
     if not is_logical_kanban_enabled():
         return
-    metadata = task.get("metadata")
+    metadata = task.get('metadata')
     if not isinstance(metadata, dict):
         return
-    lkb_metadata = metadata.get("lkb")
+    lkb_metadata = metadata.get('lkb')
     if not isinstance(lkb_metadata, dict):
         return
-    clarifications = lkb_metadata.get("assumption_clarifications")
+    clarifications = lkb_metadata.get('assumption_clarifications')
     if not isinstance(clarifications, list) or not clarifications:
         return
 
@@ -567,57 +566,57 @@ def _process_assumption_clarifications(
     for raw in clarifications:
         if not isinstance(raw, dict):
             continue
-        assumption_id = raw.get("assumption_id")
-        action = raw.get("action")
+        assumption_id = raw.get('assumption_id')
+        action = raw.get('action')
         if not isinstance(assumption_id, str) or not isinstance(action, str):
             continue
         clarification = Clarification(
             assumption_id=assumption_id,
             action=action,
-            new_value=raw.get("new_value", ""),
+            new_value=raw.get('new_value', ''),
         )
         new_record, old_record, validation_run = service.clarify_assumption(
             context, assumption_id, clarification
         )
         applied.append(
             {
-                "assumptionId": new_record.assumption_id,
-                "action": action,
-                "newValue": new_record.value,
-                "validationRunId": validation_run.validation_run_id if validation_run else None,
+                'assumptionId': new_record.assumption_id,
+                'action': action,
+                'newValue': new_record.value,
+                'validationRunId': validation_run.validation_run_id if validation_run else None,
             }
         )
         if validation_run is not None:
-            _bind_lkb_validation(task, {"validationRunId": validation_run.validation_run_id})
+            _bind_lkb_validation(task, {'validationRunId': validation_run.validation_run_id})
 
     # Clear the clarifications so they are not reprocessed.  _bind_lkb_validation
     # may have replaced the task's lkb dict, so refresh from the task before
     # clearing.
-    task_metadata = task.get("metadata")
+    task_metadata = task.get('metadata')
     if isinstance(task_metadata, dict):
-        task_lkb = task_metadata.get("lkb")
+        task_lkb = task_metadata.get('lkb')
         if isinstance(task_lkb, dict):
-            task_lkb["assumption_clarifications"] = []
-    out["assumptionClarificationsApplied"] = applied
+            task_lkb['assumption_clarifications'] = []
+    out['assumptionClarificationsApplied'] = applied
 
 
 TaskUpdateTool: Tool = build_tool(
-    name="TaskUpdate",
+    name='TaskUpdate',
     input_schema={
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "taskId": {"type": "string"},
-            "subject": {"type": "string"},
-            "description": {"type": "string"},
-            "activeForm": {"type": "string"},
-            "status": {"type": "string"},
-            "addBlocks": {"type": "array", "items": {"type": "string"}},
-            "addBlockedBy": {"type": "array", "items": {"type": "string"}},
-            "owner": {"type": "string"},
-            "metadata": {"type": "object"},
+        'type': 'object',
+        'additionalProperties': False,
+        'properties': {
+            'taskId': {'type': 'string'},
+            'subject': {'type': 'string'},
+            'description': {'type': 'string'},
+            'activeForm': {'type': 'string'},
+            'status': {'type': 'string'},
+            'addBlocks': {'type': 'array', 'items': {'type': 'string'}},
+            'addBlockedBy': {'type': 'array', 'items': {'type': 'string'}},
+            'owner': {'type': 'string'},
+            'metadata': {'type': 'object'},
         },
-        "required": ["taskId"],
+        'required': ['taskId'],
     },
     call=_task_update_call,
     prompt="""\
@@ -696,7 +695,7 @@ Set up task dependencies:
 {"taskId": "2", "addBlockedBy": ["1"]}
 ```
 """,
-    description="Update a task in the task list.",
+    description='Update a task in the task list.',
     strict=True,
     max_result_size_chars=100_000,
     is_read_only=lambda _input: True,
@@ -730,19 +729,19 @@ async def _task_output_call(tool_input: dict[str, Any], context: ToolContext) ->
     from sync contexts (test fixtures, tools dispatched from tools)
     still work transparently.
     """
-    task_id = tool_input.get("task_id")
+    task_id = tool_input.get('task_id')
     if not isinstance(task_id, str) or not task_id.strip():
-        raise ToolInputError("task_id must be a non-empty string")
+        raise ToolInputError('task_id must be a non-empty string')
     task_id = task_id.strip()
 
-    block = bool(tool_input.get("block", True))
-    timeout_ms = tool_input.get("timeout")
+    block = bool(tool_input.get('block', True))
+    timeout_ms = tool_input.get('timeout')
     if timeout_ms is None:
         timeout_ms = 30_000  # default per TS TaskOutputTool.tsx:33
     try:
         timeout_seconds = float(timeout_ms) / 1000.0
     except (TypeError, ValueError):
-        raise ToolInputError("timeout must be a number")
+        raise ToolInputError('timeout must be a number')
 
     # Branch 1 — runtime_tasks (chapter-10 source of truth).
     runtime = context.runtime_tasks.get(task_id)
@@ -756,30 +755,34 @@ async def _task_output_call(tool_input: dict[str, Any], context: ToolContext) ->
     # of the call.
     task = context.tasks.get(task_id)
     if task is None:
-        return ToolResult(name="TaskOutput", output={"retrieval_status": "success", "task": None})
+        return ToolResult(name='TaskOutput', output={'retrieval_status': 'success', 'task': None})
 
-    output = str(task.get("output") or "")
-    retrieval_status = "success" if output else "not_ready"
+    output = str(task.get('output') or '')
+    retrieval_status = 'success' if output else 'not_ready'
     task_payload: dict[str, Any] = {
-        "task_id": task_id,
-        "task_type": "task_list",
-        "status": task.get("status"),
-        "description": task.get("description"),
-        "output": output,
+        'task_id': task_id,
+        'task_type': 'task_list',
+        'status': task.get('status'),
+        'description': task.get('description'),
+        'output': output,
     }
     if is_logical_kanban_enabled():
-        lkb = task_lkb_view(context, task_id)
-        task_payload["lkb"] = {
-            "validation_status": lkb["validation_status"],
-            "last_validation_run_id": lkb["last_validation_run_id"],
-            "blocked_reason": lkb["blockedReason"],
-            **({"proof_trace": lkb["proof_trace"]} if "proof_trace" in lkb else {}),
+        lkb = task_lkb_view(context, task_id, include_proof_trace=True)
+        task_payload['lkb'] = {
+            'validation_status': lkb['validation_status'],
+            'last_validation_run_id': lkb['last_validation_run_id'],
+            'blocked_reason': lkb['blockedReason'],
+            **(
+                {'proof_trace_summary': lkb['proofTraceSummary']}
+                if 'proofTraceSummary' in lkb
+                else {}
+            ),
         }
     return ToolResult(
-        name="TaskOutput",
+        name='TaskOutput',
         output={
-            "retrieval_status": retrieval_status,
-            "task": task_payload,
+            'retrieval_status': retrieval_status,
+            'task': task_payload,
         },
     )
 
@@ -814,8 +817,8 @@ async def _poll_runtime_until_terminal(
             # Task evicted mid-poll — treat as success/None like the
             # not-found branch above.
             return ToolResult(
-                name="TaskOutput",
-                output={"retrieval_status": "success", "task": None},
+                name='TaskOutput',
+                output={'retrieval_status': 'success', 'task': None},
             )
         if is_terminal_task_status(runtime.status):
             return _runtime_task_to_output(task_id, runtime, context)
@@ -833,8 +836,8 @@ async def _poll_runtime_until_terminal(
             # Timed out — return the running snapshot but flag it.
             snapshot = _runtime_task_to_output(task_id, runtime, context)
             timed_out = dict(snapshot.output) if isinstance(snapshot.output, dict) else {}
-            timed_out["retrieval_status"] = "timeout"
-            return ToolResult(name="TaskOutput", output=timed_out)
+            timed_out['retrieval_status'] = 'timeout'
+            return ToolResult(name='TaskOutput', output=timed_out)
         await asyncio.sleep(min(poll_interval, max(remaining, 0.01)))
 
 
@@ -857,46 +860,46 @@ def _runtime_task_to_output(
         snapshot = read_background_output(context, task_id)
         if snapshot is None:
             return ToolResult(
-                name="TaskOutput",
-                output={"retrieval_status": "success", "task": None},
+                name='TaskOutput',
+                output={'retrieval_status': 'success', 'task': None},
             )
         return ToolResult(
-            name="TaskOutput",
+            name='TaskOutput',
             output={
-                "retrieval_status": "success",
-                "task": {
-                    "task_id": task_id,
-                    "task_type": "bash_background",
-                    "status": snapshot["status"],
-                    "exit_code": snapshot["exit_code"],
-                    "command": snapshot["command"],
-                    "description": snapshot["description"],
-                    "output": snapshot["output"],
-                    "truncated": snapshot["truncated"],
-                    "pid": snapshot["pid"],
-                    "started_at": snapshot["started_at"],
-                    "finished_at": snapshot["finished_at"],
+                'retrieval_status': 'success',
+                'task': {
+                    'task_id': task_id,
+                    'task_type': 'bash_background',
+                    'status': snapshot['status'],
+                    'exit_code': snapshot['exit_code'],
+                    'command': snapshot['command'],
+                    'description': snapshot['description'],
+                    'output': snapshot['output'],
+                    'truncated': snapshot['truncated'],
+                    'pid': snapshot['pid'],
+                    'started_at': snapshot['started_at'],
+                    'finished_at': snapshot['finished_at'],
                 },
             },
         )
 
     if isinstance(runtime, LocalAgentTaskState):
-        text = runtime.result_text or ""
+        text = runtime.result_text or ''
         if is_terminal_task_status(runtime.status):
-            retrieval_status = "success"
+            retrieval_status = 'success'
         else:
-            retrieval_status = "not_ready"
+            retrieval_status = 'not_ready'
         return ToolResult(
-            name="TaskOutput",
+            name='TaskOutput',
             output={
-                "retrieval_status": retrieval_status,
-                "task": {
-                    "task_id": task_id,
-                    "task_type": "local_agent",
-                    "status": runtime.status,
-                    "description": runtime.description,
-                    "agent_type": runtime.agent_type,
-                    "output": text,
+                'retrieval_status': retrieval_status,
+                'task': {
+                    'task_id': task_id,
+                    'task_type': 'local_agent',
+                    'status': runtime.status,
+                    'description': runtime.description,
+                    'agent_type': runtime.agent_type,
+                    'output': text,
                 },
             },
         )
@@ -904,43 +907,43 @@ def _runtime_task_to_output(
     # Unknown TaskStateBase subclass — surface what we have. Future task
     # types can extend this dispatch without touching the readers above.
     return ToolResult(
-        name="TaskOutput",
+        name='TaskOutput',
         output={
-            "retrieval_status": "success",
-            "task": {
-                "task_id": task_id,
-                "task_type": runtime.type,
-                "status": runtime.status,
-                "description": runtime.description,
-                "output": "",
+            'retrieval_status': 'success',
+            'task': {
+                'task_id': task_id,
+                'task_type': runtime.type,
+                'status': runtime.status,
+                'description': runtime.description,
+                'output': '',
             },
         },
     )
 
 
 TaskOutputTool: Tool = build_tool(
-    name="TaskOutput",
+    name='TaskOutput',
     input_schema={
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "task_id": {"type": "string"},
-            "block": {
-                "type": "boolean",
-                "default": True,
-                "description": "Whether to wait for task completion (default: true)",
+        'type': 'object',
+        'additionalProperties': False,
+        'properties': {
+            'task_id': {'type': 'string'},
+            'block': {
+                'type': 'boolean',
+                'default': True,
+                'description': 'Whether to wait for task completion (default: true)',
             },
             # Chapter-10 / WI-4.1 schema bounds (mirrors TS
             # TaskOutputTool.tsx:33 ``z.number().min(0).max(600000)``).
-            "timeout": {
-                "type": "number",
-                "minimum": 0,
-                "maximum": 600000,
-                "default": 30000,
-                "description": "Max wait time in ms (default 30000; max 600000)",
+            'timeout': {
+                'type': 'number',
+                'minimum': 0,
+                'maximum': 600000,
+                'default': 30000,
+                'description': 'Max wait time in ms (default 30000; max 600000)',
             },
         },
-        "required": ["task_id"],
+        'required': ['task_id'],
     },
     call=_task_output_call,
     prompt="""\
@@ -950,8 +953,8 @@ Get the output of a running or completed background task.
 - Returns the task status and any available output
 - Use this tool to check on the progress or results of background tasks
 """,
-    description="Get output for a background task.",
-    aliases=("AgentOutputTool", "BashOutputTool"),
+    description='Get output for a background task.',
+    aliases=('AgentOutputTool', 'BashOutputTool'),
     strict=True,
     max_result_size_chars=100_000,
     is_read_only=lambda _input: True,

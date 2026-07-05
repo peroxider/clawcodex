@@ -28,6 +28,13 @@ from .commit_gate_fuzzy import (
     aggregate_world_results,
     commit_gate_fuzzy_check,
 )
+from .explain import (
+    build_repair_suggestions,
+    explain_issue,
+    explain_validation_run,
+    next_actions_for_task,
+    proof_trace_summary,
+)
 from .fuzzy_types import (
     AggregationAction,
     AggregationDecision,
@@ -50,7 +57,12 @@ from .fuzzy_types import (
 )
 from .glossary import BUILT_IN_GLOSSARY, Glossary, GlossaryEntry
 from .ambiguity_detector import AmbiguityDetector
-from .fuzzy_patterns import BUILT_IN_PATTERN_LIBRARY, DomainConstraint, FuzzyPattern, FuzzyPatternLibrary
+from .fuzzy_patterns import (
+    BUILT_IN_PATTERN_LIBRARY,
+    DomainConstraint,
+    FuzzyPattern,
+    FuzzyPatternLibrary,
+)
 from .ir import (
     SCHEMA_VERSION,
     AssertionKind,
@@ -89,6 +101,7 @@ from .types import (
     FactsSnapshot,
     Proposal,
     ProposedChange,
+    RepairAction,
     RepairSuggestion,
     ValidationIssue,
     ValidationRun,
@@ -142,6 +155,7 @@ __all__ = [
     'Proposal',
     'ProposedChange',
     'Quantifier',
+    'RepairAction',
     'RepairSuggestion',
     'RuleEngineResult',
     'SCHEMA_VERSION',
@@ -157,6 +171,7 @@ __all__ = [
     'aggregate_world_results',
     'and_',
     'assertion_hash',
+    'build_repair_suggestions',
     'canonical_hash',
     'canonical_json',
     'commit_gate_fuzzy_check',
@@ -167,6 +182,8 @@ __all__ = [
     'event_for_proposal',
     'event_for_revalidation_requested',
     'event_for_validation_run',
+    'explain_issue',
+    'explain_validation_run',
     'extract_predicates',
     'get_audit_log',
     'get_logical_kanban',
@@ -174,11 +191,13 @@ __all__ = [
     'make_canonical',
     'maybe_commit_task_update',
     'maybe_commit_todo_write',
+    'next_actions_for_task',
     'not_',
     'or_',
     'pred',
     'prepare_task_change',
     'prepare_todo_write',
+    'proof_trace_summary',
     'render_assertion',
     'render_node',
     'render_proof_trace',
