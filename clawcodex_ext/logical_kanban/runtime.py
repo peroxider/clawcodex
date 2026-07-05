@@ -11,6 +11,7 @@ from .service import LogicalKanbanService
 @dataclass(slots=True)
 class LogicalKanbanRuntime:
     service: LogicalKanbanService = field(default_factory=LogicalKanbanService)
+    strict_acceptance_enabled: bool = False
 
 
 def get_logical_kanban(context: Any) -> LogicalKanbanRuntime:

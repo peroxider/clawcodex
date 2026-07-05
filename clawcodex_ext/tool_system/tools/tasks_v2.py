@@ -8,7 +8,7 @@ from ..context import ToolContext
 from ..errors import ToolInputError
 from ..protocol import ToolResult
 from clawcodex_ext.logical_kanban.context_adapter import task_list_view
-from clawcodex_ext.logical_kanban import maybe_commit_task_update
+from clawcodex_ext.logical_kanban import prepare_task_change
 from src.utils.task_flags import is_todo_v2_enabled
 
 
@@ -126,6 +126,30 @@ def _cascade_delete(task_id: str, context: ToolContext) -> None:
             other["blockedBy"] = [x for x in blocked_by if x != task_id]
 
 
+def _task_update_change_kind(tool_input: dict[str, Any]) -> str:
+    status = tool_input.get("status")
+    if status == "deleted":
+        return "delete_task"
+    if status is not None:
+        return "transition_status"
+    if tool_input.get("addBlocks") is not None or tool_input.get("addBlockedBy") is not None:
+        return "add_dependency"
+    return "update_task_fields"
+
+
+def _bind_lkb_validation(task: dict[str, Any], lkb: dict[str, Any] | None) -> None:
+    if lkb is None:
+        return
+    validation_run_id = lkb.get("validationRunId")
+    if not validation_run_id:
+        return
+    metadata = dict(task.get("metadata") or {})
+    lkb_metadata = dict(metadata.get("lkb") or {})
+    lkb_metadata["validation_run_id"] = validation_run_id
+    metadata["lkb"] = lkb_metadata
+    task["metadata"] = metadata
+
+
 # ---------------------------------------------------------------------------
 # Tool call implementations
 # ---------------------------------------------------------------------------
@@ -146,6 +170,19 @@ def _task_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
         raise ToolInputError("metadata must be an object when provided")
 
     task_id = _new_task_id()
+    denied, lkb = prepare_task_change(
+        change_kind="create_task",
+        tool_input={
+            "taskId": task_id,
+            "subject": subject,
+            "description": description,
+            "activeForm": active_form,
+            "metadata": dict(metadata),
+        },
+        context=context,
+    )
+    if denied is not None:
+        return denied
     context.tasks[task_id] = {
         "id": task_id,
         "subject": subject,
@@ -158,9 +195,12 @@ def _task_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
         "metadata": dict(metadata),
         "output": "",
     }
+    output: dict[str, Any] = {"task": {"id": task_id, "subject": subject}}
+    if lkb is not None:
+        output["lkb"] = lkb
     return ToolResult(
         name="TaskCreate",
-        output={"task": {"id": task_id, "subject": subject}},
+        output=output,
     )
 
 
@@ -335,20 +375,47 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
     task_id = tool_input.get("taskId")
     if not isinstance(task_id, str) or not task_id.strip():
         raise ToolInputError("taskId must be a non-empty string")
-    task = context.tasks.get(task_id)
-    if task is None:
-        return ToolResult(
-            name="TaskUpdate",
-            output={
-                "success": False,
-                "taskId": task_id,
-                "updatedFields": [],
-                "error": "Task not found",
-            },
-        )
 
     updated_fields: list[str] = []
     status_change: dict[str, str] | None = None
+
+    if "status" in tool_input and tool_input["status"] is not None:
+        status = tool_input["status"]
+        if not isinstance(status, str) or status not in _TASK_STATUSES and status != "deleted":
+            raise ToolInputError(
+                "status must be pending|in_progress|completed|deleted when provided"
+            )
+
+    for input_key in ("addBlocks", "addBlockedBy"):
+        if input_key in tool_input and tool_input[input_key] is not None:
+            ids = tool_input[input_key]
+            if not isinstance(ids, list) or not all(isinstance(x, str) for x in ids):
+                raise ToolInputError(f"{input_key} must be an array of strings when provided")
+
+    if "metadata" in tool_input and tool_input["metadata"] is not None:
+        md = tool_input["metadata"]
+        if not isinstance(md, dict):
+            raise ToolInputError("metadata must be an object when provided")
+
+    denied, lkb = prepare_task_change(
+        change_kind=_task_update_change_kind(tool_input),
+        tool_input=tool_input,
+        context=context,
+    )
+    if denied is not None:
+        return denied
+
+    task = context.tasks.get(task_id)
+    if task is None:
+        out: dict[str, Any] = {
+            "success": False,
+            "taskId": task_id,
+            "updatedFields": [],
+            "error": "Task not found",
+        }
+        if lkb is not None:
+            out["lkb"] = lkb
+        return ToolResult(name="TaskUpdate", output=out)
 
     for field in ("subject", "description", "activeForm", "owner"):
         if field in tool_input and tool_input[field] is not None:
@@ -361,13 +428,6 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
 
     if "status" in tool_input and tool_input["status"] is not None:
         status = tool_input["status"]
-        if not isinstance(status, str) or status not in _TASK_STATUSES and status != "deleted":
-            raise ToolInputError(
-                "status must be pending|in_progress|completed|deleted when provided"
-            )
-        denied = maybe_commit_task_update(tool_input=tool_input, context=context)
-        if denied is not None:
-            return denied
         if status == "deleted":
             context.tasks.pop(task_id, None)
             # Cascade delete: remove this task's ID from all other tasks'
@@ -375,18 +435,22 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
             _cascade_delete(task_id, context)
             return ToolResult(
                 name="TaskUpdate",
-                output={"success": True, "taskId": task_id, "updatedFields": ["deleted"]},
+                output={
+                    "success": True,
+                    "taskId": task_id,
+                    "updatedFields": ["deleted"],
+                    **({"lkb": lkb} if lkb is not None else {}),
+                },
             )
         if status != task.get("status"):
             status_change = {"from": str(task.get("status")), "to": status}
             task["status"] = status
+            _bind_lkb_validation(task, lkb)
             updated_fields.append("status")
 
     for rel_field, input_key in (("blocks", "addBlocks"), ("blockedBy", "addBlockedBy")):
         if input_key in tool_input and tool_input[input_key] is not None:
             ids = tool_input[input_key]
-            if not isinstance(ids, list) or not all(isinstance(x, str) for x in ids):
-                raise ToolInputError(f"{input_key} must be an array of strings when provided")
             cur = list(task.get(rel_field) or [])
             for x in ids:
                 if x not in cur:
@@ -397,8 +461,6 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
 
     if "metadata" in tool_input and tool_input["metadata"] is not None:
         md = tool_input["metadata"]
-        if not isinstance(md, dict):
-            raise ToolInputError("metadata must be an object when provided")
         existing = dict(task.get("metadata") or {})
         for k, v in md.items():
             if v is None:
@@ -408,9 +470,14 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
         task["metadata"] = existing
         updated_fields.append("metadata")
 
+    if status_change is not None:
+        _bind_lkb_validation(task, lkb)
+
     out: dict[str, Any] = {"success": True, "taskId": task_id, "updatedFields": updated_fields}
     if status_change is not None:
         out["statusChange"] = status_change
+    if lkb is not None:
+        out["lkb"] = lkb
     return ToolResult(name="TaskUpdate", output=out)
 
 

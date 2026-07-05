@@ -5,7 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-ChangeKind = Literal["todo_write", "task_update"]
+ChangeKind = Literal[
+    "create_task",
+    "update_task_fields",
+    "transition_status",
+    "delete_task",
+    "add_dependency",
+    "remove_dependency",
+    "legacy_todo_replace_all",
+]
 
 
 @dataclass(frozen=True)
@@ -82,6 +90,7 @@ class ValidationRun:
     status: Literal["accepted", "denied"]
     issues: tuple[ValidationIssue, ...] = ()
     proof_trace: tuple[dict[str, Any], ...] = ()
+    derived_facts: tuple[str, ...] = ()
     snapshot_hash: str = ""
 
     @property
@@ -95,6 +104,7 @@ class ValidationRun:
             "status": self.status,
             "issues": [issue.to_dict() for issue in self.issues],
             "proofTrace": list(self.proof_trace),
+            "derivedFacts": list(self.derived_facts),
             "snapshotHash": self.snapshot_hash,
         }
 
@@ -105,11 +115,13 @@ class CommitResult:
     proposal_id: str
     validation_id: str
     reason: dict[str, Any] | None = None
+    derived_facts: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "committed": self.committed,
             "proposalId": self.proposal_id,
             "validationId": self.validation_id,
+            "derivedFacts": list(self.derived_facts),
             **({"reason": self.reason} if self.reason is not None else {}),
         }

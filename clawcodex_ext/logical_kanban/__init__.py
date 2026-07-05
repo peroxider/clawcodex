@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from .adapters import maybe_commit_task_update, maybe_commit_todo_write
+from .adapters import (
+    maybe_commit_task_update,
+    maybe_commit_todo_write,
+    prepare_task_change,
+    prepare_todo_write,
+)
 from .runtime import LogicalKanbanRuntime, get_logical_kanban
 from .service import LogicalKanbanService
 from .types import (
@@ -28,4 +33,6 @@ __all__ = [
     "get_logical_kanban",
     "maybe_commit_task_update",
     "maybe_commit_todo_write",
+    "prepare_task_change",
+    "prepare_todo_write",
 ]

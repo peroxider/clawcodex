@@ -75,7 +75,94 @@ def test_feature_on_allows_unblocked_task_status_write(
 
     assert result.is_error is False
     assert result.output["success"] is True
+    assert result.output["lkb"]["validationRunId"].startswith("lkb-val-")
+    assert result.output["lkb"]["decision"] == "committed"
     assert ctx.tasks[task_id]["status"] == "in_progress"
+    assert (
+        ctx.tasks[task_id]["metadata"]["lkb"]["validation_run_id"]
+        == result.output["lkb"]["validationRunId"]
+    )
+
+
+def test_feature_on_denied_mixed_update_does_not_mutate_any_task_fields(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _set_lkb(monkeypatch, True)
+    ctx = ToolContext(workspace_root=tmp_path)
+    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output[
+        "task"
+    ]["id"]
+    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output[
+        "task"
+    ]["id"]
+    TaskUpdateTool.call({"taskId": blocked, "addBlockedBy": [blocker]}, ctx)
+    before = dict(ctx.tasks[blocked])
+
+    result = TaskUpdateTool.call(
+        {
+            "taskId": blocked,
+            "subject": "Should not land",
+            "status": "in_progress",
+            "metadata": {"note": "should not land"},
+        },
+        ctx,
+    )
+
+    assert result.is_error is True
+    assert result.output["lkb"]["decision"] == "denied"
+    assert result.output["lkb"]["validationRunId"].startswith("lkb-val-")
+    assert ctx.tasks[blocked] == before
+
+
+def test_feature_on_strict_acceptance_denies_completion_without_proof(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from clawcodex_ext.logical_kanban import get_logical_kanban
+
+    _set_lkb(monkeypatch, True)
+    ctx = ToolContext(workspace_root=tmp_path)
+    get_logical_kanban(ctx).strict_acceptance_enabled = True
+    task_id = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx).output["task"][
+        "id"
+    ]
+    TaskUpdateTool.call({"taskId": task_id, "status": "in_progress"}, ctx)
+
+    result = TaskUpdateTool.call({"taskId": task_id, "status": "completed"}, ctx)
+
+    assert result.is_error is True
+    assert result.output["reason"]["code"] == "completed_requires_acceptance_proof"
+    assert ctx.tasks[task_id]["status"] == "in_progress"
+
+
+def test_feature_on_strict_acceptance_allows_completion_with_proof(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from clawcodex_ext.logical_kanban import get_logical_kanban
+
+    _set_lkb(monkeypatch, True)
+    ctx = ToolContext(workspace_root=tmp_path)
+    get_logical_kanban(ctx).strict_acceptance_enabled = True
+    task_id = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx).output["task"][
+        "id"
+    ]
+    TaskUpdateTool.call({"taskId": task_id, "status": "in_progress"}, ctx)
+
+    result = TaskUpdateTool.call(
+        {
+            "taskId": task_id,
+            "status": "completed",
+            "metadata": {"lkb": {"acceptance_proof": "tests passed"}},
+        },
+        ctx,
+    )
+
+    assert result.is_error is False
+    assert result.output["lkb"]["validationRunId"].startswith("lkb-val-")
+    assert "HasAcceptanceProof" in " ".join(result.output["lkb"]["derivedFacts"])
+    assert ctx.tasks[task_id]["status"] == "completed"
 
 
 def test_context_adapter_derives_blocked_and_ready_without_mutating_context(
@@ -105,6 +192,48 @@ def test_context_adapter_derives_blocked_and_ready_without_mutating_context(
 
     assert blocked not in snapshot.blocked_ids
     assert blocked in snapshot.ready_ids
+
+
+def test_feature_on_delete_cascades_only_after_validation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _set_lkb(monkeypatch, True)
+    ctx = ToolContext(workspace_root=tmp_path)
+    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output[
+        "task"
+    ]["id"]
+    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output[
+        "task"
+    ]["id"]
+    TaskUpdateTool.call({"taskId": blocked, "addBlockedBy": [blocker]}, ctx)
+
+    missing = TaskUpdateTool.call({"taskId": "missing", "status": "deleted"}, ctx)
+    assert missing.output["success"] is False
+    assert blocker in ctx.tasks[blocked]["blockedBy"]
+
+    deleted = TaskUpdateTool.call({"taskId": blocker, "status": "deleted"}, ctx)
+    assert deleted.output["success"] is True
+    assert deleted.output["lkb"]["validationRunId"].startswith("lkb-val-")
+    assert blocker not in ctx.tasks
+    assert blocker not in ctx.tasks[blocked]["blockedBy"]
+
+
+def test_feature_on_todo_write_success_includes_lkb_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _set_lkb(monkeypatch, True)
+    ctx = ToolContext(workspace_root=tmp_path)
+
+    result = TodoWriteTool.call(
+        {"todos": [{"content": "x", "status": "pending", "activeForm": "Doing x"}]},
+        ctx,
+    )
+
+    assert result.output["lkb"]["changeKind"] == "legacy_todo_replace_all"
+    assert result.output["lkb"]["validationRunId"].startswith("lkb-val-")
+    assert ctx.todos == [{"content": "x", "status": "pending", "activeForm": "Doing x"}]
 
 
 def test_context_adapter_repairs_blocks_blocked_by_mismatch_for_task_list(
