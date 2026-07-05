@@ -233,6 +233,26 @@ def test_read_audit_events_for_run_returns_commit_and_denial_events(
     assert "lkb_commit" in event_types
 
 
+def test_read_audit_events_for_run_filters_by_validation_run_id(
+    context: ToolContext,
+) -> None:
+    task_a = _create_task(context, "Task A")
+    task_b = _create_task(context, "Task B")
+    result_a = validate_task_transition(context, task_a, "in_progress")
+    result_b = validate_task_transition(context, task_b, "in_progress")
+    run_id_a = result_a["validationRunId"]
+    run_id_b = result_b["validationRunId"]
+
+    assert run_id_a != run_id_b
+    assert run_id_a.startswith("V-")
+
+    events = read_audit_events_for_run(context, run_id=run_id_a)
+
+    assert len(events) >= 1
+    assert all(e.get("validationRunId") == run_id_a for e in events)
+    assert not any(e.get("validationRunId") == run_id_b for e in events)
+
+
 def test_read_audit_events_for_run_filters_by_task_id(context: ToolContext) -> None:
     task_a = _create_task(context, "Task A")
     task_b = _create_task(context, "Task B")

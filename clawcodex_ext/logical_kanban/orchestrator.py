@@ -164,20 +164,22 @@ def read_audit_events_for_run(
     task_id: str | None = None,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
-    """Read LKB audit events for a run or task.
+    """Read LKB audit events for a validation run or task.
 
     This is the dashboard/event-contract consumer from F-137.  It returns the
     most recent matching events first as plain dictionaries.
+
+    When ``run_id`` is provided it is matched against the canonical
+    ``validationRunId`` field (``V-*``) rather than session id or payload
+    substrings.
     """
     log = get_audit_log(context)
     events = log.query(
+        validation_run_id=run_id,
         task_id=task_id,
         limit=limit,
     )
-    rows = [event.to_dict() for event in events]
-    if run_id:
-        rows = [row for row in rows if row.get("sessionId") == run_id or run_id in str(row.get("payload", ""))]
-    return rows
+    return [event.to_dict() for event in events]
 
 
 __all__ = [
