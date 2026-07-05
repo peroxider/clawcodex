@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 from .context_adapter import active_blockers, build_facts_snapshot, dependency_closure
@@ -37,6 +38,23 @@ class LogicalKanbanService:
         )
 
     def validate(self, proposal: Proposal, context: "ToolContext") -> ValidationRun:
+        if proposal.change.kind == "create_task":
+            return self._accepted(
+                proposal,
+                derived_facts=(
+                    f"Task({proposal.change.payload.get('taskId')})",
+                    f"Pending({proposal.change.payload.get('taskId')})",
+                    f"Status({proposal.change.payload.get('taskId')}, pending)",
+                ),
+                proof_trace=(
+                    {
+                        "rule": "LKB-CREATE-001",
+                        "premises": ["CreateTaskProposal"],
+                        "conclusion": "Create structural task facts.",
+                        "solverVersion": self.solver_version,
+                    },
+                ),
+            )
         if proposal.change.kind == "transition_status":
             return self._validate_status_transition(proposal, context)
         if proposal.change.kind in {
@@ -371,6 +389,64 @@ class LogicalKanbanService:
                     },
                 ),
             )
+        if proposal.change.kind == "add_dependency":
+            preview = self._preview_dependency_context(context, payload)
+            snapshot = self.snapshot(preview)  # type: ignore[arg-type]
+            task_cycle = (
+                sorted(snapshot.cycle_task_ids)
+                if not isinstance(task_id, str)
+                else sorted(
+                    {task_id, *dependency_closure(snapshot, task_id)} & snapshot.cycle_task_ids
+                )
+            )
+            if task_cycle:
+                issue = ValidationIssue(
+                    code="dependency_cycle_denied",
+                    message=(
+                        "Dependency update would create a cycle involving: "
+                        f"{', '.join(task_cycle)}."
+                    ),
+                    rule="LKB-DEPENDENCY-002",
+                    task_id=task_id if isinstance(task_id, str) else None,
+                    blockers=tuple(task_cycle),
+                    repair_suggestions=(
+                        RepairSuggestion(
+                            action="remove_dependency_cycle",
+                            target=task_id if isinstance(task_id, str) else None,
+                            message="Remove one reciprocal or transitive dependency edge.",
+                        ),
+                    ),
+                )
+                return ValidationRun(
+                    validation_id=f"lkb-val-{uuid.uuid4().hex[:12]}",
+                    proposal_id=proposal.proposal_id,
+                    status="denied",
+                    issues=(issue, *snapshot.warnings),
+                    snapshot_hash=snapshot.hash,
+                    derived_facts=tuple(f"Cycle({cycle_task_id})" for cycle_task_id in task_cycle),
+                    proof_trace=(
+                        {
+                            "rule": "LKB-DEPENDENCY-002",
+                            "premises": [
+                                f"Cycle({cycle_task_id})" for cycle_task_id in task_cycle
+                            ],
+                            "conclusion": "DenyCommit",
+                            "solverVersion": self.solver_version,
+                        },
+                    ),
+                )
+            return self._accepted(
+                proposal,
+                derived_facts=(f"CanMutateDependencies({task_id})",),
+                proof_trace=(
+                    {
+                        "rule": "LKB-DEPENDENCY-001",
+                        "premises": [f"Task({task_id})", "NoDependencyCycleAfterMutation"],
+                        "conclusion": f"CanMutateDependencies({task_id})",
+                        "solverVersion": self.solver_version,
+                    },
+                ),
+            )
         return self._accepted(
             proposal,
             derived_facts=(f"CanMutateDependencies({task_id})",),
@@ -383,6 +459,34 @@ class LogicalKanbanService:
                 },
             ),
         )
+
+    def _preview_dependency_context(
+        self,
+        context: "ToolContext",
+        payload: dict[str, Any],
+    ) -> Any:
+        task_id = payload.get("taskId")
+        tasks = {
+            key: {
+                **dict(value),
+                "blocks": list((value or {}).get("blocks") or []),
+                "blockedBy": list((value or {}).get("blockedBy") or []),
+                "metadata": dict((value or {}).get("metadata") or {}),
+            }
+            for key, value in (getattr(context, "tasks", {}) or {}).items()
+            if isinstance(value, dict)
+        }
+        task = tasks.get(task_id) if isinstance(task_id, str) else None
+        if task is not None:
+            for rel_field, input_key in (("blocks", "addBlocks"), ("blockedBy", "addBlockedBy")):
+                ids = payload.get(input_key)
+                if isinstance(ids, list):
+                    cur = list(task.get(rel_field) or [])
+                    for item in ids:
+                        if isinstance(item, str) and item not in cur:
+                            cur.append(item)
+                    task[rel_field] = cur
+        return SimpleNamespace(tasks=tasks, todos=getattr(context, "todos", ()))
 
     def _accepted(
         self,

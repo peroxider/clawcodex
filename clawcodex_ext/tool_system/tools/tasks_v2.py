@@ -7,12 +7,20 @@ from ..build_tool import Tool, build_tool
 from ..context import ToolContext
 from ..errors import ToolInputError
 from ..protocol import ToolResult
-from clawcodex_ext.logical_kanban.context_adapter import task_list_view
+from clawcodex_ext.logical_kanban.context_adapter import task_lkb_view, task_list_view
 from clawcodex_ext.logical_kanban import prepare_task_change
+from clawcodex_ext.logical_kanban.flags import is_logical_kanban_enabled
 from src.utils.task_flags import is_todo_v2_enabled
 
 
 _TASK_STATUSES = {"pending", "in_progress", "completed"}
+_LKB_METADATA_FIELDS = {
+    "acceptance_proof": str,
+    "strict_acceptance": bool,
+    "assertions": list,
+    "assumptions": list,
+    "validation_run_id": str,
+}
 
 
 def _new_task_id() -> str:
@@ -150,6 +158,26 @@ def _bind_lkb_validation(task: dict[str, Any], lkb: dict[str, Any] | None) -> No
     task["metadata"] = metadata
 
 
+def _validate_lkb_metadata(metadata: dict[str, Any]) -> None:
+    lkb = metadata.get("lkb")
+    if lkb is None:
+        return
+    if not isinstance(lkb, dict):
+        raise ToolInputError("metadata.lkb must be an object when provided")
+    for key, value in lkb.items():
+        expected = _LKB_METADATA_FIELDS.get(key)
+        if expected is None:
+            raise ToolInputError(f"metadata.lkb.{key} is not a supported LKB metadata field")
+        if value is None:
+            continue
+        if expected is list:
+            if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+                raise ToolInputError(f"metadata.lkb.{key} must be an array of strings")
+        elif not isinstance(value, expected):
+            type_name = "boolean" if expected is bool else "string"
+            raise ToolInputError(f"metadata.lkb.{key} must be a {type_name}")
+
+
 # ---------------------------------------------------------------------------
 # Tool call implementations
 # ---------------------------------------------------------------------------
@@ -168,6 +196,7 @@ def _task_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
         raise ToolInputError("activeForm must be a string when provided")
     if not isinstance(metadata, dict):
         raise ToolInputError("metadata must be an object when provided")
+    _validate_lkb_metadata(metadata)
 
     task_id = _new_task_id()
     denied, lkb = prepare_task_change(
@@ -195,8 +224,14 @@ def _task_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
         "metadata": dict(metadata),
         "output": "",
     }
+    _bind_lkb_validation(context.tasks[task_id], lkb)
     output: dict[str, Any] = {"task": {"id": task_id, "subject": subject}}
     if lkb is not None:
+        lkb["createdFacts"] = [
+            f"Task({task_id})",
+            f"Pending({task_id})",
+            f"Status({task_id}, pending)",
+        ]
         output["lkb"] = lkb
     return ToolResult(
         name="TaskCreate",
@@ -284,6 +319,8 @@ def _task_get_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResu
         "blocks": list(task.get("blocks") or []),
         "blockedBy": list(task.get("blockedBy") or []),
     }
+    if is_logical_kanban_enabled():
+        task_data["lkb"] = task_lkb_view(context, task_id)
     return ToolResult(
         name="TaskGet",
         output={"task": task_data},
@@ -333,7 +370,10 @@ Returns full task details:
 
 
 def _task_list_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
-    return ToolResult(name="TaskList", output={"tasks": task_list_view(context)})
+    return ToolResult(
+        name="TaskList",
+        output={"tasks": task_list_view(context, include_lkb=is_logical_kanban_enabled())},
+    )
 
 
 TaskListTool: Tool = build_tool(
@@ -396,6 +436,7 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
         md = tool_input["metadata"]
         if not isinstance(md, dict):
             raise ToolInputError("metadata must be an object when provided")
+        _validate_lkb_metadata(md)
 
     denied, lkb = prepare_task_change(
         change_kind=_task_update_change_kind(tool_input),
@@ -640,17 +681,26 @@ async def _task_output_call(tool_input: dict[str, Any], context: ToolContext) ->
 
     output = str(task.get("output") or "")
     retrieval_status = "success" if output else "not_ready"
+    task_payload: dict[str, Any] = {
+        "task_id": task_id,
+        "task_type": "task_list",
+        "status": task.get("status"),
+        "description": task.get("description"),
+        "output": output,
+    }
+    if is_logical_kanban_enabled():
+        lkb = task_lkb_view(context, task_id)
+        task_payload["lkb"] = {
+            "validation_status": lkb["validation_status"],
+            "last_validation_run_id": lkb["last_validation_run_id"],
+            "blocked_reason": lkb["blockedReason"],
+            **({"proof_trace": lkb["proof_trace"]} if "proof_trace" in lkb else {}),
+        }
     return ToolResult(
         name="TaskOutput",
         output={
             "retrieval_status": retrieval_status,
-            "task": {
-                "task_id": task_id,
-                "task_type": "task_list",
-                "status": task.get("status"),
-                "description": task.get("description"),
-                "output": output,
-            },
+            "task": task_payload,
         },
     )
 

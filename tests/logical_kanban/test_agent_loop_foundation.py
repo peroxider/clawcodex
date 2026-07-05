@@ -3,7 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.tool_system.context import ToolContext
-from src.tool_system.tools import TaskCreateTool, TaskListTool, TaskUpdateTool, TodoWriteTool
+from src.tool_system.tools import (
+    TaskCreateTool,
+    TaskGetTool,
+    TaskListTool,
+    TaskOutputTool,
+    TaskUpdateTool,
+    TodoWriteTool,
+)
 
 
 def _set_lkb(monkeypatch, enabled: bool) -> None:
@@ -84,6 +91,43 @@ def test_feature_on_allows_unblocked_task_status_write(
     )
 
 
+def test_feature_on_task_create_emits_structural_facts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _set_lkb(monkeypatch, True)
+    ctx = ToolContext(workspace_root=tmp_path)
+
+    result = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx)
+    task_id = result.output["task"]["id"]
+
+    assert result.output["lkb"]["validationRunId"].startswith("lkb-val-")
+    assert result.output["lkb"]["createdFacts"] == [
+        f"Task({task_id})",
+        f"Pending({task_id})",
+        f"Status({task_id}, pending)",
+    ]
+    assert ctx.tasks[task_id]["metadata"]["lkb"]["validation_run_id"].startswith("lkb-val-")
+
+
+def test_feature_on_rejects_invalid_lkb_metadata_shape(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _set_lkb(monkeypatch, True)
+    ctx = ToolContext(workspace_root=tmp_path)
+
+    try:
+        TaskCreateTool.call(
+            {"subject": "Task", "description": "D", "metadata": {"lkb": "invalid"}},
+            ctx,
+        )
+    except Exception as exc:
+        assert "metadata.lkb must be an object" in str(exc)
+    else:
+        raise AssertionError("TaskCreate should reject invalid metadata.lkb")
+
+
 def test_feature_on_denied_mixed_update_does_not_mutate_any_task_fields(
     tmp_path: Path,
     monkeypatch,
@@ -113,6 +157,63 @@ def test_feature_on_denied_mixed_update_does_not_mutate_any_task_fields(
     assert result.output["lkb"]["decision"] == "denied"
     assert result.output["lkb"]["validationRunId"].startswith("lkb-val-")
     assert ctx.tasks[blocked] == before
+
+
+def test_feature_on_task_get_list_and_output_expose_lkb_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import asyncio
+
+    _set_lkb(monkeypatch, True)
+    ctx = ToolContext(workspace_root=tmp_path)
+    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output[
+        "task"
+    ]["id"]
+    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output[
+        "task"
+    ]["id"]
+    TaskUpdateTool.call({"taskId": blocked, "addBlockedBy": [blocker]}, ctx)
+
+    denied = TaskUpdateTool.call({"taskId": blocked, "status": "in_progress"}, ctx)
+    got = TaskGetTool.call({"taskId": blocked}, ctx).output["task"]
+    listed = TaskListTool.call({}, ctx).output["tasks"]
+    listed_blocked = [task for task in listed if task["id"] == blocked][0]
+    task_output = asyncio.run(TaskOutputTool.call({"task_id": blocked}, ctx)).output["task"]
+
+    assert got["status"] == "pending"
+    assert got["lkb"]["derivedStatus"] == "blocked"
+    assert got["lkb"]["blockedBy"] == [blocker]
+    assert got["lkb"]["latestDenialReason"]["validationRunId"] == denied.output["lkb"][
+        "validationRunId"
+    ]
+    assert listed_blocked["blockedBy"] == [blocker]
+    assert listed_blocked["lkb"]["blockedReason"] == f"Blocked by incomplete task(s): {blocker}."
+    assert task_output["lkb"]["validation_status"] == "denied"
+    assert task_output["lkb"]["blocked_reason"] == f"Blocked by incomplete task(s): {blocker}."
+
+
+def test_feature_on_completing_blocker_then_retrying_blocked_task_succeeds(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _set_lkb(monkeypatch, True)
+    ctx = ToolContext(workspace_root=tmp_path)
+    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output[
+        "task"
+    ]["id"]
+    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output[
+        "task"
+    ]["id"]
+    TaskUpdateTool.call({"taskId": blocked, "addBlockedBy": [blocker]}, ctx)
+
+    denied = TaskUpdateTool.call({"taskId": blocked, "status": "in_progress"}, ctx)
+    TaskUpdateTool.call({"taskId": blocker, "status": "completed"}, ctx)
+    retried = TaskUpdateTool.call({"taskId": blocked, "status": "in_progress"}, ctx)
+
+    assert denied.is_error is True
+    assert retried.is_error is False
+    assert ctx.tasks[blocked]["status"] == "in_progress"
 
 
 def test_feature_on_strict_acceptance_denies_completion_without_proof(
@@ -323,10 +424,12 @@ def test_feature_on_denies_cyclic_readiness_transition(
         "task"
     ]["id"]
     TaskUpdateTool.call({"taskId": first, "addBlockedBy": [second]}, ctx)
-    TaskUpdateTool.call({"taskId": second, "addBlockedBy": [first]}, ctx)
+    reciprocal = TaskUpdateTool.call({"taskId": second, "addBlockedBy": [first]}, ctx)
 
     result = TaskUpdateTool.call({"taskId": first, "status": "in_progress"}, ctx)
 
+    assert reciprocal.is_error is True
+    assert reciprocal.output["reason"]["code"] == "dependency_cycle_denied"
     assert result.is_error is True
-    assert result.output["reason"]["code"] == "cyclic_dependency_blocks_readiness"
+    assert result.output["reason"]["code"] == "blocked_task_cannot_enter_in_progress"
     assert ctx.tasks[first]["status"] == "pending"

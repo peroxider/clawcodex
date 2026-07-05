@@ -34,9 +34,17 @@ def prepare_task_change(
     if not is_logical_kanban_enabled():
         return None, None
     change = ProposedChange(kind=change_kind, payload=dict(tool_input))  # type: ignore[arg-type]
-    proposal, validation, commit = get_logical_kanban(context).service.run(change, context)
+    runtime = get_logical_kanban(context)
+    proposal, validation, commit = runtime.service.run(change, context)
     if commit.committed:
         return None, _accepted_lkb(proposal, validation, commit)
+    task_id = tool_input.get("taskId")
+    if isinstance(task_id, str) and task_id:
+        runtime.latest_denials[task_id] = {
+            "validationRunId": validation.validation_id,
+            "reason": commit.reason or {"code": "validation_denied"},
+            "message": validation.issues[0].message if validation.issues else "Validation denied.",
+        }
     return _denied_result("TaskUpdate", proposal, validation, commit), None
 
 

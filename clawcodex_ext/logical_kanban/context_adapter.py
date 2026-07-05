@@ -146,7 +146,7 @@ def dependency_closure(snapshot: FactsSnapshot, task_id: str) -> frozenset[str]:
     return frozenset(seen)
 
 
-def task_list_view(context: "ToolContext") -> list[dict[str, Any]]:
+def task_list_view(context: "ToolContext", *, include_lkb: bool = False) -> list[dict[str, Any]]:
     snapshot = build_facts_snapshot(context)
     rows: list[dict[str, Any]] = []
     for task_id, task in snapshot.normalized_tasks.items():
@@ -158,9 +158,86 @@ def task_list_view(context: "ToolContext") -> list[dict[str, Any]]:
             **({"owner": task["owner"]} if task.get("owner") else {}),
             "blockedBy": list(active),
         }
+        if include_lkb:
+            row["lkb"] = task_lkb_view(context, task_id, snapshot=snapshot)
         rows.append(row)
     rows.sort(key=lambda x: x["id"])
     return rows
+
+
+def task_lkb_view(
+    context: "ToolContext",
+    task_id: str,
+    *,
+    snapshot: FactsSnapshot | None = None,
+    include_proof_trace: bool = False,
+) -> dict[str, Any]:
+    snapshot = snapshot or build_facts_snapshot(context)
+    task = snapshot.normalized_tasks.get(task_id)
+    if task is None:
+        return {
+            "derivedStatus": "needs_recheck",
+            "blockedBy": [],
+            "blockedReason": "Task is missing from the current LKB snapshot.",
+            "nextActions": ["refresh_task"],
+            "validation_status": "missing",
+            "last_validation_run_id": None,
+        }
+
+    blockers = active_blockers(snapshot, task_id)
+    warnings = [
+        w
+        for w in snapshot.warnings
+        if w.task_id == task_id and w.code != "dependency_direction_mismatch"
+    ]
+    lkb_metadata = ((task.get("metadata") or {}).get("lkb") or {})
+    validation_run_id = lkb_metadata.get("validation_run_id")
+    latest_denial = _latest_denial(context, task_id)
+
+    if blockers:
+        derived_status = "blocked"
+    elif task_id in snapshot.cycle_task_ids or warnings:
+        derived_status = "needs_recheck"
+    else:
+        derived_status = "ready"
+
+    blocked_reason = None
+    next_actions: list[str] = []
+    if blockers:
+        blocked_reason = f"Blocked by incomplete task(s): {', '.join(blockers)}."
+        next_actions = [f"complete:{blocker}" for blocker in blockers]
+    elif task_id in snapshot.cycle_task_ids:
+        blocked_reason = "Dependency graph contains a cycle involving this task."
+        next_actions = ["remove_dependency_cycle"]
+    elif warnings:
+        blocked_reason = warnings[0].message
+        next_actions = ["repair_dependency_metadata"]
+    else:
+        next_actions = ["start_task"] if task["status"] == "pending" else []
+
+    out: dict[str, Any] = {
+        "derivedStatus": derived_status,
+        "blockedBy": list(blockers),
+        "blockedReason": blocked_reason,
+        "nextActions": next_actions,
+        "validation_status": (
+            "denied" if latest_denial else ("validated" if validation_run_id else "unknown")
+        ),
+        "last_validation_run_id": validation_run_id,
+        "latestDenialReason": latest_denial,
+    }
+    if include_proof_trace:
+        out["proof_trace"] = []
+    return out
+
+
+def _latest_denial(context: "ToolContext", task_id: str) -> dict[str, Any] | None:
+    runtime = getattr(context, "logical_kanban", None)
+    denials = getattr(runtime, "latest_denials", None)
+    if not isinstance(denials, dict):
+        return None
+    denial = denials.get(task_id)
+    return dict(denial) if isinstance(denial, dict) else None
 
 
 def _normalize_task(task_id: str, task: dict[str, Any]) -> dict[str, Any]:
