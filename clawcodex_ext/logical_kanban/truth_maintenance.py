@@ -288,6 +288,13 @@ class TruthMaintenanceSystem:
             assertion_id for assertion_id, record in self._assertions.items() if record.status == "stale"
         )
 
+    @property
+    def stale_assumption_count(self) -> int:
+        """Number of assumptions that are invalid or superseded."""
+        return sum(
+            1 for record in self._assumptions.values() if record.status in ("invalid", "superseded")
+        )
+
     def assumptions_for_task(self, task_id: str) -> tuple[AssumptionRecord, ...]:
         ids: set[str] = set()
         for assertion in self._assertions.values():

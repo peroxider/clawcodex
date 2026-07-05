@@ -32,6 +32,7 @@ AuditEventType = Literal[
     "lkb_denial",
     "lkb_assumption_invalidated",
     "lkb_revalidation_requested",
+    "lkb_human_override",
 ]
 
 
@@ -335,6 +336,38 @@ def event_for_assumption_invalidated(
     )
 
 
+def event_for_human_override(
+    *,
+    assumption_id: str,
+    assertion_id: str,
+    actor: str,
+    reason: str,
+    previous_result: str,
+    task_ids: tuple[str, ...] = (),
+    validation_run_id: str | None = None,
+    session_id: str | None = None,
+) -> AuditEvent:
+    """Record an explicit human override of an LKB assumption/denial."""
+    return AuditEvent(
+        event_id=_new_event_id(),
+        event_type="lkb_human_override",
+        actor=actor,
+        timestamp=_utc_now(),
+        session_id=session_id,
+        proposal_id=None,
+        validation_run_id=validation_run_id,
+        task_id=task_ids[0] if task_ids else None,
+        decision="committed",
+        payload={
+            "assumptionId": assumption_id,
+            "assertionId": assertion_id,
+            "reason": reason,
+            "previousResult": previous_result,
+            "taskIds": list(task_ids),
+        },
+    )
+
+
 def event_for_revalidation_requested(
     task_id: str,
     *,
@@ -343,6 +376,7 @@ def event_for_revalidation_requested(
     session_id: str | None = None,
     actor: str = "system",
 ) -> AuditEvent:
+    """Record a request to revalidate a task after a dependency/assumption change."""
     return AuditEvent(
         event_id=_new_event_id(),
         event_type="lkb_revalidation_requested",
@@ -421,6 +455,7 @@ __all__ = [
     "default_session_log_path",
     "event_for_assumption_invalidated",
     "event_for_commit",
+    "event_for_human_override",
     "event_for_proposal",
     "event_for_revalidation_requested",
     "event_for_validation_run",

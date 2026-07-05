@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from .audit import AuditLog
     from .service import LogicalKanbanService
     from .truth_maintenance import TruthMaintenanceSystem
+    from .types import FactsSnapshot
 
 
 @dataclass(slots=True)
@@ -20,6 +21,9 @@ class LogicalKanbanRuntime:
     strict_logical_todo_enabled: bool = False
     latest_denials: dict[str, dict[str, Any]] = field(default_factory=dict)
     audit_log: "AuditLog | None" = field(default=None)
+    # F-139: cache the last facts snapshot keyed by a lightweight context hash.
+    _snapshot_cache_key: str | None = field(default=None)
+    _snapshot_cache_value: "FactsSnapshot | None" = field(default=None)
 
 
 def _make_service() -> "LogicalKanbanService":

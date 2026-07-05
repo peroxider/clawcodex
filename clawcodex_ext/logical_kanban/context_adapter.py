@@ -12,22 +12,77 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from .explain import next_actions_for_task, proof_trace_summary
+from . import metrics
 from .types import FactsSnapshot, ValidationIssue
 
 if TYPE_CHECKING:
     from clawcodex_ext.tool_system.context import ToolContext
 
 
-def _get_tms(context: 'ToolContext'):
+def _get_runtime(context: 'ToolContext'):
     # Local import avoids a circular import at module load time: runtime
     # imports service, service imports context_adapter.
     from clawcodex_ext.logical_kanban.runtime import get_logical_kanban
 
-    runtime = get_logical_kanban(context)
-    return getattr(runtime, 'tms', None)
+    return get_logical_kanban(context)
+
+
+def _get_tms(context: 'ToolContext'):
+    return getattr(_get_runtime(context), 'tms', None)
+
+
+def _snapshot_cache_key(context: 'ToolContext') -> str:
+    """Return a lightweight hash key for the current task/todo surface.
+
+    The key intentionally excludes derived facts and heavy normalization so
+    repeated ``TaskList`` calls with unchanged context are cheap.
+    """
+    tasks = getattr(context, 'tasks', {}) or {}
+    todos = getattr(context, 'todos', []) or []
+    task_items = []
+    for task_id in sorted(tasks):
+        task = tasks[task_id]
+        if not isinstance(task, dict):
+            continue
+        if (task.get('metadata') or {}).get('_internal'):
+            continue
+        task_items.append(
+            (
+                task_id,
+                task.get('status'),
+                tuple(sorted(_string_list(task.get('blocks')))),
+                tuple(sorted(_string_list(task.get('blockedBy')))),
+                task.get('subject'),
+                task.get('description'),
+            )
+        )
+    todo_items = [
+        (
+            index,
+            t.get('status') if isinstance(t, dict) else None,
+            str(t.get('content', ''))[:256] if isinstance(t, dict) else '',
+        )
+        for index, t in enumerate(todos)
+    ]
+    payload = {
+        'tasks': task_items,
+        'todos': todo_items,
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, default=str).encode('utf-8')
+    ).hexdigest()
+    return f'sha256:{digest}'
 
 
 def build_facts_snapshot(context: 'ToolContext') -> FactsSnapshot:
+    cache_key = _snapshot_cache_key(context)
+    runtime = _get_runtime(context)
+    cached = runtime._snapshot_cache_value
+    if runtime._snapshot_cache_key == cache_key and cached is not None:
+        metrics.record_snapshot_cache_hit()
+        return cached
+    metrics.record_snapshot_cache_miss()
+
     todos = tuple(dict(t) for t in getattr(context, 'todos', []) or [])
     raw_tasks = {
         task_id: dict(task)
@@ -123,7 +178,7 @@ def build_facts_snapshot(context: 'ToolContext') -> FactsSnapshot:
         json.dumps(payload, sort_keys=True, default=str).encode('utf-8')
     ).hexdigest()
 
-    return FactsSnapshot(
+    snapshot = FactsSnapshot(
         todos=todos,
         tasks=raw_tasks,
         normalized_tasks=normalized_tasks,
@@ -137,6 +192,9 @@ def build_facts_snapshot(context: 'ToolContext') -> FactsSnapshot:
         warnings=tuple(warnings),
         hash=f'sha256:{digest}',
     )
+    runtime._snapshot_cache_key = cache_key
+    runtime._snapshot_cache_value = snapshot
+    return snapshot
 
 
 def active_blockers(snapshot: FactsSnapshot, task_id: str) -> tuple[str, ...]:

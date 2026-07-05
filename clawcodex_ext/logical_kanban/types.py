@@ -152,6 +152,9 @@ class ValidationRun:
     created_at: str = ''  # ISO-8601 UTC
     requested_by: str = 'system'
 
+    # F-138: per-adapter solver results for traceability when multiple engines run.
+    solver_results: tuple[dict[str, Any], ...] = ()
+
     @property
     def validation_id(self) -> str:
         """Backwards-compatible alias for :attr:`validation_run_id`."""
@@ -185,6 +188,7 @@ class ValidationRun:
             'repairSuggestions': [s.to_dict() for s in self.repair_suggestions],
             'createdAt': self.created_at,
             'requestedBy': self.requested_by,
+            'solverResults': list(self.solver_results),
         }
         if self.issues:
             out['issues'] = [issue.to_dict() for issue in self.issues]

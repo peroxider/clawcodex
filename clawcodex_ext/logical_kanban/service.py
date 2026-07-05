@@ -11,10 +11,12 @@ from typing import TYPE_CHECKING, Any
 
 from .ambiguity_detector import AmbiguityDetector
 from .commit_gate_fuzzy import aggregate_world_results, commit_gate_fuzzy_check
+from . import metrics
 from .audit import (
     AuditLog,
     event_for_assumption_invalidated,
     event_for_commit,
+    event_for_human_override,
     event_for_proposal,
     event_for_revalidation_requested,
     event_for_validation_run,
@@ -27,6 +29,8 @@ from .ir_hash import canonical_hash
 from .multiworld_validator import MultiWorldValidator
 from .rule_engine import Layer1RuleEngine
 from .runtime import get_logical_kanban
+from .solver_adapter import SolverRequest
+from .solver_pipeline import SolverPipeline
 from .truth_maintenance import TruthMaintenanceSystem
 from .world_generator import WorldGenerator
 from .types import (
@@ -82,6 +86,7 @@ class LogicalKanbanService:
 
     def __init__(self) -> None:
         self.engine = Layer1RuleEngine()
+        self.pipeline = SolverPipeline()
 
     def snapshot(self, context: 'ToolContext') -> FactsSnapshot:
         return build_facts_snapshot(context)
@@ -104,7 +109,33 @@ class LogicalKanbanService:
         _audit_log(context).append(
             event_for_validation_run(proposal, run, session_id=_session_id(context))
         )
+        task_count = len(getattr(context, 'tasks', {}) or {})
+        metrics.record_validation_run(
+            result=run.result,
+            engine=run.engine,
+            change_kind=proposal.change.kind,
+            duration_ms=run.duration_ms,
+            task_count=task_count,
+            task_id=run.task_id,
+            validation_run_id=run.validation_run_id,
+            proposal_id=proposal.proposal_id,
+        )
+        self._emit_snapshot_metrics(context)
         return run
+
+    def _emit_snapshot_metrics(self, context: 'ToolContext') -> None:
+        """Emit counts derived from the current facts snapshot."""
+        try:
+            snapshot = self.snapshot(context)
+        except Exception:  # pragma: no cover - metrics must never break validation
+            return
+        metrics.record_blocked_tasks(len(snapshot.blocked_ids))
+        try:
+            tms = get_logical_kanban(context).tms
+            stale_count = tms.stale_assumption_count
+        except Exception:
+            stale_count = 0
+        metrics.record_stale_assumptions(stale_count)
 
     def _do_validate(self, proposal: Proposal, context: 'ToolContext') -> ValidationRun:
         if proposal.change.kind == 'create_task':
@@ -147,7 +178,10 @@ class LogicalKanbanService:
         validation: ValidationRun,
         context: 'ToolContext',
     ) -> CommitResult:
-        if validation.accepted:
+        accepted = validation.accepted
+        if accepted and proposal.change.kind == 'transition_status':
+            accepted = self._validation_is_fresh(validation, context)
+        if accepted:
             commit = CommitResult(
                 committed=True,
                 proposal_id=proposal.proposal_id,
@@ -155,21 +189,58 @@ class LogicalKanbanService:
                 derived_facts=validation.derived_facts,
             )
         else:
+            reason_code = validation.issues[0].code if validation.issues else 'validation_denied'
+            if proposal.change.kind == 'transition_status' and not self._validation_is_fresh(validation, context):
+                reason_code = 'validation_stale'
             commit = CommitResult(
                 committed=False,
                 proposal_id=proposal.proposal_id,
                 validation_run_id=validation.validation_run_id,
                 reason={
-                    'code': validation.issues[0].code if validation.issues else 'validation_denied',
+                    'code': reason_code,
                     'validation': validation.to_dict(),
                 },
             )
         _audit_log(context).append(
             event_for_commit(proposal, validation, commit, session_id=_session_id(context))
         )
+        if not commit.committed and validation.issues:
+            metrics.record_denial(
+                rule=validation.issues[0].rule,
+                code=validation.issues[0].code,
+                change_kind=proposal.change.kind,
+                task_id=validation.task_id,
+                validation_run_id=validation.validation_run_id,
+            )
+        metrics.record_commit(
+            committed=commit.committed,
+            change_kind=proposal.change.kind,
+            task_id=validation.task_id,
+            validation_run_id=validation.validation_run_id,
+        )
         if commit.committed:
             self._persist_accepted_metadata(proposal, validation, context)
         return commit
+
+    def _validation_is_fresh(
+        self,
+        validation: ValidationRun,
+        context: 'ToolContext',
+    ) -> bool:
+        """Return True when the validation run matches the current snapshot.
+
+        F-139 requires that a status-transition commit is backed by a current
+        validation run.  We compare the run's input_facts_hash to the current
+        snapshot hash; any drift between propose/validate and commit denies the
+        commit and forces revalidation.
+        """
+        if not validation.input_facts_hash:
+            return False
+        try:
+            current_snapshot = self.snapshot(context)
+        except Exception:  # pragma: no cover - defensive only
+            return False
+        return validation.input_facts_hash == current_snapshot.hash
 
     def _persist_accepted_metadata(
         self,
@@ -588,133 +659,63 @@ class LogicalKanbanService:
             )
 
         if target_status == 'completed':
-            engine_result = self.engine.evaluate(
-                snapshot,
-                target_task_id=task_id,
-                target_status='completed',
-                strict_acceptance=self._strict_acceptance_enabled(context, task, payload),
-                acceptance_proof_present=self._has_acceptance_proof(task, payload),
+            pipeline_result = self._run_transition_pipeline(
+                proposal, snapshot, task_id, target_status, context, task, payload
             )
-            if engine_result.result == 'fail':
-                issue = ValidationIssue(
-                    code='completed_requires_acceptance_proof',
-                    message=engine_result.message,
-                    rule=engine_result.violated_rule or 'R-005',
-                    task_id=task_id,
-                    repair_suggestions=(
-                        RepairSuggestion(
-                            action='add_acceptance_proof',
-                            target=task_id,
-                            message='Attach metadata.lkb.acceptance_proof before completing the task.',
-                            priority=1,
-                        ),
-                        RepairSuggestion(
-                            action='revalidate_task',
-                            target=task_id,
-                            message='Keep the task in_progress until acceptance proof is available.',
-                            priority=2,
-                        ),
-                    ),
+            if pipeline_result.result != 'pass':
+                issues = self._transition_issues_from_pipeline_result(
+                    pipeline_result, task_id, snapshot
                 )
                 return self._denied(
                     proposal,
                     task_id=task_id,
-                    issues=(issue, *snapshot.warnings),
+                    issues=issues,
                     snapshot=snapshot,
-                    derived_facts=engine_result.derived_facts,
-                    proof_trace=engine_result.proof_trace,
+                    derived_facts=pipeline_result.derived_facts,
+                    proof_trace=pipeline_result.proof_trace,
+                    engine=pipeline_result.engine,
+                    engine_version=pipeline_result.engine_version,
+                    solver_results=pipeline_result.solver_results,
+                    result=pipeline_result.result,
                 )
             return self._accepted(
                 proposal,
                 task_id=task_id,
-                derived_facts=engine_result.derived_facts,
-                proof_trace=engine_result.proof_trace,
+                derived_facts=pipeline_result.derived_facts,
+                proof_trace=pipeline_result.proof_trace,
+                engine=pipeline_result.engine,
+                engine_version=pipeline_result.engine_version,
+                solver_results=pipeline_result.solver_results,
             )
 
         if target_status == 'in_progress':
-            engine_result = self.engine.evaluate(
-                snapshot,
-                target_task_id=task_id,
-                target_status='in_progress',
+            pipeline_result = self._run_transition_pipeline(
+                proposal, snapshot, task_id, target_status, context, task, payload
             )
-            if engine_result.result == 'fail':
-                if engine_result.violated_rule == 'R-006':
-                    issue = ValidationIssue(
-                        code='cyclic_dependency_blocks_readiness',
-                        message=engine_result.message,
-                        rule=engine_result.violated_rule,
-                        task_id=task_id,
-                        blockers=engine_result.cycle_tasks,
-                        repair_suggestions=(
-                            RepairSuggestion(
-                                action='fix_cycle',
-                                target=task_id,
-                                message='Remove or rewrite one dependency edge in the cycle.',
-                                priority=1,
-                            ),
-                            RepairSuggestion(
-                                action='remove_dependency',
-                                target=task_id,
-                                message='Remove one reciprocal or transitive dependency edge.',
-                                priority=2,
-                            ),
-                            RepairSuggestion(
-                                action='split_task',
-                                target=task_id,
-                                message='Consider splitting the task to break the cycle.',
-                                priority=3,
-                            ),
-                        ),
-                    )
-                else:
-                    blockers = list(active_blockers(snapshot, task_id))
-                    suggestions: list[RepairSuggestion] = [
-                        RepairSuggestion(
-                            action='complete_prerequisite',
-                            target=blocker,
-                            message=f'Complete blocker {blocker} before starting {task_id}.',
-                            priority=1,
-                        )
-                        for blocker in blockers
-                    ]
-                    suggestions.append(
-                        RepairSuggestion(
-                            action='remove_dependency',
-                            target=task_id,
-                            message='Remove the dependency if it is no longer required.',
-                            priority=2,
-                        )
-                    )
-                    if len(blockers) > 1:
-                        suggestions.append(
-                            RepairSuggestion(
-                                action='split_task',
-                                target=task_id,
-                                message='Consider splitting the task into smaller pieces.',
-                                priority=3,
-                            )
-                        )
-                    issue = ValidationIssue(
-                        code='blocked_task_cannot_enter_in_progress',
-                        message=engine_result.message,
-                        rule=engine_result.violated_rule or 'R-002',
-                        task_id=task_id,
-                        blockers=tuple(blockers),
-                        repair_suggestions=tuple(suggestions),
-                    )
+            if pipeline_result.result != 'pass':
+                issues = self._transition_issues_from_pipeline_result(
+                    pipeline_result, task_id, snapshot
+                )
                 return self._denied(
                     proposal,
                     task_id=task_id,
-                    issues=(issue, *snapshot.warnings),
+                    issues=issues,
                     snapshot=snapshot,
-                    derived_facts=engine_result.derived_facts,
-                    proof_trace=engine_result.proof_trace,
+                    derived_facts=pipeline_result.derived_facts,
+                    proof_trace=pipeline_result.proof_trace,
+                    engine=pipeline_result.engine,
+                    engine_version=pipeline_result.engine_version,
+                    solver_results=pipeline_result.solver_results,
+                    result=pipeline_result.result,
                 )
             return self._accepted(
                 proposal,
                 task_id=task_id,
-                derived_facts=engine_result.derived_facts,
-                proof_trace=engine_result.proof_trace,
+                derived_facts=pipeline_result.derived_facts,
+                proof_trace=pipeline_result.proof_trace,
+                engine=pipeline_result.engine,
+                engine_version=pipeline_result.engine_version,
+                solver_results=pipeline_result.solver_results,
             )
 
         return self._accepted(
@@ -722,6 +723,179 @@ class LogicalKanbanService:
             task_id=task_id,
             derived_facts=(f'CanMoveTo({task_id}, {target_status})',),
         )
+
+    def _run_transition_pipeline(
+        self,
+        proposal: Proposal,
+        snapshot: FactsSnapshot,
+        task_id: str,
+        target_status: str,
+        context: 'ToolContext',
+        task: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> ValidationRun:
+        """Run the solver pipeline for a status transition."""
+        request = SolverRequest(
+            snapshot=snapshot,
+            target_task_id=task_id,
+            target_status=target_status,
+            strict_acceptance=(
+                self._strict_acceptance_enabled(context, task, payload)
+                if target_status == 'completed'
+                else False
+            ),
+            acceptance_proof_present=(
+                self._has_acceptance_proof(task, payload)
+                if target_status == 'completed'
+                else None
+            ),
+        )
+        return self.pipeline.validate(
+            request,
+            proposal_id=proposal.proposal_id,
+            task_id=task_id,
+            input_facts_hash=snapshot.hash,
+            ruleset_hash=_RULESET_HASH,
+            snapshot_hash=proposal.snapshot_hash,
+            requested_by=proposal.change.actor or 'system',
+        )
+
+    def _transition_issues_from_pipeline_result(
+        self,
+        pipeline_result: ValidationRun,
+        task_id: str,
+        snapshot: FactsSnapshot,
+    ) -> tuple[ValidationIssue, ...]:
+        """Build human-readable issues from the pipeline's aggregate result."""
+        if pipeline_result.result in ('unknown', 'timeout', 'error'):
+            return (
+                ValidationIssue(
+                    code=f'solver_{pipeline_result.result}',
+                    message=(
+                        f'Solver pipeline returned {pipeline_result.result} for task '
+                        f'{task_id}; the transition cannot be committed safely.'
+                    ),
+                    rule='LKB-SOLVER-AGG-001',
+                    task_id=task_id,
+                    repair_suggestions=(
+                        RepairSuggestion(
+                            action='revalidate_task',
+                            target=task_id,
+                            message='Retry the transition once the solver is available.',
+                            priority=1,
+                        ),
+                    ),
+                ),
+            )
+
+        layer1 = next(
+            (
+                r
+                for r in pipeline_result.solver_results
+                if r.get('adapter') == 'layer1-python'
+            ),
+            None,
+        )
+        if layer1 is None:
+            return (
+                ValidationIssue(
+                    code='solver_fail_no_layer1',
+                    message='Solver pipeline failed but no Layer-1 response is available.',
+                    rule='LKB-SOLVER-AGG-002',
+                    task_id=task_id,
+                ),
+            )
+
+        violated_rule = layer1.get('violatedRule')
+        message = layer1.get('message', '')
+        cycle_tasks = tuple(layer1.get('cycleTasks', []))
+
+        if violated_rule == 'R-006':
+            issue = ValidationIssue(
+                code='cyclic_dependency_blocks_readiness',
+                message=message,
+                rule=violated_rule,
+                task_id=task_id,
+                blockers=cycle_tasks,
+                repair_suggestions=(
+                    RepairSuggestion(
+                        action='fix_cycle',
+                        target=task_id,
+                        message='Remove or rewrite one dependency edge in the cycle.',
+                        priority=1,
+                    ),
+                    RepairSuggestion(
+                        action='remove_dependency',
+                        target=task_id,
+                        message='Remove one reciprocal or transitive dependency edge.',
+                        priority=2,
+                    ),
+                    RepairSuggestion(
+                        action='split_task',
+                        target=task_id,
+                        message='Consider splitting the task to break the cycle.',
+                        priority=3,
+                    ),
+                ),
+            )
+        elif violated_rule == 'R-005':
+            issue = ValidationIssue(
+                code='completed_requires_acceptance_proof',
+                message=message,
+                rule=violated_rule or 'R-005',
+                task_id=task_id,
+                repair_suggestions=(
+                    RepairSuggestion(
+                        action='add_acceptance_proof',
+                        target=task_id,
+                        message='Attach metadata.lkb.acceptance_proof before completing the task.',
+                        priority=1,
+                    ),
+                    RepairSuggestion(
+                        action='revalidate_task',
+                        target=task_id,
+                        message='Keep the task in_progress until acceptance proof is available.',
+                        priority=2,
+                    ),
+                ),
+            )
+        else:
+            blockers = list(active_blockers(snapshot, task_id))
+            suggestions: list[RepairSuggestion] = [
+                RepairSuggestion(
+                    action='complete_prerequisite',
+                    target=blocker,
+                    message=f'Complete blocker {blocker} before starting {task_id}.',
+                    priority=1,
+                )
+                for blocker in blockers
+            ]
+            suggestions.append(
+                RepairSuggestion(
+                    action='remove_dependency',
+                    target=task_id,
+                    message='Remove the dependency if it is no longer required.',
+                    priority=2,
+                ),
+            )
+            if len(blockers) > 1:
+                suggestions.append(
+                    RepairSuggestion(
+                        action='split_task',
+                        target=task_id,
+                        message='Consider splitting the task into smaller pieces.',
+                        priority=3,
+                    ),
+                )
+            issue = ValidationIssue(
+                code='blocked_task_cannot_enter_in_progress',
+                message=message,
+                rule=violated_rule or 'R-002',
+                task_id=task_id,
+                blockers=tuple(blockers),
+                repair_suggestions=tuple(suggestions),
+            )
+        return (issue, *snapshot.warnings)
 
     def _validate_structural_task_change(
         self,
@@ -901,6 +1075,9 @@ class LogicalKanbanService:
         counterexample: dict[str, Any] | None = None,
         repair_suggestions: tuple[RepairSuggestion, ...] | None = None,
         input_facts_hash: str | None = None,
+        engine: str | None = None,
+        engine_version: str | None = None,
+        solver_results: tuple[dict[str, Any], ...] | None = None,
     ) -> ValidationRun:
         if repair_suggestions is None:
             suggestions: list[RepairSuggestion] = []
@@ -917,8 +1094,8 @@ class LogicalKanbanService:
             input_facts_hash=input_facts_hash or proposal.snapshot_hash,
             ruleset_hash=_RULESET_HASH,
             snapshot_hash=proposal.snapshot_hash,
-            engine='layer1-python',
-            engine_version=self.solver_version,
+            engine=engine or 'layer1-python',
+            engine_version=engine_version if engine_version is not None else self.solver_version,
             result=result,
             derived_facts=derived_facts,
             proof_trace=proof_trace
@@ -934,6 +1111,7 @@ class LogicalKanbanService:
             issues=issues,
             created_at=datetime.now(timezone.utc).isoformat(),
             requested_by=proposal.change.actor or 'system',
+            solver_results=solver_results or (),
         )
 
     def _counterexample_for(
@@ -979,6 +1157,9 @@ class LogicalKanbanService:
         counterexample: dict[str, Any] | None = None,
         repair_suggestions: tuple[RepairSuggestion, ...] | None = None,
         result: ValidationResult = 'fail',
+        engine: str | None = None,
+        engine_version: str | None = None,
+        solver_results: tuple[dict[str, Any], ...] | None = None,
     ) -> ValidationRun:
         if counterexample is None and issues:
             counterexample = self._counterexample_for(
@@ -995,6 +1176,9 @@ class LogicalKanbanService:
             issues=issues,
             counterexample=counterexample,
             repair_suggestions=repair_suggestions,
+            engine=engine,
+            engine_version=engine_version,
+            solver_results=solver_results,
         )
 
     def _accepted(
@@ -1004,6 +1188,9 @@ class LogicalKanbanService:
         task_id: str | None = None,
         proof_trace: tuple[dict[str, Any], ...] | None = None,
         derived_facts: tuple[str, ...] = (),
+        engine: str | None = None,
+        engine_version: str | None = None,
+        solver_results: tuple[dict[str, Any], ...] | None = None,
     ) -> ValidationRun:
         return self._make_validation_run(
             proposal,
@@ -1011,6 +1198,9 @@ class LogicalKanbanService:
             task_id=task_id,
             derived_facts=derived_facts,
             proof_trace=proof_trace,
+            engine=engine,
+            engine_version=engine_version,
+            solver_results=solver_results,
         )
 
     def _strict_acceptance_enabled(
@@ -1168,6 +1358,23 @@ class LogicalKanbanService:
         tms = self._tms(context)
         new_record, old_record = tms.clarify_assumption(assumption_id, clarification)
         validation_run: ValidationRun | None = None
+
+        # F-139: an override creates a new active assumption and supersedes the
+        # old one.  Log an explicit human-override audit event.
+        if old_record is not None:
+            assertion = tms.get_assertion(old_record.assertion_id)
+            task_ids = tuple(assertion.task_ids) if assertion else ()
+            _audit_log(context).append(
+                event_for_human_override(
+                    assumption_id=old_record.assumption_id,
+                    assertion_id=old_record.assertion_id,
+                    actor=getattr(clarification, 'actor', None) or 'system',
+                    reason=getattr(clarification, 'reason', '') or 'user override',
+                    previous_result=old_record.status,
+                    task_ids=task_ids,
+                    session_id=_session_id(context),
+                )
+            )
 
         affected = tms.get_stale_task_ids()
         if len(affected) == 0:
