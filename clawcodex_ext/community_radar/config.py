@@ -54,6 +54,22 @@ DEFAULT_ROADMAP_KEYWORDS: list[str] = [
     "orchestrator",
     "provider",
     "context",
+    # SR-5.1 embodied / spatial intelligence domain keywords
+    "embodied",
+    "robot",
+    "robotics",
+    "manipulation",
+    "navigation",
+    "policy",
+    "vla",
+    "simulation",
+    "spatial",
+    "3d",
+    "nerf",
+    "gaussian",
+    "slam",
+    "rendering",
+    "imitation",
 ]
 
 

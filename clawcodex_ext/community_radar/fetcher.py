@@ -1,31 +1,29 @@
-"""GitHub fetcher for SR-5.1 Community Feature Radar.
+"""Fetcher for SR-5.1 Community Feature Radar.
 
-Implements the ``Fetcher`` sketched in FEATURE_PLAN.md §10.1.5:
+Release fetching:
+    Releases are obtained by shallow-cloning the upstream repo (``--depth 30``)
+    and parsing Keep-a-Changelog-style markdown (CHANGELOG.md, RELEASE.md, etc.).
+    No GitHub API calls are made for releases.
 
-* Pulls Releases / Commits / PullRequests for each :class:`WatchSource`
-  via the public GitHub REST API (``api.github.com``).
-* Uses ETag / If-None-Match to short-circuit unchanged responses and
-  persist cursors under ``cache_dir/cursors.json`` so the next scan
-  only downloads what is new.
-* Caches full release bodies under ``cache_dir/releases/{source}.json``
-  (indefinite TTL — release notes are immutable) and lightweight
-  commit / PR caches under ``cache_dir/{commits,prs}/{source}.json``
-  with a TTL the caller controls.
+Commits / PullRequests (optional):
+    Pulled via the public GitHub REST API (``api.github.com``) with
+    lightweight TTL-based caching under ``cache_dir/{commits,prs}/{source}.json``.
 
-The class is deliberately synchronous (httpx.Client) — the cron entry
-point runs in a worker thread, and an async client would force every
-caller to manage an event loop. A ``httpx`` import failure is handled
-gracefully so unit tests can drop in a fake client via ``client=``.
+The class is deliberately synchronous (httpx.Client for the optional API
+calls) — the cron entry point runs in a worker thread, and an async
+client would force every caller to manage an event loop. An ``httpx``
+import failure is handled gracefully so unit tests can drop in a fake
+client via ``client=``.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
 import re
 import time
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -41,61 +39,14 @@ DEFAULT_PAGE_SIZE = 30
 DEFAULT_REQUEST_TIMEOUT = 15.0  # seconds
 DEFAULT_USER_AGENT = "clawcodex-community-radar/0.1"
 DEFAULT_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60  # 30 days
+CHANGELOG_CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 hours
+MAX_RELEASES_PER_SOURCE = 30
+RATE_LIMIT_WARN_THRESHOLD = 20
 
 
 # ---------------------------------------------------------------------------
-# Cursor store (ETag + last-seen timestamp)
+# Cache helpers (commits / PRs)
 # ---------------------------------------------------------------------------
-
-
-@dataclass
-class _SourceCursor:
-    etag: str | None = None
-    last_release_published_at: str | None = None
-
-
-def _load_cursors(cache_dir: Path) -> dict[str, _SourceCursor]:
-    path = cache_dir / "cursors.json"
-    if not path.exists():
-        return {}
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        _log.warning("cursors.json unreadable (%s); ignoring", exc)
-        return {}
-    cursors: dict[str, _SourceCursor] = {}
-    for source, payload in (raw or {}).items():
-        if not isinstance(payload, dict):
-            continue
-        cursors[source] = _SourceCursor(
-            etag=payload.get("etag"),
-            last_release_published_at=payload.get("last_release_published_at"),
-        )
-    return cursors
-
-
-def _save_cursors(cache_dir: Path, cursors: dict[str, _SourceCursor]) -> None:
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    payload = {
-        name: {
-            "etag": c.etag,
-            "last_release_published_at": c.last_release_published_at,
-        }
-        for name, c in cursors.items()
-    }
-    (cache_dir / "cursors.json").write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cache helpers (per-source release bodies)
-# ---------------------------------------------------------------------------
-
-
-def _release_cache_path(cache_dir: Path, source: WatchSource) -> Path:
-    safe = re.sub(r"[^A-Za-z0-9._-]", "_", source.name) or "unknown"
-    return cache_dir / "releases" / f"{safe}.json"
 
 
 def _list_cache_path(cache_dir: Path, kind: str, source: WatchSource) -> Path:
@@ -115,6 +66,35 @@ def _read_cached_json(path: Path) -> Any:
 def _write_cached_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# CHANGELOG raw-text cache helpers
+# ---------------------------------------------------------------------------
+
+
+def _changelog_cache_path(cache_dir: Path, source: WatchSource) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", source.name) or "unknown"
+    return cache_dir / "changelogs" / f"{safe}.txt"
+
+
+def _read_changelog_cache(cache_dir: Path, source: WatchSource, ttl: int = CHANGELOG_CACHE_TTL_SECONDS) -> str | None:
+    path = _changelog_cache_path(cache_dir, source)
+    if not path.exists():
+        return None
+    try:
+        mtime = path.stat().st_mtime
+        if time.time() - mtime > ttl:
+            return None
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _write_changelog_cache(cache_dir: Path, source: WatchSource, text: str) -> None:
+    path = _changelog_cache_path(cache_dir, source)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -146,9 +126,17 @@ class Fetcher:
         self.page_size = page_size
         self.timeout = timeout
         self.cache_ttl_seconds = cache_ttl_seconds
-        self._cursors = _load_cursors(self.cache_dir)
         self._owns_client = client is None
         self._client = client or self._build_client()
+
+        if not self.github_token:
+            _log.warning(
+                "GITHUB_TOKEN is not set — anonymous GitHub API rate limit is "
+                "60 requests/hour. Set the environment variable to avoid "
+                "rate-limit errors. See https://github.com/settings/tokens"
+            )
+        else:
+            self._validate_token()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -171,6 +159,41 @@ class Fetcher:
             headers["Authorization"] = f"Bearer {self.github_token}"
         return httpx.Client(timeout=self.timeout, headers=headers, follow_redirects=True)
 
+    def _validate_token(self) -> None:
+        """Verify the GitHub token by calling ``GET /rate_limit``.
+
+        A failing token (401 Bad credentials) is logged as a clear error
+        so the operator can fix it before the scan starts making real API
+        calls.  The call is cheap (does not count against the rate limit)
+        and includes the remaining quota when the token is valid.
+        """
+        try:
+            resp = self._client.get(
+                f"{GITHUB_API_ROOT}/rate_limit",
+                timeout=self.timeout,
+            )
+        except Exception as exc:
+            _log.debug("rate_limit check failed (%s); token not verified", exc)
+            return
+        if resp.status_code == 200:
+            data = resp.json()
+            core = data.get("resources", {}).get("core", {})
+            remaining = core.get("remaining", "?")
+            limit = core.get("limit", "?")
+            _log.info(
+                "GitHub token is valid (rate limit: %s/%s remaining)", remaining, limit
+            )
+        elif resp.status_code == 401:
+            _log.warning(
+                "GitHub token is invalid (401 Bad credentials). "
+                "Check GITHUB_TOKEN and regenerate at "
+                "https://github.com/settings/tokens"
+            )
+        elif resp.status_code == 403 and "rate limit" in (resp.text or "").lower():
+            _log.warning("GitHub rate limit already exhausted before scan started")
+        else:
+            _log.debug("rate_limit check returned %s; token not verified", resp.status_code)
+
     def close(self) -> None:
         if self._owns_client:
             try:
@@ -188,12 +211,12 @@ class Fetcher:
     # Public API
     # ------------------------------------------------------------------
 
-    def fetch(self, source: WatchSource) -> FetchResult:
+    def fetch(self, source: WatchSource, *, incremental: bool = False) -> FetchResult:
         """Fetch everything ``source`` requested. Always returns a result."""
         result = FetchResult(source=source.name)
         try:
             if source.track_releases:
-                result.releases = self.fetch_releases(source)
+                result.releases = self.fetch_releases(source, incremental=incremental)
             if source.track_commits:
                 result.commits = self.fetch_commits(source)
             if source.track_prs:
@@ -201,114 +224,305 @@ class Fetcher:
         except Exception as exc:  # noqa: BLE001 — log + degrade gracefully
             _log.exception("fetch failed for source %s: %s", source.name, exc)
             result.errors.append(f"{type(exc).__name__}: {exc}")
-        finally:
-            _save_cursors(self.cache_dir, self._cursors)
         return result
 
-    def fetch_all(self, sources: Iterable[WatchSource]) -> list[FetchResult]:
-        return [self.fetch(s) for s in sources]
+    def fetch_all(
+        self, sources: Iterable[WatchSource], *, incremental: bool = False
+    ) -> list[FetchResult]:
+        return [self.fetch(s, incremental=incremental) for s in sources]
 
     # ------------------------------------------------------------------
-    # Releases
+    # Releases (four-layer fallback: API → Tags → CHANGELOG raw → git clone)
     # ------------------------------------------------------------------
 
     def fetch_releases(
-        self, source: WatchSource, *, since: str | None = None
+        self, source: WatchSource, *, incremental: bool = False
     ) -> list[Release]:
-        """Fetch releases for ``source``.
+        """Fetch releases via four-layer fallback strategy.
 
-        ``since`` is an ISO-8601 lower bound. When omitted the cursor
-        stored for the source is used (incremental). On a cold cache the
-        function walks pagination until either the first page returns
-        304 or ``release_tag_filter`` rejects every release.
-
-        Each release body is persisted to
-        ``cache_dir/releases/{source}.json`` keyed by tag so the
-        extractor can read bodies without re-hitting GitHub.
+        Layer 1:  GitHub Releases API (structured, fast)
+        Layer 1.5: Supplement with CHANGELOG raw_body when L1 succeeds
+        Layer 2:  GitHub Tags API (covers tag-only projects)
+        Layer 3:  GitHub Content API → CHANGELOG raw (no clone needed)
+        Layer 4:  git clone + local file parse (last resort / non-GitHub)
         """
+        releases: list[Release] = []
+
+        # ── Layer 1: GitHub Releases API ──────────────────────────
+        releases = self._fetch_releases_api(source)
+        if releases:
+            # ── Layer 1.5: supplement with CHANGELOG raw_body ─────
+            changelog_text = self._fetch_changelog_raw(source)
+            if changelog_text:
+                releases = self._merge_changelog_raw(releases, changelog_text)
+            releases = self._apply_tag_filter(releases, source)
+            return releases[:MAX_RELEASES_PER_SOURCE]
+
+        # ── Layer 2: GitHub Tags API ──────────────────────────────
+        releases = self._fetch_tags_api(source)
+        if releases:
+            releases = self._apply_tag_filter(releases, source)
+            return releases[:MAX_RELEASES_PER_SOURCE]
+
+        # ── Layer 3: GitHub Content API → CHANGELOG raw ──────────
+        changelog_text = self._fetch_changelog_raw(source)
+        if changelog_text:
+            releases = self._parse_changelog(changelog_text, source=source)
+            if releases:
+                releases = self._apply_tag_filter(releases, source)
+                return releases[:MAX_RELEASES_PER_SOURCE]
+
+        # ── Layer 4: git clone + local CHANGELOG file ─────────────
+        return self._fetch_releases_via_clone(source, incremental=incremental)
+
+    # ── Layer 1: GitHub Releases API ──────────────────────────────
+
+    def _fetch_releases_api(self, source: WatchSource) -> list[Release]:
+        """Fetch releases via ``GET /repos/{owner}/{repo}/releases``."""
         owner, name = source.repo.split("/", 1)
-        cache_path = _release_cache_path(self.cache_dir, source)
-        cached_bodies = _read_cached_json(cache_path) or {}
-
-        cursor = self._cursors.get(source.name) or _SourceCursor()
-        headers: dict[str, str] = {}
-        if cursor.etag:
-            headers["If-None-Match"] = cursor.etag
-
-        params: dict[str, Any] = {
-            "per_page": self.page_size,
-            "page": 1,
-        }
-        if since:
-            params["since"] = since
-        elif cursor.last_release_published_at:
-            # Encourage the API to short-circuit unchanged pages. We
-            # still walk pagination because the cursor is per-source,
-            # not per-page.
-            params["since"] = cursor.last_release_published_at
-
         url = f"{GITHUB_API_ROOT}/repos/{quote(owner)}/{quote(name)}/releases"
-        collected: list[Release] = []
-        new_etag: str | None = cursor.etag
-        newest_seen_at = cursor.last_release_published_at
-
-        while True:
-            response = self._request("GET", url, params=params, headers=headers)
-            if response.status_code == 304:
-                break
-            if response.status_code != 200:
-                msg = (
-                    f"GitHub releases {response.status_code}: "
-                    f"{response.text[:200] if hasattr(response, 'text') else ''}"
+        params: dict[str, Any] = {"per_page": MAX_RELEASES_PER_SOURCE, "page": 1}
+        try:
+            resp = self._request("GET", url, params=params)
+        except Exception as exc:
+            _log.warning("Layer 1 (releases API) request failed for %s: %s", source.name, exc)
+            return []
+        self._check_rate_limit(resp)
+        if resp.status_code == 200:
+            payload = resp.json() or []
+            return [
+                Release(
+                    tag=str(item.get("tag_name", "")),
+                    name=str(item.get("name") or item.get("tag_name", "")),
+                    body=str(item.get("body") or ""),
+                    published_at=item.get("published_at"),
+                    url=str(item.get("html_url") or ""),
+                    is_prerelease=bool(item.get("prerelease", False)),
                 )
-                raise RuntimeError(msg)
-            new_etag = response.headers.get("ETag", new_etag)
-            try:
-                payload = response.json()
-            except Exception as exc:  # noqa: BLE001
-                raise RuntimeError(f"invalid releases JSON: {exc}") from exc
-            if not isinstance(payload, list) or not payload:
-                break
+                for item in payload
+                if isinstance(item, dict)
+            ]
+        elif resp.status_code in (401, 403):
+            _log.warning(
+                "Layer 1 (releases API) returned %s for %s, falling back",
+                resp.status_code, source.name,
+            )
+        elif resp.status_code == 404:
+            _log.info("Layer 1 (releases API) 404 for %s (repo not found or private)", source.name)
+        else:
+            _log.warning("Layer 1 (releases API) unexpected %s for %s", resp.status_code, source.name)
+        return []
 
-            for entry in payload:
-                if not isinstance(entry, dict):
-                    continue
-                tag = str(entry.get("tag_name") or "")
-                if source.release_tag_filter and tag:
-                    if not re.search(source.release_tag_filter, tag):
-                        continue
-                published_at = entry.get("published_at") or entry.get("created_at")
-                body = entry.get("body") or ""
-                release = Release(
-                    tag=tag,
-                    name=str(entry.get("name") or tag),
-                    body=body,
-                    published_at=published_at,
-                    url=str(entry.get("html_url") or ""),
-                    is_prerelease=bool(entry.get("prerelease")),
-                )
-                collected.append(release)
-                cached_bodies[tag or release.url] = release.to_dict()
-                if published_at and (
-                    newest_seen_at is None or published_at > newest_seen_at
-                ):
-                    newest_seen_at = published_at
+    # ── Layer 1.5: merge CHANGELOG raw_body ───────────────────────
 
-            if len(payload) < self.page_size:
-                break
-            params["page"] = int(params["page"]) + 1
-            headers.pop("If-None-Match", None)
+    @staticmethod
+    def _merge_changelog_raw(releases: list[Release], changelog_text: str) -> list[Release]:
+        """Match CHANGELOG sections to API releases and populate ``raw_body``."""
+        sections = Fetcher._split_changelog_sections(changelog_text)
+        if not sections:
+            return releases
+        for r in releases:
+            for candidate in (r.tag, r.name, f"v{r.tag}", r.tag.lstrip("v")):
+                if candidate in sections:
+                    r.raw_body = sections[candidate]
+                    break
+        return releases
 
-        _write_cached_json(cache_path, cached_bodies)
-        self._cursors[source.name] = _SourceCursor(
-            etag=new_etag,
-            last_release_published_at=newest_seen_at,
+    @staticmethod
+    def _split_changelog_sections(text: str) -> dict[str, str]:
+        """Split changelog markdown into ``{version: body}`` mapping.
+
+        Reuses the same heading-split strategy as ``_parse_changelog`` but
+        returns a dict keyed by version string instead of ``Release`` objects.
+        """
+        import re as _re
+
+        blocks = _re.split(r"^##\s+", text, flags=_re.MULTILINE)
+        if len(blocks) <= 1:
+            return {}
+
+        heading_re = _re.compile(
+            r"^\[?(?P<version>v?\d[\d.]*(?:-(?:rc|alpha|beta|dev|pre)\.?\d*)?)\]?"
+            r"\s*(?:[-—]\s*(?P<date>\d{4}-\d{2}-\d{2}))?\s*$"
         )
-        # Persist cursors eagerly so callers that only invoke
-        # ``fetch_releases`` (e.g. the pipeline tests) still benefit
-        # from incremental state across runs.
-        _save_cursors(self.cache_dir, self._cursors)
-        return collected
+        sections: dict[str, str] = {}
+        for block in blocks[1:]:
+            first_line_end = block.find("\n")
+            heading_line = block[:first_line_end].strip() if first_line_end != -1 else block.strip()
+            m = heading_re.match(heading_line)
+            if not m:
+                m2 = _re.match(
+                    r"^(?P<version>.+?)\s*[-—]\s*(?P<date>\d{4}-\d{2}-\d{2})\s*$",
+                    heading_line,
+                )
+                version = m2.group("version").strip().lstrip("[").rstrip("]") if m2 else heading_line.strip().lstrip("[").rstrip("]")
+            else:
+                version = m.group("version")
+            start = first_line_end + 1 if first_line_end != -1 else len(block)
+            body = block[start:].strip()
+            sections[version] = body
+        return sections
+
+    # ── Layer 2: GitHub Tags API ──────────────────────────────────
+
+    def _fetch_tags_api(self, source: WatchSource) -> list[Release]:
+        """Fetch tags via ``GET /repos/{owner}/{repo}/tags``."""
+        owner, name = source.repo.split("/", 1)
+        url = f"{GITHUB_API_ROOT}/repos/{quote(owner)}/{quote(name)}/tags"
+        params: dict[str, Any] = {"per_page": MAX_RELEASES_PER_SOURCE, "page": 1}
+        try:
+            resp = self._request("GET", url, params=params)
+        except Exception as exc:
+            _log.warning("Layer 2 (tags API) request failed for %s: %s", source.name, exc)
+            return []
+        self._check_rate_limit(resp)
+        if resp.status_code == 200:
+            owner_repo = source.repo
+            payload = resp.json() or []
+            return [
+                Release(
+                    tag=str(item.get("name", "")),
+                    name=str(item.get("name", "")),
+                    body="",
+                    published_at=None,
+                    url=f"https://github.com/{owner_repo}/releases/tag/{quote(item.get('name', ''))}",
+                    is_prerelease=bool(
+                        re.search(r"-(?:rc|alpha|beta|dev|pre)\.?\d*$", str(item.get("name", "")), re.IGNORECASE)
+                    ),
+                )
+                for item in payload
+                if isinstance(item, dict)
+            ]
+        elif resp.status_code in (401, 403):
+            _log.warning(
+                "Layer 2 (tags API) returned %s for %s, falling back",
+                resp.status_code, source.name,
+            )
+        elif resp.status_code == 404:
+            _log.info("Layer 2 (tags API) 404 for %s", source.name)
+        else:
+            _log.warning("Layer 2 (tags API) unexpected %s for %s", resp.status_code, source.name)
+        return []
+
+    # ── Layer 3: GitHub Content API → CHANGELOG raw ──────────────
+
+    def _fetch_changelog_raw(self, source: WatchSource) -> str | None:
+        """Fetch CHANGELOG via ``GET /repos/{owner}/{repo}/contents/{path}``.
+
+        Tries the same file paths as ``_read_changelog``, with a 24 h cache.
+        Returns the raw markdown text or ``None`` if no file was found.
+        """
+        # Check cache first
+        cached = _read_changelog_cache(self.cache_dir, source)
+        if cached is not None:
+            _log.debug("changelog cache hit for %s", source.name)
+            return cached
+
+        owner, name = source.repo.split("/", 1)
+        paths_to_try: list[str] = []
+        if source.changelog_path:
+            paths_to_try.append(source.changelog_path)
+        paths_to_try.extend([
+            "CHANGELOG.md",
+            "CHANGELOG",
+            "RELEASE.md",
+            "RELEASE_NOTES.md",
+            "History.md",
+        ])
+
+        seen: set[str] = set()
+        for rel_path in paths_to_try:
+            if rel_path in seen:
+                continue
+            seen.add(rel_path)
+            url = f"{GITHUB_API_ROOT}/repos/{quote(owner)}/{quote(name)}/contents/{quote(rel_path)}"
+            try:
+                resp = self._request("GET", url)
+            except Exception as exc:
+                _log.debug("Layer 3 (contents API) request failed for %s %s: %s", source.name, rel_path, exc)
+                continue
+            self._check_rate_limit(resp)
+            if resp.status_code == 200:
+                payload = resp.json()
+                if isinstance(payload, dict) and payload.get("encoding") == "base64":
+                    content_b64 = payload.get("content") or ""
+                    try:
+                        text = base64.b64decode(content_b64).decode("utf-8")
+                    except (ValueError, UnicodeDecodeError) as exc:
+                        _log.warning("Layer 3 base64 decode failed for %s %s: %s", source.name, rel_path, exc)
+                        continue
+                    _write_changelog_cache(self.cache_dir, source, text)
+                    _log.debug("changelog fetched via API for %s (%s)", source.name, rel_path)
+                    return text
+                # Content API may return a list for directories — skip
+                _log.debug("Layer 3 unexpected response shape for %s %s", source.name, rel_path)
+            elif resp.status_code == 403 and "rate limit" in (resp.text or "").lower():
+                _log.warning("Layer 3 (contents API) rate limited for %s", source.name)
+                return None
+            elif resp.status_code == 404:
+                _log.debug("Layer 3 file not found for %s: %s", source.name, rel_path)
+            else:
+                _log.debug("Layer 3 returned %s for %s %s", resp.status_code, source.name, rel_path)
+        return None
+
+    # ── Layer 4: git clone + local CHANGELOG (V1 logic, preserved) ──
+
+    def _fetch_releases_via_clone(
+        self, source: WatchSource, *, incremental: bool = False
+    ) -> list[Release]:
+        """Fallback: shallow-clone the repo and parse CHANGELOG from disk."""
+        clone_dir = self._clone_dir(source)
+        repo_url = f"https://github.com/{source.repo}.git"
+
+        if not clone_dir.exists():
+            self._git_clone(repo_url, clone_dir)
+        elif incremental:
+            self._git_fetch(clone_dir)
+
+        changelog_text = self._read_changelog(clone_dir, source)
+        if not changelog_text:
+            _log.warning(
+                "no changelog found for %s (searched in %s)", source.name, clone_dir
+            )
+            return []
+
+        releases = self._parse_changelog(changelog_text, source=source)
+        releases = self._apply_tag_filter(releases, source)
+        return releases[:MAX_RELEASES_PER_SOURCE]
+
+    # ── Tag filter (applied across all layers) ────────────────────
+
+    @staticmethod
+    def _apply_tag_filter(releases: list[Release], source: WatchSource) -> list[Release]:
+        """Filter releases by ``source.release_tag_filter`` prefix match."""
+        tag_filter = source.release_tag_filter
+        if not tag_filter:
+            return releases
+        filtered = [r for r in releases if r.tag.startswith(tag_filter)]
+        if not filtered and releases:
+            _log.debug(
+                "release_tag_filter '%s' excluded all %d releases for %s",
+                tag_filter, len(releases), source.name,
+            )
+        return filtered
+
+    # ── Rate limit helper ─────────────────────────────────────────
+
+    @staticmethod
+    def _check_rate_limit(resp: Any) -> None:
+        """Log a warning when the GitHub API rate limit is running low."""
+        try:
+            remaining = resp.headers.get("X-RateLimit-Remaining")
+            if remaining is not None:
+                remaining = int(remaining)
+                if remaining < RATE_LIMIT_WARN_THRESHOLD:
+                    _log.warning(
+                        "GitHub API rate limit low (%s remaining). "
+                        "Consider setting GITHUB_TOKEN to increase quota.",
+                        remaining,
+                    )
+        except (ValueError, AttributeError):
+            pass
 
     # ------------------------------------------------------------------
     # Commits / PRs (lightweight, optional)
@@ -392,6 +606,135 @@ class Fetcher:
         ]
         _write_cached_json(cache_path, {"fetched_at": time.time(), "items": [p.to_dict() for p in prs]})
         return prs
+
+    # ------------------------------------------------------------------
+    # Git clone helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _safe_clone_name(source_name: str) -> str:
+        return re.sub(r"[^A-Za-z0-9._-]", "_", source_name) or "unknown"
+
+    def _clone_dir(self, source: WatchSource) -> Path:
+        return self.cache_dir / "git-clones" / self._safe_clone_name(source.name)
+
+    @staticmethod
+    def _git_clone(repo_url: str, clone_dir: Path) -> None:
+        """Shallow-clone *repo_url* to *clone_dir* (--depth 30)."""
+        from clawcodex_ext.utils.git import _run_git  # type: ignore
+
+        clone_dir.parent.mkdir(parents=True, exist_ok=True)
+        _log.info("cloning %s (--depth 30) into %s", repo_url, clone_dir)
+        stdout, stderr, rc = _run_git(
+            ["clone", "--depth", "30", repo_url, str(clone_dir)],
+            timeout=120.0,
+        )
+        if rc != 0:
+            raise RuntimeError(f"git clone failed: {stderr}")
+
+    @staticmethod
+    def _git_fetch(clone_dir: Path) -> None:
+        """Shallow-fetch latest and reset (--depth 30 stays shallow)."""
+        from clawcodex_ext.utils.git import _run_git  # type: ignore
+
+        _log.info("fetching --depth 30 in %s", clone_dir)
+        _run_git(["fetch", "--depth", "30", "origin"], cwd=str(clone_dir), timeout=60.0)
+        _run_git(["reset", "--hard", "origin/HEAD"], cwd=str(clone_dir), timeout=30.0)
+
+    @staticmethod
+    def _read_changelog(clone_dir: Path, source: WatchSource) -> str | None:
+        """Read CHANGELOG content from the cloned repo.
+
+        Tries *source.changelog_path* first, then common fallback names.
+        """
+        paths_to_try: list[str] = []
+        if source.changelog_path:
+            paths_to_try.append(source.changelog_path)
+        paths_to_try.extend([
+            "CHANGELOG.md",
+            "CHANGELOG",
+            "RELEASE.md",
+            "RELEASE_NOTES.md",
+            "History.md",
+        ])
+
+        seen: set[str] = set()
+        for rel_path in paths_to_try:
+            if rel_path in seen:
+                continue
+            seen.add(rel_path)
+            full_path = clone_dir / rel_path
+            if full_path.exists():
+                _log.debug("reading changelog: %s", full_path)
+                return full_path.read_text(encoding="utf-8", errors="replace")
+        return None
+
+    @staticmethod
+    def _parse_changelog(
+        text: str,
+        *,
+        source: WatchSource,
+    ) -> list[Release]:
+        """Parse Keep-a-Changelog-style markdown into Release objects.
+
+        Supports::
+
+            ## [1.0.0] - 2026-01-15
+            ## 1.0.0 - 2026-01-15
+            ## 1.0.0 (2026-01-15)
+        """
+        import re as _re
+
+        # Split on ``## `` headings. The first group is pre-heading content
+        # (title, etc.) and is skipped.
+        blocks = _re.split(r"^##\s+", text, flags=_re.MULTILINE)
+        if len(blocks) <= 1:
+            return []
+
+        # Parse version + optional date from the heading line of each block.
+        heading_re = _re.compile(
+            r"^\[?(?P<version>v?\d[\d.]*(?:-(?:rc|alpha|beta|dev|pre)\.?\d*)?)\]?"
+            r"\s*(?:[-—]\s*(?P<date>\d{4}-\d{2}-\d{2}))?\s*$"
+        )
+        owner_repo = source.repo
+        releases: list[Release] = []
+        for block in blocks[1:]:  # skip pre-heading content
+            first_line_end = block.find("\n")
+            heading_line = block[:first_line_end].strip() if first_line_end != -1 else block.strip()
+            m = heading_re.match(heading_line)
+            if not m:
+                # Try a looser match: anything up to a date-like pattern
+                m2 = _re.match(
+                    r"^(?P<version>.+?)\s*[-—]\s*(?P<date>\d{4}-\d{2}-\d{2})\s*$",
+                    heading_line,
+                )
+                if m2:
+                    version = m2.group("version").strip().lstrip("[").rstrip("]")
+                    date_str = m2.group("date")
+                else:
+                    version = heading_line.strip().lstrip("[").rstrip("]")
+                    date_str = None
+            else:
+                version = m.group("version")
+                date_str = m.group("date")
+
+            start = first_line_end + 1 if first_line_end != -1 else len(block)
+            body = block[start:].strip()
+            tag = version
+            published_at = f"{date_str}T00:00:00Z" if date_str else None
+            url = f"https://github.com/{owner_repo}/releases/tag/{tag}"
+            is_prerelease = bool(
+                _re.search(r"-(?:rc|alpha|beta|dev|pre)\.?\d*$", version, _re.IGNORECASE)
+            )
+            releases.append(Release(
+                tag=tag,
+                name=version,
+                body=body,
+                published_at=published_at,
+                url=url,
+                is_prerelease=is_prerelease,
+            ))
+        return releases
 
     # ------------------------------------------------------------------
     # Internal HTTP wrapper (also reused by tests via monkeypatch)

@@ -49,6 +49,9 @@ _ADAPTATION_COST: dict[FeatureCategory, float] = {
     FeatureCategory.MULTI_AGENT: 65.0,
     FeatureCategory.ORCHESTRATOR: 70.0,
     FeatureCategory.INFRA: 80.0,
+    FeatureCategory.EMBODIED_AI: 55.0,
+    FeatureCategory.SPATIAL_INTELLIGENCE: 50.0,
+    FeatureCategory.CODE_AGENT: 70.0,  # defensive: never assigned, but safe
     FeatureCategory.UNKNOWN: 60.0,
 }
 
@@ -69,6 +72,9 @@ _ARCHITECTURE_FIT: dict[FeatureCategory, float] = {
     FeatureCategory.PROVIDER: 70.0,
     FeatureCategory.AGENT_LOOP: 60.0,
     FeatureCategory.INFRA: 50.0,
+    FeatureCategory.EMBODIED_AI: 70.0,
+    FeatureCategory.SPATIAL_INTELLIGENCE: 75.0,
+    FeatureCategory.CODE_AGENT: 80.0,  # defensive: never assigned, but safe
     FeatureCategory.UNKNOWN: 50.0,
 }
 

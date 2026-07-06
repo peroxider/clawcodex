@@ -24,6 +24,9 @@ from typing import Any
 
 
 class FeatureCategory(str, Enum):
+    # Parent-level category (never assigned to a feature — pure aggregation)
+    CODE_AGENT = "code_agent"
+    # Leaf categories under CODE_AGENT
     AGENT_LOOP = "agent_loop"
     TOOL_SYSTEM = "tool_system"
     PROVIDER = "provider"
@@ -36,7 +39,95 @@ class FeatureCategory(str, Enum):
     CLI = "cli"
     OBSERVABILITY = "observability"
     INFRA = "infra"
+    # Both leaf and parent (contains SPATIAL_INTELLIGENCE)
+    EMBODIED_AI = "embodied_ai"
+    # Leaf under EMBODIED_AI
+    SPATIAL_INTELLIGENCE = "spatial_intelligence"
     UNKNOWN = "unknown"
+
+
+# ---------------------------------------------------------------------------
+# FeatureCategory hierarchy helpers (path-based, supports N levels)
+# ---------------------------------------------------------------------------
+
+# Category → path tuple from root to self.
+# Root-only nodes (e.g. CODE_AGENT) are single-element paths.
+# Leaf nodes under a root are two-element paths (root, self).
+# Add deeper paths (root, mid, leaf) for 3+ levels — nothing else changes.
+_CATEGORY_PATH: dict[FeatureCategory, tuple[FeatureCategory, ...]] = {
+    FeatureCategory.CODE_AGENT: (FeatureCategory.CODE_AGENT,),
+    FeatureCategory.AGENT_LOOP: (FeatureCategory.CODE_AGENT, FeatureCategory.AGENT_LOOP),
+    FeatureCategory.TOOL_SYSTEM: (FeatureCategory.CODE_AGENT, FeatureCategory.TOOL_SYSTEM),
+    FeatureCategory.PROVIDER: (FeatureCategory.CODE_AGENT, FeatureCategory.PROVIDER),
+    FeatureCategory.PERMISSION: (FeatureCategory.CODE_AGENT, FeatureCategory.PERMISSION),
+    FeatureCategory.MEMORY: (FeatureCategory.CODE_AGENT, FeatureCategory.MEMORY),
+    FeatureCategory.MCP: (FeatureCategory.CODE_AGENT, FeatureCategory.MCP),
+    FeatureCategory.MULTI_AGENT: (FeatureCategory.CODE_AGENT, FeatureCategory.MULTI_AGENT),
+    FeatureCategory.ORCHESTRATOR: (FeatureCategory.CODE_AGENT, FeatureCategory.ORCHESTRATOR),
+    FeatureCategory.TUI_REPL: (FeatureCategory.CODE_AGENT, FeatureCategory.TUI_REPL),
+    FeatureCategory.CLI: (FeatureCategory.CODE_AGENT, FeatureCategory.CLI),
+    FeatureCategory.OBSERVABILITY: (FeatureCategory.CODE_AGENT, FeatureCategory.OBSERVABILITY),
+    FeatureCategory.INFRA: (FeatureCategory.CODE_AGENT, FeatureCategory.INFRA),
+    FeatureCategory.EMBODIED_AI: (FeatureCategory.EMBODIED_AI,),
+    FeatureCategory.SPATIAL_INTELLIGENCE: (FeatureCategory.EMBODIED_AI, FeatureCategory.SPATIAL_INTELLIGENCE),
+    FeatureCategory.UNKNOWN: (FeatureCategory.UNKNOWN,),
+}
+
+
+def get_path(cat: FeatureCategory) -> tuple[FeatureCategory, ...]:
+    """Return the full path from root to *cat*.
+
+    >>> get_path(FeatureCategory.AGENT_LOOP)
+    (CODE_AGENT, AGENT_LOOP)
+    >>> get_path(FeatureCategory.EMBODIED_AI)
+    (EMBODIED_AI,)
+    """
+    return _CATEGORY_PATH.get(cat, (cat,))
+
+
+def get_root(cat: FeatureCategory) -> FeatureCategory:
+    """Return the root (first element) of *cat*'s path.
+
+    >>> get_root(FeatureCategory.TOOL_SYSTEM).value
+    'code_agent'
+    >>> get_root(FeatureCategory.EMBODIED_AI).value
+    'embodied_ai'
+    """
+    return get_path(cat)[0]
+
+
+def get_level(cat: FeatureCategory) -> int:
+    """Return 0 for root-only nodes, 1 for direct children, 2+ for deeper.
+
+    >>> get_level(FeatureCategory.CODE_AGENT)
+    0
+    >>> get_level(FeatureCategory.AGENT_LOOP)
+    1
+    """
+    return len(get_path(cat)) - 1
+
+
+def get_subtree(root: FeatureCategory) -> list[FeatureCategory]:
+    """Return all categories whose path starts with *root*, excluding *root*.
+
+    >>> get_subtree(FeatureCategory.CODE_AGENT)
+    [AGENT_LOOP, TOOL_SYSTEM, ..., INFRA]
+    >>> get_subtree(FeatureCategory.EMBODIED_AI)
+    [SPATIAL_INTELLIGENCE]
+    """
+    result: list[FeatureCategory] = []
+    for cat, path in _CATEGORY_PATH.items():
+        if len(path) > 1 and path[0] == root:
+            result.append(cat)
+    return result
+
+
+def is_leaf(cat: FeatureCategory) -> bool:
+    """True when *cat* can be assigned to a feature.
+
+    CODE_AGENT is the only non-leaf — it exists purely for aggregation.
+    """
+    return cat != FeatureCategory.CODE_AGENT
 
 
 class FeatureType(str, Enum):
@@ -45,6 +136,17 @@ class FeatureType(str, Enum):
     BREAKING = "breaking"
     DEPRECATION = "deprecation"
     BUGFIX = "bugfix"
+
+
+class SourceDomain(str, Enum):
+    """Known domain for a WatchSource, used to penalise cross-domain
+    classification (e.g. a software-engineering project whose features
+    happen to mention ``robot`` is NOT an embodied-AI feature)."""
+
+    SOFTWARE_ENGINEERING = "software_engineering"
+    EMBODIED_AI = "embodied_ai"
+    SPATIAL_INTELLIGENCE = "spatial_intelligence"
+    GENERAL = "general"
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +165,7 @@ class WatchSource:
 
     name: str
     repo: str
+    domain: str = SourceDomain.GENERAL.value
     track_releases: bool = True
     track_commits: bool = False
     track_prs: bool = False
@@ -90,9 +193,15 @@ class WatchSource:
         keywords = data.get("roadmap_keywords") or data.get("roadmapKeywords") or []
         if not isinstance(keywords, list):
             keywords = []
+        domain_raw = data.get("domain") or data.get("domain")
+        try:
+            domain = SourceDomain(domain_raw).value if domain_raw else SourceDomain.GENERAL.value
+        except ValueError:
+            domain = SourceDomain.GENERAL.value
         return cls(
             name=name,
             repo=repo,
+            domain=domain,
             track_releases=bool(data.get("track_releases", True)),
             track_commits=bool(data.get("track_commits", False)),
             track_prs=bool(data.get("track_prs", False)),
@@ -108,6 +217,7 @@ class WatchSource:
         return {
             "name": self.name,
             "repo": self.repo,
+            "domain": self.domain,
             "track_releases": self.track_releases,
             "track_commits": self.track_commits,
             "track_prs": self.track_prs,
@@ -132,6 +242,7 @@ class Release:
     published_at: str | None  # ISO 8601
     url: str
     is_prerelease: bool = False
+    raw_body: str = ""  # CHANGELOG 原文 (Layer 1.5 填充), 供 extractor 优先使用
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -141,6 +252,7 @@ class Release:
             "published_at": self.published_at,
             "url": self.url,
             "is_prerelease": self.is_prerelease,
+            "raw_body": self.raw_body,
         }
 
     @classmethod
@@ -152,6 +264,7 @@ class Release:
             published_at=data.get("published_at"),
             url=str(data.get("url", "")),
             is_prerelease=bool(data.get("is_prerelease", False)),
+            raw_body=str(data.get("raw_body", "") or ""),
         )
 
 
@@ -208,6 +321,7 @@ class FetchResult:
     commits: list[Commit] = field(default_factory=list)
     prs: list[PullRequest] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    detected_domain: str | None = None  # auto-detected project domain
 
     @property
     def is_empty(self) -> bool:
@@ -342,16 +456,18 @@ class FeatureScore:
 
 @dataclass
 class DigestStats:
-    total_releases: int = 0
+    total_versions: int = 0
     total_features: int = 0
     by_category: dict[str, int] = field(default_factory=dict)
+    by_root_category: dict[str, int] = field(default_factory=dict)
     top_projects: list[tuple[str, int]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "total_releases": self.total_releases,
+            "total_versions": self.total_versions,
             "total_features": self.total_features,
             "by_category": dict(self.by_category),
+            "by_root_category": dict(self.by_root_category),
             "top_projects": [list(item) for item in self.top_projects],
         }
 
@@ -396,6 +512,23 @@ class CommunityDigest:
             "sources_used": list(self.sources_used),
             "errors": list(self.errors),
         }
+
+
+@dataclass
+class HistoryComparison:
+    """Delta between two consecutive CommunityDigest runs.
+
+    Built by :func:`reporter.compare_digests` and rendered as a
+    "变化对比" section in the Markdown digest."""
+
+    previous_period: str
+    previous_generated_at: str
+    previous_stem: str
+    new_count: int
+    disappeared_count: int
+    score_changed: list[dict[str, Any]] = field(default_factory=list)
+    new_features: list[FeatureRecord] = field(default_factory=list)
+    disappeared_features: list[FeatureRecord] = field(default_factory=list)
 
 
 def utc_now_iso() -> str:

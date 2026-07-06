@@ -303,7 +303,7 @@ def build_digest_message(
     lines.append(f"**{digest.summary.strip()}**")
     lines.append("")
     lines.append(f"覆盖 {len(digest.sources_used)} 个项目 · "
-                 f"{digest.stats.total_releases} 个 release · "
+                 f"{digest.stats.total_versions} 个版本 · "
                  f"{digest.stats.total_features} 条候选特性")
     if digest.trending:
         lines.append("")

@@ -9,6 +9,11 @@ from clawcodex_ext.community_radar.models import (
     FeatureType,
     Release,
     WatchSource,
+    get_level,
+    get_path,
+    get_root,
+    get_subtree,
+    is_leaf,
     make_feature_id,
 )
 
@@ -100,3 +105,117 @@ def test_feature_score_to_dict() -> None:
     payload = score.to_dict()
     assert payload["overall"] == 72.5
     assert payload["dimensions"]["popularity"] == 80.0
+
+
+# ---------------------------------------------------------------------------
+# FeatureCategory hierarchy tests
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# FeatureCategory hierarchy tests (path-based)
+# ---------------------------------------------------------------------------
+
+
+def test_get_path_code_agent_children() -> None:
+    """All 12 code-agent leaf categories have path (CODE_AGENT, <self>)."""
+    code_agent_children = [
+        FeatureCategory.AGENT_LOOP,
+        FeatureCategory.TOOL_SYSTEM,
+        FeatureCategory.PROVIDER,
+        FeatureCategory.PERMISSION,
+        FeatureCategory.MEMORY,
+        FeatureCategory.MCP,
+        FeatureCategory.MULTI_AGENT,
+        FeatureCategory.ORCHESTRATOR,
+        FeatureCategory.TUI_REPL,
+        FeatureCategory.CLI,
+        FeatureCategory.OBSERVABILITY,
+        FeatureCategory.INFRA,
+    ]
+    for cat in code_agent_children:
+        path = get_path(cat)
+        assert len(path) == 2, f"{cat.value} path should have 2 elements"
+        assert path[0] == FeatureCategory.CODE_AGENT, (
+            f"{cat.value} root should be CODE_AGENT, got {path[0]}"
+        )
+        assert path[1] == cat
+
+
+def test_get_path_root_nodes_are_single_element() -> None:
+    """CODE_AGENT, EMBODIED_AI, and UNKNOWN are single-element paths."""
+    for cat in (FeatureCategory.CODE_AGENT, FeatureCategory.EMBODIED_AI, FeatureCategory.UNKNOWN):
+        path = get_path(cat)
+        assert len(path) == 1, f"{cat.value} path should be single-element"
+        assert path[0] == cat
+
+
+def test_get_path_spatial_under_embodied() -> None:
+    """SPATIAL_INTELLIGENCE path is (EMBODIED_AI, SPATIAL_INTELLIGENCE)."""
+    path = get_path(FeatureCategory.SPATIAL_INTELLIGENCE)
+    assert path == (FeatureCategory.EMBODIED_AI, FeatureCategory.SPATIAL_INTELLIGENCE)
+
+
+def test_get_root_returns_root_category() -> None:
+    """get_root returns the first element of the path."""
+    assert get_root(FeatureCategory.AGENT_LOOP) == FeatureCategory.CODE_AGENT
+    assert get_root(FeatureCategory.TOOL_SYSTEM) == FeatureCategory.CODE_AGENT
+    assert get_root(FeatureCategory.CODE_AGENT) == FeatureCategory.CODE_AGENT
+    assert get_root(FeatureCategory.SPATIAL_INTELLIGENCE) == FeatureCategory.EMBODIED_AI
+    assert get_root(FeatureCategory.EMBODIED_AI) == FeatureCategory.EMBODIED_AI
+    assert get_root(FeatureCategory.UNKNOWN) == FeatureCategory.UNKNOWN
+
+
+def test_get_root_value_for_aggregation() -> None:
+    """get_root().value gives stable aggregation keys."""
+    assert get_root(FeatureCategory.AGENT_LOOP).value == "code_agent"
+    assert get_root(FeatureCategory.SPATIAL_INTELLIGENCE).value == "embodied_ai"
+    assert get_root(FeatureCategory.EMBODIED_AI).value == "embodied_ai"
+    assert get_root(FeatureCategory.UNKNOWN).value == "unknown"
+
+
+def test_get_level_root_nodes() -> None:
+    """Root-only nodes are level 0."""
+    for cat in (FeatureCategory.CODE_AGENT, FeatureCategory.EMBODIED_AI, FeatureCategory.UNKNOWN):
+        assert get_level(cat) == 0, f"{cat.value} should be level 0"
+
+
+def test_get_level_children() -> None:
+    """Direct children are level 1."""
+    assert get_level(FeatureCategory.AGENT_LOOP) == 1
+    assert get_level(FeatureCategory.SPATIAL_INTELLIGENCE) == 1
+    assert get_level(FeatureCategory.MCP) == 1
+
+
+def test_get_subtree_code_agent_has_12() -> None:
+    """CODE_AGENT subtree should have 12 descendants, not including itself."""
+    subtree = get_subtree(FeatureCategory.CODE_AGENT)
+    assert len(subtree) == 12
+    assert FeatureCategory.AGENT_LOOP in subtree
+    assert FeatureCategory.INFRA in subtree
+    assert FeatureCategory.CODE_AGENT not in subtree  # root excluded
+
+
+def test_get_subtree_embodied_ai_has_1() -> None:
+    """EMBODIED_AI subtree has 1 descendant: SPATIAL_INTELLIGENCE (not itself)."""
+    subtree = get_subtree(FeatureCategory.EMBODIED_AI)
+    assert len(subtree) == 1
+    assert FeatureCategory.SPATIAL_INTELLIGENCE in subtree
+    assert FeatureCategory.EMBODIED_AI not in subtree  # root excluded
+
+
+def test_get_subtree_unknown_empty() -> None:
+    """UNKNOWN has no descendants."""
+    assert get_subtree(FeatureCategory.UNKNOWN) == []
+
+
+def test_is_leaf_code_agent_is_false() -> None:
+    """CODE_AGENT is a pure aggregator, not a leaf."""
+    assert is_leaf(FeatureCategory.CODE_AGENT) is False
+
+
+def test_is_leaf_real_categories_are_true() -> None:
+    """All actual feature categories (including EMBODIED_AI) are leaves."""
+    for cat in FeatureCategory:
+        if cat == FeatureCategory.CODE_AGENT:
+            continue
+        assert is_leaf(cat) is True, f"{cat.value} should be a leaf"

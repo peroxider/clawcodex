@@ -73,7 +73,7 @@ def _digest(
         trending=scored,
         breaking_changes=breaking,
         stats=DigestStats(
-            total_releases=1,
+            total_versions=1,
             total_features=len(trending),
             by_category={"tool_system": max(len(trending), 1)},
         ),

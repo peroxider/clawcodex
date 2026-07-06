@@ -45,6 +45,15 @@ class _CategoryRule:
     # (keyword, sub_tag) so the digest can show why a record landed in
     # "agent_loop/context_management" instead of just "agent_loop".
     sub_tags: tuple[tuple[str, str], ...] = ()
+    # Ambiguous keywords that only score when at least one domain-anchor
+    # keyword also appears in the text.  Format:
+    #   (keyword, weight, (anchor_keyword, ...))
+    # When no anchor matches the weight is skipped entirely so generic
+    # terms like "rendering" or "policy" don't cause false positives
+    # across unrelated domains.
+    conditional_keywords: tuple[tuple[str, float, tuple[str, ...]], ...] = ()
+    # Sub-tags gated by the same anchor condition.
+    conditional_sub_tags: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
 
 
 _RULES: tuple[_CategoryRule, ...] = (
@@ -209,7 +218,129 @@ _RULES: tuple[_CategoryRule, ...] = (
             ("bench", 0.8),
         ),
     ),
+    _CategoryRule(
+        category=FeatureCategory.EMBODIED_AI,
+        keywords=(
+            ("embodied", 1.6),
+            ("robot", 1.2),
+            ("robotics", 1.3),
+            ("locomotion", 1.3),
+            ("imitation learning", 1.5),
+            ("teleoperation", 1.4),
+            ("sim-to-real", 1.5),
+            ("sim2real", 1.5),
+            ("grasping", 1.3),
+            ("dexterous", 1.3),
+            ("end-effector", 1.2),
+            ("actuator", 1.1),
+            ("kinematic", 1.2),
+            ("reinforcement learning", 1.3),
+            ("vla", 1.4),
+            ("vision language action", 1.5),
+            ("robot learning", 1.4),
+            ("foundation model for robotics", 1.6),
+            ("generalist robot", 1.5),
+            ("mobile manipulation", 1.4),
+            ("humanoid", 1.2),
+            ("legged", 1.2),
+        ),
+        sub_tags=(
+            ("vla", "vla_model"),
+            ("vision language action", "vla_model"),
+            ("imitation learning", "imitation_learning"),
+            ("sim-to-real", "sim2real_transfer"),
+            ("sim2real", "sim2real_transfer"),
+            ("foundation model for robotics", "foundation_model"),
+            ("generalist robot", "generalist_policy"),
+        ),
+        # Ambiguous keywords that require a robotics/embodied anchor to score.
+        conditional_keywords=(
+            # "policy" is robot_policy only near embodied terms; otherwise
+            # it's usage-policy / permissions-policy in software projects.
+            ("policy", 0.9, ("robot", "robotics", "vla", "manipulation", "grasping",
+                             "trajectory", "locomotion", "end-effector", "actuator")),
+            # "navigation" in the context of robotics, SLAM, or habitat.
+            ("navigation", 1.3, ("robot", "robotics", "embodied", "habitat", "slam",
+                                 "lidar", "locomotion", "manipulation")),
+            # "imitation" alone is too broad; anchor it to robotics terms.
+            ("imitation", 1.2, ("robot", "robotics", "learning", "policy",
+                                "manipulation", "trajectory", "grasping", "locomotion")),
+            # "trajectory" means physical motion path in robotics but
+            # conversation/action trace in software agents.
+            ("trajectory", 1.1, ("robot", "robotics", "manipulation", "kinematic",
+                                 "actuator", "grasping", "locomotion", "end-effector")),
+            # "manipulation" is robotic manipulation when near embodied
+            # terms; otherwise it's data/string/node manipulation.
+            ("manipulation", 1.4, ("robot", "robotics", "grasping", "dexterous",
+                                   "end-effector", "actuator", "locomotion",
+                                   "embodied", "teleoperation")),
+        ),
+        conditional_sub_tags=(
+            ("policy", "robot_policy", ("robot", "robotics", "vla", "manipulation",
+                                         "grasping", "trajectory", "locomotion")),
+            ("imitation", "imitation_learning", ("robot", "robotics", "learning",
+                                                  "policy", "manipulation")),
+        ),
+    ),
+    _CategoryRule(
+        category=FeatureCategory.SPATIAL_INTELLIGENCE,
+        keywords=(
+            ("point cloud", 1.4),
+            ("nerf", 1.5),
+            ("gaussian splatting", 1.6),
+            ("neural radiance", 1.6),
+            ("novel view", 1.3),
+            ("slam", 1.5),
+            ("lidar", 1.3),
+            ("voxel", 1.2),
+            ("mesh", 1.0),
+            ("volumetric", 1.2),
+            ("radiance field", 1.6),
+            ("occupancy", 1.2),
+            ("physical simulation", 1.5),
+        ),
+        sub_tags=(
+            ("nerf", "nerf"),
+            ("gaussian splatting", "gaussian_splatting"),
+            ("neural radiance", "nerf"),
+            ("slam", "slam"),
+            ("point cloud", "point_cloud"),
+        ),
+        # Ambiguous keywords that require a 3D/spatial anchor to score.
+        # Without anchors generic terms like "rendering" catch UI rendering
+        # in software projects, "scene" catches narrative scenes, etc.
+        conditional_keywords=(
+            ("rendering", 1.1, ("nerf", "gaussian", "splatting", "point cloud", "3d",
+                                "mesh", "depth", "volumetric", "radiance", "scene",
+                                "reconstruction")),
+            ("scene", 0.9, ("nerf", "gaussian", "3d", "reconstruction", "rendering",
+                            "point cloud", "volumetric")),
+            ("reconstruction", 1.2, ("nerf", "gaussian", "3d", "point cloud", "mesh",
+                                     "slam", "volumetric", "depth")),
+            ("depth", 1.0, ("nerf", "gaussian", "point cloud", "3d", "lidar",
+                            "rendering", "volumetric", "scene")),
+            ("segmentation", 1.0, ("point cloud", "3d", "lidar", "voxel", "mesh", "scene")),
+            ("3d", 1.0, ("nerf", "gaussian", "point cloud", "rendering", "slam", "mesh",
+                         "voxel", "reconstruction", "scene", "depth")),
+            ("spatial", 1.5, ("nerf", "gaussian", "3d", "point cloud", "slam",
+                              "reconstruction", "rendering", "mesh")),
+            ("geometric", 1.1, ("nerf", "gaussian", "3d", "point cloud", "mesh",
+                                "reconstruction")),
+            ("world model", 1.4, ("nerf", "gaussian", "3d", "spatial", "point cloud",
+                                  "scene", "rendering")),
+        ),
+        conditional_sub_tags=(
+            ("world model", "world_model", ("nerf", "gaussian", "3d", "spatial",
+                                             "point cloud", "scene")),
+        ),
+    ),
 )
+
+
+# Categories that imply a source lives in the embodied / spatial domain.
+# Used by _check_domain to reject cross-domain keyword matches.
+_EMBODIED_CATS: frozenset[FeatureCategory] = frozenset({FeatureCategory.EMBODIED_AI})
+_SPATIAL_CATS: frozenset[FeatureCategory] = frozenset({FeatureCategory.SPATIAL_INTELLIGENCE})
 
 
 # Categories the tie-breaker prefers (highest priority first).
@@ -221,6 +352,8 @@ _TIEBREAK: tuple[FeatureCategory, ...] = (
     FeatureCategory.MCP,
     FeatureCategory.MULTI_AGENT,
     FeatureCategory.ORCHESTRATOR,
+    FeatureCategory.EMBODIED_AI,
+    FeatureCategory.SPATIAL_INTELLIGENCE,
     FeatureCategory.OBSERVABILITY,
     FeatureCategory.PROVIDER,
     FeatureCategory.TUI_REPL,
@@ -249,12 +382,17 @@ class FeatureClassifier:
         rules: Iterable[_CategoryRule] | None = None,
         llm_hook: LLMClassifierHook | None = None,
         roadmap_keywords: Iterable[str] | None = None,
+        source_domain_map: dict[str, str] | None = None,
     ) -> None:
         self._rules: tuple[_CategoryRule, ...] = tuple(rules) if rules is not None else _RULES
         self._llm_hook = llm_hook
         self.roadmap_keywords: tuple[str, ...] = tuple(
             k.lower() for k in (roadmap_keywords or DEFAULT_ROADMAP_KEYWORDS)
         )
+        # source_name → SourceDomain value, used by _check_domain to
+        # prevent cross-domain misclassification (e.g. a software-eng
+        # project tagged as EMBODIED_AI just because it mentions "robot").
+        self._source_domain_map: dict[str, str] = dict(source_domain_map) if source_domain_map else {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -280,12 +418,21 @@ class FeatureClassifier:
             for keyword, sub_tag in rule.sub_tags:
                 if self._keyword_matches(keyword, text):
                     matched_sub_tags.append(sub_tag)
+            for keyword, weight, anchors in rule.conditional_keywords:
+                if self._keyword_matches(keyword, text):
+                    if any(self._keyword_matches(a, text) for a in anchors):
+                        score += weight
+            for keyword, sub_tag, anchors in rule.conditional_sub_tags:
+                if self._keyword_matches(keyword, text):
+                    if any(self._keyword_matches(a, text) for a in anchors):
+                        matched_sub_tags.append(sub_tag)
             if score > 0:
                 scores[rule.category] = scores.get(rule.category, 0.0) + score
                 if matched_sub_tags:
                     sub_tags.setdefault(rule.category, []).extend(matched_sub_tags)
 
         category = self._pick_category(scores)
+        category = self._check_domain(category, record.source)
         record.category = category
 
         # Combine rule sub_tags with roadmap keyword tags so the
@@ -350,3 +497,24 @@ class FeatureClassifier:
             if cat in tied:
                 return cat
         return tied[0]
+
+    def _check_domain(
+        self, category: FeatureCategory, source: str
+    ) -> FeatureCategory:
+        """Reject ``category`` when it contradicts the source's known domain.
+
+        A ``software_engineering`` source mentioning "robot" in a gallery
+        example is NOT an embodied-AI feature; a ``spatial_intelligence``
+        source mentioning "policy" is NOT a robot-policy feature.
+        """
+        domain = self._source_domain_map.get(source, "general")
+        if domain == "software_engineering":
+            if category in _EMBODIED_CATS or category in _SPATIAL_CATS:
+                return FeatureCategory.UNKNOWN
+        elif domain == "embodied_ai":
+            if category in _SPATIAL_CATS:
+                return FeatureCategory.UNKNOWN
+        elif domain == "spatial_intelligence":
+            if category in _EMBODIED_CATS:
+                return FeatureCategory.UNKNOWN
+        return category
