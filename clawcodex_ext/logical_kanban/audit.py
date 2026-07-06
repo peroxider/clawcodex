@@ -33,6 +33,7 @@ AuditEventType = Literal[
     "lkb_assumption_invalidated",
     "lkb_revalidation_requested",
     "lkb_human_override",
+    "lkb_proof_enrichment",
 ]
 
 
@@ -394,6 +395,49 @@ def event_for_revalidation_requested(
     )
 
 
+def event_for_proof_enrichment(
+    validation: ValidationRun,
+    *,
+    adapter: str,
+    proof_trace: tuple[dict[str, Any], ...] = (),
+    counterexample: dict[str, Any] | None = None,
+    session_id: str | None = None,
+    actor: str = "system",
+) -> AuditEvent:
+    """Record asynchronous proof/countermodel enrichment for a validation run."""
+    enrichment_key = f"{validation.validation_run_id}:{adapter}"
+    return AuditEvent(
+        event_id=_new_event_id(),
+        event_type="lkb_proof_enrichment",
+        actor=actor,
+        timestamp=_utc_now(),
+        session_id=session_id,
+        proposal_id=validation.proposal_id,
+        validation_run_id=validation.validation_run_id,
+        task_id=validation.task_id,
+        decision=None,
+        payload={
+            "adapter": adapter,
+            "enrichmentKey": enrichment_key,
+            "proofTrace": list(proof_trace),
+            "counterexample": counterexample,
+        },
+    )
+
+
+def append_proof_enrichment_once(audit_log: AuditLog, event: AuditEvent) -> bool:
+    """Append ``event`` unless the same enrichment key is already present."""
+    key = event.payload.get("enrichmentKey")
+    for existing in audit_log.query(
+        event_type="lkb_proof_enrichment",
+        validation_run_id=event.validation_run_id,
+    ):
+        if existing.payload.get("enrichmentKey") == key:
+            return False
+    audit_log.append(event)
+    return True
+
+
 def _denial_payload(validation: ValidationRun) -> dict[str, Any]:
     return {
         "validationRunId": validation.validation_run_id,
@@ -456,8 +500,10 @@ __all__ = [
     "event_for_assumption_invalidated",
     "event_for_commit",
     "event_for_human_override",
+    "event_for_proof_enrichment",
     "event_for_proposal",
     "event_for_revalidation_requested",
     "event_for_validation_run",
+    "append_proof_enrichment_once",
     "get_audit_log",
 ]

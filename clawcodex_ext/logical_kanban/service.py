@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from dataclasses import replace
@@ -24,9 +25,11 @@ from . import metrics
 from .audit import (
     AuditEvent,
     AuditLog,
+    append_proof_enrichment_once,
     event_for_assumption_invalidated,
     event_for_commit,
     event_for_human_override,
+    event_for_proof_enrichment,
     event_for_proposal,
     event_for_revalidation_requested,
     event_for_validation_run,
@@ -40,7 +43,7 @@ from .ir_hash import canonical_hash
 from .multiworld_validator import MultiWorldValidator
 from .rule_engine import Layer1RuleEngine
 from .runtime import get_logical_kanban
-from .solver_adapter import SolverRequest
+from .solver_adapter import SolverAdapter, SolverRequest
 from .solver_pipeline import SolverPipeline
 from .truth_maintenance import TruthMaintenanceSystem
 from .world_generator import WorldGenerator
@@ -97,6 +100,13 @@ def _string_list(value: Any) -> tuple[str, ...]:
     return tuple(item for item in value if isinstance(item, str) and item)
 
 
+def _task_id_from_payload(payload: Any) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    task_id = payload.get('taskId')
+    return task_id if isinstance(task_id, str) else None
+
+
 class LogicalKanbanService:
     """Internal propose/validate/commit service for task-state changes."""
 
@@ -141,6 +151,138 @@ class LogicalKanbanService:
         )
         self._emit_snapshot_metrics(context)
         return run
+
+    async def validate_async(
+        self,
+        proposal: Proposal,
+        context: 'ToolContext',
+        *,
+        adapters: tuple[SolverAdapter, ...] | list[SolverAdapter] | None = None,
+        timeout_seconds: float = 60.0,
+    ) -> ValidationRun:
+        """Run optional proof enrichment without blocking the sync commit path."""
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(
+                    self._validate_async_blocking,
+                    proposal,
+                    context,
+                    tuple(adapters) if adapters is not None else None,
+                    timeout_seconds,
+                ),
+                timeout=timeout_seconds + 1.0,
+            )
+        except Exception as exc:  # noqa: BLE001 - async enrichment must not leak
+            return ValidationRun(
+                validation_run_id=_new_id('V-'),
+                proposal_id=proposal.proposal_id,
+                task_id=_task_id_from_payload(proposal.change.payload),
+                input_facts_hash=proposal.snapshot_hash,
+                ruleset_hash=_RULESET_HASH,
+                snapshot_hash=proposal.snapshot_hash,
+                engine='external-atp-async',
+                engine_version='',
+                result='error',
+                duration_ms=0,
+                created_at=datetime.now(timezone.utc).isoformat(),
+                requested_by=proposal.change.actor or 'system',
+                solver_results=(
+                    {
+                        'adapter': 'external-atp-async',
+                        'result': 'error',
+                        'errorInfo': {
+                            'reason': 'exception',
+                            'exception': type(exc).__name__,
+                            'detail': str(exc),
+                        },
+                    },
+                ),
+            )
+
+    def _validate_async_blocking(
+        self,
+        proposal: Proposal,
+        context: 'ToolContext',
+        adapters: tuple[SolverAdapter, ...] | None,
+        timeout_seconds: float,
+    ) -> ValidationRun:
+        if proposal.change.kind != 'transition_status':
+            return self.validate(proposal, context)
+
+        payload = proposal.change.payload
+        task_id = payload.get('taskId')
+        target_status = payload.get('status')
+        snapshot = self.snapshot(context)
+        task = snapshot.normalized_tasks.get(task_id) if isinstance(task_id, str) else None
+        if not isinstance(task_id, str) or not isinstance(target_status, str) or task is None:
+            return self.validate(proposal, context)
+
+        if adapters is None:
+            from .atp import Mace4SolverAdapter, Prover9SolverAdapter, VampireSolverAdapter
+
+            adapters = (
+                VampireSolverAdapter(),
+                Prover9SolverAdapter(),
+                Mace4SolverAdapter(),
+            )
+            adapters = tuple(adapter for adapter in adapters if adapter.available())
+
+        request = SolverRequest(
+            snapshot=snapshot,
+            target_task_id=task_id,
+            target_status=target_status,
+            strict_acceptance=(
+                self._strict_acceptance_enabled(context, task, payload)
+                if target_status == 'completed'
+                else False
+            ),
+            acceptance_proof_present=(
+                self._has_acceptance_proof(task, payload)
+                if target_status == 'completed'
+                else None
+            ),
+        )
+
+        run = SolverPipeline(adapters).validate(
+            request,
+            proposal_id=proposal.proposal_id,
+            task_id=task_id,
+            input_facts_hash=snapshot.hash,
+            ruleset_hash=_RULESET_HASH,
+            snapshot_hash=proposal.snapshot_hash,
+            timeout_seconds=timeout_seconds,
+            requested_by=proposal.change.actor or 'system',
+        )
+        self._append_proof_enrichments(run, context)
+        return run
+
+    def _append_proof_enrichments(
+        self,
+        validation: ValidationRun,
+        context: 'ToolContext',
+    ) -> None:
+        audit = _audit_log(context)
+        for result in validation.solver_results:
+            adapter = result.get('adapter')
+            if not isinstance(adapter, str) or not adapter.startswith('atp-'):
+                continue
+            proof_trace = tuple(
+                step for step in result.get('proofTrace', ()) if isinstance(step, dict)
+            )
+            counterexample = result.get('counterexample')
+            if not proof_trace and not isinstance(counterexample, dict):
+                continue
+            append_proof_enrichment_once(
+                audit,
+                event_for_proof_enrichment(
+                    validation,
+                    adapter=adapter,
+                    proof_trace=proof_trace,
+                    counterexample=counterexample if isinstance(counterexample, dict) else None,
+                    session_id=_session_id(context),
+                    actor=validation.requested_by,
+                ),
+            )
 
     def _emit_snapshot_metrics(self, context: 'ToolContext') -> None:
         """Emit counts derived from the current facts snapshot."""

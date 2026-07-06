@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -261,7 +262,7 @@ class TestSecurity:
     def test_external_solver_enforces_timeout(self) -> None:
         with pytest.raises(SolverLimitError) as exc_info:
             run_external_solver(
-                ['sleep', '5'],
+                [sys.executable, '-c', 'import time; time.sleep(5)'],
                 limits=SolverResourceLimits(timeout_seconds=0.1, max_memory_mb=64),
             )
         assert exc_info.value.reason == 'timeout'

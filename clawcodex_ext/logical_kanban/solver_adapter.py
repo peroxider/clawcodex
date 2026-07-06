@@ -149,6 +149,7 @@ class SolverResponse:
     violated_rule: str | None = None
     message: str = ''
     cycle_tasks: tuple[str, ...] = ()
+    counterexample: dict[str, Any] | None = None
     error_info: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -162,6 +163,8 @@ class SolverResponse:
             out['violatedRule'] = self.violated_rule
         if self.cycle_tasks:
             out['cycleTasks'] = list(self.cycle_tasks)
+        if self.counterexample is not None:
+            out['counterexample'] = self.counterexample
         if self.error_info is not None:
             out['errorInfo'] = self.error_info
         return out
@@ -1844,11 +1847,16 @@ def extended_adapters() -> tuple[SolverAdapter, ...]:
     not installed) are silently filtered out.
     """
     adapters: list[SolverAdapter] = [Layer1SolverAdapter()]
+    from .atp import Mace4SolverAdapter, Prover9SolverAdapter, VampireSolverAdapter
+
     for adapter in (
         DatalogSolverAdapter(),
         ClingoSolverAdapter(),
         Z3SolverAdapter(),
         AtpTptpSolverAdapter(),
+        VampireSolverAdapter(),
+        Prover9SolverAdapter(),
+        Mace4SolverAdapter(),
     ):
         if adapter.available():
             adapters.append(adapter)

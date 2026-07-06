@@ -119,6 +119,7 @@ class SolverPipeline:
         derived_facts, proof_trace, violated_rule, message, cycle_tasks = _merge_responses(
             [r for r in results if r.get('result') in ('pass', 'fail')]
         )
+        counterexample = _first_counterexample(results)
 
         return ValidationRun(
             validation_run_id=_new_id('V-'),
@@ -133,6 +134,7 @@ class SolverPipeline:
             duration_ms=duration_ms,
             derived_facts=derived_facts,
             proof_trace=proof_trace,
+            counterexample=counterexample,
             repair_suggestions=(),
             issues=(),
             created_at=datetime.now(timezone.utc).isoformat(),
@@ -270,6 +272,14 @@ def _merge_responses(
             traces.append(dict(trace))
 
     return tuple(sorted(facts)), tuple(traces), violated_rule, message, tuple(sorted(cycle_tasks))
+
+
+def _first_counterexample(responses: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for response in responses:
+        counterexample = response.get('counterexample')
+        if isinstance(counterexample, dict):
+            return counterexample
+    return None
 
 
 def _new_id(prefix: str) -> str:

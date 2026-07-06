@@ -143,6 +143,7 @@ class ValidationRun:
     derived_facts: tuple[str, ...] = ()
     proof_trace: tuple[dict[str, Any], ...] = ()
     counterexample: dict[str, Any] | None = None
+    proof_enrichment: dict[str, Any] | None = None
     repair_suggestions: tuple[RepairSuggestion, ...] = ()
 
     # Human-readable diagnostics (kept for internal adapter use)
@@ -185,6 +186,7 @@ class ValidationRun:
             'derivedFacts': list(self.derived_facts),
             'proofTrace': list(self.proof_trace),
             'counterexample': self.counterexample,
+            'proofEnrichment': self.proof_enrichment,
             'repairSuggestions': [s.to_dict() for s in self.repair_suggestions],
             'createdAt': self.created_at,
             'requestedBy': self.requested_by,

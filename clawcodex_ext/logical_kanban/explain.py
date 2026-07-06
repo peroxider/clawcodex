@@ -59,9 +59,13 @@ _REPAIR_TEMPLATES: dict[str, tuple[tuple[str, str, int], ...]] = {
 }
 
 
-def explain_validation_run(validation_run: ValidationRun) -> dict[str, Any]:
+def explain_validation_run(
+    validation_run: ValidationRun,
+    proof_enrichment: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Return a structured, human-readable explanation of a validation run."""
     issue = validation_run.issues[0] if validation_run.issues else None
+    enrichment = proof_enrichment or validation_run.proof_enrichment or {}
     return {
         'result': validation_run.result,
         'summary': _human_summary(validation_run, issue),
@@ -69,6 +73,7 @@ def explain_validation_run(validation_run: ValidationRun) -> dict[str, Any]:
         'rulesUsed': _rules_used(validation_run.proof_trace),
         'derivedFacts': list(validation_run.derived_facts),
         'proofTraceSummary': proof_trace_summary(validation_run.proof_trace),
+        'proofEnrichmentSummary': proof_enrichment_summary(enrichment),
         'repairSuggestions': [s.to_dict() for s in validation_run.repair_suggestions],
         'explanation_generated_by': 'lkb-layer1-python',
     }
@@ -171,6 +176,29 @@ def proof_trace_summary(
             }
         )
     return summary
+
+
+def proof_enrichment_summary(enrichment: dict[str, Any]) -> list[str]:
+    """Render machine proof lines and LLM notes with explicit source tags."""
+    if not enrichment:
+        return []
+    lines: list[str] = []
+    proof_trace = enrichment.get('proofTrace', ())
+    if isinstance(proof_trace, (list, tuple)):
+        for step in proof_trace:
+            if not isinstance(step, dict):
+                continue
+            rule = step.get('rule', 'proof')
+            conclusion = step.get('conclusion', '')
+            lines.append(f'[proof] {rule}: {conclusion}')
+    annotations = enrichment.get('llmAnnotations', ())
+    if isinstance(annotations, str):
+        annotations = (annotations,)
+    if isinstance(annotations, (list, tuple)):
+        for annotation in annotations:
+            if isinstance(annotation, str) and annotation:
+                lines.append(f'[llm] {annotation}')
+    return lines
 
 
 def next_actions_for_task(
