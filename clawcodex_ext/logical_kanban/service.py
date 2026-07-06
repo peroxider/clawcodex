@@ -10,9 +10,19 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 from .ambiguity_detector import AmbiguityDetector
+from .causal import (
+    CausalEffect,
+    CausalEngine,
+    CausalGraph,
+    CausalMechanism,
+    SIGNIFICANT_THRESHOLD,
+    build_causal_graph,
+    is_strict_causal_enabled,
+)
 from .commit_gate_fuzzy import aggregate_world_results, commit_gate_fuzzy_check
 from . import metrics
 from .audit import (
+    AuditEvent,
     AuditLog,
     event_for_assumption_invalidated,
     event_for_commit,
@@ -22,6 +32,7 @@ from .audit import (
     event_for_validation_run,
     get_audit_log,
 )
+from .flags import is_causal_verification_enabled
 from .context_adapter import active_blockers, build_facts_snapshot, dependency_closure
 from .explain import build_repair_suggestions
 from .fuzzy_types import AggregationDecision, CommitDecision, MultiWorldResult
@@ -79,6 +90,13 @@ def _audit_log(context: 'ToolContext') -> AuditLog:
     return get_audit_log(context)
 
 
+def _string_list(value: Any) -> tuple[str, ...]:
+    """Return ``value`` if it's a list of strings, else an empty tuple."""
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, str) and item)
+
+
 class LogicalKanbanService:
     """Internal propose/validate/commit service for task-state changes."""
 
@@ -87,6 +105,7 @@ class LogicalKanbanService:
     def __init__(self) -> None:
         self.engine = Layer1RuleEngine()
         self.pipeline = SolverPipeline()
+        self.causal_engine = CausalEngine()
 
     def snapshot(self, context: 'ToolContext') -> FactsSnapshot:
         return build_facts_snapshot(context)
@@ -272,6 +291,304 @@ class LogicalKanbanService:
         lkb['proof_trace'] = list(validation.proof_trace)
         metadata['lkb'] = lkb
         task['metadata'] = metadata
+
+    # ------------------------------------------------------------------
+    # F-141 Causal Verification Layer
+    # ------------------------------------------------------------------
+
+    def _apply_causal_gate(
+        self,
+        proposal: Proposal,
+        snapshot: FactsSnapshot,
+        validation: ValidationRun,
+        *,
+        edges: tuple[tuple[str, str], ...] = (),
+        context: 'ToolContext',
+    ) -> ValidationRun:
+        """Run the F-141 causal gate after the symbolic gate has passed.
+
+        ``edges`` is the set of (treatment, outcome) pairs whose causal
+        weight should be evaluated.  When the feature is disabled, the
+        input ``validation`` is returned unchanged.
+
+        The gate is advisory by default; a ``weak`` outcome only becomes
+        a binding denial when ``LKB_STRICT_CAUSAL`` is set in the
+        environment (or via the stricter ``strict_causal`` override on
+        the runtime).  The conservative aggregation from F-138 still
+        wins: a symbolic fail never reaches this method.
+
+        The output ``ValidationRun`` always carries a ``causal`` sub-record
+        in ``counterexample`` when the gate produced new information.
+        When the original ``counterexample`` was ``None`` (because the
+        symbolic gate passed cleanly), the new ``counterexample`` is
+        ``{"causal": {…}}`` so consumers always know the gate ran.
+        """
+        if not is_causal_verification_enabled() or not edges:
+            return validation
+        if validation.result != 'pass':
+            # Defensive: a non-pass validation should not reach this gate.
+            return validation
+        graph = build_causal_graph(snapshot)
+        if not graph.edges:
+            return validation
+        evaluated: list[CausalEffect] = []
+        for treatment, outcome in edges:
+            effect = self.causal_engine.intervene_do(
+                graph,
+                treatment_node=treatment,
+                treatment_value='completed',
+                outcome_node=outcome,
+            )
+            evaluated.append(effect)
+        if not evaluated:
+            return validation
+        worst = min(
+            evaluated,
+            key=lambda effect: (
+                0 if effect.tag == 'significant' else 1 if effect.tag == 'moderate' else 2,
+            ),
+        )
+
+        causal_record: dict[str, Any] = {
+            'engine': 'lkb-f141-causal',
+            'engineVersion': 'f141-v1',
+            'gate': 'advisory' if not is_strict_causal_enabled() else 'strict',
+            'graphSnapshotHash': graph.snapshot_hash,
+            'edges': [
+                {'source': s, 'target': t}
+                for s, t in edges
+            ],
+            'evaluations': [effect.to_dict() for effect in evaluated],
+            'worst': {
+                'tag': worst.tag,
+                'weight': worst.weight,
+                'mechanism': worst.mechanism,
+                'isSignificant': worst.is_significant,
+                'edge': {'source': worst.source, 'target': worst.target},
+            },
+        }
+
+        existing_counterexample = validation.counterexample or {}
+        if not existing_counterexample:
+            new_counterexample: dict[str, Any] = {'causal': causal_record}
+        else:
+            new_counterexample = {**existing_counterexample, 'causal': causal_record}
+        annotated = replace(validation, counterexample=new_counterexample)
+
+        if worst.tag == 'weak' and is_strict_causal_enabled():
+            issue = ValidationIssue(
+                code='causal_weight_weak',
+                message=(
+                    f'Causal effect on edge {worst.source}->{worst.target} '
+                    f'is weak (weight={worst.weight}); strict mode denies the change.'
+                ),
+                rule='LKB-CAUSAL-001',
+                task_id=validation.task_id,
+                repair_suggestions=(
+                    RepairSuggestion(
+                        action='clarify_ambiguity',
+                        target=worst.source,
+                        message=(
+                            'Provide a manual cause declaration via '
+                            'metadata.lkb.causes with weight >= 0.7, or '
+                            'invoke override_causal with a justification.'
+                        ),
+                    ),
+                ),
+            )
+            metrics.record_denial(
+                rule='LKB-CAUSAL-001',
+                code='causal_weight_weak',
+                change_kind=proposal.change.kind,
+                task_id=validation.task_id,
+                validation_run_id=validation.validation_run_id,
+            )
+            return replace(
+                annotated,
+                result='fail',
+                issues=(issue,),
+                proof_trace=(
+                    *annotated.proof_trace,
+                    {
+                        'rule': 'LKB-CAUSAL-001',
+                        'premises': [worst.source, worst.target],
+                        'conclusion': (
+                            f'CausalWeight({worst.source}->{worst.target})={worst.weight}'
+                        ),
+                        'solverVersion': 'f141-v1',
+                    },
+                ),
+            )
+        return annotated
+
+    def override_causal(
+        self,
+        *,
+        edge: tuple[str, str],
+        reason: str,
+        weight: float,
+        approver: str,
+        validation_run_id: str | None = None,
+        proposal_id: str | None = None,
+        context: 'ToolContext',
+    ) -> AuditEvent:
+        """Record a human override of a ``weak`` causal outcome.
+
+        Emits an ``lkb_human_override`` audit event with the canonical
+        F-141 fields (``proposal_id``, ``edge``, ``justification``,
+        ``approver``) and attaches ``metadata.lkb.causal_override`` to
+        the source task so downstream tools can see who accepted the
+        weak edge.
+        """
+        source, target = edge
+        sanitised_weight = round(
+            max(0.0, min(1.0, float(weight) if isinstance(weight, (int, float)) and not isinstance(weight, bool) else 0.0)),
+            3,
+        )
+        previous = event_for_human_override(
+            assumption_id=f'causal:{source}->{target}',
+            assertion_id=validation_run_id or f'edge:{source}->{target}',
+            actor=approver,
+            reason=reason,
+            previous_result='weak',
+            task_ids=(source, target),
+            validation_run_id=validation_run_id,
+            session_id=_session_id(context),
+        )
+        # Rebuild the event so the payload exposes the F-141 field names
+        # (``proposal_id``, ``edge``, ``justification``, ``approver``).
+        event = AuditEvent(
+            event_id=previous.event_id,
+            event_type=previous.event_type,
+            actor=previous.actor,
+            timestamp=previous.timestamp,
+            session_id=previous.session_id,
+            proposal_id=proposal_id,
+            validation_run_id=validation_run_id,
+            task_id=source,
+            decision=previous.decision,
+            payload={
+                'overrideType': 'causal',
+                'proposal_id': proposal_id,
+                'edge': {'source': source, 'target': target},
+                'justification': reason,
+                'approver': approver,
+                'weight': sanitised_weight,
+                'previousResult': 'weak',
+                'assumptionId': previous.payload.get('assumptionId'),
+                'assertionId': previous.payload.get('assertionId'),
+            },
+        )
+        _audit_log(context).append(event)
+        self._attach_causal_override_metadata(
+            context,
+            source=source,
+            target=target,
+            approver=approver,
+            reason=reason,
+            weight=sanitised_weight,
+        )
+        return event
+
+    def _attach_causal_override_metadata(
+        self,
+        context: 'ToolContext',
+        *,
+        source: str,
+        target: str,
+        approver: str,
+        reason: str,
+        weight: float,
+    ) -> None:
+        """Write ``metadata.lkb.causal_override`` on the source task."""
+        tasks = getattr(context, 'tasks', None)
+        if not isinstance(tasks, dict):
+            return
+        task = tasks.get(source)
+        if not isinstance(task, dict):
+            return
+        metadata = dict(task.get('metadata') or {})
+        lkb = dict(metadata.get('lkb') or {})
+        lkb['causal_override'] = {
+            'source': source,
+            'target': target,
+            'approver': approver,
+            'reason': reason,
+            'weight': weight,
+            'overriddenAt': datetime.now(timezone.utc).isoformat(),
+        }
+        metadata['lkb'] = lkb
+        task['metadata'] = metadata
+
+    def _apply_causal_gate_for_transition(
+        self,
+        proposal: Proposal,
+        snapshot: FactsSnapshot,
+        task_id: str,
+        validation: ValidationRun,
+        context: 'ToolContext',
+    ) -> ValidationRun:
+        """Run the F-141 causal gate for a status transition.
+
+        The affected edges are the upstream blockers of ``task_id`` —
+        each ``(blocker, task_id)`` pair is the causal claim that
+        completing the blocker will enable the target.  When the task has
+        no upstream blockers the gate is skipped (there is nothing
+        causally to evaluate).
+        """
+        if not is_causal_verification_enabled():
+            return validation
+        blockers = sorted(set(snapshot.blocked_by.get(task_id, ())))
+        if not blockers:
+            return validation
+        edges = tuple((blocker, task_id) for blocker in blockers)
+        return self._apply_causal_gate(
+            proposal,
+            snapshot,
+            validation,
+            edges=edges,
+            context=context,
+        )
+
+    def _apply_causal_gate_for_dependency(
+        self,
+        proposal: Proposal,
+        snapshot: FactsSnapshot,
+        payload: dict[str, Any],
+        task_id: str | None,
+        validation: ValidationRun,
+        context: 'ToolContext',
+    ) -> ValidationRun:
+        """Run the F-141 causal gate for an ``add_dependency`` change.
+
+        The affected edges are the *new* edges being added by the
+        proposal (``addBlockedBy`` for the target, or ``addBlocks`` for
+        the inverse direction).  Existing edges are skipped — the
+        symbolic gate already vouched for their cycle-freeness, and the
+        causal gate only needs to score the *new* mechanistic claim.
+        """
+        if not is_causal_verification_enabled():
+            return validation
+        if not isinstance(task_id, str):
+            return validation
+        edges: list[tuple[str, str]] = []
+        for blocker in _string_list(payload.get('addBlockedBy')):
+            if blocker == task_id:
+                continue
+            edges.append((blocker, task_id))
+        for dependent in _string_list(payload.get('addBlocks')):
+            if dependent == task_id:
+                continue
+            edges.append((task_id, dependent))
+        if not edges:
+            return validation
+        return self._apply_causal_gate(
+            proposal,
+            snapshot,
+            validation,
+            edges=tuple(edges),
+            context=context,
+        )
 
     def run(
         self,
@@ -678,7 +995,7 @@ class LogicalKanbanService:
                     solver_results=pipeline_result.solver_results,
                     result=pipeline_result.result,
                 )
-            return self._accepted(
+            accepted = self._accepted(
                 proposal,
                 task_id=task_id,
                 derived_facts=pipeline_result.derived_facts,
@@ -686,6 +1003,9 @@ class LogicalKanbanService:
                 engine=pipeline_result.engine,
                 engine_version=pipeline_result.engine_version,
                 solver_results=pipeline_result.solver_results,
+            )
+            return self._apply_causal_gate_for_transition(
+                proposal, snapshot, task_id, accepted, context
             )
 
         if target_status == 'in_progress':
@@ -708,7 +1028,7 @@ class LogicalKanbanService:
                     solver_results=pipeline_result.solver_results,
                     result=pipeline_result.result,
                 )
-            return self._accepted(
+            accepted = self._accepted(
                 proposal,
                 task_id=task_id,
                 derived_facts=pipeline_result.derived_facts,
@@ -716,6 +1036,9 @@ class LogicalKanbanService:
                 engine=pipeline_result.engine,
                 engine_version=pipeline_result.engine_version,
                 solver_results=pipeline_result.solver_results,
+            )
+            return self._apply_causal_gate_for_transition(
+                proposal, snapshot, task_id, accepted, context
             )
 
         return self._accepted(
@@ -1008,7 +1331,7 @@ class LogicalKanbanService:
                         },
                     ),
                 )
-            return self._accepted(
+            accepted = self._accepted(
                 proposal,
                 task_id=task_id,
                 derived_facts=(f'CanMutateDependencies({task_id})',),
@@ -1020,6 +1343,9 @@ class LogicalKanbanService:
                         'solverVersion': self.solver_version,
                     },
                 ),
+            )
+            return self._apply_causal_gate_for_dependency(
+                proposal, snapshot, payload, task_id, accepted, context
             )
         return self._accepted(
             proposal,

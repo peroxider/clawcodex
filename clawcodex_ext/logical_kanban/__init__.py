@@ -24,6 +24,22 @@ from .audit import (
     event_for_validation_run,
     get_audit_log,
 )
+from .causal import (
+    CAP_VERBS,
+    Baseline,
+    CausalEdge,
+    CausalEffect,
+    CausalEngine,
+    CausalGraph,
+    CausalMechanism,
+    CausalScope,
+    CausalTag,
+    MODERATE_THRESHOLD,
+    SIGNIFICANT_THRESHOLD,
+    build_causal_graph,
+    is_strict_causal_enabled,
+    to_wire_json,
+)
 from .commit_gate_fuzzy import (
     FUZZY_THRESHOLD_MINOR,
     aggregate_world_results,
@@ -57,6 +73,12 @@ from .fuzzy_types import (
     WorldValidationResult,
 )
 from .glossary import BUILT_IN_GLOSSARY, Glossary, GlossaryEntry
+from .flags import (
+    CAUSAL_FEATURE_NAME,
+    FEATURE_NAME,
+    is_causal_verification_enabled,
+    is_logical_kanban_enabled,
+)
 from .ambiguity_detector import AmbiguityDetector
 from .fuzzy_patterns import (
     BUILT_IN_PATTERN_LIBRARY,
@@ -166,7 +188,15 @@ __all__ = [
     'AuditLog',
     'BUILT_IN_GLOSSARY',
     'BUILT_IN_PATTERN_LIBRARY',
+    'CAP_VERBS',
     'CanonicalAssertion',
+    'CausalEdge',
+    'CausalEffect',
+    'CausalEngine',
+    'CausalGraph',
+    'CausalMechanism',
+    'CausalScope',
+    'CausalTag',
     'Clarification',
     'ClarificationAction',
     'ClingoSolverAdapter',
@@ -194,6 +224,7 @@ __all__ = [
     'LogicalKanbanService',
     'MultiWorldResult',
     'MultiWorldValidator',
+    'MODERATE_THRESHOLD',
     'PredicateExtraction',
     'Proposal',
     'ProposedChange',
@@ -202,6 +233,7 @@ __all__ = [
     'RepairSuggestion',
     'RuleEngineResult',
     'SCHEMA_VERSION',
+    'SIGNIFICANT_THRESHOLD',
     'SessionFileAuditLog',
     'Severity',
     'SolverAdapter',
@@ -223,6 +255,11 @@ __all__ = [
     'all_adapters',
     'and_',
     'assertion_hash',
+    'build_causal_graph',
+    'CAUSAL_FEATURE_NAME',
+    'FEATURE_NAME',
+    'is_causal_verification_enabled',
+    'is_logical_kanban_enabled',
     'build_repair_suggestions',
     'canonical_hash',
     'canonical_json',
@@ -245,6 +282,7 @@ __all__ = [
     'get_audit_log',
     'get_logical_kanban',
     'implies',
+    'is_strict_causal_enabled',
     'latest_denial_for_task',
     'make_canonical',
     'maybe_commit_task_update',
@@ -274,6 +312,7 @@ __all__ = [
     'run_external_solver',
     'task_list_summary',
     'task_ready_state',
+    'to_wire_json',
     'validate_assertion',
     'validate_task_transition',
 ]

@@ -211,6 +211,16 @@ _DEFAULT_FLAGS: list[FeatureFlag] = [
             "todo and task status mutations (F-126)"
         ),
     ),
+    FeatureFlag(
+        name="LKB_CAUSAL",
+        default=False,
+        description=(
+            "Enable the F-141 causal verification layer (CAP-compatible "
+            "in-process engine) that augments symbolic validation runs "
+            "with a causal_weight, is_significant flag, and mechanism tag."
+        ),
+        deps=["logical_kanban"],
+    ),
 ]
 
 
