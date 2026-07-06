@@ -6,7 +6,9 @@ Port of Symphony's Orchestrator.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -3655,6 +3657,8 @@ class Orchestrator:
                         # the built-in rebase path. Format::
                         #   rebase\n<id>\nforce=0|1\n<reason>
                         await self._handle_rebase_control(issue_id, extra)
+                    elif cmd in {'gateway_connect', 'gateway_disconnect'}:
+                        await self._handle_gateway_control(cmd, extra)
                     else:
                         self._apply_control_command(cmd, issue_id, extra)
                 finally:
@@ -3665,6 +3669,180 @@ class Orchestrator:
                         pass
         except Exception as exc:
             logger.warning('Failed to process control commands: %s', exc)
+
+    async def _handle_gateway_control(self, cmd: str, extra: str) -> None:
+        """Handle CLI-written IM gateway connect/disconnect control files."""
+        payload: dict[str, Any] = {}
+        if extra:
+            try:
+                payload = json.loads(extra)
+            except json.JSONDecodeError as exc:
+                logger.warning('gateway control: invalid payload: %s', exc)
+                return
+        response_path = payload.get('response_path')
+        if cmd == 'gateway_connect':
+            result = await self._connect_gateway_runtime(
+                origin=str(payload.get('origin') or ''),
+                sock=str(payload.get('sock') or ''),
+            )
+        else:
+            result = await self._disconnect_gateway_runtime()
+        if response_path:
+            self._write_gateway_control_result(Path(str(response_path)), result)
+
+    def _write_gateway_control_result(self, path: Path, result: dict[str, Any]) -> None:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(result, ensure_ascii=False), encoding='utf-8')
+        except Exception:  # noqa: BLE001
+            logger.debug('gateway control: failed to write result %s', path, exc_info=True)
+
+    async def _connect_gateway_runtime(self, *, origin: str, sock: str) -> dict[str, Any]:
+        if not origin:
+            return {'ok': False, 'message': 'gateway origin is required'}
+        if not sock:
+            return {'ok': False, 'message': 'gateway socket is required'}
+
+        current = getattr(self, '_im_gateway_wrapper', None)
+        current_ipc = getattr(current, '_ipc', None)
+        current_origin = getattr(current, '_origin', None)
+        current_sock = str(getattr(current_ipc, 'socket_path', getattr(current_ipc, 'sock', '')))
+        if current is not None and current_origin == origin and current_sock == sock:
+            return {'ok': True, 'message': 'already connected'}
+
+        from clawcodex_ext.services.im_gateway.ipc_client import GatewayIpcClient
+        from extensions.orchestrator.im_gateway_client import (
+            OrchestratorGatewayClient,
+            OrchestratorHandlers,
+        )
+
+        def _control_verb(verb, issue_id):
+            self._apply_control_command(verb, issue_id or '', '')
+
+        def _issue_inject(issue_id, hint):
+            hints_file = self._workspace_root / '.operator_hints.md'
+            hints_file.parent.mkdir(parents=True, exist_ok=True)
+            with hints_file.open('a', encoding='utf-8') as f:
+                f.write(f'\n{hint}\n')
+
+        handlers = OrchestratorHandlers(
+            queue_pending_message=lambda issue_id, text: logger.info(
+                'IM followup queued: issue=%s text_len=%d', issue_id, len(text)
+            ),
+            control_verb=_control_verb,
+            issue_inject=_issue_inject,
+            operator_hints=_issue_inject,
+            agent_intent=_control_verb,
+            issue_cli=lambda verb, issue_id, payload: logger.info(
+                'IM issue_cli: %s issue=%s', verb, issue_id
+            ),
+            bridge_interrupt=lambda issue_id, payload: _control_verb('stop', issue_id),
+        )
+        session_id = f'orchestrator-{os.getpid()}-{int(time.time() * 1000)}'
+        ipc = GatewayIpcClient(sock, instance_id=session_id)
+        wrapper = OrchestratorGatewayClient(
+            handlers, ipc_client=ipc, origin=origin, command_router=None, control_bridge=None
+        )
+        try:
+            await ipc.connect()
+            response = await ipc.register(
+                session_id=session_id,
+                origin=origin,
+                capabilities=['outbound_text'],
+            )
+            if response is None or response.ack_layer != 'accepted':
+                await ipc.close()
+                return {'ok': False, 'message': 'gateway registration failed'}
+        except FileNotFoundError:
+            await ipc.close()
+            return {'ok': False, 'message': 'IM gateway daemon is not running'}
+        except Exception as exc:  # noqa: BLE001
+            await ipc.close()
+            logger.warning('gateway control connect failed', exc_info=True)
+            return {'ok': False, 'message': str(exc)}
+
+        old_wrapper = getattr(self, '_im_gateway_wrapper', None)
+        old_task = getattr(self, '_im_gateway_heartbeat_task', None)
+        old_session_id = getattr(self, '_im_gateway_session_id', None)
+        deliver = self._build_gateway_ipc_deliver(wrapper)
+        self._im_gateway_wrapper = wrapper
+        self._im_gateway_session_id = session_id
+        self._im_gateway_heartbeat_task = asyncio.create_task(
+            self._gateway_runtime_heartbeat_loop(wrapper, session_id)
+        )
+        self.im_event_deliver = deliver
+        self.im_event_channel = 'wechat'
+        self._attach_gateway_sink_to_existing_emitters(deliver)
+        if callable(getattr(wrapper, '_flush_pending_outbound', None)):
+            await wrapper._flush_pending_outbound()
+        if old_task is not None and not old_task.done():
+            old_task.cancel()
+            with __import__('contextlib').suppress(asyncio.CancelledError):
+                await old_task
+        if old_wrapper is not None and old_wrapper is not wrapper:
+            await self._close_gateway_wrapper(old_wrapper, old_session_id)
+        self._emit_im_event(
+            '',
+            'orchestrator.started',
+            EventLevel.INFO,
+            'IM notifications enabled',
+        )
+        return {'ok': True, 'message': 'connected'}
+
+    def _build_gateway_ipc_deliver(self, wrapper) -> Any:
+        loop = asyncio.get_running_loop()
+
+        def _sync_deliver(event, text):
+            loop.create_task(wrapper.send_outbound(text))
+
+        return _sync_deliver
+
+    def _attach_gateway_sink_to_existing_emitters(self, deliver) -> None:
+        emitters = getattr(self, '_im_emitters', {}) or {}
+        if not emitters:
+            return
+        from .channel_sink import ChannelProgressSink
+
+        for emitter in list(emitters.values()):
+            add_sink = getattr(emitter, 'add_sink', None)
+            if callable(add_sink):
+                add_sink(ChannelProgressSink(deliver))
+
+    async def _gateway_runtime_heartbeat_loop(self, wrapper, session_id: str) -> None:
+        ipc = getattr(wrapper, '_ipc', None)
+        if ipc is None:
+            return
+        while True:
+            try:
+                await ipc.heartbeat()
+            except Exception:  # noqa: BLE001
+                logger.debug('orchestrator IM runtime heartbeat failed', exc_info=True)
+            await asyncio.sleep(30.0)
+
+    async def _disconnect_gateway_runtime(self) -> dict[str, Any]:
+        wrapper = getattr(self, '_im_gateway_wrapper', None)
+        task = getattr(self, '_im_gateway_heartbeat_task', None)
+        session_id = getattr(self, '_im_gateway_session_id', None)
+        if task is not None and not task.done():
+            task.cancel()
+            with __import__('contextlib').suppress(asyncio.CancelledError):
+                await task
+        if wrapper is not None:
+            await self._close_gateway_wrapper(wrapper, session_id)
+        self._im_gateway_wrapper = None
+        self._im_gateway_heartbeat_task = None
+        self._im_gateway_session_id = None
+        self.im_event_deliver = None
+        self.im_event_channel = ''
+        return {'ok': True, 'message': 'disconnected'}
+
+    async def _close_gateway_wrapper(self, wrapper, session_id: str | None) -> None:
+        ipc = getattr(wrapper, '_ipc', None)
+        if ipc is None:
+            return
+        with __import__('contextlib').suppress(RuntimeError, ConnectionError, OSError):
+            await ipc.unregister(session_id)
+        await ipc.close()
 
     def _apply_control_command(self, cmd: str, issue_id: str, extra: str) -> None:
         """Apply a single control command to a running session."""

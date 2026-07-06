@@ -137,6 +137,7 @@
 具体来说，本仓库新增：
 
 - 🤖 **编排器（Orchestrator）** —— 守护进程，自动轮询工单系统、拉分支、跑 agent、开 PR，全程无需人工
+- 💬 **IM 消息网关** —— 让 REPL 和编排器在运行期接入微信/飞书私聊消息，把 agent 控制和回复带到 IM 渠道
 - 🧩 **SOP 编译器** —— 把任何 `workflow.md` 流程化规范编译成多 agent 协同系统
 - ⏰ **定时任务系统（Cron System）** —— 分布式锁调度，带 jitter 和 NDJSON 运行历史
 - 🌉 **桥接守护进程扩展** —— 多 session 桥接、远程运行时、REPL/headless 适配器
@@ -323,18 +324,24 @@ clawcodex-dev gateway restart wechat # 重启 WeChat IM 渠道
 clawcodex-dev gateway status wechat # 查看 WeChat 登录健康状态和 REPL/orchestrator 连接状态
 ```
 
-gateway 守护进程运行且某个双向 app 渠道登录后，可把一个 REPL 或 orchestrator 会话接入该 IM 渠道。WeChat direct/private 私信或 Feishu p2p 私聊都可以驱动 agent，回复会回流到实际发送者。Feishu setup 优先使用二维码 scan-to-create 注册；扫码拒绝、过期或无法完成时，会回退到手动填写应用凭证。首次配置 Feishu 后，请重启整个 gateway 守护进程，让 Feishu SDK 在新进程中加载。
+gateway 守护进程运行且某个双向 app 渠道登录后，先正常启动 REPL 或 orchestrator，再把该运行时接入 IM 渠道。WeChat direct/private 私信或 Feishu p2p 私聊都可以驱动 agent，回复会回流到实际发送者。Feishu setup 优先使用二维码 scan-to-create 注册；扫码拒绝、过期或无法完成时，会回退到手动填写应用凭证。首次配置 Feishu 后，请重启整个 gateway 守护进程，让 Feishu SDK 在新进程中加载。
 
 **连接网关：**
 
 ```bash
-# REPL：恢复已有会话；没有历史会话时省略 --resume 即新建。
-clawcodex-dev --resume <session-id> --gateway
-# orchestrator：接入后可通过 WeChat 下发 /pause AGENTSDK-15 等控制命令。
-clawcodex-dev orchestrator server start --workflow path/to/workflow.md --gateway
+# REPL：恢复已有会话；没有历史会话时省略 --resume 即新建，然后连接。
+clawcodex-dev --resume <session-id>
+/gateway connect
+/gateway status
+/gateway disconnect
+
+# Orchestrator：正常启动后，再连接运行中的守护进程。
+clawcodex-dev orchestrator server start --workflow path/to/workflow.md
+clawcodex-dev orchestrator server connect-gateway
+clawcodex-dev orchestrator server disconnect-gateway
 ```
 
-`--gateway` 会绑定当前活跃双向 IM app 渠道下的所有 direct/private 发送者。同一时间只有一个运行域能拥有该渠道：启动 REPL 绑定会断开 orchestrator 绑定，启动 orchestrator 绑定也会断开 REPL 绑定。V1 只支持一个活跃双向 app 渠道（`wechat` 或 Feishu WebSocket）；启用 Feishu WebSocket 时，`gateway setup` 会停用其它 inbound app 渠道。Legacy Feishu/Slack/Discord webhook 仍是 outbound-only。`CLAWCODEX_GATEWAY_SOCK` 可覆盖 daemon socket；特定 origin 绑定仅保留给定向调试或未来多 origin 自动化。
+运行期连接默认绑定当前活跃双向 IM app 渠道下的所有 direct/private 发送者。同一时间只有一个运行域能拥有该渠道：连接 REPL 会断开 orchestrator 绑定，连接 orchestrator 会断开 REPL 绑定。V1 只支持一个活跃双向 app 渠道（`wechat` 或 Feishu WebSocket）；启用 Feishu WebSocket 时，`gateway setup` 会停用其它 inbound app 渠道。Legacy Feishu/Slack/Discord webhook 仍是 outbound-only。`CLAWCODEX_GATEWAY_SOCK` 可覆盖 daemon socket；特定 origin 绑定仅保留给定向调试或未来多 origin 自动化。
 
 网关支持向 REPL/orchestrator 下发控制命令，例如 `/stop` 可停止当前任务。
 

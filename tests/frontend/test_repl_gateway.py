@@ -40,9 +40,148 @@ def _make_repl_client(capacity=3):
     return client, enqueued
 
 
+class _FakeCommandRegistry:
+    def __init__(self) -> None:
+        self.commands: dict[str, object] = {}
+
+    def register(self, command) -> None:
+        self.commands[command.name] = command
+
+
+class _FakeConsole:
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    def print(self, message: str = '', *args, **kwargs) -> None:
+        self.messages.append(str(message))
+
+
+class _FakeReplForGatewayCommand:
+    def __init__(self) -> None:
+        self.command_registry = _FakeCommandRegistry()
+        self.console = _FakeConsole()
+        self._queued_prompts: list[str] = []
+        self._gateway_client = None
+        self._im_reply_controller = None
+        self._gateway_init = None
+        self._gateway_session_counter = 0
+
+    def _update_built_in_commands_with_command_system(self) -> None:
+        return None
+
+    def _enqueue_prompt(self, text: str) -> None:
+        self._queued_prompts.append(text)
+
+    def _wake_prompt_for_im(self) -> None:
+        return None
+
+
+def _gateway_ctx(*, gateway=False, origin=None, sock=None):
+    return SimpleNamespace(
+        options=SimpleNamespace(
+            gateway=gateway,
+            gateway_origin=origin,
+            gateway_sock=sock,
+        )
+    )
+
+
 def test_repl_can_enqueue_under_capacity() -> None:
     client, _ = _make_repl_client(capacity=5)
     assert client.can_enqueue() is True
+
+
+def test_repl_gateway_command_status_tracks_connect_disconnect(monkeypatch) -> None:
+    """The runtime /gateway command reports disconnected, connected, then disconnected."""
+    from clawcodex_ext.frontend.repl_extensions import _install_gateway_client
+
+    created: list[object] = []
+
+    class _FakeRuntimeClient:
+        def __init__(self, sock, *, session_id, origin, **_kwargs):
+            self.socket_path = sock
+            self.session_id = session_id
+            self.origin = origin
+            self.connected = False
+            self.closed = False
+            created.append(self)
+
+        @property
+        def is_connected(self):
+            return self.connected
+
+        async def connect(self):
+            self.connected = True
+            return SimpleNamespace(ack_layer='accepted')
+
+        async def start_heartbeat(self, interval=30.0):
+            return None
+
+        async def close(self):
+            self.connected = False
+            self.closed = True
+
+    monkeypatch.setattr(
+        'clawcodex_ext.frontend.repl_gateway.ReplGatewayClient',
+        _FakeRuntimeClient,
+    )
+
+    repl = _FakeReplForGatewayCommand()
+    _install_gateway_client(repl, _gateway_ctx())
+
+    command = repl.command_registry.commands['gateway']
+    assert 'connect' in command.description.lower()
+    assert 'status' in command.description.lower()
+    assert 'disconnect' in command.description.lower()
+    assert 'disconnected' in repl._handle_gateway_command('status')
+    assert 'connected' in repl._handle_gateway_command(
+        'connect --origin wechat:direct:default:user --sock /tmp/gateway.sock'
+    )
+    assert 'connected' in repl._handle_gateway_command('status')
+    assert 'wechat:direct:default:user' in repl._handle_gateway_command('status')
+    assert 'disconnected' in repl._handle_gateway_command('disconnect')
+    assert 'disconnected' in repl._handle_gateway_command('status')
+    assert created[-1].closed is True
+
+
+def test_repl_gateway_is_advertised_in_slash_suggestions() -> None:
+    """Typing /g should surface /gateway with the runtime actions in the popup."""
+    from clawcodex_ext.repl.core import ClawcodexREPL
+
+    description = ClawcodexREPL._REPL_EXTRA_BUILTIN_DESCRIPTIONS.get('gateway')
+
+    assert description is not None
+    lowered = description.lower()
+    for action in ('connect', 'status', 'disconnect'):
+        assert action in lowered
+
+
+def test_repl_gateway_connect_missing_daemon_fails_without_client(monkeypatch) -> None:
+    """Missing gateway socket should fail visibly and leave the REPL disconnected."""
+    from clawcodex_ext.frontend.repl_extensions import _install_gateway_client
+
+    class _MissingGatewayClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def connect(self):
+            raise FileNotFoundError('/tmp/missing.sock')
+
+        async def close(self):
+            return None
+
+    monkeypatch.setattr(
+        'clawcodex_ext.frontend.repl_gateway.ReplGatewayClient',
+        _MissingGatewayClient,
+    )
+
+    repl = _FakeReplForGatewayCommand()
+    _install_gateway_client(repl, _gateway_ctx())
+
+    result = repl._handle_gateway_command('connect --sock /tmp/missing.sock')
+
+    assert 'IM gateway daemon is not running' in result
+    assert repl._gateway_client is None
 
 
 @pytest.mark.asyncio

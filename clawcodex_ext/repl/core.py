@@ -1201,20 +1201,20 @@ class ClawcodexREPL:
             )
             # Space-separated label (matches TUI's "cost N" pattern;
             # avoids the REPL/TUI label-style split critic flagged).
-            cost_part = f" · cost {format_cost_usd(total_cost)}" if total_cost > 0 else ""
+            cost_part = f' · cost {format_cost_usd(total_cost)}' if total_cost > 0 else ''
             _in = self._stats_input_tokens
             _out = self._stats_output_tokens
-            _fmt = lambda n: f"{n / 1000:.1f}k" if n >= 1000 else str(n)
+            _fmt = lambda n: f'{n / 1000:.1f}k' if n >= 1000 else str(n)
             return (
-                f" {provider} · {model} · {cwd} · "
-                f"mode: {permission_mode_short_title(self._permission_mode)} · "
-                f"turns: {self._stats_turns} · "
-                f"tokens: {_fmt(_in)} in / "
-                f"{_fmt(_out)} out"
-                f"{ctx_part}"
-                f"{advisor_tokens}"
-                f"{cost_part}"
-                f" "
+                f' {provider} · {model} · {cwd} · '
+                f'mode: {permission_mode_short_title(self._permission_mode)} · '
+                f'turns: {self._stats_turns} · '
+                f'tokens: {_fmt(_in)} in / '
+                f'{_fmt(_out)} out'
+                f'{ctx_part}'
+                f'{advisor_tokens}'
+                f'{cost_part}'
+                f' '
             )
         except Exception:
             # Never let the toolbar break the input prompt. Runs on every
@@ -2045,9 +2045,7 @@ class ClawcodexREPL:
         if not _HAS_PROMPT_TOOLKIT:
             # Best-effort fallback: print everything, mark a hint line.
             self.console.print('\n' + body)
-            self.console.print(
-                '[dim](prompt_toolkit unavailable — answer not paginated)[/dim]'
-            )
+            self.console.print('[dim](prompt_toolkit unavailable — answer not paginated)[/dim]')
             return
 
         self._run_scroll_viewer(body, lines=lines, window=window, command=command)
@@ -2099,7 +2097,10 @@ class ClawcodexREPL:
                 fragments.append(('', '~\n'))
             # Footer hint
             fragments.append(
-                ('class:scroll-footer', '\n  ↑↓ scroll · PgUp/PgDn page · Home/End jump · Space/Enter/Esc/q close'),
+                (
+                    'class:scroll-footer',
+                    '\n  ↑↓ scroll · PgUp/PgDn page · Home/End jump · Space/Enter/Esc/q close',
+                ),
             )
             return fragments
 
@@ -2239,6 +2240,7 @@ class ClawcodexREPL:
         'tool': 'Inspect or invoke a single tool',
         'init': 'Initialize a CLAUDE.md for this workspace',
         'tui': 'Switch to the Textual TUI',
+        'gateway': 'Connect, status, or disconnect the IM gateway',
     }
 
     _SLASH_SUGGESTIONS_TTL_S = 30.0
@@ -2854,7 +2856,7 @@ class ClawcodexREPL:
             return get_agents_for_mentions(
                 cwd,
                 tool_context=self.tool_context,
-                runtime_context=getattr(self, "runtime_context", None),
+                runtime_context=getattr(self, 'runtime_context', None),
             )
         except Exception:
             return list(get_built_in_agents())
@@ -3014,13 +3016,16 @@ class ClawcodexREPL:
         buffer_changed_handler = None
         default_buffer = None
         try:
-            controller = getattr(self, "_intent_forecast_controller", None)
-            default_buffer = getattr(getattr(self.prompt_session, "app", None), "default_buffer", None)
+            controller = getattr(self, '_intent_forecast_controller', None)
+            default_buffer = getattr(
+                getattr(self.prompt_session, 'app', None), 'default_buffer', None
+            )
             if controller is not None and default_buffer is not None:
+
                 def _on_text_changed(_sender) -> None:
                     try:
                         controller.on_prompt_draft_changed(
-                            str(getattr(default_buffer, "text", "") or "")
+                            str(getattr(default_buffer, 'text', '') or '')
                         )
                     except Exception:
                         pass
@@ -3607,21 +3612,21 @@ class ClawcodexREPL:
         except Exception:
             return
 
-        if not info or info.get("status") != "running":
+        if not info or info.get('status') != 'running':
             return
 
-        pid = info.get("pid")
-        pid_str = f" (pid {pid})" if pid is not None else ""
+        pid = info.get('pid')
+        pid_str = f' (pid {pid})' if pid is not None else ''
         self.console.print(
-            f"\n[warning]⏎ Background agent{pid_str} is still running for this session.[/warning]"
+            f'\n[warning]⏎ Background agent{pid_str} is still running for this session.[/warning]'
         )
         self.console.print(
-            "[dim]The history shown below is partial — it only reflects what the "
-            "background agent has produced so far.[/dim]"
+            '[dim]The history shown below is partial — it only reflects what the '
+            'background agent has produced so far.[/dim]'
         )
         self.console.print(
-            f"[dim]To see the complete output once it finishes, exit and re-run:[/dim]\n"
-            f"  [info]clawcodex --resume {session_id}[/info]"
+            f'[dim]To see the complete output once it finishes, exit and re-run:[/dim]\n'
+            f'  [info]clawcodex --resume {session_id}[/info]'
         )
 
     def _replay_resume_history(self) -> None:
@@ -4092,16 +4097,16 @@ class ClawcodexREPL:
                     continue
 
                 if user_input.startswith('/'):
-                    controller = getattr(self, "_intent_forecast_controller", None)
+                    controller = getattr(self, '_intent_forecast_controller', None)
                     if controller is not None:
-                        controller.on_user_interaction("slash")
+                        controller.on_user_interaction('slash')
                     self.handle_command(user_input)
                     continue
 
                 if user_input.startswith('!'):
-                    controller = getattr(self, "_intent_forecast_controller", None)
+                    controller = getattr(self, '_intent_forecast_controller', None)
                     if controller is not None:
-                        controller.on_user_interaction("bash")
+                        controller.on_user_interaction('bash')
                     # Bash mode: direct execution, no agent turn.
                     # Feeds the bash input + output into the conversation
                     # (so the model sees what happened on its next turn).
@@ -5402,7 +5407,7 @@ class ClawcodexREPL:
         unknown_agents = find_unknown_agent_mentions(user_input, available_agents)
         if unknown_agents:
             self.console.print(
-                f"[error]{format_unknown_agent_mention_error(unknown_agents, available_agents)}[/error]"
+                f'[error]{format_unknown_agent_mention_error(unknown_agents, available_agents)}[/error]'
             )
             return True
 
@@ -5429,10 +5434,10 @@ class ClawcodexREPL:
             for att in agent_attachments:
                 if _sop_bundle_active:
                     self.console.print(
-                        f"[dim]  ⎿  @{att['agent_type']} → delegating via overview agent[/dim]"
+                        f'[dim]  ⎿  @{att["agent_type"]} → delegating via overview agent[/dim]'
                     )
                 else:
-                    self.console.print(f"[dim]  ⎿  Invoking agent @{att['agent_type']}[/dim]")
+                    self.console.print(f'[dim]  ⎿  Invoking agent @{att["agent_type"]}[/dim]')
 
         if agent_attachments and not at_attachments and not _sop_bundle_active:
             from clawcodex_ext.repl.mentioned_agent import (
@@ -5443,7 +5448,7 @@ class ClawcodexREPL:
             if should_run_mentioned_agent_directly(agent_attachments, at_attachments):
                 if run_mentioned_agent_direct(
                     self,
-                    agent_type=agent_attachments[0]["agent_type"],
+                    agent_type=agent_attachments[0]['agent_type'],
                     user_input=user_input,
                 ):
                     return True

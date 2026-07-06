@@ -23,6 +23,7 @@ import os
 import signal
 import sys
 import time
+import uuid
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -200,11 +201,10 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
     # --- server connect-gateway ---
     connect_parser = server_sub.add_parser(
         'connect-gateway',
-        help='Check whether a running daemon can be connected to the IM gateway',
+        help='Ask a running daemon to connect to the IM gateway',
         description=(
-            'Diagnose IM gateway opt-in for an already-running orchestrator daemon. '
-            'Current daemons must opt in at startup; this command reports the exact '
-            'startup/running-state boundary instead of silently pretending to attach.'
+            'Submit an IM gateway connect request to an already-running orchestrator daemon. '
+            'The daemon handles the request on its next control-file poll.'
         ),
     )
     connect_parser.add_argument(
@@ -224,28 +224,17 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
     connect_parser.add_argument(
         '--gateway',
         dest='gateway',
-        action='store_true',
-        help='Use the default all-private-message IM gateway binding',
-    )
-    connect_parser.add_argument(
-        '--im-gateway',
-        dest='gateway',
-        action='store_true',
-        help=argparse.SUPPRESS,
-    )
-    connect_parser.add_argument(
-        '--gateway-origin',
-        dest='gateway_origin',
         type=str,
         default=None,
         metavar='ORIGIN',
         help=(
-            'Origin to bind, e.g. wechat:direct:default:user_id. Falls back to CLAWCODEX_GATEWAY_ORIGIN.'
+            'Optional specific origin to bind, e.g. wechat:direct:default:user_id. '
+            'Omit for all supported direct/private IM messages.'
         ),
     )
     connect_parser.add_argument(
-        '--im-gateway-origin',
-        dest='gateway_origin',
+        '--im-gateway',
+        dest='gateway',
         type=str,
         default=None,
         metavar='ORIGIN',
@@ -258,7 +247,7 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         default=None,
         metavar='PATH',
         help=(
-            'Gateway daemon Unix socket for --gateway-origin '
+            'Gateway daemon Unix socket for connect-gateway '
             '(default: ~/.clawcodex/gateway/gateway.sock)'
         ),
     )
@@ -269,6 +258,30 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         default=None,
         metavar='PATH',
         help=argparse.SUPPRESS,
+    )
+
+    # --- server disconnect-gateway ---
+    disconnect_parser = server_sub.add_parser(
+        'disconnect-gateway',
+        help='Ask a running daemon to disconnect from the IM gateway',
+        description=(
+            'Submit an IM gateway disconnect request to an already-running orchestrator daemon. '
+            'The daemon handles the request on its next control-file poll.'
+        ),
+    )
+    disconnect_parser.add_argument(
+        '--workspace',
+        type=str,
+        default=None,
+        metavar='PATH',
+        help='Explicit workspace root path (optional auto-detection override)',
+    )
+    disconnect_parser.add_argument(
+        '--workflow',
+        type=str,
+        default=None,
+        metavar='PATH',
+        help='Path to WORKFLOW.md (helps resolve workspace when metadata is missing)',
     )
 
 
@@ -288,6 +301,8 @@ def run(args: argparse.Namespace) -> int:
         return _run_start(args)
     elif cmd == 'connect-gateway':
         return _run_connect_gateway(args)
+    elif cmd == 'disconnect-gateway':
+        return _run_disconnect_gateway(args)
     print(f"error: unknown server subcommand '{cmd}'", file=sys.stderr)
     return 2
 
@@ -616,24 +631,8 @@ def _run_stop(args: argparse.Namespace) -> int:
 
 
 def _run_connect_gateway(args: argparse.Namespace) -> int:
-    """Diagnose IM gateway opt-in for an already-running orchestrator daemon.
-
-    The current daemon has no runtime control channel for injecting a new
-    GatewayIpcClient into an already-running process. Startup opt-in is the
-    supported path; this command exists to make that boundary explicit.
-    """
-    origin = (
-        getattr(args, 'gateway_origin', None)
-        or os.environ.get('CLAWCODEX_GATEWAY_ORIGIN')
-        or os.environ.get('CLAWCODEX_IM_ORIGIN')
-    )
-    if not origin and getattr(args, 'gateway', False):
-        from clawcodex_ext.services.im_gateway.models import IM_DIRECT_ALL_ORIGIN
-
-        origin = IM_DIRECT_ALL_ORIGIN
-    if not origin:
-        print('error: --gateway or --gateway-origin is required', file=sys.stderr)
-        return 2
+    """Submit an IM gateway connect request to the running orchestrator daemon."""
+    origin = _resolve_gateway_origin(args)
 
     meta_path, meta = _find_metadata(args)
     pid = meta.get('pid') if meta else None
@@ -645,27 +644,148 @@ def _run_connect_gateway(args: argparse.Namespace) -> int:
         print('连接失败，orchestrator未启动', file=sys.stderr)
         return 1
 
+    sock = _resolve_gateway_sock(args)
+    if not _gateway_socket_available(sock):
+        print('IM gateway daemon is not running', file=sys.stderr)
+        print(f'  Requested socket: {sock}', file=sys.stderr)
+        return 1
+
+    workspace = Path(meta.get('workspace_root', os.getcwd())) if meta else Path.cwd()
+    response_path = _gateway_control_response_path(workspace, 'gateway_connect')
+    control_path = _write_gateway_control(
+        workspace,
+        'gateway_connect',
+        {
+            'origin': origin,
+            'sock': sock,
+            'response_path': str(response_path),
+        },
+    )
+    result = _wait_gateway_control_result(response_path)
+    if result is not None:
+        if result.get('ok'):
+            print(f'gateway connected: origin={origin} sock={sock}')
+            return 0
+        print(
+            f'gateway connect failed: {result.get("message") or "unknown error"}', file=sys.stderr
+        )
+        return 1
+
+    print('gateway connect request submitted; waiting for orchestrator next poll')
+    print(f'  Control: {control_path}')
+    print(f'  Running daemon PID: {pid}')
+    if meta_path:
+        print(f'  Metadata: {meta_path}')
+    return 0
+
+
+def _run_disconnect_gateway(args: argparse.Namespace) -> int:
+    """Submit an IM gateway disconnect request to the running orchestrator daemon."""
+    meta_path, meta = _find_metadata(args)
+    pid = meta.get('pid') if meta else None
+    try:
+        alive = bool(pid and _is_pid_alive(int(pid)))
+    except (TypeError, ValueError):
+        alive = False
+    if not alive:
+        print('连接失败，orchestrator未启动', file=sys.stderr)
+        return 1
+
+    workspace = Path(meta.get('workspace_root', os.getcwd())) if meta else Path.cwd()
+    response_path = _gateway_control_response_path(workspace, 'gateway_disconnect')
+    control_path = _write_gateway_control(
+        workspace,
+        'gateway_disconnect',
+        {
+            'response_path': str(response_path),
+        },
+    )
+    result = _wait_gateway_control_result(response_path)
+    if result is not None:
+        if result.get('ok'):
+            print('gateway disconnected')
+            return 0
+        print(
+            f'gateway disconnect failed: {result.get("message") or "unknown error"}',
+            file=sys.stderr,
+        )
+        return 1
+
+    print('gateway disconnect request submitted; waiting for orchestrator next poll')
+    print(f'  Control: {control_path}')
+    print(f'  Running daemon PID: {pid}')
+    if meta_path:
+        print(f'  Metadata: {meta_path}')
+    return 0
+
+
+def _resolve_gateway_origin(args: argparse.Namespace) -> str:
+    explicit = getattr(args, 'gateway', None)
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+    origin = os.environ.get('CLAWCODEX_GATEWAY_ORIGIN') or os.environ.get('CLAWCODEX_IM_ORIGIN')
+    if origin:
+        return origin
+    from clawcodex_ext.services.im_gateway.models import IM_DIRECT_ALL_ORIGIN
+
+    return IM_DIRECT_ALL_ORIGIN
+
+
+def _resolve_gateway_sock(args: argparse.Namespace) -> str:
     sock = (
         getattr(args, 'gateway_sock', None)
         or os.environ.get('CLAWCODEX_GATEWAY_SOCK')
         or os.environ.get('CLAWCODEX_IM_GATEWAY_SOCK')
     )
-    if not sock:
-        sock = os.path.expanduser('~/.clawcodex/gateway/gateway.sock')
-    workspace = meta.get('workspace_root', 'unknown') if meta else 'unknown'
-    print(
-        '连接失败，当前版本不支持对已运行 orchestrator 动态注入 IM gateway；'
-        '请重启时使用 `clawcodex-dev orchestrator server start '
-        '--gateway-origin <origin> [--gateway-sock <path>]`。',
-        file=sys.stderr,
-    )
-    print(f'  Running daemon PID: {pid}', file=sys.stderr)
-    print(f'  Workspace: {workspace}', file=sys.stderr)
-    print(f'  Requested origin: {origin}', file=sys.stderr)
-    print(f'  Requested socket: {sock}', file=sys.stderr)
-    if meta_path:
-        print(f'  Metadata: {meta_path}', file=sys.stderr)
-    return 1
+    return str(sock or os.path.expanduser('~/.clawcodex/gateway/gateway.sock'))
+
+
+def _gateway_socket_available(sock: str) -> bool:
+    if not Path(sock).exists():
+        return False
+    try:
+        asyncio.run(_probe_gateway_socket(sock))
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+async def _probe_gateway_socket(sock: str) -> None:
+    from clawcodex_ext.services.im_gateway.ipc_client import GatewayIpcClient
+
+    client = GatewayIpcClient(sock, instance_id='orchestrator-control-probe')
+    try:
+        await client.connect()
+    finally:
+        await client.close()
+
+
+def _gateway_control_response_path(workspace: Path, command: str) -> Path:
+    control_dir = workspace / '.orchestrator_control'
+    control_dir.mkdir(parents=True, exist_ok=True)
+    return control_dir / f'{command}_{uuid.uuid4().hex}.result.json'
+
+
+def _write_gateway_control(workspace: Path, command: str, payload: dict) -> Path:
+    control_dir = workspace / '.orchestrator_control'
+    control_dir.mkdir(parents=True, exist_ok=True)
+    request_id = uuid.uuid4().hex
+    control_path = control_dir / f'{command}_{request_id}.control'
+    body = f'{command}\n\n{json.dumps(payload, ensure_ascii=False, separators=(",", ":"))}\n'
+    control_path.write_text(body, encoding='utf-8')
+    return control_path
+
+
+def _wait_gateway_control_result(response_path: Path, timeout_seconds: float = 0.2) -> dict | None:
+    deadline = time.time() + max(0.0, timeout_seconds)
+    while time.time() < deadline:
+        if response_path.exists():
+            try:
+                return json.loads(response_path.read_text(encoding='utf-8'))
+            except json.JSONDecodeError:
+                return {'ok': False, 'message': 'invalid gateway control result'}
+        time.sleep(0.02)
+    return None
 
 
 def _run_start(args: argparse.Namespace) -> int:
@@ -884,6 +1004,9 @@ def _mount_gateway_opt_in(
         _orig_orch_run = _Orch.run
 
         async def _orch_run_patched(self, *a, **kw):
+            self._im_gateway_wrapper = wrapper
+            self._im_gateway_session_id = session_id
+            self._im_gateway_heartbeat_task = getattr(wrapper, '_heartbeat_task', None)
             self.im_event_deliver = _sync_deliver
             self.im_event_channel = 'wechat'
             if hasattr(self, '_emit_im_event'):
@@ -1073,6 +1196,7 @@ def _run_orchestrator(
         im_task = None
         if im_client_wrapper is not None:
             im_task = asyncio.create_task(im_client_wrapper._heartbeat_loop())
+            im_client_wrapper._heartbeat_task = im_task
         try:
             await subsystem.run()
         except (asyncio.CancelledError, KeyboardInterrupt):

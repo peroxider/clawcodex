@@ -22,6 +22,7 @@ calls :func:`install_repl_extensions` immediately after
 from __future__ import annotations
 
 import logging
+import shlex
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -451,17 +452,18 @@ def install_repl_extensions(repl: 'ClawcodexREPL', ctx) -> None:
 
 
 def _install_gateway_client(repl: 'ClawcodexREPL', ctx=None) -> None:
-    """Opt-in: connect the REPL to the IM gateway so IM messages drive it.
+    """Install REPL IM gateway command hooks and optional startup opt-in.
 
-    Enabled when ``--gateway`` is passed or when a specific origin is
-    provided via ``--gateway-origin`` / ``CLAWCODEX_GATEWAY_ORIGIN``. Without a
-    specific origin, the REPL binds all supported direct/private IM messages.
-
-    Connection is deferred: ``install_repl_extensions`` runs before
-    ``repl.run()`` creates the persistent asyncio loop, so we stash an init
-    callable on the repl for ``run()`` to invoke once the loop is up.
+    Startup connection remains opt-in via ``--gateway`` / ``--gateway-origin``.
+    The ``/gateway`` command is always installed so a normally-started REPL can
+    connect to an already-running gateway daemon later.
     """
     import os
+
+    _install_gateway_command(repl)
+    repl._handle_gateway_command = lambda args='': _handle_gateway_command(repl, args)
+    if getattr(repl, 'command_context', None) is not None:
+        repl.command_context.repl = repl
 
     options = getattr(ctx, 'options', None)
     sock = (
@@ -484,9 +486,150 @@ def _install_gateway_client(repl: 'ClawcodexREPL', ctx=None) -> None:
     if not sock:
         sock = str(os.path.expanduser('~/.clawcodex/gateway/gateway.sock'))
 
+    client = _new_repl_gateway_client(repl, origin=origin, sock=sock)
+    repl._gateway_client = client
+    repl._im_reply_controller = _ImReplyController(repl, client, origin)
+    _log.info('repl IM gateway startup opt-in staged: origin=%s sock=%s', origin[:32], sock)
+
+    async def _im_init(loop):
+        """Connect + register + start heartbeat on the REPL's loop."""
+        message = await _connect_repl_gateway(repl, origin=origin, sock=sock)
+        if 'connected' in message:
+            _log.info('repl IM gateway opt-in connected: origin=%s sock=%s', origin[:32], sock)
+        elif 'IM gateway daemon is not running' in message:
+            _log.error(
+                'IM gateway daemon is not running. Start it first:\n'
+                '    clawcodex-dev gateway start\n'
+                'Then relaunch with --gateway.'
+            )
+        else:
+            _log.warning('repl IM gateway opt-in connect failed: %s', message)
+
+    repl._gateway_init = _im_init
+
+
+def _install_gateway_command(repl: 'ClawcodexREPL') -> None:
+    try:
+        from src.command_system.registry import get_command_registry
+        from src.command_system.types import LocalCommand
+    except Exception:  # noqa: BLE001
+        return
+
+    def _make_command() -> LocalCommand:
+        command = LocalCommand(
+            name='gateway',
+            description='Connect, show status, or disconnect the IM gateway',
+            argument_hint='connect|status|disconnect [--origin ORIGIN] [--sock PATH]',
+        )
+        command.set_call(_gateway_command_call)
+        return command
+
+    for registry in (get_command_registry(), getattr(repl, 'command_registry', None)):
+        if registry is None:
+            continue
+        try:
+            registry.register(_make_command())
+        except Exception:  # noqa: BLE001
+            _log.debug('failed to register /gateway command', exc_info=True)
+    update_commands = getattr(repl, '_update_built_in_commands_with_command_system', None)
+    if callable(update_commands):
+        update_commands()
+    if hasattr(repl, '_slash_suggestions_cache'):
+        repl._slash_suggestions_cache = None
+        repl._slash_suggestions_cache_at = 0.0
+
+
+def _gateway_command_call(args: str, context) -> object:
+    from src.command_system.types import LocalCommandResult
+
+    repl = getattr(context, 'repl', None)
+    if repl is None:
+        return LocalCommandResult(type='text', value='IM gateway: unavailable')
+    handler = getattr(repl, '_handle_gateway_command', None)
+    if not callable(handler):
+        return LocalCommandResult(type='text', value='IM gateway: unavailable')
+    return LocalCommandResult(type='text', value=str(handler(args)))
+
+
+def _handle_gateway_command(repl: 'ClawcodexREPL', args: str = '') -> str:
+    try:
+        tokens = shlex.split(args or '')
+    except ValueError as exc:
+        return f'Usage: /gateway connect|status|disconnect [--origin ORIGIN] [--sock PATH]\n{exc}'
+    action = (tokens[0].lower() if tokens else 'status').strip()
+    rest = tokens[1:] if tokens else []
+
+    if action == 'status':
+        return _format_repl_gateway_status(repl)
+    if action == 'connect':
+        origin, sock, error = _parse_gateway_options(rest)
+        if error:
+            return error
+        return _run_repl_gateway_coro(
+            repl,
+            _connect_repl_gateway(repl, origin=origin, sock=sock),
+        )
+    if action == 'disconnect':
+        return _run_repl_gateway_coro(repl, _disconnect_repl_gateway(repl))
+    return 'Usage: /gateway connect|status|disconnect [--origin ORIGIN] [--sock PATH]'
+
+
+def _parse_gateway_options(tokens: list[str]) -> tuple[str | None, str | None, str | None]:
+    origin = None
+    sock = None
+    idx = 0
+    while idx < len(tokens):
+        token = tokens[idx]
+        if token in {'--origin', '--gateway-origin', '--im-gateway-origin'}:
+            if idx + 1 >= len(tokens):
+                return None, None, f'error: {token} requires a value'
+            origin = tokens[idx + 1]
+            idx += 2
+            continue
+        if token in {'--sock', '--gateway-sock', '--im-gateway-sock'}:
+            if idx + 1 >= len(tokens):
+                return None, None, f'error: {token} requires a value'
+            sock = tokens[idx + 1]
+            idx += 2
+            continue
+        if token in {'--gateway', '--im-gateway'}:
+            from clawcodex_ext.services.im_gateway.models import IM_DIRECT_ALL_ORIGIN
+
+            origin = IM_DIRECT_ALL_ORIGIN
+            idx += 1
+            continue
+        return None, None, f'error: unknown /gateway option {token!r}'
+    return origin, sock, None
+
+
+def _default_gateway_origin() -> str:
+    from clawcodex_ext.services.im_gateway.models import IM_DIRECT_ALL_ORIGIN
+
+    return IM_DIRECT_ALL_ORIGIN
+
+
+def _default_gateway_sock() -> str:
+    import os
+
+    return (
+        os.environ.get('CLAWCODEX_GATEWAY_SOCK')
+        or os.environ.get('CLAWCODEX_IM_GATEWAY_SOCK')
+        or str(os.path.expanduser('~/.clawcodex/gateway/gateway.sock'))
+    )
+
+
+def _next_repl_gateway_session_id(repl: 'ClawcodexREPL') -> str:
+    import os
+
+    counter = int(getattr(repl, '_gateway_session_counter', 0)) + 1
+    repl._gateway_session_counter = counter
+    return f'repl-{os.getpid()}-{counter}'
+
+
+def _new_repl_gateway_client(repl: 'ClawcodexREPL', *, origin: str, sock: str):
     from clawcodex_ext.frontend.repl_gateway import ReplGatewayClient
 
-    session_id = f'repl-{os.getpid()}'
+    session_id = _next_repl_gateway_session_id(repl)
     client = ReplGatewayClient(
         sock,
         session_id=session_id,
@@ -499,32 +642,120 @@ def _install_gateway_client(repl: 'ClawcodexREPL', ctx=None) -> None:
         ),
         permission_probe=lambda text: _handle_im_permission_reply(repl, text),
     )
+    return client
+
+
+async def _connect_repl_gateway(
+    repl: 'ClawcodexREPL',
+    *,
+    origin: str | None = None,
+    sock: str | None = None,
+) -> str:
+    origin = origin or _default_gateway_origin()
+    sock = sock or _default_gateway_sock()
+    current = getattr(repl, '_gateway_client', None)
+    current_origin = _client_origin(current)
+    current_sock = _client_sock(current)
+    if current is not None and getattr(current, 'is_connected', False):
+        if str(current_origin) == origin and str(current_sock) == sock:
+            return f'IM gateway connected: origin={origin} sock={sock}'
+
+    reuse_current = (
+        current is not None and str(current_origin) == origin and str(current_sock) == sock
+    )
+    client = current if reuse_current else _new_repl_gateway_client(repl, origin=origin, sock=sock)
+    try:
+        await client.connect()
+        await _start_repl_gateway_heartbeat(client)
+    except FileNotFoundError:
+        if not reuse_current:
+            await _close_repl_gateway_client(client)
+        return 'IM gateway daemon is not running'
+    except Exception as exc:  # noqa: BLE001
+        if not reuse_current:
+            await _close_repl_gateway_client(client)
+        _log.warning('repl IM gateway connect failed', exc_info=True)
+        return f'IM gateway connect failed: {exc}'
+
+    old = getattr(repl, '_gateway_client', None)
     repl._gateway_client = client
-
-    # IM reply controller: after each assistant turn, send the final reply
-    # text back to the IM origin via the OUTBOUND IPC frame.
     repl._im_reply_controller = _ImReplyController(repl, client, origin)
-    _log.info('repl IM gateway opt-in staged: origin=%s sock=%s', origin[:32], sock)
+    if old is not None and old is not client:
+        try:
+            await _close_repl_gateway_client(old)
+        except Exception:  # noqa: BLE001
+            _log.debug('failed to close previous REPL gateway client', exc_info=True)
+    return f'IM gateway connected: origin={origin} sock={sock}'
 
-    async def _im_init(loop):
-        """Connect + register + start heartbeat on the REPL's loop."""
+
+async def _disconnect_repl_gateway(repl: 'ClawcodexREPL') -> str:
+    client = getattr(repl, '_gateway_client', None)
+    if client is None:
+        repl._im_reply_controller = None
+        return 'IM gateway disconnected'
+    try:
+        await _close_repl_gateway_client(client)
+    finally:
+        repl._gateway_client = None
+        repl._im_reply_controller = None
+    return 'IM gateway disconnected'
+
+
+def _client_origin(client) -> str | None:
+    if client is None:
+        return None
+    value = getattr(client, 'origin', getattr(client, '_origin', None))
+    if value is None:
+        value = getattr(client, 'kwargs', {}).get('origin')
+    return value
+
+
+def _client_sock(client) -> str | None:
+    if client is None:
+        return None
+    return getattr(client, 'socket_path', getattr(client, '_socket_path', None))
+
+
+async def _start_repl_gateway_heartbeat(client) -> None:
+    start = getattr(client, 'start_heartbeat', None)
+    if callable(start):
+        await start(30.0)
+        return
+    loop = getattr(client, '_heartbeat_loop', None)
+    if callable(loop):
         import asyncio
 
-        try:
-            await client.connect()
-            client._heartbeat_task = asyncio.create_task(client._heartbeat_loop(30.0))
-            _log.info('repl IM gateway opt-in connected: origin=%s sock=%s', origin[:32], sock)
-        except FileNotFoundError:
-            _log.error(
-                'IM gateway daemon is not running. Start it first:\n'
-                '    clawcodex-dev gateway start\n'
-                'Then relaunch with --gateway.'
-            )
-            return
-        except Exception:  # noqa: BLE001
-            _log.warning('repl IM gateway opt-in connect failed', exc_info=True)
+        client._heartbeat_task = asyncio.create_task(loop(30.0))
 
-    repl._gateway_init = _im_init
+
+async def _close_repl_gateway_client(client) -> None:
+    close = getattr(client, 'close', None)
+    if callable(close):
+        await close()
+
+
+def _format_repl_gateway_status(repl: 'ClawcodexREPL') -> str:
+    client = getattr(repl, '_gateway_client', None)
+    if client is None or not getattr(client, 'is_connected', False):
+        return 'IM gateway disconnected'
+    origin = _client_origin(client) or 'unknown'
+    sock = _client_sock(client) or 'unknown'
+    return f'IM gateway connected: origin={origin} sock={sock}'
+
+
+def _run_repl_gateway_coro(repl: 'ClawcodexREPL', coro) -> str:
+    import asyncio
+
+    loop = getattr(repl, '_cron_loop', None)
+    try:
+        if loop is not None and not loop.is_closed():
+            if loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(coro, loop)
+                return str(future.result(timeout=10.0))
+            return str(loop.run_until_complete(coro))
+        return str(asyncio.run(coro))
+    except Exception as exc:  # noqa: BLE001
+        return f'IM gateway command failed: {exc}'
 
 
 def _handle_im_control(repl: 'ClawcodexREPL', text: str, origin: str | None = None) -> bool:
