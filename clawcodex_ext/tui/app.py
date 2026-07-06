@@ -742,8 +742,11 @@ class ClawCodexTUI(App):
             transcript.append_system(f"Dialog '{name}' not available.", style='muted')
 
     def _set_model_direct(self, model_id: str, transcript: Transcript) -> None:
-        """Set the model directly (used by /model <name>)."""
-        if model_id == self.model:
+        """Set the model directly (used by /model <name> and model picker)."""
+        # Normalise both sides for a fair comparison — providers may
+        # return model ids with different casing than what the user
+        # types (e.g. "deepseek-v4-flash" vs "DeepSeek-V4-Flash").
+        if model_id.lower() == (self.model or "").lower():
             transcript.append_system(f'Model is already {model_id}.', style='muted')
             return
         self.model = model_id
@@ -753,31 +756,29 @@ class ClawCodexTUI(App):
         except Exception:
             pass
         self.app_state.model = model_id
-        transcript.append_system(f'Model switched to {model_id}.', style='muted')
+        # Update the REPL-screen widgets BEFORE appending the transcript
+        # message so the visual state is consistent even if the append
+        # fails (rare).
         if self._repl_screen is not None:
-            self._repl_screen.status_bar.refresh_identity(model=model_id)
-            self._repl_screen.header_widget.refresh_banner(model=model_id)
+            try:
+                self._repl_screen.status_bar.refresh_identity(model=model_id)
+            except Exception:
+                pass
+            try:
+                self._repl_screen.header_widget.refresh_banner(model=model_id)
+            except Exception:
+                pass
+        transcript.append_system(f'Model switched to {model_id}.', style='muted')
         self.announcer.announce(f'Model switched to {model_id}.')
 
     def _open_model_picker(self, transcript: Transcript) -> None:
         models = self._list_available_models()
 
         def _on_selected(model_id: str | None) -> None:
-            if not model_id or model_id == self.model:
+            if not model_id or model_id.lower() == (self.model or "").lower():
                 self._restore_prompt_focus()
                 return
-            self.model = model_id
-            try:
-                if hasattr(self.provider, 'model'):
-                    setattr(self.provider, 'model', model_id)
-            except Exception:
-                pass
-            self.app_state.model = model_id
-            transcript.append_system(f'Model switched to {model_id}.', style='muted')
-            if self._repl_screen is not None:
-                self._repl_screen.status_bar.refresh_identity(model=model_id)
-                self._repl_screen.header_widget.refresh_banner(model=model_id)
-            self.announcer.announce(f'Model switched to {model_id}.')
+            self._set_model_direct(model_id, transcript)
             self._restore_prompt_focus()
 
         self.announcer.announce('Opened model picker.', notify=False)
