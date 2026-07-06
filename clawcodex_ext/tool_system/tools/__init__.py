@@ -40,6 +40,7 @@ from .tasks_v2 import (
     TaskOutputTool,
     TaskUpdateTool,
 )
+from .task_decompose import TaskDecomposeTool
 from .team import TeamCreateTool, TeamDeleteTool
 from .team_memory import TeamMemoryTool
 from .todo_write import TodoWriteTool
@@ -84,6 +85,7 @@ ALL_STATIC_TOOLS: list[Tool] = [
     StatusTool,
     StructuredOutputTool,
     TaskCreateTool,
+    TaskDecomposeTool,
     TaskGetTool,
     TaskListTool,
     TaskOutputTool,
@@ -134,6 +136,7 @@ __all__ = [
     "StatusTool",
     "StructuredOutputTool",
     "TaskCreateTool",
+    "TaskDecomposeTool",
     "TaskGetTool",
     "TaskListTool",
     "TaskOutputTool",

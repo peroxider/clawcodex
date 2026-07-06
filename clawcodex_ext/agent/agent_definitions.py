@@ -103,6 +103,8 @@ def task_v2_guidelines() -> str:
         "\n\nTask tracking guidelines:\n"
         "- For multi-step work, create structured tasks with TaskCreate and track them "
         "with TaskList.\n"
+        "- For complex goals with 3+ steps, use TaskDecompose first to get a validated "
+        "plan, then create the proposed tasks with TaskCreate.\n"
         "- Declare dependencies with TaskUpdate `addBlockedBy` before starting work.\n"
         "- Only mark a task `in_progress` after TaskGet confirms its `blockedBy` list is empty.\n"
         "- Only mark a task `completed` when the work is fully done and tests pass. "

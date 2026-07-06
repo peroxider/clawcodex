@@ -38,6 +38,7 @@ AuditEventType = Literal[
     "lkb_fact_dropped",
     "lkb_llm_fallback_used",
     "lkb_legacy_todo_ambiguity",
+    "lkb_decomposition_proposed",
 ]
 
 
@@ -555,6 +556,45 @@ def event_for_legacy_todo_ambiguity(
     )
 
 
+def event_for_decomposition_proposed(
+    decomposition_run_id: str,
+    goal: str,
+    *,
+    task_count: int,
+    dependency_count: int,
+    ambiguity_count: int,
+    validation_run_id: str | None = None,
+    result: str = "pass",
+    session_id: str | None = None,
+    actor: str = "agent",
+) -> AuditEvent:
+    """Record a task-decomposition proposal produced by TaskDecompose.
+
+    F-149: one event per decomposition run so the audit trail can replay
+    what the agent was offered before it chose to create/update tasks.
+    """
+    return AuditEvent(
+        event_id=_new_event_id(),
+        event_type="lkb_decomposition_proposed",
+        actor=actor,
+        timestamp=_utc_now(),
+        session_id=session_id,
+        proposal_id=None,
+        validation_run_id=validation_run_id,
+        task_id=None,
+        decision="accepted" if result == "pass" else "denied",
+        payload={
+            "decompositionRunId": decomposition_run_id,
+            "goal": goal[:500],
+            "taskCount": task_count,
+            "dependencyCount": dependency_count,
+            "ambiguityCount": ambiguity_count,
+            "result": result,
+            "enrichmentKey": decomposition_run_id,
+        },
+    )
+
+
 def append_event_once(
     audit_log: AuditLog,
     event: AuditEvent,
@@ -646,6 +686,7 @@ __all__ = [
     "default_session_log_path",
     "event_for_assumption_invalidated",
     "event_for_commit",
+    "event_for_decomposition_proposed",
     "event_for_fact_dropped",
     "event_for_fact_extracted",
     "event_for_human_override",
