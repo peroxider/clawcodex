@@ -45,9 +45,9 @@ class ModelPickerScreen(DialogScreen[str | None]):
         options: list[SelectOption] = []
         current_index = 0
         for idx, model in enumerate(self._models):
-            desc = "current" if model == self._current else None
+            desc = "current" if model.lower() == (self._current or "").lower() else None
             options.append(SelectOption(label=model, value=model, description=desc))
-            if model == self._current:
+            if model.lower() == (self._current or "").lower():
                 current_index = idx
         self._select = SelectList(
             options or [SelectOption(label="(no models available)", disabled=True)],
