@@ -196,21 +196,6 @@ $ clawcodex-dev orchestrator issue inject --id gitcode/AGENTSDK-15 "address revi
 > GitHub / GitCode 的 README 不允许 `<script>` 内嵌（会被 sanitize 剥离），所以走外链方式跳转。  
 > 静态截图缩略图可在 `assets/video-b/screenshots/` 下重新生成：`python3 scripts/capture_video_b_screenshots.py`。
 
-### 4 个章节速览
-
-| 章节 | 时长 | 聚焦能力 |
-|---|---|---|
-| 1. Cold Open | ~9s | "你睡了，agent 在干活。早上醒来，PR 自己开了。" |
-| 2. Orchestrator | ~52s | 4 个 issue 平台 · 真实日志逐步揭示 · reviewer 评论自动修 · Takeover |
-| 3. SOP Compiler | ~30s | `workflow.md` → 多 agent 团队（agent / skill / 编排图 / 通信） |
-| 4. Install + Metrics | ~39s | 3 平台一键安装 · `doctor` / `--dry-run` 预检 · Hero Metrics（4 / 100+ / 3 行） |
-
-### 源材料（双源原则：口播稿决定节拍，事实底稿决定画面密度）
-
-- 📝 **口播稿**：[`assets/video-b/script.md`](assets/video-b/script.md)
-- 🗒️ **分镜稿**：[`assets/video-b/outline.md`](assets/video-b/outline.md)
-- 📚 **事实底稿**：[`assets/video-b/article.md`](assets/video-b/article.md)
-
 ---
 
 ## Quick Start
