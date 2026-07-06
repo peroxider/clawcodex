@@ -10,6 +10,7 @@ from clawcodex_ext.logical_kanban.commit_gate_fuzzy import (
     aggregate_world_results,
     commit_gate_fuzzy_check,
 )
+from clawcodex_ext.logical_kanban.fuzzy_patterns import BUILT_IN_PATTERN_LIBRARY
 from clawcodex_ext.logical_kanban.fuzzy_types import (
     Assumption,
     Clarification,
@@ -77,18 +78,8 @@ class TestAmbiguityDetector:
         )
         assert distance_amb.severity == "major"
         codes = {i.code for i in distance_amb.candidate_interpretations}
-        assert "walking" in codes
+        assert "on_foot" in codes
         assert "straight_line" in codes
-
-    def test_detects_service_mode_ambiguity(self) -> None:
-        detector = AmbiguityDetector()
-        report = detector.detect("我要洗车", assertion_id="A-2")
-
-        service_amb = next(
-            (a for a in report.detected_ambiguities if "洗车" in a.phrase), None
-        )
-        assert service_amb is not None
-        assert service_amb.severity == "critical"
 
     def test_detects_unclear_dependency_direction(self) -> None:
         detector = AmbiguityDetector()
@@ -104,13 +95,13 @@ class TestAmbiguityDetector:
 
     def test_driving_context_boosts_driving_interpretation(self) -> None:
         detector = AmbiguityDetector()
-        report = detector.detect("开车离家50米", assertion_id="A-4")
+        report = detector.detect("驾车离家50米", assertion_id="A-4")
 
         amb = next(a for a in report.detected_ambiguities if a.kind == "semantic_vagueness")
-        driving = next(i for i in amb.candidate_interpretations if i.code == "driving")
-        # After normalisation driving may not exceed 0.5, but it should be the
+        by_vehicle = next(i for i in amb.candidate_interpretations if i.code == "by_vehicle")
+        # After normalisation by_vehicle may not exceed 0.5, but it should be the
         # highest-confidence interpretation when driving context is present.
-        assert driving.base_confidence == max(
+        assert by_vehicle.base_confidence == max(
             i.base_confidence for i in amb.candidate_interpretations
         )
 
@@ -127,7 +118,7 @@ class TestWorldGenerator:
 
     def test_world_confidences_sum_to_one(self) -> None:
         detector = AmbiguityDetector()
-        report = detector.detect("我要洗车", assertion_id="A-2")
+        report = detector.detect("很快完成", assertion_id="A-2")
         worlds = WorldGenerator().generate(report, _base_assertion())
 
         assert sum(w.confidence for w in worlds) == pytest.approx(1.0)
@@ -141,17 +132,27 @@ class TestWorldGenerator:
         assert worlds[0].confidence == 1.0
 
     def test_domain_constraint_prunes_invalid_world(self) -> None:
-        # "自助洗车" + "离家50米直线距离" should be pruned by the domain constraint
-        # that self_service + straight_line is inconsistent.
-        detector = AmbiguityDetector()
-        report = detector.detect("自助洗车离家50米", assertion_id="A-6")
+        # The default library ships no domain constraints (car-wash scenario
+        # removed per F-148 PR 1).  Downstream callers can still attach
+        # ``FuzzyPatternLibrary.add_constraint(...)`` and this test exercises
+        # that path with a synthetic constraint that blocks the
+        # ``immediate`` + ``today`` temporal combination.
+        from clawcodex_ext.logical_kanban.fuzzy_patterns import DomainConstraint
+
+        constraint = DomainConstraint(
+            blocks=frozenset({"immediate", "today"}),
+            rationale="test-only block",
+        )
+        library = BUILT_IN_PATTERN_LIBRARY.add_constraint(constraint)
+        detector = AmbiguityDetector(library=library)
+        report = detector.detect("很快完成", assertion_id="A-6")
         worlds = WorldGenerator().generate(report, _base_assertion())
 
         selected_codes = [
             {a.assumed_value for a in w.assumptions} for w in worlds
         ]
         for codes in selected_codes:
-            assert not ({"self_service", "straight_line"} <= codes)
+            assert not ({"immediate", "today"} <= codes)
 
 
 class TestMultiWorldValidator:
