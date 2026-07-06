@@ -27,6 +27,9 @@ AssumptionSource = Literal[
     "inferred",
     "user_clarified",
     "datalog_derived",
+    "llm_extracted",
+    "web_search",
+    "agent_inferred",
 ]
 
 DetectionMethod = Literal[

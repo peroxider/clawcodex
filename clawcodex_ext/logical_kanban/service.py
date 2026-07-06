@@ -35,10 +35,11 @@ from .audit import (
     event_for_validation_run,
     get_audit_log,
 )
-from .flags import is_causal_verification_enabled
+from .flags import is_causal_verification_enabled, is_llm_facts_enabled
 from .context_adapter import active_blockers, build_facts_snapshot, dependency_closure
 from .explain import build_repair_suggestions
 from .fuzzy_types import AggregationDecision, CommitDecision, MultiWorldResult
+from .glossary import BUILT_IN_GLOSSARY
 from .ir_hash import canonical_hash
 from .multiworld_validator import MultiWorldValidator
 from .rule_engine import Layer1RuleEngine
@@ -112,13 +113,35 @@ class LogicalKanbanService:
 
     solver_version = 'lkb-foundation-sync-v1'
 
-    def __init__(self) -> None:
+    def __init__(self, llm_provider: Any = None) -> None:
         self.engine = Layer1RuleEngine()
         self.pipeline = SolverPipeline()
         self.causal_engine = CausalEngine()
+        self._llm_provider = llm_provider
 
     def snapshot(self, context: 'ToolContext') -> FactsSnapshot:
         return build_facts_snapshot(context)
+
+    def _augmented_snapshot(self, context: 'ToolContext') -> FactsSnapshot:
+        """Return a snapshot possibly enriched with LLM-derived facts (F-143 L1).
+
+        When the feature flag is off or no provider is configured, this is a
+        thin wrapper around :meth:`snapshot` with no extra latency.
+        """
+        snapshot = self.snapshot(context)
+        if not is_llm_facts_enabled() or self._llm_provider is None:
+            return snapshot
+        from .llm_fact_extractor import LlmFactExtractor
+
+        extractor = LlmFactExtractor(provider=self._llm_provider)
+        extracted = extractor.run(
+            snapshot,
+            BUILT_IN_GLOSSARY,
+            audit_log=_audit_log(context),
+        )
+        if extracted:
+            return replace(snapshot, facts=(*snapshot.facts, *extracted))
+        return snapshot
 
     def propose(self, change: ProposedChange, context: 'ToolContext') -> Proposal:
         snapshot = self.snapshot(context)
@@ -749,6 +772,7 @@ class LogicalKanbanService:
         *,
         assertion_id: str | None = None,
         context_facts: tuple[str, ...] = (),
+        context: 'ToolContext | None' = None,
     ) -> MultiWorldResult:
         """Detect ambiguities in ``text`` and generate possible worlds.
 
@@ -761,7 +785,8 @@ class LogicalKanbanService:
         assertion_id = assertion_id or _new_id('A-')
         if not isinstance(base_assertion, CanonicalAssertion):
             raise TypeError('base_assertion must be a CanonicalAssertion')
-        detector = AmbiguityDetector()
+        audit_log = _audit_log(context) if context is not None else None
+        detector = AmbiguityDetector(audit_log=audit_log)
         report = detector.detect(
             text,
             assertion_id=assertion_id,
@@ -787,7 +812,7 @@ class LogicalKanbanService:
 
         Returns the aggregation decision and the final fuzzy commit decision.
         """
-        snapshot = self.snapshot(context)
+        snapshot = self._augmented_snapshot(context)
         validator = MultiWorldValidator(self.engine)
         world_results = validator.validate(
             list(multi_world_result.worlds),
@@ -839,6 +864,7 @@ class LogicalKanbanService:
             base_assertion,
             assertion_id=payload.get('assertionId'),
             context_facts=tuple(payload.get('contextFacts', [])),
+            context=context,
         )
         aggregation, commit_decision = self.validate_assertion_proposal(
             multi_world,
@@ -1086,7 +1112,7 @@ class LogicalKanbanService:
             )
 
         current_status = task.get('status')
-        snapshot = self.snapshot(context)
+        snapshot = self._augmented_snapshot(context)
         if current_status == target_status:
             return self._accepted(
                 proposal,
@@ -1419,7 +1445,7 @@ class LogicalKanbanService:
             )
         if proposal.change.kind == 'add_dependency':
             preview = self._preview_dependency_context(context, payload)
-            snapshot = self.snapshot(preview)  # type: ignore[arg-type]
+            snapshot = self._augmented_snapshot(preview)  # type: ignore[arg-type]
             task_cycle = (
                 sorted(snapshot.cycle_task_ids)
                 if not isinstance(task_id, str)

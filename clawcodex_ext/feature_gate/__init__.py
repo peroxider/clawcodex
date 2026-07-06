@@ -221,6 +221,15 @@ _DEFAULT_FLAGS: list[FeatureFlag] = [
         ),
         deps=["logical_kanban"],
     ),
+    FeatureFlag(
+        name="LKB_LLM_FACTS",
+        default=False,
+        description=(
+            "Enable F-143 runtime LLM-derived facts for Logical Kanban, "
+            "allowing the agent loop to contribute facts at validation time."
+        ),
+        deps=["logical_kanban"],
+    ),
 ]
 
 

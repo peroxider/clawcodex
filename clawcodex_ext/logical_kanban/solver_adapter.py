@@ -1815,6 +1815,126 @@ class AtpTptpSolverAdapter(SolverAdapter):
         )
 
 
+class LlmKnowledgeAdapter(SolverAdapter):
+    """Conservative LLM-backed solver adapter (F-143 L2).
+
+    This adapter is advisory: an LLM ``pass`` does not flip a symbolic ``fail``,
+    but an LLM ``fail`` produces a conservative veto.  The adapter reports itself
+    as unavailable when no provider is supplied, so the pipeline remains green
+    when LLM credentials are missing.
+    """
+
+    def __init__(self, provider: "Any" = None) -> None:
+        self.provider = provider
+
+    @property
+    def name(self) -> str:
+        return 'llm-knowledge'
+
+    @property
+    def version(self) -> str:
+        return 'llm-knowledge-v1'
+
+    def available(self) -> bool:
+        return self.provider is not None
+
+    def solve(
+        self,
+        request: SolverRequest,
+        *,
+        timeout_seconds: float = 30.0,
+    ) -> SolverResponse:
+        del timeout_seconds  # Reserved for future per-call timeout plumbing.
+        if not self.available():
+            return SolverResponse(
+                result='unknown',
+                message='LLM knowledge adapter has no provider.',
+                error_info={'reason': 'engine_unavailable'},
+            )
+        prompt = self._build_prompt(request)
+        try:
+            from clawcodex_ext.providers.base import ChatMessage
+
+            response = self.provider.chat([ChatMessage(role='user', content=prompt)])
+            raw = response.content
+        except Exception as exc:  # noqa: BLE001 - adapter must never raise
+            return SolverResponse(
+                result='unknown',
+                message=f'LLM knowledge adapter call failed: {type(exc).__name__}.',
+                error_info={
+                    'reason': 'exception',
+                    'exception': type(exc).__name__,
+                    'detail': str(exc),
+                },
+            )
+        verdict = self._parse_verdict(raw)
+        if verdict == 'fail':
+            return SolverResponse(
+                result='fail',
+                message='LLM conservative veto: the proposal may violate a domain constraint.',
+                error_info={'reason': 'llm_conservative_veto'},
+                proof_trace=(
+                    {
+                        'rule': 'LLM-KNOWLEDGE-VETO',
+                        'premises': ['llm-knowledge inference'],
+                        'conclusion': 'LLM returned fail; conservative aggregation denies.',
+                        'solverVersion': self.version,
+                    },
+                ),
+            )
+        if verdict == 'pass':
+            return SolverResponse(
+                result='pass',
+                message='LLM knowledge adapter returned pass.',
+                proof_trace=(
+                    {
+                        'rule': 'LLM-KNOWLEDGE-PASS',
+                        'premises': ['llm-knowledge inference'],
+                        'conclusion': 'LLM returned pass; advisory only.',
+                        'solverVersion': self.version,
+                    },
+                ),
+            )
+        return SolverResponse(
+            result='unknown',
+            message='LLM knowledge adapter returned unknown or unparseable verdict.',
+        )
+
+    def _build_prompt(self, request: SolverRequest) -> str:
+        snapshot_summary = encode_solver_facts(request)
+        return (
+            'You are a conservative validator for a logical kanban system. '
+            'Given the following snapshot and proposed transition, return '
+            'strictly JSON with shape {"verdict": "pass|fail|unknown"}. '
+            'Return "fail" only if you are confident the transition violates '
+            'a domain constraint. If uncertain, return "unknown".\n'
+            f'{snapshot_summary}\n'
+            'JSON:'
+        )
+
+    def _parse_verdict(self, raw: str) -> str:
+        if not isinstance(raw, str):
+            return 'unknown'
+        text = raw.strip()
+        if text.startswith('```'):
+            lines = text.splitlines()
+            if lines[0].startswith('```'):
+                lines = lines[1:]
+            if lines and lines[-1].startswith('```'):
+                lines = lines[:-1]
+            text = '\n'.join(lines).strip()
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return 'unknown'
+        if not isinstance(parsed, dict):
+            return 'unknown'
+        verdict = parsed.get('verdict')
+        if verdict in ('pass', 'fail', 'unknown'):
+            return verdict
+        return 'unknown'
+
+
 # ---------------------------------------------------------------------------
 # Default registry
 # ---------------------------------------------------------------------------
@@ -1836,7 +1956,10 @@ def all_adapters() -> tuple[SolverAdapter, ...]:
     )
 
 
-def extended_adapters() -> tuple[SolverAdapter, ...]:
+def extended_adapters(
+    *,
+    llm_provider: "Any" = None,
+) -> tuple[SolverAdapter, ...]:
     """Return the default set with every available optional backend appended.
 
     Unlike :func:`default_adapters`, this factory probes the environment at
@@ -1860,6 +1983,9 @@ def extended_adapters() -> tuple[SolverAdapter, ...]:
     ):
         if adapter.available():
             adapters.append(adapter)
+    llm_adapter = LlmKnowledgeAdapter(provider=llm_provider)
+    if llm_adapter.available():
+        adapters.append(llm_adapter)
     return tuple(adapters)
 
 
@@ -1868,6 +1994,7 @@ __all__ = [
     'ClingoSolverAdapter',
     'DatalogSolverAdapter',
     'Layer1SolverAdapter',
+    'LlmKnowledgeAdapter',
     'SolverAdapter',
     'SolverRequest',
     'SolverResponse',

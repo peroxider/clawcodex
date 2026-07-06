@@ -23,6 +23,9 @@ STALE_ASSUMPTIONS = 'lkb_stale_assumptions'
 TIMEOUT = 'lkb_solver_timeout'
 SNAPSHOT_CACHE_HIT = 'lkb_snapshot_cache_hit'
 SNAPSHOT_CACHE_MISS = 'lkb_snapshot_cache_miss'
+LLM_FACTS_EXTRACTED = 'lkb_llm_facts_extracted'
+LLM_FACTS_DROPPED = 'lkb_llm_facts_dropped'
+LLM_FALLBACK_USED = 'lkb_llm_fallback_used'
 
 _Sink = Callable[[str, dict[str, Any]], None]
 
@@ -185,6 +188,21 @@ def record_snapshot_cache_miss() -> None:
     emit(SNAPSHOT_CACHE_MISS)
 
 
+def record_llm_facts_extracted(count: int, *, source: str = 'llm_extracted') -> None:
+    """Record LLM-derived facts that passed the glossary gate."""
+    emit(LLM_FACTS_EXTRACTED, count=count, source=source)
+
+
+def record_llm_facts_dropped(count: int, *, reason: str = 'unknown_predicate') -> None:
+    """Record LLM-derived facts that were dropped by the glossary gate."""
+    emit(LLM_FACTS_DROPPED, count=count, reason=reason)
+
+
+def record_llm_fallback_used(*, phrase: str, kind: str) -> None:
+    """Record an L3 ambiguity-detector fallback to the LLM."""
+    emit(LLM_FALLBACK_USED, phrase=phrase, kind=kind)
+
+
 __all__ = [
     'ADAPTER_RESULT',
     'BLOCKED_TASKS',
@@ -195,11 +213,17 @@ __all__ = [
     'SNAPSHOT_CACHE_MISS',
     'TIMEOUT',
     'VALIDATION_RUN',
+    'LLM_FACTS_EXTRACTED',
+    'LLM_FACTS_DROPPED',
+    'LLM_FALLBACK_USED',
     'emit',
     'record_adapter_result',
     'record_blocked_tasks',
     'record_commit',
     'record_denial',
+    'record_llm_facts_dropped',
+    'record_llm_facts_extracted',
+    'record_llm_fallback_used',
     'record_stale_assumptions',
     'record_snapshot_cache_hit',
     'record_snapshot_cache_miss',

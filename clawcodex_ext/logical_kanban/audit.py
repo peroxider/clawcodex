@@ -34,6 +34,9 @@ AuditEventType = Literal[
     "lkb_revalidation_requested",
     "lkb_human_override",
     "lkb_proof_enrichment",
+    "lkb_fact_extracted",
+    "lkb_fact_dropped",
+    "lkb_llm_fallback_used",
 ]
 
 
@@ -425,17 +428,127 @@ def event_for_proof_enrichment(
     )
 
 
-def append_proof_enrichment_once(audit_log: AuditLog, event: AuditEvent) -> bool:
-    """Append ``event`` unless the same enrichment key is already present."""
+def event_for_fact_extracted(
+    *,
+    assertion_hash: str,
+    source: str,
+    confidence: float,
+    model_id: str,
+    glossary_status: str = "valid",
+    validation_run_id: str | None = None,
+    session_id: str | None = None,
+    actor: str = "system",
+) -> AuditEvent:
+    """Record a successfully extracted LLM-derived fact."""
+    return AuditEvent(
+        event_id=_new_event_id(),
+        event_type="lkb_fact_extracted",
+        actor=actor,
+        timestamp=_utc_now(),
+        session_id=session_id,
+        proposal_id=None,
+        validation_run_id=validation_run_id,
+        task_id=None,
+        decision=None,
+        payload={
+            "assertionHash": assertion_hash,
+            "source": source,
+            "confidence": confidence,
+            "modelId": model_id,
+            "glossaryStatus": glossary_status,
+            "enrichmentKey": f"{assertion_hash}:{source}",
+        },
+    )
+
+
+def event_for_fact_dropped(
+    *,
+    assertion_hash: str,
+    reason: str,
+    unknown_predicates: tuple[str, ...] = (),
+    model_id: str | None = None,
+    validation_run_id: str | None = None,
+    session_id: str | None = None,
+    actor: str = "system",
+) -> AuditEvent:
+    """Record an LLM-derived fact that failed the glossary gate or confidence floor."""
+    return AuditEvent(
+        event_id=_new_event_id(),
+        event_type="lkb_fact_dropped",
+        actor=actor,
+        timestamp=_utc_now(),
+        session_id=session_id,
+        proposal_id=None,
+        validation_run_id=validation_run_id,
+        task_id=None,
+        decision=None,
+        payload={
+            "assertionHash": assertion_hash,
+            "reason": reason,
+            "unknownPredicates": list(unknown_predicates),
+            "modelId": model_id,
+            "enrichmentKey": f"{assertion_hash}:{reason}",
+        },
+    )
+
+
+def event_for_llm_fallback_used(
+    *,
+    phrase: str,
+    kind: str,
+    candidate_count: int,
+    model_id: str,
+    validation_run_id: str | None = None,
+    session_id: str | None = None,
+    actor: str = "system",
+) -> AuditEvent:
+    """Record an L3 ambiguity-detection fallback to the LLM."""
+    return AuditEvent(
+        event_id=_new_event_id(),
+        event_type="lkb_llm_fallback_used",
+        actor=actor,
+        timestamp=_utc_now(),
+        session_id=session_id,
+        proposal_id=None,
+        validation_run_id=validation_run_id,
+        task_id=None,
+        decision=None,
+        payload={
+            "phrase": phrase,
+            "kind": kind,
+            "candidateCount": candidate_count,
+            "modelId": model_id,
+            "enrichmentKey": f"{phrase}:{model_id}",
+        },
+    )
+
+
+def append_event_once(
+    audit_log: AuditLog,
+    event: AuditEvent,
+    *,
+    event_type: str | None = None,
+) -> bool:
+    """Append ``event`` unless the same enrichment key is already present.
+
+    ``event_type`` defaults to ``event.event_type`` so callers can rely on the
+    event's own type for the idempotency query.
+    """
     key = event.payload.get("enrichmentKey")
+    query_type = event_type or event.event_type
     for existing in audit_log.query(
-        event_type="lkb_proof_enrichment",
+        event_type=query_type,
         validation_run_id=event.validation_run_id,
     ):
         if existing.payload.get("enrichmentKey") == key:
             return False
     audit_log.append(event)
     return True
+
+
+def append_proof_enrichment_once(audit_log: AuditLog, event: AuditEvent) -> bool:
+    """Append ``event`` unless the same enrichment key is already present."""
+    return append_event_once(audit_log, event, event_type="lkb_proof_enrichment")
 
 
 def _denial_payload(validation: ValidationRun) -> dict[str, Any]:
@@ -496,14 +609,18 @@ __all__ = [
     "EventDecision",
     "InMemoryAuditLog",
     "SessionFileAuditLog",
+    "append_event_once",
+    "append_proof_enrichment_once",
     "default_session_log_path",
     "event_for_assumption_invalidated",
     "event_for_commit",
+    "event_for_fact_dropped",
+    "event_for_fact_extracted",
     "event_for_human_override",
+    "event_for_llm_fallback_used",
     "event_for_proof_enrichment",
     "event_for_proposal",
     "event_for_revalidation_requested",
     "event_for_validation_run",
-    "append_proof_enrichment_once",
     "get_audit_log",
 ]
