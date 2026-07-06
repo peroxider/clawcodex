@@ -117,6 +117,8 @@ def _accepted_lkb(
     if proposal.change.kind == 'legacy_todo_replace_all':
         out['compatibilityMode'] = 'legacy_todo_write'
         out['progress'] = _legacy_todo_progress(proposal.change.payload)
+        if validation.legacy_todo_ambiguities:
+            out['legacyTodoAmbiguities'] = list(validation.legacy_todo_ambiguities)
     return out
 
 
@@ -152,6 +154,8 @@ def _denied_result(
     if proposal.change.kind == 'legacy_todo_replace_all':
         lkb_payload['compatibilityMode'] = 'legacy_todo_write'
         lkb_payload['progress'] = _legacy_todo_progress(proposal.change.payload)
+        if validation.legacy_todo_ambiguities:
+            lkb_payload['legacyTodoAmbiguities'] = list(validation.legacy_todo_ambiguities)
     return ToolResult(
         name=tool_name,
         is_error=True,

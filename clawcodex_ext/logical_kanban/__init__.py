@@ -23,6 +23,7 @@ from .audit import (
     event_for_fact_dropped,
     event_for_fact_extracted,
     event_for_human_override,
+    event_for_legacy_todo_ambiguity,
     event_for_llm_fallback_used,
     event_for_proof_enrichment,
     event_for_proposal,
@@ -87,7 +88,7 @@ from .flags import (
     is_llm_facts_enabled,
     is_logical_kanban_enabled,
 )
-from .ambiguity_detector import AmbiguityDetector
+from .ambiguity_detector import AmbiguityDetector, BuiltinRefinementRules
 from .fuzzy_patterns import (
     BUILT_IN_PATTERN_LIBRARY,
     DomainConstraint,
@@ -211,6 +212,7 @@ __all__ = [
     'AuditLog',
     'BUILT_IN_GLOSSARY',
     'BUILT_IN_PATTERN_LIBRARY',
+    'BuiltinRefinementRules',
     'CAP_VERBS',
     'CanonicalAssertion',
     'CausalEdge',
@@ -311,6 +313,7 @@ __all__ = [
     'event_for_fact_dropped',
     'event_for_fact_extracted',
     'event_for_human_override',
+    'event_for_legacy_todo_ambiguity',
     'event_for_llm_fallback_used',
     'event_for_proof_enrichment',
     'event_for_proposal',

@@ -1,16 +1,21 @@
 """Ambiguity detector for natural-language assertions.
 
-The detector consumes a pattern library (by default the built-in F-134 library)
-and produces an AmbiguityReport.  It intentionally does not call external
-solvers; the matching logic is a direct Python translation of the Datalog
-pattern rules described in the LKB v3 spec.
+The detector consumes a pattern library (by default the built-in F-134 / F-148
+library) and produces an AmbiguityReport.  It intentionally does not call
+external solvers; the matching logic is a direct Python translation of the
+Datalog pattern rules described in the LKB v3 spec.
+
+F-148 PR 1 removes scenario-specific refactor rules (``self_service`` /
+``staff_service`` / ``automatic`` from the legacy car-wash demo) and replaces
+the hard-coded ``driving`` boost with a ``BuiltinRefinementRules`` namespace
+plus a per-``FuzzyPattern`` ``refinement_rules`` field.
 """
 
 from __future__ import annotations
 
 import json
 import time
-from typing import TYPE_CHECKING, Any, get_args
+from typing import TYPE_CHECKING, Any, Callable, get_args
 
 from .fuzzy_types import (
     Ambiguity,
@@ -22,7 +27,8 @@ from .fuzzy_types import (
 )
 
 if TYPE_CHECKING:
-    from .fuzzy_patterns import FuzzyPatternLibrary
+    from .audit import AuditLog
+    from .fuzzy_patterns import FuzzyPattern, FuzzyPatternLibrary, RefinementRule
 
 
 def _max_severity(severities: list[Severity]) -> Severity:
@@ -47,6 +53,45 @@ def _requires_clarification(ambiguities: list[Ambiguity]) -> bool:
     return False
 
 
+def _driving_keyword_distance(
+    text: str, interpretation: Interpretation
+) -> Interpretation:
+    """Builtin refinement: boost ``by_vehicle`` when the text carries a
+    driving-mode keyword (Chinese 开车 / 驾车 / English ``drive``).
+
+    The rule name ``driving_keyword_distance`` is preserved for history; the
+    target interpretation code is ``"by_vehicle"`` as of F-148 PR 1.  This is
+    the only builtin refinement rule; downstream callers can register their
+    own via the detector's ``refinement_rules`` argument.
+    """
+    if interpretation.code != "by_vehicle":
+        return interpretation
+    lowered = text.lower()
+    if "驾车" in text or "drive" in lowered:
+        return Interpretation(
+            code=interpretation.code,
+            formalization=interpretation.formalization,
+            base_confidence=0.70,
+        )
+    return interpretation
+
+
+class BuiltinRefinementRules:
+    """Namespace of pre-bundled refinement rules.
+
+    Each entry is a ``RefinementRule`` (see ``fuzzy_patterns``).  Pass one or
+    more rules to ``AmbiguityDetector(..., refinement_rules=...)`` to wire
+    them in.
+    """
+
+    driving_keyword_distance = staticmethod(_driving_keyword_distance)
+
+    @staticmethod
+    def default() -> tuple["RefinementRule", ...]:
+        """Return the default rule set used by the F-148 detector."""
+        return (_driving_keyword_distance,)
+
+
 class AmbiguityDetector:
     """Detect ambiguities in a natural-language assertion."""
 
@@ -56,12 +101,17 @@ class AmbiguityDetector:
         *,
         llm_fallback_provider: Any = None,
         audit_log: "AuditLog | None" = None,
+        refinement_rules: tuple["RefinementRule", ...] | None = None,
     ) -> None:
         from .fuzzy_patterns import BUILT_IN_PATTERN_LIBRARY
 
         self.library = library or BUILT_IN_PATTERN_LIBRARY
         self.llm_fallback_provider = llm_fallback_provider
         self.audit_log = audit_log
+        self.refinement_rules: tuple[Callable[..., Any], ...] = (
+            refinement_rules if refinement_rules is not None
+            else BuiltinRefinementRules.default()
+        )
 
     def detect(
         self,
@@ -210,8 +260,8 @@ class AmbiguityDetector:
             "Given the user phrase, classify it into exactly one of the "
             f"allowed kinds: {valid_kinds}.\n"
             "Return strictly JSON with shape:\n"
-            '{"kind": "semantic_vagueness", "interpretations": [{"code": "walking", '
-            '"formalization": "WalkingDistance({from}, {to}, {number})", "confidence": 0.6}]}\n'
+            '{"kind": "semantic_vagueness", "interpretations": [{"code": "option_a", '
+            '"formalization": "Estimate({entity}, {value})", "confidence": 0.6}]}\n'
             "Interpretation codes must be drawn from the allowed set for that kind:\n"
             f"{code_listing}\n"
             f"Phrase: {text}\n"
@@ -259,6 +309,7 @@ class AmbiguityDetector:
                 pattern.interpretations,
                 text,
                 context_facts,
+                pattern=pattern,
             )
             ambiguities.append(
                 Ambiguity(
@@ -268,6 +319,8 @@ class AmbiguityDetector:
                     candidate_interpretations=interpretations,
                     resolved=False,
                     resolution_method=None,
+                    pattern_id=pattern.pattern_id,
+                    clarification_prompt=pattern.clarification_prompt,
                 )
             )
         return ambiguities
@@ -277,33 +330,35 @@ class AmbiguityDetector:
         interpretations: tuple[Interpretation, ...],
         text: str,
         context_facts: tuple[str, ...],
+        *,
+        pattern: "FuzzyPattern | None" = None,
     ) -> tuple[Interpretation, ...]:
         """Adjust interpretation confidences based on context clues.
 
-        For example, if the text mentions driving, boost the ``driving``
-        distance interpretation.  The returned tuple preserves order and
-        re-normalises confidences so they sum to 1.0.
+        The detector walks two rule sources in order:
+
+        1. The detector-level ``self.refinement_rules`` (defaults to
+           ``BuiltinRefinementRules.default()``).
+        2. The pattern-level ``pattern.refinement_rules`` (F-148 PR 1
+           addition — empty by default; downstream callers opt in).
+
+        Each rule is ``Callable[[str, Interpretation], Interpretation]``:
+        it returns an adjusted ``Interpretation`` whose ``base_confidence``
+        reflects the textual context, or the original ``Interpretation``
+        unchanged if the rule does not apply.
+
+        The returned tuple preserves order and re-normalises confidences so
+        they sum to 1.0.
         """
+        rules: tuple[Callable[..., Any], ...] = self.refinement_rules
+        if pattern is not None:
+            rules = (*rules, *pattern.refinement_rules)
         adjusted: list[Interpretation] = []
         for interp in interpretations:
-            confidence = interp.base_confidence
-            if interp.code == "driving" and (
-                "开车" in text or "驾车" in text or "drive" in text.lower()
-            ):
-                confidence = 0.70
-            elif interp.code == "self_service" and "自助" in text:
-                confidence = 0.80
-            elif interp.code == "staff_service" and "代洗" in text:
-                confidence = 0.95
-            elif interp.code == "automatic" and "自动" in text:
-                confidence = 0.90
-            adjusted.append(
-                Interpretation(
-                    code=interp.code,
-                    formalization=interp.formalization,
-                    base_confidence=confidence,
-                )
-            )
+            refined = interp
+            for rule in rules:
+                refined = rule(text, refined)
+            adjusted.append(refined)
 
         total = sum(i.base_confidence for i in adjusted)
         if total > 0:
@@ -320,4 +375,4 @@ class AmbiguityDetector:
         return normalized
 
 
-__all__ = ["AmbiguityDetector"]
+__all__ = ["AmbiguityDetector", "BuiltinRefinementRules"]

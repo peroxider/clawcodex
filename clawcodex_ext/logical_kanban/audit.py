@@ -37,6 +37,7 @@ AuditEventType = Literal[
     "lkb_fact_extracted",
     "lkb_fact_dropped",
     "lkb_llm_fallback_used",
+    "lkb_legacy_todo_ambiguity",
 ]
 
 
@@ -523,6 +524,37 @@ def event_for_llm_fallback_used(
     )
 
 
+def event_for_legacy_todo_ambiguity(
+    todo_id: str,
+    ambiguity_code: str,
+    severity: str,
+    clarification_prompt: str,
+    *,
+    validation_run_id: str | None = None,
+    session_id: str | None = None,
+    actor: str = "system",
+) -> AuditEvent:
+    """Record a critical/major ambiguity detected in a legacy TodoWrite todo."""
+    return AuditEvent(
+        event_id=_new_event_id(),
+        event_type="lkb_legacy_todo_ambiguity",
+        actor=actor,
+        timestamp=_utc_now(),
+        session_id=session_id,
+        proposal_id=None,
+        validation_run_id=validation_run_id,
+        task_id=todo_id,
+        decision=None,
+        payload={
+            "todoId": todo_id,
+            "ambiguityCode": ambiguity_code,
+            "severity": severity,
+            "clarificationPrompt": clarification_prompt,
+            "enrichmentKey": f"{validation_run_id}:{todo_id}:{ambiguity_code}",
+        },
+    )
+
+
 def append_event_once(
     audit_log: AuditLog,
     event: AuditEvent,
@@ -617,6 +649,7 @@ __all__ = [
     "event_for_fact_dropped",
     "event_for_fact_extracted",
     "event_for_human_override",
+    "event_for_legacy_todo_ambiguity",
     "event_for_llm_fallback_used",
     "event_for_proof_enrichment",
     "event_for_proposal",
