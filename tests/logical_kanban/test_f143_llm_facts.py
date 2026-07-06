@@ -90,7 +90,7 @@ class TestL1FactExtractor:
                 "facts": [
                     {
                         "predicate": "Requires",
-                        "args": ["vehicle", "task_x"],
+                        "args": ["task_a", "task_x"],
                         "source": "llm_extracted",
                         "confidence": 0.6,
                     }
@@ -99,13 +99,13 @@ class TestL1FactExtractor:
             }
         )
         provider = _StubProvider(response)
-        snapshot = _snapshot({"vehicle": _task("vehicle"), "task_x": _task("task_x")})
+        snapshot = _snapshot({"task_a": _task("task_a"), "task_x": _task("task_x")})
         facts = extract_facts(snapshot, BUILT_IN_GLOSSARY, provider=provider)
 
         assert len(facts) == 1
         assert facts[0].body == pred(
             "Requires",
-            encode_solver_literal("vehicle"),
+            encode_solver_literal("task_a"),
             encode_solver_literal("task_x"),
         )
 

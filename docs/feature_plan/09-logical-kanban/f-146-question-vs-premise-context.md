@@ -147,9 +147,9 @@ change. No new field on `Ambiguity` or `AmbiguityReport`.
 - The parameterised "every `DisambiguatingToken` has a guard" test
   passes for the built-in library and for two in-test registered
   custom patterns.
-- `tests/logical_kanban/test_fuzzy_multiworld.py::test_driving_context_boosts_driving_interpretation`
+- `tests/logical_kanban/test_fuzzy_multiworld.py::test_by_vehicle_context_boosts_by_vehicle_interpretation`
   is updated to use a premise-style input and continues to assert
-  `driving` is the top interpretation.
+  `by_vehicle` is the top interpretation.
 - All other F-134 / F-145 tests continue to pass without
   modification.
 

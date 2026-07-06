@@ -93,14 +93,14 @@ class TestAmbiguityDetector:
         assert dep_amb.severity == "critical"
         assert report.needs_clarification is True
 
-    def test_driving_context_boosts_driving_interpretation(self) -> None:
+    def test_by_vehicle_context_boosts_by_vehicle_interpretation(self) -> None:
         detector = AmbiguityDetector()
         report = detector.detect("驾车离家50米", assertion_id="A-4")
 
         amb = next(a for a in report.detected_ambiguities if a.kind == "semantic_vagueness")
         by_vehicle = next(i for i in amb.candidate_interpretations if i.code == "by_vehicle")
         # After normalisation by_vehicle may not exceed 0.5, but it should be the
-        # highest-confidence interpretation when driving context is present.
+        # highest-confidence interpretation when by_vehicle context is present.
         assert by_vehicle.base_confidence == max(
             i.base_confidence for i in amb.candidate_interpretations
         )

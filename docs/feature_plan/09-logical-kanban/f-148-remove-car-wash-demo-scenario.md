@@ -473,9 +473,9 @@ After all four PRs merge:
   == ()`. The `test_domain_constraint_prunes_invalid_world` test now
   builds its own library inline.
 - **Detector still boosts**: the rewritten
-  `test_driving_context_boosts_driving_interpretation` confirms the
-  `driving_keyword_distance` rule still produces the same confidence
-  ordering as the original.
+  `test_by_vehicle_context_boosts_by_vehicle_interpretation` confirms
+  the `driving_keyword_distance` rule still produces the same
+  confidence ordering as the original.
 - **Stability gate**: `python3 -m pytest tests/stability_gate/ -q
   --tb=short -x` continues to pass. The LKB-related stages (5 / 6)
   are unchanged in expected runtime.
