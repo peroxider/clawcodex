@@ -25,6 +25,7 @@ Important integration decision: LKB is an agent-loop todo/task enhancement layer
 | F-140 | Orchestrator Adoption Through Todo Tools | orchestrator as consumer | 17, 22-23 |
 | F-141 | Causal Verification Layer (CAP-compatible) | synthetic causal graph, causal_weight gate | 10.6, 22.3 |
 | F-142 | External ATP (Vampire / Prover9 / Mace4) | optional TPTP subprocess adapters, async proof enrichment | 10.5, 22.4 |
+| F-143 | Runtime LLM Knowledge Facts | LLM as fact source at L1 (pre-processor) / L2 (solver adapter) / L3 (ambiguity fallback); deterministic kernel preserved | 22.4 |
 
 ## Architectural Placement
 
