@@ -54,19 +54,19 @@ def mock_session() -> MagicMock:
 _KNOWN_HANDLED_COMMANDS: set[str] = {
     # Handled by dispatch_local_command
     "/help", "/exit", "/quit", "/q", "/repl", "/clear",
-    "/tools", "/stream",
+    "/tools", "/stream", "/render-last", "/skills",
     "/effort", "/history", "/cost", "/idle", "/theme",
     "/diff", "/mcp", "/tasks", "/rewind", "/resume", "/permission",
-    "/forecast",
+    "/forecast", "/model",
     # Handled by dispatch_registry_command (NOT by dispatch_local_command)
-    "/init", "/model", "/provider", "/recap", "/btw",
+    "/init", "/provider", "/recap", "/btw",
     "/advisor", "/buddy", "/compact", "/context", "/cron-list",
     "/cron-delete", "/cron-run", "/cron-runs", "/cron-status",
     "/goal", "/export", "/output-style", "/security-review",
     "/statusline", "/telemetry", "/copy", "/doctor", "/logo",
     "/memory", "/permissions", "/release-notes", "/rename",
     "/stickers", "/vim", "/voice", "/workflows", "/deep-research",
-    "/render-last", "/skills",
+    "/tts", "/ultraplan",
 }
 
 
@@ -296,6 +296,43 @@ def test_dispatch_forecast_status_falls_through(mock_session, tmp_path, tool_reg
         "/forecast status", session=mock_session, workspace_root=tmp_path, tool_registry=tool_registry
     )
     assert result.handled is False
+
+
+# ---------------------------------------------------------------------------
+# /model — local command (picker + direct switch)
+# ---------------------------------------------------------------------------
+
+def test_dispatch_model_opens_picker(mock_session, tmp_path, tool_registry):
+    """``/model`` alone should open the model picker dialog."""
+    result = dispatch_local_command(
+        "/model", session=mock_session, workspace_root=tmp_path, tool_registry=tool_registry
+    )
+    assert result.handled is True
+    assert result.open_dialog == "model"
+
+
+def test_dispatch_model_switch(mock_session, tmp_path, tool_registry):
+    """``/model <name>`` should resolve to a direct model switch."""
+    result = dispatch_local_command(
+        "/model deepseek-v4-flash",
+        session=mock_session,
+        workspace_root=tmp_path,
+        tool_registry=tool_registry,
+    )
+    assert result.handled is True
+    assert result.system_text == "__model_set__ deepseek-v4-flash"
+
+
+def test_dispatch_model_switch_with_extra_spaces(mock_session, tmp_path, tool_registry):
+    """``/model   <name>`` should trim whitespace correctly."""
+    result = dispatch_local_command(
+        "/model   gpt-4o  ",
+        session=mock_session,
+        workspace_root=tmp_path,
+        tool_registry=tool_registry,
+    )
+    assert result.handled is True
+    assert result.system_text == "__model_set__ gpt-4o"
 
 
 # ---------------------------------------------------------------------------

@@ -689,6 +689,10 @@ class ClawCodexTUI(App):
             status = 'enabled' if self.stream else 'disabled'
             transcript.append_system(f'Stream mode {status}.')
             return
+        if result.system_text.startswith('__model_set__ '):
+            model_id = result.system_text[len('__model_set__ '):].strip()
+            self._set_model_direct(model_id, transcript)
+            return
         if result.system_text:
             transcript.append_system(
                 result.system_text,
@@ -737,6 +741,24 @@ class ClawCodexTUI(App):
         else:
             transcript.append_system(f"Dialog '{name}' not available.", style='muted')
 
+    def _set_model_direct(self, model_id: str, transcript: Transcript) -> None:
+        """Set the model directly (used by /model <name>)."""
+        if model_id == self.model:
+            transcript.append_system(f'Model is already {model_id}.', style='muted')
+            return
+        self.model = model_id
+        try:
+            if hasattr(self.provider, 'model'):
+                setattr(self.provider, 'model', model_id)
+        except Exception:
+            pass
+        self.app_state.model = model_id
+        transcript.append_system(f'Model switched to {model_id}.', style='muted')
+        if self._repl_screen is not None:
+            self._repl_screen.status_bar.refresh_identity(model=model_id)
+            self._repl_screen.header_widget.refresh_banner(model=model_id)
+        self.announcer.announce(f'Model switched to {model_id}.')
+
     def _open_model_picker(self, transcript: Transcript) -> None:
         models = self._list_available_models()
 
@@ -754,6 +776,7 @@ class ClawCodexTUI(App):
             transcript.append_system(f'Model switched to {model_id}.', style='muted')
             if self._repl_screen is not None:
                 self._repl_screen.status_bar.refresh_identity(model=model_id)
+                self._repl_screen.header_widget.refresh_banner(model=model_id)
             self.announcer.announce(f'Model switched to {model_id}.')
             self._restore_prompt_focus()
 

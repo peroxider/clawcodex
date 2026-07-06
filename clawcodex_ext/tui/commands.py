@@ -46,6 +46,8 @@ LOCAL_BUILTINS: tuple[str, ...] = (
     "/cost",
     "/idle",
     "/theme",
+    # Model switching:
+    "/model",
     # Phase 3 dialogs:
     "/diff",
     "/mcp",
@@ -330,6 +332,13 @@ def dispatch_local_command(
         return CommandDispatchResult(handled=True, open_dialog="resume")
     if name == "/permission":
         return CommandDispatchResult(handled=True, open_dialog="permission")
+    if name == "/model":
+        parts = raw.split(" ", 1)
+        if len(parts) > 1 and parts[1].strip():
+            # /model <name> → set model directly (no picker)
+            return CommandDispatchResult(handled=True, system_text=f"__model_set__ {parts[1].strip()}")
+        # /model alone → open picker
+        return CommandDispatchResult(handled=True, open_dialog="model")
     if name == "/forecast":
         parts = raw.split(maxsplit=1)
         action = parts[1].strip().lower() if len(parts) > 1 else ""
