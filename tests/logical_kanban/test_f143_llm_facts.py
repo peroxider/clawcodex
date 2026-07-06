@@ -41,6 +41,39 @@ def _set_llm_facts(monkeypatch, enabled: bool) -> None:
     monkeypatch.setitem(get_registry()._overrides, "LKB_LLM_FACTS", enabled)
 
 
+def _dist_library_with_interps():
+    """Library equivalent to a downstream consumer's P-DIST-001.
+
+    F-148 ships the matcher-only shell; tests that exercise the LLM
+    fallback need a library where ``semantic_vagueness`` carries an
+    ``on_foot`` interpretation so ``_kind_code_map`` returns a non-empty
+    allowed-codes set for that kind.
+    """
+    from clawcodex_ext.logical_kanban.fuzzy_patterns import (
+        BUILT_IN_PATTERN_LIBRARY,
+        FuzzyPattern,
+    )
+    from clawcodex_ext.logical_kanban.fuzzy_types import Interpretation
+
+    return BUILT_IN_PATTERN_LIBRARY.replace(
+        "P-DIST-001",
+        FuzzyPattern(
+            pattern_id="P-DIST-001",
+            category="semantic_vagueness",
+            severity="major",
+            matcher=BUILT_IN_PATTERN_LIBRARY.patterns[0].matcher,
+            interpretations=(
+                Interpretation(
+                    code="on_foot",
+                    formalization="FootDistance({from}, {to}, {number})",
+                    base_confidence=0.60,
+                ),
+            ),
+            clarification_prompt="您说的距离是指步行距离吗？",
+        ),
+    )
+
+
 class _StubProvider:
     """Test double that returns scripted JSON content from chat()."""
 
@@ -298,8 +331,8 @@ class TestL3AmbiguityFallback:
                 "kind": "semantic_vagueness",
                 "interpretations": [
                     {
-                        "code": "walking",
-                        "formalization": "WalkingDistance({from}, {to}, {number})",
+                        "code": "on_foot",
+                        "formalization": "FootDistance({from}, {to}, {number})",
                         "confidence": 0.6,
                     }
                 ],
@@ -307,6 +340,7 @@ class TestL3AmbiguityFallback:
         )
         audit_log = InMemoryAuditLog()
         detector = AmbiguityDetector(
+            library=_dist_library_with_interps(),
             llm_fallback_provider=_StubProvider(response),
             audit_log=audit_log,
         )
@@ -316,7 +350,7 @@ class TestL3AmbiguityFallback:
         assert len(report.detected_ambiguities) == 1
         ambiguity = report.detected_ambiguities[0]
         assert ambiguity.kind == "semantic_vagueness"
-        assert any(i.code == "walking" for i in ambiguity.candidate_interpretations)
+        assert any(i.code == "on_foot" for i in ambiguity.candidate_interpretations)
         fallback_events = audit_log.query(event_type="lkb_llm_fallback_used")
         assert len(fallback_events) == 1
         assert fallback_events[0].payload["kind"] == "semantic_vagueness"

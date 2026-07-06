@@ -70,6 +70,7 @@ from .types import (
 
 if TYPE_CHECKING:
     from clawcodex_ext.tool_system.context import ToolContext
+    from .fuzzy_patterns import FuzzyPatternLibrary
     from .fuzzy_types import Clarification
     from .ir import CanonicalAssertion
     from .truth_maintenance import AssumptionRecord
@@ -156,11 +157,23 @@ class LogicalKanbanService:
 
     solver_version = 'lkb-foundation-sync-v1'
 
-    def __init__(self, llm_provider: Any = None) -> None:
+    def __init__(
+        self,
+        llm_provider: Any = None,
+        pattern_library: 'FuzzyPatternLibrary | None' = None,
+    ) -> None:
+        from .fuzzy_patterns import BUILT_IN_PATTERN_LIBRARY
+
         self.engine = Layer1RuleEngine()
         self.pipeline = SolverPipeline()
         self.causal_engine = CausalEngine()
         self._llm_provider = llm_provider
+        # F-148: the default library carries zero scenario-bound
+        # interpretations.  Deployments that need a concrete
+        # ``on_foot / straight_line / by_vehicle`` (or any other) split
+        # pass it via the ``pattern_library`` constructor argument;
+        # ``library.add(...)`` chains are the supported wiring.
+        self._pattern_library = pattern_library or BUILT_IN_PATTERN_LIBRARY
 
     def snapshot(self, context: 'ToolContext') -> FactsSnapshot:
         return build_facts_snapshot(context)
@@ -829,7 +842,9 @@ class LogicalKanbanService:
         if not isinstance(base_assertion, CanonicalAssertion):
             raise TypeError('base_assertion must be a CanonicalAssertion')
         audit_log = _audit_log(context) if context is not None else None
-        detector = AmbiguityDetector(audit_log=audit_log)
+        detector = AmbiguityDetector(
+            library=self._pattern_library, audit_log=audit_log,
+        )
         report = detector.detect(
             text,
             assertion_id=assertion_id,
@@ -1098,7 +1113,9 @@ class LogicalKanbanService:
         # F-144: run the fuzzy gate over legacy todo content when LKB is enabled.
         if is_logical_kanban_enabled():
             audit_log = _audit_log(context)
-            detector = AmbiguityDetector(audit_log=audit_log)
+            detector = AmbiguityDetector(
+                library=self._pattern_library, audit_log=audit_log,
+            )
             ambiguous_todos: list[tuple[str, AmbiguityReport]] = []
             ambiguity_derived_facts: list[str] = []
             for index, todo in enumerate(todos):

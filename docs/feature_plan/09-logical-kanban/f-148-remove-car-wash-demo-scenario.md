@@ -147,8 +147,14 @@ The following is exhaustive. Anything not listed stays unchanged.
 
 3. **`__init__.py`**
 
-   - **Export** `BuiltinRefinementRules` (new symbol).
-   - All other names already exported continue to be exported.
+   - All previously exported names continue to be exported.
+     `BuiltinRefinementRules` is **not** added (see §D3.1).
+     `LogicalKanbanService` gains a `pattern_library: FuzzyPatternLibrary | None`
+     constructor argument that propagates to the internal
+     `AmbiguityDetector(library=...)` sites (§D3 ships an empty-shell
+     `P-DIST-001`, so any test that needs the canonical
+     `on_foot / straight_line / by_vehicle` split passes its own
+     library).
 
 #### Code: tests
 
@@ -313,21 +319,42 @@ default pattern reuses them; nothing else in the codebase depends on
 those code strings. A codebase-wide grep before the PR confirms this
 — the search list is in the implementation steps.
 
-### D3. `P-DIST-001` Interpretation Rename
+### D3. `P-DIST-001` Becomes an Empty-Shell Pattern
 
-The `P-DIST-001` interpretation codes are renamed from
-`walking / straight_line / driving` to `on_foot / straight_line /
-by_vehicle`. The middle code is already neutral. The corresponding
-`formalization` strings are renamed from
-`WalkingDistance / EuclideanDistance / DrivingDistance` to
-`FootDistance / EuclideanDistance / VehicleDistance`. The conceptual
-ambiguity (how is the distance measured?) is preserved; only the
-naming moves from verb-form to noun-form.
+The default `P-DIST-001` entry in `_default_library()` is stripped of
+all concrete interpretations (`on_foot / straight_line / by_vehicle`
+are **not** shipped). The pattern entry keeps only the **matcher
+regexes** (so downstream consumers can rely on the same detection
+surface) and a generic placeholder `clarification_prompt`. Concrete
+interpretation codes are a per-deployment concern:
 
-The `BuiltinRefinementRules.driving_keyword_distance` rule keeps its
-matcher (`"驾车" in text or "drive" in text.lower()`) but bumps the
-interpretation whose code is `"by_vehicle"`. The rule name is a
-historical artefact and stays.
+- a logistics consumer registers
+  `library.add(FuzzyPattern(pattern_id="P-DIST-001",
+  interpretations=(TruckDistance(...), AirDistance(...), ...)))`;
+- a fitness consumer registers
+  `library.add(FuzzyPattern(pattern_id="P-DIST-001",
+  interpretations=(OutdoorPace(...), TreadmillPace(...), ...)))`.
+
+The reasoning is identical to §D1's treatment of `P-SERV-001`: any
+concrete distance-modality split (foot vs straight-line vs vehicle;
+truck vs air; outdoor vs treadmill) is scenario-bound and is not a
+property of the kernel. Shipping a default would re-introduce a
+domain-specific scenario under a generic name.
+
+### D3.1. `BuiltinRefinementRules` Namespace Removed
+
+The `BuiltinRefinementRules` namespace is removed entirely along with
+the `driving_keyword_distance` rule. The driving-keyword boost is a
+transport-mode scenario — exactly the kind of concern that §D3 just
+externalised from the default library — and therefore belongs in a
+downstream-registered `FuzzyPattern.refinement_rules` field, not in
+a kernel namespace.
+
+The `RefinementRule` Protocol (`Callable[[str, Interpretation],
+Interpretation]`) and the per-pattern `refinement_rules` field
+declared in §D7 stay: they are abstract interfaces used by F-145's
+`DisambiguatingToken` registry and by any downstream scenario that
+wants to attach a refinement rule to its `P-DIST-001` variant.
 
 ### D4. DomainConstraint Pruning Test Rewriting
 
@@ -363,15 +390,19 @@ patterns. If reviewers prefer a single verb, the regex simplifies to
 
 ### D7. `RefinementRule` Protocol
 
-The driving boost that used to be hard-coded lives on as
-`BuiltinRefinementRules.driving_keyword_distance`. This is the only
-builtin rule. It bumps the interpretation whose code is `"by_vehicle"`
-when `"驾车" in text or "drive" in text.lower()` — the same logic
-that existed before F-148, just relocated. New patterns opt in via
-the new `FuzzyPattern.refinement_rules` field. The shape
-`Callable[[str, Interpretation], Interpretation]` matches the
-`DisambiguatingToken.boosted_confidence` pattern from F-145, so when
-F-145 lands the two mechanisms can share a registry.
+The driving boost that used to be hard-coded is **not** promoted to a
+builtin rule. It was a transport-mode scenario that should travel
+with the consumer's `P-DIST-001` variant (per §D3), not with the
+kernel. Downstream consumers who want the boost register a
+refinement rule through the new `FuzzyPattern.refinement_rules`
+field on their own `P-DIST-001` clone.
+
+The `RefinementRule` Protocol (`Callable[[str, Interpretation],
+Interpretation]`) and the per-pattern `refinement_rules` field stay
+as abstract interfaces: they are the mechanism F-145's
+`DisambiguatingToken` registry uses, and they are available for any
+downstream scenario that wants to attach a refinement rule to its
+own pattern entries.
 
 ## Implementation Steps
 
@@ -386,12 +417,11 @@ Each step is a self-contained, revertible PR.
   - Rewrite `_extract_phrase` (lines 79-106) to drop the `"serv"` /
     `"洗车"` branches and all six category-id substring branches; the
     only fallback is `text[:60]`.
-  - Rename `P-DIST-001` interpretation codes from
-    `walking / straight_line / driving` to
-    `on_foot / straight_line / by_vehicle` and corresponding
-    `formalization` strings from
-    `WalkingDistance / EuclideanDistance / DrivingDistance` to
-    `FootDistance / EuclideanDistance / VehicleDistance`.
+  - **Convert `P-DIST-001` to a matcher-only shell**: drop the
+    `on_foot / straight_line / by_vehicle` interpretations; the
+    pattern entry keeps the `离家/距离` regexes but ships an empty
+    `interpretations=()` tuple and a generic placeholder prompt
+    ("请澄清此距离的语义。").  See §D3.
   - Rename `P-INFO-001` interpretation codes from `vehicle_at_home /
     vehicle_unknown` to `entity_default / entity_unknown` and the
     `formalization` strings to `AtDefault({subject})` and
@@ -399,9 +429,10 @@ Each step is a self-contained, revertible PR.
   - Widen `P-INFO-001` matcher from `去[洗修买吃]` to `去(做|完成|办理)`.
 - File: `clawcodex_ext/logical_kanban/ambiguity_detector.py`
   - Add `RefinementRule` Protocol.
-  - Add `BuiltinRefinementRules` namespace with
-    `driving_keyword_distance` (bumps the interpretation whose code
-    is `"by_vehicle"`).
+  - **Do not add `BuiltinRefinementRules`**.  Per §D3.1, the previously
+    hard-coded driving-keyword boost travels with the downstream
+    consumer's `P-DIST-001` clone via per-pattern `refinement_rules`,
+    not in a kernel namespace.
   - Rewire `_refine_interpretations` to walk
     `[s for s in self.refinement_rules]` plus
     `[r for p in patterns for r in p.refinement_rules]`. Remove the
@@ -412,9 +443,12 @@ Each step is a self-contained, revertible PR.
 - File: `clawcodex_ext/logical_kanban/fuzzy_patterns.py` schema
   - Add `FuzzyPattern.refinement_rules: tuple[Callable[[str,
     Interpretation], Interpretation], ...] = ()`.
+  - Add `FuzzyPatternLibrary.replace(pattern_id, pattern)` so downstream
+    can swap the shell `P-DIST-001` for an interpretation-bearing
+    variant in one call instead of producing duplicate patterns.
 
 Expected diff: 1 library file substantive + 1 detector file
-substantive + 1 schema addition + 1 export. **No test changes in this
+substantive + 1 schema addition. **No test changes in this
 PR.** All existing tests that referenced the demo are expected to
 **fail**; this is intentional and surfaces them for PR 2.
 

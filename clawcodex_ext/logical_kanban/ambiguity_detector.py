@@ -5,10 +5,15 @@ library) and produces an AmbiguityReport.  It intentionally does not call
 external solvers; the matching logic is a direct Python translation of the
 Datalog pattern rules described in the LKB v3 spec.
 
-F-148 PR 1 removes scenario-specific refactor rules (``self_service`` /
-``staff_service`` / ``automatic`` from the legacy car-wash demo) and replaces
-the hard-coded ``driving`` boost with a ``BuiltinRefinementRules`` namespace
-plus a per-``FuzzyPattern`` ``refinement_rules`` field.
+F-148 removes all scenario-bound interpretations and refinement rules from
+the default library.  The default ``P-DIST-001`` is a matcher-only shell;
+downstream callers attach their own modalities (e.g. on_foot /
+straight_line / by_vehicle for a generic consumer, or TruckDistance /
+AirDistance for a logistics consumer) by registering a `P-DIST-001` clone
+through ``FuzzyPatternLibrary.add(...)``.  The same applies to refinement
+rules: the previously hard-coded ``driving_keyword_distance`` boost is now
+the downstream consumer's concern (via per-``FuzzyPattern
+refinement_rules=...``), not a kernel namespace.
 """
 
 from __future__ import annotations
@@ -53,45 +58,6 @@ def _requires_clarification(ambiguities: list[Ambiguity]) -> bool:
     return False
 
 
-def _driving_keyword_distance(
-    text: str, interpretation: Interpretation
-) -> Interpretation:
-    """Builtin refinement: boost ``by_vehicle`` when the text carries a
-    driving-mode keyword (Chinese 开车 / 驾车 / English ``drive``).
-
-    The rule name ``driving_keyword_distance`` is preserved for history; the
-    target interpretation code is ``"by_vehicle"`` as of F-148 PR 1.  This is
-    the only builtin refinement rule; downstream callers can register their
-    own via the detector's ``refinement_rules`` argument.
-    """
-    if interpretation.code != "by_vehicle":
-        return interpretation
-    lowered = text.lower()
-    if "驾车" in text or "drive" in lowered:
-        return Interpretation(
-            code=interpretation.code,
-            formalization=interpretation.formalization,
-            base_confidence=0.70,
-        )
-    return interpretation
-
-
-class BuiltinRefinementRules:
-    """Namespace of pre-bundled refinement rules.
-
-    Each entry is a ``RefinementRule`` (see ``fuzzy_patterns``).  Pass one or
-    more rules to ``AmbiguityDetector(..., refinement_rules=...)`` to wire
-    them in.
-    """
-
-    driving_keyword_distance = staticmethod(_driving_keyword_distance)
-
-    @staticmethod
-    def default() -> tuple["RefinementRule", ...]:
-        """Return the default rule set used by the F-148 detector."""
-        return (_driving_keyword_distance,)
-
-
 class AmbiguityDetector:
     """Detect ambiguities in a natural-language assertion."""
 
@@ -108,9 +74,13 @@ class AmbiguityDetector:
         self.library = library or BUILT_IN_PATTERN_LIBRARY
         self.llm_fallback_provider = llm_fallback_provider
         self.audit_log = audit_log
+        # F-148: the detector has no default refinement rule set.
+        # Scenario-specific refinements (e.g. driving-keyword boost) are
+        # supplied by downstream consumers via per-pattern
+        # `FuzzyPattern.refinement_rules` fields, or via this constructor
+        # argument when an application-level rule set is appropriate.
         self.refinement_rules: tuple[Callable[..., Any], ...] = (
-            refinement_rules if refinement_rules is not None
-            else BuiltinRefinementRules.default()
+            refinement_rules if refinement_rules is not None else ()
         )
 
     def detect(
@@ -337,8 +307,8 @@ class AmbiguityDetector:
 
         The detector walks two rule sources in order:
 
-        1. The detector-level ``self.refinement_rules`` (defaults to
-           ``BuiltinRefinementRules.default()``).
+        1. The detector-level ``self.refinement_rules`` (default empty as
+           of F-148; downstream callers opt in via the constructor).
         2. The pattern-level ``pattern.refinement_rules`` (F-148 PR 1
            addition — empty by default; downstream callers opt in).
 
@@ -375,4 +345,4 @@ class AmbiguityDetector:
         return normalized
 
 
-__all__ = ["AmbiguityDetector", "BuiltinRefinementRules"]
+__all__ = ["AmbiguityDetector"]

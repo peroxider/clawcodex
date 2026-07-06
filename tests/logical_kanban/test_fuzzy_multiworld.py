@@ -10,10 +10,14 @@ from clawcodex_ext.logical_kanban.commit_gate_fuzzy import (
     aggregate_world_results,
     commit_gate_fuzzy_check,
 )
-from clawcodex_ext.logical_kanban.fuzzy_patterns import BUILT_IN_PATTERN_LIBRARY
+from clawcodex_ext.logical_kanban.fuzzy_patterns import (
+    BUILT_IN_PATTERN_LIBRARY,
+    FuzzyPattern,
+)
 from clawcodex_ext.logical_kanban.fuzzy_types import (
     Assumption,
     Clarification,
+    Interpretation,
     WorldValidationResult,
 )
 from clawcodex_ext.logical_kanban.ir import make_canonical, pred
@@ -23,6 +27,47 @@ from clawcodex_ext.logical_kanban.service import LogicalKanbanService
 from clawcodex_ext.logical_kanban.types import ProposedChange
 from clawcodex_ext.logical_kanban.world_generator import WorldGenerator
 from clawcodex_ext.tool_system.context import ToolContext
+
+
+def _generic_distance_library():
+    """Library equivalent to a generic consumer's downstream P-DIST-001.
+
+    The F-148 empty-shell P-DIST-001 carries matcher-only behaviour; a
+    consumer that wants the canonical
+    ``on_foot / straight_line / by_vehicle`` split registers its own
+    interpretation-bearing entry via
+    ``FuzzyPatternLibrary.replace(pattern_id, new_pattern)``.  This
+    helper mirrors that downstream wiring so the multi-world tests have
+    material to disambiguate.
+    """
+    return BUILT_IN_PATTERN_LIBRARY.replace(
+        "P-DIST-001",
+        FuzzyPattern(
+            pattern_id="P-DIST-001",
+            category="semantic_vagueness",
+            severity="major",
+            matcher=BUILT_IN_PATTERN_LIBRARY.patterns[0].matcher,
+            interpretations=(
+                Interpretation(
+                    code="on_foot",
+                    formalization="FootDistance({from}, {to}, {number})",
+                    base_confidence=0.60,
+                ),
+                Interpretation(
+                    code="straight_line",
+                    formalization="EuclideanDistance({from}, {to}, {number})",
+                    base_confidence=0.40,
+                ),
+                Interpretation(
+                    code="by_vehicle",
+                    formalization="VehicleDistance({from}, {to}, {number})",
+                    base_confidence=0.00,
+                ),
+            ),
+            clarification_prompt="您说的距离是指步行距离、直线距离还是驾车距离？",
+        ),
+    )
+
 
 
 @pytest.fixture
@@ -68,7 +113,9 @@ def _base_assertion():
 
 class TestAmbiguityDetector:
     def test_detects_distance_vagueness(self) -> None:
-        detector = AmbiguityDetector()
+        # Use the downstream-equivalent library so the canonical
+        # on_foot / straight_line / by_vehicle split is registered.
+        detector = AmbiguityDetector(library=_generic_distance_library())
         report = detector.detect("距离 100米", assertion_id="A-1")
 
         assert report.needs_clarification is True
@@ -93,8 +140,49 @@ class TestAmbiguityDetector:
         assert dep_amb.severity == "critical"
         assert report.needs_clarification is True
 
-    def test_by_vehicle_context_boosts_by_vehicle_interpretation(self) -> None:
-        detector = AmbiguityDetector()
+    def test_downstream_can_attach_by_vehicle_refinement(self) -> None:
+        # F-148 removed BuiltinRefinementRules.  A consumer that wants the
+        # driving-keyword boost registers it as a per-pattern refinement
+        # rule on its own P-DIST-001 clone.  This test demonstrates the
+        # recommended downstream wiring.
+        def driving_keyword_distance(text, interpretation):
+            if interpretation.code != "by_vehicle":
+                return interpretation
+            if "驾车" in text or "drive" in text.lower():
+                from dataclasses import replace as _replace
+
+                return _replace(interpretation, base_confidence=0.70)
+            return interpretation
+
+        library = BUILT_IN_PATTERN_LIBRARY.replace(
+            "P-DIST-001",
+            FuzzyPattern(
+                pattern_id="P-DIST-001",
+                category="semantic_vagueness",
+                severity="major",
+                matcher=BUILT_IN_PATTERN_LIBRARY.patterns[0].matcher,
+                interpretations=(
+                    Interpretation(
+                        code="on_foot",
+                        formalization="FootDistance({from}, {to}, {number})",
+                        base_confidence=0.60,
+                    ),
+                    Interpretation(
+                        code="straight_line",
+                        formalization="EuclideanDistance({from}, {to}, {number})",
+                        base_confidence=0.40,
+                    ),
+                    Interpretation(
+                        code="by_vehicle",
+                        formalization="VehicleDistance({from}, {to}, {number})",
+                        base_confidence=0.00,
+                    ),
+                ),
+                refinement_rules=(driving_keyword_distance,),
+                clarification_prompt="您说的距离是指步行距离、直线距离还是驾车距离？",
+            )
+        )
+        detector = AmbiguityDetector(library=library)
         report = detector.detect("驾车离家50米", assertion_id="A-4")
 
         amb = next(a for a in report.detected_ambiguities if a.kind == "semantic_vagueness")
@@ -108,7 +196,7 @@ class TestAmbiguityDetector:
 
 class TestWorldGenerator:
     def test_generates_multiple_worlds(self) -> None:
-        detector = AmbiguityDetector()
+        detector = AmbiguityDetector(library=_generic_distance_library())
         report = detector.detect("距离 100米", assertion_id="A-1")
         worlds = WorldGenerator().generate(report, _base_assertion())
 
@@ -284,7 +372,7 @@ class TestCommitGateFuzzy:
 
 class TestClarification:
     def test_user_clarification_overrides_assumption(self) -> None:
-        detector = AmbiguityDetector()
+        detector = AmbiguityDetector(library=_generic_distance_library())
         report = detector.detect("距离 100米", assertion_id="A-9")
         worlds = WorldGenerator().generate(report, _base_assertion())
 
@@ -326,7 +414,12 @@ class TestServiceIntegration:
             "fuzzy_clarification_needed_for_irreversible_change",
         )
 
-    def test_evaluate_assertion_returns_worlds(self, service: LogicalKanbanService) -> None:
+    def test_evaluate_assertion_returns_worlds(self) -> None:
+        # F-148: the service needs a downstream pattern_library for the
+        # canonical on_foot / straight_line / by_vehicle split.
+        service = LogicalKanbanService(
+            pattern_library=_generic_distance_library(),
+        )
         result = service.evaluate_assertion(
             "距离 100米",
             _base_assertion(),

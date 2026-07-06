@@ -30,7 +30,8 @@ Important integration decision: LKB is an agent-loop todo/task enhancement layer
 | F-145 | Disambiguating Tokens as Confidence Boosters (P0) | known-disambiguating tokens become first-class `DisambiguatingToken` entries; the matcher-exclusion anti-pattern is replaced | 9.4 |
 | F-146 | Question-Context Suppression for Interpretation Refinement (P1) | every keyword-driven boost in `_refine_interpretations` and `_apply_disambiguating_tokens` checks the surrounding question frame | 9.4 |
 | F-147 | Movement-Phrase Matcher Tolerance (P1) | `missing_subject` matcher allows 0–8 intervening characters; widens verb class; adds `出发去`/`前往`/`去到`/`head to`/`going to` | 9.4 |
-| F-148 | Remove Car-Wash Demo Scenario from Default Library (P1) | default `FuzzyPatternLibrary` carries only generic patterns (verbs 做 / 完成 / nouns 距离 / 质量); scenario-bound patterns are supplied by downstream callers via `library.add(...)`; parent feature for the F-143 walkthrough update + F-145/F-146/F-147 doc rewording | 9.4 |
+| F-148 | Remove Car-Wash + Transport Demo from Default Library (P1) | default `FuzzyPatternLibrary` carries zero scenario-bound interpretations: `P-SERV-001` deleted, `P-DIST-001` carries matcher only (no interpretations; downstream registers per-deployment modalities like `on_foot / straight_line / by_vehicle` via `library.add(...)`), `BuiltinRefinementRules` namespace removed (refinement rules attach via per-`FuzzyPattern` `refinement_rules` field); parent feature for the F-143 walkthrough update + F-145/F-146/F-147 doc rewording | 9.4 |
+| F-149 | Automatic Task Decomposition | agent-loop proposal generator that turns a high-level goal into a validated LKB task plan with dependencies and acceptance criteria | 5, 10, 17 |
 
 ## Architectural Placement
 

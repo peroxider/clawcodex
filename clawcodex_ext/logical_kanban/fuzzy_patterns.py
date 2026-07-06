@@ -17,9 +17,10 @@ from .fuzzy_types import AmbiguityKind, Interpretation, Severity
 
 # A refinement rule converts one (text, interpretation) pair into a
 # adjusted interpretation whose base_confidence reflects the textual
-# context.  Detector-default rules live in
-# ``ambiguity_detector.BuiltinRefinementRules``; ``FuzzyPattern`` may
-# also declare its own.
+# context.  F-148 removed the ``BuiltinRefinementRules`` namespace;
+# rules now live either as detector-level constructor arguments (via
+# ``AmbiguityDetector(refinement_rules=...)``) or as per-pattern
+# ``FuzzyPattern.refinement_rules`` declarations.
 RefinementRule = Callable[[str, Interpretation], Interpretation]
 
 
@@ -62,6 +63,34 @@ class FuzzyPatternLibrary:
     def add(self, pattern: FuzzyPattern) -> "FuzzyPatternLibrary":
         return FuzzyPatternLibrary(
             patterns=(*self.patterns, pattern),
+            constraints=self.constraints,
+        )
+
+    def replace(
+        self, pattern_id: str, pattern: FuzzyPattern
+    ) -> "FuzzyPatternLibrary":
+        """Return a new library with ``pattern_id`` swapped for ``pattern``.
+
+        F-148: the default ``P-DIST-001`` ships as a matcher-only shell,
+        so downstream consumers that want concrete interpretations
+        (``on_foot / straight_line / by_vehicle`` or any other split)
+        use this method to overwrite the shell with their interpretation-
+        bearing entry.  Adding the entry unchanged would produce two
+        matching patterns for the same input, which
+        ``AmbiguityDetector`` then sees as two separate ambiguities.
+        """
+        replaced = False
+        new_patterns: list[FuzzyPattern] = []
+        for existing in self.patterns:
+            if existing.pattern_id == pattern_id:
+                new_patterns.append(pattern)
+                replaced = True
+            else:
+                new_patterns.append(existing)
+        if not replaced:
+            new_patterns.append(pattern)
+        return FuzzyPatternLibrary(
+            patterns=tuple(new_patterns),
             constraints=self.constraints,
         )
 
@@ -108,7 +137,14 @@ def _default_library() -> FuzzyPatternLibrary:
     """
     lib = FuzzyPatternLibrary()
 
-    # P-DIST-001: distance semantic vagueness
+    # P-DIST-001: distance semantic vagueness (matcher-only shell)
+    #
+    # The detection surface (regex below) is reusable across consumers, but
+    # the interpretation split is a per-deployment concern.  A generic
+    # consumer registers ``on_foot / straight_line / by_vehicle``; a logistics
+    # consumer registers ``TruckDistance / AirDistance``; a fitness consumer
+    # registers ``OutdoorPace / TreadmillPace``.  None of those splits are
+    # shipped in the default library — see F-148 §D3.
     lib = lib.add(
         FuzzyPattern(
             pattern_id="P-DIST-001",
@@ -118,24 +154,8 @@ def _default_library() -> FuzzyPatternLibrary:
                 re.search(r"(离家|距离).*?\d+\s*[米公里m]", t)
                 or re.search(r"\d+\s*[米公里m].*?(店|地方|位置)", t)
             ),
-            interpretations=(
-                Interpretation(
-                    code="on_foot",
-                    formalization="FootDistance({from}, {to}, {number})",
-                    base_confidence=0.60,
-                ),
-                Interpretation(
-                    code="straight_line",
-                    formalization="EuclideanDistance({from}, {to}, {number})",
-                    base_confidence=0.40,
-                ),
-                Interpretation(
-                    code="by_vehicle",
-                    formalization="VehicleDistance({from}, {to}, {number})",
-                    base_confidence=0.00,
-                ),
-            ),
-            clarification_prompt="您说的距离是指步行距离、直线距离还是驾车距离？",
+            interpretations=(),
+            clarification_prompt="请澄清此距离的语义。",
         )
     )
 

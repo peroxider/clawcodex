@@ -17,7 +17,49 @@ from clawcodex_ext.logical_kanban import (
     Severity,
 )
 from clawcodex_ext.logical_kanban.audit import get_audit_log
+from clawcodex_ext.logical_kanban.fuzzy_patterns import (
+    BUILT_IN_PATTERN_LIBRARY,
+    FuzzyPattern,
+)
+from clawcodex_ext.logical_kanban.fuzzy_types import Interpretation
 from clawcodex_ext.tool_system.context import ToolContext
+
+
+def _dist_library_with_interps():
+    """Mirror a downstream consumer's P-DIST-001 with the canonical split.
+
+    F-148 ships the matcher-only shell in the default library; consumers
+    that want the on_foot / straight_line / by_vehicle split register a
+    replacement via ``FuzzyPatternLibrary.replace(...)``.  Tests use the
+    same wiring.
+    """
+    return BUILT_IN_PATTERN_LIBRARY.replace(
+        "P-DIST-001",
+        FuzzyPattern(
+            pattern_id="P-DIST-001",
+            category="semantic_vagueness",
+            severity="major",
+            matcher=BUILT_IN_PATTERN_LIBRARY.patterns[0].matcher,
+            interpretations=(
+                Interpretation(
+                    code="on_foot",
+                    formalization="FootDistance({from}, {to}, {number})",
+                    base_confidence=0.60,
+                ),
+                Interpretation(
+                    code="straight_line",
+                    formalization="EuclideanDistance({from}, {to}, {number})",
+                    base_confidence=0.40,
+                ),
+                Interpretation(
+                    code="by_vehicle",
+                    formalization="VehicleDistance({from}, {to}, {number})",
+                    base_confidence=0.00,
+                ),
+            ),
+            clarification_prompt="您说的距离是指步行距离、直线距离还是驾车距离？",
+        ),
+    )
 
 
 def _set_lkb(monkeypatch, enabled: bool) -> None:
@@ -171,7 +213,12 @@ class TestTodoWriteFuzzyGate:
     ) -> None:
         _set_lkb(monkeypatch, True)
         ctx = _make_context(tmp_path)
-        service = LogicalKanbanService()
+        # F-148: register the canonical on_foot / straight_line / by_vehicle
+        # split as a downstream library so the F-144 fuzzy gate has material
+        # to disambiguate.
+        service = LogicalKanbanService(
+            pattern_library=_dist_library_with_interps(),
+        )
 
         text = "离家50米的任务，方式待定"
         change = ProposedChange(

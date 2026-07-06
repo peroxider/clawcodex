@@ -20,6 +20,7 @@ from .audit import (
     default_session_log_path,
     event_for_assumption_invalidated,
     event_for_commit,
+    event_for_decomposition_proposed,
     event_for_fact_dropped,
     event_for_fact_extracted,
     event_for_human_override,
@@ -30,6 +31,12 @@ from .audit import (
     event_for_revalidation_requested,
     event_for_validation_run,
     get_audit_log,
+)
+from .decomposer import (
+    DecompositionPlan,
+    ProposedTask,
+    TaskDecomposer,
+    TaskDecompositionError,
 )
 from .causal import (
     CAP_VERBS,
@@ -88,7 +95,7 @@ from .flags import (
     is_llm_facts_enabled,
     is_logical_kanban_enabled,
 )
-from .ambiguity_detector import AmbiguityDetector, BuiltinRefinementRules
+from .ambiguity_detector import AmbiguityDetector
 from .fuzzy_patterns import (
     BUILT_IN_PATTERN_LIBRARY,
     DomainConstraint,
@@ -212,7 +219,6 @@ __all__ = [
     'AuditLog',
     'BUILT_IN_GLOSSARY',
     'BUILT_IN_PATTERN_LIBRARY',
-    'BuiltinRefinementRules',
     'CAP_VERBS',
     'CanonicalAssertion',
     'CausalEdge',
@@ -227,6 +233,7 @@ __all__ = [
     'ClingoSolverAdapter',
     'CommitDecision',
     'CommitResult',
+    'DecompositionPlan',
     'DatalogSolverAdapter',
     'DetectionMethod',
     'DomainConstraint',
@@ -261,6 +268,7 @@ __all__ = [
     'Prover9SolverAdapter',
     'Proposal',
     'ProposedChange',
+    'ProposedTask',
     'Quantifier',
     'RepairAction',
     'RepairSuggestion',
@@ -275,6 +283,8 @@ __all__ = [
     'SolverRequest',
     'SolverResourceLimits',
     'SolverResponse',
+    'TaskDecomposer',
+    'TaskDecompositionError',
     'TruthMaintenanceSystem',
     'ValidationIssue',
     'ValidationResultForWorld',
@@ -310,6 +320,7 @@ __all__ = [
     'extended_adapters',
     'event_for_assumption_invalidated',
     'event_for_commit',
+    'event_for_decomposition_proposed',
     'event_for_fact_dropped',
     'event_for_fact_extracted',
     'event_for_human_override',
