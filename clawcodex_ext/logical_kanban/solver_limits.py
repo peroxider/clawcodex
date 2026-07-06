@@ -8,7 +8,6 @@ adapters can use; when a limit is breached the process is killed.
 from __future__ import annotations
 
 import os
-import resource
 import signal
 import subprocess
 import threading
@@ -38,11 +37,14 @@ class SolverLimitError(Exception):
 def _set_memory_limit(max_memory_mb: int) -> None:
     """Preexec helper: set the address-space limit for the child process."""
     try:
+        import resource
+
         # RLIMIT_AS is the maximum virtual-memory size in bytes.
         limit_bytes = max_memory_mb * 1024 * 1024
         resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
-    except Exception:
-        # Platforms without RLIMIT_AS (e.g. Windows under WSL) silently skip.
+    except (ImportError, AttributeError, OSError):
+        # Platforms without the resource module (e.g. Windows) or without
+        # RLIMIT_AS (e.g. WSL) silently skip.
         pass
 
 
