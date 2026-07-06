@@ -132,27 +132,42 @@ class TestWorldGenerator:
         assert worlds[0].confidence == 1.0
 
     def test_domain_constraint_prunes_invalid_world(self) -> None:
-        # The default library ships no domain constraints (car-wash scenario
-        # removed per F-148 PR 1).  Downstream callers can still attach
-        # ``FuzzyPatternLibrary.add_constraint(...)`` and this test exercises
-        # that path with a synthetic constraint that blocks the
-        # ``immediate`` + ``today`` temporal combination.
+        # The default library ships no domain constraints (the car-wash
+        # constraint was removed in F-148 PR 1).  Downstream callers can
+        # still attach ``FuzzyPatternLibrary.add_constraint(...)``; this
+        # test exercises that path with a synthetic cross-ambiguity block.
+        #
+        # The phrase "很快完成" matches *two* generic patterns — P-TEMP-001
+        # (``immediate`` / ``soon`` / ``today``) and P-ACCEPT-001
+        # (``needs_acceptance_proof`` / ``implicit_acceptance``) — so the
+        # Cartesian product can pair any temporal pick with any acceptance
+        # pick.  Blocking ``{immediate, needs_acceptance_proof}`` prunes
+        # only the worlds where that particular pair co-occurs.
         from clawcodex_ext.logical_kanban.fuzzy_patterns import DomainConstraint
 
         constraint = DomainConstraint(
-            blocks=frozenset({"immediate", "today"}),
-            rationale="test-only block",
+            blocks=frozenset({"immediate", "needs_acceptance_proof"}),
+            rationale="test-only cross-ambiguity block",
         )
         library = BUILT_IN_PATTERN_LIBRARY.add_constraint(constraint)
+
         detector = AmbiguityDetector(library=library)
         report = detector.detect("很快完成", assertion_id="A-6")
-        worlds = WorldGenerator().generate(report, _base_assertion())
+        worlds = WorldGenerator(library=library).generate(report, _base_assertion())
 
         selected_codes = [
             {a.assumed_value for a in w.assumptions} for w in worlds
         ]
+        # Sanity check: the constraint must actually trigger — at least one
+        # surviving world carries ``immediate`` or ``needs_acceptance_proof``,
+        # but never both.
+        immediate_worlds = [c for c in selected_codes if "immediate" in c]
+        accept_proof_worlds = [
+            c for c in selected_codes if "needs_acceptance_proof" in c
+        ]
+        assert immediate_worlds or accept_proof_worlds
         for codes in selected_codes:
-            assert not ({"immediate", "today"} <= codes)
+            assert not ({"immediate", "needs_acceptance_proof"} <= codes)
 
 
 class TestMultiWorldValidator:
