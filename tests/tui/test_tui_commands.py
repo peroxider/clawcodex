@@ -369,3 +369,56 @@ def test_build_command_suggestions_includes_local_builtins(tmp_path: Path):
         assert cmd.lower() in sugg_names, (
             f"{cmd} is in LOCAL_BUILTINS but missing from build_command_suggestions"
         )
+
+
+# ---------------------------------------------------------------------------
+# AppState.set_model — subscriber notification
+# ---------------------------------------------------------------------------
+
+
+def test_set_model_notifies_subscribers():
+    """``AppState.set_model`` must fire subscriber callbacks unlike direct assignment."""
+    from clawcodex_ext.tui.state import AppState
+
+    notified = []
+
+    def _cb() -> None:
+        notified.append(True)
+
+    state = AppState(model="gpt-4")
+    state.subscribe(_cb)
+
+    # Direct assignment does NOT notify
+    state.model = "claude-3"
+    assert not notified, "Direct assignment should not notify subscribers"
+
+    # set_model DOES notify
+    state.set_model("claude-3")
+    assert notified, "set_model should notify subscribers"
+
+
+def test_set_model_is_thread_safe():
+    """``AppState.set_model`` must acquire the same lock as other mutators."""
+    from clawcodex_ext.tui.state import AppState
+
+    state = AppState(model="gpt-4")
+    # Should not raise even with concurrent calls
+    import threading
+
+    errors: list[BaseException] = []
+
+    def _worker() -> None:
+        try:
+            for _ in range(100):
+                state.set_model("model-x")
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=_worker) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"Concurrent set_model raised: {errors}"
+    assert state.model == "model-x"
