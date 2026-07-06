@@ -82,6 +82,22 @@ class ReplGatewayClient:
         self._reply_context_tokens: deque[str | None] = deque()
         self._heartbeat_task: asyncio.Task[None] | None = None
 
+    @property
+    def socket_path(self) -> str:
+        return self._socket_path
+
+    @property
+    def session_id(self) -> str:
+        return self._session_id
+
+    @property
+    def origin(self) -> str:
+        return self._origin
+
+    @property
+    def is_connected(self) -> bool:
+        return self._client._writer is not None
+
     async def _on_pushed_deliver(self, frame) -> None:
         """Server-pushed DELIVER callback: enqueue into the REPL prompt queue."""
         delivery_id = frame.delivery_id or frame.message_id or ''
@@ -104,11 +120,15 @@ class ReplGatewayClient:
         except Exception:  # noqa: BLE001
             logger.exception('repl_gateway: deliver failed delivery_id=%s', delivery_id[:16])
 
-    async def connect(self) -> None:
+    async def connect(self) -> GatewayFrame | None:
         await self._client.connect()
-        await self._client.register(
+        response = await self._client.register(
             session_id=self._session_id, origin=self._origin, capabilities=['outbound_text']
         )
+        if response is None or response.ack_layer != 'accepted':
+            await self._client.close()
+            raise ConnectionError('gateway registration failed')
+        return response
 
     async def close(self) -> None:
         if self._heartbeat_task is not None:

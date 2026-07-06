@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import argparse
 import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -481,8 +483,7 @@ def test_orchestrator_connect_gateway_reports_not_started(monkeypatch, capsys) -
     args = SimpleNamespace(
         workspace=None,
         workflow=None,
-        gateway=False,
-        gateway_origin='wechat:direct:default:user',
+        gateway=None,
         gateway_sock=None,
     )
     monkeypatch.setattr(server_mod, '_find_metadata', lambda _args: (None, None))
@@ -494,15 +495,16 @@ def test_orchestrator_connect_gateway_reports_not_started(monkeypatch, capsys) -
     assert '连接失败，orchestrator未启动' in captured.err
 
 
-def test_orchestrator_connect_gateway_all_private_reports_not_started(monkeypatch, capsys) -> None:
-    """--gateway checks the daemon without asking for account/user origin details."""
+def test_orchestrator_connect_gateway_gateway_option_reports_not_started(
+    monkeypatch, capsys
+) -> None:
+    """--gateway ORIGIN still checks the daemon before submitting a control request."""
     from extensions.orchestrator.cli import server as server_mod
 
     args = SimpleNamespace(
         workspace=None,
         workflow=None,
-        gateway=True,
-        gateway_origin=None,
+        gateway='wechat:direct:default:user',
         gateway_sock=None,
     )
     monkeypatch.setattr(server_mod, '_find_metadata', lambda _args: (None, None))
@@ -514,26 +516,227 @@ def test_orchestrator_connect_gateway_all_private_reports_not_started(monkeypatc
     assert '连接失败，orchestrator未启动' in captured.err
 
 
-def test_orchestrator_connect_gateway_does_not_fake_hot_attach(monkeypatch, capsys) -> None:
-    """Running daemons still need startup opt-in until a control channel exists."""
+def test_orchestrator_connect_gateway_parser_defaults_without_gateway_origin(capsys) -> None:
+    """connect-gateway has no --gateway-origin and defaults to all direct/private messages."""
+    from extensions.orchestrator.cli import server as server_mod
+
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest='command', required=True)
+    server_mod.add_server_parser(subparsers)
+
+    args = parser.parse_args(['server', 'connect-gateway'])
+    assert args.gateway is None
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                'server',
+                'connect-gateway',
+                '--gateway-origin',
+                'wechat:direct:default:user',
+            ]
+        )
+    capsys.readouterr()
+
+
+def test_orchestrator_connect_gateway_writes_control_file(monkeypatch, capsys, tmp_path) -> None:
+    """Running daemons receive a gateway_connect control file for the next poll."""
     from extensions.orchestrator.cli import server as server_mod
 
     args = SimpleNamespace(
         workspace=None,
         workflow=None,
-        gateway=False,
-        gateway_origin='wechat:direct:default:user',
+        gateway=None,
         gateway_sock='/tmp/gateway.sock',
     )
-    meta = {'pid': 12345, 'workspace_root': '/repo'}
+    meta = {'pid': 12345, 'workspace_root': str(tmp_path)}
     monkeypatch.setattr(server_mod, '_find_metadata', lambda _args: (None, meta))
     monkeypatch.setattr(server_mod, '_is_pid_alive', lambda _pid: True)
+    monkeypatch.setattr(server_mod, '_gateway_socket_available', lambda _sock: True)
+    monkeypatch.setattr(server_mod, '_wait_gateway_control_result', lambda *_args, **_kwargs: None)
+
+    rc = server_mod._run_connect_gateway(args)
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert 'gateway connect request submitted' in captured.out
+    control_files = list((tmp_path / '.orchestrator_control').glob('gateway_connect_*.control'))
+    assert len(control_files) == 1
+    cmd, issue_id, extra = control_files[0].read_text(encoding='utf-8').splitlines()
+    assert cmd == 'gateway_connect'
+    assert issue_id == ''
+    payload = json.loads(extra)
+    assert payload['origin'] == IM_DIRECT_ALL_ORIGIN
+    assert payload['sock'] == '/tmp/gateway.sock'
+    assert payload['response_path'].endswith('.result.json')
+
+
+def test_orchestrator_connect_gateway_accepts_specific_origin(monkeypatch, tmp_path) -> None:
+    """--gateway ORIGIN requests a specific runtime binding instead of the default."""
+    from extensions.orchestrator.cli import server as server_mod
+
+    args = SimpleNamespace(
+        workspace=None,
+        workflow=None,
+        gateway='wechat:direct:default:user',
+        gateway_sock='/tmp/gateway.sock',
+    )
+    meta = {'pid': 12345, 'workspace_root': str(tmp_path)}
+    monkeypatch.setattr(server_mod, '_find_metadata', lambda _args: (None, meta))
+    monkeypatch.setattr(server_mod, '_is_pid_alive', lambda _pid: True)
+    monkeypatch.setattr(server_mod, '_gateway_socket_available', lambda _sock: True)
+    monkeypatch.setattr(server_mod, '_wait_gateway_control_result', lambda *_args, **_kwargs: None)
+
+    rc = server_mod._run_connect_gateway(args)
+
+    assert rc == 0
+    control_files = list((tmp_path / '.orchestrator_control').glob('gateway_connect_*.control'))
+    assert len(control_files) == 1
+    _cmd, _issue_id, extra = control_files[0].read_text(encoding='utf-8').splitlines()
+    assert json.loads(extra)['origin'] == 'wechat:direct:default:user'
+
+
+def test_orchestrator_connect_gateway_missing_gateway_fails(monkeypatch, capsys, tmp_path) -> None:
+    """Gateway socket absence should fail before writing a control request."""
+    from extensions.orchestrator.cli import server as server_mod
+
+    args = SimpleNamespace(
+        workspace=None,
+        workflow=None,
+        gateway=None,
+        gateway_sock='/tmp/missing-gateway.sock',
+    )
+    meta = {'pid': 12345, 'workspace_root': str(tmp_path)}
+    monkeypatch.setattr(server_mod, '_find_metadata', lambda _args: (None, meta))
+    monkeypatch.setattr(server_mod, '_is_pid_alive', lambda _pid: True)
+    monkeypatch.setattr(server_mod, '_gateway_socket_available', lambda _sock: False)
 
     rc = server_mod._run_connect_gateway(args)
 
     captured = capsys.readouterr()
     assert rc == 1
-    assert '不支持对已运行 orchestrator 动态注入 IM gateway' in captured.err
+    assert 'IM gateway daemon is not running' in captured.err
+    assert not (tmp_path / '.orchestrator_control').exists()
+
+
+def test_orchestrator_disconnect_gateway_writes_control_file(monkeypatch, capsys, tmp_path) -> None:
+    """disconnect-gateway reuses the same orchestrator control directory."""
+    from extensions.orchestrator.cli import server as server_mod
+
+    args = SimpleNamespace(workspace=None, workflow=None)
+    meta = {'pid': 12345, 'workspace_root': str(tmp_path)}
+    monkeypatch.setattr(server_mod, '_find_metadata', lambda _args: (None, meta))
+    monkeypatch.setattr(server_mod, '_is_pid_alive', lambda _pid: True)
+    monkeypatch.setattr(server_mod, '_wait_gateway_control_result', lambda *_args, **_kwargs: None)
+
+    rc = server_mod._run_disconnect_gateway(args)
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert 'gateway disconnect request submitted' in captured.out
+    control_files = list((tmp_path / '.orchestrator_control').glob('gateway_disconnect_*.control'))
+    assert len(control_files) == 1
+    cmd, issue_id, extra = control_files[0].read_text(encoding='utf-8').splitlines()
+    assert cmd == 'gateway_disconnect'
+    assert issue_id == ''
+    payload = json.loads(extra)
+    assert payload['response_path'].endswith('.result.json')
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_control_poll_connects_and_disconnects_gateway(
+    monkeypatch, tmp_path
+) -> None:
+    """The daemon handles gateway control files inside the running process."""
+    from extensions.orchestrator.orchestrator import Orchestrator
+
+    calls: list[tuple[str, object]] = []
+
+    class _FakeIpc:
+        def __init__(self, sock, instance_id=None):
+            self.sock = sock
+            self.instance_id = instance_id
+            self.on_deliver = None
+
+        async def connect(self):
+            calls.append(('connect', self.sock))
+
+        async def register(self, *, session_id, origin, capabilities):
+            calls.append(('register', (session_id, origin, tuple(capabilities))))
+            return SimpleNamespace(ack_layer='accepted')
+
+        async def heartbeat(self):
+            return SimpleNamespace(ack_layer='accepted')
+
+        async def unregister(self, session_id=None):
+            calls.append(('unregister', session_id))
+            return SimpleNamespace(ack_layer='accepted')
+
+        async def close(self):
+            calls.append(('close', self.sock))
+
+    class _FakeWrapper:
+        def __init__(self, handlers, *, ipc_client=None, origin='', **_kwargs):
+            self._ipc = ipc_client
+            self._origin = origin
+            self.sent: list[str] = []
+
+        async def send_outbound(self, text):
+            self.sent.append(text)
+
+        async def _flush_pending_outbound(self):
+            calls.append(('flush', self._origin))
+
+    monkeypatch.setattr(
+        'clawcodex_ext.services.im_gateway.ipc_client.GatewayIpcClient',
+        _FakeIpc,
+    )
+    monkeypatch.setattr(
+        'extensions.orchestrator.im_gateway_client.OrchestratorGatewayClient',
+        _FakeWrapper,
+    )
+
+    orchestrator = Orchestrator.__new__(Orchestrator)
+    orchestrator._workspace_root = tmp_path
+    orchestrator._im_emitters = {}
+    orchestrator.im_event_deliver = None
+    orchestrator.im_event_channel = ''
+
+    control_dir = tmp_path / '.orchestrator_control'
+    control_dir.mkdir()
+    connect_result = control_dir / 'gateway-connect.result.json'
+    connect_payload = {
+        'origin': IM_DIRECT_ALL_ORIGIN,
+        'sock': '/tmp/gateway.sock',
+        'response_path': str(connect_result),
+    }
+    (control_dir / 'gateway_connect_1.control').write_text(
+        'gateway_connect\n\n' + json.dumps(connect_payload),
+        encoding='utf-8',
+    )
+
+    await orchestrator._process_control_commands()
+
+    assert ('connect', '/tmp/gateway.sock') in calls
+    assert any(call[0] == 'register' and call[1][1] == IM_DIRECT_ALL_ORIGIN for call in calls)
+    assert getattr(orchestrator, '_im_gateway_wrapper', None) is not None
+    assert callable(orchestrator.im_event_deliver)
+    assert json.loads(connect_result.read_text(encoding='utf-8'))['ok'] is True
+
+    disconnect_result = control_dir / 'gateway-disconnect.result.json'
+    disconnect_payload = {'response_path': str(disconnect_result)}
+    (control_dir / 'gateway_disconnect_1.control').write_text(
+        'gateway_disconnect\n\n' + json.dumps(disconnect_payload),
+        encoding='utf-8',
+    )
+
+    await orchestrator._process_control_commands()
+
+    assert any(call[0] == 'unregister' for call in calls)
+    assert any(call[0] == 'close' for call in calls)
+    assert getattr(orchestrator, '_im_gateway_wrapper', None) is None
+    assert orchestrator.im_event_deliver is None
+    assert json.loads(disconnect_result.read_text(encoding='utf-8'))['ok'] is True
 
 
 def test_mount_gateway_switch_uses_all_private_origin(monkeypatch) -> None:

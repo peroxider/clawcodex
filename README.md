@@ -137,6 +137,7 @@ The upstream `clawcodex` already gives you a faithful Python port of Claude Code
 Concretely, this repo ships:
 
 - 🤖 **Orchestrator** — daemon that polls issue trackers, branches a workspace, runs the agent, and opens PRs unattended
+- 💬 **IM Message Gateway** — connects REPL and Orchestrator to WeChat/Feishu direct messages at runtime, so agent control and replies can happen from IM channels
 - 🧩 **SOP Compiler** — convert `workflow.md` procedural specs into coordinated multi-agent systems
 - ⏰ **Cron System** — distributed-lock scheduling with jitter and NDJSON run history
 - 🌉 **Bridge Daemon extensions** — multi-session bridge, remote runtime, REPL/headless adapters
@@ -191,9 +192,9 @@ $ clawcodex-dev orchestrator issue inject --id gitcode/AGENTSDK-15 "address revi
 | 📺 GitCode Pages | [https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html](https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html) | 待仓库 Pages 启用后即可访问 |
 | 📺 GitHub Pages | [https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html](https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html) | 镜像仓库可同步 |
 | 🏃 本地预览 | `cd assets/video-b/presentation && npm install && npm run dev` → [http://localhost:5174](http://localhost:5174) | 需要 Node 18+ |
-| 📦 单文件直开 | [`assets/video-b/presentation/dist/index.html`](assets/video-b/presentation/dist/index.html) | 离线 / 静态托管通用，238 KB |
+| 📦 单文件直开 | [`assets/video-b/presentation/article.html`](assets/video-b/presentation/article.html) | 离线 / 静态托管通用，238 KB |
 
-> GitHub / GitCode 的 README 不允许 `<script>` 内嵌（会被 sanitize 剥离），所以走外链方式跳转。  
+> GitHub / GitCode 的 README 不允许 `<script>` 内嵌（会被 sanitize 剥离），所以走外链方式跳转。
 > 静态截图缩略图可在 `assets/video-b/screenshots/` 下重新生成：`python3 scripts/capture_video_b_screenshots.py`。
 
 ---
@@ -347,18 +348,24 @@ clawcodex-dev gateway restart wechat # restart WeChat IM channel
 clawcodex-dev gateway status wechat # show WeChat login health and REPL/orchestrator connection status
 ```
 
-With the gateway daemon running and a bidirectional app channel logged in, you can opt a REPL or orchestrator session into that IM channel. WeChat direct/private messages or Feishu p2p messages can drive the agent, and replies flow back to the actual sender. Feishu setup uses QR scan-to-create registration when available and falls back to manual app credentials if the scan is denied, expires, or cannot complete. After first-time Feishu setup, restart the whole gateway daemon so the Feishu SDK loads in a fresh process.
+With the gateway daemon running and a bidirectional app channel logged in, start REPL or Orchestrator normally, then connect that runtime to the IM channel. WeChat direct/private messages or Feishu p2p messages can drive the agent, and replies flow back to the actual sender. Feishu setup uses QR scan-to-create registration when available and falls back to manual app credentials if the scan is denied, expires, or cannot complete. After first-time Feishu setup, restart the whole gateway daemon so the Feishu SDK loads in a fresh process.
 
 **Connect to the gateway:**
 
 ```bash
-# REPL: resume an existing session or omit --resume to start a new one.
-clawcodex-dev --resume <session-id> --gateway
-# orchestrator: once connected, WeChat can send /pause AGENTSDK-15 and other control commands.
-clawcodex-dev orchestrator server start --workflow path/to/workflow.md --gateway
+# REPL: resume an existing session or omit --resume to start a new one, then connect.
+clawcodex-dev --resume <session-id>
+/gateway connect
+/gateway status
+/gateway disconnect
+
+# Orchestrator: start normally, then connect the running daemon.
+clawcodex-dev orchestrator server start --workflow path/to/workflow.md
+clawcodex-dev orchestrator server connect-gateway
+clawcodex-dev orchestrator server disconnect-gateway
 ```
 
-`--gateway` binds all direct/private senders for the active bidirectional IM app channel. Only one runtime can own the channel at a time: starting a REPL binding disconnects an orchestrator binding, and starting an orchestrator binding disconnects a REPL binding. V1 supports only one active bidirectional app channel (`wechat` or Feishu WebSocket); `gateway setup` disables the other inbound app channel when enabling Feishu WebSocket. Legacy Feishu/Slack/Discord webhooks remain outbound-only. `CLAWCODEX_GATEWAY_SOCK` can override the daemon socket; specific-origin binding remains available only for targeted debugging or future multi-origin automation.
+Runtime connect binds all direct/private senders for the active bidirectional IM app channel by default. Only one runtime can own the channel at a time: connecting a REPL binding disconnects an orchestrator binding, and connecting an orchestrator binding disconnects a REPL binding. V1 supports only one active bidirectional app channel (`wechat` or Feishu WebSocket); `gateway setup` disables the other inbound app channel when enabling Feishu WebSocket. Legacy Feishu/Slack/Discord webhooks remain outbound-only. `CLAWCODEX_GATEWAY_SOCK` can override the daemon socket; specific-origin binding remains available only for targeted debugging or future multi-origin automation.
 
 The gateway supports sending control commands to REPL/orchestrator, such as `/stop` to stop the current task.
 
