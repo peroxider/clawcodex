@@ -128,6 +128,17 @@ lkb-smt = [
 lkb-asp = [
     "clingo>=5.8",
 ]
+# F-138 Layer-5 ATP/TPTP solver. The adapter is always available
+# because the refutation prover lives in-process at
+# ``clawcodex_ext/logical_kanban/solver_atp.py``. The extra is kept
+# for symmetry with ``lkb-smt`` / ``lkb-asp`` so ``pip install -e
+# ".[lkb-atp]"`` is a meaningful command-line target — the adapter is
+# exposed regardless of whether the extra is installed, but listing it
+# in ``pip install`` documents the intent of pulling in the F-138
+# Layer-5 backend explicitly. Future swaps to a subprocess ATP
+# (``vampire``, ``eprover``) can populate this list.
+lkb-atp = [
+]
 feishu = [
     "lark-oapi==1.7.0",
     "qrcode==7.4.2",

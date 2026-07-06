@@ -114,6 +114,7 @@ from .rule_engine import Layer1RuleEngine, RuleEngineResult, evaluate_rules
 from .runtime import LogicalKanbanRuntime, get_logical_kanban
 from .service import LogicalKanbanService
 from .solver_adapter import (
+    AtpTptpSolverAdapter,
     ClingoSolverAdapter,
     DatalogSolverAdapter,
     Layer1SolverAdapter,
@@ -159,6 +160,7 @@ __all__ = [
     'Assumption',
     'AssumptionRecord',
     'AssumptionSource',
+    'AtpTptpSolverAdapter',
     'AuditEvent',
     'AuditEventType',
     'AuditLog',

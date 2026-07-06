@@ -134,7 +134,7 @@ class TestSolverAdapters:
     def test_all_adapters_includes_every_layer(self) -> None:
         adapters = all_adapters()
         names = {a.name for a in adapters}
-        assert names == {'layer1-python', 'datalog-souffle', 'asp-clingo', 'smt-z3'}
+        assert names == {'layer1-python', 'datalog-souffle', 'asp-clingo', 'smt-z3', 'atp-tptp'}
 
 
 class TestSolverPipeline:

@@ -390,11 +390,11 @@ class DatalogSolverAdapter(SolverAdapter):
                     error_info={'reason': exc.reason},
                 )
 
-        violation_rows = self._read_violation_rows(facts_dir)
-        verdict = self._classify_violations(request, violation_rows)
+            violation_rows = self._read_violation_rows(facts_dir)
+            verdict = self._classify_violations(request, violation_rows)
 
         if verdict[0] == 'fail':
-            violated_rule, message, premises = verdict[1], verdict[2], verdict[3]
+            _, violated_rule, message, premises = verdict
             return SolverResponse(
                 result='fail',
                 derived_facts=(),
@@ -434,10 +434,11 @@ class DatalogSolverAdapter(SolverAdapter):
             )
 
         # ``error`` verdict (compilation failure or stray return code).
+        _, _, message, error_info = verdict
         return SolverResponse(
             result='error',
-            message=verdict[2],
-            error_info=verdict[3],
+            message=message,
+            error_info=error_info,
         )
 
     # ------------------------------------------------------------------
@@ -544,30 +545,31 @@ class DatalogSolverAdapter(SolverAdapter):
         # Blocks / Requires
         seen_blocks: set[tuple[str, str]] = set()
         seen_requires: set[tuple[str, str]] = set()
-        with open(
-            os.path.join(facts_dir, 'blocks.facts'), 'w', encoding='utf-8'
-        ) as handle:
-            for fact in snapshot.facts:
-                parsed = _parse_fact(fact)
-                if parsed is None:
-                    continue
-                name, args = parsed
-                if name == 'Blocks' and len(args) == 2:
-                    key = (args[0], args[1])
-                    if key in seen_blocks:
+        blocks_path = os.path.join(facts_dir, 'blocks.facts')
+        requires_path = os.path.join(facts_dir, 'requires.facts')
+        with open(blocks_path, 'w', encoding='utf-8') as blocks_handle:
+            with open(requires_path, 'w', encoding='utf-8') as requires_handle:
+                for fact in snapshot.facts:
+                    parsed = _parse_fact(fact)
+                    if parsed is None:
                         continue
-                    seen_blocks.add(key)
-                    handle.write(
-                        f'{self._atom(args[0])}\t{self._atom(args[1])}\n'
-                    )
-                elif name == 'Requires' and len(args) == 2:
-                    key = (args[0], args[1])
-                    if key in seen_requires:
-                        continue
-                    seen_requires.add(key)
-                    handle.write(
-                        f'{self._atom(args[0])}\t{self._atom(args[1])}\n'
-                    )
+                    name, args = parsed
+                    if name == 'Blocks' and len(args) == 2:
+                        key = (args[0], args[1])
+                        if key in seen_blocks:
+                            continue
+                        seen_blocks.add(key)
+                        blocks_handle.write(
+                            f'{self._atom(args[0])}\t{self._atom(args[1])}\n'
+                        )
+                    elif name == 'Requires' and len(args) == 2:
+                        key = (args[0], args[1])
+                        if key in seen_requires:
+                            continue
+                        seen_requires.add(key)
+                        requires_handle.write(
+                            f'{self._atom(args[0])}\t{self._atom(args[1])}\n'
+                        )
 
         # Status predicates
         self._write_unary_facts(
@@ -674,20 +676,23 @@ class DatalogSolverAdapter(SolverAdapter):
     def _classify_violations(
         request: SolverRequest,
         violation_rows: tuple[str, ...],
-    ) -> tuple[str, tuple[Any, ...] | None]:
+    ) -> tuple[str, str | None, str, Any]:
         """Map violation rows back to Layer-1 rule codes.
 
-        Returns a tag + payload tuple. The payload schema varies by tag but
-        is always either ``None`` (no payload), a 3-tuple
-        ``(rule, message, premises)`` for pass/fail, or a 3-tuple
-        ``(message, error_info, None)`` for error.
+        Always returns a 4-tuple ``(tag, rule, message, payload)`` where:
+
+        * ``tag`` is ``'pass'``, ``'fail'``, or ``'error'``
+        * ``rule`` is the rule code (or ``None`` for ``pass``/``error``)
+        * ``message`` is the human-readable verdict
+        * ``payload`` is ``premises`` for ``fail`` or ``error_info`` for
+          ``error`` (unused for ``pass``)
         """
         target = request.target_task_id
         target_status = request.target_status
         snapshot = request.snapshot
 
         if not violation_rows:
-            return ('pass', None)
+            return ('pass', None, '', None)
 
         if (
             target is not None
@@ -697,12 +702,10 @@ class DatalogSolverAdapter(SolverAdapter):
             cycle = tuple(sorted(snapshot.cycle_task_ids))
             return (
                 'fail',
-                (
-                    'R-006',
-                    f'Task {target} is part of a dependency cycle '
-                    f'({{{", ".join(cycle)}}}) and cannot enter in_progress.',
-                    tuple(f'Cycle({t})' for t in cycle),
-                ),
+                'R-006',
+                f'Task {target} is part of a dependency cycle '
+                f'({{{", ".join(cycle)}}}) and cannot enter in_progress.',
+                tuple(f'Cycle({t})' for t in cycle),
             )
         if (
             target is not None
@@ -717,12 +720,10 @@ class DatalogSolverAdapter(SolverAdapter):
             )
             return (
                 'fail',
-                (
-                    'R-002',
-                    f'Task {target} cannot enter in_progress because its '
-                    f'active blockers remain: {", ".join(blockers) or "<unknown>"}.',
-                    tuple(f'Requires({b}, {target})' for b in blockers),
-                ),
+                'R-002',
+                f'Task {target} cannot enter in_progress because its '
+                f'active blockers remain: {", ".join(blockers) or "<unknown>"}.',
+                tuple(f'Requires({b}, {target})' for b in blockers),
             )
         if (
             request.strict_acceptance
@@ -732,13 +733,11 @@ class DatalogSolverAdapter(SolverAdapter):
         ):
             return (
                 'fail',
+                'R-005',
+                f'Task {target} requires an acceptance proof in strict mode.',
                 (
-                    'R-005',
-                    f'Task {target} requires an acceptance proof in strict mode.',
-                    (
-                        f'StrictAcceptance({target})',
-                        f'Not(HasAcceptanceProof({target}))',
-                    ),
+                    f'StrictAcceptance({target})',
+                    f'Not(HasAcceptanceProof({target}))',
                 ),
             )
         if (
@@ -747,20 +746,16 @@ class DatalogSolverAdapter(SolverAdapter):
         ):
             return (
                 'fail',
-                (
-                    'LKB-TRANSITION-001',
-                    f'Task {target} is not present in the current snapshot.',
-                    (f'Task({target})',),
-                ),
+                'LKB-TRANSITION-001',
+                f'Task {target} is not present in the current snapshot.',
+                (f'Task({target})',),
             )
         return (
             'fail',
-            (
-                'DL-UNSAT',
-                f'Soufflé produced {len(violation_rows)} violation row(s); '
-                'no Layer-1 rule matched.',
-                ('Snapshot facts + Layer-1 constraints + Proposal',),
-            ),
+            'DL-UNSAT',
+            f'Soufflé produced {len(violation_rows)} violation row(s); '
+            'no Layer-1 rule matched.',
+            ('Snapshot facts + Layer-1 constraints + Proposal',),
         )
 
 
@@ -1561,6 +1556,262 @@ class Z3SolverAdapter(SolverAdapter):
         )
 
 
+class AtpTptpSolverAdapter(SolverAdapter):
+    """Optional Layer-5 ATP/TPTP adapter.
+
+    The adapter translates the F-132 snapshot and the proposal into a
+    TPTP FOF program and runs an in-process first-order refutation
+    prover (:mod:`solver_atp`) against it. The decision is conservative:
+
+    * empty clause derivable (refutation) → ``fail``
+    * saturation reached, no contradiction → ``pass``
+    * saturation cap hit, no decision       → ``unknown``
+
+    The in-process prover is hand-rolled and intentionally narrow: it
+    handles the LKB Horn-ish FOL fragment (predicate symbols, ground
+    constants, universal quantification, no equality). The TPTP program
+    emitted for audit is well-formed and could be piped to ``vampire``
+    or ``eprover`` if either were on ``PATH``; the prover module is
+    isolated from the TPTP syntax so a future swap to a subprocess
+    backend does not require touching this class.
+
+    F-139: every task identifier is sanitised via
+    :func:`encode_solver_literal` before being concatenated into TPTP
+    atoms. Raw subject/description text never reaches the audit payload.
+
+    The adapter is always available because the prover lives in-process;
+    no external binary is required.
+    """
+
+    engine_name = 'atp-tptp'
+    _PROVER_VERSION = 'lkb-atp/0.1.0'
+
+    def __init__(self) -> None:
+        self._last_tptp_program: str | None = None
+
+    @property
+    def name(self) -> str:
+        return self.engine_name
+
+    @property
+    def version(self) -> str:
+        return self._PROVER_VERSION
+
+    def available(self) -> bool:
+        return True
+
+    def solve(
+        self,
+        request: SolverRequest,
+        *,
+        timeout_seconds: float = 30.0,
+    ) -> SolverResponse:
+        try:
+            return self._solve_impl(request, timeout_seconds)
+        except Exception as exc:  # noqa: BLE001 - adapter must never raise
+            return SolverResponse(
+                result='error',
+                message=f'ATP/TPTP adapter raised {type(exc).__name__}: {exc}',
+                error_info={
+                    'reason': 'exception',
+                    'exception': type(exc).__name__,
+                    'detail': str(exc),
+                },
+            )
+
+    def last_tptp_program(self) -> str | None:
+        """Return the TPTP FOF program emitted by the most recent solve.
+
+        Useful for debugging and audit: callers can inspect the exact
+        axioms and conjecture that fed the prover. Returns ``None``
+        before the first :meth:`solve` call.
+        """
+        return self._last_tptp_program
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _solve_impl(
+        self,
+        request: SolverRequest,
+        timeout_seconds: float,
+    ) -> SolverResponse:
+        from .solver_atp import (
+            emit_tptp_program,
+            prove_lkb_request,
+            task_constants,
+        )
+
+        snapshot = request.snapshot
+        # Pull metadata about acceptance proofs out of the snapshot so the
+        # prover can assert ``has_acceptance_proof(c)`` for tasks that
+        # carry an explicit ``acceptance_proof`` marker.
+        has_proof_ids = frozenset(
+            task_id
+            for task_id, task in snapshot.normalized_tasks.items()
+            if (task.get('metadata') or {}).get('lkb', {}).get('acceptance_proof')
+        )
+        completed_ids = frozenset(snapshot.completed_ids)
+        snapshot_task_ids = frozenset(snapshot.normalized_tasks)
+        constants = task_constants(snapshot.normalized_tasks)
+
+        verdict, meta = prove_lkb_request(
+            constants=constants,
+            blocked_ids=frozenset(snapshot.blocked_ids),
+            cycle_ids=frozenset(snapshot.cycle_task_ids),
+            has_proof_ids=has_proof_ids,
+            completed_ids=completed_ids,
+            strict_acceptance=request.strict_acceptance,
+            proposal_target=request.target_task_id,
+            proposal_status=request.target_status,
+            snapshot_task_ids=snapshot_task_ids,
+        )
+
+        # Cache the TPTP program emitted for this request so callers can
+        # inspect / replay it via vampire or eprover.
+        emit_constants: tuple[str, ...] = tuple(
+            sorted(
+                set(constants)
+                | ({request.target_task_id} if request.target_task_id else set())
+            )
+        )
+        self._last_tptp_program = emit_tptp_program(
+            constants=emit_constants,
+            blocked_ids=frozenset(snapshot.blocked_ids),
+            cycle_ids=frozenset(snapshot.cycle_task_ids),
+            has_proof_ids=has_proof_ids,
+            strict_acceptance=request.strict_acceptance,
+            proposal_target=request.target_task_id,
+            proposal_status=request.target_status,
+        )
+
+        if verdict == 'pass':
+            return SolverResponse(
+                result='pass',
+                derived_facts=tuple(sorted(set(snapshot.facts))),
+                proof_trace=(
+                    {
+                        'rule': 'ATP-SAT',
+                        'premises': ['Snapshot facts + Layer-1 FOL invariants + Proposal'],
+                        'conclusion': (
+                            f'TPTP prover found a model satisfying the proposal '
+                            f'(target={request.target_task_id}, '
+                            f'status={request.target_status}).'
+                        ),
+                        'solverVersion': self.version,
+                        'clauseCount': meta.get('clause_count'),
+                    },
+                ),
+                message=(
+                    'In-process FOL prover found no contradiction against the '
+                    'proposal; the LKB invariants hold.'
+                ),
+            )
+
+        if verdict == 'fail':
+            violated, message, premises = self._classify_unsat(request)
+            return SolverResponse(
+                result='fail',
+                derived_facts=(),
+                violated_rule=violated,
+                message=message,
+                proof_trace=(
+                    {
+                        'rule': violated,
+                        'premises': list(premises),
+                        'conclusion': (
+                            f'TPTP prover derived $false from the proposal '
+                            f'(target={request.target_task_id}, '
+                            f'status={request.target_status}).'
+                        ),
+                        'solverVersion': self.version,
+                        'clauseCount': meta.get('clause_count'),
+                    },
+                ),
+            )
+
+        # ``unknown``: saturation cap hit or some other inconclusive
+        # outcome. Surface as ``unknown`` so the pipeline treats it as
+        # uncertain rather than fail.
+        return SolverResponse(
+            result='unknown',
+            message='In-process FOL prover could not decide inside the budget.',
+            error_info={
+                'reason': str(meta.get('reason', 'no_decision')),
+                'clause_count': meta.get('clause_count'),
+            },
+        )
+
+    @staticmethod
+    def _classify_unsat(
+        request: SolverRequest,
+    ) -> tuple[str, str, tuple[str, ...]]:
+        """Map a refutation back to a recognisable Layer-1 rule.
+
+        The classification mirrors the Layer-4 / Layer-3 helpers so the
+        adapter stack produces consistent rule codes for the same
+        snapshot, regardless of which backend discovered the violation.
+        """
+        target = request.target_task_id
+        target_status = request.target_status
+        snapshot = request.snapshot
+        if target is not None and target not in snapshot.normalized_tasks:
+            return (
+                'LKB-TRANSITION-001',
+                f'Task {target} is not present in the current snapshot.',
+                (f'Task({target})',),
+            )
+        if (
+            target is not None
+            and target_status == 'in_progress'
+            and target in snapshot.cycle_task_ids
+        ):
+            cycle = tuple(sorted(snapshot.cycle_task_ids))
+            return (
+                'R-006',
+                f'Task {target} is part of a dependency cycle '
+                f'({{{", ".join(cycle)}}}) and cannot enter in_progress.',
+                tuple(f'Cycle({t})' for t in cycle),
+            )
+        if (
+            target is not None
+            and target_status == 'in_progress'
+            and target in snapshot.blocked_ids
+        ):
+            blockers = tuple(
+                sorted(
+                    b for b in snapshot.blocked_by.get(target, ())
+                    if b not in snapshot.completed_ids
+                )
+            )
+            return (
+                'R-002',
+                f'Task {target} cannot enter in_progress because its '
+                f'active blockers remain: {", ".join(blockers) or "<unknown>"}.',
+                tuple(f'Requires({b}, {target})' for b in blockers),
+            )
+        if (
+            request.strict_acceptance
+            and target is not None
+            and target_status == 'completed'
+            and not request.acceptance_proof_present
+        ):
+            return (
+                'R-005',
+                f'Task {target} requires an acceptance proof in strict mode.',
+                (
+                    f'StrictAcceptance({target})',
+                    f'Not(HasAcceptanceProof({target}))',
+                ),
+            )
+        return (
+            'ATP-UNSAT',
+            'TPTP prover proved the proposal unsatisfiable; no Layer-1 rule matched.',
+            ('Snapshot facts + Layer-1 FOL invariants + Proposal',),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Default registry
 # ---------------------------------------------------------------------------
@@ -1578,6 +1829,7 @@ def all_adapters() -> tuple[SolverAdapter, ...]:
         DatalogSolverAdapter(),
         ClingoSolverAdapter(),
         Z3SolverAdapter(),
+        AtpTptpSolverAdapter(),
     )
 
 
@@ -1592,13 +1844,19 @@ def extended_adapters() -> tuple[SolverAdapter, ...]:
     not installed) are silently filtered out.
     """
     adapters: list[SolverAdapter] = [Layer1SolverAdapter()]
-    for adapter in (DatalogSolverAdapter(), ClingoSolverAdapter(), Z3SolverAdapter()):
+    for adapter in (
+        DatalogSolverAdapter(),
+        ClingoSolverAdapter(),
+        Z3SolverAdapter(),
+        AtpTptpSolverAdapter(),
+    ):
         if adapter.available():
             adapters.append(adapter)
     return tuple(adapters)
 
 
 __all__ = [
+    'AtpTptpSolverAdapter',
     'ClingoSolverAdapter',
     'DatalogSolverAdapter',
     'Layer1SolverAdapter',
