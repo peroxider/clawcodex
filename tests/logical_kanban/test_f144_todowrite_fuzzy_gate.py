@@ -164,7 +164,7 @@ class TestTodoWriteFuzzyGate:
         assert validation.legacy_todo_ambiguities == ()
         assert validation.proof_trace[-1]["rule"] == "LKB-TODOWRITE-COMPAT-ALLOW"
 
-    def test_car_wash_input_is_denied(
+    def test_distance_disambiguation_input_is_denied(
         self,
         tmp_path: Any,
         monkeypatch: Any,
@@ -173,10 +173,10 @@ class TestTodoWriteFuzzyGate:
         ctx = _make_context(tmp_path)
         service = LogicalKanbanService()
 
-        text = "我需要到离家50米(步行距离)外的车店洗车(洗车店的工人代洗车)，我是该开车过去还是走路过去"
+        text = "离家50米的任务，方式待定"
         change = ProposedChange(
             kind="legacy_todo_replace_all",
-            payload={"todos": [{"id": "todo-car", "content": text, "status": "pending"}]},
+            payload={"todos": [{"id": "todo-dist", "content": text, "status": "pending"}]},
         )
         _proposal, validation, commit = service.run(change, ctx)
 

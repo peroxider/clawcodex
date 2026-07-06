@@ -90,7 +90,7 @@ class TestL1FactExtractor:
                 "facts": [
                     {
                         "predicate": "Requires",
-                        "args": ["vehicle", "car_shop"],
+                        "args": ["vehicle", "task_x"],
                         "source": "llm_extracted",
                         "confidence": 0.6,
                     }
@@ -99,14 +99,14 @@ class TestL1FactExtractor:
             }
         )
         provider = _StubProvider(response)
-        snapshot = _snapshot({"vehicle": _task("vehicle"), "car_shop": _task("car_shop")})
+        snapshot = _snapshot({"vehicle": _task("vehicle"), "task_x": _task("task_x")})
         facts = extract_facts(snapshot, BUILT_IN_GLOSSARY, provider=provider)
 
         assert len(facts) == 1
         assert facts[0].body == pred(
             "Requires",
             encode_solver_literal("vehicle"),
-            encode_solver_literal("car_shop"),
+            encode_solver_literal("task_x"),
         )
 
     def test_extract_facts_drops_unknown_predicate_and_audits(
@@ -373,15 +373,15 @@ class TestFeatureFlagBehaviour:
         assert not is_llm_facts_enabled()
 
 
-class TestCarWashRegression:
-    def test_fifty_meter_car_wash_passes_with_llm_fact(self, monkeypatch) -> None:
+class TestGenericDistanceRegression:
+    def test_hundred_meter_distance_passes_with_llm_fact(self, monkeypatch) -> None:
         _set_llm_facts(monkeypatch, True)
         response = json.dumps(
             {
                 "facts": [
                     {
                         "predicate": "Requires",
-                        "args": ["vehicle", "car_shop"],
+                        "args": ["task_a", "task_x"],
                         "source": "llm_extracted",
                         "confidence": 0.7,
                     }
@@ -391,11 +391,11 @@ class TestCarWashRegression:
         provider = _StubProvider(response)
         ctx = SimpleNamespace(
             tasks={
-                "vehicle": _task("vehicle", status="completed"),
-                "car_shop": _task(
-                    "car_shop",
+                "task_a": _task("task_a", status="completed"),
+                "task_x": _task(
+                    "task_x",
                     status="in_progress",
-                    subject="50 米开外那儿洗车",
+                    subject="距离 100米",
                 ),
             },
             todos=(),
@@ -406,7 +406,7 @@ class TestCarWashRegression:
 
         change = ProposedChange(
             kind="transition_status",
-            payload={"taskId": "car_shop", "status": "completed"},
+            payload={"taskId": "task_x", "status": "completed"},
             actor="tester",
         )
         proposal, validation, commit = service.run(change, ctx)

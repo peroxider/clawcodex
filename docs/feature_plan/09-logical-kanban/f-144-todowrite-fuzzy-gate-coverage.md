@@ -30,8 +30,8 @@ world generator, or `commit_gate_fuzzy_check`. The same shape of bug
 would apply to **any** todo whose `content` field carries an ambiguity
 the user expects to be flagged — transportation choices, vendor
 selection, scheduling, file-format decisions, deployment-environment
-selection, etc. The car-wash reproduction was the simplest case that
-exercised the gap; the gap is structural.
+selection, etc. The distance + mode reproduction was the simplest
+case that exercised the gap; the gap is structural.
 
 ## Scope
 

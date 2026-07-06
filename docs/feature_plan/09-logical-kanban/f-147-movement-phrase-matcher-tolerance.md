@@ -82,14 +82,14 @@ No public API change. No schema change. No new field on
 ## Requirements
 
 - `P-INFO-001` matches all of the following test inputs:
-  - `"去洗车"` (regression — original adjacent case)
+  - `"去办理业务"` (regression — original adjacent case)
   - The two reproduction inputs from the F-143 walkthrough.
   - `"我准备出发去吃饭"`, `"请问前往哪里？"`, `"去到店门口"`,
     `"heading to the office"`, `"I'm going to fix this"`.
 - `P-INFO-001` still **does not match** any of:
-  - `"我刚从洗车店出来"` (location declared)
-  - `"我正在洗车"` (location declared)
-  - `"我喜欢洗车"` (no movement intent)
+  - `"我刚从店里出来"` (location declared)
+  - `"我正在做事"` (location declared)
+  - `"我喜欢做事"` (no movement intent)
   - `"We just got back from buying groceries"` (location declared,
     movement in the past)
 - The reproduction input from the F-143 walkthrough now produces
@@ -109,8 +109,9 @@ No public API change. No schema change. No new field on
 - A **non-reproduction-domain** input is part of the test matrix:
   `"我要去取快递"`, `"heading to the airport"`,
   `"我准备出发去办理签证"`. Each is asserted to produce a
-  `missing_subject` ambiguity. This proves the fix is not
-  car-wash-specific.
+  `missing_subject` ambiguity. This proves the fix is domain-agnostic
+  — the same matcher handles generic verbs regardless of which
+  scenario the user has in mind.
 - The reproduction input from the F-143 walkthrough is encoded
   as a regression test: it produces at least one `Ambiguity` of
   kind `missing_subject` with `severity='major'`.
@@ -128,8 +129,8 @@ No public API change. No schema change. No new field on
   and detector.
 - F-145 (Disambiguating Tokens as Confidence Boosters) — the
   reproduction input now produces both the widened
-  `missing_subject` and the disambiguated `service_mode`
-  ambiguity; F-147 composes with F-145, not regresses it.
+  `missing_subject` and the disambiguated priority-mode ambiguity;
+  F-147 composes with F-145, not regresses it.
 - F-146 (Question-Context Suppression) — the post-window
   `还是` marker for the question-frame guard must coexist with
   the new colloquial variants. F-146's negative clause does not

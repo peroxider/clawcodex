@@ -91,7 +91,7 @@ if interp.code == "driving" and (
 ```
 
 The same shape of guard wraps every other keyword-driven
-refinement in the file (`"自助"`, `"代洗"`, `"自动"`,
+refinement in the file (`"紧急"`, `"普通"`, `"不急"`,
 `"步行"`, `"公交"`, `"地铁"`, etc.). A new test
 parameterisation enforces that **every** `DisambiguatingToken`
 declared in any `FuzzyPattern` (built-in or custom) is wrapped
@@ -140,8 +140,8 @@ change. No new field on `Ambiguity` or `AmbiguityReport`.
     (`"我该开车过去吗"`), `walking` (`"我该走路去吗"`), and
     a custom `Subway` interpretation registered in-test
     (`"我该坐地铁去吗"`). All three must skip the boost.
-  - A new mixed-domain input `"去自助洗车还是代洗"` reports
-    `self_service` and `staff_service` at the default base
+  - A new mixed-domain input `"紧急完成还是普通完成？"` reports
+    `high_priority` and `medium_priority` at the default base
     confidences, not the hint-boosted 0.95 values, because the
     keywords are inside the question frame.
 - The parameterised "every `DisambiguatingToken` has a guard" test
@@ -159,8 +159,8 @@ change. No new field on `Ambiguity` or `AmbiguityReport`.
   refinement logic are touched.
 - F-145 (Disambiguating Tokens as Confidence Boosters) — F-146 must
   compose with F-145, not regress it. The hint boost for
-  `"代洗"` in a premise (`"我要代洗车"`) must still push
-  `staff_service` to 0.95; F-146 only suppresses boosts for
+  `"紧急"` in a premise (`"我要紧急完成"`) must still push
+  `high_priority` to 0.95; F-146 only suppresses boosts for
   question-framed occurrences.
 
 ## Out of Scope

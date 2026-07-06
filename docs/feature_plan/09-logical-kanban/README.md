@@ -30,7 +30,7 @@ Important integration decision: LKB is an agent-loop todo/task enhancement layer
 | F-145 | Disambiguating Tokens as Confidence Boosters (P0) | known-disambiguating tokens become first-class `DisambiguatingToken` entries; the matcher-exclusion anti-pattern is replaced | 9.4 |
 | F-146 | Question-Context Suppression for Interpretation Refinement (P1) | every keyword-driven boost in `_refine_interpretations` and `_apply_disambiguating_tokens` checks the surrounding question frame | 9.4 |
 | F-147 | Movement-Phrase Matcher Tolerance (P1) | `missing_subject` matcher allows 0–8 intervening characters; widens verb class; adds `出发去`/`前往`/`去到`/`head to`/`going to` | 9.4 |
-| F-148 | Remove Car-Wash Demo Scenario from Default Library (P0) | default `FuzzyPatternLibrary` carries only generic patterns (verbs 做 / 完成 / nouns 距离 / 质量); scenario-bound patterns are supplied by downstream callers via `library.add(...)` | 9.4 |
+| F-148 | Remove Car-Wash Demo Scenario from Default Library (P1) | default `FuzzyPatternLibrary` carries only generic patterns (verbs 做 / 完成 / nouns 距离 / 质量); scenario-bound patterns are supplied by downstream callers via `library.add(...)`; parent feature for the F-143 walkthrough update + F-145/F-146/F-147 doc rewording | 9.4 |
 
 ## Architectural Placement
 

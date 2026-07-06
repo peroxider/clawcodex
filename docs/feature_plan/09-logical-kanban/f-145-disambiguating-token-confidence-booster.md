@@ -19,30 +19,33 @@ matching `Interpretation.base_confidence` while keeping the ambiguity
 
 ## Background
 
-Reproduced on 2026-07-06 in the F-143 walkthrough. The
-`P-SERV-001` matcher in the built-in library was, for example:
+Reproduced on 2026-07-06 in the F-143 walkthrough. As an
+illustrative (non-shipped) example, a hypothetical `P-PRIORITY-001`
+matcher in the built-in library would have been:
 
 ```python
-matcher=lambda t: "洗车" in t
-              and "自助" not in t
-              and "代洗" not in t
-              and "自动" not in t,
+matcher=lambda t: "完成" in t
+              and "紧急" not in t
+              and "普通" not in t
+              and "不急" not in t,
 ```
 
-The substring `"代洗"` in the user's text caused the entire pattern
-to be skipped, so no `Ambiguity` was recorded. The detector returned
-only the unrelated distance / movement ambiguities. Meanwhile
-`AmbiguityDetector._refine_interpretations` already had a refinement
-that would have pushed `staff_service` to confidence 0.95 if it had
-run, but it never ran because the matcher filtered the input first.
+The substring `"紧急"` in the user's text would cause the entire
+pattern to be skipped, so no `Ambiguity` would be recorded. The
+detector would return only the unrelated distance / movement
+ambiguities. Meanwhile `AmbiguityDetector._refine_interpretations`
+already had a refinement that would have pushed `high_priority` to
+confidence 0.95 if it had run, but it never ran because the matcher
+filtered the input first.
 
 The same anti-pattern exists in the family of `P-XXX` patterns that
 mix "match the ambiguous phrase" with "exclude known-resolved
 variants" — today the resolution is silently swallowed and the user
-never gets asked to confirm the assumption. The car-wash reproduction
-was the simplest case; the same shape of bug would surface in any
-domain that builds P-XXX patterns the same way (e.g. payment-method
-selection, deployment-environment selection, file-format selection).
+never gets asked to confirm the assumption. The priority-mode
+reproduction is the simplest case; the same shape of bug would
+surface in any domain that builds P-XXX patterns the same way (e.g.
+payment-method selection, deployment-environment selection,
+file-format selection).
 
 ## Scope
 
@@ -53,8 +56,8 @@ selection, deployment-environment selection, file-format selection).
 ```python
 @dataclass(frozen=True, slots=True)
 class DisambiguatingToken:
-    keyword: str                       # e.g. "代洗"
-    code: str                          # e.g. "staff_service"
+    keyword: str                       # e.g. "紧急"
+    code: str                          # e.g. "high_priority"
     boosted_confidence: float = 0.95   # target confidence when present
     window: int = 16                   # max distance to the ambiguous phrase
 
@@ -70,10 +73,10 @@ class FuzzyPattern:
 ```
 
 `FuzzyPatternLibrary.add(...)` is updated to round-trip the new
-field. The built-in `P-SERV-001` is rewritten to use the new schema
-instead of the negation chain. **No other built-in pattern is changed
-in this feature** — the new mechanism is opt-in per pattern, and
-migrating the rest of the built-ins is a follow-up.
+field. The hypothetical `P-PRIORITY-001` is rewritten to use the new
+schema instead of the negation chain. **No other built-in pattern is
+changed in this feature** — the new mechanism is opt-in per pattern,
+and migrating the rest of the built-ins is a follow-up.
 
 ### Refinement Pipeline
 
@@ -119,14 +122,14 @@ fall below `FUZZY_THRESHOLD_MINOR`.
 - A hit is recorded on the `Ambiguity` even when the keyword is the
   only thing distinguishing the interpretation. The user must
   always be told which auto-resolved assumption was made.
-- The original P-SERV-001 negation chain is removed. The pattern
-  matches whenever the **core** keyword (the regex / substring
-  embedded in `matcher`) is present, regardless of disambiguating
-  token presence.
+- The original `P-PRIORITY-001` negation chain is removed. The
+  pattern matches whenever the **core** keyword (the regex /
+  substring embedded in `matcher`) is present, regardless of
+  disambiguating token presence.
 - The `Interpretation.base_confidence` values declared in the
-  built-in pattern (0.80 / 0.15 / 0.05 for P-SERV-001 today) remain
-  the **default** values; the disambiguating-token boost is layered
-  on top, then renormalised.
+  built-in pattern (0.80 / 0.15 / 0.05 for `P-PRIORITY-001` in this
+  example) remain the **default** values; the disambiguating-token
+  boost is layered on top, then renormalised.
 - No change to `AmbiguityReport` schema, `Assumption` schema, or
   `commit_gate_fuzzy_check` aggregation logic.
 
@@ -134,30 +137,30 @@ fall below `FUZZY_THRESHOLD_MINOR`.
 
 - `tests/logical_kanban/test_f145_disambiguating_tokens.py`:
   - The original three-way split (no disambiguating token) is
-    preserved — `detector.detect("去洗车")` returns the same
+    preserved — `detector.detect("完成")` returns the same
     `severity='critical'`, `needs_clarification=True` result as
     today, with three interpretations at 0.80 / 0.15 / 0.05
     (renormalised).
-  - Disambiguating-token cases for P-SERV-001 (`"代洗"`,
-    `"自助"`, `"自动"`) each return one `Ambiguity` whose
+  - Disambiguating-token cases for `P-PRIORITY-001` (`"紧急"`,
+    `"普通"`, `"不急"`) each return one `Ambiguity` whose
     `disambiguating_hits` records the matched keyword/code/confidence
     triple and whose `clarification_prompt` ends with the new suffix.
-  - The detector is exercised with **at least one non-P-SERV-001
+  - The detector is exercised with **at least one non-`P-PRIORITY-001`
     disambiguating-token scenario** built in-test by registering a
     custom `FuzzyPattern` with `disambiguating_tokens` and asserting
     the same boost / hit-recording behaviour. This proves the
-    mechanism is reusable beyond P-SERV-001.
+    mechanism is reusable beyond `P-PRIORITY-001`.
 - `Ambiguity` carries the new `disambiguating_hits` field. The
   `Ambiguity.to_dict()` method serialises it under
   `disambiguatingHits`.
 - All existing `test_fuzzy_multiworld.py` tests continue to pass;
-  in particular `test_detects_service_mode_ambiguity` must still
+  in particular `test_detects_priority_mode_ambiguity` must still
   assert `severity='critical'` and the three interpretations
   continue to be returned.
 - The end-to-end reproduction input from the bug report now produces
-  a `P-SERV-001` ambiguity in the `AmbiguityReport` (it was
+  a `P-PRIORITY-001` ambiguity in the `AmbiguityReport` (it was
   silently dropped before) and a `disambiguating_hits` entry that
-  surfaces `"代洗" → staff_service → 0.95` to the user.
+  surfaces `"紧急" → high_priority → 0.95` to the user.
 
 ## Dependencies
 
@@ -182,9 +185,9 @@ fall below `FUZZY_THRESHOLD_MINOR`.
 - Auto-resolving the ambiguity to `resolved=True`. F-145 keeps
   resolution human-driven; the suffix is presented as
   *"please confirm"*, never as a silent decision.
-- Adding new disambiguating tokens to `P-SERV-001` (e.g. `"手洗"`,
-  `"机洗"`, `"上门"`). The existing three are sufficient for the
-  MVP; new tokens are a follow-up that does not need a new
+- Adding new disambiguating tokens to `P-PRIORITY-001` (e.g.
+  `"特急"`, `"加急"`, `"延后"`). The existing three are sufficient
+  for the MVP; new tokens are a follow-up that does not need a new
   feature ID.
 - Allowing per-tenant / per-session overrides of
   `boosted_confidence`. The value is declared in the pattern

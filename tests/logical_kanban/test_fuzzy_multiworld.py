@@ -69,7 +69,7 @@ def _base_assertion():
 class TestAmbiguityDetector:
     def test_detects_distance_vagueness(self) -> None:
         detector = AmbiguityDetector()
-        report = detector.detect("离家50米的洗车店", assertion_id="A-1")
+        report = detector.detect("距离 100米", assertion_id="A-1")
 
         assert report.needs_clarification is True
         assert any(a.kind == "semantic_vagueness" for a in report.detected_ambiguities)
@@ -109,7 +109,7 @@ class TestAmbiguityDetector:
 class TestWorldGenerator:
     def test_generates_multiple_worlds(self) -> None:
         detector = AmbiguityDetector()
-        report = detector.detect("离家50米的洗车店", assertion_id="A-1")
+        report = detector.detect("距离 100米", assertion_id="A-1")
         worlds = WorldGenerator().generate(report, _base_assertion())
 
         assert len(worlds) >= 2
@@ -132,10 +132,11 @@ class TestWorldGenerator:
         assert worlds[0].confidence == 1.0
 
     def test_domain_constraint_prunes_invalid_world(self) -> None:
-        # The default library ships no domain constraints (the car-wash
-        # constraint was removed in F-148 PR 1).  Downstream callers can
-        # still attach ``FuzzyPatternLibrary.add_constraint(...)``; this
-        # test exercises that path with a synthetic cross-ambiguity block.
+        # The default library ships no domain constraints (F-148 PR 1
+        # removed the only built-in scenario-bound constraint).  Downstream
+        # callers can still attach
+        # ``FuzzyPatternLibrary.add_constraint(...)``; this test exercises
+        # that path with a synthetic cross-ambiguity block.
         #
         # The phrase "很快完成" matches *two* generic patterns — P-TEMP-001
         # (``immediate`` / ``soon`` / ``today``) and P-ACCEPT-001
@@ -266,7 +267,7 @@ class TestCommitGateFuzzy:
             assertion_id="A",
             detected_ambiguities=(
                 Ambiguity(
-                    phrase="洗车",
+                    phrase="做某事",
                     kind="semantic_vagueness",
                     severity="critical",
                     resolved=False,
@@ -284,16 +285,16 @@ class TestCommitGateFuzzy:
 class TestClarification:
     def test_user_clarification_overrides_assumption(self) -> None:
         detector = AmbiguityDetector()
-        report = detector.detect("离家50米", assertion_id="A-9")
+        report = detector.detect("距离 100米", assertion_id="A-9")
         worlds = WorldGenerator().generate(report, _base_assertion())
 
-        # Simulate user clarifying the walking assumption.
+        # Simulate user clarifying the on-foot assumption.
         original = worlds[0].assumptions[0]
         clarified = Assumption(
             assumption_id=original.assumption_id,
             assertion_id=original.assertion_id,
             field=original.field,
-            assumed_value="walking",
+            assumed_value="on_foot",
             confidence=1.0,
             source="user_clarified",
             clarified_at="2026-07-05T12:00:00Z",
@@ -327,7 +328,7 @@ class TestServiceIntegration:
 
     def test_evaluate_assertion_returns_worlds(self, service: LogicalKanbanService) -> None:
         result = service.evaluate_assertion(
-            "离家50米的洗车店",
+            "距离 100米",
             _base_assertion(),
             assertion_id="A-10",
         )

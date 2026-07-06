@@ -25,12 +25,13 @@ contract changes; no existing `SolverAdapter` is renamed or removed.
 Today's LKB has a hard limit: a transition is committed only when the
 six F-132 rules (R-001 … R-006) plus the installed solver adapters
 agree, and those rules only know about 17 canonical predicates
-(`BUILT_IN_GLOSSARY`). The "50-metre car wash" walkthrough in the
-README makes the limit concrete — LKB detects `P-DIST-001` /
-`P-SERV-001` ambiguities, but it cannot answer *"should I walk or
-drive?"* because the predicate `RequiresVehiclePresence(car,
-shop)` is not in the glossary. The user is the only entity allowed to
-write that predicate, and a non-technical user typically will not.
+(`BUILT_IN_GLOSSARY`). The generic distance + mode walkthrough makes
+the limit concrete — LKB detects `P-DIST-001` ambiguities
+(`on_foot / straight_line / by_vehicle`), but it cannot answer
+*"should I walk or drive?"* because the predicate
+`Requires(entity, entity)` is not in the glossary. The user is the
+only entity allowed to write that predicate, and a non-technical user
+typically will not.
 
 F-143 closes the gap by letting the **agent** author those predicates
 on the user's behalf, while keeping the **kernel** (rules, solvers,
@@ -257,7 +258,7 @@ The F-139 input-sanitisation rules apply unchanged:
   - L2 with the provider missing does not appear in
     `extended_adapters()`; the pipeline runs and the F-138 baseline
     tests stay green.
-  - L3 `AmbiguityDetector.detect("50 米开外那儿洗车", ...)` with a
+  - L3 `AmbiguityDetector.detect("距离 100", ...)` with a
     stub provider returns an `AmbiguityReport` whose
     `detection_method == "llm_fallback"`, whose `kind` is one of the 9
     `AmbiguityKind` literals, and whose `Interpretation.code` values
@@ -271,11 +272,11 @@ The F-139 input-sanitisation rules apply unchanged:
   `LlmFactExtractor.run()` is never called, `LlmKnowledgeAdapter` is
   absent from `extended_adapters()`, and `_llm_fallback` is a
   no-op.
-- End-to-end: the 50-metre car-wash scenario from the README is
-  encoded as a regression test where the LLM stub returns the fact
-  `Requires(vehicle, car_shop)`, and the validation result becomes
-  `pass` with a non-empty proof trace (no longer
-  `divergent_conclusions`).
+- End-to-end: the generic distance + mode scenario from the F-148
+  acceptance criteria is encoded as a regression test where the LLM
+  stub returns the fact `Requires(entity_a, entity_b)`, and the
+  validation result becomes `pass` with a non-empty proof trace
+  (no longer `divergent_conclusions`).
 - All existing `tests/logical_kanban/` tests remain green; no
   existing F-126…F-142 acceptance criterion is weakened.
 - Audit log scrubbing: a single `TaskUpdate` that triggers an L1
