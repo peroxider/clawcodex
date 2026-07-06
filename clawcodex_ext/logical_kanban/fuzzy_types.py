@@ -89,6 +89,8 @@ class Ambiguity:
     candidate_interpretations: tuple[Interpretation, ...] = ()
     resolved: bool = False
     resolution_method: str | None = None
+    pattern_id: str = ""
+    clarification_prompt: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -100,6 +102,10 @@ class Ambiguity:
         }
         if self.resolution_method is not None:
             out["resolutionMethod"] = self.resolution_method
+        if self.pattern_id:
+            out["patternId"] = self.pattern_id
+        if self.clarification_prompt:
+            out["clarificationPrompt"] = self.clarification_prompt
         return out
 
 

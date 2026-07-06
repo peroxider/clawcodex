@@ -75,6 +75,7 @@ def explain_validation_run(
         'proofTraceSummary': proof_trace_summary(validation_run.proof_trace),
         'proofEnrichmentSummary': proof_enrichment_summary(enrichment),
         'repairSuggestions': [s.to_dict() for s in validation_run.repair_suggestions],
+        'legacyTodoAmbiguities': list(validation_run.legacy_todo_ambiguities),
         'explanation_generated_by': 'lkb-layer1-python',
     }
 

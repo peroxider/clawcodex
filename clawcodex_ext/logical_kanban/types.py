@@ -156,6 +156,9 @@ class ValidationRun:
     # F-138: per-adapter solver results for traceability when multiple engines run.
     solver_results: tuple[dict[str, Any], ...] = ()
 
+    # F-144: ambiguous todos detected in legacy TodoWrite replacement sets.
+    legacy_todo_ambiguities: tuple[dict[str, Any], ...] = ()
+
     @property
     def validation_id(self) -> str:
         """Backwards-compatible alias for :attr:`validation_run_id`."""
@@ -194,6 +197,8 @@ class ValidationRun:
         }
         if self.issues:
             out['issues'] = [issue.to_dict() for issue in self.issues]
+        if self.legacy_todo_ambiguities:
+            out['legacyTodoAmbiguities'] = list(self.legacy_todo_ambiguities)
         return out
 
 

@@ -29,16 +29,25 @@ from .audit import (
     event_for_assumption_invalidated,
     event_for_commit,
     event_for_human_override,
+    event_for_legacy_todo_ambiguity,
     event_for_proof_enrichment,
     event_for_proposal,
     event_for_revalidation_requested,
     event_for_validation_run,
     get_audit_log,
 )
-from .flags import is_causal_verification_enabled, is_llm_facts_enabled
+from .flags import is_causal_verification_enabled, is_llm_facts_enabled, is_logical_kanban_enabled
 from .context_adapter import active_blockers, build_facts_snapshot, dependency_closure
 from .explain import build_repair_suggestions
-from .fuzzy_types import AggregationDecision, CommitDecision, MultiWorldResult
+from .fuzzy_types import (
+    AggregationDecision,
+    Ambiguity,
+    AmbiguityReport,
+    CommitDecision,
+    MultiWorldResult,
+    Severity,
+    World,
+)
 from .glossary import BUILT_IN_GLOSSARY
 from .ir_hash import canonical_hash
 from .multiworld_validator import MultiWorldValidator
@@ -61,7 +70,7 @@ from .types import (
 
 if TYPE_CHECKING:
     from clawcodex_ext.tool_system.context import ToolContext
-    from .fuzzy_types import Clarification, World
+    from .fuzzy_types import Clarification
     from .ir import CanonicalAssertion
     from .truth_maintenance import AssumptionRecord
 
@@ -92,6 +101,40 @@ def _session_id(context: 'ToolContext') -> str | None:
 
 def _audit_log(context: 'ToolContext') -> AuditLog:
     return get_audit_log(context)
+
+
+def _severity_rank(severity: Severity) -> int:
+    return {'negligible': 0, 'minor': 1, 'major': 2, 'critical': 3}[severity]
+
+
+def _select_ambiguity_entry(report: AmbiguityReport) -> Ambiguity | None:
+    """Return the highest-severity ambiguity in ``report``."""
+    if not report.detected_ambiguities:
+        return None
+    return max(report.detected_ambiguities, key=lambda a: _severity_rank(a.severity))
+
+
+def _legacy_todo_ambiguity_dict(todo_id: str, report: AmbiguityReport) -> dict[str, Any]:
+    """Build the F-144 ambiguity payload for a single todo."""
+    entry = _select_ambiguity_entry(report)
+    return {
+        'todoId': todo_id,
+        'ambiguityCode': entry.pattern_id if entry else '',
+        'severity': report.severity,
+        'clarificationPrompt': entry.clarification_prompt if entry else '',
+    }
+
+
+def _legacy_todo_denial_message(
+    ambiguities: tuple[dict[str, Any], ...],
+    commit_decision: CommitDecision | None,
+) -> str:
+    """Build a human-readable denial message for ambiguous legacy todos."""
+    if commit_decision is not None and not commit_decision.commit:
+        return commit_decision.human_message.get(
+            'en', 'Legacy TodoWrite contains ambiguous content that must be clarified.'
+        )
+    return 'Legacy TodoWrite contains ambiguous content that must be clarified.'
 
 
 def _string_list(value: Any) -> tuple[str, ...]:
@@ -1052,6 +1095,119 @@ class LogicalKanbanService:
                 ),
             )
 
+        # F-144: run the fuzzy gate over legacy todo content when LKB is enabled.
+        if is_logical_kanban_enabled():
+            audit_log = _audit_log(context)
+            detector = AmbiguityDetector(audit_log=audit_log)
+            ambiguous_todos: list[tuple[str, AmbiguityReport]] = []
+            ambiguity_derived_facts: list[str] = []
+            for index, todo in enumerate(todos):
+                todo_id = f'todo:{index}'
+                content = todo.get('content') if isinstance(todo, dict) else None
+                if isinstance(content, str) and content.strip():
+                    report = detector.detect(
+                        content,
+                        assertion_id=todo_id,
+                        context_facts=tuple(derived_facts),
+                    )
+                    ambiguity_derived_facts.append(
+                        f'AmbiguityDetected({todo_id}, {report.severity}, '
+                        f'{len(report.detected_ambiguities)})'
+                    )
+                    if report.severity in {'critical', 'major'} and report.needs_clarification:
+                        ambiguous_todos.append((todo_id, report))
+
+            if ambiguous_todos:
+                combined_ambiguities = tuple(
+                    amb
+                    for _todo_id, report in ambiguous_todos
+                    for amb in report.detected_ambiguities
+                )
+                combined_report = AmbiguityReport(
+                    assertion_id=proposal.proposal_id,
+                    detected_ambiguities=combined_ambiguities,
+                    severity=max(
+                        (report.severity for _todo_id, report in ambiguous_todos),
+                        key=_severity_rank,
+                    ),
+                    needs_clarification=True,
+                )
+
+                from .ir import make_canonical, pred
+
+                base_assertion = make_canonical(
+                    role='assumption',
+                    kind='consistency',
+                    body=pred('LegacyTodoBatch', proposal.proposal_id),
+                )
+                worlds = WorldGenerator().generate(combined_report, base_assertion)
+                validator = MultiWorldValidator(self.engine)
+                world_results = validator.validate(
+                    worlds, self._augmented_snapshot(context)
+                )
+                commit_decision = commit_gate_fuzzy_check(
+                    worlds,
+                    world_results,
+                    combined_report,
+                    is_irreversible=False,
+                )
+
+                # Any critical/major ambiguity is enough to deny the batch.
+                if not commit_decision.commit or combined_report.severity in {'critical', 'major'}:
+                    legacy_ambiguities = tuple(
+                        _legacy_todo_ambiguity_dict(todo_id, report)
+                        for todo_id, report in ambiguous_todos
+                    )
+                    repair_suggestions = tuple(
+                        RepairSuggestion(
+                            action='clarify_ambiguity',
+                            target=entry['todoId'],
+                            message=entry['clarificationPrompt'],
+                        )
+                        for entry in legacy_ambiguities
+                    )
+                    issue = ValidationIssue(
+                        code='LKB-TODOWRITE-AMBIG-001',
+                        message=_legacy_todo_denial_message(legacy_ambiguities, commit_decision),
+                        rule='LKB-TODOWRITE-AMBIG-001',
+                        repair_suggestions=repair_suggestions,
+                    )
+                    ambiguity_derived_facts.extend(
+                        f'Assumes({a.assertion_id}, {a.assumption_id}, {a.assumed_value})'
+                        for w in worlds
+                        for a in w.assumptions
+                    )
+                    validation = self._denied(
+                        proposal,
+                        issues=(issue,),
+                        derived_facts=tuple(derived_facts) + tuple(ambiguity_derived_facts),
+                        proof_trace=(
+                            {
+                                'rule': 'LKB-TODOWRITE-AMBIG-001',
+                                'premises': [
+                                    f'Ambiguity({entry["todoId"]}, {entry["severity"]}, {entry["ambiguityCode"]})'
+                                    for entry in legacy_ambiguities
+                                ],
+                                'conclusion': 'DenyCommit',
+                                'solverVersion': self.solver_version,
+                            },
+                        ),
+                        legacy_todo_ambiguities=legacy_ambiguities,
+                    )
+                    session_id = _session_id(context)
+                    for entry in legacy_ambiguities:
+                        audit_log.append(
+                            event_for_legacy_todo_ambiguity(
+                                entry['todoId'],
+                                entry['ambiguityCode'],
+                                entry['severity'],
+                                entry['clarificationPrompt'],
+                                validation_run_id=validation.validation_run_id,
+                                session_id=session_id,
+                            )
+                        )
+                    return validation
+
         return self._accepted(
             proposal,
             derived_facts=tuple(derived_facts),
@@ -1572,6 +1728,7 @@ class LogicalKanbanService:
         engine: str | None = None,
         engine_version: str | None = None,
         solver_results: tuple[dict[str, Any], ...] | None = None,
+        legacy_todo_ambiguities: tuple[dict[str, Any], ...] = (),
     ) -> ValidationRun:
         if repair_suggestions is None:
             suggestions: list[RepairSuggestion] = []
@@ -1606,6 +1763,7 @@ class LogicalKanbanService:
             created_at=datetime.now(timezone.utc).isoformat(),
             requested_by=proposal.change.actor or 'system',
             solver_results=solver_results or (),
+            legacy_todo_ambiguities=legacy_todo_ambiguities,
         )
 
     def _counterexample_for(
@@ -1654,6 +1812,7 @@ class LogicalKanbanService:
         engine: str | None = None,
         engine_version: str | None = None,
         solver_results: tuple[dict[str, Any], ...] | None = None,
+        legacy_todo_ambiguities: tuple[dict[str, Any], ...] = (),
     ) -> ValidationRun:
         if counterexample is None and issues:
             counterexample = self._counterexample_for(
@@ -1673,6 +1832,7 @@ class LogicalKanbanService:
             engine=engine,
             engine_version=engine_version,
             solver_results=solver_results,
+            legacy_todo_ambiguities=legacy_todo_ambiguities,
         )
 
     def _accepted(
@@ -1685,6 +1845,7 @@ class LogicalKanbanService:
         engine: str | None = None,
         engine_version: str | None = None,
         solver_results: tuple[dict[str, Any], ...] | None = None,
+        legacy_todo_ambiguities: tuple[dict[str, Any], ...] = (),
     ) -> ValidationRun:
         return self._make_validation_run(
             proposal,
@@ -1695,6 +1856,7 @@ class LogicalKanbanService:
             engine=engine,
             engine_version=engine_version,
             solver_results=solver_results,
+            legacy_todo_ambiguities=legacy_todo_ambiguities,
         )
 
     def _strict_acceptance_enabled(
