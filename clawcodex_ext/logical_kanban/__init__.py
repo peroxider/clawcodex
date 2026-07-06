@@ -125,6 +125,7 @@ from .solver_adapter import (
     default_adapters,
     encode_solver_facts,
     encode_solver_literal,
+    extended_adapters,
 )
 from .solver_limits import SolverLimitError, SolverResourceLimits, run_external_solver
 from .solver_pipeline import SolverPipeline
@@ -229,6 +230,7 @@ __all__ = [
     'encode_solver_facts',
     'encode_solver_literal',
     'evaluate_rules',
+    'extended_adapters',
     'event_for_assumption_invalidated',
     'event_for_commit',
     'event_for_human_override',
