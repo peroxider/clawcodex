@@ -24,7 +24,7 @@ class _FakeFetcher:
         self._results = results
         self.closed = False
 
-    def fetch_all(self, sources):  # type: ignore[no-untyped-def]
+    def fetch_all(self, sources, *, incremental: bool = False):  # type: ignore[no-untyped-def]
         return list(self._results)
 
     def close(self) -> None:

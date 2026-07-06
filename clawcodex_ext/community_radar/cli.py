@@ -96,10 +96,6 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     config = apply_env_overrides(RadarConfig.from_dict(_read_config_file()))
     if args.output:
         config.output_dir = str(args.output)
-    if args.no_write:
-        config_write = True  # local var shadow to keep cfg semantics
-    else:
-        config_write = True
 
     registry = _maybe_load_registry(args.registry)
     pipeline = CommunityRadarPipeline(config=config, registry=registry)
@@ -108,12 +104,14 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         write=not args.no_write,
         output_dir=config.output_dir,
         persistent_copy=not args.no_persistent,
+        compare=args.compare,
+        incremental=args.incremental,
     )
 
     summary = result.digest.to_dict()["stats"]
     print(f"Scan complete: {summary['total_features']} features from "
           f"{len(result.digest.sources_used)} sources "
-          f"({summary['total_releases']} releases).")
+          f"({summary['total_versions']} versions).")
     if result.write_result:
         print(f"  digest: {result.write_result.markdown_path}")
         print(f"  json:   {result.write_result.json_path}")
@@ -148,6 +146,8 @@ def _cmd_source_add(args: argparse.Namespace) -> int:
         "track_prs": args.track_prs,
         "track_issues": args.track_issues,
     }
+    if args.domain:
+        data["domain"] = args.domain
     if args.tag_filter:
         data["release_tag_filter"] = args.tag_filter
     if args.changelog:
@@ -308,7 +308,14 @@ def _build_parser() -> argparse.ArgumentParser:
     scan_p.add_argument("--output", type=Path, default=None)
     scan_p.add_argument("--no-write", action="store_true")
     scan_p.add_argument("--no-persistent", action="store_true")
-
+    scan_p.add_argument(
+        "--compare", action="store_true", default=False,
+        help="Compare against the previous digest in the output directory.",
+    )
+    scan_p.add_argument(
+        "--incremental", action="store_true", default=False,
+        help="Incremental fetch (use cursors/ETags for speed, suitable for cron).",
+    )
     # source
     source_p = sub.add_parser("source")
     source_sub = source_p.add_subparsers(dest="source_cmd", required=True)
@@ -318,6 +325,9 @@ def _build_parser() -> argparse.ArgumentParser:
     add_p = source_sub.add_parser("add")
     add_p.add_argument("name")
     add_p.add_argument("--repo", required=True)
+    add_p.add_argument("--domain", choices=("software_engineering", "embodied_ai",
+                        "spatial_intelligence", "general"), default=None,
+                       help="Source domain for cross-domain classification guard.")
     add_p.add_argument("--track-releases", dest="track_releases", action="store_true", default=True)
     add_p.add_argument("--no-track-releases", dest="track_releases", action="store_false")
     add_p.add_argument("--track-commits", dest="track_commits", action="store_true", default=False)

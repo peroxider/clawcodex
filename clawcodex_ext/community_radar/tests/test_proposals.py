@@ -75,7 +75,7 @@ def test_render_proposals_basic_shape() -> None:
         new_features=[record],
         trending=[ScoredFeature(record=record, score=_score(record.id))],
         breaking_changes=[],
-        stats=DigestStats(total_releases=1, total_features=1),
+        stats=DigestStats(total_versions=1, total_features=1),
         sources_used=["aider"],
     )
     payload = render_proposals(digest)
@@ -103,7 +103,7 @@ def test_render_proposals_empty_digest() -> None:
         new_features=[],
         trending=[],
         breaking_changes=[],
-        stats=DigestStats(total_releases=0, total_features=0),
+        stats=DigestStats(total_versions=0, total_features=0),
         sources_used=[],
     )
     payload = render_proposals(digest)
@@ -149,7 +149,7 @@ def test_render_proposals_includes_related_projects() -> None:
         new_features=[record],
         trending=[ScoredFeature(record=record, score=_score(record.id))],
         breaking_changes=[],
-        stats=DigestStats(total_releases=1, total_features=1),
+        stats=DigestStats(total_versions=1, total_features=1),
         sources_used=["aider"],
     )
     payload = render_proposals(digest)
@@ -165,7 +165,7 @@ def test_reporter_write_emits_proposals_file(tmp_path: Path) -> None:
         features=[record],
         scored=[ScoredFeature(record=record, score=_score(record.id))],
         sources_used=["aider"],
-        releases_total=1,
+        versions_total=1,
         summary="x",
     )
     result = reporter.write(digest, tmp_path)
@@ -186,7 +186,7 @@ def test_reporter_write_can_skip_proposals(tmp_path: Path) -> None:
         features=[record],
         scored=[ScoredFeature(record=record, score=_score(record.id))],
         sources_used=["aider"],
-        releases_total=1,
+        versions_total=1,
     )
     result = reporter.write(digest, tmp_path, write_proposals=False)
     assert result.proposals_path is None

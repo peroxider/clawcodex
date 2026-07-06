@@ -73,7 +73,7 @@ def _digest(
         trending=scored,
         breaking_changes=list(breaking or []),
         stats=DigestStats(
-            total_releases=1,
+            total_versions=1,
             total_features=len(records),
             by_category={r.category.value: 1 for r in records},
         ),

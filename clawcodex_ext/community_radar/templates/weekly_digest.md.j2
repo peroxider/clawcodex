@@ -2,10 +2,49 @@
 # {{ title }} ({{ period_label }})
 
 > 生成时间: {{ generated_at }}
-> 覆盖范围: {{ sources_count }} 个项目 · {{ total_releases }} 个 release · {{ total_features }} 条特性记录
+> 覆盖范围: {{ sources_count }} 个项目 · {{ total_versions }} 个版本 · {{ total_features }} 条特性记录
 {%- if llm_assisted %}
 > LLM 辅助: 本期分类/摘要经模型精炼
 {%- endif %}
+
+{% if comparison.get('has_comparison') %}
+## 变化对比 (vs 上期)
+
+> 对比基准: {{ comparison.previous_generated_at }}
+
+### 新增特性 ({{ comparison.new_count }})
+
+{% if comparison.show_new_features -%}
+{% for rec in comparison.new_features %}
+- **{{ rec.title }}** — {{ rec.desc }}（{{ rec.category }}，来源: {{ rec.source }}）
+{% endfor %}
+{% else -%}
+（无新增特性）
+{% endif %}
+
+### 消失特性 ({{ comparison.disappeared_count }})
+
+{% if comparison.show_disappeared -%}
+{% for rec in comparison.disappeared_features %}
+- ~~**{{ rec.title }}**~~ — {{ rec.desc }}（{{ rec.category }}，来源: {{ rec.source }}）
+{% endfor %}
+{% else -%}
+（无消失特性）
+{% endif %}
+
+### 评分变化 ({{ comparison.score_changed|length }})
+
+{% if comparison.show_score_changes -%}
+| 特性 | 旧评分 | 新评分 | 变化 |
+|------|:-:|:-:|:-:|
+{% for item in comparison.score_changed %}
+| {{ item.title }} | {{ "%.1f"|format(item.old_score) }} | {{ "%.1f"|format(item.new_score) }} | {% if item.delta > 0 %}↑{% else %}↓{% endif %} {{ "%.1f"|format(item.delta|abs) }} |
+{% endfor %}
+{% else -%}
+（无显著评分变化）
+{% endif %}
+
+{% endif %}
 
 ## 摘要
 
@@ -53,6 +92,16 @@
 
 ## 分类分布
 
+{% if by_root_category %}
+### 按领域
+
+{% for root_name, count in by_root_category %}
+- {{ root_name }}: {{ count }}
+{% endfor %}
+
+### 按子分类
+
+{% endif %}
 {% if by_category %}
 {% for cat, count in by_category %}
 - {{ cat }}: {{ count }}

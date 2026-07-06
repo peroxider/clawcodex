@@ -72,9 +72,21 @@ class CommunityRadarPipeline:
         self.config = config or RadarConfig()
         self.registry = registry
         self.extractor = extractor or FeatureExtractor()
-        self.classifier = classifier or FeatureClassifier(
-            roadmap_keywords=self.config.roadmap_keywords
-        )
+
+        # Build source_name → domain map from the registry so the
+        # classifier can reject cross-domain keyword matches.
+        _domain_map: dict[str, str] = {}
+        if self.registry is not None:
+            for source in self.registry.list():
+                if source.domain:
+                    _domain_map[source.name] = source.domain
+        if classifier is not None:
+            self.classifier = classifier
+        else:
+            self.classifier = FeatureClassifier(
+                roadmap_keywords=self.config.roadmap_keywords,
+                source_domain_map=_domain_map,
+            )
         self.deduplicator = deduplicator or FeatureDeduplicator()
         self.scorer = scorer or FeatureScorer(self.config)
         self.reporter = reporter or CommunityReporter(self.config)
@@ -97,6 +109,8 @@ class CommunityRadarPipeline:
         persistent_copy: bool = True,
         notify: bool | None = None,
         auto_install_cron: bool | None = None,
+        compare: bool = False,
+        incremental: bool = False,
     ) -> ScanResult:
         """Run the full pipeline and (optionally) persist a digest.
 
@@ -132,7 +146,7 @@ class CommunityRadarPipeline:
         notifications: dict[str, bool] | None = None
 
         try:
-            fetch_results = self._fetch_all(sources)
+            fetch_results = self._fetch_all(sources, incremental=incremental)
             records = self._extract(fetch_results)
             records = self.classifier.classify_many(records)
             records = self.deduplicator.deduplicate(records)
@@ -140,7 +154,7 @@ class CommunityRadarPipeline:
                 ScoredFeature(record=record, score=self.scorer.score(record))
                 for record in records
             ]
-            releases_total = sum(len(fr.releases) for fr in fetch_results)
+            versions_total = sum(len(fr.releases) for fr in fetch_results)
             errors: list[str] = []
             for fr in fetch_results:
                 errors.extend(f"[{fr.source}] {msg}" for msg in fr.errors)
@@ -151,13 +165,13 @@ class CommunityRadarPipeline:
                 scored=scored,
                 sources_used=[s.name for s in sources],
                 errors=errors,
-                releases_total=releases_total,
+                versions_total=versions_total,
             )
 
             write_result: DigestWriteResult | None = None
             if write:
                 target_dir = Path(output_dir or self.config.output_dir)
-                write_result = self.reporter.write(digest, target_dir)
+                write_result = self.reporter.write(digest, target_dir, compare=compare)
                 if persistent_copy:
                     copy_to_persistent(write_result.markdown_path)
                     copy_to_persistent(write_result.json_path)
@@ -201,12 +215,12 @@ class CommunityRadarPipeline:
                 _log.warning("registry load failed: %s", exc)
         return self.registry.list()
 
-    def _fetch_all(self, sources: list[WatchSource]) -> list:
+    def _fetch_all(self, sources: list[WatchSource], *, incremental: bool = False) -> list:
         if not sources:
             return []
         if self.fetcher is None:
             self.fetcher = Fetcher(cache_dir=self.config.cache_dir)
-        return self.fetcher.fetch_all(sources)
+        return self.fetcher.fetch_all(sources, incremental=incremental)
 
     def _extract(self, fetch_results: list) -> list[FeatureRecord]:
         records: list[FeatureRecord] = []
@@ -229,6 +243,7 @@ def run_community_scan(
     output_dir: Path | str | None = None,
     period: str = "weekly",
     sources: Iterable[WatchSource] | None = None,
+    incremental: bool = False,
 ) -> ScanResult:
     """Run a single scan and return the result.
 
@@ -247,4 +262,5 @@ def run_community_scan(
         write=True,
         output_dir=output_dir,
         persistent_copy=True,
+        incremental=incremental,
     )

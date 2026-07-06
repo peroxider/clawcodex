@@ -212,10 +212,16 @@ class FeatureExtractor:
     # ------------------------------------------------------------------
 
     def extract(self, release: Release, source: str) -> list[FeatureRecord]:
-        """Extract candidate feature records from ``release``."""
-        if not release.body:
+        """Extract candidate feature records from ``release``.
+
+        Prefers ``raw_body`` (CHANGELOG text from Layer 1.5) over ``body``
+        (GitHub Release body) when available — CHANGELOG sections provide
+        richer ``## Added / Changed / Fixed`` markup for pattern extraction.
+        """
+        source_text = release.raw_body or release.body
+        if not source_text:
             return []
-        candidates = list(self._extract_by_patterns(release.body))
+        candidates = list(self._extract_by_patterns(source_text))
         records: list[FeatureRecord] = []
         for candidate in candidates:
             records.append(
@@ -232,7 +238,7 @@ class FeatureExtractor:
             )
         if self._llm_hook is not None:
             try:
-                records = self._llm_hook(records, release.body)
+                records = self._llm_hook(records, source_text)
             except Exception as exc:  # noqa: BLE001
                 _log.warning("LLM hook raised (%s); keeping rule-based output", exc)
         return records
