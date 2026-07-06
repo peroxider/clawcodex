@@ -23,6 +23,8 @@ Important integration decision: LKB is an agent-loop todo/task enhancement layer
 | F-138 | Solver Layer Roadmap | Datalog, ASP, SMT, ATP adapters | 10, 21, 22 |
 | F-139 | Security, Performance, Observability | NFRs and operations | 18-20, 25 |
 | F-140 | Orchestrator Adoption Through Todo Tools | orchestrator as consumer | 17, 22-23 |
+| F-141 | Causal Verification Layer (CAP-compatible) | synthetic causal graph, causal_weight gate | 10.6, 22.3 |
+| F-142 | External ATP (Vampire / Prover9 / Mace4) | optional TPTP subprocess adapters, async proof enrichment | 10.5, 22.4 |
 
 ## Architectural Placement
 
