@@ -245,6 +245,22 @@ class AppState:
             self.streaming_text = ""
         self._notify()
 
+    # ---- model -----------------------------------------------
+    def set_model(self, model: str) -> None:
+        """Thread-safe model setter that notifies subscribers.
+
+        Direct assignment to ``.model`` bypasses the subscriber
+        notification loop, which means ``_on_state_change`` →
+        ``_sync_terminal_title`` never sees the update.  This method
+        acquires the same lock as other mutators and calls ``_notify()``
+        so all observers (including the terminal-title sync) are kept
+        in sync.
+        """
+
+        with self._lock:
+            self.model = model
+        self._notify()
+
     # ---- thinking / verb ----
     def set_thinking(self, thinking: bool, verb: str = "") -> None:
         with self._lock:

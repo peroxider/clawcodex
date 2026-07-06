@@ -79,7 +79,9 @@ class StartupHeader(Static):
             self._model = model
         if provider is not None:
             self._provider = provider
-        self.update(self._render_banner())
+        rendered = self._render_banner()
+        self.update(rendered)
+        self.refresh()
 
     def _render_banner(self) -> Panel:
         display_path = _display_cwd(self._workspace_root)

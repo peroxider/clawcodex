@@ -755,7 +755,7 @@ class ClawCodexTUI(App):
                 setattr(self.provider, 'model', model_id)
         except Exception:
             pass
-        self.app_state.model = model_id
+        self.app_state.set_model(model_id)
         # Update the REPL-screen widgets BEFORE appending the transcript
         # message so the visual state is consistent even if the append
         # fails (rare).

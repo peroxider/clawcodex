@@ -170,7 +170,9 @@ class StatusLine(Static):
                 spinner = _SPINNER_FRAMES[self._frame]
         else:
             spinner = " "
-        self.update(self._compose_text(spinner=spinner))
+        rendered = self._compose_text(spinner=spinner)
+        self.update(rendered)
+        self.refresh()
 
     def _compose_text(self, *, spinner: str) -> Text:
         state = self._app_state
