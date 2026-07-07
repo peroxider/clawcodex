@@ -221,6 +221,26 @@ quote-style = "single"
 # a repo-wide style cleanup. Formatting is still checked on changed files in CI.
 select = ["E9", "F63", "F7", "F82"]
 
+# F-152 (Bounded Scheduling Solver) — OR-Tools meta-package 安全守门。
+# OR-Tools wheel 打包了 6 个污染 LKB 的子模块（routing / linear_solver /
+# constraint_solver / algorithms / graph / ml），其中 ml/routing 含启发式 +
+# ML 黑盒，违反项目"不引入额外模型"红线。LKB 只允许引入
+# ortools.sat.python.cp_model 一个子模块做 CP-SAT 约束规划。
+#
+# 此规则在 CI lint job（.github/workflows/ci.yml:30-47）自动运行，违规导入
+# 会被 ruff 拒绝。详见 docs/feature_plan/09-logical-kanban/f-152-bounded-scheduling-solver.md
+# Phase 1（方案 A — lint 守门）。
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"ortools.routing".msg = "F-152: Only ortools.sat.python.cp_model is allowed (OR-Tools routing 含 ML 启发式)."
+"ortools.linear_solver".msg = "F-152: Only ortools.sat.python.cp_model is allowed."
+"ortools.constraint_solver".msg = "F-152: Only ortools.sat.python.cp_model is allowed (constraint_solver 是 VRP)."
+"ortools.algorithms".msg = "F-152: Only ortools.sat.python.cp_model is allowed."
+"ortools.graph".msg = "F-152: Only ortools.sat.python.cp_model is allowed (graph 用 NetworkX 已覆盖)."
+"ortools.ml".msg = "F-152: 违反项目'不引入额外 ML 模型'红线."
+
 [tool.ruff.lint.per-file-ignores]
 # These ``src`` modules are intentional lazy facades for implementations that
 # now live under ``clawcodex_ext``. Their public names are materialized via

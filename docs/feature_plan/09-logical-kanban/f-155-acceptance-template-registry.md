@@ -2,7 +2,8 @@
 
 > **修订记录**
 > - v1.0：初稿（含 F-150/151/153/154 复用路径 + 否决清单 8 项 + 实施 Phase 1-8）
-> - v1.1（本次）：显式追加 spaCy word vectors + spaCy 库本体 + RDFLib/owlrl 至否决清单；Out-of-Scope / 验收标准同步强化。回应用户问题："模糊 / 歧义检测中 spaCy word vectors + cosine，https://github.com/RDFLib/owlrl 还有必要作为特性增强集成吗？"
+> - v1.1：显式追加 spaCy word vectors + spaCy 库本体 + RDFLib/owlrl 至否决清单；Out-of-Scope / 验收标准同步强化。回应用户问题："模糊 / 歧义检测中 spaCy word vectors + cosine，https://github.com/RDFLib/owlrl 还有必要作为特性增强集成吗？"
+> - v1.2（本次）：在形式化校验方向追加 3 条否决项 —— Alloy Analyzer / MiniZinc+Gecode+Chuffed / OR-Tools 非 CP-SAT 子模块（routing / linear_solver / constraint_solver / algorithms / graph / ml）。回应用户问题："形式化校验中 Alloy / MiniZinc+Gecode+Chuffed / Google OR-Tools 还有必要作为特性增强集成吗？"。**澄清**：OR-Tools CP-SAT 子模块（F-152 调度求解器）仍按方案 A（lint 守门）引入；本否决项针对的是 OR-Tools meta-package 内其他 6 个子模块。
 
 ## Goal
 
@@ -235,6 +236,9 @@
 | **spaCy word vectors + cosine similarity** | 需要 `en_core_web_lg` / `md`（几百 MB）违反"不引入额外模型"约束；与 F-134 模式匹配 + LLM 校验重叠；弱匹配难区分"差不多"（模糊）与"差不多吧"（语气） |
 | **spaCy 库本体（即便不加载 word vectors 模型）** | 与 F-134 `FuzzyPatternLibrary` 等价（`matcher: Callable[[str], bool]`）；tokenizer 用 Python `str.split` / `re` 即可；rule-based Matcher 用现有库已实现；引入仅增加依赖与维护负担 |
 | **RDFLib / owlrl** | F-142 Z3 已支持 SROIQ（OWL DL 的逻辑基础），能力 ⊇ OWL-RL；F-154 ontology 推理通过 Z3 + Turtle→SMT 编码完成；引入新推理后端增加测试矩阵与依赖维护 |
+| **Alloy Analyzer** | F-142 Z3 已覆盖关系逻辑 + SAT（Alloy 底层就是 Kodkod + SAT）；Alloy 无原生 Python API，需 JPype/Celery 桥接；引入仅增加依赖不增加能力 |
+| **MiniZinc + Gecode / Chuffed** | 与 F-152 OR-Tools CP-SAT 解决同类问题（约束优化求解），功能重叠；MiniZinc 是建模语言而非求解器，需 + Gecode/Chuffed 后端；CP-SAT 性能更优 + Python 原生绑定 + 已有 pyproject.toml 规划 |
+| **OR-Tools 非 CP-SAT 子模块**（`ortools.routing` / `ortools.linear_solver` / `ortools.constraint_solver` / `ortools.algorithms` / `ortools.graph` / `ortools.ml`） | OR-Tools 是 meta-package，routing 含 ML 启发式、constraint_solver 是 VRP、ml/rl 是黑盒，违反项目"不引入额外模型"红线；图算法由 NetworkX + F-142 Z3 已覆盖；**唯一允许**：F-152 通过 `ortools.sat.python.cp_model` 引入 CP-SAT 子模块，由 pyproject.toml ruff `flake8-tidy-imports banned-api` 规则在 CI 强制守门（详见 F-152 Phase 1 方案 A） |
 
 ### 通过的决策
 
@@ -245,6 +249,7 @@
 5. **种子模板 status = approved**：MVP 不需要 experimental 子类；治理流程已支持 deprecate。
 6. **R-METHOD-006 warning-only**：与 R-METHOD-001/002/003 一致，不阻断 F-149 现有用户。
 7. **CLI 挂在 `lkb template` 子组**：与 `lkb method` 平级，避免在 `lkb` 顶层命令爆炸。
+8. **OR-Tools 仅通过 lint 守门引入 CP-SAT**（F-152 方案 A）：不创建 import wrapper；通过 `pyproject.toml` 的 `flake8-tidy-imports banned-api` 规则禁止 6 个非 cp_model 子模块；docstring + CI lint 双层守门；其他 OR-Tools 子模块通过本表"否决决策清单"显式拒绝。
 
 ## 依赖与协同
 

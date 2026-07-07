@@ -49,9 +49,46 @@ LKB 的核心使命是"分解 + 校验"。CP-SAT 的核心使命是**调度**：
 
 ### Phase 1 — 依赖集成（~0.5 周）
 
-1. 在 `pyproject.toml` 增加 `ortools>=9.8` 到 `dependencies`（或 `[project.optional-dependencies] scheduling`）。
-2. `clawcodex_ext/logical_kanban/scheduling_solver.py` 顶部 `try: from ortools.sat.python import cp_model; except ImportError: CP_MODEL = None`。
-3. 定义 `SchedulingUnavailable` 异常。
+**核心约束（方案 A — lint 守门）**：OR-Tools 是 meta-package，包含 6 个会污染 LKB 的子模块（routing 含 ML 启发式、linear_solver 不需要、constraint_solver 是 VRP、algorithms 是 TSP/装箱、graph 已用 NetworkX 替代、ml/rl 是启发式黑盒）。**LKB 只允许导入 `ortools.sat.python.cp_model`**，由 `pyproject.toml` 的 ruff `flake8-tidy-imports` 规则强制守门，不在 Python 导入层做硬包装。
+
+1. 在 `pyproject.toml` 增加 `ortools>=9.8` 到 `[project.optional-dependencies] scheduling`（**不放入** `dependencies`，避免污染核心安装）。
+2. `pyproject.toml` 的 `[tool.ruff.lint]` 段增加 `flake8-tidy-imports` 的 `banned-imports` 规则，禁止 6 个非 cp_model 子模块：
+   ```toml
+   [tool.ruff.lint]
+   extend-select = ["TID251"]   # flake8-tidy-imports
+
+   [tool.ruff.lint.flake8-tidy-imports]
+   ban-relative-imports = "parents"
+
+   [tool.ruff.lint.flake8-tidy-imports.banned-api]
+   "ortools.routing".msg = "F-152: Only ortools.sat.python.cp_model is allowed (OR-Tools routing 含 ML 启发式)."
+   "ortools.linear_solver".msg = "F-152: Only ortools.sat.python.cp_model is allowed."
+   "ortools.constraint_solver".msg = "F-152: Only ortools.sat.python.cp_model is allowed (constraint_solver 是 VRP)."
+   "ortools.algorithms".msg = "F-152: Only ortools.sat.python.cp_model is allowed."
+   "ortools.graph".msg = "F-152: Only ortools.sat.python.cp_model is allowed (graph 用 NetworkX 已覆盖)."
+   "ortools.ml".msg = "F-152: 违反项目'不引入额外 ML 模型'红线."
+   ```
+3. `clawcodex_ext/logical_kanban/scheduling_solver.py` 顶部 docstring **强制声明** + 单点导入：
+   ```python
+   """F-152 SchedulingSolver.
+
+   ⚠️ DO NOT IMPORT FROM ortools.* EXCEPT ortools.sat.python.cp_model.
+
+   OR-Tools meta-package 包含 routing / linear_solver / constraint_solver /
+   algorithms / graph / ml 等子模块，其中部分含启发式 / ML 黑盒，违反项目
+   "不引入额外模型" 强约束。本文件只允许 CP-SAT 子模块，由 pyproject.toml
+   的 ruff flake8-tidy-imports banned-api 规则在 CI 强制拒绝违规导入。
+   """
+   try:
+       from ortools.sat.python import cp_model
+       from ortools.sat.python.cp_model import (
+           CpModel, CpSolver, OPTIMAL, FEASIBLE, INFEASIBLE, MODEL_INVALID,
+       )
+   except ImportError:
+       cp_model = None
+   ```
+4. 定义 `SchedulingUnavailable` 异常：当 `cp_model is None` 时抛出。
+5. CI 工作流 `.github/workflows/ci.yml` 的 `lint` job **不修改默认阻断行为**（与 F-138 / F-149 一致），但 F-152 实施 PR 需在 PR description 中确认 ruff 新规则已生效。
 
 ### Phase 2 — 数据结构（~1 周）
 
@@ -121,7 +158,9 @@ LKB 的核心使命是"分解 + 校验"。CP-SAT 的核心使命是**调度**：
 
 ## 验收标准
 
-- [ ] OR-Tools 依赖加入 `pyproject.toml`，可选 `extras_require=["scheduling"]`。
+- [ ] OR-Tools 依赖加入 `pyproject.toml` 的 `[project.optional-dependencies] scheduling`（**不放入** `dependencies`），安装命令 `pip install clawcodex[scheduling]`。
+- [ ] `pyproject.toml` 的 `[tool.ruff.lint]` 含 `flake8-tidy-imports` 的 `banned-api` 规则，禁止 6 个非 cp_model 子模块（routing / linear_solver / constraint_solver / algorithms / graph / ml），CI 上违规导入会被 lint 拒绝。
+- [ ] `scheduling_solver.py` 顶部 docstring 明确 "DO NOT IMPORT FROM ortools.* EXCEPT ortools.sat.python.cp_model"，并通过 ruff 校验。
 - [ ] `SchedulingSolver` 在 N≤20 任务 + M≤5 资源 + horizon≤30 天的规模下 <1s 求解。
 - [ ] 支持 4 种约束类型：`no_overlap` / `cumulative` / `interval` / `before` / `after` + 时窗。
 - [ ] 支持 3 种目标：`makespan` / `weighted_completion` / `resource_level`。
