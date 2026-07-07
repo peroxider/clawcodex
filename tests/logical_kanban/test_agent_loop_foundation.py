@@ -64,7 +64,7 @@ def test_feature_on_denies_blocked_task_status_write(
     assert result.is_error is True
     assert result.output["status"] == "denied"
     assert result.output["reason"]["code"] == "blocked_task_cannot_enter_in_progress"
-    assert result.output["logicalKanban"]["validation"]["status"] == "denied"
+    assert result.output["lkb"]["decision"] == "denied"
     assert ctx.tasks[blocked]["status"] == "pending"
 
 

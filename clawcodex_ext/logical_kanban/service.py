@@ -438,7 +438,21 @@ class LogicalKanbanService:
                 validation_run_id=validation.validation_run_id,
                 reason={
                     'code': reason_code,
-                    'validation': validation.to_dict(),
+                    'validation': {
+                        'validationRunId': validation.validation_run_id,
+                        'taskId': validation.task_id,
+                        'result': validation.result,
+                        'status': validation.status,
+                        'humanMessage': (
+                            validation.issues[0].message if validation.issues else 'Validation denied.'
+                        ),
+                        'counterexample': validation.counterexample,
+                        'repairSuggestions': [
+                            suggestion.to_dict()
+                            for issue in validation.issues
+                            for suggestion in issue.repair_suggestions
+                        ],
+                    },
                 },
             )
         _audit_log(context).append(

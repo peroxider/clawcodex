@@ -130,15 +130,9 @@ def _denied_result(
 ) -> ToolResult:
     lkb_payload: dict[str, Any] = {
         'decision': 'denied',
-        'validationRunId': validation.validation_run_id,
-        'proposalId': validation.proposal_id,
-        'taskId': validation.task_id,
         'result': validation.result,
-        'engine': validation.engine,
-        'engineVersion': validation.engine_version,
-        'inputFactsHash': validation.input_facts_hash,
-        'rulesetHash': validation.ruleset_hash,
-        'durationMs': validation.duration_ms,
+        'validationRunId': validation.validation_run_id,
+        'taskId': validation.task_id,
         'humanMessage': (
             validation.issues[0].message if validation.issues else 'Validation denied.'
         ),
@@ -149,7 +143,6 @@ def _denied_result(
             for issue in validation.issues
             for suggestion in issue.repair_suggestions
         ],
-        'validation': validation.to_dict(),
     }
     if proposal.change.kind == 'legacy_todo_replace_all':
         lkb_payload['compatibilityMode'] = 'legacy_todo_write'
@@ -164,15 +157,6 @@ def _denied_result(
             'status': 'denied',
             'reason': commit.reason or {'code': 'validation_denied'},
             'lkb': lkb_payload,
-            'logicalKanban': {
-                'proposal': {
-                    'proposalId': proposal.proposal_id,
-                    'changeKind': proposal.change.kind,
-                    'snapshotHash': proposal.snapshot_hash,
-                },
-                'validation': validation.to_dict(),
-                'commit': commit.to_dict(),
-            },
         },
     )
 
