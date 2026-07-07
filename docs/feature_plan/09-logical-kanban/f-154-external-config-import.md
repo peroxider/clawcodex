@@ -67,12 +67,12 @@
 
 ### Phase 1 — 格式规范（~1 周）
 
-1. **Method Library JSON Schema** (`docs/feature_plan/09-logical-kanban/f-154-method-library-schema.json`)：
+1. **Method Library JSON Schema** (`docs/schemas/logical-kanban/method-library.schema.json`)：
    - 完整描述 `EngineeringMethod` / `SubtaskTemplate` / `AcceptanceTemplate` 的 JSON 表示。
    - 必填字段、可选字段、默认值。
    - 版本字段 `"schema_version": "1.0.0"`。
    - `min_lkb_version` 字段声明最低兼容版本。
-2. **Operation Schema JSON Schema** (`docs/feature_plan/09-logical-kanban/f-154-operation-schema-schema.json`)：
+2. **Operation Schema JSON Schema** (`docs/schemas/logical-kanban/operation-schema.schema.json`)：
    - 单个 operation 结构：
      ```json
      {
@@ -89,7 +89,7 @@
 3. **Domain Ontology 格式**：
    - 优先使用 [Turtle (TTL)](https://www.w3.org/TR/turtle/) 格式（人类可读、广泛支持）。
    - 文档化最小可用子集：`owl:Class` / `owl:ObjectProperty` / `rdfs:subClassOf` / `rdfs:domain` / `rdfs:range`。
-   - 提供最小模板 `docs/feature_plan/09-logical-kanban/f-154-ontology-template.ttl`。
+   - 提供最小模板 `docs/templates/logical-kanban/ontology-template.ttl`。
 4. **Manifest 文件**（多文件目录场景）：
    ```json
    {
@@ -209,9 +209,9 @@
    - 端到端：用户提供 ttl + json + yaml → import → LLM 在 decompose 时引用方法 + ontology。
 3. 文档：
    - `docs/feature_plan/09-logical-kanban/f-154-user-guide.md` — 完整使用指南。
-   - `docs/feature_plan/09-logical-kanban/f-154-method-library-schema.json` — JSON Schema。
-   - `docs/feature_plan/09-logical-kanban/f-154-operation-schema-schema.json` — JSON Schema。
-   - `docs/feature_plan/09-logical-kanban/f-154-ontology-template.ttl` — 最小 ontology 模板。
+   - `docs/schemas/logical-kanban/method-library.schema.json` — JSON Schema。
+   - `docs/schemas/logical-kanban/operation-schema.schema.json` — JSON Schema。
+   - `docs/templates/logical-kanban/ontology-template.ttl` — 最小 ontology 模板。
    - `docs/feature_plan/09-logical-kanban/f-154-entry-points.md` — 第三方包打包指南。
 4. 示例仓库（**硬交付，与 user-guide 一一对应**）：`examples/external-configs/` 必须包含 3 个场景的完整可运行配置：
    - `examples/external-configs/k8s-deploy/`：Kubernetes 部署场景，含 ontology（Pod / Service / Deployment 等 K8s 概念）+ operation schema（`OP-rolling-update` / `OP-canary-deploy` / `OP-rollback`）+ method library（M-deploy-canary-001 等）。
@@ -278,9 +278,9 @@
 ## 文件变更清单
 
 ```
-NEW  docs/feature_plan/09-logical-kanban/f-154-method-library-schema.json        # ~150 行 JSON Schema
-NEW  docs/feature_plan/09-logical-kanban/f-154-operation-schema-schema.json      # ~120 行 JSON Schema
-NEW  docs/feature_plan/09-logical-kanban/f-154-ontology-template.ttl            # ~30 行 Turtle
+NEW  docs/schemas/logical-kanban/method-library.schema.json        # ~150 行 JSON Schema
+NEW  docs/schemas/logical-kanban/operation-schema.schema.json      # ~120 行 JSON Schema
+NEW  docs/templates/logical-kanban/ontology-template.ttl            # ~30 行 Turtle
 NEW  docs/feature_plan/09-logical-kanban/f-154-user-guide.md                    # ~400 行
 NEW  docs/feature_plan/09-logical-kanban/f-154-entry-points.md                  # ~150 行
 NEW  clawcodex_ext/logical_kanban/external_config.py                            # ~500 行

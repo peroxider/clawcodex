@@ -108,7 +108,7 @@ F-153 引入 **save-as-method workflow + 版本治理 + 覆盖率指标**，让�
    clawcodex-dev lkb method approve <proposal_id> [--reviewer=alice]
    clawcodex-dev lkb method reject <proposal_id> --reason="..."
    clawcodex-dev lkb method deprecate <method_id> [--replacement=M-yyy]
-   clawcodex-dev lkb method coverage [--golden-set=docs/feature_plan/09-logical-kanban/golden_set.json]
+   clawcodex-dev lkb method coverage [--golden-set=clawcodex_ext/logical_kanban/golden_set.json]
    ```
 2. 在 `clawcodex_ext/cli/lkb_method_cmd/commands.py` 使用 `@register("lkb")` 装饰器（参考 `auth_cmd.py` 的 `@register("auth")` 风格），主入口 `run_lkb_command(args)` 解析 `method` 子命令后分发到具体 handler。
 3. 在 `clawcodex_ext/cli/subcommand_registry.py:load_builtin_subcommands()` 增加 `from clawcodex_ext.cli.lkb_method_cmd import commands as _lkb_method_commands  # noqa: F401`，确保 CLI 启动时自动加载。
@@ -116,7 +116,7 @@ F-153 引入 **save-as-method workflow + 版本治理 + 覆盖率指标**，让�
 
 ### Phase 5 — 覆盖率指标与黄金集（~1 周）
 
-1. 黄金集定义：`docs/feature_plan/09-logical-kanban/golden_set.json`：
+1. 黄金集定义：`clawcodex_ext/logical_kanban/golden_set.json`：
    ```json
    [
      {"goal": "Add JWT auth middleware", "expected_method_pattern": "add_middleware"},
@@ -216,7 +216,7 @@ NEW  clawcodex_ext/cli/lkb_method_cmd/__init__.py           # ~5 行
 NEW  clawcodex_ext/cli/lkb_method_cmd/commands.py           # ~300 行（@register("lkb") + 子命令分发）
 MOD  clawcodex_ext/logical_kanban/method_library.py         # +60 行（加载顺序、版本 API）
 MOD  clawcodex_ext/cli/subcommand_registry.py               # +3 行（load_builtin_subcommands 注册）
-NEW  docs/feature_plan/09-logical-kanban/golden_set.json    # ~50 行
+NEW  clawcodex_ext/logical_kanban/golden_set.json           # ~50 行
 NEW  docs/feature_plan/09-logical-kanban/f-153-method-library-paths.md
 NEW  tests/logical_kanban/test_f153_method_governance.py    # ~350 行
 ```
