@@ -122,6 +122,20 @@ from .ir import (
 from .ir_hash import assertion_hash, canonical_hash, canonical_json
 from .ir_renderer import render_assertion, render_node, render_proof_trace
 from .llm_fact_extractor import LlmFactExtractor, extract_facts
+from .method_library import (
+    AcceptanceTemplate,
+    EngineeringMethod,
+    METHOD_LIBRARY,
+    SubtaskRole,
+    SubtaskTemplate,
+    get_all_methods,
+    get_method,
+    list_methods,
+    load_method_library,
+    register_method,
+    reset_method_registry,
+    save_method_library,
+)
 from .metrics import (
     LLM_FACTS_DROPPED,
     LLM_FACTS_EXTRACTED,
@@ -155,7 +169,12 @@ from .predicate_extractor import (
     extract_predicates,
     validate_assertion,
 )
-from .rule_engine import Layer1RuleEngine, RuleEngineResult, evaluate_rules
+from .rule_engine import (
+    Layer1RuleEngine,
+    RuleEngineResult,
+    evaluate_rules,
+    validate_method_compliance,
+)
 from .runtime import LogicalKanbanRuntime, get_logical_kanban
 from .service import LogicalKanbanService
 from .solver_adapter import (
@@ -201,6 +220,7 @@ from .types import (
 from .world_generator import WorldGenerator
 
 __all__ = [
+    'AcceptanceTemplate',
     'AggregationAction',
     'AggregationDecision',
     'AggregationStrategy',
@@ -219,6 +239,7 @@ __all__ = [
     'AuditLog',
     'BUILT_IN_GLOSSARY',
     'BUILT_IN_PATTERN_LIBRARY',
+    'EngineeringMethod',
     'CAP_VERBS',
     'CanonicalAssertion',
     'CausalEdge',
@@ -260,6 +281,9 @@ __all__ = [
     'LlmKnowledgeAdapter',
     'LogicalKanbanRuntime',
     'LogicalKanbanService',
+    'METHOD_LIBRARY',
+    'SubtaskRole',
+    'SubtaskTemplate',
     'Mace4SolverAdapter',
     'MultiWorldResult',
     'MultiWorldValidator',
@@ -336,14 +360,20 @@ __all__ = [
     'extract_predicates',
     'get_audit_log',
     'get_logical_kanban',
+    'get_all_methods',
+    'get_method',
     'implies',
     'is_strict_causal_enabled',
     'latest_denial_for_task',
+    'list_methods',
+    'load_method_library',
     'make_canonical',
     'maybe_commit_task_update',
     'maybe_commit_todo_write',
     'next_actions_for_task',
     'not_',
+    'register_method',
+    'reset_method_registry',
     'or_',
     'parse_mace4_interpretation',
     'parse_szs_status',
@@ -366,6 +396,7 @@ __all__ = [
     'record_validation_run',
     'register_sink',
     'render_assertion',
+    'save_method_library',
     'render_node',
     'render_proof_trace',
     'reset_sinks',
@@ -375,4 +406,5 @@ __all__ = [
     'to_wire_json',
     'validate_assertion',
     'validate_task_transition',
+    'validate_method_compliance',
 ]

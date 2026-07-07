@@ -25,6 +25,7 @@ from .solver_pipeline import SolverPipeline
 from .types import FactsSnapshot, ValidationIssue, ValidationRun
 
 if TYPE_CHECKING:
+    from .method_library import EngineeringMethod
     from clawcodex_ext.providers.base import BaseProvider
     from clawcodex_ext.tool_system.context import ToolContext
 
@@ -98,11 +99,16 @@ _TASK_KEYS = {
     "blockedBy",
     "lkbMetadata",
 }
+# F-150 added ``method_ref`` so the LLM can attach a method-library reference
+# to a ProposedTask.  The field is OPTIONAL: omitting it leaves the task
+# un-method-tagged.  When present it must be a non-empty string (see
+# ``_validate_lkb_metadata`` below).
 _LKB_METADATA_KEYS = {
     "assertions",
     "acceptance_proof",
     "assumptions",
     "strict_acceptance",
+    "method_ref",
 }
 
 
@@ -116,7 +122,17 @@ class TaskDecomposer:
         ambiguity_detector: AmbiguityDetector | None = None,
         solver_pipeline: SolverPipeline | None = None,
         max_retries: int = 1,
+        method_library: tuple["EngineeringMethod", ...] | None = None,
     ) -> None:
+        # F-150: optionally pin the method library used for R-METHOD-* checks.
+        # ``None`` means "use the default METHOD_LIBRARY at validation time".
+        # We resolve to a concrete tuple so the snapshot of the library at
+        # constructor time is used for all subsequent ``decompose()`` calls.
+        if method_library is None:
+            from .method_library import METHOD_LIBRARY
+
+            method_library = METHOD_LIBRARY
+        self.method_library = method_library
         self.llm_provider = llm_provider
         self.ambiguity_detector = ambiguity_detector or AmbiguityDetector()
         self.solver_pipeline = solver_pipeline or SolverPipeline()
@@ -253,10 +269,14 @@ class TaskDecomposer:
             "\"activeForm\": \"...\", \"acceptanceCriteria\": [\"...\"], "
             "\"blockedBy\": [\"tmp-...\"], "
             "\"lkbMetadata\": {\"assertions\": [...], \"acceptance_proof\": \"...\", "
-            "\"assumptions\": [...], \"strict_acceptance\": false}}], "
+            "\"assumptions\": [...], \"strict_acceptance\": false, "
+            "\"method_ref\": \"M-add-api-endpoint-001\"}}], "
             "\"dependencies\": [[\"tmp-a\", \"tmp-b\"]], "
             "\"assumptions\": [\"...\"]}. "
-            "accepted lkbMetadata keys: assertions, acceptance_proof, assumptions, strict_acceptance."
+            "accepted lkbMetadata keys: assertions, acceptance_proof, "
+            "assumptions, strict_acceptance, method_ref.  method_ref is "
+            "optional; when present it MUST be a method_id from the "
+            "engineering method library."
         )
 
     @staticmethod
@@ -395,6 +415,25 @@ class TaskDecomposer:
                     )
                 )
 
+        # F-150: emit method-compliance warnings (R-METHOD-001/002/003).
+        # These never block the commit per the F-150 design decision; the
+        # ``_merge_result`` helper only flips the result to ``fail`` for
+        # error-severity issues, so warnings ride along in the ValidationRun.
+        from .rule_engine import validate_method_compliance
+
+        method_plan = DecompositionPlan(
+            decomposition_run_id=decomposition_run_id,
+            goal="",
+            tasks=tasks,
+            dependencies=dependencies,
+            assumptions=(),
+            ambiguity_report=ambiguity_report,
+            validation_run=None,
+        )
+        issues.extend(
+            validate_method_compliance(method_plan, method_library=self.method_library)
+        )
+
         # Run the solver pipeline on the snapshot for a canonical ValidationRun.
         request = SolverRequest(snapshot=snapshot)
         pipeline_result = self.solver_pipeline.validate(
@@ -478,7 +517,10 @@ class TaskDecomposer:
     ) -> "Any":
         from .types import ValidationResult
 
-        if issues:
+        # F-150: warnings (e.g. R-METHOD-*) must NOT block the commit per
+        # the F-150 design decision ("MVP 阶段保证向后兼容").  Only
+        # severity='error' issues flip the result to 'fail'.
+        if any(issue.severity == "error" for issue in issues):
             return "fail"
         if pipeline_result in ("pass", "fail", "unknown", "timeout", "error", "stale"):
             return pipeline_result  # type: ignore[return-value]
@@ -681,6 +723,15 @@ def _validate_lkb_metadata(lkb: dict[str, Any], where: str) -> None:
                     )
     if "acceptance_proof" in lkb and not isinstance(lkb["acceptance_proof"], (str, type(None))):
         raise TaskDecompositionError(f"{where}.acceptance_proof must be a string or null")
+    # F-150: ``method_ref`` is optional; if present, it must be a non-empty
+    # string.  We do not enforce method-library membership here — that is the
+    # job of R-METHOD-UNKNOWN in ``validate_method_compliance``.
+    if "method_ref" in lkb:
+        method_ref = lkb["method_ref"]
+        if not isinstance(method_ref, str) or not method_ref.strip():
+            raise TaskDecompositionError(
+                f"{where}.method_ref must be a non-empty string when present"
+            )
 
 
 __all__ = [

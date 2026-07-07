@@ -4,6 +4,12 @@ The engine evaluates the six MVP rules defined in F-132 synchronously,
 without external solvers. It consumes a :class:`FactsSnapshot` produced by
 ``context_adapter.build_facts_snapshot`` and returns deterministic derived
 facts plus proof traces for every denial.
+
+F-150 adds :meth:`Layer1RuleEngine.validate_method_compliance` which
+evaluates three method-library rules (R-METHOD-001/002/003) against a
+:class:`~.decomposer.DecompositionPlan`. Those rules emit ``warning``-level
+:class:`~.types.ValidationIssue` entries — they never block the commit
+during the MVP phase.
 """
 
 from __future__ import annotations
@@ -11,9 +17,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
-from .types import FactsSnapshot
+from .types import FactsSnapshot, ValidationIssue
 
 if TYPE_CHECKING:
+    from .decomposer import DecompositionPlan
+    from .method_library import EngineeringMethod
     from clawcodex_ext.tool_system.context import ToolContext
 
 
@@ -415,3 +423,203 @@ def evaluate_rules(
         strict_acceptance=strict_acceptance,
         acceptance_proof_present=acceptance_proof_present,
     )
+
+
+# ---------------------------------------------------------------------------
+# F-150: method-library compliance (R-METHOD-001 / 002 / 003)
+# ---------------------------------------------------------------------------
+
+
+import re as _re
+
+_SLOT_FINDER = _re.compile(r"\{[a-zA-Z_][a-zA-Z0-9_]*\}")
+
+
+def _strip_slots(template: str) -> str:
+    """Return ``template`` with all ``{slot}`` markers removed.
+
+    Used by R-METHOD-003 to canonicalize an acceptance-template assertion
+    so that we can do a substring match against the task's
+    ``lkbMetadata.assertions`` without worrying about unfilled placeholders.
+    """
+    return _SLOT_FINDER.sub("", template).strip()
+
+
+def _resolve_method(method_id: str, library: tuple["EngineeringMethod", ...] | None) -> "EngineeringMethod | None":
+    if not library:
+        return None
+    for method in library:
+        if method.method_id == method_id:
+            return method
+    return None
+
+
+def validate_method_compliance(
+    plan: "DecompositionPlan",
+    *,
+    method_library: tuple["EngineeringMethod", ...] | None = None,
+) -> tuple[ValidationIssue, ...]:
+    """Evaluate R-METHOD-001/002/003 against ``plan`` and return any issues.
+
+    All issues are emitted with ``severity="warning"`` per the F-150 design
+    decision (MVP phase: methods are guidance, not hard constraints).  The
+    caller (typically :class:`~.decomposer.TaskDecomposer`) decides whether
+    to surface these issues inside its :class:`~.types.ValidationRun`.
+
+    Rules
+    -----
+    R-METHOD-001
+        For each ``ProposedTask`` that references a known method via
+        ``lkbMetadata.method_ref``, the *total* number of tasks referring
+        to that method must match ``method.subtask_templates`` length.  If
+        only a subset is present (typical mid-decomposition state) the
+        issue mentions the missing count.
+
+    R-METHOD-002
+        Every entry in ``method.preconditions`` must be reflected in
+        either ``plan.assumptions`` or the union of
+        ``task.lkbMetadata.assumptions`` across tasks referencing this
+        method.  Mismatches are surfaced as warnings so the user can decide
+        whether to add the assumption or drop the method reference.
+
+    R-METHOD-003
+        When ``method.acceptance_template.strict_acceptance`` is true, the
+        rendered (slot-stripped) ``assertion_template`` must appear in the
+        union of ``task.lkbMetadata.assertions`` for tasks referencing this
+        method.  This guards against silent acceptance regressions where
+        the LLM skips the documented assertion.
+    """
+    # Lazy imports keep rule_engine importable from contexts that have not
+    # yet loaded method_library (e.g. circular-import-safe unit tests).
+    from .decomposer import DecompositionPlan  # type: ignore[attr-defined]
+
+    issues: list[ValidationIssue] = []
+    if not isinstance(plan, DecompositionPlan):
+        raise TypeError("validate_method_compliance expects a DecompositionPlan")
+
+    if method_library is None:
+        try:
+            from .method_library import get_all_methods
+        except ImportError:  # pragma: no cover - defensive
+            return ()
+        method_library = get_all_methods()
+
+    # Bucket tasks by method_ref so we can count subtasks per method.
+    by_method: dict[str, list[Any]] = {}
+    for task in plan.tasks:
+        method_ref = task.lkb_metadata.get("method_ref") if task.lkb_metadata else None
+        if not isinstance(method_ref, str) or not method_ref:
+            continue
+        by_method.setdefault(method_ref, []).append(task)
+
+    if not by_method:
+        return ()
+
+    plan_assumptions = " ".join(plan.assumptions).lower()
+
+    for method_id, tasks in by_method.items():
+        method = _resolve_method(method_id, method_library)
+        if method is None:
+            issues.append(
+                ValidationIssue(
+                    code="R-METHOD-UNKNOWN",
+                    message=(
+                        f"Task(s) reference unknown method_id {method_id!r}; "
+                        "R-METHOD-001/002/003 skipped for this reference."
+                    ),
+                    rule="R-METHOD-001",
+                    severity="warning",
+                )
+            )
+            continue
+
+        # R-METHOD-001 — task count vs subtask template count.
+        expected = len(method.subtask_templates)
+        actual = len(tasks)
+        if actual < expected:
+            missing = expected - actual
+            issues.append(
+                ValidationIssue(
+                    code="R-METHOD-001-INCOMPLETE",
+                    message=(
+                        f"Method {method_id!r} expects {expected} subtask "
+                        f"templates but only {actual} tasks reference it "
+                        f"(missing at least {missing})."
+                    ),
+                    rule="R-METHOD-001",
+                    severity="warning",
+                    task_id=tasks[-1].proposed_task_id,
+                )
+            )
+
+        # Aggregate task-level assumptions and assertions.
+        task_assumptions: list[str] = []
+        task_assertions: list[str] = []
+        for task in tasks:
+            meta = task.lkb_metadata or {}
+            for assumption in meta.get("assumptions") or ():
+                if isinstance(assumption, str) and assumption:
+                    task_assumptions.append(assumption)
+            for assertion in meta.get("assertions") or ():
+                if isinstance(assertion, str) and assertion:
+                    task_assertions.append(assertion)
+        task_assumption_blob = " ".join(task_assumptions).lower()
+
+        # R-METHOD-002 — preconditions must be reflected in assumptions.
+        for precondition in method.preconditions:
+            lowered = precondition.lower()
+            if lowered in plan_assumptions or lowered in task_assumption_blob:
+                continue
+            # Best-effort token overlap — check at least one 5+ char token
+            # from the precondition shows up in any assumption.
+            tokens = [t for t in lowered.split() if len(t) >= 5]
+            if any(token in task_assumption_blob or token in plan_assumptions for token in tokens):
+                continue
+            issues.append(
+                ValidationIssue(
+                    code="R-METHOD-002-PRECONDITION",
+                    message=(
+                        f"Method {method_id!r} precondition {precondition!r} "
+                        "is not reflected in plan.assumptions or task "
+                        "lkbMetadata.assumptions."
+                    ),
+                    rule="R-METHOD-002",
+                    severity="warning",
+                    task_id=tasks[0].proposed_task_id,
+                )
+            )
+
+        # R-METHOD-003 — strict acceptance assertion must be present.
+        if (
+            method.acceptance_template is not None
+            and method.acceptance_template.strict_acceptance
+        ):
+            canonical = _strip_slots(
+                method.acceptance_template.assertion_template
+            )
+            canonical_lower = canonical.lower()
+            # Match either as a substring, or as the prefix before any
+            # parenthesis — this lets the LLM fill in slots inline
+            # (``EndpointContractStable(/api/v1/things)`` matches
+            # ``EndpointContractStable({route})``).
+            canonical_prefix = canonical_lower.split("(", 1)[0].strip()
+            assertion_blob = " ".join(task_assertions).lower()
+            matched = bool(canonical_lower) and (
+                canonical_lower in assertion_blob
+                or (canonical_prefix and canonical_prefix in assertion_blob)
+            )
+            if not matched:
+                issues.append(
+                    ValidationIssue(
+                        code="R-METHOD-003-ASSERTION",
+                        message=(
+                            f"Method {method_id!r} has strict_acceptance but "
+                            f"no task assertion matches {canonical!r}."
+                        ),
+                        rule="R-METHOD-003",
+                        severity="warning",
+                        task_id=tasks[0].proposed_task_id,
+                    )
+                )
+
+    return tuple(issues)
