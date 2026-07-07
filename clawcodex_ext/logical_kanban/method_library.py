@@ -16,12 +16,16 @@ technology stack — see F-150 design note §"已拟定的设计决定".
 from __future__ import annotations
 
 import json
+import logging
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Literal
 
 from .method_seed import build_seed_methods
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Status enum
@@ -276,11 +280,11 @@ def _validate_method_internals(method: EngineeringMethod) -> None:
         _SLOT_PATTERN.findall(method.acceptance_template.assertion_template)
 
 
-def register_method(method: EngineeringMethod) -> None:
+def register_method(method: EngineeringMethod, *, force: bool = False) -> None:
     """Register ``method`` in the in-memory method library.
 
     * The method must validate (see :func:`_validate_method_internals`).
-    * ``method.method_id`` must be unique in the registry.
+    * ``method.method_id`` must be unique in the registry unless ``force`` is true.
 
     Raises ``ValueError`` on either failure. The seed library is immutable
     in spirit — re-registering a seed ``method_id`` is rejected so that
@@ -294,6 +298,13 @@ def register_method(method: EngineeringMethod) -> None:
 
     existing_ids = {m.method_id for m in _METHOD_REGISTRY}
     if method.method_id in existing_ids:
+        if force:
+            _METHOD_REGISTRY[:] = [
+                existing for existing in _METHOD_REGISTRY
+                if existing.method_id != method.method_id
+            ]
+            _METHOD_REGISTRY.append(method)
+            return
         raise ValueError(
             f"method_id {method.method_id!r} already registered; pick a unique id"
         )
@@ -395,7 +406,7 @@ def save_method_library(
         "methods": [m.to_dict() for m in methods],
     }
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
 
 
 def load_method_library(path: Path) -> tuple[EngineeringMethod, ...]:
@@ -460,15 +471,30 @@ def load_method_library_layered(
         seen[m.method_id] = m
 
     # 2. User-level
-    user_path = (user_cache_dir or Path.home() / ".cache" / "clawcodex" / "lkb" / "methods")
+    user_path = _methods_dir_from_cache_arg(user_cache_dir)
     _merge_from_directory(user_path, seen)
 
     # 3. Project-level
-    if project_dir is not None:
-        project_path = project_dir / ".lkb" / "methods"
-        _merge_from_directory(project_path, seen)
+    project_root = project_dir if project_dir is not None else Path.cwd()
+    project_path = project_root / ".lkb" / "methods"
+    _merge_from_directory(project_path, seen)
 
     return tuple(seen.values())
+
+
+def initialize_method_registry(
+    *,
+    project_dir: Path | None = None,
+    user_cache_dir: Path | None = None,
+) -> tuple[EngineeringMethod, ...]:
+    """Load the layered method library into the live in-memory registry."""
+    methods = load_method_library_layered(
+        project_dir=project_dir,
+        user_cache_dir=user_cache_dir,
+    )
+    _METHOD_REGISTRY.clear()
+    _METHOD_REGISTRY.extend(methods)
+    return tuple(_METHOD_REGISTRY)
 
 
 def _merge_from_directory(
@@ -481,8 +507,13 @@ def _merge_from_directory(
     for fpath in sorted(directory.glob("*.json")):
         try:
             methods = load_method_library(fpath)
-        except Exception:
-            continue  # Corrupt file — skip silently
+        except Exception as exc:
+            logger.warning(
+                "Skipping invalid LKB method library file %s: %s",
+                fpath,
+                exc,
+            )
+            continue
         for method in methods:
             seen[method.method_id] = method
 
@@ -494,9 +525,28 @@ def ensure_default_dirs() -> None:
     - ``~/.cache/clawcodex/lkb/methods/``
     - ``~/.cache/clawcodex/lkb/proposals/``
     """
-    base = Path.home() / ".cache" / "clawcodex" / "lkb"
+    base = default_lkb_cache_dir()
     for sub in ("methods", "proposals"):
         (base / sub).mkdir(parents=True, exist_ok=True)
+
+
+def default_lkb_cache_dir() -> Path:
+    """Return the user-level LKB cache root."""
+    home = os.environ.get("HOME")
+    root = Path(home) if home else Path.home()
+    return root / ".cache" / "clawcodex" / "lkb"
+
+
+def default_user_methods_dir() -> Path:
+    """Return the default user-level method library directory."""
+    return default_lkb_cache_dir() / "methods"
+
+
+def _methods_dir_from_cache_arg(user_cache_dir: Path | None) -> Path:
+    if user_cache_dir is None:
+        return default_user_methods_dir()
+    path = Path(user_cache_dir)
+    return path if path.name == "methods" else path / "methods"
 
 
 def _deserialize_method(raw: dict[str, Any]) -> EngineeringMethod:
@@ -745,9 +795,12 @@ __all__ = [
     "SubtaskRole",
     "SubtaskTemplate",
     "bump_version",
+    "default_lkb_cache_dir",
+    "default_user_methods_dir",
     "ensure_default_dirs",
     "get_all_methods",
     "get_method",
+    "initialize_method_registry",
     "incompatible_change",
     "list_methods",
     "load_method_library",

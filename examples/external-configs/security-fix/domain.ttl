@@ -1,0 +1,11 @@
+@prefix ex: <https://example.com/lkb/security#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex:CVE a owl:Class .
+ex:Vulnerability a owl:Class .
+ex:Patch a owl:Class .
+
+ex:mitigates a owl:ObjectProperty ;
+  rdfs:domain ex:Patch ;
+  rdfs:range ex:Vulnerability .

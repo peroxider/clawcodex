@@ -623,3 +623,79 @@ def validate_method_compliance(
                 )
 
     return tuple(issues)
+
+
+def validate_external_config_references(
+    plan: "DecompositionPlan",
+    *,
+    operations: tuple[Any, ...] | None = None,
+    ontology: Any | None = None,
+) -> tuple[ValidationIssue, ...]:
+    """Evaluate F-154 R-METHOD-004/005 external config rules."""
+
+    from .decomposer import DecompositionPlan  # type: ignore[attr-defined]
+    from .operation_schema import get_all_operation_schemas, predicate_name
+    from .ontology_graph import get_registered_ontology
+
+    if not isinstance(plan, DecompositionPlan):
+        raise TypeError("validate_external_config_references expects a DecompositionPlan")
+
+    if operations is None:
+        operations = get_all_operation_schemas()
+    if ontology is None:
+        ontology = get_registered_ontology()
+
+    issues: list[ValidationIssue] = []
+    operation_ids = {
+        operation.operation_id
+        for operation in operations
+        if hasattr(operation, "operation_id")
+    }
+
+    if operation_ids:
+        for task in plan.tasks:
+            meta = task.lkb_metadata or {}
+            for assumption in meta.get("assumptions") or ():
+                if not isinstance(assumption, str):
+                    continue
+                for operation_id in _external_operation_ids(assumption):
+                    if operation_id not in operation_ids:
+                        issues.append(
+                            ValidationIssue(
+                                code="R-METHOD-004-UNKNOWN-OPERATION",
+                                message=(
+                                    f"Task {task.proposed_task_id} references operation "
+                                    f"{operation_id!r}, but no loaded OperationSchema defines it."
+                                ),
+                                rule="R-METHOD-004",
+                                severity="error",
+                                task_id=task.proposed_task_id,
+                            )
+                        )
+
+    if ontology is not None and getattr(ontology, "classes", None):
+        classes = set(ontology.classes)
+        for task in plan.tasks:
+            meta = task.lkb_metadata or {}
+            for assertion in meta.get("assertions") or ():
+                if not isinstance(assertion, str):
+                    continue
+                class_name = predicate_name(assertion)
+                if class_name and class_name not in classes:
+                    issues.append(
+                        ValidationIssue(
+                            code="R-METHOD-005-UNKNOWN-ONTOLOGY-CLASS",
+                            message=(
+                                f"Task {task.proposed_task_id} assertion {assertion!r} "
+                                f"references ontology class {class_name!r}, but it is not loaded."
+                            ),
+                            rule="R-METHOD-005",
+                            severity="warning",
+                            task_id=task.proposed_task_id,
+                        )
+                    )
+    return tuple(issues)
+
+
+def _external_operation_ids(text: str) -> tuple[str, ...]:
+    return tuple(_re.findall(r"\bOP-[a-z0-9]+(?:-[a-z0-9]+)*\b", text))

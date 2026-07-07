@@ -27,6 +27,7 @@ from clawcodex_ext.logical_kanban.method_library import (
     ensure_default_dirs,
     get_all_methods,
     get_method,
+    initialize_method_registry,
     incompatible_change,
     list_methods,
     load_method_library_layered,
@@ -511,6 +512,70 @@ class TestLayeredLoading:
             assert "M-701" in found
             assert len(result) >= len(METHOD_LIBRARY)
 
+    def test_project_layer_overrides_user_layer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            user_dir = root / "user" / "methods"
+            project_dir = root / "project"
+            project_methods_dir = project_dir / ".lkb" / "methods"
+            user_dir.mkdir(parents=True)
+            project_methods_dir.mkdir(parents=True)
+
+            user_method = _make_draft_method(
+                "M-702", "user_pattern", status="approved"
+            )
+            project_method = _make_draft_method(
+                "M-702", "project_pattern", status="approved"
+            )
+            save_method_library([user_method], user_dir / "user.json")
+            save_method_library([project_method], project_methods_dir / "project.json")
+
+            result = load_method_library_layered(
+                project_dir=project_dir,
+                user_cache_dir=user_dir,
+            )
+            found = {m.method_id: m for m in result}
+            assert found["M-702"].pattern == "project_pattern"
+
+    def test_user_cache_root_argument_loads_methods_subdir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_root = Path(tmp) / "lkb"
+            user_dir = cache_root / "methods"
+            user_dir.mkdir(parents=True)
+            user_method = _make_draft_method(
+                "M-703", "cache_root_pattern", status="approved"
+            )
+            save_method_library([user_method], user_dir / "methods.json")
+
+            result = load_method_library_layered(user_cache_dir=cache_root)
+            found = {m.method_id: m for m in result}
+            assert found["M-703"].pattern == "cache_root_pattern"
+
+    def test_corrupt_method_file_warns_and_is_skipped(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            user_dir = Path(tmp) / "methods"
+            user_dir.mkdir()
+            (user_dir / "broken.json").write_text("{not-json", encoding="utf-8")
+
+            result = load_method_library_layered(user_cache_dir=user_dir)
+            assert len(result) >= len(METHOD_LIBRARY)
+            assert "Skipping invalid LKB method library file" in caplog.text
+
+    def test_initialize_method_registry_uses_layered_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project_dir = Path(tmp) / "project"
+            methods_dir = project_dir / ".lkb" / "methods"
+            methods_dir.mkdir(parents=True)
+            method = _make_draft_method("M-704", "project_loaded", status="approved")
+            save_method_library([method], methods_dir / "project.json")
+
+            initialize_method_registry(project_dir=project_dir)
+            found = get_method("M-704")
+            assert found is not None
+            assert found.pattern == "project_loaded"
+
     def test_default_dirs_created(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             orig_home = os.environ.get("HOME")
@@ -525,6 +590,35 @@ class TestLayeredLoading:
                     os.environ["HOME"] = orig_home
                 else:
                     del os.environ["HOME"]
+
+    def test_load_proposals_missing_dir_does_not_create_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            proposal_dir = Path(tmp) / "missing" / "proposals"
+            load_proposals(proposal_dir)
+            assert not proposal_dir.exists()
+
+    def test_load_proposals_from_json_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            proposal_dir = Path(tmp) / "proposals"
+            proposal_dir.mkdir()
+            method = _make_draft_method("M-705", "loaded_proposal")
+            payload = {
+                "proposalId": "P-ABC12345",
+                "method": method.to_dict(),
+                "status": "draft",
+                "reviewer": "",
+                "reason": "",
+                "createdAt": "2026-01-01T00:00:00+00:00",
+                "updatedAt": "2026-01-01T00:00:00+00:00",
+            }
+            (proposal_dir / "P-ABC12345.json").write_text(
+                json.dumps(payload), encoding="utf-8"
+            )
+
+            load_proposals(proposal_dir)
+            proposal = get_proposal("P-ABC12345")
+            assert proposal is not None
+            assert proposal.method.method_id == "M-705"
 
 
 # ===================================================================

@@ -664,7 +664,10 @@ class TaskDecomposer:
         # These never block the commit per the F-150 design decision; the
         # ``_merge_result`` helper only flips the result to ``fail`` for
         # error-severity issues, so warnings ride along in the ValidationRun.
-        from .rule_engine import validate_method_compliance
+        from .rule_engine import (
+            validate_external_config_references,
+            validate_method_compliance,
+        )
 
         method_plan = DecompositionPlan(
             decomposition_run_id=decomposition_run_id,
@@ -678,6 +681,7 @@ class TaskDecomposer:
         issues.extend(
             validate_method_compliance(method_plan, method_library=self.method_library)
         )
+        issues.extend(validate_external_config_references(method_plan))
 
         # Run the solver pipeline on the snapshot for a canonical ValidationRun.
         request = SolverRequest(snapshot=snapshot)

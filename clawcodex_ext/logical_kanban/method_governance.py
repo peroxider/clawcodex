@@ -14,6 +14,7 @@ State machine
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -23,10 +24,13 @@ from typing import Any, Literal
 from clawcodex_ext.logical_kanban.method_library import (
     EngineeringMethod,
     MethodStatus,
+    default_lkb_cache_dir,
     get_all_methods,
     get_method,
     register_method,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -82,8 +86,10 @@ class MethodProposal:
     updated_at: str = ""
 
 
-#: On-disk directory for proposals
-_DEFAULT_PROPOSAL_DIR = Path.home() / ".cache" / "clawcodex" / "lkb" / "proposals"
+#: On-disk directory for proposals. Kept as a public-ish implementation
+#: detail for older tests; path resolution uses ``default_proposal_dir()`` so
+#: HOME overrides are honored after import too.
+_DEFAULT_PROPOSAL_DIR = default_lkb_cache_dir() / "proposals"
 
 
 # ---------------------------------------------------------------------------
@@ -365,9 +371,19 @@ def _find_proposal_for_method(method_id: str) -> MethodProposal | None:
 # ---------------------------------------------------------------------------
 
 
-def _proposal_path(proposal_dir: Path | None = None) -> Path:
-    dir_path = proposal_dir or _DEFAULT_PROPOSAL_DIR
-    dir_path.mkdir(parents=True, exist_ok=True)
+def default_proposal_dir() -> Path:
+    """Return the default user-level proposal directory."""
+    return default_lkb_cache_dir() / "proposals"
+
+
+def _proposal_path(
+    proposal_dir: Path | None = None,
+    *,
+    create: bool = True,
+) -> Path:
+    dir_path = proposal_dir or default_proposal_dir()
+    if create:
+        dir_path.mkdir(parents=True, exist_ok=True)
     return dir_path
 
 
@@ -385,13 +401,13 @@ def _persist_proposal(proposal: MethodProposal) -> None:
         "updatedAt": proposal.updated_at,
     }
     path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        json.dumps(data, ensure_ascii=True, indent=2), encoding="utf-8"
     )
 
 
 def load_proposals(proposal_dir: Path | None = None) -> None:
     """Load all proposal JSON files from *proposal_dir* into memory."""
-    root = _proposal_path(proposal_dir)
+    root = _proposal_path(proposal_dir, create=False)
     if not root.is_dir():
         return
     for fpath in sorted(root.glob("P-*.json")):
@@ -413,8 +429,8 @@ def load_proposals(proposal_dir: Path | None = None) -> None:
                 updated_at=data.get("updatedAt", ""),
             )
             _proposals[proposal.proposal_id] = proposal
-        except Exception:
-            pass  # Corrupt file — skip silently
+        except Exception as exc:
+            logger.debug("Skipping invalid LKB method proposal file %s: %s", fpath, exc)
 
 
 # ---------------------------------------------------------------------------

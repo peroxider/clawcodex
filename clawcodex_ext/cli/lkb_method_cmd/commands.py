@@ -24,6 +24,7 @@ from clawcodex_ext.logical_kanban.method_library import (
     list_methods,
     get_method,
     get_all_methods,
+    initialize_method_registry,
     save_method_library,
     load_method_library,
 )
@@ -47,8 +48,14 @@ from clawcodex_ext.logical_kanban.decomposer import TaskDecomposer
 # ---------------------------------------------------------------------------
 
 _USAGE = (
-    "usage: clawcodex-dev lkb method <subcommand> [options]\n\n"
+    "usage: clawcodex-dev lkb <method|import|export|config> [options]\n\n"
     "Subcommands:\n"
+    "  import <path|url|entry-point>... [--lint-only] [--recursive] [--force]\n"
+    "                         Import external LKB configs.\n"
+    "  import --list          List lkb.configs entry points.\n"
+    "  export --format=json <output>\n"
+    "                         Export active method/operation config as JSON.\n"
+    "  config list            List loaded external config entities.\n"
     "  list [--status=STATUS] [--pattern-prefix=PREFIX]\n"
     "                         List methods (default: --status=approved).\n"
     "  show <method_id>       Show method details.\n"
@@ -73,7 +80,8 @@ _USAGE = (
 @register("lkb")
 def run_lkb_command(args: list[str]) -> int:
     """Handle ``clawcodex-dev lkb method <subcommand>``."""
-    # Ensure proposals are loaded once
+    # Ensure the file-backed layers are loaded once at CLI startup.
+    initialize_method_registry(project_dir=Path.cwd())
     load_proposals()
 
     if not args:
@@ -95,6 +103,12 @@ def run_lkb_command(args: list[str]) -> int:
             print(_USAGE, file=sys.stderr)
             return 1
         return _dispatch_method(rest)
+    if sub == "import":
+        return _cmd_import(rest)
+    if sub == "export":
+        return _cmd_export(rest)
+    if sub == "config" and rest[:1] == ["list"]:
+        return _cmd_config_list(rest[1:])
 
     # Unknown lkb subcommand — this module only handles ``method``.
     print(f"Unknown lkb subcommand: {sub}", file=sys.stderr)
@@ -279,7 +293,7 @@ def _cmd_coverage(args: list[str]) -> int:
     else:
         # Try default golden set path
         default_path = (
-            Path("docs") / "feature_plan" / "09-logical-kanban" / "golden_set.json"
+            Path("clawcodex_ext") / "logical_kanban" / "golden_set.json"
         )
         if default_path.is_file():
             golden_set = json.loads(default_path.read_text(encoding="utf-8"))
@@ -294,6 +308,96 @@ def _cmd_coverage(args: list[str]) -> int:
     report = evaluator.evaluate(golden_set)
 
     print(_format_coverage_report(report))
+    return 0
+
+
+def _cmd_import(args: list[str]) -> int:
+    from clawcodex_ext.logical_kanban.external_config import ExternalConfigImporter
+
+    if "--list" in args:
+        entries = ExternalConfigImporter.list_entry_points()
+        if entries:
+            print("\n".join(entries))
+        else:
+            print("(no lkb.configs entry points)")
+        return 0
+
+    lint_only = "--lint-only" in args
+    recursive = "--recursive" in args
+    force = "--force" in args
+    sources = [arg for arg in args if not arg.startswith("--")]
+    if not sources:
+        print("Usage: clawcodex-dev lkb import <path|url|entry-point>...", file=sys.stderr)
+        return 1
+
+    importer = ExternalConfigImporter(force=force, lint_only=lint_only)
+    exit_code = 0
+    for source in sources:
+        try:
+            if source.startswith("https://"):
+                result = importer.import_url(source)
+                results = [result]
+            else:
+                path = Path(source)
+                if path.exists():
+                    if path.is_dir():
+                        results = importer.import_directory(path, recursive=recursive)
+                    else:
+                        results = [importer.import_file(path)]
+                else:
+                    results = [importer.import_package(source)]
+        except Exception as exc:
+            print(f"error: {source}: {exc}", file=sys.stderr)
+            exit_code = 2
+            continue
+        for result in results:
+            print(_format_import_result(result))
+            if result.error_count:
+                exit_code = max(exit_code, 2)
+            elif result.lint_issues:
+                exit_code = max(exit_code, 1)
+    return exit_code if lint_only else (2 if exit_code == 2 else 0)
+
+
+def _cmd_export(args: list[str]) -> int:
+    from clawcodex_ext.logical_kanban.method_library import get_all_methods
+    from clawcodex_ext.logical_kanban.operation_schema import get_all_operation_schemas
+
+    fmt = _parse_flag(args, "--format", "json")
+    targets = [arg for arg in args if not arg.startswith("--") and arg != fmt]
+    if fmt != "json":
+        print("error: only --format=json is supported in this CLI", file=sys.stderr)
+        return 1
+    if not targets:
+        print("Usage: clawcodex-dev lkb export --format=json <output>", file=sys.stderr)
+        return 1
+    output = Path(targets[-1])
+    payload = {
+        "schemaVersion": "1.0.0",
+        "methods": [method.to_dict() for method in get_all_methods()],
+        "operations": [op.to_dict() for op in get_all_operation_schemas()],
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    print(f"Exported LKB config to {output}")
+    return 0
+
+
+def _cmd_config_list(args: list[str]) -> int:
+    from clawcodex_ext.logical_kanban.method_library import get_all_methods
+    from clawcodex_ext.logical_kanban.operation_schema import get_all_operation_schemas
+    from clawcodex_ext.logical_kanban.ontology_graph import get_registered_ontology
+
+    methods = get_all_methods()
+    operations = get_all_operation_schemas()
+    ontology = get_registered_ontology()
+    print("Kind              Count  Source")
+    print(f"method_library    {len(methods):5d}  registry")
+    print(f"operation_schema  {len(operations):5d}  registry")
+    if ontology is None:
+        print("ontology              0  registry")
+    else:
+        print(f"ontology          {ontology.item_count:5d}  {ontology.source}")
     return 0
 
 
@@ -426,4 +530,16 @@ def _format_coverage_report(report: dict[str, Any]) -> str:
         lines.append("  Integrity warnings:")
         for w in warnings:
             lines.append(f"    - {w}")
+    return "\n".join(lines)
+
+
+def _format_import_result(result: Any) -> str:
+    status = "ok" if result.success else "error"
+    lines = [
+        f"{status}: {result.kind} {result.item_count} item(s) from {result.source}",
+    ]
+    for issue in result.lint_issues:
+        location = f" {issue.source}" if issue.source else ""
+        field = f" {issue.field_path}" if issue.field_path else ""
+        lines.append(f"  [{issue.severity}] {issue.code}:{location}{field} {issue.message}")
     return "\n".join(lines)

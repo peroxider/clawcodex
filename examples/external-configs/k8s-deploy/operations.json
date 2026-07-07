@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0.0",
+  "operations": [
+    {
+      "operation_id": "OP-rolling-update",
+      "description": "Roll a Kubernetes Deployment to a new image.",
+      "preconditions": ["DeploymentReady(app)", "ImageBuilt(app)"],
+      "effects": ["Deployment(app)"],
+      "estimated_duration_minutes": 30,
+      "required_resources": ["cluster-admin"],
+      "version": "1.0.0"
+    },
+    {
+      "operation_id": "OP-canary-deploy",
+      "description": "Shift a small percentage of traffic to a canary.",
+      "preconditions": ["Service(app)", "MetricsReady(app)"],
+      "effects": ["Service(app)"],
+      "estimated_duration_minutes": 45,
+      "required_resources": ["cluster-admin"],
+      "version": "1.0.0"
+    },
+    {
+      "operation_id": "OP-rollback",
+      "description": "Rollback a Deployment to the last known good revision.",
+      "preconditions": ["Deployment(app)", "RevisionAvailable(app)"],
+      "effects": ["Deployment(app)"],
+      "estimated_duration_minutes": 15,
+      "required_resources": ["cluster-admin"],
+      "version": "1.0.0"
+    }
+  ]
+}

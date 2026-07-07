@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0.0",
+  "operations": [
+    {
+      "operation_id": "OP-apply-patch",
+      "description": "Apply a security patch.",
+      "preconditions": ["PatchAvailable(cve)", "TestsReady(app)"],
+      "effects": ["Patch(cve)"],
+      "estimated_duration_minutes": 40,
+      "required_resources": ["maintainer"],
+      "version": "1.0.0"
+    },
+    {
+      "operation_id": "OP-rotate-credential",
+      "description": "Rotate exposed credentials.",
+      "preconditions": ["CredentialIdentified(secret)", "OwnerApproved(secret)"],
+      "effects": ["Patch(secret)"],
+      "estimated_duration_minutes": 25,
+      "required_resources": ["security"],
+      "version": "1.0.0"
+    }
+  ]
+}

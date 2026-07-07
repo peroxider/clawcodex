@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0.0",
+  "operations": [
+    {
+      "operation_id": "OP-ingest-batch",
+      "description": "Ingest a batch dataset into the lake.",
+      "preconditions": ["Dataset(source)", "StorageReady(target)"],
+      "effects": ["Dataset(target)"],
+      "estimated_duration_minutes": 60,
+      "required_resources": ["spark"],
+      "version": "1.0.0"
+    },
+    {
+      "operation_id": "OP-transform-spark",
+      "description": "Transform data with Spark.",
+      "preconditions": ["Dataset(input)", "ClusterReady(spark)"],
+      "effects": ["Pipeline(job)"],
+      "estimated_duration_minutes": 90,
+      "required_resources": ["spark"],
+      "version": "1.0.0"
+    }
+  ]
+}

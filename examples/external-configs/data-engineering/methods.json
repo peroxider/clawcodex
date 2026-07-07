@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0.0",
+  "methods": [
+    {
+      "methodId": "M-build-pipeline-001",
+      "pattern": "build_pipeline",
+      "description": "Build and validate a batch data pipeline.",
+      "preconditions": ["source dataset available"],
+      "assumptions": ["OP-ingest-batch and OP-transform-spark are available"],
+      "version": "1.0.0",
+      "status": "approved",
+      "tags": ["data"],
+      "subtaskTemplates": [
+        {"templateId": "design", "role": "design", "subjectTemplate": "Design pipeline for {dataset}"},
+        {"templateId": "impl", "role": "impl", "subjectTemplate": "Implement transforms for {dataset}", "defaultBlockedBy": ["design"]},
+        {"templateId": "test", "role": "test", "subjectTemplate": "Validate output dataset {dataset}", "defaultBlockedBy": ["impl"]}
+      ],
+      "acceptanceTemplate": {"assertionTemplate": "Dataset({dataset})", "strictAcceptance": true}
+    }
+  ]
+}

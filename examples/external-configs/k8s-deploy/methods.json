@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0.0",
+  "min_lkb_version": "0.5.0",
+  "methods": [
+    {
+      "methodId": "M-deploy-canary-001",
+      "pattern": "deploy_canary",
+      "description": "Canary deploy a Kubernetes service with metrics and rollback coverage.",
+      "preconditions": ["cluster access", "observability configured"],
+      "assumptions": ["OP-canary-deploy is available"],
+      "version": "1.0.0",
+      "status": "approved",
+      "tags": ["k8s", "deploy"],
+      "subtaskTemplates": [
+        {"templateId": "design", "role": "design", "subjectTemplate": "Plan canary rollout for {service}"},
+        {"templateId": "impl", "role": "deploy", "subjectTemplate": "Execute canary deployment for {service}", "defaultBlockedBy": ["design"]},
+        {"templateId": "test", "role": "test", "subjectTemplate": "Verify canary metrics for {service}", "defaultBlockedBy": ["impl"]}
+      ],
+      "acceptanceTemplate": {"assertionTemplate": "Service({service})", "strictAcceptance": true}
+    }
+  ]
+}

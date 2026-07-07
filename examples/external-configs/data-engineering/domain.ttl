@@ -1,0 +1,11 @@
+@prefix ex: <https://example.com/lkb/data#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex:Pipeline a owl:Class .
+ex:DAG a owl:Class .
+ex:Dataset a owl:Class .
+
+ex:produces a owl:ObjectProperty ;
+  rdfs:domain ex:Pipeline ;
+  rdfs:range ex:Dataset .

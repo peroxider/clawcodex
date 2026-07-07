@@ -40,6 +40,7 @@ AuditEventType = Literal[
     "lkb_legacy_todo_ambiguity",
     "lkb_decomposition_proposed",
     "lkb_method_referenced",
+    "lkb_external_config_imported",
 ]
 
 
@@ -634,6 +635,41 @@ def event_for_method_referenced(
     )
 
 
+def event_for_external_config_imported(
+    *,
+    source: str,
+    kind: str,
+    version: str = "",
+    item_count: int,
+    lint_issue_count: int,
+    lint_error_count: int,
+    session_id: str | None = None,
+    actor: str = "system",
+) -> AuditEvent:
+    """Record an external LKB configuration import (F-154)."""
+
+    return AuditEvent(
+        event_id=_new_event_id(),
+        event_type="lkb_external_config_imported",
+        actor=actor,
+        timestamp=_utc_now(),
+        session_id=session_id,
+        proposal_id=None,
+        validation_run_id=None,
+        task_id=None,
+        decision="accepted" if lint_error_count == 0 else "error",
+        payload={
+            "source": source,
+            "kind": kind,
+            "version": version,
+            "itemCount": item_count,
+            "lintIssueCount": lint_issue_count,
+            "lintErrorCount": lint_error_count,
+            "enrichmentKey": f"{source}:{kind}:{version}",
+        },
+    )
+
+
 def append_event_once(
     audit_log: AuditLog,
     event: AuditEvent,
@@ -726,6 +762,7 @@ __all__ = [
     "event_for_assumption_invalidated",
     "event_for_commit",
     "event_for_decomposition_proposed",
+    "event_for_external_config_imported",
     "event_for_fact_dropped",
     "event_for_fact_extracted",
     "event_for_human_override",

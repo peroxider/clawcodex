@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0.0",
+  "methods": [
+    {
+      "methodId": "M-fix-cve-001",
+      "pattern": "fix_cve",
+      "description": "Patch and verify a known vulnerability.",
+      "preconditions": ["CVE triaged"],
+      "assumptions": ["OP-apply-patch is available"],
+      "version": "1.0.0",
+      "status": "approved",
+      "tags": ["security"],
+      "subtaskTemplates": [
+        {"templateId": "triage", "role": "design", "subjectTemplate": "Triage {cve} impact"},
+        {"templateId": "patch", "role": "impl", "subjectTemplate": "Apply fix for {cve}", "defaultBlockedBy": ["triage"]},
+        {"templateId": "verify", "role": "test", "subjectTemplate": "Verify fix for {cve}", "defaultBlockedBy": ["patch"]}
+      ],
+      "acceptanceTemplate": {"assertionTemplate": "Patch({cve})", "strictAcceptance": true}
+    }
+  ]
+}

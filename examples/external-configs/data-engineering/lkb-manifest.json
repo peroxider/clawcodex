@@ -1,0 +1,10 @@
+{
+  "manifest_version": "1.0",
+  "name": "data-engineering",
+  "version": "1.0.0",
+  "contents": [
+    {"path": "domain.ttl", "kind": "ontology"},
+    {"path": "operations.json", "kind": "operation_schema"},
+    {"path": "methods.json", "kind": "method_library"}
+  ]
+}
