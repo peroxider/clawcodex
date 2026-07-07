@@ -210,6 +210,15 @@ class CommitResult:
     reason: dict[str, Any] | None = None
     derived_facts: tuple[str, ...] = ()
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            'committed': self.committed,
+            'proposalId': self.proposal_id,
+            'validationRunId': self.validation_run_id,
+            'reason': self.reason,
+            'derivedFacts': list(self.derived_facts),
+        }
+
 
 # ── UI-oriented derived status (consumed by TaskListWidget & /lkb) ──
 
