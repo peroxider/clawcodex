@@ -4,34 +4,17 @@ This directory decomposes `docs/feature_plan/logical_kanban_v3_spec.md` into imp
 
 Important integration decision: LKB is an agent-loop todo/task enhancement layer, not an orchestrator-only subsystem. The primary integration points are `ToolContext.todos`, `ToolContext.tasks`, `TodoWrite`, `TaskCreate`, `TaskUpdate`, `TaskList`, and the task-list transcript UI. Orchestrator and workflows consume LKB indirectly by using the same todo/task tools.
 
-## Feature Map
+## Remaining Feature Map
 
-| ID | Requirement | Primary Area | Source Chapters |
-| --- | --- | --- | --- |
-| F-126 | Agent Loop Foundation | tool context, session lifecycle | 1-4, 11 |
-| F-127 | Task Context Adapter | `ToolContext.todos/tasks` normalization | 5, 13 |
-| F-128 | Propose/Validate/Commit Tool Contract | todo/task write contract | 3, 11, 14 |
-| F-129 | Task V2 Integration | `TaskCreate/List/Get/Update/Output` | 5, 10, 17 |
-| F-130 | TodoWrite Compatibility | legacy TodoWrite bridge | 5, 11 |
-| F-131 | Canonical IR and Glossary | assertion IR, predicate registry | 6-8, 26 |
-| F-132 | Layer-1 Rule Engine | dependency and state inference | 5, 6, 10 |
-| F-133 | Validation Runs and Proof Trace | validation records, reproducibility | 5, 14, 15 |
-| F-134 | Fuzzy Input and Multi-World Handling | ambiguity detection, possible worlds | 8, 9, 24 |
-| F-135 | Assumptions and Truth Maintenance | hypothesis invalidation | 9, 12, 24 |
-| F-136 | Explainability and Repair Suggestions | model-facing and UI explanations | 15, 16 |
-| F-137 | Persistence and Audit Events | local/session storage, event log | 13, 18, 20 |
-| F-138 | Solver Layer Roadmap | Datalog, ASP, SMT, ATP adapters | 10, 21, 22 |
-| F-139 | Security, Performance, Observability | NFRs and operations | 18-20, 25 |
-| F-140 | Orchestrator Adoption Through Todo Tools | orchestrator as consumer | 17, 22-23 |
-| F-141 | Causal Verification Layer (CAP-compatible) | synthetic causal graph, causal_weight gate | 10.6, 22.3 |
-| F-142 | External ATP (Vampire / Prover9 / Mace4) | optional TPTP subprocess adapters, async proof enrichment | 10.5, 22.4 |
-| F-143 | Runtime LLM Knowledge Facts | LLM as fact source at L1 (pre-processor) / L2 (solver adapter) / L3 (ambiguity fallback); deterministic kernel preserved | 22.4 |
-| F-144 | Legacy Todo Path Fuzzy-Gate Coverage (P0) | every `TodoWrite` replacement is gated by `commit_gate_fuzzy_check` on per-todo content | — |
-| F-145 | Disambiguating Tokens as Confidence Boosters (P0) | known-disambiguating tokens become first-class `DisambiguatingToken` entries; the matcher-exclusion anti-pattern is replaced | 9.4 |
-| F-146 | Question-Context Suppression for Interpretation Refinement (P1) | every keyword-driven boost in `_refine_interpretations` and `_apply_disambiguating_tokens` checks the surrounding question frame | 9.4 |
-| F-147 | Movement-Phrase Matcher Tolerance (P1) | `missing_subject` matcher allows 0–8 intervening characters; widens verb class; adds `出发去`/`前往`/`去到`/`head to`/`going to` | 9.4 |
-| F-148 | Remove Car-Wash + Transport Demo from Default Library (P1) | default `FuzzyPatternLibrary` carries zero scenario-bound interpretations: `P-SERV-001` deleted, `P-DIST-001` carries matcher only (no interpretations; downstream registers per-deployment modalities like `on_foot / straight_line / by_vehicle` via `library.add(...)`), `BuiltinRefinementRules` namespace removed (refinement rules attach via per-`FuzzyPattern` `refinement_rules` field); parent feature for the F-143 walkthrough update + F-145/F-146/F-147 doc rewording | 9.4 |
-| F-149 | Automatic Task Decomposition | agent-loop proposal generator that turns a high-level goal into a validated LKB task plan with dependencies and acceptance criteria | 5, 10, 17 |
+以下特性已在代码中完全实现，需求文档已删除：F-126 ~ F-144, F-148 ~ F-150。当前目录仅保留尚未实现的特性。
+
+| ID | Requirement | Primary Area | Source Chapters | Status |
+| --- | --- | --- | --- | --- |
+| F-151 | Prompt-Integrated Method Reuse | inject method library summary into system prompt; guide LLM to reuse templates | 5, 10, 17 | ❌ 未实现 |
+| F-152 | Bounded Scheduling Solver (OR-Tools CP-SAT) | closed scheduling sub-problem solving with resource constraints and time windows | 5, 10, 17 | ❌ 未实现 |
+| F-153 | Method Library Growth & Governance | save-as-method workflow, version management, approval CLI, coverage metrics | 5, 10, 17 | ❌ 未实现 |
+| F-154 | External Configuration Import | import domain ontology / operation schema / method library from external files | 5, 10, 17 | ❌ 未实现 |
+| F-155 | Acceptance Template Registry | elevate `AcceptanceTemplate` to top-level concept; standalone registry with governance | 5, 10, 17 | ❌ 未实现 |
 
 ## Architectural Placement
 

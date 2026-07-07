@@ -46,7 +46,6 @@ docs/feature_plan/
 |----------|------|:----:|---------|
 | F-10 | ExecuteExtraTool 延迟工具系统 | 📋 | [f-10-extratool.md](03-agent-core/f-10-extratool.md) |
 | F-100 | Dreaming 后台记忆整合 | 🔄 | [f-100-dreaming.md](03-agent-core/f-100-dreaming.md) |
-| F-102 | Agent Loop Hook 扩展点 | ✅ | [f-102-hook-extensions.md](03-agent-core/f-102-hook-extensions.md) |
 | F-107 | PowerShell 支持增强 | 📋 | [f-107-powershell.md](03-agent-core/f-107-powershell.md) |
 | F-108 | Freeze Detection & Auto-Recovery | 📋 | [f-108-freeze-detection.md](03-agent-core/f-108-freeze-detection.md) |
 | F-119 | System Prompt 段落拼装与自迭代基础设施 | 📋 | [f-119-prompt-assembly.md](03-agent-core/f-119-prompt-assembly.md) |
@@ -123,3 +122,4 @@ docs/feature_plan/
 | 2026-07-01 | 新增 F-123 Intent Forecast 空闲意图预测规划 | 用户提出 REPL/TUI 2 分钟空闲后预测下一步、`/forecast` 与 CLI 同名、异步 session summary sidecar 的设计需求 |
 | 2026-07-03 | 删除 F-70/F-71/F-81/F-122 已完成特性规划文档 | 代码确认特性已全部落地，移除已完成的规范文档 |
 | 2026-07-04 | 删除 F-89/F-93/F-97/F-123 已完成特性规划文档;同步 master 状态 11 处(F-66 🚧、F-72/F-84/F-87 🔄、F-102 ✅、F-110-F-116 🟡、F-94 🚧);补登 F-125;新增 08-agent-dashboard 章节收录 F-120 | 全量复核 49 个 F-Number 文档 vs 代码层,识别 4 个 ✅ 完全实现特性 + 11 处文档/master 状态不一致 + 1 处遗漏章节 |
+| 2026-07-07 | 删除 F-102 已完成特性规划文档(代码确认 P102-A~E 全部落地, 3 新建+9 修改文件, 稳定性门禁通过) | 代码确认特性已全部实现，移除已完成的规范文档 |

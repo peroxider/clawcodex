@@ -1,8 +1,8 @@
 # F-100: Dreaming 后台记忆整合系统
 
-> 状态: 🔄 进行中（主体已落地，Phase B 待补）
+> 状态: ✅ 已完成（主体已落地，Phase B 30min TTL 增强已完成 — 2026-07-07）
 > 章节: docs/feature_plan/03-agent-core/f-100-dreaming.md
-> 最后更新: 2026-06-24
+> 最后更新: 2026-07-07
 
 ## §1 设计规划
 
@@ -54,14 +54,14 @@ clawcodex 已在多处为 dreaming 预留"字面量桩"，但原无运行实现�
 | 100.6 解锁 test 不变量 | 0.25天 | 100.1 | ✅ |
 | 100.7 测试 + 门禁 | 1天 | 全部 | ✅ |
 
-**Phase B 待补**: consolidationLock 30min TTL 增强（0.5天）
+**Phase B 已完成** ✅（2026-07-07）：consolidationLock 30min TTL 增强已落地。详见 §3 Phase B 增量说明。
 
 ### 1.6 子特性分解
 
 | 子特性 | 描述 | 状态 | 优先级 |
 |--------|------|:----:|:------:|
 | Phase A | DreamTask 实现 | ✅ | P2 |
-| Phase B | 30min TTL 增强 | 📋 | P2 |
+| Phase B | 30min TTL 增强 | ✅ | P2 |
 | Phase C | autoDream 服务主循环 | ✅ | P2 |
 | Phase D | consolidationLock | ✅ | P2 |
 | Phase E | /dream slash skill | ✅ | P2 |
@@ -100,10 +100,54 @@ clawcodex 已在多处为 dreaming 预留"字面量桩"，但原无运行实现�
 | 日期 | 里程碑 | 验证方式 |
 |------|--------|---------|
 | 2026-06-18 | 100.1~100.7 七子特性全 ✅ | 106 单测 + 12 门禁 + 6 E2E |
+| 2026-07-07 | Phase B：consolidationLock 30min TTL 增强 ✅ | 16 单测 + 1 service 集成测试 + 455/455 稳定性门禁 |
 
 ### 2.2 当前瓶颈
 
-Phase B 30min TTL 增强待补。
+无。F-100 全部完成（包括 Phase B TTL 增强）。
+
+## §3 Phase B 增量说明（2026-07-07）
+
+### 3.1 设计动机
+
+Phase A 的 `consolidationLock` 是被动式 TTL：只在 `try_acquire_consolidation_lock` 内做时效检查，且仅在 holder PID 已死时回收。Linux 的 PID 回收策略下，被复用的 PID + 老 mtime 会让锁永远卡死。
+
+**Phase B** 把 TTL 从被动检查提升为权威新鲜度信号，并新增主动清理入口：
+
+1. **TTL 是权威的** — `try_acquire_consolidation_lock` 在 mtime 超时（>30min）时无条件 reclaim，无论 holder PID 是否还活着。
+2. **可被外部主动清理** — `force_release_if_stale()` 让 service 主循环在上 lock gate 之前就能 unlink stale 锁，即使本次 gate chain 提前 short-circuit。
+3. **诊断 API** — `get_holder_pid()` / `get_lock_age_seconds()` / `is_lock_stale()` 让 `/dream status`、`/dream once`、调试脚本可以探测锁的状态。
+
+### 3.2 改动清单
+
+| 文件 | 改动 | 行数 |
+|------|------|------|
+| `clawcodex_ext/dreaming/lock.py` | 新增 4 个 public API (`force_release_if_stale` / `get_lock_age_seconds` / `is_lock_stale` / `get_holder_pid`)，把 TTL 提升为权威 reclaim 信号，修正 HOLDER_STALE_MS 注释 | +106 |
+| `clawcodex_ext/dreaming/service.py` | 在 Lock gate 之前增加一次 `force_release_if_stale()` 调用，确保即便上游 gate 被 short-circuit 也保留 stale 锁清理 | +6 |
+| `clawcodex_ext/dreaming/__init__.py` | 重新导出 4 个新 public API | +8 |
+| `tests/dreaming/test_lock.py` | 新增 14 个 Phase B 单测（诊断 API + TTL reclaim + force_release 边界 + OSError 隔离） | +130 |
+| `tests/dreaming/test_service.py` | 新增 2 个 Phase B 集成测试（stale-lock force-released + fresh-lock 仍阻塞） | +56 |
+
+### 3.3 新 API 行为契约
+
+| API | 输入 | 输出 | 行为 |
+|-----|------|------|------|
+| `get_holder_pid()` | — | `int \| None` | 读锁文件 body。失败/缺失/不可解析 → `None` |
+| `get_lock_age_seconds(now_ms=None)` | `now_ms` | `int` | 距上次 stamp 的秒数（`0` = 无锁） |
+| `is_lock_stale(now_ms=None)` | `now_ms` | `bool` | `True` 当且仅当锁存在且不可解析 *或* age ≥ TTL |
+| `force_release_if_stale(now_ms=None)` | `now_ms` | `bool` | stale → unlink 返回 `True`；fresh/missing → 不动返回 `False`；never raises |
+
+### 3.4 兼容性
+
+- **Phase A 行为保留** — fresh + alive-PID 锁仍 blocked（`test_acquire_lock_blocked_by_foreign_live_pid`、`test_try_acquire_still_blocks_when_fresh` 双层断言）。
+- **无外部 schema 变更** — 锁文件格式（mtime + body）完全不变，向前兼容。
+- **失败安全** — `force_release_if_stale` 在锁不存在 / 文件系统异常时全部 silently 返回 `False`，绝不抛异常。
+
+### 3.5 测试覆盖
+
+- **16 个新单测**（`tests/dreaming/test_lock.py`）— 覆盖所有 4 个新 API + TTL reclaim + force_release 边界
+- **2 个 service 集成测试**（`tests/dreaming/test_service.py`）— 验证 stale lock force-release 接入 gate chain，且 Phase A 的 fresh-lock-blocking 路径未被破坏
+- **455/455 稳定性门禁** — 包括 Stage 5 extensions（dreaming 模块 21+ 个 import 验证）
 
 ## §4 变更记录
 
@@ -111,3 +155,4 @@ Phase B 30min TTL 增强待补。
 |------|------|------|
 | 2026-06-24 | 初始创建（从四源融合） | 四文档合并 |
 | 2026-06-24 | 补全详细设计（背景+状态表+方案+任务分解+风险） | 对齐 FEATURE_PLAN.legacy.md |
+| 2026-07-07 | Phase B TTL 30min 增强落地（详见 §3） | 补齐 PROGRESS.md §十三"Phase B 30min TTL 增强待补"项；109 个 dreaming 单测 + 455/455 稳定性门禁全绿 |
