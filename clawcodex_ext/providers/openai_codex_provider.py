@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import queue
+import threading
 from typing import Any, Generator, Optional
 
 try:
@@ -12,16 +14,16 @@ except ModuleNotFoundError:  # pragma: no cover
     OpenAI = None
 
 from src.auth.codex_oauth import CODEX_BASE_URL, resolve_codex_runtime_credentials
-
 from clawcodex_ext.providers.base import ChatResponse, MessageInput
 from clawcodex_ext.providers.codex_models import CODEX_FALLBACK_MODELS, get_codex_model_ids
+from clawcodex_ext.providers._stream_abort import StreamAbortGuard
 from clawcodex_ext.providers.openai_compatible import (
     OpenAICompatibleProvider,
     _convert_anthropic_messages_to_openai,
     _convert_to_openai_tool_schema,
 )
 
-_INTERNAL_CHAT_KWARGS = {"model", "tools", "abort_signal", "stream"}
+_INTERNAL_CHAT_KWARGS = {"model", "tools", "abort_signal", "stream", "on_thinking_chunk"}
 
 
 class OpenAICodexProvider(OpenAICompatibleProvider):
@@ -94,6 +96,84 @@ class OpenAICodexProvider(OpenAICompatibleProvider):
         tools: Optional[list[dict[str, Any]]] = None,
         **kwargs,
     ) -> ChatResponse:
+        model, request_kwargs = self._build_responses_request(messages, tools, **kwargs)
+        stream = self.client.responses.create(**request_kwargs)
+        return _collect_responses_stream(stream, model=model)
+
+    def chat_stream(
+        self,
+        messages: list[MessageInput],
+        tools: Optional[list[dict[str, Any]]] = None,
+        **kwargs,
+    ) -> Generator[str, None, None]:
+        response = self.chat(messages, tools, **kwargs)
+        if response.content:
+            yield response.content
+
+    def chat_stream_response(
+        self,
+        messages: list[MessageInput],
+        tools: Optional[list[dict[str, Any]]] = None,
+        on_text_chunk=None,
+        on_thinking_chunk=None,
+        abort_signal: Any = None,
+        **kwargs: Any,
+    ) -> ChatResponse:
+        guard = StreamAbortGuard(abort_signal)
+        guard.raise_if_pre_aborted()
+
+        model, request_kwargs = self._build_responses_request(messages, tools, **kwargs)
+        stream_queue: queue.Queue = queue.Queue()
+        done = object()
+
+        def _drain_responses_stream() -> None:
+            stream = None
+            try:
+                stream = self.client.responses.create(**request_kwargs)
+                for event in stream:
+                    stream_queue.put(event)
+            except BaseException as exc:  # noqa: BLE001 - surface to polling thread
+                stream_queue.put(exc)
+            finally:
+                stream_queue.put(done)
+
+        worker = threading.Thread(
+            target=_drain_responses_stream,
+            daemon=True,
+            name=f"openai-codex-responses-{id(self)}",
+        )
+        worker.start()
+        events: list[Any] = []
+        while True:
+            try:
+                item = stream_queue.get(timeout=0.1)
+            except queue.Empty:
+                if guard.aborted:
+                    guard.raise_if_post_aborted()
+                continue
+            if item is done:
+                break
+            if isinstance(item, BaseException):
+                if isinstance(item, Exception):
+                    guard.reraise_if_aborted(item)
+                    raise item
+                raise item
+            if guard.aborted:
+                guard.raise_if_post_aborted()
+            delta = _response_event_text_delta(item)
+            if delta and on_text_chunk is not None:
+                on_text_chunk(delta)
+            events.append(item)
+
+        guard.raise_if_post_aborted()
+        return _collect_responses_stream(events, model=model)
+
+    def _build_responses_request(
+        self,
+        messages: list[MessageInput],
+        tools: Optional[list[dict[str, Any]]] = None,
+        **kwargs: Any,
+    ) -> tuple[str, dict[str, Any]]:
         model = self._get_model(**kwargs)
         instructions, responses_input = self._prepare_responses_input(messages)
         request_kwargs: dict[str, Any] = {
@@ -108,25 +188,7 @@ class OpenAICodexProvider(OpenAICompatibleProvider):
         if converted_tools:
             request_kwargs["tools"] = converted_tools
         request_kwargs.update({k: v for k, v in kwargs.items() if k not in _INTERNAL_CHAT_KWARGS})
-
-        stream = self.client.responses.create(**request_kwargs)
-        return _collect_responses_stream(stream, model=model)
-
-    def chat_stream(
-        self,
-        messages: list[MessageInput],
-        tools: Optional[list[dict[str, Any]]] = None,
-        **kwargs,
-    ) -> Generator[str, None, None]:
-        response = self.chat(messages, tools, **kwargs)
-        if response.content:
-            yield response.content
-
-    def chat_stream_response(self, *args: Any, on_text_chunk=None, **kwargs: Any) -> ChatResponse:
-        response = self.chat(*args, **kwargs)
-        if on_text_chunk and response.content:
-            on_text_chunk(response.content)
-        return response
+        return model, request_kwargs
 
     def get_available_models(self) -> list[str]:
         try:
@@ -260,6 +322,14 @@ def _get_attr_or_key(obj: Any, key: str, default: Any = None) -> Any:
     if isinstance(obj, dict):
         return obj.get(key, default)
     return getattr(obj, key, default)
+
+
+def _response_event_text_delta(event: Any) -> str:
+    event_type = _get_attr_or_key(event, "type", "")
+    if event_type not in {"response.output_text.delta", "output_text.delta"}:
+        return ""
+    delta = _get_attr_or_key(event, "delta", "")
+    return delta if isinstance(delta, str) else str(delta or "")
 
 
 def _collect_responses_stream(stream: Any, *, model: str) -> ChatResponse:
