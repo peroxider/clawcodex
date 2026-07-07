@@ -15,6 +15,7 @@ from clawcodex_ext.services.api.retry import (
 from clawcodex_ext.services.api.errors import (
     OverloadedError,
     RateLimitError,
+    categorize_retryable_api_error,
 )
 
 
@@ -91,6 +92,29 @@ class TestWithRetry(unittest.TestCase):
 
         asyncio.run(_run())
 
+    def test_retry_on_transient_upstream_not_found_404(self) -> None:
+        async def _run() -> None:
+            call_count = 0
+
+            async def operation(attempt: int, ctx: RetryContext) -> str:
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    err = Exception(
+                        "Error code: 404 - {'error': {'message': "
+                        "'x.NotFoundError: NotFoundError: OpenAIException - "
+                        '{"detail":"Not Found"}'
+                        "', 'type': 'upstream_error', 'param': '', 'code': '404'}}"
+                    )
+                    raise err
+                return "ok"
+
+            result = await with_retry(operation, RetryOptions(max_retries=3))
+            self.assertEqual(result, "ok")
+            self.assertEqual(call_count, 2)
+
+        asyncio.run(_run())
+
     def test_cannot_retry_on_non_retryable(self) -> None:
         async def _run() -> None:
             async def operation(attempt: int, ctx: RetryContext) -> str:
@@ -100,6 +124,13 @@ class TestWithRetry(unittest.TestCase):
                 await with_retry(operation, RetryOptions(max_retries=3))
 
         asyncio.run(_run())
+
+    def test_plain_404_is_not_retryable(self) -> None:
+        err = Exception("Error code: 404 - model not found")
+
+        classification = categorize_retryable_api_error(err)
+
+        self.assertFalse(classification.retryable)
 
     def test_fallback_model_on_529(self) -> None:
         async def _run() -> None:
