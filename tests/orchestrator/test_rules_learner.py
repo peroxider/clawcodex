@@ -15,6 +15,7 @@ from pathlib import Path
 import yaml
 
 from extensions.orchestrator.rules_learner import (
+    JudgeResult,
     RuleEmbedder,
     RuleEngine,
     RuleStore,
@@ -133,7 +134,7 @@ class TestRuleEngineExtract(unittest.TestCase):
     def test_extract_bold_title_instead_of_category(self) -> None:
         """Agent used `**bold title** — desc` instead of `[category] desc`."""
         reply = """## Extracted Rules
-- **Quote Style Convention** — Use double quotes for string literals
+- **Quote Style Convention** — Prefers double quotes in Python code instead of single
   Body: The project requires double quotes for all string literals.
 """
         rules = RuleEngine.extract(reply)
@@ -157,7 +158,7 @@ class TestRuleEngineExtract(unittest.TestCase):
     def test_extract_no_category_no_title(self) -> None:
         """Bare summary with no `[category]` and no `**title**`."""
         reply = """## Extracted Rules
-- Use double quotes for string literals instead of single quotes
+- Prefers double quotes in Python code instead of single instead of single quotes
   Body: The project convention requires double quotes everywhere.
 """
         rules = RuleEngine.extract(reply)
@@ -990,3 +991,218 @@ class TestRuleEngineGetRulesPath(unittest.TestCase):
         config = type('FakeConfig', (), {})()
         result = RuleEngine.get_rules_path(config, '/tmp/WORKFLOW.md')
         self.assertIsNone(result)
+
+
+class TestConflictDetection(unittest.TestCase):
+    """F-121 §3.1: BatchedLLMJudge + _apply_judge_results tests."""
+
+    def test_extract_rule_has_conflict_with_field(self) -> None:
+        """extract() 输出的规则应包含 conflict_with: [] 默认字段。"""
+        reply = (
+            '## Extracted Rules\n'
+            '- [naming] Use snake_case for functions\n'
+            '  Body: Always use snake_case for function names.\n'
+        )
+        rules = RuleEngine.extract(reply)
+        self.assertEqual(len(rules), 1)
+        self.assertIn('conflict_with', rules[0])
+        self.assertEqual(rules[0]['conflict_with'], [])
+
+    def test_merge_two_rules_preserves_conflict_with(self) -> None:
+        """_merge_two_rules 合并时 conflict_with 取并集。"""
+        a = {
+            'summary': 'Use snake_case',
+            'body': '',
+            'category': 'naming',
+            'support_count': 1,
+            'source': 'PR #1',
+            'confidence': 'high',
+            'created_at': '2026-01-01T00:00:00Z',
+            'conflict_with': [1],
+        }
+        b = {
+            'summary': 'Always use snake_case naming',
+            'body': '',
+            'category': 'naming',
+            'support_count': 1,
+            'source': 'PR #2',
+            'confidence': 'medium',
+            'created_at': '2026-06-01T00:00:00Z',
+            'conflict_with': [2],
+        }
+        merged = _merge_two_rules(a, b)
+        self.assertIn('conflict_with', merged)
+        self.assertEqual(sorted(merged['conflict_with']), [1, 2])
+
+    # ------------------------------------------------------------------
+    # BatchedLLMJudge._build_prompt / _parse_reply
+    # ------------------------------------------------------------------
+
+    def test_build_prompt_includes_candidates_and_existing(self) -> None:
+        """_build_prompt 输出包含所有 candidate 和 existing 的信息。"""
+        from extensions.orchestrator.rules_learner import BatchedLLMJudge
+
+        candidates = [
+            {'category': 'code_style', 'summary': 'A', 'body': 'body a'},
+            {'category': 'testing', 'summary': 'B'},
+        ]
+        existing = [
+            {'id': 1, 'category': 'code_style', 'summary': 'X', 'body': 'body x'},
+        ]
+        prompt = BatchedLLMJudge._build_prompt(candidates, existing)
+        self.assertIn('Existing rules:', prompt)
+        self.assertIn('Candidate rules:', prompt)
+        self.assertIn('1. [code_style] X', prompt)
+        self.assertIn('A. [code_style] A', prompt)
+        self.assertIn('B. [testing] B', prompt)
+        self.assertIn('Body:', prompt)
+
+    def test_parse_reply_new(self) -> None:
+        """_parse_reply 正确解析 NEW 动作。"""
+        from extensions.orchestrator.rules_learner import BatchedLLMJudge
+
+        results = BatchedLLMJudge._parse_reply("A: NEW", 1)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].action, "new")
+
+    def test_parse_reply_duplicate(self) -> None:
+        """_parse_reply 正确解析 DUPLICATE 动作。"""
+        from extensions.orchestrator.rules_learner import BatchedLLMJudge
+
+        results = BatchedLLMJudge._parse_reply("A: DUPLICATE 2\nB: MERGE 3\nC: CONFLICT 1", 3)
+        self.assertEqual(len(results), 3)
+        self.assertEqual(results[0].action, "duplicate")
+        self.assertEqual(results[0].target_idx, 1)  # 2 - 1 = 1
+        self.assertEqual(results[1].action, "merge")
+        self.assertEqual(results[1].target_idx, 2)  # 3 - 1 = 2
+        self.assertEqual(results[2].action, "conflict")
+        self.assertEqual(results[2].target_idx, 0)  # 1 - 1 = 0
+
+    def test_parse_reply_fallback_to_new(self) -> None:
+        """无法解析的行默认 fallback 到 new。"""
+        from extensions.orchestrator.rules_learner import BatchedLLMJudge
+
+        results = BatchedLLMJudge._parse_reply("garbage output", 1)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].action, "new")
+
+    # ------------------------------------------------------------------
+    # _apply_judge_results
+    # ------------------------------------------------------------------
+
+    def test_apply_judge_new(self) -> None:
+        """NEW → candidate 被追加到 merged 列表末尾。"""
+        from extensions.orchestrator.rules_learner import _apply_judge_results
+
+        existing = [{'id': 1, 'summary': 'X'}]
+        remaining = [(0, {'summary': 'A', 'body': ''})]
+        jr = [JudgeResult(action="new")]
+        merged = _apply_judge_results(existing, remaining, jr, "2026-07-07T00:00:00Z")
+        self.assertEqual(len(merged), 2)
+        self.assertEqual(merged[1]['summary'], 'A')
+
+    def test_apply_judge_duplicate(self) -> None:
+        """DUPLICATE → existing 规则的 support_count 递增。"""
+        from extensions.orchestrator.rules_learner import _apply_judge_results
+
+        existing = [{'id': 1, 'summary': 'X', 'support_count': 1}]
+        remaining = [(0, {'summary': 'A', 'body': ''})]
+        jr = [JudgeResult(action="duplicate", target_idx=0)]
+        merged = _apply_judge_results(existing, remaining, jr, "2026-07-07T00:00:00Z")
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0]['support_count'], 2)
+
+    def test_apply_judge_merge(self) -> None:
+        """MERGE → candidate 与 existing 规则合并。"""
+        from extensions.orchestrator.rules_learner import _apply_judge_results
+
+        existing = [{'id': 1, 'summary': 'X', 'body': 'old body', 'category': 'code_style'}]
+        remaining = [(0, {'summary': 'X with more detail', 'body': 'new body', 'category': 'code_style'})]
+        jr = [JudgeResult(action="merge", target_idx=0)]
+        merged = _apply_judge_results(existing, remaining, jr, "2026-07-07T00:00:00Z")
+        self.assertEqual(len(merged), 1)
+        self.assertIn('more detail', merged[0]['summary'])
+
+    def test_apply_judge_conflict(self) -> None:
+        """CONFLICT → 两条规则都保留，互标 _conflict_with_idx。"""
+        from extensions.orchestrator.rules_learner import _apply_judge_results
+
+        existing = [{'id': 1, 'summary': 'X'}]
+        remaining = [(0, {'summary': 'A', 'body': ''})]
+        jr = [JudgeResult(action="conflict", target_idx=0)]
+        merged = _apply_judge_results(existing, remaining, jr, "2026-07-07T00:00:00Z")
+        self.assertEqual(len(merged), 2)
+        self.assertIn('_conflict_with_idx', merged[0])
+        self.assertIn('_conflict_with_idx', merged[1])
+
+    def test_apply_judge_target_out_of_range(self) -> None:
+        """target_idx 越界时降级为 new。"""
+        from extensions.orchestrator.rules_learner import _apply_judge_results
+
+        existing = [{'id': 1, 'summary': 'X'}]
+        remaining = [(0, {'summary': 'A', 'body': ''})]
+        jr = [JudgeResult(action="merge", target_idx=999)]
+        merged = _apply_judge_results(existing, remaining, jr, "2026-07-07T00:00:00Z")
+        self.assertEqual(len(merged), 2)
+        self.assertEqual(merged[1]['summary'], 'A')
+
+    def test_dedup_merge_llm_path_new(self) -> None:
+        """LLM 路径：_judge_results 传入时使用 LLM 判定而非 TF-IDF。"""
+        candidates = [
+            {'category': 'code_style', 'summary': 'A new rule'},
+        ]
+        existing = [
+            {'id': 1, 'category': 'code_style', 'summary': 'An existing rule'},
+        ]
+        merged = RuleEngine._deduplicate_and_merge(
+            candidates, existing,
+            _judge_results=[JudgeResult(action="new")],
+        )
+        self.assertEqual(len(merged), 2)
+
+    def test_dedup_merge_llm_path_duplicate(self) -> None:
+        """LLM 路径：DUPLICATE 不追加。"""
+        candidates = [
+            {'category': 'code_style', 'summary': 'dupe of rule 1'},
+        ]
+        existing = [
+            {'id': 1, 'category': 'code_style', 'summary': 'rule 1', 'support_count': 1},
+        ]
+        merged = RuleEngine._deduplicate_and_merge(
+            candidates, existing,
+            _judge_results=[JudgeResult(action="duplicate", target_idx=0)],
+        )
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0]['support_count'], 2)
+
+    def test_dedup_merge_llm_path_conflict(self) -> None:
+        """LLM 路径：CONFLICT 保留两条 + 标记 index refs。"""
+        candidates = [
+            {'category': 'code_style', 'summary': 'conflicting rule'},
+        ]
+        existing = [
+            {'id': 1, 'category': 'code_style', 'summary': 'existing rule'},
+        ]
+        merged = RuleEngine._deduplicate_and_merge(
+            candidates, existing,
+            _judge_results=[JudgeResult(action="conflict", target_idx=0)],
+        )
+        self.assertEqual(len(merged), 2)
+        self.assertIn('_conflict_with_idx', merged[0])
+        self.assertIn('_conflict_with_idx', merged[1])
+
+    def test_dedup_merge_tfidf_fallback(self) -> None:
+        """无 _judge_results 时回退 TF-IDF 路径（非 LLM 场景）。"""
+        candidates = [
+            {'category': 'code_style', 'summary': 'Use single quotes for strings in Python'},
+        ]
+        existing = [
+            {'id': 1, 'category': 'code_style', 'summary': 'Prefer single quotes for strings in Python'},
+        ]
+        merged = RuleEngine._deduplicate_and_merge(
+            candidates, existing,
+            similarity_threshold=0.85,
+            enhancement_threshold=0.70,
+        )
+        # sim ≈ 0.75 → TF-IDF 合并为 1 条
+        self.assertEqual(len(merged), 1)
