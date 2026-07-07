@@ -500,12 +500,9 @@ class ClawCodexTUI(App):
         sid = getattr(self.session, 'session_id', None) or ''
 
         if self.app_state.is_thinking:
-            # Agent is busy — cancel the foreground run, wait briefly,
-            # then fork into the background runner.
+            # Agent is busy — cancel the foreground run and immediately
+            # fork into the background runner.
             self._agent_bridge.cancel()
-            import time
-
-            time.sleep(0.15)
             has_bg_agent = False
             try:
                 from src.agent.background_runner import launch_background_runner

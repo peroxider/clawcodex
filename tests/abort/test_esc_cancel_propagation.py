@@ -26,6 +26,7 @@ These tests pin the new behaviour:
 from __future__ import annotations
 
 import threading
+import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -373,3 +374,36 @@ def test_agent_bridge_plumbs_abort_controller_into_tool_context(
     assert context.abort_controller is not None
     assert context.abort_controller is not aborted_ctrl
     assert context.abort_controller.signal.aborted is False
+
+
+def test_agent_bridge_cancel_does_not_wait_for_busy_lock(tmp_path: Path) -> None:
+    """Ctrl+C/Ctrl+B cancellation must stay responsive during worker cleanup."""
+
+    from src.agent import Session
+    from src.tui.agent_bridge import AgentBridge
+    from src.tui.state import AppState
+
+    bridge = AgentBridge(
+        post_message=lambda _msg: None,
+        session=Session.create("test", "test-model"),
+        provider=MagicMock(),
+        tool_registry=ToolRegistry(),
+        tool_context=ToolContext(workspace_root=tmp_path),
+        app_state=AppState(),
+        run_worker=lambda *_args, **_kwargs: None,
+    )
+
+    assert bridge.submit("hello") is True
+    controller = bridge._abort_controller
+    assert controller is not None
+
+    assert bridge._busy_lock.acquire(timeout=1.0)
+    try:
+        started = time.monotonic()
+        assert bridge.cancel() is True
+        elapsed = time.monotonic() - started
+    finally:
+        bridge._busy_lock.release()
+
+    assert elapsed < 0.05
+    assert controller.signal.aborted is True

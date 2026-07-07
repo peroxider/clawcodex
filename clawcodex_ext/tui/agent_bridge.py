@@ -297,8 +297,13 @@ class AgentBridge:
         posts an ``AgentRunFinished`` and clears the busy flag.
         """
 
-        with self._busy_lock:
-            controller = self._abort_controller if self._busy else None
+        # This is called from hot key handlers on Textual's UI thread.
+        # Do not wait on ``_busy_lock`` here: the worker may briefly hold
+        # it while finishing a run, and a contended lock makes Ctrl+C /
+        # Ctrl+B feel ignored. Reading these references is atomic under
+        # the GIL; a stale controller is harmless because abort() is
+        # idempotent.
+        controller = self._abort_controller if self._busy else None
         if controller is None:
             return False
         controller.abort(reason)
