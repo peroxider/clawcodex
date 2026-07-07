@@ -139,6 +139,12 @@ lkb-asp = [
 # (``vampire``, ``eprover``) can populate this list.
 lkb-atp = [
 ]
+# F-154 optional full Turtle/RDF parser.  Without this extra the external
+# ontology importer uses a small safe Turtle subset parser for owl:Class,
+# owl:ObjectProperty, rdfs:domain, and rdfs:range declarations.
+lkb-rdf = [
+    "rdflib>=7.0.0",
+]
 # F-152 (Bounded Scheduling Solver). Installing this extra enables the
 # OR-Tools CP-SAT backed ``SchedulingSolver`` in
 # ``clawcodex_ext/logical_kanban/scheduling_solver.py``.  The extra is
