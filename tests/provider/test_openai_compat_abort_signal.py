@@ -348,6 +348,41 @@ def test_abort_unwinds_promptly_even_when_iterator_never_returns() -> None:
     assert elapsed < 1.5, f"abort took {elapsed:.2f}s — expected <1.5s"
 
 
+def test_abort_unwinds_promptly_even_when_stream_create_never_returns() -> None:
+    """Ctrl+C must not wait for ``create(stream=True)`` to return."""
+
+    controller = AbortController()
+    create_entered = threading.Event()
+    release_create = threading.Event()
+    provider = _ConcreteOpenAIProvider(api_key="test", model="test-model")
+    fake_client = MagicMock()
+
+    def _create(**_kwargs):
+        create_entered.set()
+        release_create.wait(timeout=10.0)
+        return _FakeStream(["late"], per_chunk_delay_s=0.0)
+
+    fake_client.chat.completions.create.side_effect = _create
+    provider._client = fake_client
+
+    def _trip_after_create_starts() -> None:
+        assert create_entered.wait(timeout=2.0), "create() was never entered"
+        controller.abort("user_interrupt")
+
+    threading.Thread(target=_trip_after_create_starts, daemon=True).start()
+
+    start = time.monotonic()
+    with pytest.raises(AbortError):
+        provider.chat_stream_response(
+            messages=[{"role": "user", "content": "hi"}],
+            abort_signal=controller.signal,
+        )
+    elapsed = time.monotonic() - start
+    release_create.set()
+
+    assert elapsed < 1.5, f"abort took {elapsed:.2f}s — expected <1.5s"
+
+
 class _ContentThenUsageStream:
     """Stream that yields one content chunk then a final usage-only chunk.
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from abc import abstractmethod
 from typing import Any, Callable, Generator, Optional
 
@@ -632,17 +633,19 @@ class OpenAICompatibleProvider(BaseProvider):
         # ``src/query/query.py``.
         stream_kwargs = {k: v for k, v in kwargs.items() if k not in ["model", "tools"]}
         existing_stream_options = stream_kwargs.pop("stream_options", None) or {}
-        stream_kwargs["stream_options"] = {
-            **existing_stream_options,
-            "include_usage": True,
-        }
-        stream = self.client.chat.completions.create(
-            model=model,
-            messages=provider_messages,
-            stream=True,
-            **extra_kwargs,
-            **stream_kwargs,
+        # Only add include_usage if:
+        #   1. Not explicitly disabled by the caller via stream_options,
+        #   2. Not suppressed by env var (for backends that 404 on it).
+        # Some OpenAI-compatible backends (e.g. older vLLM, custom proxies)
+        # return 404 for stream_options they don't understand.
+        _disable_usage = os.environ.get("CLAWCODEX_DISABLE_STREAM_USAGE", "").lower() in (
+            "1",
+            "true",
+            "yes",
         )
+        if not _disable_usage and "include_usage" not in existing_stream_options:
+            existing_stream_options["include_usage"] = True
+        stream_kwargs["stream_options"] = existing_stream_options
 
         content_parts: list[str] = []
         response_model = model
@@ -678,8 +681,16 @@ class OpenAICompatibleProvider(BaseProvider):
 
         def _drain_stream() -> None:
             try:
-                for c in stream:
-                    chunk_queue.put(c)
+                stream = self.client.chat.completions.create(
+                    model=model,
+                    messages=provider_messages,
+                    stream=True,
+                    **extra_kwargs,
+                    **stream_kwargs,
+                )
+                with guard.attach(stream):
+                    for c in stream:
+                        chunk_queue.put(c)
             except BaseException as exc:  # noqa: BLE001 — surface to consumer
                 chunk_queue.put(exc)
             finally:
@@ -688,97 +699,96 @@ class OpenAICompatibleProvider(BaseProvider):
         worker = _threading.Thread(
             target=_drain_stream,
             daemon=True,
-            name=f"openai-stream-{id(stream)}",
+            name=f"openai-stream-{id(self)}",
         )
 
-        with guard.attach(stream):
-            worker.start()
-            while True:
-                try:
-                    item = chunk_queue.get(timeout=0.1)
-                except _queue.Empty:
-                    # No chunk available right now — check abort and
-                    # loop. The 100 ms tick bounds how long the user
-                    # waits between pressing ESC and the prompt
-                    # returning, regardless of how slow / blocked the
-                    # underlying SDK iteration is.
-                    if guard.aborted:
-                        # Use ``raise_if_post_aborted`` so the abort
-                        # reason from the controller is preserved
-                        # (rather than hardcoding ``"user_interrupt"``,
-                        # which would silently downgrade a non-default
-                        # reason like a future ``"rate_limit_backoff"``).
-                        guard.raise_if_post_aborted()
-                    continue
-
-                if item is _DONE:
-                    break
-                if isinstance(item, BaseException):
-                    if isinstance(item, Exception):
-                        guard.reraise_if_aborted(item)
-                        raise item
-                    # KeyboardInterrupt/SystemExit from the worker
-                    # path — re-raise as-is so the outer signal-
-                    # handling story stays intact.
-                    raise item
-
-                chunk = item
-                response_model = getattr(chunk, "model", response_model)
-                usage_candidate = getattr(chunk, "usage", None)
-                if usage_candidate is not None:
-                    usage_obj = usage_candidate
-
-                choices = getattr(chunk, "choices", None) or []
-                if choices:
-                    choice = choices[0]
-                    if getattr(choice, "finish_reason", None):
-                        finish_reason = choice.finish_reason
-
-                    delta = getattr(choice, "delta", None)
-                    if delta is not None:
-                        content_piece = getattr(delta, "content", None)
-                        if content_piece:
-                            piece = str(content_piece)
-                            content_parts.append(piece)
-                            if on_text_chunk is not None:
-                                on_text_chunk(piece)
-
-                        reasoning_piece = getattr(delta, "reasoning_content", None)
-                        if reasoning_piece:
-                            reasoning_parts.append(str(reasoning_piece))
-                            ## _log(f'[openai_provider] reasoning_piece={str(reasoning_piece)[:30]}, on_thinking_chunk={on_thinking_chunk}')
-                            if on_thinking_chunk is not None:
-                                ## _log(f'[openai_provider] calling on_thinking_chunk')
-                                on_thinking_chunk(str(reasoning_piece))
-
-                        tool_call_deltas = getattr(delta, "tool_calls", None) or []
-                        for tc in tool_call_deltas:
-                            idx = getattr(tc, "index", 0)
-                            entry = tool_calls_by_index.setdefault(
-                                idx, {"id": "", "name": "", "arguments": ""}
-                            )
-
-                            tc_id = getattr(tc, "id", None)
-                            if tc_id:
-                                entry["id"] = str(tc_id)
-
-                            function = getattr(tc, "function", None)
-                            if function is not None:
-                                fn_name = getattr(function, "name", None)
-                                if fn_name:
-                                    entry["name"] += str(fn_name)
-                                fn_args = getattr(function, "arguments", None)
-                                if fn_args:
-                                    entry["arguments"] += str(fn_args)
-
-                # Check abort AFTER processing this chunk so any
-                # already-delivered content is preserved (matches the
-                # in-loop-check semantics from the old implementation:
-                # the chunk-list test pins that the chunk we received
-                # before the abort gets processed; we just don't take
-                # the next one).
+        worker.start()
+        while True:
+            try:
+                item = chunk_queue.get(timeout=0.1)
+            except _queue.Empty:
+                # No chunk available right now — check abort and
+                # loop. The 100 ms tick bounds how long the user
+                # waits between pressing ESC and the prompt
+                # returning, regardless of how slow / blocked the
+                # underlying SDK iteration is.
                 if guard.aborted:
+                    # Use ``raise_if_post_aborted`` so the abort
+                    # reason from the controller is preserved
+                    # (rather than hardcoding ``"user_interrupt"``,
+                    # which would silently downgrade a non-default
+                    # reason like a future ``"rate_limit_backoff"``).
                     guard.raise_if_post_aborted()
+                continue
+
+            if item is _DONE:
+                break
+            if isinstance(item, BaseException):
+                if isinstance(item, Exception):
+                    guard.reraise_if_aborted(item)
+                    raise item
+                # KeyboardInterrupt/SystemExit from the worker
+                # path — re-raise as-is so the outer signal-
+                # handling story stays intact.
+                raise item
+
+            chunk = item
+            response_model = getattr(chunk, "model", response_model)
+            usage_candidate = getattr(chunk, "usage", None)
+            if usage_candidate is not None:
+                usage_obj = usage_candidate
+
+            choices = getattr(chunk, "choices", None) or []
+            if choices:
+                choice = choices[0]
+                if getattr(choice, "finish_reason", None):
+                    finish_reason = choice.finish_reason
+
+                delta = getattr(choice, "delta", None)
+                if delta is not None:
+                    content_piece = getattr(delta, "content", None)
+                    if content_piece:
+                        piece = str(content_piece)
+                        content_parts.append(piece)
+                        if on_text_chunk is not None:
+                            on_text_chunk(piece)
+
+                    reasoning_piece = getattr(delta, "reasoning_content", None)
+                    if reasoning_piece:
+                        reasoning_parts.append(str(reasoning_piece))
+                        ## _log(f'[openai_provider] reasoning_piece={str(reasoning_piece)[:30]}, on_thinking_chunk={on_thinking_chunk}')
+                        if on_thinking_chunk is not None:
+                            ## _log(f'[openai_provider] calling on_thinking_chunk')
+                            on_thinking_chunk(str(reasoning_piece))
+
+                    tool_call_deltas = getattr(delta, "tool_calls", None) or []
+                    for tc in tool_call_deltas:
+                        idx = getattr(tc, "index", 0)
+                        entry = tool_calls_by_index.setdefault(
+                            idx, {"id": "", "name": "", "arguments": ""}
+                        )
+
+                        tc_id = getattr(tc, "id", None)
+                        if tc_id:
+                            entry["id"] = str(tc_id)
+
+                        function = getattr(tc, "function", None)
+                        if function is not None:
+                            fn_name = getattr(function, "name", None)
+                            if fn_name:
+                                entry["name"] += str(fn_name)
+                            fn_args = getattr(function, "arguments", None)
+                            if fn_args:
+                                entry["arguments"] += str(fn_args)
+
+            # Check abort AFTER processing this chunk so any
+            # already-delivered content is preserved (matches the
+            # in-loop-check semantics from the old implementation:
+            # the chunk-list test pins that the chunk we received
+            # before the abort gets processed; we just don't take
+            # the next one).
+            if guard.aborted:
+                guard.raise_if_post_aborted()
 
         # Stream completed naturally OR the in-loop check broke out.
         # In the latter case the signal is already tripped; raise so

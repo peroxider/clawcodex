@@ -87,6 +87,7 @@ from clawcodex_ext.services.compact.pipeline import (
     PipelineConfig,
     run_compression_pipeline,
 )
+from clawcodex_ext.services.api.retry import CannotRetryError, RetryOptions, with_retry
 from clawcodex_ext.utils.token_estimation import rough_token_count_estimation_for_messages
 
 logger = logging.getLogger(__name__)
@@ -1666,15 +1667,25 @@ async def query(
         effective_tools = _resolve_effective_tools(params, tool_use_context, messages)
 
         try:
-            returned_assistants, returned_tool_blocks = await _call_model_sync(
-                provider=params.provider,
-                messages=messages,
-                system_prompt=current_system_prompt,
-                tools=effective_tools,
-                max_output_tokens_override=max_output_tokens_override,
-                abort_signal=params.abort_controller.signal,
-                on_text_chunk=params.on_text_chunk,
-                on_thinking_chunk=params.on_thinking_chunk,
+            async def _call_model_attempt(_attempt: int, _retry_ctx: Any):
+                return await _call_model_sync(
+                    provider=params.provider,
+                    messages=messages,
+                    system_prompt=current_system_prompt,
+                    tools=effective_tools,
+                    max_output_tokens_override=max_output_tokens_override,
+                    abort_signal=params.abort_controller.signal,
+                    on_text_chunk=params.on_text_chunk,
+                    on_thinking_chunk=params.on_thinking_chunk,
+                )
+
+            returned_assistants, returned_tool_blocks = await with_retry(
+                _call_model_attempt,
+                RetryOptions(
+                    model=getattr(params.provider, "model", "") or "",
+                    signal=params.abort_controller.signal,
+                    query_source=params.query_source,
+                ),
             )
             assistant_messages = returned_assistants
             tool_use_blocks = returned_tool_blocks
@@ -1709,6 +1720,24 @@ async def query(
             # below us do the cancellation processing in exactly one
             # place — anything we did here would duplicate that work.
             pass
+
+        except CannotRetryError as e:
+            original_error = e.original_error
+            logger.error("Query error: %s", original_error)
+            _mark_proactive_context_blocked_on_error(original_error)
+            error_message = str(original_error)
+
+            for err_msg in _yield_missing_tool_result_blocks(assistant_messages, error_message):
+                yield err_msg
+
+            yield _create_assistant_api_error_message(content=error_message)
+            set_terminal(
+                holder,
+                natural_termination,
+                Terminal(reason="model_error", error=original_error),
+            )
+            _goal_finish_turn("error", original_error)
+            return
 
         except Exception as e:
             logger.error("Query error: %s", e)

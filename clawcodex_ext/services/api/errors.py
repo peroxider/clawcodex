@@ -162,6 +162,29 @@ def is_image_unsupported_error(raw: str) -> bool:
     )
 
 
+def is_transient_upstream_not_found_error(error: Exception) -> bool:
+    """Detect proxy/gateway 404s that represent a transient upstream miss.
+
+    A plain 404 usually means a bad model, bad route, or unsupported
+    capability and should not be retried. Some OpenAI-compatible gateways
+    occasionally wrap an upstream ``NotFoundError`` as a 404
+    ``upstream_error`` while the requested endpoint/model is otherwise
+    valid; those are safe to send through the normal retry loop.
+    """
+    status = getattr(error, "status", getattr(error, "status_code", None))
+    raw = str(error)
+    low = raw.lower()
+    if status is None and ("error code: 404" in low or "'code': '404'" in low):
+        status = 404
+    if status != 404:
+        return False
+    return (
+        "upstream_error" in low
+        and ("notfounderror" in low or "not found" in low)
+        and ("openaiexception" in low or "upstream" in low)
+    )
+
+
 @dataclass(frozen=True)
 class ErrorClassification:
     retryable: bool
@@ -200,6 +223,13 @@ def categorize_retryable_api_error(error: Exception) -> ErrorClassification:
             retryable=False,
             error_type="image_unsupported",
             message=str(error),
+        )
+
+    if is_transient_upstream_not_found_error(error):
+        return ErrorClassification(
+            retryable=True,
+            error_type="upstream_not_found",
+            message="Transient upstream NotFound (404)",
         )
 
     if is_overloaded_error(error):
