@@ -2,10 +2,10 @@
 
 Usage::
 
-    /lkb status                  列出所有任务的 LKB 派生状态
-    /lkb explain <task_id>       展示任务的阻塞原因 + proof trace
-    /lkb audit <task_id>         展示审计事件日志
-    /lkb clarify                 列出所有待澄清的假设
+    /lkb status                  List all tasks with LKB derived status
+    /lkb explain <task_id>       Show blocking reason + proof trace
+    /lkb audit <task_id>         Show audit event log
+    /lkb clarify                 List all pending clarifications
 
 The command is registered as a ``LocalCommand`` with
 ``supports_non_interactive=False`` because it requires a live
@@ -31,7 +31,7 @@ def _lkb_call(args: str, ctx: object) -> LocalCommandResult:
     if tool_ctx is None:
         return LocalCommandResult(
             type="text",
-            value="LKB 命令需要 tool_context（仅在 TUI/REPL 会话中可用）。",
+            value="The /lkb command requires a tool_context (only available in TUI/REPL sessions).",
         )
 
     # Guard: LKB feature flag
@@ -41,12 +41,12 @@ def _lkb_call(args: str, ctx: object) -> LocalCommandResult:
         if not is_logical_kanban_enabled():
             return LocalCommandResult(
                 type="text",
-                value="LKB（Logical Kanban）当前未启用。请启用 feature flag `logical_kanban`。",
+                value="LKB (Logical Kanban) is not currently enabled. Enable the `logical_kanban` feature flag.",
             )
     except Exception as exc:
         return LocalCommandResult(
             type="text",
-            value=f"LKB 模块不可用: {exc}",
+            value=f"LKB module unavailable: {exc}",
         )
 
     switch = {
@@ -66,11 +66,11 @@ def _lkb_call(args: str, ctx: object) -> LocalCommandResult:
 
 def _usage() -> str:
     return (
-        "LKB 命令用法:\n"
-        "  /lkb status              列出所有任务的 LKB 派生状态\n"
-        "  /lkb explain <task_id>   展示任务的阻塞原因 + proof trace\n"
-        "  /lkb audit <task_id>     展示审计事件日志\n"
-        "  /lkb clarify             列出所有待澄清的假设\n"
+        "LKB usage:\n"
+        "  /lkb status               List all tasks with LKB derived status\n"
+        "  /lkb explain <task_id>    Show blocking reason + proof trace\n"
+        "  /lkb audit <task_id>      Show audit event log\n"
+        "  /lkb clarify              List all pending clarifications\n"
     )
 
 
@@ -81,17 +81,17 @@ def _text_badge(
     stale: list[dict] | None = None,
     validation_result: str | None = None,
 ) -> str:
-    """Return a compact one-line status badge (emoji + bilingual text)."""
+    """Return a compact one-line status badge (emoji + English text)."""
     if validation_result == "fail":
-        return "✗ 验证未通过 / Validation failed"
+        return "✗ Validation failed"
     if derived_status == "blocked":
         blockers = ", ".join(blocked_by or [])
-        return f"▣ 被阻塞 / Blocked  ({blockers})" if blockers else "▣ 被阻塞 / Blocked"
+        return f"▣ Blocked  ({blockers})" if blockers else "▣ Blocked"
     if stale:
         ids = ", ".join(s.get("assumptionId", "?") for s in stale[:3])
-        return f"△ 假设已失效 / Stale assumption  ({ids})"
+        return f"△ Stale assumption  ({ids})"
     if derived_status == "needs_recheck":
-        return "◎ 需复查 / Needs recheck"
+        return "◎ Needs recheck"
     return ""
 
 
@@ -113,7 +113,7 @@ def _lkb_status(tool_ctx, _args: str) -> str:
     snapshot = build_facts_snapshot(tool_ctx)
     task_ids = sorted(snapshot.normalized_tasks.keys())
     if not task_ids:
-        return "当前没有任务。"
+        return "No tasks found."
 
     lines: list[str] = []
     counts: dict[str, int] = {"blocked": 0, "stale": 0, "clarify": 0, "verified": 0}
@@ -139,7 +139,7 @@ def _lkb_status(tool_ctx, _args: str) -> str:
             validation_result=vr,
         )
 
-        if "Blocked" in badge or "被阻塞" in badge:
+        if "Blocked" in badge:
             counts["blocked"] += 1
         if "Stale" in badge:
             counts["stale"] += 1
@@ -155,22 +155,22 @@ def _lkb_status(tool_ctx, _args: str) -> str:
         if badge:
             lines.append(f"      {badge}")
         if blockers:
-            lines.append(f"      阻塞者: {', '.join(blockers)}")
+            lines.append(f"      Blockers: {', '.join(blockers)}")
 
     lines.append("")
     lines.append(
-        f"  汇总: {len(task_ids)} 任务 / "
-        f"{counts['blocked']} 阻塞 / "
-        f"{counts['stale']} 失效假设"
+        f"  Summary: {len(task_ids)} tasks / "
+        f"{counts['blocked']} blocked / "
+        f"{counts['stale']} stale assumptions"
     )
-    return _panel("\n".join(lines), "LKB 任务状态一览")
+    return _panel("\n".join(lines), "LKB Task Status")
 
 
 def _lkb_explain(tool_ctx, task_id: str) -> str:
     """``/lkb explain <task_id>`` — show blocked reason + proof trace."""
     task_id = task_id.strip()
     if not task_id:
-        return "用法: /lkb explain <task_id>"
+        return "Usage: /lkb explain <task_id>"
 
     from clawcodex_ext.logical_kanban.context_adapter import build_facts_snapshot, task_lkb_view
     from clawcodex_ext.logical_kanban.explain import proof_trace_summary
@@ -179,21 +179,21 @@ def _lkb_explain(tool_ctx, task_id: str) -> str:
     state = task_lkb_view(tool_ctx, task_id, include_proof_trace=True)
 
     lines: list[str] = []
-    lines.append(f"任务: {task_id}")
-    lines.append(f"派生状态: {state.get('derivedStatus', '?')}")
-    lines.append(f"最近验证结果: {state.get('latestValidationResult', '—')}")
+    lines.append(f"Task: {task_id}")
+    lines.append(f"Derived status: {state.get('derivedStatus', '?')}")
+    lines.append(f"Latest validation result: {state.get('latestValidationResult', '—')}")
 
     br = state.get("blockedReason")
     if br:
-        lines.append(f"阻塞原因: {br}")
+        lines.append(f"Blocked reason: {br}")
 
     br_raw = state.get("blockedBy", [])
     if br_raw:
-        lines.append(f"阻塞者列表: {', '.join(br_raw)}")
+        lines.append(f"Blocked by: {', '.join(br_raw)}")
 
     pt = state.get("proofTraceSummary", [])
     if pt:
-        lines.append("证明轨迹 (proof trace):")
+        lines.append("Proof trace:")
         for step in pt:
             seq = step.get("step", "?")
             rule = step.get("rule", "?")
@@ -206,7 +206,7 @@ def _lkb_explain(tool_ctx, task_id: str) -> str:
     # Stale assumptions
     stale_info = state.get("staleAssumptions", [])
     if stale_info:
-        lines.append("已失效假设:")
+        lines.append("Stale assumptions:")
         for s in stale_info:
             lines.append(f"  {s.get('assumptionId')} ({s.get('field')})")
 
@@ -215,24 +215,24 @@ def _lkb_explain(tool_ctx, task_id: str) -> str:
     if denial and isinstance(denial, dict):
         sug = denial.get("repairSuggestions", [])
         if sug:
-            lines.append("修复建议:")
+            lines.append("Repair suggestions:")
             for s in sug:
                 lines.append(f"  [{s.get('action')}] {s.get('message', '')}")
 
-    return _panel("\n".join(lines), f"LKB 解释: {task_id}")
+    return _panel("\n".join(lines), f"LKB Explain: {task_id}")
 
 
 def _lkb_audit(tool_ctx, task_id: str) -> str:
     """``/lkb audit <task_id>`` — show audit events."""
     task_id = task_id.strip()
     if not task_id:
-        return "用法: /lkb audit <task_id>"
+        return "Usage: /lkb audit <task_id>"
 
     from clawcodex_ext.logical_kanban.orchestrator import read_audit_events_for_run
 
     events = read_audit_events_for_run(tool_ctx, task_id=task_id, limit=20)
     if not events:
-        return f"任务 {task_id} 暂无 LKB 审计事件。"
+        return f"Task {task_id} has no LKB audit events."
 
     lines: list[str] = []
     for ev in events:
@@ -246,7 +246,7 @@ def _lkb_audit(tool_ctx, task_id: str) -> str:
             result = payload.get("result", payload.get("validation_result", ""))
             if result:
                 lines.append(f"         result={result}")
-    return _panel("\n".join(lines), f"LKB 审计: {task_id}")
+    return _panel("\n".join(lines), f"LKB Audit: {task_id}")
 
 
 def _lkb_clarify(tool_ctx, _args: str) -> str:
@@ -264,20 +264,20 @@ def _lkb_clarify(tool_ctx, _args: str) -> str:
             pending.append((tid, phrase, sev))
 
     if not pending:
-        return "当前没有待澄清的假设。"
+        return "No pending clarifications."
 
     lines: list[str] = []
     for tid, phrase, sev in pending:
         lines.append(f"  {tid}  \"{phrase}\"")
-        lines.append(f"         严重度: {sev}  提示: 使用 /agent retry 修改任务描述来澄清")
-    return _panel("\n".join(lines), "待澄清假设")
+        lines.append(f"          Severity: {sev}  Hint: use /agent retry to refine the task description")
+    return _panel("\n".join(lines), "Pending Clarifications")
 
 
 # ── command definition ──────────────────────────────────────────────────
 
 LKB_COMMAND: LocalCommand = LocalCommand(
     name="lkb",
-    description="Logical Kanban 状态查询与诊断",
+    description="Logical Kanban status & diagnostics",
     aliases=["logical-kanban"],
     availability=[CommandAvailability.CONSOLE],
     argument_hint="status | explain <task_id> | audit <task_id> | clarify",

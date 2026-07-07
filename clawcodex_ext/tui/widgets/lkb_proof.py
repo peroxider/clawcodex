@@ -47,12 +47,12 @@ class LkbDenialPayload:
 # ── rule descriptions (6 MVP rules from spec Ch 6.3) ───────────────────
 
 _RULE_DESCRIPTIONS: dict[str, str] = {
-    "R-001": "前置条件未满足导致阻塞",
-    "R-002": "被阻塞任务不能进入 Doing",
-    "R-003": "Doing 任务必须 Ready 且不被阻塞",
-    "R-004": "状态迁移许可检查",
-    "R-005": "已完成任务必须有验收证明",
-    "R-006": "冲突断言互相失效",
+    "R-001": "Blocked by unmet preconditions",
+    "R-002": "Blocked task cannot enter Doing",
+    "R-003": "Doing task must be Ready and unblocked",
+    "R-004": "State transition permission check",
+    "R-005": "Completed tasks must have acceptance proof",
+    "R-006": "Conflicting assertions invalidate each other",
 }
 
 
@@ -134,20 +134,24 @@ class LKBProofWidget(Static):
         # 2. Proof trace (derivation chain)
         if self.denial.proof_trace:
             lines.append(Text(""))  # blank line separator
-            lines.append(Text("推导链:", style="bold"))
+            lines.append(Text("Proof trace:", style="bold"))
             for step in self.denial.proof_trace:
                 lines.append(self._render_step(step))
 
         # 3. Human-readable explanation
-        if self.denial.human_message_zh:
+        if self.denial.human_message_en:
             lines.append(Text(""))
-            lines.append(Text("语义解释:", style="bold"))
+            lines.append(Text("Explanation:", style="bold"))
+            lines.append(Text(f"  {self.denial.human_message_en}", style="dim"))
+        elif self.denial.human_message_zh:
+            lines.append(Text(""))
+            lines.append(Text("Explanation:", style="bold"))
             lines.append(Text(f"  {self.denial.human_message_zh}", style="dim"))
 
         # 4. Detected ambiguities (fuzzy input)
         if self.denial.fuzzy_ambiguities:
             lines.append(Text(""))
-            lines.append(Text("检测到模糊性:", style="bold yellow"))
+            lines.append(Text("Detected ambiguities:", style="bold yellow"))
             for amb in self.denial.fuzzy_ambiguities:
                 phrase = amb.get("phrase", amb.get("text", ""))
                 sev = amb.get("severity", "?")
@@ -160,7 +164,7 @@ class LKBProofWidget(Static):
         # 5. Repair suggestions
         if self.denial.repair_suggestions:
             lines.append(Text(""))
-            lines.append(Text("修复建议:", style="bold"))
+            lines.append(Text("Repair suggestions:", style="bold"))
             for idx, sug in enumerate(self.denial.repair_suggestions, 1):
                 lines.append(self._render_suggestion(idx, sug))
 
@@ -169,14 +173,14 @@ class LKBProofWidget(Static):
             lines.append(Text(""))
             lines.append(
                 Text(
-                    f"  (输入 /lkb explain {self.denial.reason.split()[-1] if self.denial.reason.split() else ''} "
-                    f"查看完整证明)",
+                    f"  (run /lkb explain {self.denial.reason.split()[-1] if self.denial.reason.split() else ''} "
+                    f"for full proof)",
                     style="dim",
                 )
             )
 
         body = Text("\n").join(lines)
-        return Panel(body, title="❌ LKB 验证未通过", border_style="red")
+        return Panel(body, title="❌ LKB validation failed", border_style="red")
 
     # ── internal helpers ────────────────────────────────────────────
 
@@ -184,7 +188,7 @@ class LKBProofWidget(Static):
         rule_id = self.denial.violated_rule or "—"
         desc = _RULE_DESCRIPTIONS.get(rule_id, rule_id)
         out = Text()
-        out.append(f"违反规则: {rule_id}  ", style="bold red")
+        out.append(f"Violated rule: {rule_id}  ", style="bold red")
         out.append(desc, style="red")
         return out
 
