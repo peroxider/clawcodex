@@ -436,10 +436,6 @@ def _format_report(results: dict[str, Any]) -> str:
 def main() -> int:
     results = run_evaluation()
     print(_format_report(results))
-    out_path = _REPO_ROOT / "docs" / "feature_plan" / "09-logical-kanban" / "f-151-eval-results.json"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"\nDetailed results written to: {out_path.relative_to(_REPO_ROOT)}")
     return 0
 
 

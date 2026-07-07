@@ -23,6 +23,7 @@ from textual.reactive import reactive
 from textual.widget import Widget
 
 from .base import BaseRow, RowHeader
+from ..lkb_proof import LKBProofWidget, extract_lkb_denial
 from ..tool_activity import build_tool_activity, ToolActivity
 
 
@@ -66,11 +67,14 @@ class AssistantToolUseMessage(BaseRow):
         self._set_status("done")
         if self._activity is not None:
             self._activity.on_result(output, is_error=False)
+        # Mount LKB proof widget when the tool was denied by the commit gate.
+        self._maybe_mount_lkb_denial(output)
 
     def mark_error(self, output, *, error: str | None = None) -> None:
         self._set_status("error")
         if self._activity is not None:
             self._activity.on_result(output, is_error=True, error=error)
+        self._maybe_mount_lkb_denial(output)
 
     # ---- internals ----
     def _set_status(self, status: str) -> None:
@@ -121,6 +125,17 @@ class AssistantToolUseMessage(BaseRow):
         except Exception:
             return None
         return None
+
+    # ---- LKB denial detection ----
+
+    def _maybe_mount_lkb_denial(self, output) -> None:
+        """If *output* contains an LKB denial, mount a :class:`LKBProofWidget`."""
+        try:
+            denial = extract_lkb_denial(output)
+            if denial is not None:
+                self.mount(LKBProofWidget(denial))
+        except Exception:
+            pass  # best-effort; don't crash the transcript row
 
 
 def _summarise_input(tool_name: str, tool_input: dict) -> str:

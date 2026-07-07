@@ -25,6 +25,8 @@ from typing import Iterable, Literal
 from rich.text import Text
 from textual.widgets import Static
 
+from clawcodex_ext.logical_kanban.types import LkbStatus
+
 
 TaskStatus = Literal["pending", "in_progress", "completed", "cancelled", "failed"]
 
@@ -38,6 +40,8 @@ class Task:
     status: TaskStatus = "pending"
     detail: str = ""
     children: list["Task"] = field(default_factory=list)
+    # Optional LKB-derived status badge (when LKB is enabled).
+    lkb: LkbStatus | None = None
 
 
 # Mapping from status → (icon, colour). Mirrors the glyph palette
@@ -49,6 +53,47 @@ _STATUS_STYLES: dict[TaskStatus, tuple[str, str]] = {
     "cancelled": ("⊘", "dim yellow"),
     "failed": ("✖", "bold red"),
 }
+
+# ── LKB derived-status badge table ──────────────────────────────────────
+# Each entry: (emoji, zh_label, en_label, rich_style)
+_LKB_BADGE_STYLES: dict[str, tuple[str, str, str, str]] = {
+    "fail":           ("✗", "验证未通过",     "Validation failed",      "bold red"),
+    "blocked":        ("▣", "被阻塞",          "Blocked",                "bold yellow"),
+    "needs_clarify":  ("?",  "待澄清",          "Needs clarification",   "bold cyan"),
+    "stale":          ("△", "假设已失效",      "Stale assumption",      "bold #d4943a"),
+    "verified":       ("✓", "已验证",          "Verified",              "bold green"),
+    "needs_recheck":  ("◎", "需复查",          "Needs recheck",         "dim yellow"),
+}
+
+
+def _lkb_badge(lkb: LkbStatus | None) -> Text | None:
+    """Return a Rich Text badge for *lkb*, or ``None`` when no badge is needed."""
+    if lkb is None:
+        return None
+
+    key: str | None = None
+    if lkb.validation_result == 'fail':
+        key = 'fail'
+    elif lkb.is_blocked:
+        key = 'blocked'
+    elif lkb.has_pending_clarification:
+        key = 'needs_clarify'
+    elif lkb.stale_assumptions:
+        key = 'stale'
+    elif lkb.validation_result == 'pass':
+        key = 'verified'
+    elif lkb.derived_status == 'needs_recheck':
+        key = 'needs_recheck'
+
+    if key is None:
+        return None
+
+    emoji, zh, en, style = _LKB_BADGE_STYLES[key]
+    out = Text()
+    out.append("  [", style="dim")
+    out.append(f"{emoji} {zh} / {en}", style=style)
+    out.append("]", style="dim")
+    return out
 
 
 def render_task_tree(tasks: Iterable[Task], *, indent: int = 0) -> Text:
@@ -65,6 +110,10 @@ def render_task_tree(tasks: Iterable[Task], *, indent: int = 0) -> Text:
         out.append(connector, style="dim")
         out.append(f"{icon} ", style=style)
         out.append(task.title, style=style)
+        # LKB derived-status badge
+        badge = _lkb_badge(task.lkb)
+        if badge is not None:
+            out.append_text(badge)
         if task.detail:
             out.append(f"  {task.detail}", style="dim")
         out.append("\n")

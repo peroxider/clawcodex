@@ -210,6 +210,39 @@ class CommitResult:
     reason: dict[str, Any] | None = None
     derived_facts: tuple[str, ...] = ()
 
+
+# ── UI-oriented derived status (consumed by TaskListWidget & /lkb) ──
+
+DerivedStatus = Literal['ready', 'blocked', 'needs_recheck', 'needs_review']
+
+
+@dataclass(frozen=True, slots=True)
+class LkbStatus:
+    """Compact LKB-derived status for UI rendering.
+
+    Every field is derived from the rule engine / TMS, not from the
+    raw task status field.  This is the canonical data source consumed
+    by :class:`~clawcodex_ext.tui.widgets.task_list.TaskListWidget`
+    and the ``/lkb`` slash command.
+    """
+
+    derived_status: DerivedStatus = 'ready'
+    validation_result: ValidationResult | None = None
+    blocked_by: tuple[str, ...] = ()
+    stale_assumptions: tuple[str, ...] = ()
+    has_pending_clarification: bool = False
+
+    @property
+    def is_blocked(self) -> bool:
+        return self.derived_status == 'blocked'
+
+    @property
+    def has_issues(self) -> bool:
+        return (
+            self.derived_status in ('blocked', 'needs_recheck')
+            or bool(self.stale_assumptions)
+        )
+
     @property
     def validation_id(self) -> str:
         """Backwards-compatible alias for :attr:`validation_run_id`."""

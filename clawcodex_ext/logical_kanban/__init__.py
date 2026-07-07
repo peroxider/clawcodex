@@ -245,7 +245,9 @@ from .truth_maintenance import (
 )
 from .types import (
     CommitResult,
+    DerivedStatus,
     FactsSnapshot,
+    LkbStatus,
     Proposal,
     ProposedChange,
     RepairAction,
@@ -293,6 +295,7 @@ __all__ = [
     'DecompositionPlan',
     'DatalogSolverAdapter',
     'DetectionMethod',
+    'DerivedStatus',
     'DomainConstraint',
     'EventDecision',
     'FactsSnapshot',
@@ -313,6 +316,7 @@ __all__ = [
     'LLM_FACTS_EXTRACTED',
     'LLM_FALLBACK_USED',
     'LLM_FACTS_FEATURE_NAME',
+    'LkbStatus',
     'LlmFactExtractor',
     'LlmKnowledgeAdapter',
     'LogicalKanbanRuntime',
