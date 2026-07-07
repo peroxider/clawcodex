@@ -66,11 +66,9 @@ def spawn_background_bash(
 
     output_handle = open(output_path, "wb", buffering=0)
 
-    # Same wrapper the foreground path uses, so a trailing ``cd`` still writes
-    # the final PWD for inspection. Exit code is appended to the log after the
-    # process exits so ``TaskOutput`` can report it even if Popen.wait() races
-    # with the reader.
-    wrapped = f'{{ {command}\n}}; __rc=$?; echo "__CLAWCODEX_EXIT__=$__rc" >&2; exit $__rc'
+    # Exit code is appended to the log after the process exits so
+    # ``TaskOutput`` can report it even if Popen.wait() races with the reader.
+    wrapped = build_bg_wrapper(shell, command)
 
     # ``stdin=DEVNULL`` mirrors the foreground bash path: prevents background
     # commands that read fd 0 from blocking on a TTY inherited from clawcodex's

@@ -53,7 +53,11 @@ def build_powershell_args(cmd: str) -> list[str]:
     * ``-NonInteractive`` — fail fast instead of prompting for input.
     * ``-Command``        — execute the literal string that follows.
     """
-    return ["-NoProfile", "-NonInteractive", "-Command", cmd]
+    encoding_prelude = (
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+        "$OutputEncoding = [System.Text.Encoding]::UTF8; "
+    )
+    return ["-NoProfile", "-NonInteractive", "-Command", f"{encoding_prelude}{cmd}"]
 
 
 def find_powershell_path() -> str | None:
@@ -183,9 +187,11 @@ def build_cwd_wrapper_bash(command: str, cwd_path: str) -> str:
 
 def build_cwd_wrapper_powershell(command: str, cwd_path: str) -> str:
     """Wrap *command* for PowerShell CWD tracking."""
-    # PowerShell: use $(Get-Location).Path for CWD, $LASTEXITCODE for RC.
+    # PowerShell: use $(Get-Location).Path for CWD, $LASTEXITCODE for native
+    # commands, and default to success for pure cmdlets that leave it unset.
     return (
-        f"{{ {command}\n}}; $__rc = $LASTEXITCODE; "
+        f"& {{ {command}\n}}; $__success = $?; $__native = $LASTEXITCODE; "
+        f"$__rc = if (-not $__success) {{ 1 }} elseif ($null -eq $__native) {{ 0 }} else {{ $__native }}; "
         f"(Get-Location).Path | Out-File -Encoding UTF8 '{cwd_path}'; "
         f"exit $__rc"
     )
@@ -206,7 +212,8 @@ def build_bg_wrapper(shell: str, command: str) -> str:
     """
     if shell == "powershell":
         return (
-            f"{{ {command}\n}}; $__rc = $LASTEXITCODE; "
+            f"& {{ {command}\n}}; $__success = $?; $__native = $LASTEXITCODE; "
+            f"$__rc = if (-not $__success) {{ 1 }} elseif ($null -eq $__native) {{ 0 }} else {{ $__native }}; "
             f'Write-Error "__CLAWCODEX_EXIT__=$__rc"; '
             f"exit $__rc"
         )

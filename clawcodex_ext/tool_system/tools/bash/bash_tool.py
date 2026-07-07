@@ -76,7 +76,6 @@ def _run_bash_with_abort(
     Returning quickly on abort is what makes ESC feel instant — the
     previous ``subprocess.run`` had to wait the entire timeout.
     """
-
     # ``stdin=DEVNULL`` matches TS ``Shell.ts`` (stdio[0] = 'pipe' with the
     # writable end never written to). Without this the child inherits the
     # parent's stdin -- when clawcodex runs in a terminal, that's a TTY, and
@@ -148,7 +147,8 @@ def _run_bash_with_abort(
     # discriminator for downstream callers; the exit-code label is
     # rewritten in ``_bash_call``.
     if interrupted or timed_out:
-        _kill_process_group(proc.pid, _signal_mod.SIGKILL)
+        kill_signal = getattr(_signal_mod, "SIGKILL", _signal_mod.SIGTERM)
+        _kill_process_group(proc.pid, kill_signal)
         try:
             proc.wait(timeout=_KILL_REAP_TIMEOUT_S)
         except subprocess.TimeoutExpired:
@@ -196,12 +196,6 @@ from src.utils.format import format_duration
 from .background import spawn_background_bash
 from clawcodex_ext.utils.shell_resolver import (
     build_cwd_wrapper,
-    build_shell_argv,
-    resolve_shell,
-)
-from clawcodex_ext.utils.shell_resolver import (
-    build_cwd_wrapper,
-    build_shell_argv,
     resolve_shell,
 )
 from .command_semantics import interpret_command_result
@@ -226,8 +220,7 @@ def _resolve_shell_from_input(tool_input: dict) -> tuple[str, list[str]]:
     raw = tool_input.get("shell")
     if raw is not None and not isinstance(raw, str):
         raw = None
-    from clawcodex_ext.utils.shell_resolver import resolve_shell as _rs
-    return _rs(raw or "auto")
+    return resolve_shell(raw or "auto")
 
 
 def _try_extract_cd(command: str) -> Path | None:
@@ -305,7 +298,7 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
 
     explicit_cwd = tool_input.get("cwd")
     if explicit_cwd is not None:
-        if not isinstance(explicit_cwd, str) or not explicit_cwd.startswith("/"):
+        if not isinstance(explicit_cwd, str) or not Path(explicit_cwd).expanduser().is_absolute():
             raise ToolInputError("cwd must be an absolute path when provided")
         cwd = context.ensure_allowed_path(explicit_cwd)
     else:
@@ -318,11 +311,10 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     # behaviour: we return immediately with a task id and let the model poll
     # the output via ``TaskOutput``.
     #
-    # Default to "bash" — the non-background path (below) hard-codes
-    # ``["bash", "-c", …]``.
-    shell_kind = "bash"
+    # Resolve before either foreground or background execution so Windows
+    # auto mode uses PowerShell consistently instead of falling through to WSL.
+    shell_kind, shell_argv_factory = _resolve_shell_from_input(tool_input)
     if tool_input.get("run_in_background"):
-        shell_kind, _shell_argv = _resolve_shell_from_input(tool_input)
         bg_output = spawn_background_bash(
             command=command,
             cwd=cwd,
@@ -384,9 +376,8 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     cwd_fd, cwd_path = _tempfile.mkstemp(prefix="clawcodex-bash-cwd-", suffix=".txt")
     _os.close(cwd_fd)
     try:
-        wrapped = (
-            f"{{ {command}\n}}; __rc=$?; pwd > {shlex.quote(cwd_path)} 2>/dev/null; exit $__rc"
-        )
+        wrapped = build_cwd_wrapper(shell_kind, command, cwd_path)
+        shell_argv = shell_argv_factory(wrapped)
         # Spawn bash in its own session/process group so we can kill the
         # whole subtree (e.g. ``find /`` that itself forks helpers) when
         # ESC fires. Mirrors TS ``ShellCommand`` (typescript/src/utils/
@@ -395,7 +386,7 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
         # POSIX; on Windows it falls back to a process group via
         # ``CREATE_NEW_PROCESS_GROUP``.
         run_result = _run_bash_with_abort(
-            ["bash", "-c", wrapped],
+            shell_argv,
             cwd=str(cwd),
             timeout_s=timeout_s,
             abort_signal=_get_abort_signal(context),
