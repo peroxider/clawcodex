@@ -432,6 +432,16 @@ class FeatureClassifier:
                     sub_tags.setdefault(rule.category, []).extend(matched_sub_tags)
 
         category = self._pick_category(scores)
+        # Source-domain fallback: when no keyword matches, use the
+        # source's known domain so features from embodied / spatial
+        # projects don't fall through to UNKNOWN.
+        if category == FeatureCategory.UNKNOWN:
+            domain = self._source_domain_map.get(record.source, "general")
+            if domain in {"embodied_ai", "spatial_intelligence"}:
+                try:
+                    category = FeatureCategory(domain)
+                except ValueError:
+                    pass
         category = self._check_domain(category, record.source)
         record.category = category
 
@@ -503,12 +513,12 @@ class FeatureClassifier:
     ) -> FeatureCategory:
         """Reject ``category`` when it contradicts the source's known domain.
 
-        A ``software_engineering`` source mentioning "robot" in a gallery
+        A ``code_agent`` source mentioning "robot" in a gallery
         example is NOT an embodied-AI feature; a ``spatial_intelligence``
         source mentioning "policy" is NOT a robot-policy feature.
         """
         domain = self._source_domain_map.get(source, "general")
-        if domain == "software_engineering":
+        if domain == "code_agent":
             if category in _EMBODIED_CATS or category in _SPATIAL_CATS:
                 return FeatureCategory.UNKNOWN
         elif domain == "embodied_ai":

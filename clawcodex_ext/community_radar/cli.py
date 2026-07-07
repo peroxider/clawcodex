@@ -325,7 +325,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_p = source_sub.add_parser("add")
     add_p.add_argument("name")
     add_p.add_argument("--repo", required=True)
-    add_p.add_argument("--domain", choices=("software_engineering", "embodied_ai",
+    add_p.add_argument("--domain", choices=("code_agent", "embodied_ai",
                         "spatial_intelligence", "general"), default=None,
                        help="Source domain for cross-domain classification guard.")
     add_p.add_argument("--track-releases", dest="track_releases", action="store_true", default=True)

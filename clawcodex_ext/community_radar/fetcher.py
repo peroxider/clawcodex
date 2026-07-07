@@ -27,6 +27,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
+import urllib.request
 from urllib.parse import quote
 
 from .models import Commit, FetchResult, PullRequest, Release, WatchSource
@@ -95,6 +96,121 @@ def _write_changelog_cache(cache_dir: Path, source: WatchSource, text: str) -> N
     path = _changelog_cache_path(cache_dir, source)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Domain detection cache helpers
+# ---------------------------------------------------------------------------
+
+
+def _domain_cache_path(cache_dir: Path, repo: str) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", repo.replace("/", "_")) or "unknown"
+    return cache_dir / "domains" / f"{safe}.json"
+
+
+def _read_domain_cache(cache_dir: Path, repo: str, ttl: int = CHANGELOG_CACHE_TTL_SECONDS) -> str | None:
+    path = _domain_cache_path(cache_dir, repo)
+    if not path.exists():
+        return None
+    try:
+        mtime = path.stat().st_mtime
+        if time.time() - mtime > ttl:
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+        cached = data.get("domain")
+        if isinstance(cached, str) and cached:
+            return cached
+        return None
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def _write_domain_cache(cache_dir: Path, repo: str, domain: str) -> None:
+    path = _domain_cache_path(cache_dir, repo)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"domain": domain, "repo": repo, "cached_at": time.time()}),
+        encoding="utf-8",
+    )
+
+
+# Keywords matched against GitHub topics + description to auto-detect
+# a project's domain when the user has not set one explicitly.
+_EMBODIED_AI_DOMAIN_KEYWORDS = [
+    "robot", "robotics", "manipulation", "locomotion", "grasping",
+    "embodied", "vla", "reinforcement-learning", "imitation-learning",
+    "humanoid", "legged-robot", "mobile-manipulation", "teleoperation",
+    "sim-to-real", "robot-learning",
+]
+
+_SPATIAL_DOMAIN_KEYWORDS = [
+    "nerf", "neural-radiance", "3d-reconstruction", "3d-vision",
+    "gaussian-splatting", "point-cloud", "slam", "lidar",
+    "novel-view-synthesis", "volumetric", "mesh", "voxel",
+    "spatial-intelligence", "radiance-field",
+]
+
+
+def detect_repo_domain(
+    repo: str,
+    cache_dir: Path | str,
+    *,
+    github_token: str | None = None,
+) -> str | None:
+    """Auto-detect a GitHub repo's domain from its topics and description.
+
+    Calls ``GET /repos/{owner}/{repo}`` and matches keywords against the
+    repo's ``topics`` list and ``description`` field.  Results are cached
+    for 24 h under ``cache_dir/domains/`` so repeated scans don't burn
+    API quota.
+
+    Returns ``"embodied_ai"``, ``"spatial_intelligence"``, or ``None``
+    (meaning stay ``general`` / software engineering).
+    """
+    cache_dir = Path(cache_dir)
+
+    # Check cache first (negative results are cached as empty string)
+    cached = _read_domain_cache(cache_dir, repo)
+    if cached is not None:
+        return cached
+
+    owner, name = repo.split("/", 1)
+    url = f"{GITHUB_API_ROOT}/repos/{quote(owner)}/{quote(name)}"
+
+    req = urllib.request.Request(url)
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("X-GitHub-Api-Version", "2022-11-28")
+    req.add_header("User-Agent", DEFAULT_USER_AGENT)
+    if github_token:
+        req.add_header("Authorization", f"Bearer {github_token}")
+
+    try:
+        with urllib.request.urlopen(req, timeout=DEFAULT_REQUEST_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        _log.debug("domain detection failed for %s: %s", repo, exc)
+        return None
+
+    # Build a single lower-case blob from topics + description
+    topics = [str(t).lower() for t in (data.get("topics") or [])]
+    description = (data.get("description") or "").lower()
+    combined = " ".join(topics) + " " + description
+
+    detected: str | None = None
+    for kw in _EMBODIED_AI_DOMAIN_KEYWORDS:
+        if kw in combined:
+            detected = "embodied_ai"
+            break
+    if detected is None:
+        for kw in _SPATIAL_DOMAIN_KEYWORDS:
+            if kw in combined:
+                detected = "spatial_intelligence"
+                break
+
+    # Cache even negative results so we don't re-fetch on every scan
+    _write_domain_cache(cache_dir, repo, detected or "")
+    _log.info("auto-detected domain for %s: %s", repo, detected or "general")
+    return detected
 
 
 # ---------------------------------------------------------------------------

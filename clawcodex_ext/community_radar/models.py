@@ -143,7 +143,7 @@ class SourceDomain(str, Enum):
     classification (e.g. a software-engineering project whose features
     happen to mention ``robot`` is NOT an embodied-AI feature)."""
 
-    SOFTWARE_ENGINEERING = "software_engineering"
+    CODE_AGENT = "code_agent"
     EMBODIED_AI = "embodied_ai"
     SPATIAL_INTELLIGENCE = "spatial_intelligence"
     GENERAL = "general"
