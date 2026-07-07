@@ -49,6 +49,13 @@ def test_classify_control_verb_is_command() -> None:
         assert c.classify(_msg(f'{v} something')) is MessageSemantics.COMMAND
 
 
+def test_classify_orchestrator_cli_is_command() -> None:
+    c = MessageClassifier()
+    assert c.classify(_msg('/issue list')) is MessageSemantics.COMMAND
+    assert c.classify(_msg('/issue show --id AGENTSDK-15')) is MessageSemantics.COMMAND
+    assert c.classify(_msg('/server status')) is MessageSemantics.COMMAND
+
+
 def test_classify_busy_plain_text_is_followup() -> None:
     c = MessageClassifier()
     assert c.classify(_msg('顺便更新下注释'), is_busy=True) is MessageSemantics.FOLLOW_UP
@@ -117,6 +124,28 @@ def test_command_router_no_issue_returns_none_hint() -> None:
 
 def test_command_router_plain_text_returns_none() -> None:
     assert CommandRouter().route(_msg('hello')) is None
+
+
+def test_command_router_orchestrator_issue_cli() -> None:
+    r = CommandRouter().route(_msg('/issue list --status running'))
+    assert r is not None
+    assert r.kind == 'orchestrator_cli'
+    assert r.verb == 'issue'
+    assert r.argv == ('issue', 'list', '--status', 'running')
+
+
+def test_command_router_orchestrator_server_status() -> None:
+    r = CommandRouter().route(_msg('/server status --workflow ./workflow.md'))
+    assert r is not None
+    assert r.kind == 'orchestrator_cli'
+    assert r.verb == 'server'
+    assert r.argv == ('server', 'status', '--workflow', './workflow.md')
+
+
+def test_command_router_orchestrator_issue_id_hint() -> None:
+    r = CommandRouter().route(_msg('/issue stop --id AGENTSDK-15'))
+    assert r is not None
+    assert r.issue_hint == 'AGENTSDK-15'
 
 
 # -- control bridge ----------------------------------------------------

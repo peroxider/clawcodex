@@ -1330,3 +1330,91 @@ def test_orchestrator_issue_cli_commands_call_handler() -> None:
         assert calls[0][0] == 'issue_cli'
         assert calls[0][1] == verb
         assert calls[0][2] == 'AGENTSDK-15'
+
+
+def test_orchestrator_cli_command_queues_captured_output() -> None:
+    h, _calls = _handlers()
+    c = OrchestratorGatewayClient(
+        h,
+        cli_runner=lambda argv: (0, f'argv={argv!r}\nissue output\n', ''),
+    )
+    msg = InboundMessage('o', '/issue list', 'm1', 'wechat-main')
+
+    status = c.dispatch(msg, MessageSemantics.COMMAND)
+
+    assert status == 'orchestrator_cli_issue_list'
+    pending = list(c._pending_outbound)
+    assert len(pending) == 1
+    assert '命令已执行：/issue list' in pending[0]
+    assert "argv=['issue', 'list']" in pending[0]
+    assert 'issue output' in pending[0]
+
+
+def test_orchestrator_issue_stop_routes_to_control_handler() -> None:
+    h, calls = _handlers()
+
+    def _fail_cli(_argv):
+        raise AssertionError('control-like issue commands must not run interactive CLI')
+
+    c = OrchestratorGatewayClient(h, cli_runner=_fail_cli)
+    msg = InboundMessage('o', '/issue stop --id AGENTSDK-15', 'm1', 'wechat-main')
+
+    status = c.dispatch(msg, MessageSemantics.COMMAND)
+
+    assert status == 'orchestrator_cli_issue_stop'
+    assert calls[0] == ('control', 'stop', 'AGENTSDK-15')
+    assert 'Control command' in list(c._pending_outbound)[0]
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_pushed_cli_command_sends_outbound_reply() -> None:
+    from clawcodex_ext.services.im_gateway.ipc_protocol import GatewayFrame
+
+    h, _calls = _handlers()
+
+    class _FakeIpc:
+        def __init__(self):
+            self.on_deliver = None
+            self.sent: list[tuple[str, str]] = []
+
+        async def send_outbound(self, *, origin, text):
+            self.sent.append((origin, text))
+            return GatewayFrame.ack(delivery_id='d1', layer='processed', message='sent')
+
+    ipc = _FakeIpc()
+    c = OrchestratorGatewayClient(
+        h,
+        ipc_client=ipc,
+        origin='feishu:dm:*:*',
+        cli_runner=lambda argv: (0, 'Orchestrator daemon: RUNNING\n', ''),
+    )
+
+    await c._on_pushed_deliver(
+        GatewayFrame.deliver(
+            delivery_id='d1',
+            session_id='orch',
+            origin='feishu:dm:cli_app:ou_user',
+            text='/server status',
+            semantic='command',
+        )
+    )
+
+    assert ipc.sent == [
+        (
+            'feishu:dm:*:*',
+            '命令已执行：/server status\n\nOrchestrator daemon: RUNNING',
+        )
+    ]
+
+
+def test_orchestrator_issue_tail_returns_bounded_notice() -> None:
+    h, _calls = _handlers()
+    c = OrchestratorGatewayClient(h)
+    msg = InboundMessage('o', '/issue tail --id AGENTSDK-15', 'm1', 'wechat-main')
+
+    status = c.dispatch(msg, MessageSemantics.COMMAND)
+
+    assert status == 'orchestrator_cli_issue_tail'
+    reply = list(c._pending_outbound)[0]
+    assert 'streaming command' in reply
+    assert 'AGENTSDK-15' in reply

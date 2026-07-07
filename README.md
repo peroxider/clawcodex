@@ -353,23 +353,39 @@ With the gateway daemon running and a bidirectional app channel logged in, start
 **Connect to the gateway:**
 
 ```bash
-# REPL: resume an existing session or omit --resume to start a new one, then connect.
+# REPL: connect at startup
+clawcodex-dev --gateway
+
+# REPL: or resume/start normally and connect later
+clawcodex-dev
 clawcodex-dev --resume <session-id>
 /gateway connect
 /gateway status
 /gateway disconnect
 
-# Orchestrator: start normally, then connect the running daemon.
+# Orchestrator: connect at startup
+clawcodex-dev orchestrator server start --workflow path/to/workflow.md --gateway
+
+# Orchestrator: or connect an already-running daemon later
 clawcodex-dev orchestrator server start --workflow path/to/workflow.md
 clawcodex-dev orchestrator server connect-gateway
 clawcodex-dev orchestrator server disconnect-gateway
 ```
 
-Runtime connect binds all direct/private senders for the active bidirectional IM app channel by default. Only one runtime can own the channel at a time: connecting a REPL binding disconnects an orchestrator binding, and connecting an orchestrator binding disconnects a REPL binding. V1 supports only one active bidirectional app channel (`wechat` or Feishu WebSocket); `gateway setup` disables the other inbound app channel when enabling Feishu WebSocket. Legacy Feishu/Slack/Discord webhooks remain outbound-only. `CLAWCODEX_GATEWAY_SOCK` can override the daemon socket; specific-origin binding remains available only for targeted debugging or future multi-origin automation.
+Startup `--gateway` and runtime connect both bind all direct/private senders for the active bidirectional IM app channel by default. Only one runtime can own the channel at a time: connecting a REPL binding disconnects an orchestrator binding, and connecting an orchestrator binding disconnects a REPL binding. V1 supports only one active bidirectional app channel (`wechat` or Feishu WebSocket); `gateway setup` disables the other inbound app channel when enabling Feishu WebSocket. Legacy Feishu/Slack/Discord webhooks remain outbound-only. `CLAWCODEX_GATEWAY_SOCK` can override the daemon socket; specific-origin binding remains available only for targeted debugging or future multi-origin automation.
 
-The gateway supports sending control commands to REPL/orchestrator, such as `/stop` to stop the current task.
+**Command Control:**
 
-For live diagnosis, restart the daemon with INFO logging and tail the gateway log:
+| Runtime | Whitelisted IM commands |
+|---|---|
+| REPL | `/stop`, `/clear`, `/reset`, `/new`, `/goal`, `/help`, `/?`, `/cost`, `/history`, `/context`, `/recap`, `/btw`, `/cron-list`, `/cron-status`, `/cron-runs`, `/tools`, `/skills`, `/diff`, `/mcp`, `/tasks`, `/idle`, `/doctor`, `/release-notes` |
+| Orchestrator | `/server status`; `/issue list`, `/issue show`, `/issue tail`, `/issue stop`, `/issue pause`, `/issue resume`, `/issue takeover`, `/issue clarify`, `/issue inject`, `/issue workspace` |
+
+Non-whitelisted Orchestrator slash commands return `不支持 /xxx 执行`.
+
+**Troubleshooting:**
+
+Restart the daemon with INFO logging and tail the gateway log:
 
 ```bash
 clawcodex-dev gateway restart --verbose

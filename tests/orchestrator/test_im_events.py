@@ -1226,7 +1226,7 @@ async def test_orchestrator_all_private_binding_sends_to_wildcard_then_wildcard(
 
 @pytest.mark.asyncio
 async def test_orchestrator_pending_outbound_stays_queued_when_flush_is_rejected() -> None:
-    """A NACK/timeout during flush must not silently drop queued events."""
+    """A gateway NACK during flush must not silently drop queued events."""
     from clawcodex_ext.services.im_gateway.ipc_protocol import GatewayFrame
     from extensions.orchestrator.im_gateway_client import OrchestratorGatewayClient
 
@@ -1272,6 +1272,62 @@ async def test_orchestrator_pending_outbound_stays_queued_when_flush_is_rejected
         ('wechat:direct:*:*', 'event text'),
     ]
     assert list(client._pending_outbound) == ['event text']
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_outbound_timeout_does_not_queue_retry() -> None:
+    """ACK timeout is ambiguous: the IM message may already be delivered.
+
+    Do not enqueue an automatic retry, otherwise Feishu/WeChat can receive
+    duplicate messages when gateway.send succeeds but the IPC ACK arrives
+    after the client timeout.
+    """
+    from extensions.orchestrator.im_gateway_client import OrchestratorGatewayClient
+
+    class _TimeoutIpc:
+        def __init__(self):
+            self.on_deliver = None
+            self.sent: list[tuple[str, str]] = []
+
+        async def send_outbound(self, *, origin, text):
+            self.sent.append((origin, text))
+            return None
+
+    ipc = _TimeoutIpc()
+    client = OrchestratorGatewayClient(_handlers(), ipc_client=ipc, origin='im:direct:*:*')
+
+    await client.send_outbound('event text')
+
+    assert ipc.sent == [('im:direct:*:*', 'event text')]
+    assert list(client._pending_outbound) == []
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_pending_outbound_timeout_is_dropped_not_retried() -> None:
+    """A queued message that times out after send attempt must be removed.
+
+    This avoids repeated duplicate deliveries when the gateway did send the
+    IM message but returned the ACK too late.
+    """
+    from extensions.orchestrator.im_gateway_client import OrchestratorGatewayClient
+
+    class _TimeoutIpc:
+        def __init__(self):
+            self.on_deliver = None
+            self.sent: list[tuple[str, str]] = []
+
+        async def send_outbound(self, *, origin, text):
+            self.sent.append((origin, text))
+            return None
+
+    ipc = _TimeoutIpc()
+    client = OrchestratorGatewayClient(_handlers(), ipc_client=ipc, origin='im:direct:*:*')
+    client._queue_pending_outbound('event text')
+
+    await client._flush_pending_outbound()
+
+    assert ipc.sent == [('im:direct:*:*', 'event text')]
+    assert list(client._pending_outbound) == []
 
 
 @pytest.mark.asyncio

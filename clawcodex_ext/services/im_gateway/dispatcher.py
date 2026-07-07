@@ -25,7 +25,7 @@ from clawcodex_ext.messaging.semantics import MessageClassifier
 logger = logging.getLogger(__name__)
 
 from .models import AckLayer, AckReceipt, InboundMessage, MessageSemantics
-from .repl_command_gate import check_repl_command
+from .repl_command_gate import check_orchestrator_command, check_repl_command
 from .router import SessionRouter
 from .store import ReliabilityStore
 
@@ -106,9 +106,8 @@ class InboundDispatcher:
             target.session_id[:32],
             target.host_type,
         )
-        # 3.5 REPL 侧白名单门禁：只放行白名单内的斜杠命令到 REPL，
-        # 其余斜杠命令在网关层直接拒绝（不 push、不入队）。仅对
-        # target.host_type == 'repl' 生效；orchestrator 不受影响。
+        # 3.5 opt-in runtime 白名单门禁：只放行白名单内的斜杠命令，
+        # 其余斜杠命令在网关层直接拒绝（不 push、不入队）。
         if target.host_type == 'repl':
             allowed, reason = check_repl_command(message.text or '')
             if not allowed:
@@ -121,6 +120,27 @@ class InboundDispatcher:
                 )
                 logger.info(
                     'im_gateway: REPL command blocked origin=%s cmd=%s',
+                    message.origin[:32],
+                    (message.text or '')[:32],
+                )
+                return AckReceipt(
+                    delivery_id,
+                    AckLayer.ACCEPTED,
+                    message=reason,
+                    notify_user=True,
+                )
+        elif target.host_type == 'orchestrator':
+            allowed, reason = check_orchestrator_command(message.text or '')
+            if not allowed:
+                self._store.audit(
+                    'orchestrator_command_blocked',
+                    delivery_id=delivery_id,
+                    origin=message.origin,
+                    command=(message.text or '')[:64],
+                    reason=reason,
+                )
+                logger.info(
+                    'im_gateway: orchestrator command blocked origin=%s cmd=%s',
                     message.origin[:32],
                     (message.text or '')[:32],
                 )

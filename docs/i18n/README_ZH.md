@@ -329,23 +329,39 @@ gateway 守护进程运行且某个双向 app 渠道登录后，先正常启动 
 **连接网关：**
 
 ```bash
-# REPL：恢复已有会话；没有历史会话时省略 --resume 即新建，然后连接。
+# REPL：启动时直接连接
+clawcodex-dev --gateway
+
+# REPL：也可正常恢复/新建后再连接
+clawcodex-dev
 clawcodex-dev --resume <session-id>
 /gateway connect
 /gateway status
 /gateway disconnect
 
-# Orchestrator：正常启动后，再连接运行中的守护进程。
+# Orchestrator：启动时直接连接
+clawcodex-dev orchestrator server start --workflow path/to/workflow.md --gateway
+
+# Orchestrator：也可连接已经运行中的守护进程
 clawcodex-dev orchestrator server start --workflow path/to/workflow.md
 clawcodex-dev orchestrator server connect-gateway
 clawcodex-dev orchestrator server disconnect-gateway
 ```
 
-运行期连接默认绑定当前活跃双向 IM app 渠道下的所有 direct/private 发送者。同一时间只有一个运行域能拥有该渠道：连接 REPL 会断开 orchestrator 绑定，连接 orchestrator 会断开 REPL 绑定。V1 只支持一个活跃双向 app 渠道（`wechat` 或 Feishu WebSocket）；启用 Feishu WebSocket 时，`gateway setup` 会停用其它 inbound app 渠道。Legacy Feishu/Slack/Discord webhook 仍是 outbound-only。`CLAWCODEX_GATEWAY_SOCK` 可覆盖 daemon socket；特定 origin 绑定仅保留给定向调试或未来多 origin 自动化。
+启动时的 `--gateway` 与运行期连接都会默认绑定当前活跃双向 IM app 渠道下的所有 direct/private 发送者。同一时间只有一个运行域能拥有该渠道：连接 REPL 会断开 orchestrator 绑定，连接 orchestrator 会断开 REPL 绑定。V1 只支持一个活跃双向 app 渠道（`wechat` 或 Feishu WebSocket）；启用 Feishu WebSocket 时，`gateway setup` 会停用其它 inbound app 渠道。Legacy Feishu/Slack/Discord webhook 仍是 outbound-only。`CLAWCODEX_GATEWAY_SOCK` 可覆盖 daemon socket；特定 origin 绑定仅保留给定向调试或未来多 origin 自动化。
 
-网关支持向 REPL/orchestrator 下发控制命令，例如 `/stop` 可停止当前任务。
+**命令控制：**
 
-排查现场链路时，用 INFO 日志重启 daemon 并跟踪 gateway 日志：
+| 运行域 | IM 白名单命令 |
+|---|---|
+| REPL | `/stop`、`/clear`、`/reset`、`/new`、`/goal`、`/help`、`/?`、`/cost`、`/history`、`/context`、`/recap`、`/btw`、`/cron-list`、`/cron-status`、`/cron-runs`、`/tools`、`/skills`、`/diff`、`/mcp`、`/tasks`、`/idle`、`/doctor`、`/release-notes` |
+| Orchestrator | `/server status`；`/issue list`、`/issue show`、`/issue tail`、`/issue stop`、`/issue pause`、`/issue resume`、`/issue takeover`、`/issue clarify`、`/issue inject`、`/issue workspace` |
+
+Orchestrator 非白名单斜杠命令会返回 `不支持 /xxx 执行`。
+
+**问题排查：**
+
+用 INFO 日志重启 daemon 并跟踪 gateway 日志：
 
 ```bash
 clawcodex-dev gateway restart --verbose
