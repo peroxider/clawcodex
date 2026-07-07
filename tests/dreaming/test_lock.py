@@ -223,3 +223,132 @@ def test_list_sessions_skips_dotfiles(monkeypatch: pytest.MonkeyPatch, memory_di
     )
     result = lock_mod.list_sessions_touched_since(0)
     assert result == ["visible"]
+
+
+# ---------------------------------------------------------------------------
+# Phase B — TTL 30min diagnostics & active cleanup
+# ---------------------------------------------------------------------------
+
+
+def _write_lock(memory_dir: Path, *, pid: int, mtime_seconds: float) -> Path:
+    """Drop a lock file with a specific PID body + mtime."""
+    lock_path = memory_dir / lock_mod.LOCK_FILE_NAME
+    lock_path.write_text(str(pid), encoding="utf-8")
+    os.utime(lock_path, (mtime_seconds, mtime_seconds))
+    return lock_path
+
+
+def test_get_holder_pid_returns_int_when_present(memory_dir: Path) -> None:
+    _write_lock(memory_dir, pid=4242, mtime_seconds=time.time())
+    assert lock_mod.get_holder_pid() == 4242
+
+
+def test_get_holder_pid_returns_none_when_missing(memory_dir: Path) -> None:
+    assert lock_mod.get_holder_pid() is None
+
+
+def test_get_holder_pid_returns_none_for_corrupt_body(memory_dir: Path) -> None:
+    lock_path = memory_dir / lock_mod.LOCK_FILE_NAME
+    lock_path.write_text("not-a-pid", encoding="utf-8")
+    assert lock_mod.get_holder_pid() is None
+
+
+def test_get_holder_pid_returns_none_for_zero_or_negative(memory_dir: Path) -> None:
+    lock_path = memory_dir / lock_mod.LOCK_FILE_NAME
+    lock_path.write_text("0", encoding="utf-8")
+    assert lock_mod.get_holder_pid() is None
+    lock_path.write_text("-7", encoding="utf-8")
+    assert lock_mod.get_holder_pid() is None
+
+
+def test_get_lock_age_seconds_zero_when_missing(memory_dir: Path) -> None:
+    assert lock_mod.get_lock_age_seconds() == 0
+
+
+def test_get_lock_age_seconds_uses_mtime(memory_dir: Path) -> None:
+    past = time.time() - 1234
+    _write_lock(memory_dir, pid=os.getpid(), mtime_seconds=past)
+    age = lock_mod.get_lock_age_seconds()
+    assert 1230 <= age <= 1240
+
+
+def test_is_lock_stale_false_when_missing(memory_dir: Path) -> None:
+    assert lock_mod.is_lock_stale() is False
+
+
+def test_is_lock_stale_false_when_fresh(memory_dir: Path) -> None:
+    _write_lock(memory_dir, pid=os.getpid(), mtime_seconds=time.time())
+    assert lock_mod.is_lock_stale() is False
+
+
+def test_is_lock_stale_true_when_past_ttl(memory_dir: Path) -> None:
+    stale_seconds = lock_mod.HOLDER_STALE_MS / 1000 + 60
+    _write_lock(memory_dir, pid=os.getpid(), mtime_seconds=time.time() - stale_seconds)
+    assert lock_mod.is_lock_stale() is True
+
+
+def test_is_lock_stale_true_when_corrupt_body(memory_dir: Path) -> None:
+    """Unparseable body is treated as stale — nothing valid to preserve."""
+    lock_path = memory_dir / lock_mod.LOCK_FILE_NAME
+    lock_path.write_text("garbage", encoding="utf-8")
+    assert lock_mod.is_lock_stale() is True
+
+
+def test_force_release_if_stale_no_op_when_missing(memory_dir: Path) -> None:
+    assert lock_mod.force_release_if_stale() is False
+
+
+def test_force_release_if_stale_no_op_when_fresh(memory_dir: Path) -> None:
+    lock_path = _write_lock(
+        memory_dir, pid=os.getpid(), mtime_seconds=time.time()
+    )
+    assert lock_mod.force_release_if_stale() is False
+    assert lock_path.exists()
+
+
+def test_force_release_if_stale_unlinks_when_stale(memory_dir: Path) -> None:
+    lock_path = memory_dir / lock_mod.LOCK_FILE_NAME
+    stale_seconds = lock_mod.HOLDER_STALE_MS / 1000 + 120
+    _write_lock(memory_dir, pid=os.getpid(), mtime_seconds=time.time() - stale_seconds)
+    assert lock_mod.is_lock_stale() is True
+    assert lock_mod.force_release_if_stale() is True
+    assert not lock_path.exists()
+
+
+def test_force_release_if_stale_swallows_oserror(
+    monkeypatch, memory_dir: Path
+) -> None:
+    """Even on filesystem failure, force_release_if_stale must not raise."""
+    _write_lock(memory_dir, pid=os.getpid(), mtime_seconds=time.time())
+    monkeypatch.setattr(lock_mod, "is_lock_stale", lambda now_ms=None: True)
+
+    def _raise(*_a, **_kw):
+        raise OSError("boom")
+
+    monkeypatch.setattr(lock_mod.Path, "unlink", _raise)
+    assert lock_mod.force_release_if_stale() is False
+
+
+def test_try_acquire_reclaims_live_pid_when_ttl_expired(memory_dir: Path) -> None:
+    """Phase B core — PID is alive but mtime age > TTL.
+
+    Without Phase B the freshness gate would refuse to reclaim a
+    lock whose holder is still alive. With Phase B the TTL is
+    authoritative: reclaim happens regardless of holder liveness.
+    """
+    stale_seconds = lock_mod.HOLDER_STALE_MS / 1000 + 60
+    _write_lock(
+        memory_dir, pid=os.getpid(), mtime_seconds=time.time() - stale_seconds
+    )
+    result = lock_mod.try_acquire_consolidation_lock()
+    assert result is not None
+    lock_path = memory_dir / lock_mod.LOCK_FILE_NAME
+    assert int(lock_path.read_text()) == os.getpid()
+
+
+def test_try_acquire_still_blocks_when_fresh(memory_dir: Path) -> None:
+    """Phase A behavior preserved: fresh + live-PID → blocked."""
+    foreign_pid = os.getppid()
+    assert foreign_pid != os.getpid(), "parent PID must differ from ours"
+    _write_lock(memory_dir, pid=foreign_pid, mtime_seconds=time.time())
+    assert lock_mod.try_acquire_consolidation_lock() is None

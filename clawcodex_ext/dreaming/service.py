@@ -42,6 +42,7 @@ from clawcodex_ext.dreaming.config import (
     is_auto_dream_enabled,
 )
 from clawcodex_ext.dreaming.lock import (
+    force_release_if_stale,
     list_sessions_touched_since,
     read_last_consolidated_at,
     record_consolidation,
@@ -223,7 +224,15 @@ async def _execute(
         )
         return
 
-    # --- Lock gate ---
+    # --- Lock gate (Phase B: TTL-aware) ---
+    # Active stale-lock sweep *before* the in-band PID check: even
+    # if the gate chain above blocks this run (e.g. session gate
+    # closed), kicking a stale lock now keeps the next process
+    # unblocked.
+    try:
+        force_release_if_stale()
+    except Exception as e:
+        _log.debug("auto-dream: force_release_if_stale failed: %s", e)
     try:
         prior_mtime = try_acquire_consolidation_lock()
     except Exception as e:

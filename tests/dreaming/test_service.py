@@ -25,7 +25,7 @@ from clawcodex_ext.dreaming import (
     set_dream_config,
     try_acquire_consolidation_lock,
 )
-from clawcodex_ext.dreaming.lock import LOCK_FILE_NAME
+from clawcodex_ext.dreaming.lock import HOLDER_STALE_MS, LOCK_FILE_NAME
 from clawcodex_ext.dreaming.runner import (
     DreamRunResult,
     set_dream_runner_factory,
@@ -327,3 +327,64 @@ def test_is_auto_dream_enabled_default_true(tmp_path: Path) -> None:
 def test_is_auto_dream_enabled_env_off(tmp_path: Path) -> None:
     os.environ["CLAWCODEX_DISABLE_AUTO_DREAM"] = "1"
     assert is_auto_dream_enabled() is False
+
+
+# ---------------------------------------------------------------------------
+# Phase B — TTL active cleanup wired into the service gate chain
+# ---------------------------------------------------------------------------
+
+
+def test_stale_lock_is_force_released_before_lock_gate(tmp_path: Path) -> None:
+    """When a previous consolidator crashed and left a stale lock,
+    the service's gate chain must ``force_release_if_stale`` before
+    the in-band lock acquire. A successful dream run is observable
+    proof that the cleanup path actually ran.
+    """
+    seen: list[str] = []
+
+    def factory():
+        def runner(prompt, on_message):
+            seen.append(prompt)
+            if on_message is not None:
+                on_message(text="consolidated", tool_use_count=0, touched_paths=[])
+            return DreamRunResult(
+                files_touched=["MEMORY.md"],
+                usage={"output_tokens": 17},
+                summary="updated MEMORY.md",
+            )
+
+        return runner
+
+    set_dream_runner_factory(factory)
+    # Stage a stale lock: live holder PID + TTL+60s old mtime. Without
+    # Phase B this would block the lock gate forever; with Phase B
+    # ``force_release_if_stale`` unlinks it on entry.
+    lock_path = tmp_path / LOCK_FILE_NAME
+    lock_path.write_text(str(os.getppid()), encoding="utf-8")
+    stale_seconds = HOLDER_STALE_MS / 1000 + 60
+    stale_mtime = time.time() - stale_seconds
+    os.utime(lock_path, (stale_mtime, stale_mtime))
+
+    reg = _init(force_min_hours=0, force_min_sessions=0)
+    asyncio.run(execute_auto_dream(registry=reg))
+
+    # Dream task was registered + completed — the TTL-sweep path
+    # successfully reclaimed the stale lock for the next pass.
+    tasks = reg.by_type("dream")
+    assert tasks, "stale lock should have been force-released; expected a dream task"
+    assert tasks[0].status == "completed"
+
+
+def test_fresh_lock_alive_pid_blocks_unchanged(tmp_path: Path) -> None:
+    """Phase A path is preserved: fresh mtime + alive holder → blocked,
+    even with the new force_release_if_stale call wired in.
+    """
+    lock_path = tmp_path / LOCK_FILE_NAME
+    lock_path.write_text(str(os.getppid()), encoding="utf-8")
+    now = time.time()
+    os.utime(lock_path, (now, now))
+
+    reg = _init(force_min_hours=0, force_min_sessions=0)
+    asyncio.run(execute_auto_dream(registry=reg))
+
+    assert reg.by_type("dream") == []

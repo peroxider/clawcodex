@@ -36,6 +36,10 @@ from clawcodex_ext.dreaming.cron_integration import (
 from clawcodex_ext.dreaming.lock import (
     HOLDER_STALE_MS,
     LOCK_FILE_NAME,
+    force_release_if_stale,
+    get_holder_pid,
+    get_lock_age_seconds,
+    is_lock_stale,
     list_sessions_touched_since,
     read_last_consolidated_at,
     record_consolidation,
@@ -87,6 +91,10 @@ __all__ = [
     # lock
     "HOLDER_STALE_MS",
     "LOCK_FILE_NAME",
+    "force_release_if_stale",
+    "get_holder_pid",
+    "get_lock_age_seconds",
+    "is_lock_stale",
     "list_sessions_touched_since",
     "read_last_consolidated_at",
     "record_consolidation",

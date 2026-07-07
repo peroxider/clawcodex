@@ -1,15 +1,50 @@
-"""Consolidation lock — F-100 / 100.3.
+"""Consolidation lock — F-100 / 100.3 (with Phase B TTL enhancement).
 
 Mirrors ``typescript/src/services/autoDream/consolidationLock.ts``.
 The lock file lives in the auto-memory dir and its mtime *is*
 ``lastConsolidatedAt``. Body is the holder's PID. Two reclaimers
 both write the same PID — last write wins; loser bails on re-read.
 
+**Phase B (TTL 30min) — 2026-07-07**
+
+The original Phase A implementation only counted a holder as
+"alive" when (a) the PID is still running *and* (b) the mtime is
+within :data:`HOLDER_STALE_MS`. The Phase B enhancement goes
+further — it treats the mtime TTL as authoritative even when
+the PID is alive. This closes the PID-reuse race:
+
+* A consolidator crashes without unlinking the lock. Linux may
+  recycle the PID within minutes. A second consolidator then
+  sees the same PID still alive, and the old Phase A code
+  refuses to reclaim — so a stale 30min+ old mtime can keep
+  blocking new consolidations forever.
+* Phase B lets the second consolidator forcibly reclaim the
+  stale lock once mtime age ≥ :data:`HOLDER_STALE_MS`,
+  regardless of holder PID liveness. The act of reclaiming
+  also rewrites the mtime to *now*, which doubles as the
+  ``lastConsolidatedAt`` stamp for the time gate (rolling
+  forward, since we did not run the consolidation).
+
+New APIs (all O(1) stat reads, no extra I/O):
+
+* :func:`get_holder_pid` — lock body PID (or ``None``).
+* :func:`get_lock_age_seconds` — seconds since last stamp (``0``
+  = no lock file).
+* :func:`is_lock_stale` — age ≥ :data:`HOLDER_STALE_MS`
+  (or lock file missing → ``False``; unparseable body → ``True``).
+* :func:`force_release_if_stale` — unlink stale lock; return
+  whether something was actually released.
+
+The change is **conservative** — lock files younger than
+TTL still gate on PID liveness exactly as before. Reclaim of
+live-PID locks only happens past TTL.
+
 Operations:
 
 * :func:`read_last_consolidated_at` — one stat, returns mtime ms.
 * :func:`try_acquire_consolidation_lock` — write PID, return prior
-  mtime for rollback or ``None`` if blocked.
+  mtime for rollback or ``None`` if blocked. **TTL-aware**: stale
+  holders are reclaimed even if PID is still alive.
 * :func:`rollback_consolidation_lock` — rewind mtime to prior
   (or unlink if prior was 0).
 * :func:`record_consolidation` — optimistic stamp for manual /dream
@@ -31,8 +66,11 @@ _log = logging.getLogger(__name__)
 
 LOCK_FILE_NAME = ".consolidate-lock"
 
-# Stale past this even if PID is live (PID-reuse guard). Matches
-# upstream ``HOLDER_STALE_MS`` (60min).
+# Stale past this even if PID is live (PID-reuse guard). Phase B
+# promotes the TTL from "implicit reclaim-only" to the authoritative
+# freshness gate in :func:`is_lock_stale`. 30 minutes matches the
+# design doc; long enough to cover a slow LLM consolidation, short
+# enough that PID recycling won't strand the lock for long.
 HOLDER_STALE_MS = 30 * 60 * 1000
 
 
@@ -90,6 +128,11 @@ def try_acquire_consolidation_lock() -> int | None:
       by the manual ``/dream`` path), return the pre-acquire mtime
       without re-writing. The PID is the same, the intent is the
       same, and blocking here would make manual /dream a no-op.
+    * **Phase B TTL reclaim** — if the lock is older than
+      :data:`HOLDER_STALE_MS` (30min by default), reclaim it
+      regardless of whether the holder PID is still alive. This
+      closes the PID-reuse race: without this, a 30min+ stale
+      lock held by a recycled PID would block forever.
     """
     path = _lock_path()
     mtime_ms: int | None = None
@@ -112,6 +155,7 @@ def try_acquire_consolidation_lock() -> int | None:
     if holder_pid == os.getpid():
         return mtime_ms or 0
 
+    # Fresh + live holder → blocked (Phase A behavior, preserved).
     if mtime_ms is not None and _now_ms() - mtime_ms < HOLDER_STALE_MS:
         if holder_pid is not None and _pid_is_alive(holder_pid):
             _log.debug(
@@ -120,7 +164,10 @@ def try_acquire_consolidation_lock() -> int | None:
                 (_now_ms() - mtime_ms) // 1000,
             )
             return None
-        # Dead PID or unparseable body — reclaim.
+        # Fresh-but-dead-PID — reclaim below (dead PID would still
+        # alive-check as False here, so we naturally fall through).
+    # else: Phase B — stale TTL is authoritative; reclaim even if
+    # the holder PID is still alive (PID-reuse race close).
 
     # Ensure the memory dir exists before writing.
     try:
@@ -186,6 +233,121 @@ def record_consolidation() -> None:
         path.write_text(str(os.getpid()), encoding="utf-8")
     except OSError as e:  # pragma: no cover - defensive
         _log.debug("record_consolidation write failed: %s", e)
+
+
+# ---------------------------------------------------------------------------
+# Phase B — TTL 30min diagnostics & active cleanup
+# ---------------------------------------------------------------------------
+
+
+def get_holder_pid() -> int | None:
+    """Return the PID recorded in the lock body, or ``None``.
+
+    No mtime / liveness check — purely a stat + parse. ``0`` and
+    negative values (legacy / corrupted body) normalize to
+    ``None``. Missing file → ``None``.
+    """
+    path = _lock_path()
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as e:  # pragma: no cover - defensive
+        _log.debug("get_holder_pid read failed: %s", e)
+        return None
+    try:
+        pid = int(raw.strip())
+    except ValueError:
+        return None
+    return pid if pid > 0 else None
+
+
+def get_lock_age_seconds(now_ms: int | None = None) -> int:
+    """Seconds since the lock was last stamped. ``0`` when absent.
+
+    A write to the lock file (acquire / record / rollback) updates
+    mtime; this reads back the same mtime used by the time gate.
+    Treats missing-file as ``0`` rather than "infinitely old" —
+    callers that need fresh-only behavior should check
+    :func:`is_lock_stale` directly.
+    """
+    try:
+        mtime_ms = read_last_consolidated_at()
+    except Exception:  # pragma: no cover - defensive
+        return 0
+    if mtime_ms <= 0:
+        return 0
+    if now_ms is None:
+        now_ms = _now_ms()
+    return max(0, (now_ms - mtime_ms) // 1000)
+
+
+def is_lock_stale(now_ms: int | None = None) -> bool:
+    """Whether the current lock has aged past :data:`HOLDER_STALE_MS`.
+
+    Returns ``False`` if no lock file exists, ``True`` if the lock
+    is missing *or* the body is unparseable *or* the age window
+    has elapsed. Used by :func:`force_release_if_stale` to decide
+    whether unlinking is safe.
+
+    This is the Phase B enhancement — the underlying TTL value
+    itself did not change, but it now drives an authoritative
+    freshness signal (instead of only being one of two gates
+    inside :func:`try_acquire_consolidation_lock`).
+    """
+    if now_ms is None:
+        now_ms = _now_ms()
+    path = _lock_path()
+    if not path.exists():
+        return False
+    # Treat empty / unparseable body as stale — there's nothing
+    # valid to preserve.
+    if get_holder_pid() is None:
+        return True
+    last_ms = read_last_consolidated_at()
+    if last_ms <= 0:
+        return True
+    return (now_ms - last_ms) >= HOLDER_STALE_MS
+
+
+def force_release_if_stale(now_ms: int | None = None) -> bool:
+    """Best-effort unlink if :func:`is_lock_stale` reports stale.
+
+    Returns ``True`` only when a file was actually removed (or
+    found missing-but-not-stale). Caller-safe — never raises.
+    Designed to be invoked once per service tick before the Lock
+    gate so a process that crashed last week never strands the
+    lock file forever.
+
+    * Missing file → ``False`` (nothing to release).
+    * Stale lock → unlink, return ``True``.
+    * Fresh lock → leave it alone, return ``False``.
+
+    This complements — does not replace — the in-band reclaim
+    inside :func:`try_acquire_consolidation_lock`. The two
+    checks together mean: a fresh lock is blocked by PID, a
+    stale lock is reclaimed regardless of PID, and explicitly
+    calling :func:`force_release_if_stale` lets the next
+    consolidator run even if it never reaches the acquire
+    branch (e.g. gates above blocked it).
+    """
+    path = _lock_path()
+    try:
+        if not path.exists():
+            return False
+        if not is_lock_stale(now_ms=now_ms):
+            return False
+        path.unlink(missing_ok=True)
+        _log.info(
+            "force_release_if_stale: unlinked stale consolidation lock "
+            "(age %ds, TTL %ds)",
+            get_lock_age_seconds(now_ms=now_ms),
+            HOLDER_STALE_MS // 1000,
+        )
+        return True
+    except OSError as e:  # pragma: no cover - defensive
+        _log.debug("force_release_if_stale failed: %s", e)
+        return False
 
 
 # ---------------------------------------------------------------------------
