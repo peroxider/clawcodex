@@ -72,7 +72,7 @@ async def btw_command_run(args: str, context: CommandContext) -> InteractiveOutc
     question = args.strip()
     if not question:
         return InteractiveOutcome(
-            message="Usage: /btw <your question> —— 在不中断工作会话的前提下快速询问",
+            message="Usage: /btw <your question> — Ask a quick side question without interrupting your main session.",
             display="user",
         )
 
@@ -87,7 +87,7 @@ async def btw_command_run(args: str, context: CommandContext) -> InteractiveOutc
     params = await _build_cache_safe_params(context)
     if params is None:
         return InteractiveOutcome(
-            message="⚠️ 无法构建侧边询问上下文。请在主会话中直接提问。",
+            message="⚠️ Cannot build side-question context. Please ask directly in the main session.",
             display="user",
         )
 
@@ -97,7 +97,7 @@ async def btw_command_run(args: str, context: CommandContext) -> InteractiveOutc
     except Exception as e:
         logger.exception("Side question failed")
         return InteractiveOutcome(
-            message=f"⚠️ 侧边询问失败: {e}",
+            message=f"⚠️ Side question failed: {e}",
             display="user",
         )
 
@@ -109,7 +109,7 @@ async def btw_command_run(args: str, context: CommandContext) -> InteractiveOutc
             scrollable=_should_render_scrollable(message),
         )
     return InteractiveOutcome(
-        message="⚠️ 侧边询问未能获取回答。请在主会话中直接提问。",
+        message="⚠️ Side question returned no answer. Please ask directly in the main session.",
         display="user",
     )
 
@@ -208,6 +208,6 @@ class BtwCommand(InteractiveCommand):
 
 BTW_COMMAND = BtwCommand(
     name="btw",
-    description="在不中断工作会话的前提下快速询问（侧边问题）",
+    description="Ask a quick side question without interrupting your main session",
     argument_hint="<your question>",
 )

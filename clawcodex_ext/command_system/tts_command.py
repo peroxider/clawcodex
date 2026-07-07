@@ -70,7 +70,7 @@ _HELP = (
     "- /tts gemini             Enable with Gemini TTS (requires google-genai + GEMINI_API_KEY)\n"
     "- /tts off                Disable TTS playback\n"
     "- /tts voice <name>       Set the provider-specific voice id\n"
-    "- /tts say <text>         试听: synthesize and play a sample phrase\n"
+    "- /tts say <text>           Preview: synthesize and play a sample phrase\n"
     "- /tts status             Show current state and provider list\n"
     "- /tts help               Show this help"
 )
@@ -122,7 +122,7 @@ def _status_text() -> str:
 
 
 def _say(args: str) -> LocalCommandResult:
-    """试听 path: synthesize ``args`` via the current provider + play it.
+    """Preview path: synthesize ``args`` via the current provider + play it.
 
     Runs the async synthesis + playback on a fresh event loop (the command
     runs synchronously from the UI thread). Errors are caught and surfaced
@@ -159,7 +159,7 @@ def _say(args: str) -> LocalCommandResult:
             return False, "Synthesis returned empty audio."
         # Play via the audio player (P64-E8). Lazy import so the player
         # backend (PyAudio / SoX / ffplay) is only probed when the user
-        # actually runs 试听, not at module import.
+        # actually runs a preview, not at module import.
         try:
             from clawcodex_ext.services.voice.audio_player import play_pcm
 
@@ -175,16 +175,16 @@ def _say(args: str) -> LocalCommandResult:
         finally:
             loop.close()
     except Exception as exc:
-        return LocalCommandResult(type="text", value=f"试听 failed: {exc}")
+        return LocalCommandResult(type="text", value=f"Preview failed: {exc}")
     if not ok:
         return LocalCommandResult(type="text", value=err)
     return LocalCommandResult(
-        type="text", value=f"试听 played ({len(text)} chars via {provider_name})."
+        type="text", value=f"Preview played ({len(text)} chars via {provider_name})."
     )
 
 
 def tts_command_call(args: str, context: CommandContext) -> LocalCommandResult:
-    """``/tts`` handler — toggle TTS, select backend, set voice, or 试听."""
+    """``/tts`` handler — toggle TTS, select backend, set voice, or preview."""
     raw = (args or "").strip()
     a = raw.lower()
     # Split into subcommand + payload once, tolerating multiple spaces
@@ -218,7 +218,7 @@ def tts_command_call(args: str, context: CommandContext) -> LocalCommandResult:
             type="text", value=f"TTS voice set to {voice!r} (applies on next synthesis)."
         )
 
-    # 5. say <text> — 试听.
+    # 5. say <text> — preview.
     if head == "say":
         return _say(payload)
 
@@ -228,7 +228,7 @@ def tts_command_call(args: str, context: CommandContext) -> LocalCommandResult:
         set_tts_enabled(True)
         return LocalCommandResult(
             type="text",
-            value=f"TTS playback enabled with {a} backend. Run /tts say \"hello\" to 试听.",
+            value=f"TTS playback enabled with {a} backend. Run /tts say \"hello\" to preview.",
         )
 
     # 7. no args — toggle on/off (keep current provider).
