@@ -40,6 +40,8 @@ AuditEventType = Literal[
     "lkb_legacy_todo_ambiguity",
     "lkb_decomposition_proposed",
     "lkb_method_referenced",
+    "lkb_acceptance_template_registered",
+    "lkb_acceptance_template_referenced",
     "lkb_external_config_imported",
 ]
 
@@ -635,6 +637,63 @@ def event_for_method_referenced(
     )
 
 
+def event_for_acceptance_template_registered(
+    *,
+    template_id: str,
+    source: str,
+    version: str,
+    session_id: str | None = None,
+    actor: str = "system",
+) -> AuditEvent:
+    """Record that a top-level acceptance template was registered."""
+    return AuditEvent(
+        event_id=_new_event_id(),
+        event_type="lkb_acceptance_template_registered",
+        actor=actor,
+        timestamp=_utc_now(),
+        session_id=session_id,
+        proposal_id=None,
+        validation_run_id=None,
+        task_id=None,
+        decision="accepted",
+        payload={
+            "templateId": template_id,
+            "source": source,
+            "version": version,
+            "enrichmentKey": f"{source}:{template_id}:{version}",
+        },
+    )
+
+
+def event_for_acceptance_template_referenced(
+    decomposition_run_id: str,
+    template_id: str,
+    *,
+    task_count: int,
+    validation_run_id: str | None = None,
+    session_id: str | None = None,
+    actor: str = "agent",
+) -> AuditEvent:
+    """Record that a decomposition plan referenced an acceptance template."""
+    return AuditEvent(
+        event_id=_new_event_id(),
+        event_type="lkb_acceptance_template_referenced",
+        actor=actor,
+        timestamp=_utc_now(),
+        session_id=session_id,
+        proposal_id=None,
+        validation_run_id=validation_run_id,
+        task_id=None,
+        decision=None,
+        payload={
+            "decompositionRunId": decomposition_run_id,
+            "templateId": template_id,
+            "taskCount": task_count,
+            "enrichmentKey": f"{decomposition_run_id}:{template_id}",
+        },
+    )
+
+
 def event_for_external_config_imported(
     *,
     source: str,
@@ -762,6 +821,8 @@ __all__ = [
     "event_for_assumption_invalidated",
     "event_for_commit",
     "event_for_decomposition_proposed",
+    "event_for_acceptance_template_referenced",
+    "event_for_acceptance_template_registered",
     "event_for_external_config_imported",
     "event_for_fact_dropped",
     "event_for_fact_extracted",

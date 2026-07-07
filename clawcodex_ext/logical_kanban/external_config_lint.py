@@ -6,6 +6,10 @@ import re
 from dataclasses import dataclass
 from typing import Iterable, Literal
 
+from .acceptance_template import (
+    ALLOWED_ACCEPTANCE_TEMPLATE_ROLES,
+    AcceptanceTemplate,
+)
 from .method_library import EngineeringMethod
 from .ontology_graph import OntologyGraph
 from .operation_schema import OperationSchema, is_predicate_expression, predicate_name
@@ -14,7 +18,9 @@ from .operation_schema import OperationSchema, is_predicate_expression, predicat
 Severity = Literal["error", "warning"]
 
 _METHOD_ID_RE = re.compile(r"^M-[a-z0-9]+(?:-[a-z0-9]+)*-\d{3}$")
+_TEMPLATE_ID_RE = re.compile(r"^T-[a-z0-9]+(?:-[a-z0-9]+)*-\d{3}$")
 _OPERATION_ID_RE = re.compile(r"^OP-[a-z0-9]+(?:-[a-z0-9]+)*$")
+_PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
 @dataclass(frozen=True)
@@ -99,6 +105,69 @@ def lint_method_library(methods: Iterable[EngineeringMethod]) -> list[LintIssue]
                                 f"{template.template_id!r} references unknown blocker {blocker!r}."
                             ),
                             f"subtaskTemplates.{template.template_id}.defaultBlockedBy",
+                        )
+                    )
+    return issues
+
+
+def lint_acceptance_templates(
+    templates: Iterable[AcceptanceTemplate],
+) -> list[LintIssue]:
+    issues: list[LintIssue] = []
+    seen: set[str] = set()
+    for template in templates:
+        if template.template_id in seen:
+            issues.append(
+                LintIssue(
+                    "error",
+                    "acceptance_template.duplicate_id",
+                    f"Duplicate template_id {template.template_id!r}.",
+                    "templateId",
+                )
+            )
+        seen.add(template.template_id)
+        if not _TEMPLATE_ID_RE.match(template.template_id):
+            issues.append(
+                LintIssue(
+                    "error",
+                    "acceptance_template.id_format",
+                    f"template_id {template.template_id!r} should match T-<kebab-case>-NNN.",
+                    "templateId",
+                    suggestion="Use an id like T-test-passes-001.",
+                )
+            )
+        for role in template.applies_to_roles:
+            if role not in ALLOWED_ACCEPTANCE_TEMPLATE_ROLES:
+                issues.append(
+                    LintIssue(
+                        "error",
+                        "acceptance_template.role_unknown",
+                        f"applies_to_roles entry {role!r} is not allowed.",
+                        "appliesToRoles",
+                    )
+                )
+        for field_name, value in (
+            ("assertionTemplate", template.assertion_template),
+            ("proofTemplate", template.proof_template),
+        ):
+            if value.count("{") != value.count("}"):
+                issues.append(
+                    LintIssue(
+                        "error",
+                        "acceptance_template.placeholder_unbalanced",
+                        f"{field_name} has unbalanced placeholders.",
+                        field_name,
+                    )
+                )
+                continue
+            for match in re.finditer(r"\{([^}]*)\}", value):
+                if not _PLACEHOLDER_RE.fullmatch(match.group(0)):
+                    issues.append(
+                        LintIssue(
+                            "error",
+                            "acceptance_template.placeholder_format",
+                            f"{field_name} placeholder {match.group(0)!r} should use {{identifier}} syntax.",
+                            field_name,
                         )
                     )
     return issues
@@ -207,13 +276,16 @@ def lint_cross_references(
 def lint_all(
     *,
     methods: Iterable[EngineeringMethod] = (),
+    acceptance_templates: Iterable[AcceptanceTemplate] = (),
     operations: Iterable[OperationSchema] = (),
     ontology: OntologyGraph | None = None,
 ) -> LintReport:
     issues: list[LintIssue] = []
     method_tuple = tuple(methods)
+    template_tuple = tuple(acceptance_templates)
     operation_tuple = tuple(operations)
     issues.extend(lint_method_library(method_tuple))
+    issues.extend(lint_acceptance_templates(template_tuple))
     issues.extend(lint_operation_schema(operation_tuple))
     if ontology is not None:
         issues.extend(lint_ontology(ontology))
@@ -230,6 +302,7 @@ def _operation_ids_in_text(text: str) -> tuple[str, ...]:
 __all__ = [
     "LintIssue",
     "LintReport",
+    "lint_acceptance_templates",
     "lint_all",
     "lint_cross_references",
     "lint_method_library",

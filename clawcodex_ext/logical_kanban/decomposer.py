@@ -19,6 +19,7 @@ from .ambiguity_detector import AmbiguityDetector
 from .audit import (
     AuditLog,
     InMemoryAuditLog,
+    event_for_acceptance_template_referenced,
     event_for_decomposition_proposed,
     event_for_method_referenced,
 )
@@ -75,6 +76,9 @@ class DecompositionPlan:
     # the plan.  Empty when the LLM decomposed freely without anchoring to
     # a method.  Order follows first-occurrence in ``self.tasks``.
     method_references: tuple[str, ...] = ()
+    # F-155: de-duplicated list of top-level acceptance template references
+    # used across ``task.lkbMetadata``.
+    acceptance_template_references: tuple[str, ...] = ()
     # F-152: optional scheduling metadata captured at the call site.
     # When non-None, the decomposer hands the plan to
     # :class:`~clawcodex_ext.logical_kanban.scheduling_solver.SchedulingSolver`
@@ -108,6 +112,7 @@ class DecompositionPlan:
             "assumptions": list(self.assumptions),
             "ambiguities": ambiguity.get("detectedAmbiguities", []) if ambiguity else [],
             "methodReferences": list(self.method_references),
+            "acceptanceTemplateReferences": list(self.acceptance_template_references),
             "schedulingConstraints": (
                 self._serialize_scheduling_constraints()
                 if self.scheduling_constraints is not None
@@ -167,6 +172,9 @@ _LKB_METADATA_KEYS = {
     "scheduling_required",
     "duration",
     "earliest_start",
+    "acceptance_template_id",
+    "acceptance_template_ref",
+    "template_ref",
 }
 
 
@@ -296,6 +304,7 @@ class TaskDecomposer:
             method_references=_collect_method_references(
                 tasks, self.method_library
             ),
+            acceptance_template_references=_collect_acceptance_template_references(tasks),
             scheduling_constraints=scheduling_constraints,
             schedule=schedule,
         )
@@ -478,6 +487,11 @@ class TaskDecomposer:
         # never dominates the context window — see ``method_prompt.summarize_methods``.
         from .method_library import METHOD_LIBRARY as _DEFAULT_LIBRARY
         from .method_prompt import select_methods_by_pattern
+        from .acceptance_template import get_all_acceptance_templates
+        from .acceptance_template_prompt import (
+            select_templates_by_goal,
+            summarize_acceptance_templates,
+        )
 
         try:
             relevant = select_methods_by_pattern(goal, _DEFAULT_LIBRARY, top_k=10)
@@ -500,6 +514,28 @@ class TaskDecomposer:
                 "affected task's ``lkbMetadata.method_ref`` field."
             )
 
+        template_block = ""
+        try:
+            relevant_templates = select_templates_by_goal(
+                goal,
+                get_all_acceptance_templates(),
+                top_k=8,
+            )
+        except Exception:  # pragma: no cover - defensive guard
+            relevant_templates = ()
+        if relevant_templates:
+            template_summary = summarize_acceptance_templates(
+                relevant_templates,
+                max_tokens=800,
+            )
+            template_block = (
+                "\n\n"
+                f"{template_summary.text}\n"
+                "Prefer these acceptance templates when defining "
+                "``assertions`` / ``acceptance_proof``. Carry the selected "
+                "template id in ``lkbMetadata.acceptance_template_id``."
+            )
+
         return (
             "You are a task-decomposition assistant for a logical kanban system. "
             "Return strictly JSON (no markdown). "
@@ -514,14 +550,16 @@ class TaskDecomposer:
             "\"blockedBy\": [\"tmp-...\"], "
             "\"lkbMetadata\": {\"assertions\": [...], \"acceptance_proof\": \"...\", "
             "\"assumptions\": [...], \"strict_acceptance\": false, "
+            "\"acceptance_template_id\": \"T-test-passes-001\", "
             "\"method_ref\": \"M-add-api-endpoint-001\"}}], "
             "\"dependencies\": [[\"tmp-a\", \"tmp-b\"]], "
             "\"assumptions\": [\"...\"]}. "
             "accepted lkbMetadata keys: assertions, acceptance_proof, "
-            "assumptions, strict_acceptance, method_ref.  method_ref is "
+            "assumptions, strict_acceptance, method_ref, acceptance_template_id.  method_ref is "
             "optional; when present it MUST be a method_id from the "
             "engineering method library."
             f"{method_block}"
+            f"{template_block}"
         )
 
     @staticmethod
@@ -665,6 +703,7 @@ class TaskDecomposer:
         # ``_merge_result`` helper only flips the result to ``fail`` for
         # error-severity issues, so warnings ride along in the ValidationRun.
         from .rule_engine import (
+            validate_acceptance_template_references,
             validate_external_config_references,
             validate_method_compliance,
         )
@@ -682,6 +721,7 @@ class TaskDecomposer:
             validate_method_compliance(method_plan, method_library=self.method_library)
         )
         issues.extend(validate_external_config_references(method_plan))
+        issues.extend(validate_acceptance_template_references(method_plan))
 
         # Run the solver pipeline on the snapshot for a canonical ValidationRun.
         request = SolverRequest(snapshot=snapshot)
@@ -817,6 +857,17 @@ class TaskDecomposer:
                     validation_run_id=plan.validation_run_id,
                 )
                 log.append(method_event)
+
+        if plan.acceptance_template_references:
+            template_task_counts = _count_acceptance_template_task_usage(plan.tasks)
+            for template_id in plan.acceptance_template_references:
+                template_event = event_for_acceptance_template_referenced(
+                    decomposition_run_id=plan.decomposition_run_id,
+                    template_id=template_id,
+                    task_count=template_task_counts.get(template_id, 0),
+                    validation_run_id=plan.validation_run_id,
+                )
+                log.append(template_event)
 
 
 class TaskDecompositionError(Exception):
@@ -997,6 +1048,48 @@ def _count_method_task_usage(
     return counts
 
 
+def _collect_acceptance_template_references(
+    tasks: tuple[ProposedTask, ...],
+) -> tuple[str, ...]:
+    seen: list[str] = []
+    for task in tasks:
+        for template_id in _acceptance_template_refs_for_task(task):
+            if template_id not in seen:
+                seen.append(template_id)
+    return tuple(seen)
+
+
+def _count_acceptance_template_task_usage(
+    tasks: tuple[ProposedTask, ...],
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for task in tasks:
+        for template_id in _acceptance_template_refs_for_task(task):
+            counts[template_id] = counts.get(template_id, 0) + 1
+    return counts
+
+
+def _acceptance_template_refs_for_task(task: ProposedTask) -> tuple[str, ...]:
+    refs: list[str] = []
+    for key in ("acceptance_template_id", "acceptance_template_ref", "template_ref"):
+        value = task.lkb_metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            refs.append(value.strip())
+    for assertion in task.lkb_metadata.get("assertions") or ():
+        if isinstance(assertion, str):
+            refs.extend(
+                re.findall(
+                    r"\b(?:template_ref|acceptance_template_id)\s*[:=]\s*(T-[a-z0-9]+(?:-[a-z0-9]+)*-\d{3})\b",
+                    assertion,
+                )
+            )
+    out: list[str] = []
+    for ref in refs:
+        if ref not in out:
+            out.append(ref)
+    return tuple(out)
+
+
 def _reject_unknown_keys(data: dict[str, Any], allowed: set[str], where: str) -> None:
     unknown = sorted(set(data) - allowed)
     if unknown:
@@ -1046,6 +1139,13 @@ def _validate_lkb_metadata(lkb: dict[str, Any], where: str) -> None:
             raise TaskDecompositionError(
                 f"{where}.method_ref must be a non-empty string when present"
             )
+    for key in ("acceptance_template_id", "acceptance_template_ref", "template_ref"):
+        if key in lkb:
+            template_ref = lkb[key]
+            if not isinstance(template_ref, str) or not template_ref.strip():
+                raise TaskDecompositionError(
+                    f"{where}.{key} must be a non-empty string when present"
+                )
     # F-152: ``scheduling_required`` is optional; when present it must be
     # a boolean.  The flag is informational at the task level — the
     # actual scheduling parameters live in

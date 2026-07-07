@@ -12,8 +12,24 @@ from urllib.error import URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from .audit import AuditLog, event_for_external_config_imported
-from .external_config_lint import LintIssue, lint_method_library, lint_ontology, lint_operation_schema
+from .acceptance_template import (
+    AcceptanceTemplate,
+    load_acceptance_template_data,
+    load_acceptance_template_library,
+    register_acceptance_template,
+)
+from .audit import (
+    AuditLog,
+    event_for_acceptance_template_registered,
+    event_for_external_config_imported,
+)
+from .external_config_lint import (
+    LintIssue,
+    lint_acceptance_templates,
+    lint_method_library,
+    lint_ontology,
+    lint_operation_schema,
+)
 from .method_library import EngineeringMethod, load_method_library, register_method
 from .ontology_graph import OntologyGraph, load_ontology_turtle, register_ontology_graph
 from .operation_schema import (
@@ -23,7 +39,7 @@ from .operation_schema import (
 )
 
 
-ConfigKind = Literal["method_library", "operation_schema", "ontology"]
+ConfigKind = Literal["method_library", "operation_schema", "ontology", "acceptance_template"]
 Priority = Literal["builtin", "project", "user", "explicit"]
 
 _DEFAULT_MAX_SIZE = 10 * 1024 * 1024
@@ -85,7 +101,7 @@ class ExternalConfigImporter:
         if suffix == ".ttl":
             result = self._import_ontology(path)
         elif suffix in {".yaml", ".yml"}:
-            result = self._import_operation_schema(path)
+            result = self._import_yaml(path)
         elif suffix == ".json":
             result = self._import_json(path)
         else:
@@ -167,6 +183,25 @@ class ExternalConfigImporter:
                 version=str(data.get("schemaVersion") or data.get("schema_version") or ""),
                 imported=not self.lint_only,
             )
+        if kind == "acceptance_template":
+            templates = load_acceptance_template_library(path)
+            issues = tuple(lint_acceptance_templates(templates))
+            if not self.lint_only:
+                for template in templates:
+                    try:
+                        register_acceptance_template(template, force=self.force)
+                        self._emit_template_registered(template, str(path))
+                    except ValueError as exc:
+                        raise ConfigConflictError(str(exc)) from exc
+            return ImportResult(
+                success=not any(issue.severity == "error" for issue in issues),
+                kind=kind,
+                item_count=len(templates),
+                lint_issues=issues,
+                source=str(path),
+                version=str(data.get("schemaVersion") or data.get("schema_version") or ""),
+                imported=not self.lint_only,
+            )
         operations = load_operation_schema_data(data, source=str(path))
         issues = tuple(lint_operation_schema(operations))
         if not self.lint_only:
@@ -184,13 +219,33 @@ class ExternalConfigImporter:
             imported=not self.lint_only,
         )
 
-    def _import_operation_schema(self, path: Path) -> ImportResult:
+    def _import_yaml(self, path: Path) -> ImportResult:
         try:
             import yaml
         except ImportError as exc:  # pragma: no cover - dependency declared in pyproject
-            raise ValueError("PyYAML is required to import YAML operation schemas") from exc
+            raise ValueError("PyYAML is required to import YAML LKB configs") from exc
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         _reject_forbidden_json_keys(data)
+        kind = _detect_yaml_kind(data, path)
+        if kind == "acceptance_template":
+            templates = load_acceptance_template_data(data, source=str(path))
+            issues = tuple(lint_acceptance_templates(templates))
+            if not self.lint_only:
+                for template in templates:
+                    try:
+                        register_acceptance_template(template, force=self.force)
+                        self._emit_template_registered(template, str(path))
+                    except ValueError as exc:
+                        raise ConfigConflictError(str(exc)) from exc
+            return ImportResult(
+                success=not any(issue.severity == "error" for issue in issues),
+                kind="acceptance_template",
+                item_count=len(templates),
+                lint_issues=issues,
+                source=str(path),
+                version=str(data.get("schemaVersion") or data.get("schema_version") or "") if isinstance(data, dict) else "",
+                imported=not self.lint_only,
+            )
         operations = load_operation_schema_data(data, source=str(path))
         issues = tuple(lint_operation_schema(operations))
         if not self.lint_only:
@@ -248,6 +303,15 @@ class ExternalConfigImporter:
                 for method in value:
                     register_method(method, force=self.force)
             return ImportResult(not any(i.severity == "error" for i in issues), "method_library", len(value), issues, source, imported=not self.lint_only)
+        if isinstance(value, AcceptanceTemplate):
+            value = (value,)
+        if isinstance(value, tuple) and all(isinstance(v, AcceptanceTemplate) for v in value):
+            issues = tuple(lint_acceptance_templates(value))
+            if not self.lint_only:
+                for template in value:
+                    register_acceptance_template(template, force=self.force)
+                    self._emit_template_registered(template, source)
+            return ImportResult(not any(i.severity == "error" for i in issues), "acceptance_template", len(value), issues, source, imported=not self.lint_only)
         if isinstance(value, OperationSchema):
             value = (value,)
         if isinstance(value, tuple) and all(isinstance(v, OperationSchema) for v in value):
@@ -260,7 +324,7 @@ class ExternalConfigImporter:
             if not self.lint_only:
                 register_ontology_graph(value, force=self.force)
             return ImportResult(not any(i.severity == "error" for i in issues), "ontology", value.item_count, issues, source, imported=not self.lint_only)
-        raise ValueError("entry point must return methods, OperationSchema(s), or OntologyGraph")
+        raise ValueError("entry point must return methods, acceptance templates, OperationSchema(s), or OntologyGraph")
 
     def _validate_path(self, path: Path) -> None:
         suffix = path.suffix.lower()
@@ -287,10 +351,41 @@ class ExternalConfigImporter:
             )
         )
 
+    def _emit_template_registered(self, template: AcceptanceTemplate, source: str) -> None:
+        if self.audit_log is None:
+            return
+        self.audit_log.append(
+            event_for_acceptance_template_registered(
+                template_id=template.template_id,
+                source=source,
+                version=template.version,
+            )
+        )
+
 
 def _detect_json_kind(data: Any, path: Path) -> ConfigKind:
     if isinstance(data, dict) and isinstance(data.get("methods"), list):
         return "method_library"
+    if isinstance(data, dict) and (
+        data.get("kind") == "acceptance_template"
+        or isinstance(data.get("acceptanceTemplates"), list)
+        or isinstance(data.get("acceptance_templates"), list)
+    ):
+        return "acceptance_template"
+    if isinstance(data, dict) and ("operations" in data or "operation_id" in data or "operationId" in data):
+        return "operation_schema"
+    if isinstance(data, list):
+        return "operation_schema"
+    raise ValueError(f"could not detect external config kind for {path}")
+
+
+def _detect_yaml_kind(data: Any, path: Path) -> ConfigKind:
+    if isinstance(data, dict) and (
+        data.get("kind") == "acceptance_template"
+        or isinstance(data.get("acceptanceTemplates"), list)
+        or isinstance(data.get("acceptance_templates"), list)
+    ):
+        return "acceptance_template"
     if isinstance(data, dict) and ("operations" in data or "operation_id" in data or "operationId" in data):
         return "operation_schema"
     if isinstance(data, list):

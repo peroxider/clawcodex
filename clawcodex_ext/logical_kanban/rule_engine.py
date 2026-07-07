@@ -697,5 +697,79 @@ def validate_external_config_references(
     return tuple(issues)
 
 
+def validate_acceptance_template_references(
+    plan: "DecompositionPlan",
+    *,
+    templates: tuple[Any, ...] | None = None,
+) -> tuple[ValidationIssue, ...]:
+    """Evaluate F-155 R-METHOD-006 acceptance-template reference rules."""
+
+    from .decomposer import DecompositionPlan  # type: ignore[attr-defined]
+    from .acceptance_template import get_all_acceptance_templates
+
+    if not isinstance(plan, DecompositionPlan):
+        raise TypeError("validate_acceptance_template_references expects a DecompositionPlan")
+
+    if templates is None:
+        templates = get_all_acceptance_templates()
+
+    known_ids = {
+        template.template_id
+        for template in templates
+        if hasattr(template, "template_id")
+    }
+    issues: list[ValidationIssue] = []
+    for task in plan.tasks:
+        for template_id in _acceptance_template_refs_for_task(task):
+            if template_id not in known_ids:
+                issues.append(
+                    ValidationIssue(
+                        code="R-METHOD-006-UNKNOWN-ACCEPTANCE-TEMPLATE",
+                        message=(
+                            f"Task {task.proposed_task_id} references acceptance template "
+                            f"{template_id!r}, but no loaded AcceptanceTemplate defines it."
+                        ),
+                        rule="R-METHOD-006",
+                        severity="warning",
+                        task_id=task.proposed_task_id,
+                    )
+                )
+    return tuple(issues)
+
+
 def _external_operation_ids(text: str) -> tuple[str, ...]:
     return tuple(_re.findall(r"\bOP-[a-z0-9]+(?:-[a-z0-9]+)*\b", text))
+
+
+def acceptance_template_refs_for_plan(plan: "DecompositionPlan") -> tuple[str, ...]:
+    seen: list[str] = []
+    for task in plan.tasks:
+        for template_id in _acceptance_template_refs_for_task(task):
+            if template_id not in seen:
+                seen.append(template_id)
+    return tuple(seen)
+
+
+def _acceptance_template_refs_for_task(task: Any) -> tuple[str, ...]:
+    meta = getattr(task, "lkb_metadata", {}) or {}
+    refs: list[str] = []
+    for key in ("acceptance_template_id", "acceptance_template_ref", "template_ref"):
+        value = meta.get(key)
+        if isinstance(value, str) and value.strip():
+            refs.append(value.strip())
+    for assertion in meta.get("assertions") or ():
+        if not isinstance(assertion, str):
+            continue
+        refs.extend(_acceptance_template_ids(assertion))
+    out: list[str] = []
+    for ref in refs:
+        if ref not in out:
+            out.append(ref)
+    return tuple(out)
+
+
+def _acceptance_template_ids(text: str) -> tuple[str, ...]:
+    refs = []
+    refs.extend(_re.findall(r"\btemplate_ref\s*[:=]\s*(T-[a-z0-9]+(?:-[a-z0-9]+)*-\d{3})\b", text))
+    refs.extend(_re.findall(r"\bacceptance_template_id\s*[:=]\s*(T-[a-z0-9]+(?:-[a-z0-9]+)*-\d{3})\b", text))
+    return tuple(refs)

@@ -38,6 +38,19 @@ from clawcodex_ext.logical_kanban.method_governance import (
     reset_proposals,
     load_proposals,
 )
+from clawcodex_ext.logical_kanban.acceptance_template import (
+    get_acceptance_template,
+    initialize_acceptance_template_registry,
+    list_acceptance_templates,
+)
+from clawcodex_ext.logical_kanban.acceptance_template_governance import (
+    approve_acceptance_template,
+    deprecate_acceptance_template,
+    load_acceptance_template_proposals,
+    propose_acceptance_template_from_plan,
+    reject_acceptance_template,
+    submit_acceptance_template,
+)
 from clawcodex_ext.logical_kanban.method_proposer import (
     propose_method_from_plan,
 )
@@ -69,6 +82,20 @@ _USAGE = (
     "                         Deprecate an approved method.\n"
     "  coverage [--golden-set=PATH]\n"
     "                         Run coverage evaluation against the golden set.\n"
+    "  template list [--status=STATUS] [--role=ROLE]\n"
+    "                         List acceptance templates.\n"
+    "  template show <template_id>\n"
+    "                         Show acceptance template details.\n"
+    "  template propose --from-plan=RUN_ID --template-id=T-ID --description=TEXT\n"
+    "                         Propose an acceptance template from a decomposition run.\n"
+    "  template approve <proposal_id> [--reviewer=NAME]\n"
+    "                         Approve an acceptance template proposal.\n"
+    "  template reject <proposal_id> --reason=TEXT\n"
+    "                         Reject an acceptance template proposal.\n"
+    "  template deprecate <template_id> [--replacement=T-ID]\n"
+    "                         Deprecate an acceptance template.\n"
+    "  template coverage\n"
+    "                         Report acceptance-template reference coverage.\n"
     "  help, --help, -h       Print this help.\n"
 )
 
@@ -82,7 +109,9 @@ def run_lkb_command(args: list[str]) -> int:
     """Handle ``clawcodex-dev lkb method <subcommand>``."""
     # Ensure the file-backed layers are loaded once at CLI startup.
     initialize_method_registry(project_dir=Path.cwd())
+    initialize_acceptance_template_registry(project_dir=Path.cwd())
     load_proposals()
+    load_acceptance_template_proposals()
 
     if not args:
         print(_USAGE, file=sys.stderr)
@@ -103,6 +132,11 @@ def run_lkb_command(args: list[str]) -> int:
             print(_USAGE, file=sys.stderr)
             return 1
         return _dispatch_method(rest)
+    if sub == "template":
+        if not rest:
+            print(_USAGE, file=sys.stderr)
+            return 1
+        return _dispatch_template(rest)
     if sub == "import":
         return _cmd_import(rest)
     if sub == "export":
@@ -112,6 +146,35 @@ def run_lkb_command(args: list[str]) -> int:
 
     # Unknown lkb subcommand — this module only handles ``method``.
     print(f"Unknown lkb subcommand: {sub}", file=sys.stderr)
+    print(_USAGE, file=sys.stderr)
+    return 2
+
+
+def _dispatch_template(args: list[str]) -> int:
+    cmd = args[0]
+    rest = args[1:]
+    try:
+        if cmd == "list":
+            return _cmd_template_list(rest)
+        if cmd == "show":
+            return _cmd_template_show(rest)
+        if cmd == "propose":
+            return _cmd_template_propose(rest)
+        if cmd == "approve":
+            return _cmd_template_approve(rest)
+        if cmd == "reject":
+            return _cmd_template_reject(rest)
+        if cmd == "deprecate":
+            return _cmd_template_deprecate(rest)
+        if cmd == "coverage":
+            return _cmd_template_coverage(rest)
+        if cmd in ("help", "--help", "-h"):
+            print(_USAGE)
+            return 0
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(f"Unknown template subcommand: {cmd}", file=sys.stderr)
     print(_USAGE, file=sys.stderr)
     return 2
 
@@ -311,6 +374,112 @@ def _cmd_coverage(args: list[str]) -> int:
     return 0
 
 
+def _cmd_template_list(args: list[str]) -> int:
+    status = _parse_flag(args, "--status", "approved")
+    role = _parse_flag(args, "--role", None)
+    templates = list_acceptance_templates(status=status, role=role)
+    if not templates:
+        print("(no acceptance templates match)")
+        return 0
+    rows = [
+        f"  {template.template_id:35s} {template.version:8s} {template.status:12s} "
+        f"roles={','.join(template.applies_to_roles) or 'any'}"
+        for template in templates
+    ]
+    print(f"Acceptance templates ({len(rows)}):")
+    print("\n".join(rows))
+    return 0
+
+
+def _cmd_template_show(args: list[str]) -> int:
+    if not args or args[0].startswith("--"):
+        print("Usage: clawcodex-dev lkb template show <template_id>", file=sys.stderr)
+        return 1
+    template = get_acceptance_template(args[0])
+    if template is None:
+        print(f"Acceptance template {args[0]!r} not found.", file=sys.stderr)
+        return 1
+    print(_format_acceptance_template_detail(template))
+    return 0
+
+
+def _cmd_template_propose(args: list[str]) -> int:
+    from_run_id = _parse_flag(args, "--from-plan", None)
+    template_id = _parse_flag(args, "--template-id", None)
+    description = _parse_flag(args, "--description", None)
+    if not from_run_id or not template_id:
+        print("error: --from-plan and --template-id are required", file=sys.stderr)
+        return 1
+    plan = _find_decomposition_plan(from_run_id)
+    if plan is None:
+        print(f"error: no decomposition plan found for run {from_run_id!r}", file=sys.stderr)
+        return 1
+    template = propose_acceptance_template_from_plan(
+        plan,
+        template_id=template_id,
+        description=description or f"Auto-proposed from plan {from_run_id}",
+    )
+    proposal_id = submit_acceptance_template(template)
+    print(f"Proposal {proposal_id} submitted for acceptance template {template.template_id!r}.")
+    print(_format_acceptance_template_detail(template))
+    return 0
+
+
+def _cmd_template_approve(args: list[str]) -> int:
+    if not args or args[0].startswith("--"):
+        print("Usage: clawcodex-dev lkb template approve <proposal_id> [--reviewer=...]", file=sys.stderr)
+        return 1
+    approve_acceptance_template(args[0], reviewer=_parse_flag(args, "--reviewer", ""))
+    print(f"Acceptance template proposal {args[0]} approved.")
+    return 0
+
+
+def _cmd_template_reject(args: list[str]) -> int:
+    if not args or args[0].startswith("--"):
+        print("Usage: clawcodex-dev lkb template reject <proposal_id> --reason=...", file=sys.stderr)
+        return 1
+    reason = _parse_flag(args, "--reason", None)
+    if not reason:
+        print("error: --reason is required for reject", file=sys.stderr)
+        return 1
+    reject_acceptance_template(
+        args[0],
+        reviewer=_parse_flag(args, "--reviewer", ""),
+        reason=reason,
+    )
+    print(f"Acceptance template proposal {args[0]} rejected (reason: {reason})")
+    return 0
+
+
+def _cmd_template_deprecate(args: list[str]) -> int:
+    if not args or args[0].startswith("--"):
+        print("Usage: clawcodex-dev lkb template deprecate <template_id> [--replacement=...]", file=sys.stderr)
+        return 1
+    replacement = _parse_flag(args, "--replacement", None)
+    deprecate_acceptance_template(
+        args[0],
+        replacement_id=replacement,
+        reviewer=_parse_flag(args, "--reviewer", ""),
+    )
+    msg = f"Acceptance template {args[0]!r} deprecated."
+    if replacement:
+        msg += f" Replaced by {replacement}."
+    print(msg)
+    return 0
+
+
+def _cmd_template_coverage(args: list[str]) -> int:
+    templates = list_acceptance_templates(status=None)
+    approved = [template for template in templates if template.status == "approved"]
+    print("Acceptance Template Coverage")
+    print("============================")
+    print(f"  Registered templates: {len(templates)}")
+    print(f"  Approved templates:   {len(approved)}")
+    print("  Field layer:          DecompositionPlan.acceptance_template_references")
+    print("  Event layer:          lkb_acceptance_template_referenced")
+    return 0
+
+
 def _cmd_import(args: list[str]) -> int:
     from clawcodex_ext.logical_kanban.external_config import ExternalConfigImporter
 
@@ -362,6 +531,7 @@ def _cmd_import(args: list[str]) -> int:
 def _cmd_export(args: list[str]) -> int:
     from clawcodex_ext.logical_kanban.method_library import get_all_methods
     from clawcodex_ext.logical_kanban.operation_schema import get_all_operation_schemas
+    from clawcodex_ext.logical_kanban.acceptance_template import get_all_acceptance_templates
 
     fmt = _parse_flag(args, "--format", "json")
     targets = [arg for arg in args if not arg.startswith("--") and arg != fmt]
@@ -375,6 +545,9 @@ def _cmd_export(args: list[str]) -> int:
     payload = {
         "schemaVersion": "1.0.0",
         "methods": [method.to_dict() for method in get_all_methods()],
+        "acceptanceTemplates": [
+            template.to_dict() for template in get_all_acceptance_templates()
+        ],
         "operations": [op.to_dict() for op in get_all_operation_schemas()],
     }
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -387,12 +560,15 @@ def _cmd_config_list(args: list[str]) -> int:
     from clawcodex_ext.logical_kanban.method_library import get_all_methods
     from clawcodex_ext.logical_kanban.operation_schema import get_all_operation_schemas
     from clawcodex_ext.logical_kanban.ontology_graph import get_registered_ontology
+    from clawcodex_ext.logical_kanban.acceptance_template import get_all_acceptance_templates
 
     methods = get_all_methods()
+    templates = get_all_acceptance_templates()
     operations = get_all_operation_schemas()
     ontology = get_registered_ontology()
     print("Kind              Count  Source")
     print(f"method_library    {len(methods):5d}  registry")
+    print(f"acceptance_template {len(templates):3d}  registry")
     print(f"operation_schema  {len(operations):5d}  registry")
     if ontology is None:
         print("ontology              0  registry")
@@ -436,6 +612,21 @@ def _format_method_detail(method: EngineeringMethod) -> str:
     for st in method.subtask_templates:
         lines.append(f"    * {st.template_id} ({st.role}): {st.subject_template}")
     return "\n".join(lines)
+
+
+def _format_acceptance_template_detail(template: Any) -> str:
+    return "\n".join(
+        [
+            f"  ID:          {template.template_id}",
+            f"  Description: {template.description}",
+            f"  Version:     {template.version}",
+            f"  Status:      {template.status}",
+            f"  Roles:       {', '.join(template.applies_to_roles) or 'any'}",
+            f"  Strict:      {template.strict_acceptance}",
+            f"  Assertion:   {template.assertion_template}",
+            f"  Proof:       {template.proof_template or '(optional)'}",
+        ]
+    )
 
 
 def _find_decomposition_plan(run_id: str) -> Any:

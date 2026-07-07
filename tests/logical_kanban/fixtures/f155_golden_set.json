@@ -1,0 +1,12 @@
+[
+  {"goal": "add pytest coverage for parser", "expected_template_pattern": "T-test-passes"},
+  {"goal": "raise unit test coverage to eighty percent", "expected_template_pattern": "T-coverage-threshold"},
+  {"goal": "run ruff after refactor", "expected_template_pattern": "T-lint-clean"},
+  {"goal": "validate OpenAPI contract", "expected_template_pattern": "T-api-contract-valid"},
+  {"goal": "update changelog for release", "expected_template_pattern": "T-changelog-updated"},
+  {"goal": "confirm rollback script works", "expected_template_pattern": "T-rollback-tested"},
+  {"goal": "make build succeed", "expected_template_pattern": "T-build-succeeds"},
+  {"goal": "check dependency vulnerabilities", "expected_template_pattern": "T-no-new-vulnerabilities"},
+  {"goal": "apply database migration", "expected_template_pattern": "T-migration-applied"},
+  {"goal": "roll out feature flag", "expected_template_pattern": "T-feature-flag-rolled-out"}
+]

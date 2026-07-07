@@ -131,7 +131,7 @@ def _default_library() -> FuzzyPatternLibrary:
     """Return the built-in pattern library used by F-134 / F-148.
 
     The library is intentionally domain-agnostic.  Scenario-specific
-    patterns (car-wash, payment-method, deployment-strategy,
+    patterns (payment-method, deployment-strategy,
     file-format, ...) are supplied by downstream callers via
     ``FuzzyPatternLibrary.add(...)``.
     """
