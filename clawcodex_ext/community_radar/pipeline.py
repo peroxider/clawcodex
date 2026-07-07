@@ -126,6 +126,18 @@ class CommunityRadarPipeline:
         if not sources:
             _log.warning("community radar scan: no sources configured")
 
+        # Auto-detect domains for sources still marked "general" so the
+        # classifier's domain-blocking logic can work correctly.
+        if self.registry is not None:
+            import os as _os
+            token = _os.environ.get("GITHUB_TOKEN")
+            detected = self.registry.auto_detect_domains(
+                self.config.cache_dir, github_token=token
+            )
+            if detected:
+                _log.info("auto-detected domain for %d source(s)", detected)
+                sources = self._load_sources()
+
         cron_status: dict[str, Any] | None = None
         if auto_install_cron is None:
             auto_install_cron = self._ensure_cron

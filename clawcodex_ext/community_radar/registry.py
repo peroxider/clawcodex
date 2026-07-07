@@ -22,7 +22,8 @@ import os
 from pathlib import Path
 from typing import Any, Iterable
 
-from .models import WatchSource
+from .fetcher import detect_repo_domain
+from .models import SourceDomain, WatchSource
 
 _log = logging.getLogger(__name__)
 
@@ -297,6 +298,46 @@ class SourceRegistry:
         for extra in extras or ():
             reg.add(extra)
         return reg
+
+    # ------------------------------------------------------------------
+    # Domain auto-detection
+    # ------------------------------------------------------------------
+
+    def auto_detect_domains(
+        self, cache_dir: Path | str, *, github_token: str | None = None
+    ) -> int:
+        """Detect domains for sources still marked ``general``.
+
+        Calls :func:`detect_repo_domain` (which hits the GitHub API and
+        caches results for 24 h) for every source whose ``domain`` is
+        ``"general"``.  When a domain is detected the source is updated
+        in-place and the registry is persisted to disk.
+
+        Returns the number of sources whose domain was updated.
+        """
+        updated = 0
+        for source in self._sources.values():
+            if source.domain != SourceDomain.GENERAL.value:
+                continue
+            try:
+                detected = detect_repo_domain(
+                    source.repo, cache_dir, github_token=github_token
+                )
+            except Exception as exc:
+                _log.debug("domain detection failed for %s: %s", source.name, exc)
+                continue
+            if detected is not None and detected in {
+                SourceDomain.EMBODIED_AI.value,
+                SourceDomain.SPATIAL_INTELLIGENCE.value,
+            }:
+                source.domain = detected
+                updated += 1
+                _log.info(
+                    "auto-detected domain=%s for source=%s", detected, source.name
+                )
+        if updated:
+            self.save()
+        return updated
 
 
 # ---------------------------------------------------------------------------
