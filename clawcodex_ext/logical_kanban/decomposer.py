@@ -108,11 +108,31 @@ class DecompositionPlan:
             "assumptions": list(self.assumptions),
             "ambiguities": ambiguity.get("detectedAmbiguities", []) if ambiguity else [],
             "methodReferences": list(self.method_references),
-            "schedulingConstraints": dict(self.scheduling_constraints)
-            if self.scheduling_constraints is not None
-            else None,
+            "schedulingConstraints": (
+                self._serialize_scheduling_constraints()
+                if self.scheduling_constraints is not None
+                else None
+            ),
             "schedule": self.schedule.to_dict() if self.schedule is not None else None,
         }
+
+    def _serialize_scheduling_constraints(self) -> dict[str, Any]:
+        """Deep-serialize scheduling_constraints for JSON output.
+
+        Converts ``Resource`` objects inside ``resources`` to their
+        JSON-compatible dict form (via :meth:`Resource.to_dict`).
+        """
+        from .scheduling_solver import Resource as _Resource
+
+        assert self.scheduling_constraints is not None
+        sc = dict(self.scheduling_constraints)
+        raw_resources = sc.get("resources")
+        if isinstance(raw_resources, (list, tuple)):
+            sc["resources"] = [
+                r.to_dict() if isinstance(r, _Resource) else r
+                for r in raw_resources
+            ]
+        return sc
 
 
 # JSON schema shape the LLM must return.
@@ -305,6 +325,7 @@ class TaskDecomposer:
         """
         from .scheduling_solver import (
             Resource,
+            SchedulingError,
             SchedulingSolver,
             SchedulingTask,
             SchedulingUnavailable,
@@ -313,12 +334,31 @@ class TaskDecomposer:
 
         resources = scheduling_constraints.get("resources")
         horizon = scheduling_constraints.get("horizon")
+        # F-152 设计文档用 ``deadline`` 作为 horizon 的别名。
+        if horizon is None:
+            horizon = scheduling_constraints.get("deadline")
         objective = scheduling_constraints.get("objective", "makespan")
         timeout_seconds = float(scheduling_constraints.get("timeout_seconds", 5.0))
 
         if not isinstance(resources, (list, tuple)) or not resources:
             return None
-        if not all(isinstance(r, Resource) for r in resources):
+
+        # Accept both Resource objects and raw dicts — the latter is the
+        # common path when the LLM passes scheduling_constraints through
+        # the TaskDecompose tool (which serialises via JSON).
+        parsed_resources: list[Resource] = []
+        for r in resources:
+            if isinstance(r, Resource):
+                parsed_resources.append(r)
+            elif isinstance(r, dict):
+                try:
+                    parsed_resources.append(Resource.from_dict(r))
+                except (SchedulingError, TypeError, ValueError):
+                    return None
+            else:
+                return None
+
+        if not all(isinstance(r, Resource) for r in parsed_resources):
             return None
         if not isinstance(horizon, int) or horizon < 1:
             return None
@@ -363,7 +403,7 @@ class TaskDecomposer:
         try:
             schedule = solver.schedule(
                 scheduling_tasks,
-                resources,
+                parsed_resources,
                 horizon=horizon,
                 objective=objective,
                 timeout_seconds=timeout_seconds,
@@ -376,7 +416,7 @@ class TaskDecomposer:
         issues = validate_schedule(
             schedule,
             scheduling_tasks,
-            resources,
+            parsed_resources,
             dependencies=dependencies,
         )
         if issues:

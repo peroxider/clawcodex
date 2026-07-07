@@ -1589,6 +1589,15 @@ def get_builtin_commands() -> list[Command]:
     if is_buddy_command_enabled():
         cmds.append(BUDDY_COMMAND)
 
+    # LKB (Logical Kanban) diagnostic command — always registered so
+    # it's discoverable; the handler itself gates on the feature flag.
+    try:
+        from clawcodex_ext.command_system.lkb_command import LKB_COMMAND
+
+        cmds.append(LKB_COMMAND)
+    except Exception:
+        pass
+
     # Bundled dynamic-workflow slash commands (/workflows list + /deep-research).
     # Gated by is_workflows_enabled() (env CLAUDE_CODE_DISABLE_WORKFLOWS or
     # settings.disable_workflows can turn it off). The Workflow tool is already

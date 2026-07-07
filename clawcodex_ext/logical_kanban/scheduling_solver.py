@@ -153,6 +153,43 @@ class Resource:
                     f"Resource({self.resource_id!r}).skills must be non-empty strings"
                 )
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to a JSON-compatible dict."""
+        return {
+            "resourceId": self.resource_id,
+            "capacity": self.capacity,
+            "availability": [list(w) for w in self.availability],
+            "skills": sorted(self.skills),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> Resource:
+        """Deserialize from a dict (the inverse of :meth:`to_dict`)."""
+        rid = d.get("resourceId") or d.get("resource_id")
+        if not isinstance(rid, str) or not rid.strip():
+            raise SchedulingError("Resource dict must contain a non-empty 'resourceId' or 'resource_id'")
+        capacity = d.get("capacity", 1)
+        if not isinstance(capacity, int) or capacity < 1:
+            capacity = 1
+        raw_avail = d.get("availability", ())
+        if isinstance(raw_avail, (list, tuple)):
+            availability: tuple[tuple[int, int], ...] = tuple(
+                (int(s), int(e)) for s, e in raw_avail
+            )
+        else:
+            availability = ()
+        raw_skills = d.get("skills", ())
+        if isinstance(raw_skills, (list, tuple, frozenset, set)):
+            skills = frozenset(str(s) for s in raw_skills if isinstance(s, str) and s.strip())
+        else:
+            skills = frozenset()
+        return cls(
+            resource_id=rid,
+            capacity=capacity,
+            availability=availability,
+            skills=skills,
+        )
+
 
 @dataclass(frozen=True)
 class SchedulingTask:

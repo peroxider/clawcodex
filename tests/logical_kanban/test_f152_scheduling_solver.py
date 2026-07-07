@@ -237,6 +237,40 @@ class TestDataclasses:
         assert d["makespan"] == 3
         assert d["assignments"]["a"] == {"start": 0, "end": 3, "resourceId": "r1"}
 
+    def test_resource_to_dict_and_from_dict_round_trip(self) -> None:
+        r = Resource(
+            resource_id="dev1",
+            capacity=2,
+            availability=((0, 10), (20, 30)),
+            skills=frozenset({"python", "go"}),
+        )
+        d = r.to_dict()
+        assert d["resourceId"] == "dev1"
+        assert d["capacity"] == 2
+        assert d["availability"] == [[0, 10], [20, 30]]
+        assert set(d["skills"]) == {"python", "go"}
+        # Round-trip: from_dict(to_dict(...)) == original.
+        r2 = Resource.from_dict(d)
+        assert r2.resource_id == r.resource_id
+        assert r2.capacity == r.capacity
+        assert r2.availability == r.availability
+        assert r2.skills == r.skills
+
+    def test_resource_from_dict_accepts_snake_case_keys(self) -> None:
+        r = Resource.from_dict({"resource_id": "dev2", "capacity": 3})
+        assert r.resource_id == "dev2"
+        assert r.capacity == 3
+
+    def test_resource_from_dict_defaults(self) -> None:
+        r = Resource.from_dict({"resourceId": "dev3"})
+        assert r.capacity == 1
+        assert r.availability == ()
+        assert r.skills == frozenset()
+
+    def test_resource_from_dict_rejects_missing_id(self) -> None:
+        with pytest.raises(SchedulingError):
+            Resource.from_dict({"capacity": 1})
+
     def test_lkb_metadata_keys_includes_scheduling_fields(self) -> None:
         """F-152: ``scheduling_required``, ``duration``, ``earliest_start``
         are accepted as LKB metadata so the LLM can flag scheduling intent.
@@ -788,6 +822,56 @@ class TestTaskDecomposerIntegration:
                 {"goal": "g", "scheduling_constraints": "bad"},
                 ctx,
             )
+
+    def test_dict_resources_are_converted_by_scheduling_pass(self) -> None:
+        """Dict resources (the common LLM tool path) convert to Resource."""
+        decomposer = TaskDecomposer(llm_provider=_provider(_default_plan()))
+        plan = decomposer.decompose(
+            goal="g",
+            max_steps=5,
+            scheduling_constraints={
+                "resources": [
+                    {"resourceId": "r1", "capacity": 1, "skills": ["python"]},
+                ],
+                "horizon": 30,
+            },
+        )
+        assert plan.schedule is not None
+        assert plan.schedule.status in ("optimal", "feasible")
+
+    def test_deadline_alias_for_horizon(self) -> None:
+        """``deadline`` is accepted as an alias for ``horizon``."""
+        decomposer = TaskDecomposer(llm_provider=_provider(_default_plan()))
+        plan = decomposer.decompose(
+            goal="g",
+            max_steps=5,
+            scheduling_constraints={
+                "resources": [Resource(resource_id="r1")],
+                "deadline": 30,
+            },
+        )
+        assert plan.schedule is not None
+        assert plan.schedule.status in ("optimal", "feasible")
+
+    def test_to_dict_serializes_resource_objects(self) -> None:
+        """``schedulingConstraints`` in the dict output must be JSON-safe."""
+        decomposer = TaskDecomposer(llm_provider=_provider(_default_plan()))
+        plan = decomposer.decompose(
+            goal="g",
+            max_steps=5,
+            scheduling_constraints={
+                "resources": [Resource(resource_id="r1")],
+                "horizon": 30,
+            },
+        )
+        d = plan.to_dict()
+        constraints = d.get("schedulingConstraints")
+        assert constraints is not None
+        raw_resources = constraints.get("resources")
+        assert raw_resources is not None
+        for res in raw_resources:
+            assert isinstance(res, dict), f"expected dict, got {type(res)}"
+            assert "resourceId" in res
 
 
 # ---------------------------------------------------------------------------
