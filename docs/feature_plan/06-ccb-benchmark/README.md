@@ -14,6 +14,7 @@
 | 文档 | 范围 | 状态 |
 |------|------|:----:|
 | [f-64-voice-mode.md](./f-64-voice-mode.md) | F-64 Voice Mode 语音输入 | 🔄 |
+| [f-65-voice-dialogue.md](./f-65-voice-dialogue.md) | **F-65 Voice Dialogue 全双工语音对话** | 📋 |
 | [f-66-acp-protocol.md](./f-66-acp-protocol.md) | F-66 ACP 协议支持 | 🚧 |
 | [f-69-budget-mode.md](./f-69-budget-mode.md) | F-69 Budget / Poor Mode 资源节俭 | 🔄 |
 | [f-70-plugin.md](./f-70-plugin.md) | F-70 Plugin 插件系统基础框架 | 🔄 |
