@@ -139,6 +139,17 @@ lkb-asp = [
 # (``vampire``, ``eprover``) can populate this list.
 lkb-atp = [
 ]
+# F-152 (Bounded Scheduling Solver). Installing this extra enables the
+# OR-Tools CP-SAT backed ``SchedulingSolver`` in
+# ``clawcodex_ext/logical_kanban/scheduling_solver.py``.  The extra is
+# optional because OR-Tools is a heavy meta-package (~25 MB) and only the
+# ``ortools.sat.python.cp_model`` sub-module is allowed; the rest is
+# banned by the ``[tool.ruff.lint.flake8-tidy-imports.banned-api]`` rules
+# below.  Without this extra the solver raises ``SchedulingUnavailable``
+# and the rest of the LKB pipeline keeps working.
+scheduling = [
+    "ortools>=9.8",
+]
 feishu = [
     "lark-oapi==1.7.0",
     "qrcode==7.4.2",
@@ -167,6 +178,9 @@ all = [
     # F-138 Layer-3 ASP solver; kept in ``all`` so the one-click installer
     # surfaces the full solver pipeline alongside the SMT extra.
     "clingo>=5.8",
+    # F-152 (Bounded Scheduling Solver).  Kept in ``all`` so the one-click
+    # installer surfaces the full CP-SAT scheduling solver too.
+    "ortools>=9.8",
 ]
 
 [project.scripts]
@@ -219,7 +233,13 @@ quote-style = "single"
 [tool.ruff.lint]
 # Start with correctness-oriented rules that can be blocking without forcing
 # a repo-wide style cleanup. Formatting is still checked on changed files in CI.
-select = ["E9", "F63", "F7", "F82"]
+#
+# F-152 (Bounded Scheduling Solver) adds TID251 (``flake8-tidy-imports``) so
+# the ``banned-api`` block below (ortools routing/linear_solver/...) is
+# actually enforced.  TID rules are off by default in ruff, so the rule code
+# must appear in ``select`` to take effect.  Other TID codes (TID252 etc.) are
+# left to ``flake8-tidy-imports``'s own presets.
+select = ["E9", "F63", "F7", "F82", "TID251"]
 
 # F-152 (Bounded Scheduling Solver) — OR-Tools meta-package 安全守门。
 # OR-Tools wheel 打包了 6 个污染 LKB 的子模块（routing / linear_solver /

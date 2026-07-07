@@ -75,6 +75,17 @@ class DecompositionPlan:
     # the plan.  Empty when the LLM decomposed freely without anchoring to
     # a method.  Order follows first-occurrence in ``self.tasks``.
     method_references: tuple[str, ...] = ()
+    # F-152: optional scheduling metadata captured at the call site.
+    # When non-None, the decomposer hands the plan to
+    # :class:`~clawcodex_ext.logical_kanban.scheduling_solver.SchedulingSolver`
+    # and stores the resulting :class:`~clawcodex_ext.logical_kanban.
+    # scheduling_solver.Schedule` in :attr:`schedule`.  When the
+    # ``[scheduling]`` extra is not installed, ``scheduling_constraints``
+    # is preserved verbatim but ``schedule`` stays ``None`` so callers
+    # can still introspect the request.
+    scheduling_constraints: dict[str, Any] | None = None
+    schedule: Any = None  # Schedule | None — typed loosely to avoid an
+    # import cycle (scheduling_solver imports nothing from this module).
 
     @property
     def validation_run_id(self) -> str | None:
@@ -97,6 +108,10 @@ class DecompositionPlan:
             "assumptions": list(self.assumptions),
             "ambiguities": ambiguity.get("detectedAmbiguities", []) if ambiguity else [],
             "methodReferences": list(self.method_references),
+            "schedulingConstraints": dict(self.scheduling_constraints)
+            if self.scheduling_constraints is not None
+            else None,
+            "schedule": self.schedule.to_dict() if self.schedule is not None else None,
         }
 
 
@@ -114,12 +129,24 @@ _TASK_KEYS = {
 # to a ProposedTask.  The field is OPTIONAL: omitting it leaves the task
 # un-method-tagged.  When present it must be a non-empty string (see
 # ``_validate_lkb_metadata`` below).
+#
+# F-152 added ``scheduling_required`` (boolean) so an LLM can flag a
+# task as needing a scheduling pass.  The actual scheduling metadata
+# (``resources`` / ``deadline`` / ``objective``) lives at the plan
+# level (``DecompositionPlan.scheduling_constraints``), not on each
+# task; this per-task flag exists so the LLM can ask for a schedule
+# without supplying the constraints itself.  ``duration`` and
+# ``earliest_start`` are accepted so the LLM can supply per-task
+# scheduling hints that the LKB scheduling pass picks up.
 _LKB_METADATA_KEYS = {
     "assertions",
     "acceptance_proof",
     "assumptions",
     "strict_acceptance",
     "method_ref",
+    "scheduling_required",
+    "duration",
+    "earliest_start",
 }
 
 
@@ -157,6 +184,7 @@ class TaskDecomposer:
         acceptance_criteria: tuple[str, ...] = (),
         max_steps: int = 8,
         existing_tasks: tuple[dict[str, Any], ...] = (),
+        scheduling_constraints: dict[str, Any] | None = None,
     ) -> DecompositionPlan:
         """Return a validated decomposition plan for ``goal``.
 
@@ -173,6 +201,23 @@ class TaskDecomposer:
         existing_tasks:
             Existing tasks that the plan must coexist with. Each entry should
             use the same shape as ``ToolContext.tasks`` values.
+        scheduling_constraints:
+            F-152: optional scheduling parameters.  When non-None, the
+            decomposer hands the plan to
+            :class:`~clawcodex_ext.logical_kanban.scheduling_solver.
+            SchedulingSolver` after the LLM pass completes and stores
+            the result in :attr:`DecompositionPlan.schedule`.  The
+            accepted shape is::
+
+                {
+                    "resources": [Resource, ...],   # required
+                    "horizon": int,                 # required
+                    "objective": str,               # optional, default "makespan"
+                    "timeout_seconds": float,       # optional
+                }
+
+            If OR-Tools is not installed the constraints are still
+            persisted on the plan, but ``schedule`` stays ``None``.
         """
         if self.llm_provider is None:
             raise ValueError("TaskDecomposer requires an LLM provider")
@@ -180,6 +225,10 @@ class TaskDecomposer:
             raise ValueError("goal must be a non-empty string")
         if max_steps < 1:
             raise ValueError("max_steps must be at least 1")
+        if scheduling_constraints is not None and not isinstance(
+            scheduling_constraints, dict
+        ):
+            raise ValueError("scheduling_constraints must be a dict or None")
 
         decomposition_run_id = _new_id("D-")
         raw_plan = self._generate_raw_plan(
@@ -204,6 +253,18 @@ class TaskDecomposer:
             ambiguity_report=ambiguity_report,
         )
 
+        # F-152: optional scheduling pass.  We compute the schedule
+        # *before* constructing the plan so it can be stored on the
+        # final immutable value.  Failures are degraded to ``None`` so a
+        # bad schedule never blocks the LLM-generated plan.
+        schedule = None
+        if scheduling_constraints is not None:
+            schedule = self._run_scheduling_pass(
+                tasks=tasks,
+                dependencies=dependencies,
+                scheduling_constraints=scheduling_constraints,
+            )
+
         plan = DecompositionPlan(
             decomposition_run_id=decomposition_run_id,
             goal=goal,
@@ -215,12 +276,112 @@ class TaskDecomposer:
             method_references=_collect_method_references(
                 tasks, self.method_library
             ),
+            scheduling_constraints=scheduling_constraints,
+            schedule=schedule,
         )
 
         # Audit trail — one event per decomposition run.
         self._emit_audit_event(plan)
 
         return plan
+
+    @staticmethod
+    def _run_scheduling_pass(
+        *,
+        tasks: tuple[ProposedTask, ...],
+        dependencies: tuple[tuple[str, str], ...],
+        scheduling_constraints: dict[str, Any],
+    ) -> Any:
+        """Best-effort SchedulingSolver invocation.  Returns the
+        :class:`Schedule` on success, or ``None`` on any failure.
+
+        The mapping from :class:`ProposedTask` (LLM-shaped) to
+        :class:`SchedulingTask` (CP-SAT-shaped) is lossy — we pick
+        conservative defaults for duration and time windows because the
+        LLM does not usually surface numeric bounds.  Callers that need
+        tighter modelling should construct :class:`SchedulingTask` and
+        :class:`Resource` instances directly and call
+        :class:`SchedulingSolver` themselves.
+        """
+        from .scheduling_solver import (
+            Resource,
+            SchedulingSolver,
+            SchedulingTask,
+            SchedulingUnavailable,
+            validate_schedule,
+        )
+
+        resources = scheduling_constraints.get("resources")
+        horizon = scheduling_constraints.get("horizon")
+        objective = scheduling_constraints.get("objective", "makespan")
+        timeout_seconds = float(scheduling_constraints.get("timeout_seconds", 5.0))
+
+        if not isinstance(resources, (list, tuple)) or not resources:
+            return None
+        if not all(isinstance(r, Resource) for r in resources):
+            return None
+        if not isinstance(horizon, int) or horizon < 1:
+            return None
+
+        # Build a ``predecessor -> set(dependent)`` map so each task
+        # carries the dependencies that target it.
+        predecessors: dict[str, list[str]] = {t.proposed_task_id: [] for t in tasks}
+        for prereq, dependent in dependencies:
+            if dependent in predecessors and prereq in predecessors:
+                predecessors[dependent].append(prereq)
+
+        scheduling_tasks: list[SchedulingTask] = []
+        for t in tasks:
+            # Per-task scheduling hints may live in ``lkb_metadata`` —
+            # a future F-N could add ``duration``, ``earliest_start``,
+            # ``required_skills``.  For F-152 we only honour an
+            # optional ``duration`` integer override so the user can
+            # shape individual task lengths without rewriting the LLM
+            # prompt.
+            duration = t.lkb_metadata.get("duration", 1)
+            if not isinstance(duration, int) or duration < 1:
+                duration = 1
+            earliest_start = t.lkb_metadata.get("earliest_start")
+            if earliest_start is not None and (
+                not isinstance(earliest_start, int) or earliest_start < 0
+            ):
+                earliest_start = None
+            scheduling_tasks.append(
+                SchedulingTask(
+                    task_id=t.proposed_task_id,
+                    duration=duration,
+                    earliest_start=earliest_start,
+                    predecessors=tuple(predecessors[t.proposed_task_id]),
+                )
+            )
+
+        try:
+            solver = SchedulingSolver()
+        except SchedulingUnavailable:
+            return None
+
+        try:
+            schedule = solver.schedule(
+                scheduling_tasks,
+                resources,
+                horizon=horizon,
+                objective=objective,
+                timeout_seconds=timeout_seconds,
+            )
+        except Exception:  # noqa: BLE001
+            return None
+
+        # Defensive validation — the solver should already satisfy all
+        # constraints, but we re-verify so LKB can flag corrupt data.
+        issues = validate_schedule(
+            schedule,
+            scheduling_tasks,
+            resources,
+            dependencies=dependencies,
+        )
+        if issues:
+            return None
+        return schedule
 
     def _generate_raw_plan(
         self,
@@ -841,6 +1002,34 @@ def _validate_lkb_metadata(lkb: dict[str, Any], where: str) -> None:
             raise TaskDecompositionError(
                 f"{where}.method_ref must be a non-empty string when present"
             )
+    # F-152: ``scheduling_required`` is optional; when present it must be
+    # a boolean.  The flag is informational at the task level — the
+    # actual scheduling parameters live in
+    # ``DecompositionPlan.scheduling_constraints`` (set by the caller).
+    if "scheduling_required" in lkb and not isinstance(
+        lkb["scheduling_required"], bool
+    ):
+        raise TaskDecompositionError(
+            f"{where}.scheduling_required must be a boolean when present"
+        )
+    # F-152: ``duration`` (positive int) and ``earliest_start``
+    # (non-negative int) are optional per-task scheduling hints.  The
+    # LKB scheduling pass picks them up to build a SchedulingTask.
+    if "duration" in lkb and (
+        not isinstance(lkb["duration"], int) or isinstance(lkb["duration"], bool)
+        or lkb["duration"] < 1
+    ):
+        raise TaskDecompositionError(
+            f"{where}.duration must be a positive integer when present"
+        )
+    if "earliest_start" in lkb and (
+        not isinstance(lkb["earliest_start"], int)
+        or isinstance(lkb["earliest_start"], bool)
+        or lkb["earliest_start"] < 0
+    ):
+        raise TaskDecompositionError(
+            f"{where}.earliest_start must be a non-negative integer when present"
+        )
 
 
 __all__ = [

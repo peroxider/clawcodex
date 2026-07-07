@@ -183,6 +183,34 @@ from .rule_engine import (
     evaluate_rules,
     validate_method_compliance,
 )
+
+# F-152: defer the scheduling_solver import until first access.  The
+# module pulls in ``ortools.sat.python.cp_model`` which adds ~0.5s to
+# import time and is only needed when the user opts in via the
+# ``[scheduling]`` extra + ``TaskDecomposer.decompose(...
+# scheduling_constraints=...)``.  Without this guard the LKB facade
+# inflates the cold-start cost of every call site that just imports
+# ``is_logical_kanban_enabled`` (e.g. the conversation/CLI/REPL
+# modules that only need the flag).
+_SCHEDULING_NAMES = (
+    "Resource",
+    "Schedule",
+    "SchedulingError",
+    "SchedulingSolver",
+    "SchedulingTask",
+    "SchedulingUnavailable",
+    "validate_schedule",
+)
+
+
+def __getattr__(name: str):  # type: ignore[no-untyped-def]
+    if name in _SCHEDULING_NAMES:
+        from . import scheduling_solver as _sched
+
+        value = getattr(_sched, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 from .runtime import LogicalKanbanRuntime, get_logical_kanban
 from .service import LogicalKanbanService
 from .solver_adapter import (
@@ -305,7 +333,13 @@ __all__ = [
     'RepairAction',
     'RepairSuggestion',
     'RuleEngineResult',
+    'Resource',
     'SCHEMA_VERSION',
+    'Schedule',
+    'SchedulingError',
+    'SchedulingSolver',
+    'SchedulingTask',
+    'SchedulingUnavailable',
     'SIGNIFICANT_THRESHOLD',
     'SessionFileAuditLog',
     'Severity',
@@ -421,4 +455,5 @@ __all__ = [
     'validate_assertion',
     'validate_task_transition',
     'validate_method_compliance',
+    'validate_schedule',
 ]

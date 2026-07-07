@@ -36,6 +36,10 @@ def _task_decompose_call(tool_input: dict[str, Any], context: ToolContext) -> To
     if max_steps < 1 or max_steps > 20:
         raise ToolInputError("max_steps must be between 1 and 20")
 
+    scheduling_constraints = tool_input.get("scheduling_constraints")
+    if scheduling_constraints is not None and not isinstance(scheduling_constraints, dict):
+        raise ToolInputError("scheduling_constraints must be a dict or None")
+
     provider = getattr(context, "_active_provider", None)
     if provider is None:
         return ToolResult(
@@ -61,6 +65,7 @@ def _task_decompose_call(tool_input: dict[str, Any], context: ToolContext) -> To
         acceptance_criteria=tuple(acceptance_criteria),
         max_steps=max_steps,
         existing_tasks=existing_tasks,
+        scheduling_constraints=scheduling_constraints,
     )
 
     # Re-emit the audit event through the session-local audit log so it is
@@ -86,6 +91,12 @@ def _task_decompose_call(tool_input: dict[str, Any], context: ToolContext) -> To
             else []
         ),
         "validation": validation,
+        "schedule": plan.schedule.to_dict() if plan.schedule is not None else None,
+        "schedulingConstraints": (
+            dict(plan.scheduling_constraints)
+            if plan.scheduling_constraints is not None
+            else None
+        ),
     }
     return ToolResult(name="TaskDecompose", output=output)
 
@@ -149,6 +160,7 @@ TaskDecomposeTool: Tool = build_tool(
                 "items": {"type": "string", "minLength": 1},
             },
             "max_steps": {"type": "integer", "minimum": 1, "maximum": 20},
+            "scheduling_constraints": {"type": "object"},
         },
         "required": ["goal"],
     },
@@ -179,6 +191,9 @@ Returns a validated decomposition plan:
 - **assumptions**: Explicit assumptions the plan relies on.
 - **ambiguities**: Detected ambiguities in the generated plan, if any.
 - **validation**: A validation object with `result` (pass|fail) and `issues`.
+- **schedule**: Optional F-152 schedule produced by OR-Tools CP-SAT.  Populated only
+  when ``scheduling_constraints`` is supplied.  See F-152 for the constraints shape.
+- **schedulingConstraints**: Echo of the input constraints (or ``null``).
 
 ## Important
 
