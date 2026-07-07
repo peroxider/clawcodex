@@ -16,9 +16,15 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from .ambiguity_detector import AmbiguityDetector
-from .audit import event_for_decomposition_proposed
+from .audit import (
+    AuditLog,
+    InMemoryAuditLog,
+    event_for_decomposition_proposed,
+    event_for_method_referenced,
+)
 from .context_adapter import build_facts_snapshot
 from .fuzzy_types import AmbiguityReport
+from .method_prompt import summarize_methods
 from .rule_engine import Layer1RuleEngine
 from .solver_adapter import SolverRequest
 from .solver_pipeline import SolverPipeline
@@ -65,6 +71,10 @@ class DecompositionPlan:
     assumptions: tuple[str, ...]
     ambiguity_report: AmbiguityReport | None
     validation_run: ValidationRun | None
+    # F-151: de-duplicated list of method_ref strings the LLM used across
+    # the plan.  Empty when the LLM decomposed freely without anchoring to
+    # a method.  Order follows first-occurrence in ``self.tasks``.
+    method_references: tuple[str, ...] = ()
 
     @property
     def validation_run_id(self) -> str | None:
@@ -86,6 +96,7 @@ class DecompositionPlan:
             "dependencies": [list(d) for d in self.dependencies],
             "assumptions": list(self.assumptions),
             "ambiguities": ambiguity.get("detectedAmbiguities", []) if ambiguity else [],
+            "methodReferences": list(self.method_references),
         }
 
 
@@ -201,6 +212,9 @@ class TaskDecomposer:
             assumptions=assumptions,
             ambiguity_report=ambiguity_report,
             validation_run=validation_run,
+            method_references=_collect_method_references(
+                tasks, self.method_library
+            ),
         )
 
         # Audit trail — one event per decomposition run.
@@ -225,7 +239,7 @@ class TaskDecomposer:
             max_steps=max_steps,
             existing_tasks=existing_tasks,
         )
-        system_prompt = self._system_prompt(max_steps)
+        system_prompt = self._system_prompt(max_steps, goal=goal)
 
         last_error: Exception | None = None
         raw = ""
@@ -255,7 +269,36 @@ class TaskDecomposer:
         ) from last_error
 
     @staticmethod
-    def _system_prompt(max_steps: int) -> str:
+    def _system_prompt(max_steps: int, *, goal: str = "") -> str:
+        # F-151: when a method library is available, render a compact
+        # summary block inside the system prompt so the LLM can prefer
+        # the existing decomposition templates over free-form invention.
+        # The summary is bounded to ``max_tokens`` (default 1 800) so it
+        # never dominates the context window — see ``method_prompt.summarize_methods``.
+        from .method_library import METHOD_LIBRARY as _DEFAULT_LIBRARY
+        from .method_prompt import select_methods_by_pattern
+
+        try:
+            relevant = select_methods_by_pattern(goal, _DEFAULT_LIBRARY, top_k=10)
+        except Exception:  # pragma: no cover - defensive guard
+            relevant = ()
+
+        method_block = ""
+        if relevant:
+            summary = summarize_methods(
+                relevant,
+                goal=goal,
+                max_tokens=1800,
+                header="## Engineering Methods (use these templates when applicable)",
+            )
+            method_block = (
+                "\n\n"
+                f"{summary.text}\n"
+                "If a method above matches the user's goal, STRONGLY PREFER its "
+                "decomposition shape.  Carry its ``method_id`` in each "
+                "affected task's ``lkbMetadata.method_ref`` field."
+            )
+
         return (
             "You are a task-decomposition assistant for a logical kanban system. "
             "Return strictly JSON (no markdown). "
@@ -277,6 +320,7 @@ class TaskDecomposer:
             "assumptions, strict_acceptance, method_ref.  method_ref is "
             "optional; when present it MUST be a method_id from the "
             "engineering method library."
+            f"{method_block}"
         )
 
     @staticmethod
@@ -529,13 +573,16 @@ class TaskDecomposer:
     def _emit_audit_event(
         self,
         plan: DecompositionPlan,
+        *,
+        audit_log: "InMemoryAuditLog | AuditLog | None" = None,
     ) -> None:
         # We don't have a ToolContext here, so we emit to an in-memory audit log
-        # only. Callers that own a context can append the same event through
-        # get_audit_log(context) if they want session-local persistence.
-        from .audit import InMemoryAuditLog
-
+        # by default. Callers that own a context can pass an explicit
+        # ``audit_log`` (e.g. ``get_audit_log(context)``) for session-local
+        # persistence. Tests pass their own log to inspect emitted events.
         validation_run = plan.validation_run
+        log = audit_log if audit_log is not None else InMemoryAuditLog()
+
         event = event_for_decomposition_proposed(
             decomposition_run_id=plan.decomposition_run_id,
             goal=plan.goal,
@@ -549,8 +596,22 @@ class TaskDecomposer:
             validation_run_id=plan.validation_run_id,
             result=validation_run.result if validation_run else "unknown",
         )
-        log = InMemoryAuditLog()
         log.append(event)
+
+        # F-151: emit one ``lkb_method_referenced`` event per unique
+        # method_ref surfaced in the plan.  ``plan.method_references`` is
+        # already de-duplicated (first-occurrence order), so each referenced
+        # method produces exactly one event per emission call.
+        if plan.method_references:
+            method_task_counts = _count_method_task_usage(plan.tasks)
+            for method_id in plan.method_references:
+                method_event = event_for_method_referenced(
+                    decomposition_run_id=plan.decomposition_run_id,
+                    method_id=method_id,
+                    task_count=method_task_counts.get(method_id, 0),
+                    validation_run_id=plan.validation_run_id,
+                )
+                log.append(method_event)
 
 
 class TaskDecompositionError(Exception):
@@ -681,6 +742,54 @@ def _parse_raw_plan(
     dependencies = raw["dependencies"]
     assumptions = raw["assumptions"]
     return tasks, dependencies, assumptions
+
+
+def _collect_method_references(
+    tasks: tuple[ProposedTask, ...],
+    method_library: tuple["EngineeringMethod", ...],
+) -> tuple[str, ...]:
+    """Return the de-duplicated method_refs attached to ``tasks``.
+
+    F-151: this is the *plan-level* roll-up of ``lkbMetadata.method_ref``
+    values.  Order follows first occurrence; the values are *not* filtered
+    by method-library membership — the F-150 rule engine
+    (``validate_method_compliance``) already emits an R-METHOD-UNKNOWN
+    warning for any value not present in the library, so the plan can
+    surface unrecognised refs verbatim for the audit trail.
+
+    Parameters
+    ----------
+    tasks:
+        The parsed :class:`ProposedTask` list.
+    method_library:
+        The library snapshot the decomposer was constructed with.  Only
+        the type is consulted — this helper itself does not validate
+        membership.
+    """
+    seen: list[str] = []
+    for task in tasks:
+        method_ref = task.lkb_metadata.get("method_ref")
+        if not isinstance(method_ref, str):
+            continue
+        if not method_ref.strip():
+            continue
+        if method_ref in seen:
+            continue
+        seen.append(method_ref)
+    return tuple(seen)
+
+
+def _count_method_task_usage(
+    tasks: tuple[ProposedTask, ...],
+) -> dict[str, int]:
+    """Return a ``method_ref -> task_count`` map for F-151 audit events."""
+    counts: dict[str, int] = {}
+    for task in tasks:
+        method_ref = task.lkb_metadata.get("method_ref")
+        if not isinstance(method_ref, str) or not method_ref.strip():
+            continue
+        counts[method_ref] = counts.get(method_ref, 0) + 1
+    return counts
 
 
 def _reject_unknown_keys(data: dict[str, Any], allowed: set[str], where: str) -> None:

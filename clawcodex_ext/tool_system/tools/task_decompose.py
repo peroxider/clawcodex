@@ -64,24 +64,12 @@ def _task_decompose_call(tool_input: dict[str, Any], context: ToolContext) -> To
     )
 
     # Re-emit the audit event through the session-local audit log so it is
-    # persisted alongside other LKB events for this context.
-    from clawcodex_ext.logical_kanban.audit import event_for_decomposition_proposed
-
-    audit_event = event_for_decomposition_proposed(
-        decomposition_run_id=plan.decomposition_run_id,
-        goal=plan.goal,
-        task_count=len(plan.tasks),
-        dependency_count=len(plan.dependencies),
-        ambiguity_count=(
-            len(plan.ambiguity_report.detected_ambiguities)
-            if plan.ambiguity_report is not None
-            else 0
-        ),
-        validation_run_id=plan.validation_run_id,
-        result=plan.validation_run.result if plan.validation_run else "unknown",
-        session_id=getattr(context, "session_id", None),
-    )
-    get_audit_log(context).append(audit_event)
+    # persisted alongside other LKB events for this context.  We delegate
+    # the actual emission to ``decomposer._emit_audit_event`` so the F-151
+    # ``lkb_method_referenced`` events (one per referenced method) ride
+    # along on the same log.
+    session_audit_log = get_audit_log(context)
+    decomposer._emit_audit_event(plan, audit_log=session_audit_log)
 
     # Resolve the validation result to include in the wire response.
     validation = _build_validation(plan)

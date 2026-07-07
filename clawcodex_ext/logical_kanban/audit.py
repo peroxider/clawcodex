@@ -39,6 +39,7 @@ AuditEventType = Literal[
     "lkb_llm_fallback_used",
     "lkb_legacy_todo_ambiguity",
     "lkb_decomposition_proposed",
+    "lkb_method_referenced",
 ]
 
 
@@ -595,6 +596,44 @@ def event_for_decomposition_proposed(
     )
 
 
+def event_for_method_referenced(
+    decomposition_run_id: str,
+    method_id: str,
+    *,
+    task_count: int,
+    validation_run_id: str | None = None,
+    session_id: str | None = None,
+    actor: str = "agent",
+) -> AuditEvent:
+    """Record that the LLM anchored at least one task to ``method_id``.
+
+    F-151: one event per method-library reference surfaced in a
+    decomposition plan.  Emitted *after* the plan is validated so
+    downstream consumers can compute method-reuse ratios per session
+    without scraping ``lkb_decomposition_proposed`` payloads.
+
+    The event id is a content-derived hash so that re-emitting for the
+    same (run, method) pair is naturally idempotent.
+    """
+    return AuditEvent(
+        event_id=_new_event_id(),
+        event_type="lkb_method_referenced",
+        actor=actor,
+        timestamp=_utc_now(),
+        session_id=session_id,
+        proposal_id=None,
+        validation_run_id=validation_run_id,
+        task_id=None,
+        decision=None,
+        payload={
+            "decompositionRunId": decomposition_run_id,
+            "methodId": method_id,
+            "taskCount": task_count,
+            "enrichmentKey": f"{decomposition_run_id}:{method_id}",
+        },
+    )
+
+
 def append_event_once(
     audit_log: AuditLog,
     event: AuditEvent,
@@ -692,6 +731,7 @@ __all__ = [
     "event_for_human_override",
     "event_for_legacy_todo_ambiguity",
     "event_for_llm_fallback_used",
+    "event_for_method_referenced",
     "event_for_proof_enrichment",
     "event_for_proposal",
     "event_for_revalidation_requested",
