@@ -18,28 +18,127 @@ import logging
 import math
 import re
 from collections import Counter
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 import yaml
 
 logger = logging.getLogger(__name__)
 
+
 # ---------------------------------------------------------------------------
-# ConflictJudge protocol -- lightweight LLM-based conflict detection
+# RuleJudge protocol — batched LLM-based dedup / merge / conflict detection
 # ---------------------------------------------------------------------------
+
+
+@dataclass
+class JudgeResult:
+    """LLM 对单个 candidate 规则的去重/合并/冲突判定结果。"""
+
+    action: Literal["duplicate", "merge", "conflict", "new"]
+    target_idx: int | None = None
+    """当 action 为 duplicate/merge/conflict 时，指向 existing 中对应的索引。"""
 
 
 @runtime_checkable
-class ConflictJudge(Protocol):
-    """Judge whether two rules are semantically conflicting."""
+class RuleJudge(Protocol):
+    """批量判定 candidates 与 existing 的关系。"""
 
-    async def are_conflicting(self, rule_a: dict, rule_b: dict) -> bool:
+    async def judge(self, candidates: list[dict], existing: list[dict]) -> list[JudgeResult]:
         ...
 
 
-_DEFAULT_CONFLICT_JUDGE: ConflictJudge | None = None
+# ---------------------------------------------------------------------------
+# BatchedLLMJudge — 生产实现
+# ---------------------------------------------------------------------------
+
+
+class BatchedLLMJudge:
+    """使用 :func:`clawcodex_ext.llm.llm_complete` 做批量判定。"""
+
+    _JUDGE_SYSTEM = (
+        "You are a coding-convention analysis assistant. "
+        "Given a set of existing rules and one or more new candidate rules, "
+        "determine for each candidate whether it duplicates, should be merged "
+        "with, semantically conflicts with, or is entirely new relative to the "
+        "existing rules.  Reply ONLY with the exact format shown."
+    )
+
+    def __init__(self, model: str | None = None) -> None:
+        self._model = model
+
+    async def judge(self, candidates: list[dict], existing: list[dict]) -> list[JudgeResult]:
+        if not candidates or not existing:
+            return [JudgeResult(action="new") for _ in candidates]
+
+        prompt = self._build_prompt(candidates, existing)
+        from clawcodex_ext.llm import llm_complete
+
+        reply = await llm_complete(prompt, system_prompt=self._JUDGE_SYSTEM, model=self._model)
+        return self._parse_reply(reply, len(candidates))
+
+    # ------------------------------------------------------------------
+    # Prompt building
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_prompt(candidates: list[dict], existing: list[dict]) -> str:
+        lines: list[str] = ["Existing rules:"]
+        for i, e in enumerate(existing, start=1):
+            lines.append(f"{i}. [{e.get('category', '?')}] {e.get('summary', '')}")
+            body = (e.get('body') or '').strip()
+            if body:
+                truncated = body[:120] + "..." if len(body) > 120 else body
+                lines.append(f"   Body: {truncated}")
+
+        lines.append("")
+        lines.append("Candidate rules:")
+        for ci, c in enumerate(candidates):
+            label = chr(65 + ci)
+            lines.append(f"{label}. [{c.get('category', '?')}] {c.get('summary', '')}")
+            body = (c.get('body') or '').strip()
+            if body:
+                truncated = body[:120] + "..." if len(body) > 120 else body
+                lines.append(f"   Body: {truncated}")
+
+        lines.append("")
+        lines.append("For each candidate reply EXACTLY one line in this format:")
+        lines.append("A: DUPLICATE <existing_id>")
+        lines.append("A: MERGE <existing_id>")
+        lines.append("A: CONFLICT <existing_id>")
+        lines.append("A: NEW")
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------------
+    # Reply parsing
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_reply(reply: str, num_candidates: int) -> list[JudgeResult]:
+        results: list[JudgeResult] = []
+        reply_lower = reply.strip().lower()
+
+        for ci in range(num_candidates):
+            label = chr(65 + ci)
+            pattern = re.compile(
+                rf'{label}\s*:\s*(duplicate|merge|conflict|new)\s*(\d+)?',
+                re.IGNORECASE,
+            )
+            match = pattern.search(reply_lower)
+            if match:
+                action = match.group(1)
+                target_str = match.group(2)
+                target_idx = int(target_str) - 1 if target_str is not None else None
+                results.append(JudgeResult(action=action, target_idx=target_idx))  # type: ignore[arg-type]
+            else:
+                logger.warning(
+                    'Failed to parse judge result for candidate %s, defaulting to new', label
+                )
+                results.append(JudgeResult(action="new"))
+
+        return results
 
 
 # Regex to find the ## Extracted Rules section in an agent reply.
@@ -148,7 +247,9 @@ def _infer_category(text: str) -> str:
 
 
 _AUTO_MANAGED_COMMENT = (
-    '# workflow.rules.yaml \u2014 \u7531 clawcodex orchestrator \u81ea\u52a8\u7ba1\u7406'
+    '# workflow.rules.yaml \u2014 \u7531 clawcodex orchestrator \u81ea\u52a8\u7ba1\u7406\n'
+    '# \u89c4\u5219\u662f\u4ece PR review feedback \u4e2d\u5f52\u7eb3\u51fa\u7684\u53c2\u8003\u7ea6\u5b9a\uff0c\u975e\u5f3a\u5236\u7ea6\u675f\u3002\n'
+    '# Agent \u5728\u9002\u5f53\u65f6\u673a\u4ee5 Read() \u67e5\u9605\u3002'
 )
 
 # Default quality-score weights.
@@ -230,7 +331,9 @@ class RuleStore:
             return False
         try:
             first = p.read_text(encoding='utf-8').splitlines()[0] if p.stat().st_size > 0 else ''
-            return _AUTO_MANAGED_COMMENT not in first
+            # 只检测首行（兼容多行 header 的扩展）
+            marker = _AUTO_MANAGED_COMMENT.splitlines()[0]
+            return marker not in first
         except (OSError, IndexError):
             return False
 
@@ -331,9 +434,9 @@ class RuleEmbedder:
 class RuleEngine:
     """Rule extraction, deduplication, merge, quality scoring, pruning."""
 
-    def __init__(self, store: RuleStore | None = None, conflict_judge: ConflictJudge | None = None) -> None:
+    def __init__(self, store: RuleStore | None = None, rule_judge: RuleJudge | None = None) -> None:
         self.store = store or RuleStore()
-        self._conflict_judge = conflict_judge
+        self._rule_judge = rule_judge
 
     # ------------------------------------------------------------------
     # Extraction
@@ -366,6 +469,7 @@ class RuleEngine:
                     'category': category,
                     'summary': summary,
                     'body': body,
+                    'source': '',
                     'support_count': 1,
                     'confidence': 'medium',
                     'created_at': now,
@@ -414,6 +518,7 @@ class RuleEngine:
                     'category': category,
                     'summary': summary,
                     'body': body,
+                    'source': '',
                     'support_count': 1,
                     'confidence': 'medium',
                     'created_at': now,
@@ -443,18 +548,17 @@ class RuleEngine:
         similarity_threshold: float = 0.85,
         enhancement_threshold: float = 0.70,
         _conflict_pairs: set[tuple[int, int]] | None = None,
+        _judge_results: list[JudgeResult] | None = None,
     ) -> list[dict]:
         """Phase 2 semantic dedup + merge.
 
-        Three-way decision per candidate vs. each existing rule:
-          - ``sim >= similarity_threshold`` → duplicate → skip, increment
-            ``support_count`` on the existing rule.
-          - ``enhancement_threshold <= sim < similarity_threshold`` →
-            merge: combine summary/body intelligently.
-          - ``sim < enhancement_threshold`` → new rule, append.
+        When ``_judge_results`` is provided (LLM path), its decisions
+        override the TF-IDF similarity-based branching.  Only the exact
+        dedup (same summary text) is kept as a fast path.
 
-        Exact duplicate (same summary text) is still caught first as a
-        fast path before semantic comparison.
+        When ``_judge_results`` is ``None`` (TF-IDF fallback), the
+        original three-way threshold logic is used, and
+        ``_conflict_pairs`` are honoured for conflict marking.
         """
         # --- fast path: exact dedup ---------------------------------------------------
         merged = list(existing)
@@ -478,8 +582,11 @@ class RuleEngine:
         if not remaining:
             return merged
 
-        # --- semantic dedup + merge ----------------------------------------------------
-        # Collect all texts for embedding
+        # --- decide: LLM path or TF-IDF fallback ---------------------------------------
+        if _judge_results is not None:
+            return _apply_judge_results(merged, remaining, _judge_results, now)
+
+        # --- TF-IDF fallback path (original behaviour) ---------------------------------
         existing_texts = [RuleEngine._rule_text(r) for r in merged]
         candidate_texts = [RuleEngine._rule_text(c) for _, c in remaining]
         all_texts = existing_texts + candidate_texts
@@ -501,28 +608,23 @@ class RuleEngine:
                     best_sim = sim
                     best_ei = ei
 
-            if best_sim >= similarity_threshold:
+            if best_ei >= 0 and (oi, best_ei) in conflict_pairs:
+                # Confirmed conflict -> keep separate, mark with index refs
+                c['_conflict_with_idx'] = best_ei
+                merged[best_ei].setdefault('_conflict_with_idx', []).append(len(merged))
+                c['updated_at'] = now
+                merged.append(c)
+                existing_vecs.append(c_vec)
+            elif best_sim >= similarity_threshold:
                 # Duplicate — increment support_count on the closest existing rule
                 target = merged[best_ei]
                 target['support_count'] = target.get('support_count', 1) + 1
                 target['updated_at'] = now
-            if best_ei >= 0 and (oi, best_ei) in conflict_pairs:
-                    # Confirmed conflict -> keep separate, mark with index refs
-                    c['_conflict_with_idx'] = best_ei
-                    merged[best_ei].setdefault('_conflict_with_idx', []).append(len(merged))
-                    c['updated_at'] = now
-                    merged.append(c)
-                    existing_vecs.append(c_vec)
-                    continue
-
             elif best_sim >= enhancement_threshold:
                 # Merge — combine candidate into the closest existing rule
                 target = merged[best_ei]
                 merged_rule = _merge_two_rules(target, c)
-                # Replace in-place
                 merged[best_ei] = merged_rule
-                # Recompute vector for the merged rule so subsequent candidates
-                # compare against the enriched version
                 merged_text = RuleEngine._rule_text(merged_rule)
                 mvecs = embedder.embed_many([merged_text])
                 existing_vecs[best_ei] = mvecs[0]
@@ -530,7 +632,7 @@ class RuleEngine:
                 # New rule — append
                 c['id'] = next_id
                 next_id += 1
-                c['updated_at'] = now  # ensure fresh
+                c['updated_at'] = now
                 merged.append(c)
                 existing_vecs.append(candidate_vecs[ci])
 
@@ -622,16 +724,25 @@ class RuleEngine:
         enhancement_threshold: float = 0.70,
         max_rules: int = 20,
         min_confidence: str | None = None,
+        source: str = "",
     ) -> int:
         """Full pipeline: extract → dedup+merge → score → prune → filter → persist.
 
         Returns the number of new candidate rules extracted (before
         dedup), or 0 if no rules section was found or the file is
         user-managed.
+
+        *source* is an optional provenance string (e.g. ``"PR #42"``)
+        attached to every extracted rule.
         """
         candidates = self.extract(agent_reply)
         if not candidates:
             return 0
+
+        # Fill source provenance
+        if source:
+            for c in candidates:
+                c['source'] = source
 
         if RuleStore.is_user_managed(workflow_rules_path):
             logger.warning(
@@ -644,25 +755,26 @@ class RuleEngine:
         existing_data = RuleStore.load(workflow_rules_path)
         existing = existing_data.get('rules', [])
 
-        # Phase 2.5: LLM-based conflict detection before merge
-        conflict_pairs = await self._find_conflict_pairs(
-            candidates,
-            existing,
-            similarity_threshold=similarity_threshold,
-            enhancement_threshold=enhancement_threshold,
-        )
+        # Phase 2.5: LLM batch judge (dedup + merge + conflict in one call)
+        judge_results: list[JudgeResult] | None = None
+        if self._rule_judge is not None:
+            try:
+                judge_results = await self._rule_judge.judge(candidates, existing)
+            except Exception as exc:
+                logger.warning('LLM judge failed, falling back to TF-IDF: %s', exc)
+                judge_results = None
 
         merged = self._deduplicate_and_merge(
             candidates,
             existing,
             similarity_threshold=similarity_threshold,
             enhancement_threshold=enhancement_threshold,
+            _judge_results=judge_results,
         )
 
         # Assign/refresh sequential ids after dedup+merge
         for i, r in enumerate(merged, start=1):
             r['id'] = i
-
 
         # Backfill conflict references from index-based to ID-based
         for r in merged:
@@ -704,51 +816,6 @@ class RuleEngine:
         return len(candidates)
 
 
-    async def _find_conflict_pairs(
-        self,
-        candidates: list[dict],
-        existing: list[dict],
-        similarity_threshold: float = 0.85,
-        enhancement_threshold: float = 0.70,
-        prefilter_threshold: float = 0.40,
-    ) -> set[tuple[int, int]]:
-        """Find candidate-existing pairs that are semantically conflicting.
-
-        Uses TF-IDF as a lightweight pre-filter: only pairs whose
-        similarity is >= ``prefilter_threshold`` (default 0.40) and
-        < ``similarity_threshold`` (to exclude exact duplicates) are
-        forwarded to the LLM ``ConflictJudge``.
-        """
-        if not self._conflict_judge or not candidates or not existing:
-            return set()
-
-        texts = [RuleEngine._rule_text(c) for c in candidates] + [
-            RuleEngine._rule_text(e) for e in existing
-        ]
-        embedder = RuleEmbedder()
-        vectors = embedder.embed_many(texts)
-        c_vecs = vectors[: len(candidates)]
-        e_vecs = vectors[len(candidates) :]
-
-        pairs: set[tuple[int, int]] = set()
-        for ci, c in enumerate(candidates):
-            c_cat = c.get('category', '')
-            for ei, e in enumerate(existing):
-                if e.get('category', '') != c_cat:
-                    continue
-                sim = RuleEmbedder.cosine_similarity(c_vecs[ci], e_vecs[ei])
-                if prefilter_threshold <= sim < similarity_threshold:
-                    if await self._conflict_judge.are_conflicting(c, e):
-                        pairs.add((ci, ei))
-                        logger.info(
-                            'Conflict detected: candidate #%d "%s" <-> existing #%d "%s"',
-                            ci,
-                            c.get('summary', '')[:40],
-                            e.get('id', ei),
-                            e.get('summary', '')[:40],
-                        )
-        return pairs
-
     def get_rules_path(config: Any, workflow_path: str | None) -> str | None:
         rules_config = getattr(config, 'rules', None)
         if not rules_config or not getattr(rules_config, 'enabled', False):
@@ -757,6 +824,77 @@ class RuleEngine:
         if not workflow_path:
             return None
         return RuleStore.resolve_path(workflow_path, rules_path)
+
+
+# ---------------------------------------------------------------------------
+# LLM judge result applier
+# ---------------------------------------------------------------------------
+
+
+def _apply_judge_results(
+    merged: list[dict],
+    remaining: list[tuple[int, dict]],
+    judge_results: list[JudgeResult],
+    now: str,
+) -> list[dict]:
+    """Apply ``JudgeResult`` list from LLM to produce the final merged list.
+
+    Each element in *judge_results* corresponds to the **original**
+    candidate index (``oi``).  The method processes *remaining*
+    candidates that survived exact dedup.
+    """
+    next_id = len(merged) + 1
+    for oi, c in remaining:
+        jr = judge_results[oi] if oi < len(judge_results) else None
+        if jr is None or jr.action == "new":
+            # New rule — append
+            c['id'] = next_id
+            next_id += 1
+            c['updated_at'] = now
+            merged.append(c)
+        elif jr.action == "duplicate" and jr.target_idx is not None:
+            # Duplicate — increment support_count on the target
+            target_idx = jr.target_idx
+            if target_idx < len(merged):
+                merged[target_idx]['support_count'] = (
+                    merged[target_idx].get('support_count', 1) + 1
+                )
+                merged[target_idx]['updated_at'] = now
+            else:
+                # Fallback: target out of range, treat as new
+                c['id'] = next_id
+                next_id += 1
+                c['updated_at'] = now
+                merged.append(c)
+        elif jr.action == "merge" and jr.target_idx is not None:
+            # Merge — combine candidate into the target existing rule
+            target_idx = jr.target_idx
+            if target_idx < len(merged):
+                merged[target_idx] = _merge_two_rules(merged[target_idx], c)
+            else:
+                c['id'] = next_id
+                next_id += 1
+                c['updated_at'] = now
+                merged.append(c)
+        elif jr.action == "conflict" and jr.target_idx is not None:
+            # Conflict — keep separate, mark with index refs
+            target_idx = jr.target_idx
+            if target_idx < len(merged):
+                c['_conflict_with_idx'] = target_idx
+                merged[target_idx].setdefault('_conflict_with_idx', []).append(len(merged))
+                c['updated_at'] = now
+                merged.append(c)
+            else:
+                c['id'] = next_id
+                next_id += 1
+                c['updated_at'] = now
+                merged.append(c)
+        else:
+            c['id'] = next_id
+            next_id += 1
+            c['updated_at'] = now
+            merged.append(c)
+    return merged
 
 
 # ---------------------------------------------------------------------------
@@ -822,6 +960,7 @@ def _merge_two_rules(a: dict, b: dict) -> dict:
         'support_count': support,
         'source': merged_source,
         'confidence': merged_confidence,
+        'conflict_with': list(set(a.get('conflict_with', []) + b.get('conflict_with', []))),
         'created_at': merged_created,
         'updated_at': now,
         'last_applied': now,

@@ -38,7 +38,7 @@ from .modes.pipeline import PipelineModeRunner
 from .modes.single import SingleModeRunner
 from .prompt_builder import PromptBuilder
 from .review_feedback import ReviewFeedbackService, ReviewFollowup
-from .rules_learner import ConflictJudge, RuleEngine, RuleStore
+from .rules_learner import BatchedLLMJudge, RuleEngine, RuleStore
 from .status_dashboard import SessionStatus, StatusDashboard
 from clawcodex_ext.tool_system.context import ToolContext
 from clawcodex_ext.utils.git import get_default_branch, get_file_status, get_repo_root
@@ -3228,12 +3228,12 @@ class Orchestrator:
                 'Failed to update summary comment issue_id=%s: %s', session.issue.id, exc
             )
 
-    def _get_conflict_judge(self) -> ConflictJudge | None:
-        """Return a ConflictJudge for LLM-based rule conflict detection.
+    def _get_rule_judge(self) -> BatchedLLMJudge | None:
+        """Return a :class:`BatchedLLMJudge` for LLM-based rule dedup/merge/conflict.
 
-        TODO: wire real LLM callable when available.
+        Falls back to ``None`` (TF-IDF path) when the LLM is not available.
         """
-        return None
+        return BatchedLLMJudge()
 
     async def _apply_review_rules(self, session: AgentSession) -> None:
         """F-121: 从 review follow-up agent 回复中提取规则并持久化。
@@ -3247,13 +3247,21 @@ class Orchestrator:
             rules_path = RuleEngine.get_rules_path(self.workflow, self._workflow_path)
             if rules_path:
                 rc = self.workflow.rules
-                await RuleEngine(conflict_judge=self._get_conflict_judge()).apply(
+                # 构造 source：从 session 的 pull_request 信息中提取
+                pr_ref = getattr(session, 'pull_request', None)
+                source = ''
+                if pr_ref:
+                    pr_num = getattr(pr_ref, 'number', None) or getattr(pr_ref, 'id', None) or ''
+                    if pr_num:
+                        source = f'PR #{pr_num}'
+                await RuleEngine(rule_judge=self._get_rule_judge()).apply(
                     session.output_text,
                     rules_path,
                     similarity_threshold=rc.similarity_threshold,
                     enhancement_threshold=rc.enhancement_threshold,
                     max_rules=rc.max_rules,
                     min_confidence=rc.min_confidence,
+                    source=source,
                 )
         except Exception as exc:
             logger.warning(
