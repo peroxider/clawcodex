@@ -1,0 +1,330 @@
+{
+  "with_summary": {
+    "goals": 10.0,
+    "method_reuse_rate": 1.0,
+    "top1_match_rate": 0.5,
+    "validation_pass_rate": 1.0,
+    "avg_summary_tokens": 580.9,
+    "avg_duplicate_task_rate": 0.0,
+    "avg_plan_method_refs": 1.0
+  },
+  "without_summary": {
+    "goals": 10.0,
+    "method_reuse_rate": 0.0,
+    "top1_match_rate": 0.5,
+    "validation_pass_rate": 1.0,
+    "avg_summary_tokens": 0.0,
+    "avg_duplicate_task_rate": 0.0,
+    "avg_plan_method_refs": 0.0
+  },
+  "uplift": {
+    "method_reuse_rate": 1.0,
+    "top1_match_rate": 0.0,
+    "validation_pass_rate": 0.0,
+    "avg_summary_tokens": 580.9,
+    "avg_duplicate_task_rate": 0.0,
+    "avg_plan_method_refs": 1.0
+  },
+  "per_goal": [
+    {
+      "goal": "Add a JWT auth middleware to the API gateway",
+      "expected": "M-add-middleware-001",
+      "with_summary": {
+        "goal": "Add a JWT auth middleware to the API gateway",
+        "expectedMethodId": "M-add-middleware-001",
+        "summaryTokens": 584,
+        "top1Selected": "M-add-api-endpoint-001",
+        "top1MatchesExpected": false,
+        "planMethodReferences": [
+          "M-add-api-endpoint-001"
+        ],
+        "methodReuse": true,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      },
+      "without_summary": {
+        "goal": "Add a JWT auth middleware to the API gateway",
+        "expectedMethodId": "M-add-middleware-001",
+        "summaryTokens": 0,
+        "top1Selected": "M-add-api-endpoint-001",
+        "top1MatchesExpected": false,
+        "planMethodReferences": [],
+        "methodReuse": false,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      }
+    },
+    {
+      "goal": "Fix the off-by-one bug in pagination",
+      "expected": "M-fix-bug-001",
+      "with_summary": {
+        "goal": "Fix the off-by-one bug in pagination",
+        "expectedMethodId": "M-fix-bug-001",
+        "summaryTokens": 598,
+        "top1Selected": "M-add-integration-test-001",
+        "top1MatchesExpected": false,
+        "planMethodReferences": [
+          "M-add-integration-test-001"
+        ],
+        "methodReuse": true,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      },
+      "without_summary": {
+        "goal": "Fix the off-by-one bug in pagination",
+        "expectedMethodId": "M-fix-bug-001",
+        "summaryTokens": 0,
+        "top1Selected": "M-add-integration-test-001",
+        "top1MatchesExpected": false,
+        "planMethodReferences": [],
+        "methodReuse": false,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      }
+    },
+    {
+      "goal": "Add a /v1/users REST endpoint with OpenAPI documentation",
+      "expected": "M-add-api-endpoint-001",
+      "with_summary": {
+        "goal": "Add a /v1/users REST endpoint with OpenAPI documentation",
+        "expectedMethodId": "M-add-api-endpoint-001",
+        "summaryTokens": 565,
+        "top1Selected": "M-add-api-endpoint-001",
+        "top1MatchesExpected": true,
+        "planMethodReferences": [
+          "M-add-api-endpoint-001"
+        ],
+        "methodReuse": true,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      },
+      "without_summary": {
+        "goal": "Add a /v1/users REST endpoint with OpenAPI documentation",
+        "expectedMethodId": "M-add-api-endpoint-001",
+        "summaryTokens": 0,
+        "top1Selected": "M-add-api-endpoint-001",
+        "top1MatchesExpected": true,
+        "planMethodReferences": [],
+        "methodReuse": false,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      }
+    },
+    {
+      "goal": "Add a CLI command to export logs as JSON",
+      "expected": "M-add-cli-command-001",
+      "with_summary": {
+        "goal": "Add a CLI command to export logs as JSON",
+        "expectedMethodId": "M-add-cli-command-001",
+        "summaryTokens": 586,
+        "top1Selected": "M-add-cli-command-001",
+        "top1MatchesExpected": true,
+        "planMethodReferences": [
+          "M-add-cli-command-001"
+        ],
+        "methodReuse": true,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      },
+      "without_summary": {
+        "goal": "Add a CLI command to export logs as JSON",
+        "expectedMethodId": "M-add-cli-command-001",
+        "summaryTokens": 0,
+        "top1Selected": "M-add-cli-command-001",
+        "top1MatchesExpected": true,
+        "planMethodReferences": [],
+        "methodReuse": false,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      }
+    },
+    {
+      "goal": "Add a Prometheus metric for HTTP request latency",
+      "expected": "M-add-metric-001",
+      "with_summary": {
+        "goal": "Add a Prometheus metric for HTTP request latency",
+        "expectedMethodId": "M-add-metric-001",
+        "summaryTokens": 561,
+        "top1Selected": "M-add-api-doc-001",
+        "top1MatchesExpected": false,
+        "planMethodReferences": [
+          "M-add-api-doc-001"
+        ],
+        "methodReuse": true,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      },
+      "without_summary": {
+        "goal": "Add a Prometheus metric for HTTP request latency",
+        "expectedMethodId": "M-add-metric-001",
+        "summaryTokens": 0,
+        "top1Selected": "M-add-api-doc-001",
+        "top1MatchesExpected": false,
+        "planMethodReferences": [],
+        "methodReuse": false,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      }
+    },
+    {
+      "goal": "Fix the slow database query in the user list endpoint",
+      "expected": "M-fix-performance-001",
+      "with_summary": {
+        "goal": "Fix the slow database query in the user list endpoint",
+        "expectedMethodId": "M-fix-performance-001",
+        "summaryTokens": 582,
+        "top1Selected": "M-add-api-endpoint-001",
+        "top1MatchesExpected": false,
+        "planMethodReferences": [
+          "M-add-api-endpoint-001"
+        ],
+        "methodReuse": true,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      },
+      "without_summary": {
+        "goal": "Fix the slow database query in the user list endpoint",
+        "expectedMethodId": "M-fix-performance-001",
+        "summaryTokens": 0,
+        "top1Selected": "M-add-api-endpoint-001",
+        "top1MatchesExpected": false,
+        "planMethodReferences": [],
+        "methodReuse": false,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      }
+    },
+    {
+      "goal": "Patch the SQL injection in the search endpoint",
+      "expected": "M-fix-security-vulnerability-001",
+      "with_summary": {
+        "goal": "Patch the SQL injection in the search endpoint",
+        "expectedMethodId": "M-fix-security-vulnerability-001",
+        "summaryTokens": 581,
+        "top1Selected": "M-add-api-endpoint-001",
+        "top1MatchesExpected": false,
+        "planMethodReferences": [
+          "M-add-api-endpoint-001"
+        ],
+        "methodReuse": true,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      },
+      "without_summary": {
+        "goal": "Patch the SQL injection in the search endpoint",
+        "expectedMethodId": "M-fix-security-vulnerability-001",
+        "summaryTokens": 0,
+        "top1Selected": "M-add-api-endpoint-001",
+        "top1MatchesExpected": false,
+        "planMethodReferences": [],
+        "methodReuse": false,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      }
+    },
+    {
+      "goal": "Refactor the auth module into a separate service",
+      "expected": "M-refactor-extract-service-001",
+      "with_summary": {
+        "goal": "Refactor the auth module into a separate service",
+        "expectedMethodId": "M-refactor-extract-service-001",
+        "summaryTokens": 604,
+        "top1Selected": "M-refactor-extract-service-001",
+        "top1MatchesExpected": true,
+        "planMethodReferences": [
+          "M-refactor-extract-service-001"
+        ],
+        "methodReuse": true,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      },
+      "without_summary": {
+        "goal": "Refactor the auth module into a separate service",
+        "expectedMethodId": "M-refactor-extract-service-001",
+        "summaryTokens": 0,
+        "top1Selected": "M-refactor-extract-service-001",
+        "top1MatchesExpected": true,
+        "planMethodReferences": [],
+        "methodReuse": false,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      }
+    },
+    {
+      "goal": "Add an integration test for the payments webhook",
+      "expected": "M-add-integration-test-001",
+      "with_summary": {
+        "goal": "Add an integration test for the payments webhook",
+        "expectedMethodId": "M-add-integration-test-001",
+        "summaryTokens": 572,
+        "top1Selected": "M-add-integration-test-001",
+        "top1MatchesExpected": true,
+        "planMethodReferences": [
+          "M-add-integration-test-001"
+        ],
+        "methodReuse": true,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      },
+      "without_summary": {
+        "goal": "Add an integration test for the payments webhook",
+        "expectedMethodId": "M-add-integration-test-001",
+        "summaryTokens": 0,
+        "top1Selected": "M-add-integration-test-001",
+        "top1MatchesExpected": true,
+        "planMethodReferences": [],
+        "methodReuse": false,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      }
+    },
+    {
+      "goal": "Migrate from requests to httpx for the HTTP client",
+      "expected": "M-migrate-dependency-001",
+      "with_summary": {
+        "goal": "Migrate from requests to httpx for the HTTP client",
+        "expectedMethodId": "M-migrate-dependency-001",
+        "summaryTokens": 576,
+        "top1Selected": "M-migrate-dependency-001",
+        "top1MatchesExpected": true,
+        "planMethodReferences": [
+          "M-migrate-dependency-001"
+        ],
+        "methodReuse": true,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      },
+      "without_summary": {
+        "goal": "Migrate from requests to httpx for the HTTP client",
+        "expectedMethodId": "M-migrate-dependency-001",
+        "summaryTokens": 0,
+        "top1Selected": "M-migrate-dependency-001",
+        "top1MatchesExpected": true,
+        "planMethodReferences": [],
+        "methodReuse": false,
+        "validationPass": true,
+        "duplicateTaskCount": 0,
+        "duplicateTaskRate": 0.0
+      }
+    }
+  ]
+}

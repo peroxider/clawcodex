@@ -10,7 +10,7 @@ Important integration decision: LKB is an agent-loop todo/task enhancement layer
 
 | ID | Requirement | Primary Area | Source Chapters | Status |
 | --- | --- | --- | --- | --- |
-| F-151 | Prompt-Integrated Method Reuse | inject method library summary into system prompt; guide LLM to reuse templates | 5, 10, 17 | ❌ 未实现 |
+| F-151 | Prompt-Integrated Method Reuse | inject method library summary into system prompt; guide LLM to reuse templates | 5, 10, 17 | ✅ 已实现 |
 | F-152 | Bounded Scheduling Solver (OR-Tools CP-SAT) | closed scheduling sub-problem solving with resource constraints and time windows | 5, 10, 17 | ❌ 未实现 |
 | F-153 | Method Library Growth & Governance | save-as-method workflow, version management, approval CLI, coverage metrics | 5, 10, 17 | ❌ 未实现 |
 | F-154 | External Configuration Import | import domain ontology / operation schema / method library from external files | 5, 10, 17 | ❌ 未实现 |
