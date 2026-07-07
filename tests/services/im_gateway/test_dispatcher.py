@@ -1,10 +1,11 @@
-"""Tests for InboundDispatcher REPL 白名单门禁集成。
+"""Tests for InboundDispatcher IM slash-command whitelist integration.
 
 覆盖 dispatcher.process 在 REPL 目标下的白名单检查：
 - REPL 绑定的 origin 发送非白名单命令 → 返回拒绝 ack，_push_handler 不被调用
 - REPL 绑定的 origin 发送白名单命令 → _push_handler 被调用
 - REPL 绑定的 origin 发送普通文本 → _push_handler 被调用
-- orchestrator 绑定的 origin 发送非白名单命令 → 白名单不生效，_push_handler 被调用
+- orchestrator 绑定的 origin 发送非白名单命令 → 返回拒绝 ack，_push_handler 不被调用
+- orchestrator 绑定的 origin 发送白名单命令 → _push_handler 被调用
 """
 
 from __future__ import annotations
@@ -149,21 +150,48 @@ async def test_repl_plain_text_pushed(tmp_path) -> None:
     assert receipt.layer == AckLayer.ENQUEUED
 
 
-# -- orchestrator 目标：白名单不生效 -----------------------------------------
+# -- orchestrator 目标：白名单生效 -------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_blocked_command_still_pushed(tmp_path) -> None:
-    """orchestrator 绑定的 origin 发送 /exit → 白名单不生效，push_handler 被调用。
-
-    白名单仅对 target.host_type == 'repl' 生效，orchestrator 不受影响。
-    """
+async def test_orchestrator_blocked_command_not_pushed(tmp_path) -> None:
+    """orchestrator 绑定的 origin 发送 /dashboard → 拒绝，push_handler 不被调用。"""
     dispatcher, router, pushed = _make_dispatcher(tmp_path)
-    msg = _make_message('wechat:acct:user2', '/exit')
+    msg = _make_message('wechat:acct:user2', '/dashboard')
 
     receipt = await dispatcher.process(msg)
 
-    assert len(pushed) == 1, 'orchestrator target must not be gated by REPL whitelist'
+    assert len(pushed) == 0, 'blocked command must not be pushed to orchestrator'
+    assert receipt.layer == AckLayer.ACCEPTED
+    assert receipt.notify_user is True
+    assert receipt.message == '不支持 /dashboard 执行'
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_allowed_issue_command_pushed(tmp_path) -> None:
+    """orchestrator 绑定的 origin 发送 /issue list → push_handler 被调用。"""
+    dispatcher, router, pushed = _make_dispatcher(tmp_path)
+    msg = _make_message('wechat:acct:user2', '/issue list')
+
+    receipt = await dispatcher.process(msg)
+
+    assert len(pushed) == 1
+    assert pushed[0].text == '/issue list'
+    assert pushed[0].semantic is MessageSemantics.COMMAND
+    assert receipt.layer == AckLayer.ENQUEUED
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_allowed_server_status_pushed(tmp_path) -> None:
+    """orchestrator 绑定的 origin 发送 /server status → push_handler 被调用。"""
+    dispatcher, router, pushed = _make_dispatcher(tmp_path)
+    msg = _make_message('wechat:acct:user2', '/server status')
+
+    receipt = await dispatcher.process(msg)
+
+    assert len(pushed) == 1
+    assert pushed[0].text == '/server status'
+    assert pushed[0].semantic is MessageSemantics.COMMAND
     assert receipt.layer == AckLayer.ENQUEUED
 
 
@@ -182,3 +210,19 @@ async def test_repl_blocked_command_records_audit(tmp_path) -> None:
     blocked_entries = [e for e in audit_entries if e.get('event_type') == 'repl_command_blocked']
     assert len(blocked_entries) == 1
     assert '/exit' in (blocked_entries[0].get('command') or '')
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_blocked_command_records_audit(tmp_path) -> None:
+    """orchestrator 绑定的 origin 发送非白名单命令 → audit.ndjson 记录事件。"""
+    dispatcher, router, pushed = _make_dispatcher(tmp_path)
+    msg = _make_message('wechat:acct:user2', '/server stop')
+
+    await dispatcher.process(msg)
+
+    audit_entries = dispatcher._store.audit_entries()
+    blocked_entries = [
+        e for e in audit_entries if e.get('event_type') == 'orchestrator_command_blocked'
+    ]
+    assert len(blocked_entries) == 1
+    assert '/server stop' in (blocked_entries[0].get('command') or '')

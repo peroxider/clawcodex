@@ -1,12 +1,11 @@
-"""REPL 侧斜杠命令白名单门禁。
+"""IM 侧斜杠命令白名单门禁。
 
-在 InboundDispatcher.process 中，对 target.host_type == 'repl' 的 origin
-执行白名单检查：只放行白名单内的斜杠命令，其余斜杠命令在网关层直接拒绝。
-非斜杠命令（普通文本）不受影响，直接放行。
+在 InboundDispatcher.process 中，对 opt-in runtime 的 origin 执行白名单检查：
+只放行白名单内的斜杠命令，其余斜杠命令在网关层直接拒绝。非斜杠命令
+（普通文本）不受影响，直接放行。
 
-白名单设计标准：IM 侧 REPL 交互真正需要的命令——中断/清空会话、
-设置目标、只读查询类命令。会修改凭证/权限/provider/model/持久化状态
-的命令不在白名单内。
+REPL 白名单覆盖 IM 交互真正需要的会话控制与只读查询命令。Orchestrator
+白名单覆盖 README 暴露给 IM 的 issue 子命令，以及唯一允许的 server status。
 """
 
 from __future__ import annotations
@@ -44,10 +43,37 @@ REPL_ALLOWED_COMMANDS: frozenset[str] = frozenset(
     }
 )
 
+ORCHESTRATOR_ALLOWED_COMMANDS: frozenset[str] = frozenset(
+    {
+        '/server status',
+        '/issue list',
+        '/issue show',
+        '/issue tail',
+        '/issue stop',
+        '/issue pause',
+        '/issue resume',
+        '/issue takeover',
+        '/issue clarify',
+        '/issue inject',
+        '/issue workspace',
+    }
+)
+
 
 def _block_reason(cmd_token: str) -> str:
     """构造拒绝消息，回显被拒绝的命令。"""
     return f'`{cmd_token}` 非命令白名单，已被 gateway 禁止执行。'
+
+
+def _unsupported_reason(command_display: str) -> str:
+    return f'不支持 {command_display} 执行'
+
+
+def _slash_parts(text: str) -> list[str]:
+    stripped = (text or '').strip()
+    if not stripped.startswith('/'):
+        return []
+    return stripped.split(maxsplit=2)
 
 
 def check_repl_command(text: str) -> tuple[bool, str]:
@@ -57,11 +83,11 @@ def check_repl_command(text: str) -> tuple[bool, str]:
     直接匹配。非斜杠输入返回 (True, "")。单独的 ``/``（无命令名）放行，
     REPL 侧会将其处理为 slash palette 入口。
     """
-    stripped = (text or '').strip()
-    if not stripped.startswith('/'):
+    parts = _slash_parts(text)
+    if not parts:
         return True, ''
     # 取第一个 token 作为命令名（含前导 /），小写比较
-    cmd_token = stripped.split(maxsplit=1)[0].lower()
+    cmd_token = parts[0].lower()
     # 单独的 "/"（无命令名）放行，REPL 侧处理为 slash palette
     if cmd_token == '/':
         return True, ''
@@ -70,4 +96,27 @@ def check_repl_command(text: str) -> tuple[bool, str]:
     return False, _block_reason(cmd_token)
 
 
-__all__ = ['REPL_ALLOWED_COMMANDS', 'check_repl_command']
+def check_orchestrator_command(text: str) -> tuple[bool, str]:
+    """Return (allowed, reason) for orchestrator IM slash commands.
+
+    Only README-listed issue commands and ``/server status`` pass. Plain text
+    remains pass-through so operator follow-up/context messages still work.
+    """
+    parts = _slash_parts(text)
+    if not parts:
+        return True, ''
+    first = parts[0].lower()
+    second = parts[1].lower() if len(parts) > 1 else ''
+    command_display = first if not second else f'{first} {second}'
+    command_key = command_display
+    if command_key in ORCHESTRATOR_ALLOWED_COMMANDS:
+        return True, ''
+    return False, _unsupported_reason(command_display)
+
+
+__all__ = [
+    'ORCHESTRATOR_ALLOWED_COMMANDS',
+    'REPL_ALLOWED_COMMANDS',
+    'check_orchestrator_command',
+    'check_repl_command',
+]

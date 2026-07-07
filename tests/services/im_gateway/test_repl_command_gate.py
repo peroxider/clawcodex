@@ -13,7 +13,9 @@ from __future__ import annotations
 import pytest
 
 from clawcodex_ext.services.im_gateway.repl_command_gate import (
+    ORCHESTRATOR_ALLOWED_COMMANDS,
     REPL_ALLOWED_COMMANDS,
+    check_orchestrator_command,
     check_repl_command,
 )
 
@@ -127,3 +129,51 @@ def test_case_insensitive_blocked() -> None:
     allowed, reason = check_repl_command('/EXIT')
     assert allowed is False
     assert '/exit' in reason  # reason 中回显的 token 是小写化后的
+
+
+# -- Orchestrator 白名单 -----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    'cmd',
+    sorted(ORCHESTRATOR_ALLOWED_COMMANDS),
+    ids=lambda c: f'orch-allowed:{c}',
+)
+def test_orchestrator_allowed_commands_pass(cmd: str) -> None:
+    allowed, reason = check_orchestrator_command(cmd)
+    assert allowed is True
+    assert reason == ''
+
+
+def test_orchestrator_allowed_command_with_args_passes() -> None:
+    for text in [
+        '/issue list --status running',
+        '/issue show --id AGENTSDK-15',
+        '/issue inject --id AGENTSDK-15 "address review comments"',
+        '/server status --workflow ./workflow.md',
+    ]:
+        allowed, reason = check_orchestrator_command(text)
+        assert allowed is True, f'expected {text!r} to be allowed'
+        assert reason == ''
+
+
+@pytest.mark.parametrize(
+    ('cmd', 'reason'),
+    [
+        ('/server stop', '不支持 /server stop 执行'),
+        ('/dashboard', '不支持 /dashboard 执行'),
+        ('/workflow init', '不支持 /workflow init 执行'),
+        ('/unknown-cmd-xyz', '不支持 /unknown-cmd-xyz 执行'),
+    ],
+    ids=lambda c: str(c),
+)
+def test_orchestrator_blocked_commands_rejected(cmd: str, reason: str) -> None:
+    allowed, actual = check_orchestrator_command(cmd)
+    assert allowed is False
+    assert actual == reason
+
+
+def test_orchestrator_plain_text_passes() -> None:
+    allowed, reason = check_orchestrator_command('普通文本 follow-up')
+    assert allowed is True
+    assert reason == ''

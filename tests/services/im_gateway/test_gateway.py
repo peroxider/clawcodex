@@ -265,6 +265,44 @@ async def test_gateway_notifies_feishu_sender_when_repl_command_is_blocked(tmp_p
 
 
 @pytest.mark.asyncio
+async def test_gateway_notifies_feishu_sender_when_orchestrator_command_is_blocked(
+    tmp_path,
+) -> None:
+    adapter = _FakeAdapter('feishu')
+    gw = _gateway(tmp_path, adapter=adapter)
+    pushed: list[InboundMessage] = []
+
+    async def _push(msg):
+        pushed.append(msg)
+        return True
+
+    gw.set_push_handler(_push)
+    gw.binding.bind(
+        IM_DIRECT_ALL_ORIGIN,
+        SessionTarget(session_id='orch_main', host_type='orchestrator'),
+    )
+    msg = InboundMessage(
+        origin='feishu:dm:cli_app:ou_user',
+        text='/server stop',
+        message_id='m-feishu-orch-blocked',
+        channel='feishu',
+        context_token='oc_chat',
+        from_user_id='ou_user',
+    )
+
+    ack = await gw._on_inbound(msg)
+
+    assert pushed == []
+    assert getattr(ack, 'notify_user', False) is True
+    assert ack.message == '不支持 /server stop 执行'
+    assert len(adapter.send_calls) == 1
+    call = adapter.send_calls[0]
+    assert call['target'] == 'ou_user'
+    assert call['context_token'] == 'oc_chat'
+    assert call['message'].text == '不支持 /server stop 执行'
+
+
+@pytest.mark.asyncio
 async def test_gateway_inbound_default_origin_still_uses_handler(tmp_path) -> None:
     """Unbound (default) origins still go to the stub/handler, not push."""
     gw = _gateway(tmp_path)

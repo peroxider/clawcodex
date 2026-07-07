@@ -19,7 +19,10 @@ real handlers.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import io
 import logging
+import sys
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -58,12 +61,14 @@ class OrchestratorGatewayClient:
         pending_retry_base_seconds: float = 60.0,
         pending_retry_max_seconds: float = 300.0,
         clock: Callable[[], float] = time.monotonic,
+        cli_runner: Callable[[list[str]], tuple[int, str, str]] | None = None,
     ) -> None:
         self._h = handlers
         self._commands = command_router or CommandRouter()
         self._control = control_bridge or ControlBridge()
         self._ipc = ipc_client
         self._origin = origin
+        self._cli_runner = cli_runner
         self._pending_outbound: deque[str] = deque()
         self._pending_outbound_limit = max(1, pending_outbound_limit)
         self._flush_lock = asyncio.Lock()
@@ -121,13 +126,12 @@ class OrchestratorGatewayClient:
 
         The origin is the opt-in origin (``im:direct:*:*`` by default for
         orchestrator); the gateway resolves the wildcard to a concrete
-        sender at OUTBOUND time. The event is only queued when
-        the send cannot complete right now — the IPC socket is not yet
-        open (the orchestrator emits ``orchestrator.started`` before the
-        heartbeat loop has connected) or the gateway NACKs the send (for
-        example unresolved wildcard routing or channel rate limiting) — so
-        it is delivered by a later flush instead of being stranded or
-        raising.
+        sender at OUTBOUND time. The event is queued only when the send
+        cannot start right now (the IPC socket is not open yet) or when the
+        gateway explicitly NACKs the send. If the IPC ACK times out, delivery
+        is ambiguous: the gateway may already have sent the IM message but
+        returned its ACK too late. In that case we do not auto-retry, because
+        duplicate chat messages are worse than a best-effort dropped event.
         """
         if self._ipc is None or not self._origin:
             return
@@ -157,9 +161,12 @@ class OrchestratorGatewayClient:
             )
             return False
         if response is None:
-            logger.warning('orchestrator IM outbound failed without ACK origin=%s', origin[:32])
-            self._defer_pending_flush('timeout')
-            return False
+            logger.warning(
+                'orchestrator IM outbound ACK timed out origin=%s; not retrying to avoid duplicate IM delivery',
+                origin[:32],
+            )
+            self._reset_pending_flush_backoff()
+            return True
         response_type = getattr(getattr(response, 'type', None), 'value', None)
         if response_type == 'nack':
             reason = getattr(response, 'reason', '') or ''
@@ -264,6 +271,8 @@ class OrchestratorGatewayClient:
             route = self._commands.route(message)
             if route is None:
                 return 'command_unroutable'
+            if route.kind == 'orchestrator_cli':
+                return self._dispatch_orchestrator_cli(route)
             if route.kind == 'agent_intent':
                 self._h.agent_intent(route.verb, route.issue_hint or issue_id)
                 return f'agent_{route.verb}'
@@ -283,6 +292,88 @@ class OrchestratorGatewayClient:
             return f'issue_cli_{ctrl.verb}'
         # newPrompt / approval → leave to the host agent / approval binding
         return 'not_dispatched'
+
+    def _dispatch_orchestrator_cli(self, route) -> str:
+        argv = list(route.argv)
+        if len(argv) < 2:
+            self._queue_command_reply(route.payload, 2, '', 'error: invalid orchestrator command')
+            return 'orchestrator_cli_invalid'
+
+        noun, verb = argv[0], argv[1]
+        if noun == 'issue' and verb in {'stop', 'pause', 'resume', 'takeover'}:
+            issue_id = route.issue_hint or self._arg_value(argv, '--id')
+            if not issue_id:
+                self._queue_command_reply(route.payload, 2, '', 'error: --id is required')
+                return f'orchestrator_cli_issue_{verb}'
+            self._h.control_verb(verb, issue_id)
+            self._queue_command_reply(
+                route.payload,
+                0,
+                f"Control command '{verb}' sent for issue {issue_id}",
+                '',
+            )
+            return f'orchestrator_cli_issue_{verb}'
+
+        if noun == 'issue' and verb == 'tail':
+            self._queue_command_reply(route.payload, 0, self._tail_notice(argv), '')
+            return 'orchestrator_cli_issue_tail'
+
+        rc, stdout, stderr = self._run_orchestrator_cli(argv)
+        self._queue_command_reply(route.payload, rc, stdout, stderr)
+        return f'orchestrator_cli_{noun}_{verb}'
+
+    def _run_orchestrator_cli(self, argv: list[str]) -> tuple[int, str, str]:
+        if self._cli_runner is not None:
+            return self._cli_runner(list(argv))
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            try:
+                from clawcodex_ext.entrypoints.orchestrator import run_orchestrator_subcommand
+
+                rc = run_orchestrator_subcommand(list(argv))
+            except SystemExit as exc:
+                code = exc.code
+                rc = code if isinstance(code, int) else 1
+            except Exception as exc:  # noqa: BLE001
+                print(f'error: {exc}', file=sys.stderr)
+                rc = 1
+        return rc, stdout.getvalue(), stderr.getvalue()
+
+    def _queue_command_reply(self, command_text: str, rc: int, stdout: str, stderr: str) -> None:
+        text = self._format_command_reply(command_text, rc, stdout, stderr)
+        self._queue_pending_outbound(text)
+
+    @staticmethod
+    def _format_command_reply(command_text: str, rc: int, stdout: str, stderr: str) -> str:
+        command = (command_text or '').strip() or '<empty>'
+        prefix = '命令已执行' if rc == 0 else f'命令执行失败({rc})'
+        output = '\n'.join(part.strip() for part in (stdout, stderr) if part and part.strip())
+        if not output:
+            return f'{prefix}：{command}'
+        if len(output) > 6000:
+            output = output[:6000].rstrip() + '\n...'
+        return f'{prefix}：{command}\n\n{output}'
+
+    @staticmethod
+    def _tail_notice(argv: list[str]) -> str:
+        issue_id = OrchestratorGatewayClient._arg_value(argv, '--id') or '<issue-id>'
+        return (
+            f'/issue tail --id {issue_id} is a streaming command. '
+            'IM returns this bounded notice instead of holding the gateway connection. '
+            'Run `clawcodex-dev orchestrator issue tail --id '
+            f'{issue_id}` locally for live tailing.'
+        )
+
+    @staticmethod
+    def _arg_value(argv: list[str], flag: str) -> str | None:
+        for idx, token in enumerate(argv):
+            if token == flag and idx + 1 < len(argv):
+                return argv[idx + 1]
+            if token.startswith(f'{flag}='):
+                return token.split('=', 1)[1]
+        return None
 
     @staticmethod
     def _issue_id(message: InboundMessage) -> str:
