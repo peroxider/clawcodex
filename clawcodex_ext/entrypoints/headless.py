@@ -569,13 +569,42 @@ def run_headless(options: HeadlessOptions) -> int:
                     from clawcodex_ext.agent.agent_definitions import get_built_in_agents
                     from src.command_system.input_processing import (
                         expand_agent_mentions,
+                        find_unknown_agent_mentions,
                         format_at_mention_attachments,
+                        format_unknown_agent_mention_error,
                     )
 
                     cwd = str(workspace_root)
                     agents = list(get_agent_definitions_with_overrides(cwd)) or list(
                         get_built_in_agents()
                     )
+
+                    # Mirror REPL/TUI: surface a friendly error and skip the
+                    # turn when the user mentions an agent that doesn't
+                    # exist. Without this guard the model would burn a
+                    # whole turn trying to delegate to a fake subagent.
+                    unknown_types = find_unknown_agent_mentions(text, agents)
+                    if unknown_types:
+                        err_msg = format_unknown_agent_mention_error(
+                            unknown_types, agents
+                        )
+                        if writer is not None:
+                            writer.write(
+                                ResultEvent(
+                                    subtype='error',
+                                    session_id=session.session_id,
+                                    num_turns=0,
+                                    result='',
+                                    duration_ms=0,
+                                    is_error=True,
+                                    error=err_msg,
+                                )
+                            )
+                        else:
+                            print(f'error: {err_msg}', file=stderr)
+                        exit_code = 78  # EX_CONFIG: config-level misuse
+                        break
+
                     agent_attachments = expand_agent_mentions(text, agents)
                     if agent_attachments:
                         extra = format_at_mention_attachments(agent_attachments)

@@ -353,6 +353,11 @@ class PromptBuilder:
         Falls back to ("", full) when the marker is missing so callers
         that pass an old / un-migrated workflow.md still work — the full
         prompt lands in user and the system append is empty.
+
+        F-89: ``@agent-<type>`` mentions in either half of the prompt are
+        expanded into ``agent_mention`` attachments (matching REPL/TUI/
+        headless). Unknown agents are stripped with a logged warning —
+        orchestrator runs must not abort on a typo in the issue body.
         """
         full = PromptBuilder.render(
             issue,
@@ -368,8 +373,14 @@ class PromptBuilder:
         marker = PromptBuilder.USER_MESSAGE_MARKER
         if marker in full:
             system_part, user_part = full.split(marker, 1)
-            return system_part.strip(), user_part.strip()
-        return '', full
+            system_part, user_part = _expand_agent_mentions_in_prompt(
+                system_part.strip(), user_part.strip(), session=session
+            )
+            return system_part, user_part
+        user_part = _expand_agent_mentions_in_prompt(
+            '', full.strip(), session=session
+        )[1]
+        return '', user_part
 
     @staticmethod
     def render_rebase(
@@ -641,6 +652,97 @@ def _build_sequential_workspace_context(session: Any) -> str:
             '---',
         ]
     )
+
+
+def _expand_agent_mentions_in_prompt(
+    system_part: str,
+    user_part: str,
+    *,
+    session: Any | None = None,
+) -> tuple[str, str]:
+    """F-89: expand ``@agent-<type>`` mentions across the rendered prompt.
+
+    Mirrors the REPL/TUI/headless behaviour using the shared
+    :func:`clawcodex_ext.command_system.input_processing` helpers. Returns
+    ``(system_part, user_part)`` with agent attachments prepended to the
+    user half (so the model sees both the reminder and the original
+    issue text). Unknown mentions are stripped with a logged warning —
+    orchestrator runs must keep going on a typo in the issue body,
+    whereas interactive entry points can show a friendly error and
+    drop the turn.
+
+    Best-effort: any unexpected exception is logged and the original
+    (system_part, user_part) tuple is returned untouched so the
+    renderer cannot break the agent loop.
+    """
+    try:
+        from src.command_system.input_processing import (
+            expand_agent_mentions,
+            find_unknown_agent_mentions,
+            format_at_mention_attachments,
+            strip_agent_mentions,
+        )
+
+        from clawcodex_ext.agent.load_agents_dir import get_agents_for_mentions
+
+        workspace_path = _resolve_agent_expansion_workspace(session)
+        agents = (
+            get_agents_for_mentions(str(workspace_path))
+            if workspace_path
+            else []
+        )
+    except Exception as exc:  # noqa: BLE001 — best-effort only
+        logger.warning(
+            'F-89: failed to load agents for @agent-name expansion: %s',
+            exc,
+        )
+        return system_part, user_part
+
+    if not agents:
+        return system_part, user_part
+
+    # Concatenate for a single sweep so an @agent- mention that splits
+    # across the marker line is still detected. We then re-split using
+    # known markers after stripping/injecting.
+    combined = f'{system_part}\n\n{user_part}'
+
+    unknown = find_unknown_agent_mentions(combined, agents)
+    if unknown:
+        logger.warning(
+            'F-89: stripping unknown agent mention(s) from orchestrator '
+            'prompt: %s',
+            ', '.join(unknown),
+        )
+        combined = strip_agent_mentions(combined)
+
+    attachments = expand_agent_mentions(combined, agents)
+    if attachments:
+        extra = format_at_mention_attachments(attachments)
+        if extra:
+            combined = f'{extra}\n\n{combined}'
+
+    # If the original render split cleanly, keep the split; otherwise
+    # everything collapses back into user_part (the marker line is gone
+    # after our edit, which is fine — the LLM still sees the reminder
+    # before the body).
+    marker = PromptBuilder.USER_MESSAGE_MARKER
+    if marker in combined:
+        new_system, new_user = combined.split(marker, 1)
+        return new_system.strip(), new_user.strip()
+    return '', combined.strip()
+
+
+def _resolve_agent_expansion_workspace(session: Any | None) -> Path | None:
+    """Extract a workspace root path suitable for agent discovery."""
+    if session is None:
+        return None
+    ws = getattr(session, 'workspace', None)
+    if ws is None:
+        return None
+    path = getattr(ws, 'path', None)
+    if path is None:
+        return None
+    return Path(path)
 
 
 def _to_jinja_value(value: Any) -> Any:
