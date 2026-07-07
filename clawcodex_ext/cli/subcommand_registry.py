@@ -81,3 +81,6 @@ def load_builtin_subcommands() -> None:
     from clawcodex_ext.community_radar.cli import register_community_radar_subcommand
 
     register_community_radar_subcommand()
+
+    # F-153: ``clawcodex-dev lkb method list|show|propose|approve|reject|deprecate|coverage``
+    from clawcodex_ext.cli.lkb_method_cmd import commands as _lkb_method_commands  # noqa: F401

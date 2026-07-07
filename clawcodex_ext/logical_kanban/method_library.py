@@ -422,6 +422,83 @@ def load_method_library(path: Path) -> tuple[EngineeringMethod, ...]:
     return tuple(out)
 
 
+# ---------------------------------------------------------------------------
+# F-153 — Layered loading (project > user > built-in)
+# ---------------------------------------------------------------------------
+
+
+def load_method_library_layered(
+    *,
+    project_dir: Path | None = None,
+    user_cache_dir: Path | None = None,
+) -> tuple[EngineeringMethod, ...]:
+    """Load methods from three layers with priority-based conflict resolution.
+
+    Loading order (last wins):
+
+    1. **Built-in seed library** — :data:`METHOD_LIBRARY`.
+    2. **User-level** — ``~/.cache/clawcodex/lkb/methods/*.json``.
+    3. **Project-level** — ``<project_dir>/.lkb/methods/*.json``.
+
+    Conflict resolution
+    -------------------
+    When two layers define methods with the same ``method_id``, the
+    higher-priority layer's version replaces the lower one.  This means:
+
+    - Project-level **overrides** user-level.
+    - User-level **overrides** built-in seeds.
+
+    This allows teams to ship custom method variants in the project repo
+    and individual developers to override them locally.
+
+    …or to nothing if a layer directory is absent.
+    """
+    seen: dict[str, EngineeringMethod] = {}
+
+    # 1. Built-in seeds
+    for m in METHOD_LIBRARY:
+        seen[m.method_id] = m
+
+    # 2. User-level
+    user_path = (user_cache_dir or Path.home() / ".cache" / "clawcodex" / "lkb" / "methods")
+    _merge_from_directory(user_path, seen)
+
+    # 3. Project-level
+    if project_dir is not None:
+        project_path = project_dir / ".lkb" / "methods"
+        _merge_from_directory(project_path, seen)
+
+    return tuple(seen.values())
+
+
+def _merge_from_directory(
+    directory: Path,
+    seen: dict[str, EngineeringMethod],
+) -> None:
+    """Load all ``*.json`` files from *directory* and merge into *seen*."""
+    if not directory.is_dir():
+        return
+    for fpath in sorted(directory.glob("*.json")):
+        try:
+            methods = load_method_library(fpath)
+        except Exception:
+            continue  # Corrupt file — skip silently
+        for method in methods:
+            seen[method.method_id] = method
+
+
+def ensure_default_dirs() -> None:
+    """Create the default LKB method directories if they don't exist.
+
+    Creates:
+    - ``~/.cache/clawcodex/lkb/methods/``
+    - ``~/.cache/clawcodex/lkb/proposals/``
+    """
+    base = Path.home() / ".cache" / "clawcodex" / "lkb"
+    for sub in ("methods", "proposals"):
+        (base / sub).mkdir(parents=True, exist_ok=True)
+
+
 def _deserialize_method(raw: dict[str, Any]) -> EngineeringMethod:
     method_id = raw.get("methodId")
     pattern = raw.get("pattern")
@@ -555,6 +632,89 @@ def _deserialize_acceptance_template(
     )
 
 
+# ---------------------------------------------------------------------------
+# F-153 — Version management (SemVer)
+# ---------------------------------------------------------------------------
+
+_SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+
+
+def _parse_semver(version: str) -> tuple[int, int, int]:
+    """Parse a SemVer string into ``(major, minor, patch)``.
+
+    Raises ``ValueError`` if the string is not valid SemVer.
+    """
+    m = _SEMVER_RE.match(version)
+    if not m:
+        raise ValueError(
+            f"Invalid SemVer string: {version!r}. Expected format: "
+            f"MAJOR.MINOR.PATCH (e.g. '1.2.3')"
+        )
+    return int(m.group(1)), int(m.group(2)), int(m.group(3))
+
+
+def bump_version(
+    method: EngineeringMethod,
+    kind: Literal["major", "minor", "patch"],
+) -> EngineeringMethod:
+    """Return a new :class:`EngineeringMethod` with an incremented version.
+
+    Parameters
+    ----------
+    method:
+        The method whose version to bump.
+    kind:
+        Which component to increment.
+
+    Returns
+    -------
+    EngineeringMethod
+        A new method with the bumped version.  All other fields are
+        copied verbatim (use the governance API to change status etc.).
+    """
+    major, minor, patch = _parse_semver(method.version)
+    if kind == "major":
+        major += 1
+        minor = 0
+        patch = 0
+    elif kind == "minor":
+        minor += 1
+        patch = 0
+    elif kind == "patch":
+        patch += 1
+    else:
+        raise ValueError(f"Unknown bump kind: {kind!r}")
+
+    new_version = f"{major}.{minor}.{patch}"
+    return EngineeringMethod(
+        method_id=method.method_id,
+        pattern=method.pattern,
+        description=method.description,
+        subtask_templates=method.subtask_templates,
+        preconditions=method.preconditions,
+        assumptions=method.assumptions,
+        acceptance_template=method.acceptance_template,
+        version=new_version,
+        status=method.status,
+        tags=method.tags,
+    )
+
+
+def incompatible_change(
+    old_version: str,
+    new_version: str,
+) -> bool:
+    """Check whether two versions represent an incompatible change.
+
+    Versions are incompatible if their ``major`` components differ.
+    This is used by the governance layer to decide whether a new
+    version of a method requires deprecating the old one.
+    """
+    old_major, _, _ = _parse_semver(old_version)
+    new_major, _, _ = _parse_semver(new_version)
+    return old_major != new_major
+
+
 def _tuple_of_strings(
     value: Any, field_name: str, method_id: str, *, allow_empty: bool = False
 ) -> tuple[str, ...]:
@@ -584,10 +744,14 @@ __all__ = [
     "MethodStatus",
     "SubtaskRole",
     "SubtaskTemplate",
+    "bump_version",
+    "ensure_default_dirs",
     "get_all_methods",
     "get_method",
+    "incompatible_change",
     "list_methods",
     "load_method_library",
+    "load_method_library_layered",
     "register_method",
     "reset_method_registry",
     "save_method_library",
