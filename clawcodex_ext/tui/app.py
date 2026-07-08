@@ -1396,6 +1396,10 @@ class ClawCodexTUI(App):
                 pass
             return
         transcript.append_system(text, style=style, render=render)
+        try:
+            self.call_after_refresh(lambda: transcript.scroll_end(animate=False))
+        except Exception:
+            pass
 
     def _flush_pending_system_messages(self) -> None:
         screen = self._repl_screen
@@ -1405,7 +1409,9 @@ class ClawCodexTUI(App):
         pending = list(self._pending_system_messages)
         self._pending_system_messages.clear()
         for text, style, render in pending:
-            transcript.append_system(text, style=style, render=render)
+            self._append_repl_system_message(text, style=style, render=render)
+            if self._pending_system_messages:
+                break
 
     def _install_away_summary_controller(self) -> None:
         if self._away_summary_controller is not None:
