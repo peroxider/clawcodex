@@ -152,6 +152,28 @@ class WorkflowOrchestrator:
                 )
                 from_stage = last_completed + 1
 
+                # 恢复 stage_results 到引擎状态，
+                # 否则 _dependencies_satisfied() 会因为
+                # get_stage_result() 返回 None 而跳过后续 stage。
+                from .workflow_engine.workflow_state import StageResult, StageStatus
+
+                for sid, sr_data in checkpoint.stage_results.items():
+                    status_str = sr_data.get("status", "completed")
+                    try:
+                        status = StageStatus(status_str)
+                    except ValueError:
+                        status = StageStatus.COMPLETED
+                    self._engine.state.stage_results[sid] = StageResult(
+                        stage_id=sid,
+                        status=status,
+                        outputs=sr_data.get("outputs", []),
+                        error=sr_data.get("error"),
+                        cost_usd=sr_data.get("cost_usd", 0.0),
+                        duration_seconds=sr_data.get("duration_seconds", 0.0),
+                        timestamp=sr_data.get("timestamp", ""),
+                    )
+                    self._engine.state.stage_statuses[sid] = status
+
         result = await self._engine.execute(from_stage=from_stage)
 
         # 检查点管理：成功则清理，失败则保存

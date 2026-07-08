@@ -105,6 +105,8 @@ class GitSyncService:
             ".mypy_cache",
             ".ruff_cache",
             "*.log",
+            "analysis.md",
+            "changes_summary.md",
         ]
 
     async def sync(
@@ -279,11 +281,20 @@ class GitSyncService:
                 commit_sha = None
             # No staged changes but branch may have diverged from origin — still push
             if branch_name and not no_push:
-                pushed, has_conflict, conflict_files = await asyncio.to_thread(
-                    self._push_with_recovery,
-                    repo_root,
-                    branch_name,
-                )
+                # For follow-up PRs, push directly without rebase —
+                # the agent already committed on the existing PR branch.
+                if followup_pr is not None:
+                    pushed, has_conflict, conflict_files = await asyncio.to_thread(
+                        self._push_directly,
+                        repo_root,
+                        branch_name,
+                    )
+                else:
+                    pushed, has_conflict, conflict_files = await asyncio.to_thread(
+                        self._push_with_recovery,
+                        repo_root,
+                        branch_name,
+                    )
 
         pr_ref: PullRequestRef | None = followup_pr
         pr_title = self._build_pr_title(issue)
@@ -564,6 +575,28 @@ class GitSyncService:
             for pattern in new_patterns:
                 handle.write(f"{pattern}\n")
 
+    def _push_directly(
+        self,
+        repo_root: str,
+        branch_name: str,
+    ) -> tuple[bool, bool, tuple[str, ...]]:
+        """Push branch directly without rebase — used for followup PRs."""
+        try:
+            self._run_git_checked(
+                ["fetch", "origin", branch_name],
+                repo_root,
+            )
+        except Exception:
+            pass
+        try:
+            self._run_git_checked(
+                ["push", "origin", branch_name],
+                repo_root,
+            )
+        except Exception:
+            return False, False, ()
+        return True, False, ()
+
     def _push_with_recovery(
         self,
         repo_root: str,
@@ -699,6 +732,8 @@ class GitSyncService:
         ".clawcodex_workspace.lock",
         ".event_streams",
         "daemon.pid",
+        "analysis.md",
+        "changes_summary.md",
     )
 
     _WORKFLOW_ARTIFACT_PATTERNS: tuple[str, ...] = (
@@ -849,25 +884,59 @@ class GitSyncService:
                 lines.extend(["", "## Regression Tests", "", "```", summary_lines[-1], "```"])
 
         # Include workflow stage outputs (analysis, implementation notes, etc.)
-        workflow_outputs = getattr(session, "workflow_stage_outputs", None)
-        if workflow_outputs:
-            for stage_id in sorted(workflow_outputs.keys()):
-                info = workflow_outputs[stage_id]
-                phase = info.get("phase", "")
-                name = info.get("name", f"Stage {stage_id}")
-                output = info.get("output", "").strip()
-                if output:
-                    lines.extend(["", f"## {name}", ""])
-                    # Truncate very long outputs to keep PR readable
-                    if len(output) > 2000:
-                        lines.append(output[:2000])
-                        lines.append(f"\n... (truncated, {len(output)} chars total)")
-                    else:
-                        lines.append(output)
+        workspace_path = getattr(session.workspace, "path", None)
+
+        # Read analysis.md (Stage 1 output) for PR body
+        if workspace_path:
+            analysis_file = Path(workspace_path) / "analysis.md"
+            if analysis_file.exists():
+                try:
+                    analysis = analysis_file.read_text(encoding="utf-8")
+                    if analysis.strip():
+                        lines.extend(["", "## 需求分析", "", analysis.strip()])
+                except Exception:
+                    pass
+
+        # Prefer changes_summary.md over raw stage outputs for clean PR body.
+        changes_summary_text = None
+        if workspace_path:
+            summary_file = Path(workspace_path) / "changes_summary.md"
+            if summary_file.exists():
+                try:
+                    raw = summary_file.read_text(encoding="utf-8")
+                    if raw.strip():
+                        changes_summary_text = self._strip_think_blocks(raw).strip()
+                except Exception:
+                    pass
+
+        if changes_summary_text:
+            lines.extend(["", "## 变更摘要", "", changes_summary_text])
+        else:
+            workflow_outputs = getattr(session, "workflow_stage_outputs", None)
+            if workflow_outputs:
+                for stage_id in sorted(workflow_outputs.keys()):
+                    if stage_id == 1:  # skip raw analysis conversation
+                        continue
+                    info = workflow_outputs[stage_id]
+                    output = self._strip_think_blocks(info.get("output", "").strip())
+                    if output:
+                        name = info.get("name", f"Stage {stage_id}")
+                        lines.extend(["", f"## {name}", ""])
+                        if len(output) > 3000:
+                            lines.append(output[:3000])
+                            lines.append("\n... (truncated)")
+                        else:
+                            lines.append(output)
 
         if report_path:
             lines.extend(["", f"<!-- metadata: report_path={report_path} -->"])
         return "\n".join(lines)
+
+    @staticmethod
+    def _strip_think_blocks(text: str) -> str:
+        """Remove <think>...</think> blocks from LLM output."""
+        import re
+        return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
     @staticmethod
     def _extract_section(text: str, section_name: str) -> str | None:

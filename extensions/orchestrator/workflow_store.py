@@ -54,6 +54,17 @@ class WorkflowStore:
             return None
         return self._config, self._prompt_template
 
+    def set_prompt_template(self, template: str) -> str | None:
+        """Temporarily override the prompt template; returns the previous value.
+
+        Used by workflow stage runners to provide a stage-specific template
+        that suppresses commit/push instructions (the orchestrator's git_sync
+        handles all git operations after the workflow completes).
+        """
+        prev = self._prompt_template
+        self._prompt_template = template
+        return prev
+
     @classmethod
     def reset(cls) -> None:
         """Reset the singleton (mainly for tests)."""
