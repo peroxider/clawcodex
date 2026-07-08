@@ -41,6 +41,8 @@ LOCAL_BUILTINS: tuple[str, ...] = (
     "/render-last",
     "/skills",
     # Phase 2 dialogs:
+    "/model",
+    "/models",
     "/effort",
     "/history",
     "/cost",
@@ -308,6 +310,8 @@ def dispatch_local_command(
 
     # Phase 2 dialogs: the command itself has no state to resolve here,
     # it just asks the app to push the corresponding modal screen.
+    if name in ("/model", "/models"):
+        return CommandDispatchResult(handled=True, open_dialog="model")
     if name == "/effort":
         return CommandDispatchResult(handled=True, open_dialog="effort")
     if name in ("/history", "/hist"):

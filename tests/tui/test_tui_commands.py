@@ -55,18 +55,19 @@ _KNOWN_HANDLED_COMMANDS: set[str] = {
     # Handled by dispatch_local_command
     "/help", "/exit", "/quit", "/q", "/repl", "/clear",
     "/tools", "/stream",
+    "/model", "/models",
     "/effort", "/history", "/cost", "/idle", "/theme",
     "/diff", "/mcp", "/tasks", "/rewind", "/resume", "/permission",
     "/forecast",
     # Handled by dispatch_registry_command (NOT by dispatch_local_command)
-    "/init", "/model", "/provider", "/recap", "/btw",
+    "/init", "/provider", "/lkb", "/recap", "/btw",
     "/advisor", "/buddy", "/compact", "/context", "/cron-list",
     "/cron-delete", "/cron-run", "/cron-runs", "/cron-status",
     "/goal", "/export", "/output-style", "/security-review",
     "/statusline", "/telemetry", "/copy", "/doctor", "/logo",
     "/memory", "/permissions", "/release-notes", "/rename",
     "/stickers", "/vim", "/voice", "/workflows", "/deep-research",
-    "/render-last", "/skills",
+    "/render-last", "/skills", "/tts", "/ultraplan",
 }
 
 
@@ -185,6 +186,22 @@ def test_dispatch_stream_no_arg_shows_status(mock_session, tmp_path, tool_regist
     assert result.system_text == "__stream_status__"
 
 
+
+
+def test_dispatch_model(mock_session, tmp_path, tool_registry):
+    result = dispatch_local_command(
+        "/model", session=mock_session, workspace_root=tmp_path, tool_registry=tool_registry
+    )
+    assert result.handled is True
+    assert result.open_dialog == "model"
+
+
+def test_dispatch_models(mock_session, tmp_path, tool_registry):
+    result = dispatch_local_command(
+        "/models", session=mock_session, workspace_root=tmp_path, tool_registry=tool_registry
+    )
+    assert result.handled is True
+    assert result.open_dialog == "model"
 
 
 def test_dispatch_effort(mock_session, tmp_path, tool_registry):

@@ -753,3 +753,265 @@ class TestStage4Resilience:
         msgs = conv.get_messages()
         assert len(msgs) == 1
         assert len(msgs[0]["content"]) == 100_000
+
+
+class TestStage4CrossModePersistence:
+    """F-103: Recapitulate & Forecast 跨 REPL↔TUI 模式切换时内容保持。
+
+    Recapitulate（away_summary）和 Forecast（intent_forecast）在 REPL 中触发后
+    被持久化为 ``SystemMessage(subtype=...)`` 追加到 conversation，切换至 TUI
+    后通过重放 history 重新渲染。这些测试验证关键链路的完整性。
+    """
+
+    def test_create_forecast_system_message(self):
+        """create_forecast_system_message 生成正确的 SystemMessage。"""
+        from clawcodex_ext.intent_forecast.messages import (
+            ForecastResult,
+            ForecastSuggestion,
+            create_forecast_system_message,
+        )
+
+        result = ForecastResult(
+            generated=True,
+            suggestions=[
+                ForecastSuggestion(
+                    id="s1",
+                    title="Refactor module",
+                    prompt="refactor the module",
+                    reason="Improves maintainability",
+                    confidence=0.85,
+                ),
+                ForecastSuggestion(
+                    id="s2",
+                    title="Add tests",
+                    prompt="add unit tests",
+                    reason="Coverage is low",
+                    confidence=0.72,
+                ),
+            ],
+            fingerprint="fp-test-001",
+        )
+        msg = create_forecast_system_message(result, trigger="auto")
+
+        assert getattr(msg, "subtype", None) == "intent_forecast"
+        assert getattr(msg, "role", None) == "system"
+        content = getattr(msg, "content", "") or ""
+        assert "Forecast" in content
+        assert "Refactor module" in content
+        assert "Add tests" in content
+        assert hasattr(msg, "_forecast_meta")
+        assert msg._forecast_meta["trigger"] == "auto"
+        assert msg._forecast_meta["fingerprint"] == "fp-test-001"
+        assert msg._forecast_meta["suggestion_count"] == 2
+
+    def test_forecast_system_message_persists_in_conversation(self):
+        """Forecast SystemMessage 追加到 conversation 后通过 messages 属性可读取。
+
+        注：``get_messages()`` 会过滤非 local_command 的 system 消息（API 规格），
+        但 replay 代码直接遍历 ``conversation.messages`` 原生列表。
+        """
+        from src.agent.conversation import Conversation
+        from clawcodex_ext.intent_forecast.messages import (
+            ForecastResult,
+            ForecastSuggestion,
+            create_forecast_system_message,
+        )
+
+        conv = Conversation()
+        result = ForecastResult(
+            generated=True,
+            suggestions=[
+                ForecastSuggestion(
+                    id="s1", title="Fix bug", prompt="fix the bug", reason="Critical"
+                ),
+            ],
+            fingerprint="fp-test-002",
+        )
+        msg = create_forecast_system_message(result, trigger="auto")
+        conv.messages.append(msg)
+
+        # replay 代码直接遍历 conv.messages（参见 _replay_history_MARKER / _replay_resume_history）
+        assert len(conv.messages) == 1
+        assert conv.messages[0].subtype == "intent_forecast"
+        assert "Fix bug" in str(conv.messages[0].content)
+
+    def test_away_summary_system_message_persists_in_conversation(self):
+        """Away Summary（Recapitulate）SystemMessage 追加后可通过 messages 属性读取。"""
+        from src.agent.conversation import Conversation
+        from clawcodex_ext.away_summary.messages import create_away_summary_message
+
+        conv = Conversation()
+        msg = create_away_summary_message(
+            summary="- Done task A\n- Started task B",
+            trigger="auto",
+            fingerprint="fp-recap-001",
+            message_count=5,
+            model="claude-sonnet-4-20250514",
+        )
+        conv.messages.append(msg)
+
+        assert len(conv.messages) == 1
+        assert conv.messages[0].subtype == "away_summary"
+        content = str(conv.messages[0].content)
+        assert "Done task A" in content
+        assert "Started task B" in content
+
+    def test_forecast_and_recap_survive_session_round_trip(self, tmp_path):
+        """Forecast + Recap system message 经过 Session save/load 后不丢失。"""
+        from pathlib import Path
+        from unittest.mock import patch
+        from src.agent.session import Session
+        from src.agent.conversation import Conversation
+        from clawcodex_ext.away_summary.messages import create_away_summary_message
+        from clawcodex_ext.intent_forecast.messages import (
+            ForecastResult,
+            ForecastSuggestion,
+            create_forecast_system_message,
+        )
+
+        fake_home = tmp_path / "fake_home"
+        fake_home.mkdir()
+
+        conv = Conversation()
+
+        # 添加一条 forecast 系统消息
+        forecast_result = ForecastResult(
+            generated=True,
+            suggestions=[
+                ForecastSuggestion(
+                    id="s1", title="Upgrade deps", prompt="upgrade deps"
+                ),
+            ],
+            fingerprint="fp-rt-001",
+        )
+        forecast_msg = create_forecast_system_message(forecast_result, trigger="auto")
+        conv.messages.append(forecast_msg)
+
+        # 添加一条 away_summary 系统消息
+        recap_msg = create_away_summary_message(
+            summary="Summary of work done.",
+            trigger="auto",
+            fingerprint="fp-rt-002",
+            message_count=3,
+        )
+        conv.messages.append(recap_msg)
+
+        # 添加一条普通 user 消息，验证混合场景
+        conv.add_user_message("hello")
+
+        with patch("pathlib.Path.home", return_value=fake_home):
+            session = Session(
+                session_id="test-cross-mode",
+                provider="test",
+                model="test",
+                conversation=conv,
+            )
+            session.save()
+            loaded = Session.load("test-cross-mode")
+
+        assert loaded is not None
+        # get_messages() 会过滤非 local_command 的 system 消息，直接用 messages 列表
+        loaded_msgs = loaded.conversation.messages
+        assert len(loaded_msgs) == 3, f"Expected 3 messages, got {len(loaded_msgs)}"
+
+        # 验证 forecast 消息保留
+        forecast_found = any(
+            getattr(m, "subtype", None) == "intent_forecast" for m in loaded_msgs
+        )
+        assert forecast_found, "Forecast system message lost after session round-trip"
+
+        # 验证 away_summary 消息保留
+        recap_found = any(
+            getattr(m, "subtype", None) == "away_summary" for m in loaded_msgs
+        )
+        assert recap_found, "Recap system message lost after session round-trip"
+
+        # 验证内容完整
+        for m in loaded_msgs:
+            if getattr(m, "subtype", None) == "intent_forecast":
+                assert "Upgrade deps" in str(getattr(m, "content", ""))
+            elif getattr(m, "subtype", None) == "away_summary":
+                assert "Summary of work done." in str(getattr(m, "content", ""))
+
+    def test_conversation_mixed_messages_order_preserved(self):
+        """System 消息（forecast/recap）与 user/assistant 消息混合时顺序不变。"""
+        from src.agent.conversation import Conversation
+        from clawcodex_ext.away_summary.messages import create_away_summary_message
+        from clawcodex_ext.intent_forecast.messages import (
+            ForecastResult,
+            ForecastSuggestion,
+            create_forecast_system_message,
+        )
+
+        conv = Conversation()
+
+        # user → assistant → forecast → user → recap → user
+        conv.add_user_message("init")
+        conv.add_assistant_message("response-1")
+
+        forecast_result = ForecastResult(
+            generated=True,
+            suggestions=[
+                ForecastSuggestion(id="s1", title="Do X", prompt="do x"),
+            ],
+            fingerprint="fp-order",
+        )
+        conv.messages.append(create_forecast_system_message(forecast_result, trigger="auto"))
+
+        conv.add_user_message("follow-up")
+
+        recap_msg = create_away_summary_message(
+            summary="Session recap.",
+            trigger="auto",
+            fingerprint="fp-order-2",
+            message_count=4,
+        )
+        conv.messages.append(recap_msg)
+
+        conv.add_user_message("final")
+
+        # get_messages() 会过滤非 local_command 的 system 消息，直接用 messages 列表
+        roles = [m.role if hasattr(m, 'role') else '' for m in conv.messages]
+        subtypes = [getattr(m, 'subtype', '') for m in conv.messages]
+
+        # 顺序：user / assistant / system(forecast) / user / system(recap) / user
+        assert roles == ["user", "assistant", "system", "user", "system", "user"]
+        assert subtypes[2] == "intent_forecast"
+        assert subtypes[4] == "away_summary"
+
+    def test_replay_resume_history_renders_forecast_content(self):
+        """验证 REPL _replay_resume_history 分支能渲染 forecast system 消息。
+
+        不启动完整的 REPL — 验证系统中的 Rending 链关键路径：
+        create_forecast_system_message → 消息中包含可渲染的 Markdown 文本。
+        """
+        from clawcodex_ext.intent_forecast.messages import (
+            ForecastResult,
+            ForecastSuggestion,
+            create_forecast_system_message,
+        )
+
+        result = ForecastResult(
+            generated=True,
+            suggestions=[
+                ForecastSuggestion(
+                    id="s1",
+                    title="Test suggestion",
+                    prompt="test prompt",
+                    reason="Because it matters",
+                ),
+            ],
+            fingerprint="fp-render",
+        )
+        msg = create_forecast_system_message(result, trigger="auto")
+
+        content = getattr(msg, "content", "") or ""
+        # _replay_resume_history 通过 msg.content 渲染 Markdown
+        assert content.startswith("Forecast")
+        # _is_recap_text 不匹配 forecast（只匹配 Recapitulate/Away Summary）
+        from clawcodex_ext.repl.core import ClawcodexREPL
+
+        assert not ClawcodexREPL._is_recap_text(content)
+        # forecast 在 replay 分支走的是 elif subtype == 'intent_forecast'
+        # 它的 subtype 必须是 intent_forecast
+        assert getattr(msg, "subtype", None) == "intent_forecast"

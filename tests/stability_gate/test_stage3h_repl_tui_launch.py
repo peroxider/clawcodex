@@ -21,6 +21,7 @@ import subprocess
 import sys
 
 import pytest
+from unittest.mock import MagicMock
 
 
 # =========================================================================
@@ -492,6 +493,47 @@ class TestStage3hImportChain:
         assert hasattr(ClawCodexExtREPL, "run")
         assert hasattr(ClawCodexExtREPL, "chat")
         assert hasattr(ClawCodexExtREPL, "handle_command")
+
+    def test_tui_model_command_dispatched_locally(self):
+        """TUI 中 ``/model`` 和 ``/models`` 被本地 dispatch 拦截为 ``open_dialog="model"``。
+
+        回归防护：若 ``dispatch_local_command`` 的 ``/model`` 拦截被意外移除，
+        则 TUI 中的 ``/model`` 会落入 registry 命令路径，因缺乏 ui 上下文
+        而报 "This command needs an interactive surface (TUI or REPL)."。
+        """
+        from clawcodex_ext.tui.commands import (
+            LOCAL_BUILTINS,
+            dispatch_local_command,
+            CommandDispatchResult,
+        )
+        from pathlib import Path
+
+        # /model 必须在 LOCAL_BUILTINS 中（TUI 可见）
+        assert "/model" in LOCAL_BUILTINS, "/model 不在 LOCAL_BUILTINS 中"
+
+        # dispatch_local_command 拦截 /model → open_dialog="model"
+        result = dispatch_local_command(
+            "/model", session=MagicMock(), workspace_root=Path("/tmp"),
+            tool_registry=MagicMock(),
+        )
+        assert isinstance(result, CommandDispatchResult)
+        assert result.handled is True
+        assert result.open_dialog == "model", (
+            f"/model 应映射为 open_dialog='model', 实际得到 {result.open_dialog!r}"
+        )
+
+        # /models 别名同样拦截
+        result_plural = dispatch_local_command(
+            "/models", session=MagicMock(), workspace_root=Path("/tmp"),
+            tool_registry=MagicMock(),
+        )
+        assert result_plural.handled is True
+        assert result_plural.open_dialog == "model"
+
+        # ModelPickerScreen 可导入（dialog 接收端就绪）
+        from clawcodex_ext.tui.screens.model_picker import ModelPickerScreen
+
+        assert ModelPickerScreen is not None
 
 
 # =========================================================================

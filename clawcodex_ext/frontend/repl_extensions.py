@@ -31,7 +31,10 @@ from clawcodex_ext.away_summary.registration import register_away_summary_comman
 from clawcodex_ext.cli.runtime_commands import register_runtime_commands
 from clawcodex_ext.intent_forecast.config import load_intent_forecast_config
 from clawcodex_ext.intent_forecast.controller import IntentForecastController
-from clawcodex_ext.intent_forecast.messages import format_forecast_for_display
+from clawcodex_ext.intent_forecast.messages import (
+    create_forecast_system_message,
+    format_forecast_for_display,
+)
 from clawcodex_ext.intent_forecast.registration import register_intent_forecast_commands
 from clawcodex_ext.runtime.observer import RuntimeObserver, attach_observer
 
@@ -856,10 +859,22 @@ def _install_intent_forecast_controller(repl: 'ClawcodexREPL') -> None:
         print_text = getattr(repl, '_print_local_command_text', None)
         if callable(print_text):
             print_text(text, command='forecast')
-            return
-        console = getattr(repl, 'console', None)
-        if console is not None:
-            console.print(text)
+        else:
+            console = getattr(repl, 'console', None)
+            if console is not None:
+                console.print(text)
+
+        # Persist forecast to conversation so it survives REPL→TUI transition.
+        try:
+            _session = getattr(repl, 'session', None)
+            _conv = getattr(_session, 'conversation', None) if _session else None
+            if _conv is not None and result.generated:
+                msg = create_forecast_system_message(result, trigger="auto")
+                _conv.messages.append(msg)
+                if _session is not None:
+                    _session.save()
+        except Exception:
+            pass
 
     def _submit(prompt: str) -> None:
         chat = getattr(repl, 'chat', None)
