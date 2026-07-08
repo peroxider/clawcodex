@@ -58,7 +58,7 @@ class TestPropertyStubGeneration:
             class_name="LoopCoordinator",
             is_property=True,
         )
-        stub = _generate_method_stub(
+        stub, _imports = _generate_method_stub(
             op,
             is_class_method=True,
             module_name="openjiuwen.harness.task_loop.loop_coordinator",
@@ -73,7 +73,7 @@ class TestPropertyStubGeneration:
             description="Record one completed round.",
             class_name="LoopCoordinator",
         )
-        stub = _generate_method_stub(
+        stub, _imports = _generate_method_stub(
             op,
             is_class_method=True,
             module_name="openjiuwen.harness.task_loop.loop_coordinator",

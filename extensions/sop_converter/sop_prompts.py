@@ -108,6 +108,19 @@ SOP_OVERVIEW_ROUTING = f"""\
 4. 子代理内部顺序固定：**Skill → ToolSearch → SDK 工具**；工具失败后才可进入有限诊断（见源码探索策略）
 5. 用户已给出工作流或任务指南中的示例参数时，**直接执行**，不要反复向用户确认
 
+### 意图不明确时（阻塞 — 优先于源码探索）
+
+当用户请求模糊（例如「初始化团队对话」「启动 JiuwenAgent」「跑一个 agent」）且无法从
+**SDK 模块总览**、子 Agent 描述或 workflow 表唯一确定目标时：
+
+1. 使用下方 **SDK 模块总览**（启动时已注入摘要）；仅当摘要不足时再 Read bundle 内 ``SDK_OVERVIEW.md`` 全文
+2. **禁止** Glob/Grep 广搜 SDK 源码树；**禁止**派 ``Explore`` / ``general-purpose`` 做工具发现
+3. **禁止** overview 自己调用域 ``Skill`` / ``ToolSearch`` 试探（应委派子 Agent）
+4. 若仍有 **2 个及以上**合理候选（域 Agent 或入口 API），**向用户确认**：
+   列出选项、各自一句话差异、建议的调用顺序（含前置工具链）
+5. 用户确认后再 ``Agent(subagent_type="...", prompt="...")``；prompt 中写明 Skill、
+   ToolSearch 查询、以及上一步应产出的对象/路径
+
 ### 用户已指定 @agent / 工具名时（阻塞 — 禁止搜索）
 
 当用户消息已包含 ``@<domain>-agent``、kebab 工具名、或任务指南中的步骤时：
@@ -116,21 +129,11 @@ SOP_OVERVIEW_ROUTING = f"""\
 2. **禁止**派 ``Explore`` / ``general-purpose`` 做工具发现
 3. **立即** ``Agent(subagent_type="<domain>-agent", prompt="...")``；子代理 prompt 须写明 Skill 名、ToolSearch 查询、参数
 
-### 跨域编排示例（team memory）
+### 跨域编排（pos convert 生成）
 
-| 步骤 | 委派 | 子代理内流程 |
-|------|------|----------------|
-| 获取 team memory 路径 | ``@openjiuwen_merged-agent`` | ``Skill`` → ``ToolSearch`` → 对应工具（参数 ``team_name``） |
-| 创建 team-memory 目录 | ``@memory-agent`` | ``Skill`` → ``ToolSearch`` → 对应工具（参数 ``team_memory_dir`` = 上一步路径） |
-
-### 跨域编排示例（启动团队会话 — macro 优先）
-
-| 步骤 | 委派 | 子代理内流程 |
-|------|------|----------------|
-| **推荐（1 次调用）** | ``@agent_teams-agent`` | ``Skill`` → ``ToolSearch(query="启动团队会话")`` → ``start-team-session``（参数 ``config_path`` + ``initial_query``） |
-| 备选（分步） | 先 ``@agent_teams-agent`` 再 ``@core_engine-agent`` | ``load-spec-yaml`` → ``create-agent-team-session`` → ``run-agent-team`` |
-
-Macro 工具 ``start-team-session`` 与 bundle 内 ``workflow-start_team_session.yaml`` 描述同一编排；overview **优先** macro，避免拆成 3 个跨域委派。
+跨域任务按步骤委派对应域 Agent；**路由表见下方「跨域编排（pos convert 生成）」块**；
+Overview prompt 中须把上一步工具返回的路径/对象写入下一步子代理 prompt。
+具体编排路径以当前 bundle 的 Available Skills / workflow.yaml 为准。
 
 ### 交互式终端任务
 
@@ -418,6 +421,21 @@ def append_sop_overview_routing(
     routing = SOP_OVERVIEW_ROUTING.strip()
     if routing not in body:
         parts.append(routing)
+    from extensions.sop_converter.cross_domain_orchestration import (
+        format_orchestration_routes_block,
+    )
+    from extensions.sop_converter.sdk_overview import format_sdk_overview_block
+
+    overview_block = format_sdk_overview_block(
+        Path(bundle_path) if bundle_path is not None else None
+    )
+    if overview_block and overview_block.strip() not in body:
+        parts.append(overview_block.strip())
+    orch_block = format_orchestration_routes_block(
+        Path(bundle_path) if bundle_path is not None else None,
+    )
+    if orch_block and orch_block.strip() not in body:
+        parts.append(orch_block.strip())
     sdk_block = format_sdk_source_dir_block(sdk_source_dir)
     if sdk_block and sdk_block.strip() not in body:
         parts.append(sdk_block.strip())

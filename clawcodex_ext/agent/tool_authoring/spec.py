@@ -71,3 +71,7 @@ class AgentToolSpec:
     aliases: tuple[str, ...] = field(default_factory=tuple)
     source: str = "agent-created"
     bundle_id: str | None = None
+    # When True, SDK wrapper runs in-process with session-scoped state:
+    # - class methods: SdkInstanceRegistry ``_instances`` bucket
+    # - standalone functions: SdkContextRegistry ``contextvars.Context`` bucket
+    stateful_wrapper: bool = False

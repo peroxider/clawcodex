@@ -684,6 +684,7 @@ def _apply_sop_startup(
         apply_sdk_source_working_directory,
         build_bundle_context,
     )
+    from extensions.sop_converter.bundle_agents import register_bundle_agents
     from extensions.sop_converter.bundle_discovery import overview_has_sop_skills
     from extensions.sop_converter.bundle_skills import register_bundle_skills
     from extensions.sop_converter.sop_prompts import (
@@ -696,6 +697,29 @@ def _apply_sop_startup(
     bundle_ctx = None
 
     if bundle_path is not None and bundle_path.is_dir() and is_sop:
+        bundle_path = bundle_path.resolve()
+        ctx.options.agent_dir_override = bundle_path
+        ctx.tool_context._agent_dir_override = bundle_path
+
+        agent_names = register_bundle_agents(bundle_path)
+        if agent_names:
+            sample_agents = ", ".join(agent_names[:4])
+            if len(agent_names) > 4:
+                sample_agents += ", …"
+            domain_agents = [a for a in agent_names if a.endswith("-agent") and not a.startswith("clawcodex-")]
+            stage_agents = [a for a in agent_names if a.endswith("-agent") and any(stage in a for stage in ["topic-init", "problem-decompose", "search-strategy", "literature-collect", "literature-screen", "knowledge-extract", "synthesis", "hypothesis-gen", "experiment-design", "code-generation", "resource-planning", "experiment-run", "iterative-refine", "result-analysis", "research-decision", "paper-outline", "paper-draft", "peer-review", "paper-revision", "quality-gate", "knowledge-archive", "export-publish", "citation-verify"])]
+            
+            if stage_agents:
+                agent_type_desc = f"stage agents ({len(stage_agents)}) + domain agents ({len(domain_agents)})"
+            else:
+                agent_type_desc = "domain agents"
+            
+            print(
+                f'🤖 Loaded {len(agent_names)} SOP {agent_type_desc} from bundle',
+                file=sys.stderr,
+            )
+            print(f'   agents: {sample_agents}', file=sys.stderr)
+
         load_result = register_bundle_skills(bundle_path, workspace)
         registered = load_result.skill_names
         if registered:

@@ -96,9 +96,6 @@ POS_PROXY_BASE_TOOLS: frozenset[str] = frozenset(
         "ToolSearch",
         "Agent",
         "Read",
-        "Grep",
-        "Glob",
-        "Bash",
         "TodoWrite",
         "StructuredOutput",
     ]

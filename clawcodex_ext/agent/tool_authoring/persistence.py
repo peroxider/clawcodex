@@ -62,6 +62,8 @@ def _spec_to_dict(spec: AgentToolSpec) -> dict[str, Any]:
     }
     if spec.bundle_id:
         data["bundle_id"] = spec.bundle_id
+    if spec.stateful_wrapper:
+        data["stateful_wrapper"] = True
     return data
 
 
@@ -76,6 +78,7 @@ def _dict_to_spec(d: dict[str, Any]) -> AgentToolSpec:
         aliases=tuple(d.get("aliases", ())),
         source=d.get("source", "agent-created"),
         bundle_id=d.get("bundle_id"),
+        stateful_wrapper=bool(d.get("stateful_wrapper", False)),
     )
 
 

@@ -166,8 +166,28 @@ when_to_use: {{ description }}
 
 # {{ name }} - 总览 Agent
 
+## ⚠ 关键规则（最高优先级 — 必须首先遵守）
+
+1. **用户提到 @<domain>-agent 时 → 立即委派，禁止任何搜索**
+   - 立即 ``Agent(subagent_type="<domain>-agent", prompt="...")``
+   - **禁止** Read / Grep / Glob / Bash 查找工具定义、参数 schema 或 SDK 源码
+   - **禁止** 派 ``general-purpose`` / ``Explore`` 做工具发现
+
+2. **overview 只做路由与汇总，不执行 SDK 任务**
+   - **禁止** 自己调用域 ``Skill`` / ``ToolSearch`` / SDK 工具
+   - **禁止** Grep / Glob / Bash 广搜 SDK 源码树
+   - 域任务一律 ``Agent(subagent_type="<domain>-agent", prompt="...")``
+
+3. **子代理内部顺序固定**: ``Skill → ToolSearch → SDK 工具``
+   - 工具调用权限确认 ≠ 失败，等待用户批准即可，**不要**进入诊断
+   - 工具真正失败后才可有限诊断（``Read tool spec`` → ``Read wrapper`` 取 ``_SOURCE_DIR``）
+   - **禁止** 用 ``Bash`` / ``Grep`` 诊断；**禁止** Grep SDK 源码树
+
+---
+
 {{ description }}
 
+{% if workflow_stages %}
 ## 工作流概述
 
 {% for stage in workflow_stages %}
@@ -180,6 +200,7 @@ when_to_use: {{ description }}
 - **输出**: {{ stage.output_type }}
 
 {% endfor %}
+{% endif %}
 ## 子 Agent 清单
 
 {% for agent in component_agents %}
@@ -198,12 +219,14 @@ when_to_use: {{ description }}
 - **{{ agent.description }}**: `{{ agent.invoke_pattern }}`
 {% endfor %}
 
+{% if workflow_stages %}
 ## 跨组件编排
 
 当任务需要多个子 Agent 协作时，按工作流阶段顺序依次调用。
 每个阶段的输出自动作为下一阶段的输入。
 
 **用户最短指令（Overview）**：`在 run_dir=<绝对路径> 从 Stage N 做到 Stage M` — 详见运行时注入的「流水线 Stage 编排」一节。
+{% endif %}
 """
 
 _WORKFLOW_TEMPLATE_SRC = """\
@@ -463,6 +486,7 @@ class AgentMarkdownWriter:
         workflow_stages: list[WorkflowStage],
         output_dir: Path,
         model: str = "default",
+        sdk_source_dir: str | Path | None = None,
     ) -> Path:
         """生成总览 Agent 的 ``.claude/agents/<name>.md``。
 
@@ -506,7 +530,11 @@ class AgentMarkdownWriter:
             component_agents=component_agents,
             workflow_stages=workflow_stages,
         )
-        content = append_sop_overview_routing(content, bundle_path=output_dir)
+        content = append_sop_overview_routing(
+            content,
+            bundle_path=output_dir,
+            sdk_source_dir=sdk_source_dir,
+        )
 
         file_path.write_text(content.strip() + "\n", encoding="utf-8")
         logger.info("Wrote overview agent: %s", file_path)

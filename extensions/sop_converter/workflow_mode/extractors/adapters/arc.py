@@ -1,26 +1,25 @@
-"""ArcExtractor — AutoResearchClaw (ARC) workflow extractor (F-50-G).
-
-Extracts stages/transitions/gates/decisions/contracts from projects following
-the ARC convention:
-
-* ``.arc-workflow`` marker file in the project root (optional but preferred).
-* Stage enum classes following the ``*Stage*`` / ``*Step*`` naming pattern.
-* Per-stage implementation files under ``stage_impls/`` or similar directory.
-``"""
+"""AutoResearchClaw / ResearchClaw pipeline extractor (F-50-G)."""
 
 from __future__ import annotations
 
+import ast
 import logging
 from pathlib import Path
 
 from ...ast_helpers import (
     _to_kebab,
     extract_docstring_first_para,
+    find_dict_mapping_assignments,
     find_enum_classes,
-    get_enum_members,
+    find_frozenset_assigns,
+    get_enum_members_ordered,
     parse_ast,
     parse_contracts_dict,
-    walk_py_files,
+    parse_enum_dict_mapping_from_expr,
+    parse_enum_to_name_dict,
+    parse_frozenset_members,
+    parse_stage_sequence_from_expr,
+    parse_string_to_stage_dict,
 )
 from ..base import WorkflowExtractorBase
 from ..models import (
@@ -31,216 +30,261 @@ from ..models import (
     StageContract,
     Transition,
 )
-from .generic import GenericPipelineExtractor
 
 logger = logging.getLogger(__name__)
 
+_EXECUTOR_TABLE_NAMES = ("_STAGE_EXECUTORS", "STAGE_EXECUTORS")
 
-# ---------------------------------------------------------------------------
-# ARC-specific paths
-# ---------------------------------------------------------------------------
 
-_ARC_STAGE_DIR_NAMES = ("stage_impls", "stages", "steps", "pipeline")
-_ARC_WORKFLOW_MARKER = ".arc-workflow"
+def resolve_arc_pipeline_dir(source_dir: Path) -> Path | None:
+    """Locate ``researchclaw/pipeline`` (or equivalent) under *source_dir*."""
+    root = source_dir.resolve()
+    candidates = [
+        root,
+        root / "researchclaw" / "pipeline",
+        root / "pipeline",
+    ]
+    for candidate in candidates:
+        if (candidate / "stages.py").is_file() and (candidate / "contracts.py").is_file():
+            return candidate
+    for stages_py in root.rglob("stages.py"):
+        parent = stages_py.parent
+        if parent.name == "pipeline" and (parent / "contracts.py").is_file():
+            return parent
+    return None
 
 
 class ArcExtractor(WorkflowExtractorBase):
-    """Workflow extractor for AutoResearchClaw (ARC) projects.
+    """Extract WorkflowGraph from AutoResearchClaw pipeline modules."""
 
-    Detects the ARC project convention (``.arc-workflow`` marker or
-    ``autoresearch``/``arc`` in the directory name) and extracts a
-    ``WorkflowGraph`` from stage enums, implementation files, and
-    contract definitions.
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._pipeline_dir: Path | None = None
+        self._enum_class: str | None = None
+        self._member_to_value: dict[str, int] = {}
+        self._member_order: list[tuple[str, int]] = []
+        self._stage_sequence: list[int] = []
+        self._executor_rel: str | None = None
+        self._executor_by_stage: dict[int, str] = {}
 
-    Falls back to ``GenericPipelineExtractor`` when ARC-specific patterns
-    are not found, ensuring robust extraction for any Python project.
-    """
+    def _bootstrap(self, source_dir: Path) -> bool:
+        pipeline = resolve_arc_pipeline_dir(source_dir)
+        if pipeline is None:
+            return False
+        self._pipeline_dir = pipeline
 
-    def __init__(
-        self,
-        scan=None,
-        *,
-        mode: str = "fwa",
-        allow_coarse: bool = False,
-    ) -> None:
-        super().__init__(scan=scan, mode=mode, allow_coarse=allow_coarse)
-        self._fallback: GenericPipelineExtractor | None = None
+        stages_tree = parse_ast(pipeline / "stages.py")
+        if stages_tree is None:
+            return False
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    def _get_fallback(self, source_dir: Path) -> GenericPipelineExtractor:
-        """Lazy-initialize a fallback generic extractor."""
-        if self._fallback is None:
-            self._fallback = GenericPipelineExtractor(
-                scan=self._scan,
-                mode=self._mode,
-                allow_coarse=self._allow_coarse,
-            )
-        return self._fallback
-
-    def _is_arc_project(self, source_dir: Path) -> bool:
-        """Check if the source directory is an ARC project."""
-        name_lower = source_dir.name.lower()
-        if "autoresearch" in name_lower or "arc" in name_lower:
-            return True
-        if (source_dir / _ARC_WORKFLOW_MARKER).is_file():
-            return True
-        # Check for ARC stage directories
-        for d in _ARC_STAGE_DIR_NAMES:
-            if (source_dir / d).is_dir():
-                return True
-        return False
-
-    def _find_stage_enum(self, source_dir: Path):
-        """Find the primary stage enum class across all Python files."""
-        best_name: str | None = None
-        best_count = 0
-        for py_file in walk_py_files(source_dir):
-            tree = parse_ast(py_file)
-            if tree is None:
+        for cls in find_enum_classes(stages_tree):
+            members = get_enum_members_ordered(cls)
+            if not members:
                 continue
-            for cls in find_enum_classes(tree):
-                members = get_enum_members(cls)
-                if len(members) >= best_count:
-                    best_name = cls.name
-                    best_count = len(members)
-        return best_name
+            self._enum_class = cls.name
+            self._member_order = members
+            self._member_to_value = dict(members)
+            break
 
-    # ------------------------------------------------------------------
-    # Extraction methods
-    # ------------------------------------------------------------------
+        if not self._member_to_value:
+            return False
+
+        enum_names = {self._enum_class} if self._enum_class else set()
+        module_assigns = dict(find_dict_mapping_assignments(stages_tree))
+        if "STAGE_SEQUENCE" in module_assigns:
+            self._stage_sequence = parse_stage_sequence_from_expr(
+                module_assigns["STAGE_SEQUENCE"],
+                enum_class_names=enum_names,
+                enum_members_ordered=self._member_order,
+                module_assigns=module_assigns,
+            )
+        if not self._stage_sequence:
+            self._stage_sequence = [v for _, v in self._member_order]
+
+        executor_path = pipeline / "executor.py"
+        if executor_path.is_file():
+            self._executor_rel = executor_path.relative_to(source_dir.resolve()).as_posix()
+            exec_tree = parse_ast(executor_path)
+            if exec_tree is not None:
+                for var_name, dict_expr in find_dict_mapping_assignments(exec_tree):
+                    if var_name in _EXECUTOR_TABLE_NAMES and isinstance(dict_expr, ast.Dict):
+                        self._executor_by_stage = parse_enum_to_name_dict(
+                            dict_expr, enum_names, self._member_to_value,
+                        )
+        return True
+
+    def _enum_names(self) -> set[str]:
+        return {self._enum_class} if self._enum_class else set()
 
     def extract_stages(self, source_dir: Path) -> list[ExtractedStage]:
-        if not self._is_arc_project(source_dir):
-            return self._get_fallback(source_dir).extract_stages(source_dir)
+        if not self._bootstrap(source_dir):
+            return []
 
+        pipeline = self._pipeline_dir
+        assert pipeline is not None
+        stages_tree = parse_ast(pipeline / "stages.py")
+        stage_enum_cls = None
+        if stages_tree:
+            for cls in find_enum_classes(stages_tree):
+                if cls.name == self._enum_class:
+                    stage_enum_cls = cls
+                    break
+
+        desc = extract_docstring_first_para(stage_enum_cls) if stage_enum_cls else ""
         stages: list[ExtractedStage] = []
-        primary_enum = self._find_stage_enum(source_dir)
-
-        # ── Phase 1: extract from stage enum ──
-        if primary_enum:
-            for py_file in walk_py_files(source_dir):
-                tree = parse_ast(py_file)
-                if tree is None:
-                    continue
-                for cls in find_enum_classes(tree):
-                    if cls.name != primary_enum:
-                        continue
-                    members = get_enum_members(cls)
-                    doc = extract_docstring_first_para(cls)
-                    for idx, (member_name, member_value) in enumerate(members.items()):
-                        stages.append(
-                            ExtractedStage(
-                                id=len(stages) + 1,
-                                name=_to_kebab(member_name),
-                                label=member_name,
-                                source_class=cls.name,
-                                source_value=member_value,
-                                file_path=str(py_file),
-                                description=doc or "",
-                                inferred=False,
-                            )
-                        )
-
-        # ── Phase 2: fall back to directory-based detection ──
-        if not stages:
-            for stage_dir_name in _ARC_STAGE_DIR_NAMES:
-                stage_dir = source_dir / stage_dir_name
-                if not stage_dir.is_dir():
-                    continue
-                for py_file in sorted(stage_dir.glob("*.py")):
-                    if py_file.name.startswith("_"):
-                        continue
-                    tree = parse_ast(py_file)
-                    doc = ""
-                    if tree:
-                        doc = extract_docstring_first_para(tree)
-                    stages.append(
-                        ExtractedStage(
-                            id=len(stages) + 1,
-                            name=py_file.stem,
-                            label=py_file.stem.replace("_", " ").title(),
-                            source_class=None,
-                            file_path=str(py_file),
-                            description=doc or "",
-                            inferred=False,
-                        )
-                    )
-
-        # ── Phase 3: final fallback to generic ──
-        if not stages:
-            return self._get_fallback(source_dir).extract_stages(source_dir)
-
+        for name, value in self._member_order:
+            entry_fn = self._executor_by_stage.get(value)
+            stages.append(
+                ExtractedStage(
+                    id=value,
+                    name=_to_kebab(name),
+                    label=name,
+                    source_class=self._enum_class,
+                    source_value=value,
+                    file_path=self._executor_rel,
+                    entry_function=entry_fn,
+                    description=desc,
+                )
+            )
         return stages
 
     def extract_transitions(self, source_dir: Path) -> list[Transition]:
-        if not self._is_arc_project(source_dir):
-            return self._get_fallback(source_dir).extract_transitions(source_dir)
-
-        stages = self.extract_stages(source_dir)
-        if len(stages) <= 1:
+        if not self._bootstrap(source_dir):
             return []
 
-        # Default linear chain: stage 1 → stage 2 → stage 3 → …
+        pipeline = self._pipeline_dir
+        assert pipeline is not None
+        stages_tree = parse_ast(pipeline / "stages.py")
+        if stages_tree is None:
+            return []
+
+        enum_names = self._enum_names()
         transitions: list[Transition] = []
-        for i in range(len(stages) - 1):
-            transitions.append(
-                Transition(
-                    from_stage=stages[i].id,
-                    to_stage=stages[i + 1].id,
-                    is_default=True,
+        seen: set[tuple[int, int]] = set()
+
+        for var_name, dict_expr in find_dict_mapping_assignments(stages_tree):
+            if "NEXT_STAGE" in var_name.upper() or "PREVIOUS_STAGE" in var_name.upper():
+                pairs = parse_enum_dict_mapping_from_expr(
+                    dict_expr,
+                    enum_names,
+                    self._member_to_value,
+                    stage_sequence=self._stage_sequence,
                 )
-            )
+                for from_id, to_id in pairs:
+                    key = (from_id, to_id)
+                    if key not in seen:
+                        seen.add(key)
+                        transitions.append(
+                            Transition(
+                                from_stage=from_id,
+                                to_stage=to_id,
+                                condition=var_name,
+                                is_default=True,
+                            )
+                        )
+
+        if not transitions and self._stage_sequence:
+            for idx, sid in enumerate(self._stage_sequence):
+                if idx + 1 < len(self._stage_sequence):
+                    nxt = self._stage_sequence[idx + 1]
+                    transitions.append(
+                        Transition(
+                            from_stage=sid,
+                            to_stage=nxt,
+                            condition="STAGE_SEQUENCE",
+                            is_default=True,
+                        )
+                    )
         return transitions
 
     def extract_gates(self, source_dir: Path) -> dict[int, GateSpec]:
-        if not self._is_arc_project(source_dir):
-            return self._get_fallback(source_dir).extract_gates(source_dir)
-        # ARC convention: default manual gates between stages
-        stages = self.extract_stages(source_dir)
+        if not self._bootstrap(source_dir):
+            return {}
+
+        pipeline = self._pipeline_dir
+        assert pipeline is not None
+        stages_tree = parse_ast(pipeline / "stages.py")
+        if stages_tree is None:
+            return {}
+
         gates: dict[int, GateSpec] = {}
-        for stage in stages:
-            if stage.id < len(stages):
-                gates[stage.id] = GateSpec(
-                    stage_id=stage.id,
+        enum_names = self._enum_names()
+        for var_name, value_expr in find_frozenset_assigns(stages_tree):
+            stage_ids = parse_frozenset_members(
+                value_expr, enum_names, self._member_to_value,
+            )
+            for sid in stage_ids:
+                gates[sid] = GateSpec(
+                    stage_id=sid,
                     approval_mode="manual",
-                    description=f"Gate before {stage.label}",
+                    description=f"Gate from {var_name}",
+                    source_name=var_name,
                 )
         return gates
 
     def extract_decisions(self, source_dir: Path) -> dict[int, DecisionSpec]:
-        if not self._is_arc_project(source_dir):
-            return self._get_fallback(source_dir).extract_decisions(source_dir)
-        return {}
+        if not self._bootstrap(source_dir):
+            return {}
+
+        pipeline = self._pipeline_dir
+        assert pipeline is not None
+        stages_tree = parse_ast(pipeline / "stages.py")
+        if stages_tree is None:
+            return {}
+
+        enum_names = self._enum_names()
+        decisions: dict[int, DecisionSpec] = {}
+
+        for var_name, dict_expr in find_dict_mapping_assignments(stages_tree):
+            if not isinstance(dict_expr, ast.Dict):
+                continue
+            if "DECISION_ROLLBACK" not in var_name.upper():
+                continue
+            rollback = parse_string_to_stage_dict(
+                dict_expr, enum_names, self._member_to_value,
+            )
+            decision_stage = self._member_to_value.get("RESEARCH_DECISION")
+            if decision_stage is None:
+                continue
+            outcomes = {
+                name: OutcomeSpec(next_stage=sid, max_times=2)
+                for name, sid in rollback.items()
+            }
+            decisions[decision_stage] = DecisionSpec(
+                stage_id=decision_stage,
+                outcomes=outcomes,
+                source_func=var_name,
+                inferred=False,
+            )
+        return decisions
 
     def extract_contracts(self, source_dir: Path) -> dict[int, StageContract]:
-        if not self._is_arc_project(source_dir):
-            return self._get_fallback(source_dir).extract_contracts(source_dir)
+        if not self._bootstrap(source_dir):
+            return {}
 
+        pipeline = self._pipeline_dir
+        assert pipeline is not None
+        contracts_path = pipeline / "contracts.py"
+        tree = parse_ast(contracts_path)
+        if tree is None:
+            return {}
+
+        enum_names = self._enum_names()
         contracts: dict[int, StageContract] = {}
-        stages = self.extract_stages(source_dir)
-
-        # Parse contract definitions from stage implementation files
-        for stage in stages:
-            if not stage.file_path:
+        for var_name, dict_expr in find_dict_mapping_assignments(tree):
+            if not isinstance(dict_expr, ast.Dict):
                 continue
-            fp = Path(stage.file_path)
-            if not fp.exists():
+            if "CONTRACT" not in var_name.upper():
                 continue
-            tree = parse_ast(fp)
-            if tree is None:
-                continue
-
-            contract_dict = parse_contracts_dict(tree)
-            if contract_dict:
-                contracts[stage.id] = StageContract(
-                    stage_id=stage.id,
-                    input_files=contract_dict.get("input_files", []),
-                    output_files=contract_dict.get("output_files", []),
-                    dod=contract_dict.get("dod", ""),
-                    source_class=stage.source_class,
+            parsed = parse_contracts_dict(
+                dict_expr, enum_names, self._member_to_value,
+            )
+            for stage_id, (inp, out, call_name, dod) in parsed.items():
+                contracts[stage_id] = StageContract(
+                    stage_id=stage_id,
+                    input_files=inp,
+                    output_files=out,
+                    dod=dod,
+                    source_class=call_name,
                 )
-
         return contracts
