@@ -1201,6 +1201,12 @@ class AgentRunner:
                     debug_log_path=session.debug_log_path,
                     env=getattr(self.agent_config, "env", None) or {},
                     timeout_s=self.agent_config.run_timeout_ms / 1000.0,
+                    stall_timeout_s=(
+                        getattr(self.agent_config, 'stall_timeout_ms', 300_000) / 1000.0
+                    ),
+                    stall_warn_s=(
+                        getattr(self.agent_config, 'stall_warn_ms', 30_000) / 1000.0
+                    ),
                     # F-?? prompt split: keep the constant workflow background
                     # in the system prompt across every turn (turn 0 sets it
                     # via render_parts; turn > 0 reads it from the session).
