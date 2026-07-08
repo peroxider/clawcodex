@@ -43,11 +43,15 @@ class OpenAICodexProvider(OpenAICompatibleProvider):
         credentials = resolve_codex_runtime_credentials()
         self.api_key = credentials.api_key
         self.base_url = self.base_url or credentials.base_url
-        kwargs: dict[str, Any] = {"api_key": self.api_key, "base_url": self.base_url}
+        kwargs: dict[str, Any] = {
+            "api_key": self.api_key,
+            "base_url": self.base_url,
+            "timeout": 60.0,
+        }
         if os.environ.get("CLAWCODEX_SSL_VERIFY", "").lower() in ("0", "false", "no"):
             import httpx
 
-            kwargs["http_client"] = httpx.Client(verify=False)
+            kwargs["http_client"] = httpx.Client(verify=False, timeout=60.0)
         return OpenAI(**kwargs)
 
     @property

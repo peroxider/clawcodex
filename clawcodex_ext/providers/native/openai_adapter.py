@@ -88,7 +88,7 @@ class NativeOpenAIProvider(NativeProvider):
     ):
         super().__init__(api_key, base_url, model or self.DEFAULT_MODEL)
         _ensure_sdk()
-        kwargs: dict[str, Any] = {"api_key": api_key}
+        kwargs: dict[str, Any] = {"api_key": api_key, "timeout": 60.0}
         if base_url:
             kwargs["base_url"] = base_url
         # Honour the same SSL-bypass flag as the legacy OpenAIProvider
@@ -99,7 +99,7 @@ class NativeOpenAIProvider(NativeProvider):
         if os.environ.get("CLAWCODEX_SSL_VERIFY", "").lower() in ("0", "false", "no"):
             import httpx  # local import to keep the top-level dep minimal
 
-            kwargs["http_client"] = httpx.Client(verify=False)
+            kwargs["http_client"] = httpx.Client(verify=False, timeout=60.0)
         self.client = OpenAI(**kwargs)
 
     def get_provider_name(self) -> str:

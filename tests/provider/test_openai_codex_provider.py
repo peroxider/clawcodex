@@ -39,7 +39,7 @@ def test_client_resolves_oauth_token_before_creation(monkeypatch) -> None:
 
     assert isinstance(client, FakeOpenAI)
     assert provider.api_key == "oauth-access"
-    assert created == [{"api_key": "oauth-access", "base_url": CODEX_BASE_URL}]
+    assert created == [{"api_key": "oauth-access", "base_url": CODEX_BASE_URL, "timeout": 60.0}]
 
 
 def test_client_is_recreated_when_access_token_changes(monkeypatch) -> None:
@@ -70,8 +70,8 @@ def test_client_is_recreated_when_access_token_changes(monkeypatch) -> None:
 
     assert first_client is not second_client
     assert created == [
-        {"api_key": "first", "base_url": CODEX_BASE_URL},
-        {"api_key": "second", "base_url": CODEX_BASE_URL},
+        {"api_key": "first", "base_url": CODEX_BASE_URL, "timeout": 60.0},
+        {"api_key": "second", "base_url": CODEX_BASE_URL, "timeout": 60.0},
     ]
 
 

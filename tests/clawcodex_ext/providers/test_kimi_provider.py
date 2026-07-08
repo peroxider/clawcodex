@@ -55,6 +55,7 @@ class TestKimiProvider(unittest.TestCase):
         mock_openai.assert_called_once_with(
             api_key="test_key",
             base_url="https://api.moonshot.ai/v1",
+            timeout=60.0,
         )
 
     @patch.dict(os.environ, {"CLAWCODEX_SSL_VERIFY": "false"}, clear=False)
@@ -71,10 +72,11 @@ class TestKimiProvider(unittest.TestCase):
         client = provider._create_client()
 
         self.assertIs(client, mock_client)
-        mock_httpx_client.assert_called_once_with(verify=False)
+        mock_httpx_client.assert_called_once_with(verify=False, timeout=60.0)
         mock_openai.assert_called_once_with(
             api_key="test_key",
             base_url="https://api.moonshot.ai/v1",
+            timeout=60.0,
             http_client=mock_insecure_client,
         )
 

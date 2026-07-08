@@ -80,6 +80,7 @@ class NativeGrokProvider(NativeProvider):
         kwargs: dict[str, Any] = {
             "api_key": api_key,
             "base_url": base_url or _DEFAULT_BASE_URL,
+            "timeout": 60.0,
         }
         self.client = OpenAI(**kwargs)
 

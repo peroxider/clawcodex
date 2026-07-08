@@ -58,6 +58,7 @@ class KimiProvider(OpenAICompatibleProvider):
         kwargs: dict[str, Any] = {
             "api_key": self.api_key,
             "base_url": self.base_url or self.DEFAULT_BASE_URL,
+            "timeout": 60.0,
         }
         # Support SSL verification bypass for corporate/internal endpoints.
         import os
@@ -65,7 +66,7 @@ class KimiProvider(OpenAICompatibleProvider):
         if os.environ.get("CLAWCODEX_SSL_VERIFY", "").lower() in ("0", "false", "no"):
             import httpx
 
-            kwargs["http_client"] = httpx.Client(verify=False)
+            kwargs["http_client"] = httpx.Client(verify=False, timeout=60.0)
         return OpenAI(**kwargs)
 
     def _prepare_tools(self, tools: Optional[list[dict[str, Any]]]) -> Optional[list[dict[str, Any]]]:
