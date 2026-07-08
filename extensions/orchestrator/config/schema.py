@@ -498,6 +498,17 @@ class AgentConfig:
     # personal plan). Set to 0 for unlimited request rate.
     delay_between_requests_ms: int = 2000
     run_timeout_ms: int = 1_800_000
+    # F-108 P108-C — stream-stall watchdog: abort a run once the headless
+    # session shows no activity (no tool events, no stdout growth) for
+    # this long, instead of waiting out the whole run_timeout_ms budget.
+    # Default 300s: measured healthy runs pause up to 240s (long LLM
+    # turns not streamed to stdout); genuine hangs sat 949s/1140s.
+    # 0 disables. See QueryConfig.stall_timeout_s.
+    stall_timeout_ms: int = 300_000
+    # Early-diagnosis tier: emit a stall_suspected diagnostic (debug
+    # event + WARNING log) after this much silence — guarantees a clear
+    # diagnosis within ~30s of a hang without false-kill risk. 0 disables.
+    stall_warn_ms: int = 30_000
     # File-path whitelist gate (glob patterns). When non-empty, only files
     # matching at least one pattern may enter the commit.  The gate runs
     # AFTER ``git add -A`` and unstages any file that doesn't match.
@@ -945,6 +956,8 @@ class WorkflowConfig:
             rate_limit_max_retries=agent_raw.get("rate_limit_max_retries", 40),
             delay_between_requests_ms=agent_raw.get("delay_between_requests_ms", 2000),
             run_timeout_ms=agent_raw.get("run_timeout_ms", 1_800_000),
+            stall_timeout_ms=agent_raw.get("stall_timeout_ms", 300_000),
+            stall_warn_ms=agent_raw.get("stall_warn_ms", 30_000),
             # File-path whitelist gate (see AgentConfig docstring).
             allowed_changed_files=_normalize_string_list(
                 agent_raw.get("allowed_changed_files"), default=[]

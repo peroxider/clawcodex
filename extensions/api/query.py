@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import logging
 import queue
 import time
 from dataclasses import dataclass
@@ -14,6 +15,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from .debug_log import append_debug_event
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ..capabilities.event_protocol import ToolEventProtocol
@@ -74,6 +77,32 @@ class QueryConfig:
     # 1800s (30 min) matches the orchestrator's ``run_timeout_ms``.
     # Set to 0 to disable (F-108 §十八 design decision #5).
     timeout_s: float = 1800.0
+    # F-108 P108-C — stream-stall watchdog. When > 0, the event-drain
+    # loop aborts the run once the headless session shows NO activity
+    # (no tool events AND no stdout growth) for this many consecutive
+    # seconds, yielding ``SessionComplete(reason="exit_code=125")``.
+    # Provider-agnostic backstop for the observed failure mode where an
+    # LLM request returns zero chunks forever: the per-provider idle
+    # watchdog (WI-5.2) only covers the Anthropic SDK stream, so
+    # OpenAI-compatible paths used to burn the whole wall-clock budget
+    # (20 min observed live) doing nothing. Detection is activity-based,
+    # not first-token-based — any tool event or stdout growth resets the
+    # deadline. Set to 0 to disable (design decision #5).
+    #
+    # Default rationale (measured over 16 archived production runs):
+    # healthy runs showed dual-silence gaps up to 240 s (long LLM turns
+    # whose text is not streamed to stdout), while the two genuine
+    # hangs sat silent for 949 s / 1140 s. 300 s clears the healthy
+    # maximum with margin and still cuts hang recovery from the 1800 s
+    # budget to ~5 min. The 30 s requirement is met by the WARN tier
+    # below, which is diagnosis-only and safe at low thresholds.
+    stall_timeout_s: float = 300.0
+    # Early-diagnosis tier: after this many silent seconds a
+    # ``query_runner.stall_suspected`` debug event + WARNING log fire
+    # (once per silence episode; re-armed when activity resumes). This
+    # is what guarantees "clear diagnosis within 30 s of a hang"
+    # without any false-kill risk. 0 disables.
+    stall_warn_s: float = 30.0
 
 
 @dataclass
@@ -171,6 +200,7 @@ class QueryRunner:
             prompt_len=len(self.config.prompt),
             workspace=str(self.config.workspace),
             max_turns=self.config.max_turns,
+            stall_timeout_s=self.config.stall_timeout_s,
         )
 
         event_queue: queue.Queue[Any] = queue.Queue()
@@ -279,6 +309,15 @@ class QueryRunner:
         timeout_s = self.config.timeout_s
         loop_started_at = time.monotonic()
         timed_out = False
+        # F-108 P108-C: stall-watchdog bookkeeping. ``stdout.tell()`` is
+        # O(1) (write position), unlike ``getvalue()`` which copies the
+        # whole buffer — safe to poll every loop iteration.
+        stall_timeout_s = self.config.stall_timeout_s
+        stall_warn_s = self.config.stall_warn_s
+        stalled = False
+        stall_warned_at: float | None = None  # activity mark of the warned episode
+        last_stdout_pos = 0
+        last_stdout_change_at = loop_started_at
         try:
             while True:
                 try:
@@ -305,6 +344,68 @@ class QueryRunner:
                     if timeout_s > 0 and (now - loop_started_at) >= timeout_s:
                         timed_out = True
                         break
+                    # F-108 P108-C: stream-stall watchdog. "Activity" is
+                    # any tool event (``last_event_at``, updated by
+                    # ``on_event``) or stdout growth (streamed text).
+                    # When both signals have been flat for
+                    # ``stall_timeout_s`` we stop waiting: the observed
+                    # hang mode (provider accepted the request, then
+                    # never sent a single chunk) otherwise burns the
+                    # entire wall-clock budget doing nothing.
+                    stdout_pos = stdout.tell()
+                    if stdout_pos != last_stdout_pos:
+                        last_stdout_pos = stdout_pos
+                        last_stdout_change_at = now
+                    last_activity_at = max(last_event_at, last_stdout_change_at)
+                    # WARN tier: a clear diagnosis within stall_warn_s of
+                    # the silence starting — long before the abort tier
+                    # would consider acting. One event per silence
+                    # episode; activity re-arms it.
+                    if stall_warn_s > 0:
+                        if stall_warned_at is not None and last_activity_at > stall_warned_at:
+                            stall_warned_at = None  # activity resumed — re-arm
+                        if (
+                            stall_warned_at is None
+                            and (now - last_activity_at) >= stall_warn_s
+                        ):
+                            stall_warned_at = last_activity_at
+                            logger.warning(
+                                "query stall suspected run_id=%s: no activity "
+                                "for %.0fs (abort tier at %.0fs)",
+                                self.config.run_id,
+                                now - last_activity_at,
+                                stall_timeout_s,
+                            )
+                            append_debug_event(
+                                debug_log_path,
+                                "query_runner.stall_suspected",
+                                run_id=self.config.run_id,
+                                stall_warn_s=stall_warn_s,
+                                stall_timeout_s=stall_timeout_s,
+                                seconds_since_last_event=round(now - last_event_at, 3),
+                                seconds_since_stdout_change=round(
+                                    now - last_stdout_change_at, 3
+                                ),
+                                stdout_len=stdout_pos,
+                                tool_events=tool_event_count,
+                            )
+                    if stall_timeout_s > 0:
+                        if (now - last_activity_at) >= stall_timeout_s:
+                            stalled = True
+                            append_debug_event(
+                                debug_log_path,
+                                "query_runner.stall_detected",
+                                run_id=self.config.run_id,
+                                stall_timeout_s=stall_timeout_s,
+                                seconds_since_last_event=round(now - last_event_at, 3),
+                                seconds_since_stdout_change=round(
+                                    now - last_stdout_change_at, 3
+                                ),
+                                seconds_since_start=round(now - loop_started_at, 3),
+                                stdout_len=stdout_pos,
+                                tool_events=tool_event_count,
+                            )
+                            break
                     if now >= next_heartbeat_at:
                         append_debug_event(
                             debug_log_path,
@@ -351,6 +452,14 @@ class QueryRunner:
                 stdout_len=len(stdout.getvalue()),
             )
             exit_code = 124
+        elif stalled:
+            # Distinct from 124 so downstream can tell "budget spent
+            # while working" from "provider went silent". The finally
+            # block above already tripped the abort controller; the run
+            # fails fast and the orchestrator's normal retry machinery
+            # takes over — recovery in ~stall_timeout_s instead of the
+            # full wall-clock budget.
+            exit_code = 125
         else:
             try:
                 exit_code = await future
