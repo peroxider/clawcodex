@@ -323,6 +323,10 @@ class ToolContext:
     def allowed_roots(self) -> tuple[Path, ...]:
         roots: list[Path] = [self.workspace_root]
         roots.extend(self.additional_working_directories)
+        roots.extend(
+            _resolve_path(path)
+            for path in self.permission_context.additional_working_directories.keys()
+        )
         return tuple(roots)
 
     def ensure_allowed_path(self, path: str | Path) -> Path:

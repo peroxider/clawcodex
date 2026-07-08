@@ -20,6 +20,7 @@ from clawcodex_ext.permissions.types import (
     PermissionAskReply,
     PermissionAskRequest,
     PermissionUpdate,
+    PermissionUpdateAddDirectories,
     ToolPermissionContext,
 )
 
@@ -108,6 +109,16 @@ def _apply_and_persist_updates(context: ToolContext, updates: tuple[PermissionUp
                 )
     except Exception:
         log.exception("failed to persist accepted permission updates")
+
+
+def _one_shot_directory_updates(decision: PermissionAskDecision) -> tuple[PermissionUpdate, ...]:
+    """Return directory grants needed only for the currently approved call."""
+
+    return tuple(
+        update
+        for update in decision.suggestions or ()
+        if isinstance(update, PermissionUpdateAddDirectories)
+    )
 
 
 def _is_temp_path(tool_name: str, tool_input: dict[str, Any], context: ToolContext) -> bool:
@@ -280,6 +291,8 @@ class ToolRegistry:
                 tool_use_id=call.tool_use_id,
             )
 
+        restore_permission_context: ToolPermissionContext | None = None
+
         if decision.behavior == "ask":
             assert isinstance(decision, PermissionAskDecision)
             handler_cb: PermissionAskHandler | None = None
@@ -305,6 +318,16 @@ class ToolRegistry:
 
             if chosen_updates:
                 _apply_and_persist_updates(context, chosen_updates)
+            else:
+                one_shot_updates = _one_shot_directory_updates(decision)
+                if one_shot_updates:
+                    from clawcodex_ext.permissions.updates import apply_permission_updates
+
+                    restore_permission_context = context.permission_context
+                    context.permission_context = apply_permission_updates(
+                        context.permission_context,
+                        list(one_shot_updates),
+                    )
 
             if hasattr(final, "updated_input") and final.updated_input:
                 call = ToolCall(
@@ -321,7 +344,11 @@ class ToolRegistry:
                     tool_use_id=call.tool_use_id,
                 )
 
-        result = _invoke_tool_call(tool, call.input, context)
+        try:
+            result = _invoke_tool_call(tool, call.input, context)
+        finally:
+            if restore_permission_context is not None:
+                context.permission_context = restore_permission_context
         if result.tool_use_id is None and call.tool_use_id is not None:
             return ToolResult(
                 name=result.name,

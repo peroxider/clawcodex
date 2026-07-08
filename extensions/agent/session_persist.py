@@ -63,10 +63,7 @@ def save_to_session_storage(session: Any) -> None:
     try:
         from clawcodex_ext.services.session_storage import SessionStorage
 
-        storage = SessionStorage(
-            session_id=session.session_id,
-            sessions_dir=Path.home() / ".clawcodex" / "sessions",
-        )
+        storage = SessionStorage(session_id=session.session_id)
         storage.init_metadata(
             model=session.model,
             cwd=str(Path.cwd()),

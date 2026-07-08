@@ -228,7 +228,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
             self.tool_context.allow_docs = True
             self.tool_context.permission_handler = lambda _tn, _msg, _sug: (True, False)
         else:
-            self.tool_context.permission_handler = self._handle_permission_request
+            self.tool_context.permission_handler = self._handle_permission_ask_request
 
         # ---- Runtime permission controller (downstream subclass) ----
         # The upstream ``ClawcodexREPL.__init__`` instantiates its own
@@ -241,16 +241,16 @@ class ClawCodexExtREPL(ClawcodexREPL):
         # ``default_permission_handler`` is snapshotted on the
         # ``ToolContext`` so the controller can restore it on cycle
         # OUT of ``bypassPermissions`` without reaching back into
-        # ``self._handle_permission_request``.
+        # ``self._handle_permission_ask_request``.
         if self.tool_context is not None:
-            self.tool_context.default_permission_handler = self._handle_permission_request
+            self.tool_context.default_permission_handler = self._handle_permission_ask_request
         from clawcodex_ext.permissions.runtime import (
             RuntimePermissionController,
         )
 
         self._runtime_permission_controller = RuntimePermissionController(
             tool_context_factory=lambda: self.tool_context,
-            default_handler=self._handle_permission_request,
+            default_handler=self._handle_permission_ask_request,
             notify=self._notify_permission_mode_change,
         )
 
