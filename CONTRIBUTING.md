@@ -115,9 +115,9 @@ clawcodex/
 
 We follow PEP 8 with a few modifications:
 
-- **Line length**: 88 characters (Black default)
-- **Quotes**: Double quotes for strings, single quotes for dict keys
-- **Imports**: Sorted with isort
+- **Line length**: 100 characters
+- **Quotes**: Double quotes for strings and dict keys
+- **Imports**: Sorted with Ruff
 
 ### Type Hints
 
@@ -157,17 +157,17 @@ def calculate_cost(tokens: int, model: str) -> float:
 
 ### Code Formatting
 
-We use **Black** for code formatting and **isort** for import sorting:
+We use **Ruff** for code formatting and linting:
 
 ```bash
 # Format code
-black src/ tests/
+ruff format src/ tests/
 
-# Sort imports
-isort src/ tests/
+# Check lint rules
+ruff check src/ tests/
 
 # Or both at once
-black src/ tests/ && isort src/ tests/
+ruff format src/ tests/ && ruff check src/ tests/
 ```
 
 ### Type Checking
@@ -240,8 +240,8 @@ git checkout -b feature/your-feature-name
 
 ```bash
 # Format code
-black src/ tests/
-isort src/ tests/
+ruff format src/ tests/
+ruff check src/ tests/
 
 # Type check
 mypy src/
@@ -276,7 +276,7 @@ git push origin feature/your-feature-name
 ### PR Requirements
 
 - All tests must pass
-- Code must be formatted with Black and isort
+- Code must be formatted with Ruff
 - No mypy errors
 - New code must have type hints and docstrings
 - New features must have tests
