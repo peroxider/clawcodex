@@ -613,7 +613,7 @@ class WorkspaceManager:
         suffix = "" if existing.endswith("\n") or not existing else "\n"
         lines = "\n".join(patterns)
         exclude_path.write_text(
-            f"{existing}{suffix}# ClawCodeX managed — do not edit manually\n{lines}\n",
+            f"{existing}{suffix}# ClawCodeX managed\n{lines}\n",
             encoding="utf-8",
         )
 

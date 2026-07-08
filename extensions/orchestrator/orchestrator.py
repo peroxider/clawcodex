@@ -2494,7 +2494,9 @@ class Orchestrator:
                     progress_sink = self._build_session_sink(session.issue.id or "")
 
                     # F-110: 如果配置了 workflow.yaml，使用声明式工作流引擎
-                    if self._workflow_orchestrator is not None:
+                    # review_followup 使用专用 prompt（render_review_feedback），
+                    # 不走 workflow.yaml 的完整 stage 流程，避免循环。
+                    if self._workflow_orchestrator is not None and session.run_kind != 'review_followup':
                         await self._run_issue_with_workflow(session, progress_sink)
                     else:
                         # F-?? collaboration-mode dispatch. For the

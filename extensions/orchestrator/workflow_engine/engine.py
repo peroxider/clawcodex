@@ -358,7 +358,12 @@ class DeclarativeWorkflowEngine:
                     if stage.on_error == "rollback" or stage.gate_rollback_to is not None:
                         idx = await self._handle_gate_rejection(stage, result)
                         continue
+                    elif stage.on_error == "skip":
+                        logger.info("GATE stage %s rejected, skipping (on_error=skip)", stage.id)
+                        idx += 1
+                        continue
                     else:
+                        # on_error == "fail" (default)
                         break
 
                 # DECISION 阶段：计算下一个阶段

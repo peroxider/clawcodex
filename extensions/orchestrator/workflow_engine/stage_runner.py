@@ -417,7 +417,7 @@ class StageRunner:
                 if sresult:
                     parts.append(f"- Stage {sid}: {sresult.status.value}")
                     if sresult.outputs:
-                        parts.append(f"  Output: {sresult.outputs[0][:500]}")
+                        parts.append(f"  Output: {sresult.outputs[0][:50000]}")
 
         # 4. 输出验证要求
         if stage_node.validators:
