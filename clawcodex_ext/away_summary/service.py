@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -71,19 +72,41 @@ class AwaySummaryService:
             self.conversation,
             max_input_tokens=self.config.max_input_tokens,
         )
-        try:
-            response = self.provider.chat(
-                messages=messages,
-                tools=None,
-                model=self.model,
-                max_tokens=self.config.max_output_tokens,
-            )
-        except TypeError:
-            response = self.provider.chat(
-                messages=messages,
-                tools=None,
-                model=self.model,
-            )
+        # Transient TLS / network errors (e.g. SSL: UNEXPECTED_EOF_WHILE_READING)
+        # are common when issuing an API call after a long idle period.  Retry
+        # once after a short delay rather than failing the whole summary.
+        _last_exc: Exception | None = None
+        for attempt in range(2):
+            if attempt > 0:
+                logger.info("Retrying Away Summary API call (attempt %d/2)", attempt + 1)
+                time.sleep(1.0)
+            try:
+                response = self.provider.chat(
+                    messages=messages,
+                    tools=None,
+                    model=self.model,
+                    max_tokens=self.config.max_output_tokens,
+                )
+            except TypeError:
+                # Some providers reject max_tokens — fall back to no limit.
+                try:
+                    response = self.provider.chat(
+                        messages=messages,
+                        tools=None,
+                        model=self.model,
+                    )
+                except Exception as exc:
+                    _last_exc = exc
+                    continue
+            except Exception as exc:
+                _last_exc = exc
+                continue
+            else:
+                _last_exc = None
+                break
+
+        if _last_exc is not None:
+            raise _last_exc  # type: ignore[misc] — re-raise so the controller logs it
         summary = str(getattr(response, "content", "") or "").strip()
         if not summary:
             summary = _fallback_summary(self.conversation)
