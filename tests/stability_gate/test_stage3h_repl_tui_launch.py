@@ -542,14 +542,19 @@ class TestStage3hImportChain:
         except ImportError:
             pytest.skip("ClawCodexExtREPL import failed (is prompt_toolkit installed?)")
 
-        from pathlib import Path
+        from unittest.mock import patch
+
+        class _PromptSessionStub:
+            def prompt(self, *args, **kwargs):
+                return "/exit"
 
         try:
-            repl = ClawCodexExtREPL(
-                provider_name="anthropic",
-                stream=False,
-                permission_mode="default",
-            )
+            with patch("prompt_toolkit.PromptSession", _PromptSessionStub):
+                repl = ClawCodexExtREPL(
+                    provider_name="anthropic",
+                    stream=False,
+                    permission_mode="default",
+                )
             # 无论 _api_key_missing 是 True 还是 False，构造都不应抛异常
             assert isinstance(repl._api_key_missing, bool), (
                 f"_api_key_missing should be bool, got {type(repl._api_key_missing)}"
