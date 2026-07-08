@@ -99,7 +99,12 @@ from .widgets.transcript_view import Transcript
 
 
 def _flatten_message_text(content: Any) -> str:
-    """Normalise ``Message.content`` (string or block list) to text."""
+    """Normalise ``Message.content`` (string or block list) to text.
+
+    Only extracts *text* content — ``tool_use`` blocks are transparent here
+    (they are replayed as separate ``ToolEventMessage`` rows in
+    ``_replay_history_MARKER``).
+    """
 
     if content is None:
         return ''
@@ -114,10 +119,18 @@ def _flatten_message_text(content: Any) -> str:
                 kind = item.get('type')
                 if kind in (None, 'text'):
                     parts.append(str(item.get('text') or ''))
-                elif kind == 'tool_use':
-                    parts.append(f'[tool:{item.get("name") or ""}]')
-                else:
-                    parts.append('')
+                elif kind == 'thinking':
+                    parts.append(str(item.get('thinking') or ''))
+                # tool_use / tool_result are transparent — handled by replay loop
+            elif hasattr(item, 'type'):
+                # Handle dataclass content blocks (TextBlock, ToolUseBlock,
+                # ThinkingBlock, etc.) that are neither str nor dict.
+                kind = item.type
+                if kind in (None, 'text'):
+                    parts.append(str(getattr(item, 'text', '') or ''))
+                elif kind == 'thinking':
+                    parts.append(str(getattr(item, 'thinking', '') or ''))
+                # tool_use / tool_result are transparent — handled by replay loop
         return '\n'.join(p for p in parts if p).strip()
     return str(content)
 
@@ -1475,16 +1488,28 @@ class ClawCodexTUI(App):
                 # Replay tool_use / tool_result / thinking blocks from the content list.
                 if isinstance(content, list):
                     for item in content:
-                        if not isinstance(item, dict):
+                        # Normalise item to a dict so the replay logic below
+                        # handles both raw-dict items and dataclass blocks
+                        # (TextBlock, ToolUseBlock, etc.) uniformly.
+                        if isinstance(item, dict):
+                            d = item
+                        elif hasattr(item, 'type'):
+                            # Convert dataclass content block to dict
+                            from clawcodex_ext.types.content_blocks import (
+                                content_block_to_dict,
+                            )
+
+                            d = content_block_to_dict(item)
+                        else:
                             continue
-                        kind = item.get('type')
+                        kind = d.get('type')
                         if kind == 'tool_use':
                             self._post_to_screen(
                                 ToolEventMessage(
                                     kind='tool_use',
-                                    tool_name=item.get('name', ''),
-                                    tool_input=item.get('input'),
-                                    tool_use_id=item.get('id'),
+                                    tool_name=d.get('name', ''),
+                                    tool_input=d.get('input'),
+                                    tool_use_id=d.get('id'),
                                 )
                             )
                         elif kind == 'tool_result':
@@ -1492,19 +1517,19 @@ class ClawCodexTUI(App):
                                 ToolEventMessage(
                                     kind='tool_result',
                                     tool_name='',
-                                    tool_output=item.get('content'),
-                                    tool_use_id=item.get('tool_use_id'),
-                                    is_error=bool(item.get('is_error')),
+                                    tool_output=d.get('content'),
+                                    tool_use_id=d.get('tool_use_id'),
+                                    is_error=bool(d.get('is_error')),
                                 )
                             )
                         elif kind == 'thinking':
                             # Replay thinking content from historical session.
-                            thinking_text = item.get('thinking', '') or ''
+                            thinking_text = d.get('thinking', '') or ''
                             if thinking_text and self._repl_screen is not None:
                                 self._repl_screen.transcript.append_thinking_chunk(thinking_text)
                         elif kind == 'redacted_thinking':
                             # Replay redacted thinking with redacted=True.
-                            data = item.get('data', '') or ''
+                            data = d.get('data', '') or ''
                             if data and self._repl_screen is not None:
                                 self._repl_screen.transcript.append_thinking_chunk(
                                     data, redacted=True
