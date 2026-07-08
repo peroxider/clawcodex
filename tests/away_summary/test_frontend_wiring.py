@@ -294,6 +294,8 @@ def test_command_disabled_but_auto_controller_still_runs(monkeypatch) -> None:
         timer_factory=timers,
     )
 
+    controller.on_run_start()
+    controller.on_run_finish()
     controller.on_assistant_turn_complete()
     timers.timers[0].fire()
 

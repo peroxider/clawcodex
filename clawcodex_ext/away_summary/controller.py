@@ -46,30 +46,65 @@ class AwaySummaryController:
     timer_factory: TimerFactory | None = None
     interactive: bool = True
 
+    # Reasons that genuinely mean "the user is starting a new agent run" and
+    # therefore warrant cancelling the idle timer. Anything else (slash
+    # commands, cancel mid-run, bash mode, IM callbacks, intent-forecast
+    # draft/dismiss, etc.) is within-session UI manipulation and must NOT
+    # reset the 5-minute idle countdown — otherwise the recap can never fire
+    # while the user is reading/skipping the result. ``"user"`` is the bare
+    # fallback used by callers that don't classify their interaction and by
+    # the legacy ``on_user_interaction()`` test paths.
+    _USER_INTERACTION_RESET_REASONS = frozenset({"submit", "new_prompt", "user"})
+
     def __post_init__(self) -> None:
         self.timer_factory = self.timer_factory or ThreadingTimerFactory()
         self._lock = threading.RLock()
         self._timer: TimerHandle | None = None
         self._busy = False
+        self._run_completed = False
         self._armed_fingerprint: str | None = None
         self._running = False
 
     def on_user_interaction(self, reason: str = "user") -> None:
-        del reason
+        """User-facing interaction handler.
+
+        Only resets the idle timer when ``reason`` signals that a new agent
+        run is starting (the user is about to engage the LLM again). For
+        within-run gestures like ``"cancel"``, ``"slash"``, ``"bash"``,
+        ``"draft"``, ``"dismiss"`` and any unknown reason, the timer is left
+        alone so the user can still receive an automatic recap after 5
+        minutes of inactivity.
+        """
+        if reason not in self._USER_INTERACTION_RESET_REASONS:
+            return
         with self._lock:
             self._cancel_locked()
 
     def on_run_start(self) -> None:
         with self._lock:
             self._busy = True
+            self._run_completed = False
             self._cancel_locked()
 
     def on_run_finish(self) -> None:
         with self._lock:
             self._busy = False
+            # Mark that the agent loop has *actually* completed. ``on_assistant_turn_complete``
+            # will only arm the idle timer when this flag is set, which
+            # guards against callers invoking the turn-complete hook on an
+            # intermediate (inner-turn) state — a defensive measure so the
+            # recap never fires while the loop is still mid-flight.
+            self._run_completed = True
 
     def on_assistant_turn_complete(self) -> None:
         with self._lock:
+            # Defensive guard: only arm the timer after the agent loop has
+            # genuinely completed (``on_run_finish``). If this hook is
+            # somehow invoked mid-loop, ignore it and wait for the real
+            # completion signal.
+            if not self._run_completed:
+                return
+            self._run_completed = False
             self._busy = False
             if not self.interactive:
                 return
