@@ -30,7 +30,7 @@ class ForecastResult:
 
 def format_forecast_for_display(result: ForecastResult) -> str:
     if not result.generated or not result.suggestions:
-        return result.reason or "Forecast has no suggestions right now."
+        return "Forecast: no suggestions right now."
     lines = ["Forecast"]
     for idx, suggestion in enumerate(result.suggestions, 1):
         lines.append("")

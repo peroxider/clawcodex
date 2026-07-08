@@ -229,12 +229,12 @@ class IntentForecastController:
                         fingerprint=result.fingerprint,
                     )
                 return
+            if result.fingerprint in self._shown_fingerprints:
+                return
+            self._shown_fingerprints.add(result.fingerprint)
             if result.generated:
-                if result.fingerprint in self._shown_fingerprints:
-                    return
-                self._shown_fingerprints.add(result.fingerprint)
                 self._last_result = result
-                self.display(result)
+            self.display(result)
             success = True
         except Exception as exc:
             logger.warning(

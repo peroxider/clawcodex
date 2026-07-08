@@ -188,6 +188,7 @@ class ClawCodexTUI(App):
         self._command_context: Any | None = None
         self._away_summary_controller: AwaySummaryController | None = None
         self._intent_forecast_controller: IntentForecastController | None = None
+        self._pending_system_messages: list[tuple[str, str, str | None]] = []
         # F-9 / ``/goal``: persistent controller instance wired into
         # the agent run lifecycle so continuation/budget-limit injections
         # are drained and enqueued for auto-continuation. Installed by
@@ -314,6 +315,10 @@ class ClawCodexTUI(App):
             initial_history=self._initial_history,
         )
         self.push_screen(self._repl_screen)
+        try:
+            self.call_after_refresh(self._flush_pending_system_messages)
+        except Exception:
+            self._flush_pending_system_messages()
         if self._intent_forecast_controller is not None:
             self._intent_forecast_controller.on_mount()
 
@@ -1374,23 +1379,50 @@ class ClawCodexTUI(App):
         # the way the old no-op lambda did.
         return ToolContext(workspace_root=self.workspace_root)
 
+    def _append_repl_system_message(
+        self,
+        text: str,
+        *,
+        style: str = "light",
+        render: str | None = "markdown",
+    ) -> None:
+        screen = self._repl_screen
+        transcript = getattr(screen, "transcript", None) if screen is not None else None
+        if transcript is None or not getattr(transcript, "is_mounted", False):
+            self._pending_system_messages.append((text, style, render))
+            try:
+                self.call_after_refresh(self._flush_pending_system_messages)
+            except Exception:
+                pass
+            return
+        transcript.append_system(text, style=style, render=render)
+
+    def _flush_pending_system_messages(self) -> None:
+        screen = self._repl_screen
+        transcript = getattr(screen, "transcript", None) if screen is not None else None
+        if transcript is None or not getattr(transcript, "is_mounted", False):
+            return
+        pending = list(self._pending_system_messages)
+        self._pending_system_messages.clear()
+        for text, style, render in pending:
+            transcript.append_system(text, style=style, render=render)
+
     def _install_away_summary_controller(self) -> None:
         if self._away_summary_controller is not None:
             self._away_summary_controller.close()
 
         def _display(text: str) -> None:
             def _append() -> None:
-                if self._repl_screen is not None:
-                    display_text = (
-                        text.strip()
-                        if text.strip().startswith(("Recapitulate", "Recap", "Away Summary"))
-                        else format_away_summary_for_display(text)
-                    )
-                    self._repl_screen.transcript.append_system(
-                        display_text,
-                        style="light",
-                        render="markdown",
-                    )
+                display_text = (
+                    text.strip()
+                    if text.strip().startswith(("Recapitulate", "Recap", "Away Summary"))
+                    else format_away_summary_for_display(text)
+                )
+                self._append_repl_system_message(
+                    display_text,
+                    style="light",
+                    render="markdown",
+                )
 
             try:
                 self.call_from_thread(_append)
@@ -1412,12 +1444,11 @@ class ClawCodexTUI(App):
 
         def _display(result: ForecastResult) -> None:
             def _append() -> None:
-                if self._repl_screen is not None:
-                    self._repl_screen.transcript.append_system(
-                        format_forecast_for_display(result),
-                        style="light",
-                        render="markdown",
-                    )
+                self._append_repl_system_message(
+                    format_forecast_for_display(result),
+                    style="light",
+                    render="markdown",
+                )
 
             try:
                 self.call_from_thread(_append)

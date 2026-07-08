@@ -6,7 +6,11 @@ from src.types.messages import Message
 from clawcodex_ext.intent_forecast.config import IntentForecastConfig
 from clawcodex_ext.intent_forecast.controller import IntentForecastController
 from clawcodex_ext.intent_forecast.learning import read_recent_feedback
-from clawcodex_ext.intent_forecast.messages import ForecastResult, ForecastSuggestion
+from clawcodex_ext.intent_forecast.messages import (
+    ForecastResult,
+    ForecastSuggestion,
+    format_forecast_for_display,
+)
 from clawcodex_ext.intent_forecast.persistence import read_forecast_history
 
 
@@ -92,6 +96,54 @@ def test_controller_arms_on_mount_and_fires(monkeypatch, tmp_path) -> None:
     rows = read_forecast_history(cwd=tmp_path)
     assert len(rows) == 1
     assert rows[0]["trigger"] == "auto"
+
+
+def test_controller_displays_empty_auto_result(monkeypatch, tmp_path) -> None:
+    class EmptyForecastService:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        def generate(self, *, trigger: str):
+            return ForecastResult(
+                generated=False,
+                fingerprint="empty",
+                suggestions=[],
+                reason="Forecast: no suggestions right now.",
+            )
+
+    monkeypatch.setattr(
+        "clawcodex_ext.intent_forecast.controller.IntentForecastService",
+        EmptyForecastService,
+    )
+    timers = FakeTimerFactory()
+    displayed = []
+    controller = IntentForecastController(
+        provider_getter=lambda: None,
+        model_getter=lambda: None,
+        session_getter=lambda: None,
+        workspace_root=tmp_path,
+        display=displayed.append,
+        config_loader=lambda: IntentForecastConfig(idle_seconds=1),
+        conversation_getter=_empty_conversation,
+        timer_factory=timers,
+    )
+
+    controller.on_mount()
+    timers.timers[0].fire()
+
+    assert displayed
+    assert displayed[0].generated is False
+    assert controller.last_result is None
+
+
+def test_empty_forecast_display_uses_user_friendly_status() -> None:
+    result = ForecastResult(
+        generated=False,
+        suggestions=[],
+        reason="No confident next-step suggestions are available.",
+    )
+
+    assert format_forecast_for_display(result) == "Forecast: no suggestions right now."
 
 
 def test_user_interaction_cancels_timer(tmp_path) -> None:
