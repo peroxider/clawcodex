@@ -179,6 +179,66 @@ async def test_app_exit_captures_transcript_snapshot():
     assert "final answer" in rendered
 
 
+@pytest.mark.asyncio
+async def test_handoff_exit_snapshot_skips_replayed_history(tmp_path):
+    """REPL -> TUI -> REPL should not print pre-handoff history twice."""
+
+    from src.agent.conversation import Conversation
+    from src.tui.app import ClawCodexTUI
+    from src.tool_system.context import ToolContext
+    from src.tool_system.registry import ToolRegistry
+    from src.types.messages import Message
+
+    class _StubProvider:
+        model = "stub-model"
+        completions = []  # noqa: RUF012
+
+        def generate(self, *args, **kwargs):  # pragma: no cover - unused
+            raise RuntimeError("provider should not be called in UI test")
+
+    class _Session:
+        session_id = "s1"
+
+        def __init__(self) -> None:
+            self.conversation = Conversation()
+            self.conversation.messages = [
+                Message(role="user", content="old prompt"),
+                Message(role="assistant", content="old reply"),
+            ]
+
+        def save(self) -> None:
+            return None
+
+    app = ClawCodexTUI(
+        provider=_StubProvider(),
+        provider_name="stub",
+        workspace_root=tmp_path,
+        tool_registry=ToolRegistry(),
+        tool_context=ToolContext(workspace_root=tmp_path),
+        session=_Session(),
+        max_turns=1,
+        stream=False,
+        replay_exit_snapshot_from_start=False,
+    )
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.pause()
+        assert app._repl_screen is not None  # type: ignore[attr-defined]
+        transcript = app._repl_screen.transcript  # type: ignore[attr-defined]
+        transcript.append_user("new prompt")
+        transcript.append_assistant("new reply")
+        await pilot.pause()
+        app.exit()
+        await pilot.pause()
+
+    rendered = _flatten(app.exit_snapshot)
+    assert "new prompt" in rendered
+    assert "new reply" in rendered
+    assert "old prompt" not in rendered
+    assert "old reply" not in rendered
+
+
 async def _drive_exit_snapshot(app) -> None:
     """Populate the transcript and trigger an app exit."""
 

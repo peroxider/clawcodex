@@ -328,7 +328,7 @@ class TranscriptView(VerticalScroll):
         return len(self._mounted_rows)
 
     # ---- post-exit snapshot -------------------------------------------
-    def snapshot(self) -> list[Any]:
+    def snapshot(self, *, start_index: int = 0) -> list[Any]:
         """Return an ordered list of Rich renderables for the transcript.
 
         Used by :class:`ClawCodexTUI` right before it calls
@@ -339,7 +339,7 @@ class TranscriptView(VerticalScroll):
         """
 
         renderables: list[Any] = []
-        for row in self._mounted_rows:
+        for row in self._mounted_rows[max(0, start_index) :]:
             fn = getattr(row, "snapshot", None)
             if fn is None:
                 continue

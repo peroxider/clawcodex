@@ -3485,6 +3485,7 @@ class ClawcodexREPL:
             tool_context=self.tool_context,
             session=self.session,
             stream=True,
+            replay_exit_snapshot_from_start=False,
         )
         result = None
         try:

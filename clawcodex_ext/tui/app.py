@@ -61,10 +61,8 @@ from .commands import (
 )
 from .history_store import HistoryStore  # noqa: F401 (re-exported for tests)
 from .messages import (
-    AssistantMessage,
     CancelRequested,
     PermissionModeChanged,
-    ToolEventMessage,
 )
 from .screens.cost_threshold import CostThresholdScreen
 from .screens.diff_dialog import DiffDialogScreen, FileDiff
@@ -165,6 +163,7 @@ class ClawCodexTUI(App):
         resume_browse: bool = False,
         runtime_context: Any | None = None,
         append_system_prompt: str = '',
+        replay_exit_snapshot_from_start: bool = True,
     ) -> None:
         super().__init__()
         self.runtime_context = runtime_context
@@ -199,6 +198,9 @@ class ClawCodexTUI(App):
         # alt-screen tears down. Mirrors the TS ink behaviour where the
         # conversation the user saw stays on-screen after ``/exit``.
         self.exit_snapshot: list[Any] = []
+        self._exit_snapshot_start_index = 0
+        self._exit_snapshot_replay_pending = False
+        self._replay_exit_snapshot_from_start = replay_exit_snapshot_from_start
         # Persistent prompt history used by the PromptInput (↑/↓) and
         # the /history slash-command dialog. The store is append-only
         # per turn and auto-rotates past ``max_entries``.
@@ -387,7 +389,19 @@ class ClawCodexTUI(App):
         if self.exit_snapshot or self._repl_screen is None:
             return
         try:
-            self.exit_snapshot = list(self._repl_screen.transcript.snapshot())
+            transcript = self._repl_screen.transcript
+            if (
+                not self._replay_exit_snapshot_from_start
+                and self._exit_snapshot_replay_pending
+            ):
+                self._exit_snapshot_start_index = transcript.message_count
+                self._exit_snapshot_replay_pending = False
+            start_index = self._exit_snapshot_start_index
+            if start_index > transcript.message_count:
+                start_index = 0
+            self.exit_snapshot = list(
+                transcript.snapshot(start_index=start_index)
+            )
         except Exception:
             self.exit_snapshot = []
 
@@ -1484,7 +1498,11 @@ class ClawCodexTUI(App):
                 from clawcodex_ext.types.messages import NO_CONTENT_MESSAGE
 
                 if text and text != NO_CONTENT_MESSAGE:
-                    self._post_to_screen(AssistantMessage(text=text, agent_name=agent_type))
+                    if self._repl_screen is not None:
+                        self._repl_screen.transcript.append_assistant(
+                            text,
+                            agent_name=agent_type,
+                        )
                 # Replay tool_use / tool_result / thinking blocks from the content list.
                 if isinstance(content, list):
                     for item in content:
@@ -1504,24 +1522,27 @@ class ClawCodexTUI(App):
                             continue
                         kind = d.get('type')
                         if kind == 'tool_use':
-                            self._post_to_screen(
-                                ToolEventMessage(
+                            if self._repl_screen is not None:
+                                self._repl_screen.transcript.append_tool_event(
                                     kind='tool_use',
                                     tool_name=d.get('name', ''),
                                     tool_input=d.get('input'),
+                                    tool_output=None,
+                                    is_error=False,
+                                    error=None,
                                     tool_use_id=d.get('id'),
                                 )
-                            )
                         elif kind == 'tool_result':
-                            self._post_to_screen(
-                                ToolEventMessage(
+                            if self._repl_screen is not None:
+                                self._repl_screen.transcript.append_tool_event(
                                     kind='tool_result',
                                     tool_name='',
+                                    tool_input=None,
                                     tool_output=d.get('content'),
-                                    tool_use_id=d.get('tool_use_id'),
                                     is_error=bool(d.get('is_error')),
+                                    error=None,
+                                    tool_use_id=d.get('tool_use_id'),
                                 )
-                            )
                         elif kind == 'thinking':
                             # Replay thinking content from historical session.
                             thinking_text = d.get('thinking', '') or ''
@@ -1534,6 +1555,18 @@ class ClawCodexTUI(App):
                                 self._repl_screen.transcript.append_thinking_chunk(
                                     data, redacted=True
                                 )
+        if not self._replay_exit_snapshot_from_start and self._repl_screen is not None:
+            self._exit_snapshot_replay_pending = True
+            try:
+                self.call_after_refresh(self._mark_exit_snapshot_start)
+            except Exception:
+                self._mark_exit_snapshot_start()
+
+    def _mark_exit_snapshot_start(self) -> None:
+        if self._repl_screen is None:
+            return
+        self._exit_snapshot_start_index = self._repl_screen.transcript.message_count
+        self._exit_snapshot_replay_pending = False
 
     def _slash_command_words(self) -> list[str]:
         return build_command_words(self.workspace_root, self.tool_context)

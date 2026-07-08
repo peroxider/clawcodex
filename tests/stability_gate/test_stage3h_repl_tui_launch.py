@@ -285,6 +285,80 @@ class TestStage3hTuiAppImport:
 # =========================================================================
 
 
+class TestStage3hReplTuiHandoffReplay:
+    """Regression guard for REPL -> TUI -> REPL history replay."""
+
+    pytestmark = pytest.mark.asyncio
+
+    async def test_handoff_exit_snapshot_excludes_replayed_repl_history(self, tmp_path):
+        """Returning from TUI must not print pre-handoff REPL history again."""
+        pytest.importorskip("textual")
+
+        from io import StringIO
+
+        from rich.console import Console
+
+        from src.agent.conversation import Conversation
+        from src.tool_system.context import ToolContext
+        from src.tool_system.registry import ToolRegistry
+        from src.tui.app import ClawCodexTUI
+        from src.types.messages import Message
+
+        class _StubProvider:
+            model = "stub-model"
+            completions = []  # noqa: RUF012
+
+            def generate(self, *args, **kwargs):  # pragma: no cover - unused
+                raise RuntimeError("provider should not be called in UI test")
+
+        class _Session:
+            session_id = "stability-handoff"
+
+            def __init__(self) -> None:
+                self.conversation = Conversation()
+                self.conversation.messages = [
+                    Message(role="user", content="old repl prompt"),
+                    Message(role="assistant", content="old repl answer"),
+                ]
+
+            def save(self) -> None:
+                return None
+
+        app = ClawCodexTUI(
+            provider=_StubProvider(),
+            provider_name="stub",
+            workspace_root=tmp_path,
+            tool_registry=ToolRegistry(),
+            tool_context=ToolContext(workspace_root=tmp_path),
+            session=_Session(),
+            max_turns=1,
+            stream=False,
+            replay_exit_snapshot_from_start=False,
+        )
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.pause()
+            assert app._repl_screen is not None  # type: ignore[attr-defined]
+            transcript = app._repl_screen.transcript  # type: ignore[attr-defined]
+            transcript.append_user("new tui prompt")
+            transcript.append_assistant("new tui answer")
+            await pilot.pause()
+            app.exit()
+            await pilot.pause()
+
+        buf = StringIO()
+        console = Console(file=buf, force_terminal=False, width=120)
+        for piece in app.exit_snapshot:
+            console.print(piece)
+        rendered = buf.getvalue()
+
+        assert "new tui prompt" in rendered
+        assert "new tui answer" in rendered
+        assert "old repl prompt" not in rendered
+        assert "old repl answer" not in rendered
+
+
 class TestStage3hCliSubprocess:
     """子进程 CLI ``--tui`` / ``--no-tui`` 标志解析测试。
 
