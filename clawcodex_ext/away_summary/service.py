@@ -71,6 +71,7 @@ class AwaySummaryService:
         messages = build_summary_messages(
             self.conversation,
             max_input_tokens=self.config.max_input_tokens,
+            response_language=self.config.response_language,
         )
         # Transient TLS / network errors (e.g. SSL: UNEXPECTED_EOF_WHILE_READING)
         # are common when issuing an API call after a long idle period.  Retry

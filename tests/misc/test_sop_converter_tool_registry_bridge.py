@@ -1205,6 +1205,32 @@ class TestRegisterComponentTools(unittest.TestCase):
         # Two scripts: one for the class, one for the function file.
         self.assertEqual(len(list(self.scripts_dir.iterdir())), 2)
 
+    def test_register_create_kind_tool_enriches_call_impl(self) -> None:
+        """F-55 L1: create-kind ops get --catalog-metadata + bundle env prefix."""
+        with tempfile.TemporaryDirectory() as tmp:
+            source_dir = Path(tmp) / "proj"
+            source_dir.mkdir()
+            bundle_dir = Path(tmp) / "bundle"
+            bundle_dir.mkdir()
+            op = _make_op(
+                name="build_agent",
+                class_name="AgentBuilder",
+                return_type="Dict[str, Any]",
+            )
+            comp = _make_component(
+                name="agentbuilder",
+                file_path="proj/agentbuilder",
+                operations=[op],
+            )
+            name_map = register_component_tools(
+                [comp],
+                str(source_dir),
+                persist=False,
+                bundle_dir=bundle_dir,
+                bundle_id="test-bundle",
+            )
+        self.assertIn("agentbuilder.build_agent", name_map)
+
     def test_empty_components_returns_empty_map(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             source_dir = Path(tmp) / "proj"

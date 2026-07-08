@@ -36,9 +36,23 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
+import os
 
 
 _SESSION_INIT_MARKER = "session_init"
+
+
+def _resolve_sessions_dir() -> Path:
+    """Return the active sessions directory, matching ``Session.load``.
+
+    Mirrors ``clawcodex_ext.agent.session._get_sessions_dir`` without
+    introducing a module-level import. Respects ``CLAWCODEX_SESSIONS_DIR``
+    and evaluates ``Path.home()`` at call time so patches take effect.
+    """
+    override = str(os.environ.get("CLAWCODEX_SESSIONS_DIR", "")).strip()
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / ".clawcodex" / "sessions"
 
 
 def save_to_session_storage(session: Any) -> None:
@@ -63,7 +77,16 @@ def save_to_session_storage(session: Any) -> None:
     try:
         from clawcodex_ext.services.session_storage import SessionStorage
 
-        storage = SessionStorage(session_id=session.session_id)
+        # Use the same directory resolution as ``Session.load`` / ``Session.save``
+        # (``clawcodex_ext.agent.session._get_sessions_dir``) so tests that patch
+        # ``Path.home`` see writes and reads land in the same place. The module-level
+        # ``SESSIONS_DIR`` constant is evaluated at import time, which breaks when
+        # ``Path.home`` is patched after the constant has been materialised.
+        sessions_dir = _resolve_sessions_dir()
+        storage = SessionStorage(
+            session_id=session.session_id,
+            sessions_dir=sessions_dir,
+        )
         storage.init_metadata(
             model=session.model,
             cwd=str(Path.cwd()),

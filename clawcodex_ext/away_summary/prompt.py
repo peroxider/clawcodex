@@ -11,34 +11,76 @@ from clawcodex_ext.away_summary.fingerprint import is_away_summary_message
 AWAY_SUMMARY_INSTRUCTIONS = """You are writing a short session recap for a user who stepped away from an interactive coding session.
 
 Write a concise recap of the full session so far. Use 3-6 bullets maximum.
-Write the recap in the dominant language of the recent conversation.
 Focus on:
 - what the user asked for,
 - important decisions and current state,
 - files or commands that matter,
 - the next useful action when the user returns.
 
+{language_instruction}
+
 Do not include hidden reasoning. Do not mention that you are an AI. Keep it brief."""
+
+_LANGUAGE_INSTRUCTION_MAP: dict[str, str] = {
+    "Chinese": "Write the recap in natural Simplified Chinese.",
+    "English": "Write the recap in natural English.",
+}
 
 
 def build_summary_messages(
     conversation: Any,
     *,
     max_input_tokens: int,
+    response_language: str | None = None,
 ) -> list[dict[str, str]]:
+    lang = infer_response_language(conversation, response_language)
+    lang_instruction = _LANGUAGE_INSTRUCTION_MAP.get(lang, "Write the recap in natural English.")
+
     transcript = _serialize_transcript(conversation)
     transcript = _truncate_transcript(transcript, max_input_tokens=max_input_tokens)
     return [
         {
             "role": "user",
             "content": (
-                f"{AWAY_SUMMARY_INSTRUCTIONS}\n\n"
+                f"{AWAY_SUMMARY_INSTRUCTIONS.format(language_instruction=lang_instruction)}\n\n"
                 "Session transcript:\n"
                 f"{transcript}\n\n"
                 "Return only the recap."
             ),
         }
     ]
+
+
+def infer_response_language(
+    conversation: Any,
+    explicit: str | None = None,
+) -> str:
+    """Infer whether the recap should be Chinese or English.
+
+    Priority:
+    1. Explicit override (e.g. from config ``response_language``).
+    2. CJK character frequency in recent user messages.
+    3. Default to English.
+    """
+    if explicit and explicit in {"Chinese", "English"}:
+        return explicit
+
+    samples: list[str] = []
+    for msg in reversed(getattr(conversation, "messages", []) or []):
+        role = getattr(msg, "role", "")
+        if role == "user":
+            text = _content_to_text(getattr(msg, "content", ""))
+            if text.strip():
+                samples.append(text.strip())
+        if len(samples) >= 6:
+            break
+
+    text = "\n".join(samples)
+    cjk = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
+    latin = sum(1 for ch in text if "a" <= ch.lower() <= "z")
+    if cjk >= 3 and cjk >= latin * 0.25:
+        return "Chinese"
+    return "English"
 
 
 def _serialize_transcript(conversation: Any) -> str:

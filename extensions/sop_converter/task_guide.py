@@ -9,10 +9,15 @@ savings.
 from __future__ import annotations
 
 import re
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .intent_tags import collect_intent_phrases, format_search_suggestions
 from .skill_grouper import SkillSpec
 from .source_parser import SourceComponent, SourceOperation
+
+if TYPE_CHECKING:
+    from .dependency.models import ToolDependencyGraph
 
 # Module stems that often host user-facing entry APIs (Python convention, not SDK-specific).
 _COMMON_ENTRY_MODULE_STEMS = frozenset({"main", "app", "api", "cli", "__main__"})
@@ -352,12 +357,57 @@ def _composite_task_guide_rows(skill: SkillSpec) -> list[tuple[str, str, str, st
     return rows
 
 
+def _lifecycle_task_guide_rows(
+    graph: "ToolDependencyGraph | None",
+) -> list[tuple[str, str, str, str]]:
+    """F-55 L3 — dependency rows for the task guide table.
+
+    Returns rows shaped like the other task-guide rows:
+    ``(intent, tool, search, note)``.  For each create→invoke edge we
+    emit two rows: a forward row explaining the prerequisite and a
+    backward row explaining the prerequisite.
+
+    Hidden steps are rendered as an automatic arrow chain so the user
+    can see which runtime steps happen between the visible tools.
+    """
+    if graph is None or graph.is_empty():
+        return []
+    rows: list[tuple[str, str, str, str]] = []
+    for dep in graph.dependencies[:4]:  # keep table compact
+        hidden = " → ".join(s.action for s in dep.hidden_steps)
+        if hidden:
+            hidden_note = f"(自动: {hidden})"
+        else:
+            hidden_note = ""
+        shared = ", ".join(dep.shared_params) or "—"
+        # Forward row — what you must do before calling the "to" tool
+        rows.append(
+            (
+                f"调用 `{dep.to_tool}` 之前",
+                dep.from_tool,
+                f"select:{dep.from_tool}",
+                f"前置步骤; 共享参数: {shared} {hidden_note}".strip(),
+            )
+        )
+        # Backward row — when you see "not found", check the "from" tool
+        rows.append(
+            (
+                f"`{dep.to_tool}` 返回 not found",
+                dep.to_tool,
+                f"select:{dep.from_tool}",
+                f"先调用 `{dep.from_tool}` {hidden_note}".strip(),
+            )
+        )
+    return rows
+
+
 def generate_task_guide_markdown(
     skill: SkillSpec,
     components: list[SourceComponent],
     *,
     max_entries: int = 12,
     tool_deps_index: dict | None = None,
+    bundle: "str | Path | None" = None,
 ) -> str:
     """Build the ``## 任务指南`` markdown block for a skill."""
     if not skill.allowed_tools or not components:
@@ -384,7 +434,19 @@ def generate_task_guide_markdown(
     selected = _ensure_registry_chain_entries(selected, skill, index)
 
     composite_rows = _composite_task_guide_rows(skill)
-    if not selected and not composite_rows:
+
+    # F-55 L3: load lifecycle dependency metadata from the bundle, if any.
+    lifecycle_rows: list[tuple[str, str, str, str]] = []
+    if bundle is not None:
+        try:
+            from .dependency import load_tool_dependencies
+
+            graph = load_tool_dependencies(bundle)
+            lifecycle_rows = _lifecycle_task_guide_rows(graph)
+        except Exception:  # pragma: no cover — defensive
+            pass
+
+    if not selected and not composite_rows and not lifecycle_rows:
         return ""
 
     skill_name = _skill_invoke_name(skill.name)
@@ -404,6 +466,9 @@ def generate_task_guide_markdown(
     ]
 
     for intent, tool_ref, search, summary in composite_rows:
+        lines.append(f"| {intent} | `{tool_ref}` | {search} | {summary} |")
+
+    for intent, tool_ref, search, summary in lifecycle_rows:
         lines.append(f"| {intent} | `{tool_ref}` | {search} | {summary} |")
 
     for tool_ref, comp, op in selected:
@@ -434,12 +499,14 @@ def append_task_guide_to_skill_body(
     components: list[SourceComponent],
     *,
     tool_deps_index: dict | None = None,
+    bundle: "str | Path | None" = None,
 ) -> str:
     """Insert task guide after the skill description block."""
     guide = generate_task_guide_markdown(
         skill,
         components,
         tool_deps_index=tool_deps_index,
+        bundle=bundle,
     )
     if not guide:
         return body
@@ -459,6 +526,7 @@ def format_flat_skill_markdown(
     contract: object | None = None,
     bridge_tool: str | None = None,
     tool_deps_index: dict | None = None,
+    bundle: "str | Path | None" = None,
 ) -> str:
     """Format a flat ``*-skill.md`` file (frontmatter + body + optional tool list)."""
     from extensions.sop_converter.workflow_mode.generator.artifact_semantics import (
@@ -509,6 +577,7 @@ def format_flat_skill_markdown(
             guide_skill,
             components,
             tool_deps_index=tool_deps_index,
+            bundle=bundle,
         )
         if guide:
             lines.append(guide)

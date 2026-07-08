@@ -61,18 +61,18 @@ def register_composite_tools(
         A mapping from composite tool names to kebab-case registered names
         (e.g. ``{"AgentTeams": "agent-teams"}``).
     """
-    if _SKIP_PLACEHOLDER_COMPOSITE_TOOLS:
-        logger.info(
-            "Skipping composite tool registration: placeholder implementations "
-            "use 'echo' which is not in bash allowlist. Set "
-            "_SKIP_PLACEHOLDER_COMPOSITE_TOOLS=False to re-enable."
-        )
-        return {}
-
     tool_dir = bundle_tool_dir(bundle_dir) if bundle_dir is not None else None
     name_map: dict[str, str] = {}
 
-    for spec in builtin_composite_tools():
+    for spec in builtin_composite_tools(bundle_dir=bundle_dir):
+        # Placeholder composite tools (echo stage manifests) are skipped by
+        # default because "echo" is not in the bash allowlist.  Executable
+        # macros such as F-55 L1 ``invoke-existing-agent`` set ``call_impl``
+        # and must still be registered.
+        if _SKIP_PLACEHOLDER_COMPOSITE_TOOLS and spec.call_impl is None:
+            logger.info("Skipping placeholder composite tool: %s", spec.name)
+            continue
+
         tool_spec = _composite_to_agent_tool_spec(spec, bundle_dir=bundle_dir)
         if persist:
             try:
@@ -92,10 +92,26 @@ def _composite_to_agent_tool_spec(
 ) -> AgentToolSpec:
     """Convert a ``CompositeToolSpec`` into an ``AgentToolSpec``.
 
-    The generated tool uses ``call_type="bash"`` and delegates to a helper
-    script that prints the composite tool's stage list as JSON, allowing the
-    agent to decide delegation order.
+    The generated tool uses ``call_type="bash"``.  When ``spec.call_impl`` is
+    set (e.g. for F-55 L1 ``invoke-existing-agent``) it is used verbatim;
+    otherwise the tool emits a stage manifest so the agent can decide
+    delegation order.
     """
+    bundle_id = bundle_dir.name if bundle_dir else None
+
+    if spec.call_impl is not None:
+        return AgentToolSpec(
+            name=to_kebab_case(spec.name),
+            description=spec.description,
+            input_schema=spec.input_schema,
+            call_type=spec.call_type or "bash",
+            call_impl=spec.call_impl,
+            tags=spec.tags,
+            aliases=spec.aliases,
+            source="composite-tool",
+            bundle_id=bundle_id,
+        )
+
     stages_json = json.dumps(
         [
             {
@@ -109,11 +125,9 @@ def _composite_to_agent_tool_spec(
         ensure_ascii=False,
     )
 
-    # The call_impl is a bash one-liner that prints the stage manifest.
+    # The default call_impl is a bash one-liner that prints the stage manifest.
     # The agent reads this to understand the macro workflow.
     call_impl = f"echo 'Composite tool: {spec.name}' && echo 'Stages: {stages_json}'"
-
-    bundle_id = bundle_dir.name if bundle_dir else None
 
     return AgentToolSpec(
         name=to_kebab_case(spec.name),

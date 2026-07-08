@@ -33,8 +33,8 @@ from typing import Any, Awaitable, Callable
 
 import httpx
 
-from src.bridge.debug_utils import debug_body, extract_error_detail
-from src.bridge.exceptions import BridgeFatalError
+from clawcodex_ext.bridge.debug_utils import debug_body, extract_error_detail
+from clawcodex_ext.bridge.exceptions import BridgeFatalError
 from clawcodex_ext.bridge.types import (
     BRIDGE_LOGIN_INSTRUCTION,
     BridgeApiClient,

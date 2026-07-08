@@ -30,8 +30,10 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import json
 import logging
 import re
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +60,17 @@ from .tool_dependencies import (
     enrich_input_schema_with_dependencies,
     to_kebab_tool_name,
 )
+
+# F-55 L1 / L2 helpers — lifecycle catalog hook + tool-dependencies.yaml generation.
+from .heuristics.lifecycle import (
+    infer_lifecycle_kind,
+    lifecycle_metadata_payload,
+)
+from .dependency import (
+    ToolDependencyGraph,
+    write_tool_dependencies,
+)
+
 from .import_alias_resolver import ModuleImportIndex
 from .type_schema import (
     get_model_class_info,
@@ -810,7 +823,10 @@ import dataclasses
 {serialization_helpers}
 {coercion_helpers}
 {extra_sys_path_inserts}_SOURCE_DIR = r"{source_dir}"
+_REPO_ROOT = r"{repo_root}"
 sys.path.insert(0, _SOURCE_DIR)
+if _REPO_ROOT and _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 {extra_imports}{model_imports}
 {cli_prefix}
 
@@ -835,6 +851,21 @@ if __name__ == "__main__":
         print("Usage: python {script_name} <method> '<json_args>'", file=sys.stderr)
         sys.exit(1)
     method_name = sys.argv[1]
+
+    # F-55 L1: optional agent-catalog hook.  Created via
+    # ``--catalog-metadata '<json>'`` argv pair on create-kind tools; ignored
+    # otherwise.  We re-use the same sys.argv layout that the bash call_impl
+    # emits so the wrapper can stay self-contained.
+    catalog_meta = None
+    catalog_extra_args = []
+    if len(sys.argv) >= 5 and sys.argv[3] == "--catalog-metadata":
+        try:
+            catalog_meta = json.loads(sys.argv[4])
+            catalog_extra_args = sys.argv[5:]
+        except json.JSONDecodeError as exc:
+            print(json.dumps({{"error": f"invalid --catalog-metadata JSON: {{exc}}"}}, ensure_ascii=False), file=sys.stderr)
+            sys.exit(1)
+
     try:
         args = json.loads(sys.argv[2])
     except json.JSONDecodeError as exc:
@@ -846,10 +877,58 @@ if __name__ == "__main__":
         sys.exit(1)
     try:
         result = fn(**args)
-        print(_dumps_sdk_result(result))
+        serialized = _dumps_sdk_result(result)
     except Exception as exc:
         print(json.dumps({{"error": str(exc)}}, ensure_ascii=False), file=sys.stderr)
         sys.exit(1)
+
+    if catalog_meta is not None:
+        # Catalog write: pull agent_id from the return value (or any nested
+        # dict) and merge it with the static metadata emitted by the
+        # tool_registry_bridge.  This makes the create→invoke workflow
+        # recoverable across wrapper subprocess boundaries.
+        try:
+            from extensions.sop_converter.agent_catalog import AgentCatalog, AgentCatalogEntry
+            from extensions.sop_converter.agent_catalog_resolver import resolve_catalog_path
+
+            _agent_id = ""
+            if isinstance(result, dict):
+                _agent_id = str(result.get("agent_id") or result.get("id") or "")
+            if not _agent_id and catalog_meta.get("agent_id"):
+                _agent_id = str(catalog_meta["agent_id"])
+
+            if _agent_id:
+                _metadata_keys = {{
+                    "sdk_source_dir", "model", "provider", "class_name",
+                    "module_name", "query_arg", "invoke_method",
+                    "schema_version", "sdk_version", "_bundle_path",
+                }}
+                _entry = AgentCatalogEntry(
+                    agent_id=str(_agent_id),
+                    sdk_source_dir=str(catalog_meta.get("sdk_source_dir") or _SOURCE_DIR),
+                    dsl=result if isinstance(result, dict) else {{"value": result}},
+                    model=str(catalog_meta.get("model") or ""),
+                    provider=str(catalog_meta.get("provider") or ""),
+                    class_name=str(catalog_meta.get("class_name") or ""),
+                    module_name=str(catalog_meta.get("module_name") or ""),
+                    init_kwargs={{k: v for k, v in args.items() if k not in {{"agent_id", "id"}}}},
+                    query_arg=str(catalog_meta.get("query_arg") or "query"),
+                    invoke_method=str(catalog_meta.get("invoke_method") or "invoke"),
+                    schema_version=int(catalog_meta.get("schema_version") or 1),
+                    sdk_version=str(catalog_meta.get("sdk_version") or ""),
+                    metadata={{k: v for k, v in catalog_meta.items() if k not in _metadata_keys}},
+                )
+                _bundle_path = catalog_meta.get("_bundle_path")
+                _loc = resolve_catalog_path(_bundle_path)
+                _loc.ensure_parent()
+                _cat = AgentCatalog.load(_loc.path)
+                _cat.upsert(_entry, bundle_id=os.path.basename(_bundle_path) if _bundle_path else None)
+                _cat.save(_loc.path)
+        except Exception as exc:
+            print(json.dumps({{"error": f"catalog_write_failed: {{exc}}"}}, ensure_ascii=False), file=sys.stderr)
+            sys.exit(1)
+
+    print(serialized)
 '''
 
 
@@ -1332,6 +1411,9 @@ def _generate_wrapper_script(
     extra_sys_path_entries = _infer_extra_sys_path_entries(source_dir, module_name)
     extra_sys_path_inserts = _format_extra_sys_path_inserts(extra_sys_path_entries)
 
+    # Repository root so wrapper subprocesses can import extensions.sop_converter.*
+    repo_root = str(Path(__file__).resolve().parents[2])
+
     body_text = "\n".join(body_parts)
     extra_coercion = ""
     if "_coerce_team_database" in body_text:
@@ -1342,6 +1424,7 @@ def _generate_wrapper_script(
     content = _WRAPPER_SCRIPT_TEMPLATE.format(
         header_label=header_label,
         source_dir=source_dir,
+        repo_root=repo_root,
         cli_prefix=cli_prefix_line,
         extra_sys_path_inserts=extra_sys_path_inserts,
         extra_imports=extra_imports,
@@ -1693,6 +1776,31 @@ def register_component_tools(
             # Validate the spec
             validate_spec(spec)
 
+            # F-55 L1: create-kind tools get a ``--catalog-metadata`` payload so
+            # the wrapper subprocess can persist the resulting ``agent_id`` to
+            # the bundle-local AgentCatalog.  This makes the create→invoke
+            # workflow recoverable across independent wrapper processes.
+            if infer_lifecycle_kind(op) == "create":
+                catalog_meta = lifecycle_metadata_payload(
+                    op,
+                    source_dir=source_dir_abs,
+                    bundle_id=effective_bundle_id,
+                    module_name=module_path,
+                    class_name=op.class_name,
+                    tool_name=spec.name,
+                )
+                if catalog_meta and isinstance(spec.call_impl, str):
+                    if bundle_path is not None:
+                        catalog_meta["_bundle_path"] = str(bundle_path)
+                    catalog_json = json.dumps(catalog_meta, ensure_ascii=False)
+                    enriched_call_impl = (
+                        f"{spec.call_impl} --catalog-metadata {shlex.quote(catalog_json)}"
+                    )
+                    spec = AgentToolSpec(
+                        **{**spec.__dict__, "call_impl": enriched_call_impl}
+                    )
+                    validate_spec(spec)
+
             specs.append(spec)
 
             # Build name mapping (original → kebab-case).
@@ -1739,5 +1847,18 @@ def register_component_tools(
         len(components),
         len(script_paths),
     )
+
+    # ── Phase 5: F-55 L2 lifecycle dependency metadata ──
+    if bundle_path is not None:
+        try:
+            lifecycle_graph = ToolDependencyGraph.detect_from_components(components)
+            deps_path = bundle_path / ".clawcodex" / "tool-dependencies.yaml"
+            write_tool_dependencies(
+                lifecycle_graph,
+                deps_path,
+                project_name=effective_bundle_id or "",
+            )
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("Failed to write tool-dependencies.yaml: %s", exc)
 
     return name_map

@@ -292,10 +292,25 @@ def domain_agent_sop_body(
     description: str,
     skill_name: str,
     sdk_source_dir: str | Path | None = None,
+    bundle: str | Path | None = None,
 ) -> str:
-    """System prompt body for a SOP domain sub-agent."""
+    """System prompt body for a SOP domain sub-agent.
+
+    Args:
+        agent_type: Display name for the agent (e.g. ``"AutoResearch"``).
+        description: Free-form description of the agent's purpose.
+        skill_name: The SOP skill the agent must load first.
+        sdk_source_dir: Optional SDK root path; surfaces a fenced block
+            with absolute paths so the agent can Read SDK source on
+            demand.
+        bundle: Optional bundle directory.  When set, the body picks
+            up the F-55 L3 lifecycle block if the bundle contains a
+            ``tool-dependencies.yaml``.
+    """
     sdk_block = format_sdk_source_dir_block(sdk_source_dir)
     sdk_section = f"\n\n{sdk_block}" if sdk_block else ""
+    lifecycle_block = _lifecycle_prompt_block(bundle)
+    lifecycle_section = f"\n\n{lifecycle_block}" if lifecycle_block else ""
     return f"""\
 # Agent: {agent_type}
 
@@ -320,6 +335,7 @@ def domain_agent_sop_body(
 
 {SOP_INTERACTIVE_TERMINAL_STOP_LOSS}
 {sdk_section}
+{lifecycle_section}
 
 ## 禁止
 
@@ -329,6 +345,57 @@ def domain_agent_sop_body(
 - ToolSearch 已有合适 matches 时禁止继续 ToolSearch 同一任务
 - 禁止调用 ``Agent(subagent_type="Explore")`` 或 ``Agent(subagent_type="general-purpose")`` 代替本域 SDK 工具调用
 """
+
+
+def _lifecycle_prompt_block(bundle: str | Path | None) -> str:
+    """F-55 L3 — render the tool lifecycle hint for the system prompt.
+
+    The block is **only** emitted when:
+
+    1. ``bundle`` is not ``None``, AND
+    2. ``<bundle>/.clawcodex/tool-dependencies.yaml`` exists, AND
+    3. The file parses to a non-empty :class:`ToolDependencyGraph`.
+
+    The content is intentionally compact — a short table of the
+    top ``min(N, 3)`` dependencies plus an explicit recovery hint
+    for the create→invoke failure mode the F-55 doc calls out.  The
+    block is appended after the SDK source block so it never
+    interferes with the existing prompt structure.
+    """
+    if bundle is None:
+        return ""
+    try:
+        from extensions.sop_converter.dependency import (
+            load_tool_dependencies,
+        )
+    except ImportError:  # pragma: no cover — defensive
+        return ""
+    graph = load_tool_dependencies(bundle)
+    if graph is None or graph.is_empty():
+        return ""
+    deps = graph.dependencies[:3]
+    if not deps:
+        return ""
+    rows: list[str] = []
+    for dep in deps:
+        shared = (
+            ", ".join(dep.shared_params) if dep.shared_params else "—"
+        )
+        lifecycle = dep.lifecycle or "—"
+        rows.append(f"| `{dep.from_tool}` | `{dep.to_tool}` | {shared} | {lifecycle} |")
+    table = "\n".join(rows)
+    return f"""\
+## 工具生命周期提示（来自 bundle 元数据）
+
+本 bundle 检测到以下 create→invoke 依赖链，请按顺序调用：
+
+| 前置工具 | 后置工具 | 共享参数 | 阶段 |
+|----------|----------|----------|------|
+{table}
+
+- 如果后置工具返回 ``not found`` / ``not exist`` 类错误，**先检查**前置工具是否已调用；不要换工具名继续空转
+- 已标记为「自动完成」的中间步骤由 runtime 隐式处理，无需手动调用
+- 若 tool-dependencies.yaml 缺失导致本节为空，属于 bundle 元数据问题，**报告用户**而不是改用其他 invoke 工具兜底"""
 
 
 def format_overview_stage_pipeline_block(bundle_path: Path | None) -> str:

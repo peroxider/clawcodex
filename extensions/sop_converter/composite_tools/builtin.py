@@ -13,10 +13,17 @@ Available builtins
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from .models import CompositeStage, CompositeToolSpec
 
 
-def builtin_composite_tools() -> list[CompositeToolSpec]:
+_INVOKE_EXISTING_AGENT_WRAPPER = Path(__file__).with_name("scripts").joinpath(
+    "invoke_existing_agent_wrapper.py"
+)
+
+
+def builtin_composite_tools(*, bundle_dir: Path | None = None) -> list[CompositeToolSpec]:
     """Return all built-in composite tool specifications.
 
     These are the macro-level tools that stage agents and overview agents
@@ -26,6 +33,7 @@ def builtin_composite_tools() -> list[CompositeToolSpec]:
         _agent_teams(),
         _pipeline_execute(),
         _code_review(),
+        _invoke_existing_agent(bundle_dir=bundle_dir),
     ]
 
 
@@ -194,4 +202,73 @@ def _code_review() -> CompositeToolSpec:
         ],
         tags=("composite", "macro", "review", "pr"),
         aliases=("code-review", "review-pr"),
+    )
+
+
+def _shell_quote(s: str) -> str:
+    """POSIX single-quote escape: ' -> '\'' ."""
+    return "'" + s.replace("'", "'\\''") + "'"
+
+
+def _invoke_existing_agent(*, bundle_dir: Path | None = None) -> CompositeToolSpec:
+    """Invoke a previously-created SOP agent by ``agent_id``.
+
+    The tool looks up the agent in the bundle-local (or home-fallback)
+    AgentCatalog, materializes the SDK class, and calls its ``invoke`` /
+    ``run`` / ``__call__`` method.  This is the F-55 L1 recovery path
+    for the create-then-invoke workflow break.
+    """
+    escaped_bundle = _shell_quote(str(bundle_dir)) if bundle_dir else ""
+    wrapper = _INVOKE_EXISTING_AGENT_WRAPPER
+    if bundle_dir is not None:
+        call_impl = (
+            f"python3 {wrapper} invoke_existing_agent '{{json_args}}' "
+            f"--bundle-path {escaped_bundle}"
+        )
+    else:
+        call_impl = f"python3 {wrapper} invoke_existing_agent '{{json_args}}'"
+    return CompositeToolSpec(
+        name="invoke_existing_agent",
+        description=(
+            "Invoke a previously-created agent by stable agent_id.  The tool "
+            "loads the agent catalog, materializes the saved SDK class, and "
+            "calls it with the provided query / inputs."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "type": "string",
+                    "description": "Stable agent_id returned by a prior build/create tool.",
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Primary query / instruction passed to the agent.",
+                },
+                "inputs": {
+                    "type": "object",
+                    "description": "Optional additional inputs merged into the agent call.",
+                },
+            },
+            "required": ["agent_id"],
+        },
+        stages=[
+            CompositeStage(
+                name="resolve-catalog",
+                description="Load the bundle-local agent catalog by agent_id.",
+            ),
+            CompositeStage(
+                name="materialize",
+                description="Import the SDK module and instantiate the saved class.",
+            ),
+            CompositeStage(
+                name="invoke",
+                description="Call the agent's invoke/run method with the query.",
+            ),
+        ],
+        tags=("composite", "macro", "agent-lifecycle", "f-55"),
+        aliases=("invoke-existing-agent", "agent-invoke", "run-existing-agent"),
+        call_type="bash",
+        call_impl=call_impl,
+        query_arg="query",
     )

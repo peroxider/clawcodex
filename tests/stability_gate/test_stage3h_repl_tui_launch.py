@@ -545,6 +545,9 @@ class TestStage3hImportChain:
         from unittest.mock import patch
 
         class _PromptSessionStub:
+            def __init__(self, *args, **kwargs):
+                pass
+
             def prompt(self, *args, **kwargs):
                 return "/exit"
 

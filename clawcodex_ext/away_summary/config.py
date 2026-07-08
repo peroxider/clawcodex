@@ -18,6 +18,7 @@ class AwaySummaryConfig:
     max_input_tokens: int = 12_000
     max_output_tokens: int = 500
     persist_last_recap: bool = True
+    response_language: str = "auto"
 
     @classmethod
     def from_mapping(cls, raw: Any) -> "AwaySummaryConfig":
@@ -37,6 +38,7 @@ class AwaySummaryConfig:
             max_input_tokens=max(256, _int_value(data.get("max_input_tokens"), 12_000)),
             max_output_tokens=max(64, _int_value(data.get("max_output_tokens"), 500)),
             persist_last_recap=_bool_value(data.get("persist_last_recap"), True),
+            response_language=_language_value(data.get("response_language"), "auto"),
         )
 
 
@@ -80,3 +82,12 @@ def _int_value(value: Any, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _language_value(value: Any, default: str) -> str:
+    text = str(value or default).strip().lower()
+    if text in {"zh", "zh-cn", "chinese", "中文", "simplified chinese"}:
+        return "Chinese"
+    if text in {"en", "en-us", "english"}:
+        return "English"
+    return "auto"

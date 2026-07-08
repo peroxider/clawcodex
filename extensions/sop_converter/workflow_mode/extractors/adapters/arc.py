@@ -54,6 +54,19 @@ def resolve_arc_pipeline_dir(source_dir: Path) -> Path | None:
     return None
 
 
+def resolve_arc_pipeline_dir(source_dir: Path) -> Path | None:
+    """Return *source_dir* if it follows the ARC project convention.
+
+    This helper is consumed by the capability mapper and the SOP CLI to
+    decide whether to apply ARC-specific skill/agent wiring.  It mirrors
+    :meth:`ArcExtractor._is_arc_project` without forcing a full extraction.
+    """
+    extractor = ArcExtractor()
+    if extractor._is_arc_project(source_dir):
+        return source_dir
+    return None
+
+
 class ArcExtractor(WorkflowExtractorBase):
     """Extract WorkflowGraph from AutoResearchClaw pipeline modules."""
 
