@@ -38,6 +38,10 @@ class ThreadingTimerFactory:
         return timer
 
 
+_AUTO_RETRY_MAX = 3
+_AUTO_RETRY_BASE_SECONDS = 30
+
+
 @dataclass
 class IntentForecastController:
     provider_getter: Callable[[], Any]
@@ -63,6 +67,7 @@ class IntentForecastController:
         self._pending_acceptance: dict[str, Any] | None = None
         self._prompt_draft_text = ""
         self._valid_input_seen = False
+        self._auto_retry_count = 0
 
     @property
     def last_result(self) -> ForecastResult | None:
@@ -76,8 +81,6 @@ class IntentForecastController:
             self._arm_locked()
 
     def on_user_interaction(self, reason: str = "user") -> None:
-        if reason not in {"dismiss", "cancel"}:
-            self._valid_input_seen = True
         with self._lock:
             self._generation_id += 1
             self._cancel_locked()
@@ -85,7 +88,6 @@ class IntentForecastController:
     def on_prompt_draft_changed(self, text: str) -> None:
         self._prompt_draft_text = text
         if text:
-            self._valid_input_seen = True
             self._maybe_record_user_acceptance_outcome(text)
             self.on_user_interaction("draft")
         else:
@@ -154,38 +156,38 @@ class IntentForecastController:
 
     def _arm_locked(self) -> None:
         cfg = self.config_loader()
-        if (
-            not self.interactive
-            or not cfg.enabled
-            or not cfg.auto_display
-            or self._busy
-            or self._prompt_draft_text.strip()
-            or self._valid_input_seen
-            or self._conversation_has_user_input()
-        ):
+        reasons = self._guard_reasons(cfg)
+        if reasons:
+            logger.debug("_arm_locked skipped: %s", reasons)
             return
         self._cancel_locked()
         self._timer = self.timer_factory.call_later(cfg.idle_seconds, self._on_idle_timer)
+        logger.debug(
+            "_arm_locked armed: idle_seconds=%s busy=%s draft=%r valid_input_seen=%s conv_has_user=%s",
+            cfg.idle_seconds,
+            self._busy,
+            self._prompt_draft_text,
+            self._valid_input_seen,
+            self._conversation_has_user_input(),
+        )
 
     def _on_idle_timer(self) -> None:
         with self._lock:
             if self._busy or self._running:
+                logger.debug("_on_idle_timer skipped: busy=%s running=%s", self._busy, self._running)
                 return
             cfg = self.config_loader()
-            if (
-                not self.interactive
-                or not cfg.enabled
-                or not cfg.auto_display
-                or self._prompt_draft_text.strip()
-                or self._valid_input_seen
-                or self._conversation_has_user_input()
-            ):
+            reasons = self._guard_reasons(cfg)
+            if reasons:
+                logger.debug("_on_idle_timer skipped: %s", reasons)
                 return
             self._running = True
             self._timer = None
             self._generation_id += 1
             generation_id = self._generation_id
 
+        logger.debug("_on_idle_timer firing: generation_id=%s retry=%d", generation_id, self._auto_retry_count)
+        success = False
         try:
             service = IntentForecastService(
                 conversation=self._conversation(),
@@ -197,6 +199,12 @@ class IntentForecastController:
             result = service.generate(trigger="auto")
             with self._lock:
                 stale = generation_id != self._generation_id
+            logger.debug(
+                "_on_idle_timer generated: stale=%s fingerprint=%s suggestions=%d",
+                stale,
+                result.fingerprint,
+                len(result.suggestions),
+            )
             try:
                 save_forecast_result(
                     result,
@@ -221,11 +229,39 @@ class IntentForecastController:
                 self._shown_fingerprints.add(result.fingerprint)
                 self._last_result = result
                 self.display(result)
-        except Exception:
-            logger.exception("Intent Forecast failed: trigger=auto")
+            success = True
+        except Exception as exc:
+            logger.warning(
+                "Intent Forecast auto trigger failed (attempt %d/%d): %s: %s",
+                self._auto_retry_count + 1,
+                _AUTO_RETRY_MAX,
+                type(exc).__name__,
+                exc,
+            )
+            logger.debug("Intent Forecast auto trigger traceback:", exc_info=True)
+            with self._lock:
+                if self._auto_retry_count < _AUTO_RETRY_MAX:
+                    self._auto_retry_count += 1
+                    self._timer = self.timer_factory.call_later(
+                        _AUTO_RETRY_BASE_SECONDS, self._on_idle_timer
+                    )
+                    logger.warning(
+                        "Intent Forecast auto trigger will retry in %ds (attempt %d/%d).",
+                        _AUTO_RETRY_BASE_SECONDS,
+                        self._auto_retry_count + 1,
+                        _AUTO_RETRY_MAX,
+                    )
+                else:
+                    logger.warning(
+                        "Intent Forecast auto trigger giving up after %d failed attempts; "
+                        "use /forecast run to retry manually.",
+                        _AUTO_RETRY_MAX,
+                    )
         finally:
             with self._lock:
                 self._running = False
+                if success:
+                    self._auto_retry_count = 0
 
     def _conversation(self) -> Any | None:
         if self.conversation_getter is not None:
@@ -274,6 +310,24 @@ class IntentForecastController:
             except Exception:
                 pass
         self._timer = None
+
+    def _guard_reasons(self, cfg: IntentForecastConfig) -> list[str]:
+        reasons: list[str] = []
+        if not self.interactive:
+            reasons.append("non-interactive")
+        if not cfg.enabled:
+            reasons.append("cfg.enabled=False")
+        if not cfg.auto_display:
+            reasons.append("cfg.auto_display=False")
+        if self._busy:
+            reasons.append("busy")
+        if self._prompt_draft_text.strip():
+            reasons.append(f"prompt_draft={self._prompt_draft_text[:40]!r}")
+        if self._valid_input_seen:
+            reasons.append("valid_input_seen=True")
+        if self._conversation_has_user_input():
+            reasons.append("conversation_has_user_input")
+        return reasons
 
 
 def _content_has_text(content: Any) -> bool:

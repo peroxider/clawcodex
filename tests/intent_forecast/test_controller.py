@@ -164,6 +164,8 @@ def test_valid_run_input_prevents_rearm_after_run_finish(tmp_path) -> None:
     controller.on_run_start()
     controller.on_run_finish()
 
+    # After an agent run, auto-forecast is permanently disabled
+    # for the rest of the session.
     assert timers.timers == []
 
 
