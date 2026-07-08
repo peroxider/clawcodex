@@ -89,9 +89,7 @@ class BoundaryDetector:
                     out.append(BoundaryHit(message_index=i, archive_id=m.group(1)))
                     continue
                 if self._treat_legacy and text.startswith(self.LEGACY_PREFIX):
-                    out.append(
-                        BoundaryHit(message_index=i, archive_id="legacy")
-                    )
+                    out.append(BoundaryHit(message_index=i, archive_id="legacy"))
             return out
 
     def mint_archive_id(self) -> str:

@@ -173,7 +173,7 @@ def _guard_path(anchor: LodestoneAnchor, ctx: AnchorContext) -> tuple[bool, Opti
     if root is None:
         return True, "no workspace_root; path not verified"
     try:
-        candidate = (Path(rel) if Path(rel).is_absolute() else (root / rel))
+        candidate = Path(rel) if Path(rel).is_absolute() else (root / rel)
         candidate = candidate.resolve()
         root_resolved = root.resolve()
         candidate.relative_to(root_resolved)  # raises ValueError if outside
@@ -211,6 +211,7 @@ def probe_editor_from_env(env: dict[str, str] | None = None) -> Optional[str]:
 
 def _which(name: str) -> Optional[str]:
     from shutil import which
+
     return which(name)
 
 

@@ -152,9 +152,7 @@ def merge_stores(
         if key in existing:
             if not prefer_target:
                 # Caller wants source's version to win; overwrite.
-                target.commits = [
-                    c for c in target.commits if frozenset(c.archived) != key
-                ]
+                target.commits = [c for c in target.commits if frozenset(c.archived) != key]
                 target.commits.append(commit)
             continue
         target.commits.append(commit)

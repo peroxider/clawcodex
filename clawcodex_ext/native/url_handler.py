@@ -130,13 +130,21 @@ class UrlHandlerModule:
         key = f"HKCU\\Software\\Classes\\{protocol}"
         cmd_key = f"{key}\\shell\\open\\command"
         try:
-            subprocess.run([reg, "add", key, "/ve", "/d", "URL:ClawCodex Protocol", "/f"],
-                           check=False, capture_output=True)
-            subprocess.run([reg, "add", key, "/v", "URL Protocol", "/d", "", "/f"],
-                           check=False, capture_output=True)
-            subprocess.run([reg, "add", cmd_key, "/ve",
-                            "/d", f'"{executable}" "%1"', "/f"],
-                           check=False, capture_output=True)
+            subprocess.run(
+                [reg, "add", key, "/ve", "/d", "URL:ClawCodex Protocol", "/f"],
+                check=False,
+                capture_output=True,
+            )
+            subprocess.run(
+                [reg, "add", key, "/v", "URL Protocol", "/d", "", "/f"],
+                check=False,
+                capture_output=True,
+            )
+            subprocess.run(
+                [reg, "add", cmd_key, "/ve", "/d", f'"{executable}" "%1"', "/f"],
+                check=False,
+                capture_output=True,
+            )
             return True
         except (subprocess.SubprocessError, OSError) as exc:
             _logger.warning("url_handler: reg add failed: %s", exc)

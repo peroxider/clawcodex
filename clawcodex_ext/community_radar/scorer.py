@@ -37,7 +37,7 @@ _log = logging.getLogger(__name__)
 
 # Lower number ⇒ cheaper to absorb into ClawCodex (higher score).
 _ADAPTATION_COST: dict[FeatureCategory, float] = {
-    FeatureCategory.CLI: 20.0,             # well-bounded CLI additions
+    FeatureCategory.CLI: 20.0,  # well-bounded CLI additions
     FeatureCategory.TUI_REPL: 25.0,
     FeatureCategory.TOOL_SYSTEM: 30.0,
     FeatureCategory.MEMORY: 35.0,
@@ -172,9 +172,13 @@ def _strategic_value(record: FeatureRecord, keywords: Iterable[str]) -> float:
         # FeatureCategory as a coarse alignment signal — categories
         # closer to the project's core roadmap still score above
         # random infrastructure noise.
-        if record.category in {FeatureCategory.AGENT_LOOP, FeatureCategory.MEMORY,
-                               FeatureCategory.MCP, FeatureCategory.PERMISSION,
-                               FeatureCategory.ORCHESTRATOR}:
+        if record.category in {
+            FeatureCategory.AGENT_LOOP,
+            FeatureCategory.MEMORY,
+            FeatureCategory.MCP,
+            FeatureCategory.PERMISSION,
+            FeatureCategory.ORCHESTRATOR,
+        }:
             base += 10
         return float(base)
     return float(max(0, min(100, 35 + 12 * len(overlap))))

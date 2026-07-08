@@ -21,7 +21,7 @@ from __future__ import annotations
 import os
 from typing import Final
 
-_TRUTHY_VALUES: Final[frozenset[str]] = frozenset({'1', 'true', 'yes', 'on'})
+_TRUTHY_VALUES: Final[frozenset[str]] = frozenset({"1", "true", "yes", "on"})
 
 
 def is_env_truthy(name: str) -> bool:
@@ -39,5 +39,5 @@ def is_env_truthy(name: str) -> bool:
 
 
 __all__ = [
-    'is_env_truthy',
+    "is_env_truthy",
 ]

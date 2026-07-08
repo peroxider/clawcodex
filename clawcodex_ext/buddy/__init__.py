@@ -14,9 +14,7 @@ _SYMBOLS_BY_MODULE: dict[str, tuple[str, ...]] = {
     ),
 }
 _SYMBOL_MODULES = {
-    symbol: module_name
-    for module_name, symbols in _SYMBOLS_BY_MODULE.items()
-    for symbol in symbols
+    symbol: module_name for module_name, symbols in _SYMBOLS_BY_MODULE.items() for symbol in symbols
 }
 
 __all__ = list(_SYMBOL_MODULES)

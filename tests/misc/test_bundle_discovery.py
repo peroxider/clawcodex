@@ -36,9 +36,7 @@ def _pos_spec(name: str, *, bundle_id: str, aliases: tuple[str, ...] = ()) -> Ag
 
 class TestBundleDiscovery(unittest.TestCase):
     def test_overview_has_sop_skills(self) -> None:
-        self.assertTrue(
-            overview_has_sop_skills({"skills": ["openjiuwen_merged-skill", "Read"]})
-        )
+        self.assertTrue(overview_has_sop_skills({"skills": ["openjiuwen_merged-skill", "Read"]}))
         self.assertFalse(overview_has_sop_skills({"skills": ["Read", "Bash"]}))
 
     def test_discovers_bundle_from_clawcodex_and_skills(self) -> None:

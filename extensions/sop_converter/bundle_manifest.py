@@ -101,7 +101,9 @@ def write_bundle_manifest(
         workflow_mode=workflow_mode,
     )
     path = manifest_path_for_bundle(bundle_dir)
-    path.write_text(json.dumps(manifest.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(manifest.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     logger.info("Wrote bundle manifest: %s (sdk_source_dir=%s)", path, resolved_sdk)
     return path
 

@@ -195,9 +195,7 @@ class TestInMemoryAuditLog:
 
     def test_query_returns_most_recent_first(self, audit_log: InMemoryAuditLog) -> None:
         for i in range(3):
-            audit_log.append(
-                event_for_proposal(_make_proposal(payload={"taskId": f"T-{i:03d}"}))
-            )
+            audit_log.append(event_for_proposal(_make_proposal(payload={"taskId": f"T-{i:03d}"})))
 
         results = audit_log.query(limit=2)
         assert [e.task_id for e in results] == ["T-002", "T-001"]
@@ -287,9 +285,9 @@ class TestServiceAuditIntegration:
     ) -> None:
         _set_lkb(monkeypatch, True)
         ctx = ToolContext(workspace_root=tmp_path, session_id="S-1")
-        task_id = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx).output[
-            "task"
-        ]["id"]
+        task_id = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx).output["task"][
+            "id"
+        ]
 
         TaskUpdateTool.call({"taskId": task_id, "status": "in_progress"}, ctx)
 
@@ -328,9 +326,9 @@ class TestServiceAuditIntegration:
     ) -> None:
         _set_lkb(monkeypatch, True)
         ctx = ToolContext(workspace_root=tmp_path, session_id="S-1")
-        task_id = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx).output[
-            "task"
-        ]["id"]
+        task_id = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx).output["task"][
+            "id"
+        ]
 
         TaskUpdateTool.call({"taskId": task_id, "status": "in_progress"}, ctx)
 
@@ -364,9 +362,7 @@ class TestServiceAuditIntegration:
         assert len(denied_events) == 1
         assert denied_events[0].payload["result"] == "fail"
 
-        denial_events = get_audit_log(ctx).query(
-            event_type="lkb_denial", task_id=blocked
-        )
+        denial_events = get_audit_log(ctx).query(event_type="lkb_denial", task_id=blocked)
         assert len(denial_events) == 1
         validation = denial_events[0].payload["validation"]
         assert validation["result"] == "fail"

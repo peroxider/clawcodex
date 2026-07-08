@@ -78,7 +78,9 @@ def _data_dir(context: CommandContext) -> Path:
     return Path(os.environ.get("CLAWCODEX_ULTRAPLAN_DIR", "~/.clawcodex/ultraplan")).expanduser()
 
 
-def _controller(context: CommandContext, *, need_planner: bool = False, endpoint: str | None = None) -> UltraplanController:
+def _controller(
+    context: CommandContext, *, need_planner: bool = False, endpoint: str | None = None
+) -> UltraplanController:
     root = _data_dir(context)
     store = PlanStore(root / "plans")
     audit = AuditLogger(root / "audit")
@@ -266,7 +268,9 @@ def _template(parts: list[str], context: CommandContext) -> str:
     action = parts.pop(0)
     if action == "list":
         rows = library.list_templates()
-        return "\n".join(["Ultraplan templates:", ""] + [f"{t.id:16} {t.title} - {t.description}" for t in rows])
+        return "\n".join(
+            ["Ultraplan templates:", ""] + [f"{t.id:16} {t.title} - {t.description}" for t in rows]
+        )
     if action == "apply":
         if len(parts) < 2:
             raise ValueError("template apply requires <id> <goal...>")

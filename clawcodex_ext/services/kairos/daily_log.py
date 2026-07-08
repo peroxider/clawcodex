@@ -41,9 +41,7 @@ class DailyLogWriter:
             try:
                 parent.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
-                raise DailyLogError(
-                    f"cannot create daily log directory {parent}: {exc}"
-                ) from exc
+                raise DailyLogError(f"cannot create daily log directory {parent}: {exc}") from exc
 
     @property
     def path(self) -> Path:
@@ -64,9 +62,7 @@ class DailyLogWriter:
                 with open(self._path, "ab") as fh:
                     fh.write(data)
             except OSError as exc:
-                raise DailyLogError(
-                    f"failed to append to {self._path}: {exc}"
-                ) from exc
+                raise DailyLogError(f"failed to append to {self._path}: {exc}") from exc
         return len(data)
 
     def read(self) -> str:
@@ -77,9 +73,7 @@ class DailyLogWriter:
             try:
                 return self._path.read_text(encoding="utf-8")
             except OSError as exc:
-                raise DailyLogError(
-                    f"failed to read {self._path}: {exc}"
-                ) from exc
+                raise DailyLogError(f"failed to read {self._path}: {exc}") from exc
 
     def delete(self) -> None:
         with self._lock:

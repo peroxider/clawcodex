@@ -70,9 +70,7 @@ def execute_bash(
             timeout=timeout_sec,
         )
     except subprocess.TimeoutExpired as exc:
-        raise BashCallError(
-            f"Command timed out after {int(timeout_sec)}s: {command[:80]}"
-        ) from exc
+        raise BashCallError(f"Command timed out after {int(timeout_sec)}s: {command[:80]}") from exc
     except OSError as exc:
         raise BashCallError(f"Failed to execute: {exc}") from exc
 

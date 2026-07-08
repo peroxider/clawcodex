@@ -299,9 +299,7 @@ def test_force_release_if_stale_no_op_when_missing(memory_dir: Path) -> None:
 
 
 def test_force_release_if_stale_no_op_when_fresh(memory_dir: Path) -> None:
-    lock_path = _write_lock(
-        memory_dir, pid=os.getpid(), mtime_seconds=time.time()
-    )
+    lock_path = _write_lock(memory_dir, pid=os.getpid(), mtime_seconds=time.time())
     assert lock_mod.force_release_if_stale() is False
     assert lock_path.exists()
 
@@ -315,9 +313,7 @@ def test_force_release_if_stale_unlinks_when_stale(memory_dir: Path) -> None:
     assert not lock_path.exists()
 
 
-def test_force_release_if_stale_swallows_oserror(
-    monkeypatch, memory_dir: Path
-) -> None:
+def test_force_release_if_stale_swallows_oserror(monkeypatch, memory_dir: Path) -> None:
     """Even on filesystem failure, force_release_if_stale must not raise."""
     _write_lock(memory_dir, pid=os.getpid(), mtime_seconds=time.time())
     monkeypatch.setattr(lock_mod, "is_lock_stale", lambda now_ms=None: True)
@@ -337,9 +333,7 @@ def test_try_acquire_reclaims_live_pid_when_ttl_expired(memory_dir: Path) -> Non
     authoritative: reclaim happens regardless of holder liveness.
     """
     stale_seconds = lock_mod.HOLDER_STALE_MS / 1000 + 60
-    _write_lock(
-        memory_dir, pid=os.getpid(), mtime_seconds=time.time() - stale_seconds
-    )
+    _write_lock(memory_dir, pid=os.getpid(), mtime_seconds=time.time() - stale_seconds)
     result = lock_mod.try_acquire_consolidation_lock()
     assert result is not None
     lock_path = memory_dir / lock_mod.LOCK_FILE_NAME

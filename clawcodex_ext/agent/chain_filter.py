@@ -125,12 +125,8 @@ class ChainFilterConfig:
 
     def resolved(self) -> tuple[float, int]:
         return (
-            self.dead_branch_ratio
-            if self.dead_branch_ratio is not None
-            else DEAD_BRANCH_RATIO,
-            self.abs_size_threshold
-            if self.abs_size_threshold is not None
-            else ABS_SIZE_THRESHOLD,
+            self.dead_branch_ratio if self.dead_branch_ratio is not None else DEAD_BRANCH_RATIO,
+            self.abs_size_threshold if self.abs_size_threshold is not None else ABS_SIZE_THRESHOLD,
         )
 
 
@@ -459,11 +455,12 @@ def filter_active_chain_messages(
     # Re-serialise to drive the byte-level gate. ``ensure_ascii``
     # is False to keep the round-trip identical to the original
     # writer.
-    raw = "\n".join(
-        json.dumps(entry, ensure_ascii=False)
-        for entry in entries
-        if isinstance(entry, dict)
-    ).encode("utf-8") + b"\n"
+    raw = (
+        "\n".join(
+            json.dumps(entry, ensure_ascii=False) for entry in entries if isinstance(entry, dict)
+        ).encode("utf-8")
+        + b"\n"
+    )
 
     result = walk_chain_before_parse(raw, config=config)
 
@@ -499,9 +496,14 @@ def _is_metadata_line(line: bytes) -> bool:
     """
     # Avoid the cost of json.loads here. The known markers are
     # distinct enough that a substring test is safe.
-    for marker in (b'"type": "session_init"', b'"type":"session_init"',
-                   b'"type": "session_snapshot"', b'"type":"session_snapshot"',
-                   b'"type": "cost_block"', b'"type":"cost_block"'):
+    for marker in (
+        b'"type": "session_init"',
+        b'"type":"session_init"',
+        b'"type": "session_snapshot"',
+        b'"type":"session_snapshot"',
+        b'"type": "cost_block"',
+        b'"type":"cost_block"',
+    ):
         if marker in line:
             return True
     return False

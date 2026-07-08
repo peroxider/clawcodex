@@ -15,6 +15,7 @@ def _pil_available() -> bool:
     try:
         import PIL  # noqa: F401
         import numpy  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -40,6 +41,7 @@ def two_png_files(tmp_path: Path):
 
 def test_image_module_registered():
     from clawcodex_ext.native import NativeModuleRegistry
+
     assert NativeModuleRegistry.is_registered("image_processor")
 
 
@@ -77,9 +79,7 @@ def test_image_load_or_fallback_returns_object():
     assert isinstance(inst, (ImageProcessorModule, ImageFallback))
 
 
-@pytest.mark.skipif(
-    not _pil_available(), reason="Pillow+numpy not installed"
-)
+@pytest.mark.skipif(not _pil_available(), reason="Pillow+numpy not installed")
 def test_image_main_compute_diff_identical(two_png_files):
     same1, same2, _, _ = two_png_files
     mod = ImageProcessorModule()
@@ -88,9 +88,7 @@ def test_image_main_compute_diff_identical(two_png_files):
     assert mod.compute_diff(str(same1), str(same2)) == 0.0
 
 
-@pytest.mark.skipif(
-    not _pil_available(), reason="Pillow+numpy not installed"
-)
+@pytest.mark.skipif(not _pil_available(), reason="Pillow+numpy not installed")
 def test_image_main_compute_diff_different(two_png_files):
     _, _, diff1, diff2 = two_png_files
     mod = ImageProcessorModule()
@@ -100,17 +98,13 @@ def test_image_main_compute_diff_different(two_png_files):
     assert 0.0 < val <= 1.0
 
 
-@pytest.mark.skipif(
-    not _pil_available(), reason="Pillow+numpy not installed"
-)
+@pytest.mark.skipif(not _pil_available(), reason="Pillow+numpy not installed")
 def test_image_main_crop_and_resize(two_png_files, tmp_path: Path):
     same1, _, _, _ = two_png_files
     mod = ImageProcessorModule()
     if not mod.is_available():
         pytest.skip("Pillow/numpy unavailable")
     out = tmp_path / "cropped.jpg"
-    data = mod.crop_and_resize(
-        str(same1), (0, 0, 4, 4), size=(2, 2), output_path=str(out)
-    )
+    data = mod.crop_and_resize(str(same1), (0, 0, 4, 4), size=(2, 2), output_path=str(out))
     assert data[:2] == b"\xff\xd8"  # JPEG SOI marker
     assert out.exists() and out.read_bytes()[:2] == b"\xff\xd8"

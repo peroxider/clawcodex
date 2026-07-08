@@ -23,7 +23,7 @@ class SessionRouter:
         if entry is not None:
             return entry.target
         # 2. default Gateway-hosted auto session.
-        return SessionTarget(session_id=f'im:default:{key}', host_type='default')
+        return SessionTarget(session_id=f"im:default:{key}", host_type="default")
 
     def is_opt_in(self, origin: OriginKey | str) -> bool:
         return self._binding.is_opt_in(str(origin))
@@ -31,7 +31,7 @@ class SessionRouter:
     def is_offline(self, origin: OriginKey | str) -> bool:
         """True if the origin's opt-in target is bound but offline."""
         entry = self._binding.get(str(origin))
-        return entry is not None and entry.connection_state == 'offline'
+        return entry is not None and entry.connection_state == "offline"
 
 
-__all__ = ['SessionRouter']
+__all__ = ["SessionRouter"]

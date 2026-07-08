@@ -192,9 +192,7 @@ class TestStage3gBottomToolbarRuntime:
         ClawcodexREPL = _heavy_runtime
         stub = self._make_stub(in_tokens=0, out_tokens=0)
         result = ClawcodexREPL._bottom_toolbar(stub)
-        assert "cost" not in result, (
-            f"tokens are 0 but result contains 'cost': {result!r}"
-        )
+        assert "cost" not in result, f"tokens are 0 but result contains 'cost': {result!r}"
 
     def test_missing_tool_context_returns_empty(self, _heavy_runtime):
         """异常韧性: ``tool_context`` 缺失时不崩溃,返回空字符串。
@@ -215,9 +213,7 @@ class TestStage3gBottomToolbarRuntime:
             _shorten_path_text = staticmethod(lambda p: p)
 
         result = ClawcodexREPL._bottom_toolbar(_BareStub())
-        assert result == "", (
-            f"expected empty string when tool_context is None, got {result!r}"
-        )
+        assert result == "", f"expected empty string when tool_context is None, got {result!r}"
 
     def test_unknown_model_renders_without_crash(self, _heavy_runtime):
         """未知名模型不崩,降级渲染(模型上下文窗口查询静默失败)。"""

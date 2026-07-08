@@ -22,13 +22,13 @@ def _team(lead: str = "lead-1", members: tuple[str, ...] = ("lead-1", "agent-2")
     return TeamFile(
         team_name="t1",
         lead_agent_id=lead,
-        members=tuple(
-            TeamMember(agent_id=aid, name=aid) for aid in members
-        ),
+        members=tuple(TeamMember(agent_id=aid, name=aid) for aid in members),
     )
 
 
-def _entry(*, author: str = "lead-1", scope: str = "team", related: tuple[str, ...] = ()) -> TeamMemoryEntry:
+def _entry(
+    *, author: str = "lead-1", scope: str = "team", related: tuple[str, ...] = ()
+) -> TeamMemoryEntry:
     return TeamMemoryEntry(
         id="e1",
         team_id="t1",
@@ -77,9 +77,7 @@ def test_lead_only_write_by_member_requires_approval() -> None:
             author_agent_id="agent-2", scope="lead_only", require_lead_approval=True
         )
     # With approval disabled (config escape hatch), member write allowed.
-    pol.authorize_write(
-        author_agent_id="agent-2", scope="lead_only", require_lead_approval=False
-    )
+    pol.authorize_write(author_agent_id="agent-2", scope="lead_only", require_lead_approval=False)
 
 
 def test_lead_can_write_lead_only() -> None:

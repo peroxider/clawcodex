@@ -54,7 +54,7 @@ class OrchestratorGatewayClient:
         handlers: OrchestratorHandlers,
         *,
         ipc_client=None,
-        origin: str = '',
+        origin: str = "",
         command_router: CommandRouter | None = None,
         control_bridge: ControlBridge | None = None,
         pending_outbound_limit: int = 20,
@@ -93,13 +93,13 @@ class OrchestratorGatewayClient:
 
         semantic = None
         if frame.semantic:
-            with __import__('contextlib').suppress(ValueError):
+            with __import__("contextlib").suppress(ValueError):
                 semantic = MessageSemantics(frame.semantic)
         message = InboundMessage(
             origin=frame.origin or self._origin,
-            text=frame.text or '',
-            message_id=frame.delivery_id or '',
-            channel='',
+            text=frame.text or "",
+            message_id=frame.delivery_id or "",
+            channel="",
             semantic=semantic,
         )
         if semantic is None:
@@ -109,12 +109,12 @@ class OrchestratorGatewayClient:
             status = self.dispatch(message, semantic)
             await self._flush_pending_outbound(force=True)
             logger.info(
-                'orchestrator IM push dispatched: delivery_id=%s status=%s',
-                (frame.delivery_id or '')[:16],
+                "orchestrator IM push dispatched: delivery_id=%s status=%s",
+                (frame.delivery_id or "")[:16],
                 status,
             )
         except Exception:  # noqa: BLE001
-            logger.exception('orchestrator IM dispatch failed')
+            logger.exception("orchestrator IM dispatch failed")
 
     def _classify(self, message):
         from clawcodex_ext.messaging.semantics import MessageClassifier
@@ -136,7 +136,7 @@ class OrchestratorGatewayClient:
         if self._ipc is None or not self._origin:
             return
         if text in self._pending_outbound:
-            logger.debug('orchestrator IM outbound deduped before send: %r', text[:60])
+            logger.debug("orchestrator IM outbound deduped before send: %r", text[:60])
             await self._flush_pending_outbound()
             return
         if self._pending_outbound:
@@ -157,21 +157,21 @@ class OrchestratorGatewayClient:
             # Queue so the post-register flush delivers it; never propagate
             # — IM must not break the orchestrator main loop.
             logger.debug(
-                'orchestrator IM outbound not connected; queueing origin=%s (%s)', origin[:32], exc
+                "orchestrator IM outbound not connected; queueing origin=%s (%s)", origin[:32], exc
             )
             return False
         if response is None:
             logger.warning(
-                'orchestrator IM outbound ACK timed out origin=%s; not retrying to avoid duplicate IM delivery',
+                "orchestrator IM outbound ACK timed out origin=%s; not retrying to avoid duplicate IM delivery",
                 origin[:32],
             )
             self._reset_pending_flush_backoff()
             return True
-        response_type = getattr(getattr(response, 'type', None), 'value', None)
-        if response_type == 'nack':
-            reason = getattr(response, 'reason', '') or ''
+        response_type = getattr(getattr(response, "type", None), "value", None)
+        if response_type == "nack":
+            reason = getattr(response, "reason", "") or ""
             logger.warning(
-                'orchestrator IM outbound rejected origin=%s reason=%s',
+                "orchestrator IM outbound rejected origin=%s reason=%s",
                 origin[:32],
                 reason,
             )
@@ -188,13 +188,13 @@ class OrchestratorGatewayClient:
         # copy would queue and all would flush at once when the operator
         # finally sends a message.
         if text in self._pending_outbound:
-            logger.debug('orchestrator IM outbound deduped: %r already queued', text[:60])
+            logger.debug("orchestrator IM outbound deduped: %r already queued", text[:60])
             return
         if len(self._pending_outbound) >= self._pending_outbound_limit:
             self._pending_outbound.popleft()
-            logger.warning('orchestrator IM outbound pending queue full; dropped oldest event')
+            logger.warning("orchestrator IM outbound pending queue full; dropped oldest event")
         self._pending_outbound.append(text)
-        logger.info('orchestrator IM outbound queued (pending connection or send retry)')
+        logger.info("orchestrator IM outbound queued (pending connection or send retry)")
 
     def _defer_pending_flush(self, reason: str) -> None:
         delay = self._pending_retry_delay
@@ -204,7 +204,7 @@ class OrchestratorGatewayClient:
             self._pending_retry_max_seconds,
         )
         logger.info(
-            'orchestrator IM outbound retry deferred: delay=%.1fs reason=%s',
+            "orchestrator IM outbound retry deferred: delay=%.1fs reason=%s",
             delay,
             reason[:120],
         )
@@ -228,7 +228,7 @@ class OrchestratorGatewayClient:
                 self._reset_pending_flush_backoff()
             elif self._pending_next_flush_at > self._clock():
                 logger.debug(
-                    'orchestrator IM pending outbound flush deferred for %.1fs',
+                    "orchestrator IM pending outbound flush deferred for %.1fs",
                     self._pending_next_flush_at - self._clock(),
                 )
                 return
@@ -242,7 +242,7 @@ class OrchestratorGatewayClient:
                         return
                 except Exception:  # noqa: BLE001
                     logger.warning(
-                        'orchestrator IM pending outbound flush failed origin=%s',
+                        "orchestrator IM pending outbound flush failed origin=%s",
                         origin[:32],
                         exc_info=True,
                     )
@@ -257,70 +257,70 @@ class OrchestratorGatewayClient:
         issue_id = self._issue_id(message)
         if semantic is MessageSemantics.FOLLOW_UP:
             self._h.queue_pending_message(issue_id, message.text)
-            return 'followup_queued'
+            return "followup_queued"
         if semantic is MessageSemantics.CONTEXT_ONLY:
             self._h.operator_hints(issue_id, message.text)
-            return 'context_only_recorded'
+            return "context_only_recorded"
         if semantic is MessageSemantics.INTERRUPT:
             # interrupt maps to control verbs via the bridge
             ctrl = self._control.resolve(MessageSemantics.INTERRUPT, None)
             if ctrl is not None:
                 self._h.bridge_interrupt(issue_id, ctrl.payload)
-            return 'interrupt_dispatched'
+            return "interrupt_dispatched"
         if semantic is MessageSemantics.COMMAND:
             route = self._commands.route(message)
             if route is None:
-                return 'command_unroutable'
-            if route.kind == 'orchestrator_cli':
+                return "command_unroutable"
+            if route.kind == "orchestrator_cli":
                 return self._dispatch_orchestrator_cli(route)
-            if route.kind == 'agent_intent':
+            if route.kind == "agent_intent":
                 self._h.agent_intent(route.verb, route.issue_hint or issue_id)
-                return f'agent_{route.verb}'
+                return f"agent_{route.verb}"
             # control_verb
             ctrl = self._control.resolve(semantic, route)
             if ctrl is None:
-                return 'command_unroutable'
-            if ctrl.surface == 'control_socket':
+                return "command_unroutable"
+            if ctrl.surface == "control_socket":
                 self._h.control_verb(ctrl.verb, ctrl.issue_hint or issue_id)
-                return f'control_{ctrl.verb}'
-            if ctrl.surface == 'issue_inject':
+                return f"control_{ctrl.verb}"
+            if ctrl.surface == "issue_inject":
                 self._h.issue_inject(ctrl.issue_hint or issue_id, route.payload)
-                return 'inject_delivered'
-            if ctrl.surface == 'issue_cli':
+                return "inject_delivered"
+            if ctrl.surface == "issue_cli":
                 self._h.issue_cli(ctrl.verb, ctrl.issue_hint or issue_id, ctrl.payload)
-                return f'issue_cli_{ctrl.verb}'
-            return f'issue_cli_{ctrl.verb}'
+                return f"issue_cli_{ctrl.verb}"
+            return f"issue_cli_{ctrl.verb}"
         # newPrompt / approval → leave to the host agent / approval binding
-        return 'not_dispatched'
+        return "not_dispatched"
 
     def _dispatch_orchestrator_cli(self, route) -> str:
         argv = list(route.argv)
         if len(argv) < 2:
-            self._queue_command_reply(route.payload, 2, '', 'error: invalid orchestrator command')
-            return 'orchestrator_cli_invalid'
+            self._queue_command_reply(route.payload, 2, "", "error: invalid orchestrator command")
+            return "orchestrator_cli_invalid"
 
         noun, verb = argv[0], argv[1]
-        if noun == 'issue' and verb in {'stop', 'pause', 'resume', 'takeover'}:
-            issue_id = route.issue_hint or self._arg_value(argv, '--id')
+        if noun == "issue" and verb in {"stop", "pause", "resume", "takeover"}:
+            issue_id = route.issue_hint or self._arg_value(argv, "--id")
             if not issue_id:
-                self._queue_command_reply(route.payload, 2, '', 'error: --id is required')
-                return f'orchestrator_cli_issue_{verb}'
+                self._queue_command_reply(route.payload, 2, "", "error: --id is required")
+                return f"orchestrator_cli_issue_{verb}"
             self._h.control_verb(verb, issue_id)
             self._queue_command_reply(
                 route.payload,
                 0,
                 f"Control command '{verb}' sent for issue {issue_id}",
-                '',
+                "",
             )
-            return f'orchestrator_cli_issue_{verb}'
+            return f"orchestrator_cli_issue_{verb}"
 
-        if noun == 'issue' and verb == 'tail':
-            self._queue_command_reply(route.payload, 0, self._tail_notice(argv), '')
-            return 'orchestrator_cli_issue_tail'
+        if noun == "issue" and verb == "tail":
+            self._queue_command_reply(route.payload, 0, self._tail_notice(argv), "")
+            return "orchestrator_cli_issue_tail"
 
         rc, stdout, stderr = self._run_orchestrator_cli(argv)
         self._queue_command_reply(route.payload, rc, stdout, stderr)
-        return f'orchestrator_cli_{noun}_{verb}'
+        return f"orchestrator_cli_{noun}_{verb}"
 
     def _run_orchestrator_cli(self, argv: list[str]) -> tuple[int, str, str]:
         if self._cli_runner is not None:
@@ -337,7 +337,7 @@ class OrchestratorGatewayClient:
                 code = exc.code
                 rc = code if isinstance(code, int) else 1
             except Exception as exc:  # noqa: BLE001
-                print(f'error: {exc}', file=sys.stderr)
+                print(f"error: {exc}", file=sys.stderr)
                 rc = 1
         return rc, stdout.getvalue(), stderr.getvalue()
 
@@ -347,23 +347,23 @@ class OrchestratorGatewayClient:
 
     @staticmethod
     def _format_command_reply(command_text: str, rc: int, stdout: str, stderr: str) -> str:
-        command = (command_text or '').strip() or '<empty>'
-        prefix = '命令已执行' if rc == 0 else f'命令执行失败({rc})'
-        output = '\n'.join(part.strip() for part in (stdout, stderr) if part and part.strip())
+        command = (command_text or "").strip() or "<empty>"
+        prefix = "命令已执行" if rc == 0 else f"命令执行失败({rc})"
+        output = "\n".join(part.strip() for part in (stdout, stderr) if part and part.strip())
         if not output:
-            return f'{prefix}：{command}'
+            return f"{prefix}：{command}"
         if len(output) > 6000:
-            output = output[:6000].rstrip() + '\n...'
-        return f'{prefix}：{command}\n\n{output}'
+            output = output[:6000].rstrip() + "\n..."
+        return f"{prefix}：{command}\n\n{output}"
 
     @staticmethod
     def _tail_notice(argv: list[str]) -> str:
-        issue_id = OrchestratorGatewayClient._arg_value(argv, '--id') or '<issue-id>'
+        issue_id = OrchestratorGatewayClient._arg_value(argv, "--id") or "<issue-id>"
         return (
-            f'/issue tail --id {issue_id} is a streaming command. '
-            'IM returns this bounded notice instead of holding the gateway connection. '
-            'Run `clawcodex-dev orchestrator issue tail --id '
-            f'{issue_id}` locally for live tailing.'
+            f"/issue tail --id {issue_id} is a streaming command. "
+            "IM returns this bounded notice instead of holding the gateway connection. "
+            "Run `clawcodex-dev orchestrator issue tail --id "
+            f"{issue_id}` locally for live tailing."
         )
 
     @staticmethod
@@ -371,17 +371,17 @@ class OrchestratorGatewayClient:
         for idx, token in enumerate(argv):
             if token == flag and idx + 1 < len(argv):
                 return argv[idx + 1]
-            if token.startswith(f'{flag}='):
-                return token.split('=', 1)[1]
+            if token.startswith(f"{flag}="):
+                return token.split("=", 1)[1]
         return None
 
     @staticmethod
     def _issue_id(message: InboundMessage) -> str:
         if message.raw and isinstance(message.raw, dict):
-            iid = message.raw.get('issue_id')
+            iid = message.raw.get("issue_id")
             if iid:
                 return str(iid)
-        return ''
+        return ""
 
 
-__all__ = ['OrchestratorGatewayClient', 'OrchestratorHandlers']
+__all__ = ["OrchestratorGatewayClient", "OrchestratorHandlers"]

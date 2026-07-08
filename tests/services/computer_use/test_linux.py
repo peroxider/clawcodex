@@ -61,7 +61,9 @@ def _make_backend(
 
 def test_linux_backend_defaults_are_safe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CLAWCODEX_COMPUTER_USE_ALLOW", raising=False)
-    backend = LinuxBackend(runner=lambda *a, **kw: pytest.fail("runner must not be called by default"))
+    backend = LinuxBackend(
+        runner=lambda *a, **kw: pytest.fail("runner must not be called by default")
+    )
     assert backend.dry_run is True
     assert backend.allowed is False
     assert backend.is_allowed() is False
@@ -125,9 +127,7 @@ def test_screenshot_window_raises_when_not_found(
             return _FakeCompleted(stdout=b"")
         return _FakeCompleted(stdout=b"")
 
-    backend = LinuxBackend(
-        dry_run=False, allowed=True, runner=runner, timeout_seconds=0.1
-    )
+    backend = LinuxBackend(dry_run=False, allowed=True, runner=runner, timeout_seconds=0.1)
     provider = LinuxScreenshotProvider(backend)
     with pytest.raises(WindowNotFoundError):
         provider.capture_window(WindowRef(title="missing"))
@@ -232,7 +232,8 @@ def test_clipboard_real_path_uses_argv(
     manager = LinuxClipboardManager(backend)
     manager.set_text("hello")
     set_call = next(
-        c for c in fake_runner
+        c
+        for c in fake_runner
         if c["argv"][0] == "xclip" and "-selection" in c["argv"] and "-out" not in c["argv"]
     )
     assert set_call["kwargs"]["input"] == b"hello"
@@ -241,10 +242,7 @@ def test_clipboard_real_path_uses_argv(
 
     fake_runner.clear()
     manager.get_text()
-    get_call = next(
-        c for c in fake_runner
-        if c["argv"][0] == "xclip" and "-out" in c["argv"]
-    )
+    get_call = next(c for c in fake_runner if c["argv"][0] == "xclip" and "-out" in c["argv"])
     assert "-out" in get_call["argv"]
 
 
@@ -261,9 +259,7 @@ def test_window_manager_list_focus_close(
             return _FakeCompleted(returncode=0)
         return _FakeCompleted(returncode=0)
 
-    backend = LinuxBackend(
-        dry_run=False, allowed=True, runner=runner, timeout_seconds=0.1
-    )
+    backend = LinuxBackend(dry_run=False, allowed=True, runner=runner, timeout_seconds=0.1)
     manager = LinuxWindowManager(backend)
     windows = manager.list_windows()
     assert [w.title for w in windows] == ["Terminal", "Editor"]

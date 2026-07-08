@@ -196,7 +196,8 @@ class TestAppendToolEventLog(unittest.TestCase):
                 )
             log_path = workspace / ".reports" / "run-multi.events.ndjson"
             rows = [
-                json.loads(line) for line in log_path.read_text(encoding="utf-8").strip().splitlines()
+                json.loads(line)
+                for line in log_path.read_text(encoding="utf-8").strip().splitlines()
             ]
             self.assertEqual([r["tool"] for r in rows], ["Bash", "Read", "Edit"])
             self.assertEqual(rows[0]["params"], {"command": "ls"})
@@ -230,9 +231,7 @@ class TestAppendToolEventLog(unittest.TestCase):
                 "turn": 1,
             },
         )
-        log_path = (
-            Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "unknown.events.ndjson"
-        )
+        log_path = Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "unknown.events.ndjson"
         self.assertTrue(log_path.exists())
 
     def test_appends_multiple_lines(self) -> None:
@@ -240,7 +239,12 @@ class TestAppendToolEventLog(unittest.TestCase):
             workspace = Path(tmp) / "ws"
             workspace.mkdir()
             runner = AgentRunner(AgentConfig(), SandboxConfig())
-            ctx = {"run_id": "run-x", "workspace_path": str(workspace), "permission_mode": "default", "turn": 0}
+            ctx = {
+                "run_id": "run-x",
+                "workspace_path": str(workspace),
+                "permission_mode": "default",
+                "turn": 0,
+            }
             for _ in range(5):
                 runner._append_tool_event_log(_tc_event(approved=True), ctx)
             log_path = workspace / ".reports" / "run-x.events.ndjson"
@@ -533,7 +537,8 @@ class TestToolEventLogRotation(unittest.TestCase):
             self.assertTrue(rotated.exists())
             self.assertEqual(rotated.stat().st_size, _TOOL_EVENT_LOG_ROTATE_BYTES)
             rows = [
-                json.loads(line) for line in log_path.read_text(encoding="utf-8").strip().splitlines()
+                json.loads(line)
+                for line in log_path.read_text(encoding="utf-8").strip().splitlines()
             ]
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["tool"], "Bash")

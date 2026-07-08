@@ -35,6 +35,7 @@ Both backends emit the same PCM format (16 kHz, 16-bit, mono, signed
 little-endian) so the STT providers don't need to know which recorder
 was used.
 """
+
 from __future__ import annotations
 
 import logging
@@ -153,9 +154,7 @@ class PyAudioRecorder(AudioRecorder):
         try:
             while not self._stop_event.is_set():
                 try:
-                    data = self._stream.read(
-                        self._frames_per_buffer, exception_on_overflow=False
-                    )
+                    data = self._stream.read(self._frames_per_buffer, exception_on_overflow=False)
                 except OSError as exc:
                     logger.warning("PyAudio read error: %s", exc)
                     break
@@ -219,8 +218,21 @@ class SoXRecorder(AudioRecorder):
             )
         # Prefer ``rec`` (SoX's recording alias); fall back to ``sox -d``
         # (the default audio device) for builds that ship only ``sox``.
-        cmd = ["rec", "-q", "-r", str(self._sample_rate), "-e", "signed-integer",
-               "-b", "16", "-c", "1", "-t", "raw", "-"]
+        cmd = [
+            "rec",
+            "-q",
+            "-r",
+            str(self._sample_rate),
+            "-e",
+            "signed-integer",
+            "-b",
+            "16",
+            "-c",
+            "1",
+            "-t",
+            "raw",
+            "-",
+        ]
         try:
             self._proc = subprocess.Popen(
                 cmd,
@@ -228,8 +240,22 @@ class SoXRecorder(AudioRecorder):
                 stderr=subprocess.DEVNULL,
             )
         except FileNotFoundError:
-            cmd = ["sox", "-d", "-q", "-r", str(self._sample_rate), "-e",
-                   "signed-integer", "-b", "16", "-c", "1", "-t", "raw", "-"]
+            cmd = [
+                "sox",
+                "-d",
+                "-q",
+                "-r",
+                str(self._sample_rate),
+                "-e",
+                "signed-integer",
+                "-b",
+                "16",
+                "-c",
+                "1",
+                "-t",
+                "raw",
+                "-",
+            ]
             self._proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,

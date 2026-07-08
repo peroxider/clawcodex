@@ -17,13 +17,7 @@ def _release(body: str) -> Release:
 
 
 def test_extract_added_section() -> None:
-    body = (
-        "# v1.2.3\n"
-        "\n"
-        "## Added\n"
-        "- New `--lint` auto-fix mode\n"
-        "- MCP server hot-reload\n"
-    )
+    body = "# v1.2.3\n\n## Added\n- New `--lint` auto-fix mode\n- MCP server hot-reload\n"
     records = FeatureExtractor().extract(_release(body), source="aider")
     titles = [r.title for r in records]
     assert any("lint" in t.lower() for t in titles)
@@ -32,21 +26,14 @@ def test_extract_added_section() -> None:
 
 
 def test_extract_breaking_section() -> None:
-    body = (
-        "## Breaking Changes\n"
-        "- StateGraph API has been refactored\n"
-    )
+    body = "## Breaking Changes\n- StateGraph API has been refactored\n"
     records = FeatureExtractor().extract(_release(body), source="langgraph")
     assert records
     assert records[0].feature_type == FeatureType.BREAKING
 
 
 def test_extract_checkbox_items() -> None:
-    body = (
-        "## Added\n"
-        "- [x] Add OpenTelemetry exporter\n"
-        "- [x] Add hook for post-edit commands\n"
-    )
+    body = "## Added\n- [x] Add OpenTelemetry exporter\n- [x] Add hook for post-edit commands\n"
     records = FeatureExtractor().extract(_release(body), source="claude-code")
     assert len(records) == 2
     assert any("OpenTelemetry" in r.title for r in records)
@@ -58,10 +45,7 @@ def test_extract_ignores_empty_body() -> None:
 
 
 def test_extract_unknown_sections_use_default_kind() -> None:
-    body = (
-        "## Documentation\n"
-        "- Documented new CLI flags\n"
-    )
+    body = "## Documentation\n- Documented new CLI flags\n"
     records = FeatureExtractor().extract(_release(body), source="x")
     # Unknown sections still produce records so the classifier can
     # decide what to do with them.
@@ -70,11 +54,7 @@ def test_extract_unknown_sections_use_default_kind() -> None:
 
 
 def test_extract_dedups_repeated_bullets() -> None:
-    body = (
-        "## Added\n"
-        "- Add MCP hot-reload\n"
-        "- Add MCP hot-reload\n"
-    )
+    body = "## Added\n- Add MCP hot-reload\n- Add MCP hot-reload\n"
     records = FeatureExtractor().extract(_release(body), source="x")
     assert len(records) == 1
 

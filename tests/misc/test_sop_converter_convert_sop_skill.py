@@ -44,8 +44,12 @@ class TestDefaultRules(unittest.TestCase):
         method_names = {r.method_pattern for r in _DEFAULT_RULES}
         # Some common SDK method patterns we expect to see.
         for expected in [
-            "docker_build", "docker_push", "k8s_apply",
-            "slack_send", "s3_upload", "train_model",
+            "docker_build",
+            "docker_push",
+            "k8s_apply",
+            "slack_send",
+            "s3_upload",
+            "train_model",
         ]:
             self.assertIn(expected, method_names)
 
@@ -62,7 +66,8 @@ class TestGenerateAgentName(unittest.TestCase):
     def test_special_chars_collapsed(self) -> None:
         # Non-alphanumeric runs become single hyphens, then trim edges.
         self.assertEqual(
-            _generate_agent_name("  hello!!  world??  "), "hello-world",
+            _generate_agent_name("  hello!!  world??  "),
+            "hello-world",
         )
 
     def test_empty_falls_back(self) -> None:
@@ -96,8 +101,7 @@ class TestConvertPosToAgent(unittest.TestCase):
             "extensions.sop_converter.agent_builder.persist_converted_agent",
         ):
             result = convert_sop_to_agent(
-                sdk_spec="docker_build, docker_tag, docker_push, "
-                "k8s_apply, health_check",
+                sdk_spec="docker_build, docker_tag, docker_push, k8s_apply, health_check",
                 requirements="CI/CD pipeline",
                 agent_name="cicd-agent",
             )

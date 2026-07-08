@@ -51,7 +51,7 @@ def _set_memory_limit(max_memory_mb: int) -> None:
 def _kill_process_group(proc: subprocess.Popen[Any]) -> None:
     """Best-effort kill of the process group spawned by the solver."""
     try:
-        if os.name != 'nt':
+        if os.name != "nt":
             pgid = os.getpgid(proc.pid)
             os.killpg(pgid, signal.SIGKILL)
         else:
@@ -66,7 +66,7 @@ def _kill_process_group(proc: subprocess.Popen[Any]) -> None:
 def run_external_solver(
     command: list[str],
     *,
-    input_text: str = '',
+    input_text: str = "",
     limits: SolverResourceLimits | None = None,
 ) -> tuple[int, str, str]:
     """Run ``command`` as an external solver with enforced resource limits.
@@ -101,7 +101,7 @@ def run_external_solver(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        preexec_fn=(lambda: _set_memory_limit(limits.max_memory_mb)) if os.name != 'nt' else None,
+        preexec_fn=(lambda: _set_memory_limit(limits.max_memory_mb)) if os.name != "nt" else None,
         start_new_session=True,
     )
 
@@ -122,11 +122,11 @@ def run_external_solver(
                     break
                 if not chunk:
                     break
-                encoded_chunk = chunk.encode('utf-8', errors='replace')
+                encoded_chunk = chunk.encode("utf-8", errors="replace")
                 total += len(encoded_chunk)
                 if total > limit_bytes:
                     parts.append(f"\n[{label} truncated after {limit_bytes} bytes]\n")
-                    limit_reason.append('output_limit')
+                    limit_reason.append("output_limit")
                     limit_exceeded.set()
                     # Drain the rest so the process can exit without filling the pipe.
                     try:
@@ -139,12 +139,12 @@ def run_external_solver(
 
         stdout_thread = threading.Thread(
             target=_reader,
-            args=(proc.stdout, stdout_parts, limits.max_output_bytes, 'stdout'),
+            args=(proc.stdout, stdout_parts, limits.max_output_bytes, "stdout"),
             daemon=True,
         )
         stderr_thread = threading.Thread(
             target=_reader,
-            args=(proc.stderr, stderr_parts, limits.max_output_bytes, 'stderr'),
+            args=(proc.stderr, stderr_parts, limits.max_output_bytes, "stderr"),
             daemon=True,
         )
         stdout_thread.start()
@@ -167,22 +167,22 @@ def run_external_solver(
                 returncode = -1
             stdout_thread.join(timeout=1.0)
             stderr_thread.join(timeout=1.0)
-            raise SolverLimitError('timeout', f'{limits.timeout_seconds}s')
+            raise SolverLimitError("timeout", f"{limits.timeout_seconds}s")
 
         stdout_thread.join(timeout=1.0)
         stderr_thread.join(timeout=1.0)
 
-        stdout = ''.join(stdout_parts)
-        stderr = ''.join(stderr_parts)
+        stdout = "".join(stdout_parts)
+        stderr = "".join(stderr_parts)
 
         if limit_exceeded.is_set():
             _kill_process_group(proc)
-            reason = limit_reason[0] if limit_reason else 'output_limit'
-            raise SolverLimitError(reason, f'{limits.max_output_bytes} bytes')
+            reason = limit_reason[0] if limit_reason else "output_limit"
+            raise SolverLimitError(reason, f"{limits.max_output_bytes} bytes")
 
         elapsed = time.perf_counter() - start
         if elapsed > limits.timeout_seconds:
-            raise SolverLimitError('timeout', f'{limits.timeout_seconds}s')
+            raise SolverLimitError("timeout", f"{limits.timeout_seconds}s")
 
         return returncode, stdout, stderr
     except SolverLimitError:
@@ -190,11 +190,11 @@ def run_external_solver(
         raise
     except Exception as exc:
         _kill_process_group(proc)
-        raise SolverLimitError('error', str(exc)) from exc
+        raise SolverLimitError("error", str(exc)) from exc
 
 
 __all__ = [
-    'SolverLimitError',
-    'SolverResourceLimits',
-    'run_external_solver',
+    "SolverLimitError",
+    "SolverResourceLimits",
+    "run_external_solver",
 ]

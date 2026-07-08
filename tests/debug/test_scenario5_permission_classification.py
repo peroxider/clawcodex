@@ -61,8 +61,10 @@ def test_scenario5_read_etc_hosts_permission_prompt(tmp_path: Path) -> None:
     permission_obs = None
     for _ in range(max_observes):
         obs = session.observe(timeout=15.0)
-        print(f"[SC5] Observe: ok={obs.ok}, kind={obs.kind}, state={obs.state}, "
-              f"signals={obs.signals}, delta_preview={obs.delta[:120]}")
+        print(
+            f"[SC5] Observe: ok={obs.ok}, kind={obs.kind}, state={obs.state}, "
+            f"signals={obs.signals}, delta_preview={obs.delta[:120]}"
+        )
         if obs.kind == "permission_prompt" and obs.state == "awaiting_permission":
             permission_obs = obs
             break
@@ -81,14 +83,15 @@ def test_scenario5_read_etc_hosts_permission_prompt(tmp_path: Path) -> None:
         f"Last delta: {getattr(obs, 'delta', 'N/A')[:300]}"
     )
     assert "permission_prompt" in permission_obs.signals
-    print(f"[SC5] Step 3 OK: permission prompt detected, "
-          f"delta='{permission_obs.delta[:200]}'")
+    print(f"[SC5] Step 3 OK: permission prompt detected, delta='{permission_obs.delta[:200]}'")
 
     # --- Step 3: Approve the permission via raw ``\r`` key ---
     # The first menu item is "Yes, allow this action"; Enter selects it.
     approve = session.key("\r", timeout=2.0)
-    print(f"[SC5] Step 4: sent approval key, ok={approve.ok}, "
-          f"kind={approve.kind}, state={approve.state}")
+    print(
+        f"[SC5] Step 4: sent approval key, ok={approve.ok}, "
+        f"kind={approve.kind}, state={approve.state}"
+    )
     assert approve.ok, f"Approval key failed: {approve.error}"
 
     # --- Step 4: Wait for the tool result ---
@@ -96,8 +99,10 @@ def test_scenario5_read_etc_hosts_permission_prompt(tmp_path: Path) -> None:
     saw_hosts = False
     for _ in range(max_observes_after):
         obs = session.observe(timeout=15.0)
-        print(f"[SC5] Post-approve observe: ok={obs.ok}, kind={obs.kind}, "
-              f"state={obs.state}, has_hosts={'/etc/hosts' in obs.delta or '127.0.0.1' in obs.delta or 'localhost' in obs.delta}")
+        print(
+            f"[SC5] Post-approve observe: ok={obs.ok}, kind={obs.kind}, "
+            f"state={obs.state}, has_hosts={'/etc/hosts' in obs.delta or '127.0.0.1' in obs.delta or 'localhost' in obs.delta}"
+        )
         if "localhost" in obs.delta.lower() or "127.0.0.1" in obs.delta:
             saw_hosts = True
             break
@@ -117,11 +122,14 @@ def test_scenario5_read_etc_hosts_permission_prompt(tmp_path: Path) -> None:
     print(f"[SC5] Artifacts at: {result.artifact_dir}")
 
     if saw_hosts:
-        print("[SC5] SC5-DONE: /etc/hosts was read successfully through PTY with "
-              "permission approval.")
+        print(
+            "[SC5] SC5-DONE: /etc/hosts was read successfully through PTY with permission approval."
+        )
     else:
-        print("[SC5] WARNING: /etc/hosts content not clearly detected in output, "
-              "but the flow succeeded through permission approval.")
+        print(
+            "[SC5] WARNING: /etc/hosts content not clearly detected in output, "
+            "but the flow succeeded through permission approval."
+        )
 
 
 if __name__ == "__main__":

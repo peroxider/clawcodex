@@ -1,4 +1,5 @@
 """Tests for clawcodex_ext/query/outbox_types.py (P102-C)."""
+
 from __future__ import annotations
 
 import pytest

@@ -93,9 +93,7 @@ def _task_decompose_call(tool_input: dict[str, Any], context: ToolContext) -> To
         "validation": validation,
         "schedule": plan.schedule.to_dict() if plan.schedule is not None else None,
         "schedulingConstraints": (
-            dict(plan.scheduling_constraints)
-            if plan.scheduling_constraints is not None
-            else None
+            dict(plan.scheduling_constraints) if plan.scheduling_constraints is not None else None
         ),
     }
     return ToolResult(name="TaskDecompose", output=output)

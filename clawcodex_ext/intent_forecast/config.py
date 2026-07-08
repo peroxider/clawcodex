@@ -40,7 +40,9 @@ class IntentForecastConfig:
             feedback_enabled=_bool_value(data.get("feedback_enabled"), True),
             summary_lazy_generate=_bool_value(data.get("summary_lazy_generate"), True),
             response_language=_language_value(data.get("response_language"), "auto"),
-            intent_strategy=_strategy_value(data.get("intent_strategy") or data.get("strategy"), "user"),
+            intent_strategy=_strategy_value(
+                data.get("intent_strategy") or data.get("strategy"), "user"
+            ),
         )
 
 

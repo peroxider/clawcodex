@@ -283,10 +283,7 @@ class AgentTreeLayout:
         #    lanes whenever more than one worker existed.
         spawn_time = ev.get("start_time")
         if isinstance(spawn_time, (int, float)):
-            timed = [
-                (n, (n.metadata or {}).get("start_ts"))
-                for n in candidates
-            ]
+            timed = [(n, (n.metadata or {}).get("start_ts")) for n in candidates]
             after = [
                 (ts - spawn_time, n)
                 for n, ts in timed
@@ -295,9 +292,7 @@ class AgentTreeLayout:
             if after:
                 return min(after, key=lambda item: item[0])[1]
             near = [
-                (abs(ts - spawn_time), n)
-                for n, ts in timed
-                if isinstance(ts, (int, float)) and ts
+                (abs(ts - spawn_time), n) for n, ts in timed if isinstance(ts, (int, float)) and ts
             ]
             if near:
                 return min(near, key=lambda item: item[0])[1]

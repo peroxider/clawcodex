@@ -193,7 +193,9 @@ class GateRollbackHandler:
 
         logger.info(
             "GATE rollback: stage %s rejected, rolling back to stage %s (index %s)",
-            stage.id, target.stage_id, new_index,
+            stage.id,
+            target.stage_id,
+            new_index,
         )
 
         return new_index, result

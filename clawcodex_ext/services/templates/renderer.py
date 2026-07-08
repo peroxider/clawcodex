@@ -47,7 +47,9 @@ def _read_ref(path_text: str, *, workspace_root: Path | None = None) -> str:
             if candidate.is_file():
                 return candidate.read_text(encoding="utf-8")
         except OSError as exc:
-            raise TemplateRenderError(f"cannot read content_template_ref {candidate}: {exc}") from exc
+            raise TemplateRenderError(
+                f"cannot read content_template_ref {candidate}: {exc}"
+            ) from exc
     raise TemplateRenderError(f"content_template_ref not found: {path_text}")
 
 
@@ -102,9 +104,7 @@ class TemplateRenderer:
         )
         content = self._substitute(content_template, values)
         if len(content.encode("utf-8")) > self.max_render_bytes:
-            raise TemplateRenderError(
-                f"rendered template exceeds {self.max_render_bytes} bytes"
-            )
+            raise TemplateRenderError(f"rendered template exceeds {self.max_render_bytes} bytes")
 
         output_path = None
         path_template = output_path_template_of(template)

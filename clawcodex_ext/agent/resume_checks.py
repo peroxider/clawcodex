@@ -141,13 +141,9 @@ def warn_provider_model_mismatch(
         return
     mismatches: list[str] = []
     if orig_p and cur_p and orig_p != cur_p:
-        mismatches.append(
-            f"provider ({original_provider!r} -> {current_provider!r})"
-        )
+        mismatches.append(f"provider ({original_provider!r} -> {current_provider!r})")
     if orig_m and cur_m and orig_m != cur_m:
-        mismatches.append(
-            f"model ({original_model!r} -> {current_model!r})"
-        )
+        mismatches.append(f"model ({original_model!r} -> {current_model!r})")
     if not mismatches:
         return
     try:

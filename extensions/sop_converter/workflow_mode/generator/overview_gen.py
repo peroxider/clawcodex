@@ -18,9 +18,7 @@ def control_flow_markdown(graph: WorkflowGraph) -> str:
         for sid, gate in sorted(graph.gates.items()):
             stage = next((s for s in graph.stages if s.id == sid), None)
             label = stage.label if stage else str(sid)
-            lines.append(
-                f"- Stage {sid} ({label}): 完成后需审批（模式: {gate.approval_mode}）"
-            )
+            lines.append(f"- Stage {sid} ({label}): 完成后需审批（模式: {gate.approval_mode}）")
         lines.append("")
 
     if graph.decisions:

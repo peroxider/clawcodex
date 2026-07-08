@@ -142,9 +142,7 @@ class TestL1FactExtractor:
             encode_solver_literal("task_x"),
         )
 
-    def test_extract_facts_drops_unknown_predicate_and_audits(
-        self, monkeypatch
-    ) -> None:
+    def test_extract_facts_drops_unknown_predicate_and_audits(self, monkeypatch) -> None:
         _set_llm_facts(monkeypatch, True)
         response = json.dumps(
             {
@@ -161,17 +159,13 @@ class TestL1FactExtractor:
         provider = _StubProvider(response)
         audit_log = InMemoryAuditLog()
         snapshot = _snapshot({"a": _task("a"), "b": _task("b")})
-        facts = extract_facts(
-            snapshot, BUILT_IN_GLOSSARY, provider=provider
-        )
+        facts = extract_facts(snapshot, BUILT_IN_GLOSSARY, provider=provider)
 
         assert facts == ()
         dropped = audit_log.query(event_type="lkb_fact_dropped")
         assert len(dropped) == 0  # convenience function passes audit_log=None
 
-    def test_extractor_emits_dropped_event_when_audit_log_provided(
-        self, monkeypatch
-    ) -> None:
+    def test_extractor_emits_dropped_event_when_audit_log_provided(self, monkeypatch) -> None:
         _set_llm_facts(monkeypatch, True)
         response = json.dumps(
             {
@@ -230,6 +224,7 @@ class TestL1FactExtractor:
 
         assert facts == ()
         assert provider.calls == []
+
     def test_audit_event_source_is_normalized(self, monkeypatch) -> None:
         _set_llm_facts(monkeypatch, True)
         response = json.dumps(

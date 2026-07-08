@@ -35,6 +35,7 @@ the controller binds at ``start`` time (the REPL's running loop). The
 recorder runs on its own daemon thread and pushes into the thread-safe
 :class:`AudioChunkQueue`.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -64,12 +65,12 @@ __all__ = [
 class VoiceSessionState(str, Enum):
     """Lifecycle states the controller cycles through per recording."""
 
-    IDLE = "idle"          # not armed
-    ARMED = "armed"        # armed, waiting for key press
+    IDLE = "idle"  # not armed
+    ARMED = "armed"  # armed, waiting for key press
     CONNECTING = "connecting"  # opening STT stream
     RECORDING = "recording"  # streaming audio, awaiting transcripts
     FINALIZING = "finalizing"  # key released, awaiting final transcript
-    DONE = "done"          # final transcript ready
+    DONE = "done"  # final transcript ready
     ERROR = "error"
 
 
@@ -163,9 +164,7 @@ class PushToTalkController:
 
     def _emit_transcript(self, text: str, is_final: bool) -> None:
         if is_final:
-            self._final_text = (
-                (self._final_text + " " + text).strip() if self._final_text else text
-            )
+            self._final_text = (self._final_text + " " + text).strip() if self._final_text else text
         if self._on_transcript is not None:
             try:
                 self._on_transcript(text, is_final)
@@ -242,9 +241,7 @@ class PushToTalkController:
         try:
             connect_fn = getattr(provider, "connect_stream", None)
             if connect_fn is None:
-                self._emit_error(
-                    f"Provider {self._provider_name!r} does not support streaming"
-                )
+                self._emit_error(f"Provider {self._provider_name!r} does not support streaming")
                 return False
             self._connection = connect_fn(
                 on_transcript=self._emit_transcript,
@@ -335,9 +332,7 @@ class PushToTalkController:
 
         self._final_text = final_text or self._final_text
         self._set_state(VoiceSessionState.DONE)
-        result = VoiceSessionResult(
-            text=self._final_text, provider=self._provider_name
-        )
+        result = VoiceSessionResult(text=self._final_text, provider=self._provider_name)
         # Reset for the next session.
         self._final_text = ""
         self._set_state(VoiceSessionState.IDLE)

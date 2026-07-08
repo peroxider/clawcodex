@@ -264,7 +264,8 @@ class DeclarativeWorkflowEngine:
         self.state.current_stage = current_stage_id
         try:
             self._checkpoint_manager.save(
-                self.state, decision_history=list(self._decision_count.items()),
+                self.state,
+                decision_history=list(self._decision_count.items()),
             )
         except Exception:
             logger.debug("Failed to save checkpoint at stage %s", current_stage_id, exc_info=True)
@@ -367,7 +368,9 @@ class DeclarativeWorkflowEngine:
                         idx = next_idx
                         continue
                     except ValueError:
-                        logger.warning("Decision next_stage %s not in DAG order", result.decision_next_stage)
+                        logger.warning(
+                            "Decision next_stage %s not in DAG order", result.decision_next_stage
+                        )
 
                 idx += 1
 
@@ -593,18 +596,24 @@ class DeclarativeWorkflowEngine:
 
         if decision.exhausted:
             self.event_bus.emit_decision(
-                stage_id=stage.id, outcome=outcome, next_stage=None,
+                stage_id=stage.id,
+                outcome=outcome,
+                next_stage=None,
             )
             raise DecisionExhaustedError(
-                decision.reason, stage_id=stage.id,
+                decision.reason,
+                stage_id=stage.id,
             )
 
         if decision.converged:
             self.event_bus.emit_decision(
-                stage_id=stage.id, outcome=outcome, next_stage=None,
+                stage_id=stage.id,
+                outcome=outcome,
+                next_stage=None,
             )
             raise ConvergenceError(
-                decision.reason, stage_id=stage.id,
+                decision.reason,
+                stage_id=stage.id,
             )
 
         resolved_next = decision.next_stage or next_stage
@@ -634,7 +643,9 @@ class DeclarativeWorkflowEngine:
 
     # ── 错误处理 ──────────────────────────────────────────────────
 
-    def _handle_stage_error(self, stage: StageNode, exc: WorkflowEngineError, error_type: str) -> StageResult:
+    def _handle_stage_error(
+        self, stage: StageNode, exc: WorkflowEngineError, error_type: str
+    ) -> StageResult:
         """处理阶段错误 (F-110-D)。"""
         self.event_bus.emit_stage_failed(
             stage_id=stage.id,
@@ -659,7 +670,9 @@ class DeclarativeWorkflowEngine:
                 target = self._rollback_manager.resolve_rollback_target(stage)
                 self._rollback_manager.restore_snapshot(target.stage_id)
                 self._rollback_manager.update_state_on_rollback(
-                    self.state, target.stage_id, stage.id,
+                    self.state,
+                    target.stage_id,
+                    stage.id,
                 )
                 return self._dag_order.index(target.stage_id)
             except (RollbackError, ValueError) as exc:

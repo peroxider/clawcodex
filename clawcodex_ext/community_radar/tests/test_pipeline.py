@@ -42,9 +42,11 @@ def _release(body: str) -> Release:
 
 def test_pipeline_runs_end_to_end(tmp_path: Path) -> None:
     releases = [_release("## Added\n- Add lint auto-fix\n- Add MCP server hot-reload\n")]
-    fetcher = _FakeFetcher([
-        FetchResult(source="aider", releases=releases),
-    ])
+    fetcher = _FakeFetcher(
+        [
+            FetchResult(source="aider", releases=releases),
+        ]
+    )
 
     registry_path = tmp_path / "sources.yaml"
     registry = SourceRegistry.with_defaults(registry_path)
@@ -67,13 +69,15 @@ def test_pipeline_runs_end_to_end(tmp_path: Path) -> None:
 
 
 def test_pipeline_swallows_fetcher_errors(tmp_path: Path) -> None:
-    fetcher = _FakeFetcher([
-        FetchResult(
-            source="aider",
-            releases=[_release("## Added\n- Some feature\n")],
-            errors=["network down"],
-        ),
-    ])
+    fetcher = _FakeFetcher(
+        [
+            FetchResult(
+                source="aider",
+                releases=[_release("## Added\n- Some feature\n")],
+                errors=["network down"],
+            ),
+        ]
+    )
     registry = SourceRegistry.with_defaults(tmp_path / "sources.yaml")
     pipeline = CommunityRadarPipeline(
         config=RadarConfig(output_dir=str(tmp_path / "out")),
@@ -93,7 +97,9 @@ def test_pipeline_uses_explicit_sources(tmp_path: Path) -> None:
     )
     sources = [WatchSource.from_dict({"name": "demo", "repo": "foo/bar"})]
     result = pipeline.run_scan(
-        period="weekly", write=False, sources=sources,
+        period="weekly",
+        write=False,
+        sources=sources,
     )
     assert result.digest.sources_used == ["demo"]
 

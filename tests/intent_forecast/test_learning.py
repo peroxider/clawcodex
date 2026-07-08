@@ -28,10 +28,15 @@ def test_feedback_roundtrip(tmp_path) -> None:
 
 
 def test_feedback_features_and_similarity() -> None:
-    suggestion = ForecastSuggestion(id="s1", title="Run focused tests", prompt="pytest tests/intent_forecast")
+    suggestion = ForecastSuggestion(
+        id="s1", title="Run focused tests", prompt="pytest tests/intent_forecast"
+    )
     context = ForecastContext(
         cwd="repo",
-        workspace={"git_status": " M file.py", "changed_files": ["clawcodex_ext/intent_forecast/service.py"]},
+        workspace={
+            "git_status": " M file.py",
+            "changed_files": ["clawcodex_ext/intent_forecast/service.py"],
+        },
         task_state={"blocked_reason": ""},
         intent_stage="test",
         response_language="English",
@@ -46,7 +51,9 @@ def test_feedback_features_and_similarity() -> None:
 
 
 def test_feedback_weight_uses_feature_similarity_without_title_match(tmp_path) -> None:
-    accepted = ForecastSuggestion(id="s1", title="Run focused tests", prompt="pytest tests/intent_forecast")
+    accepted = ForecastSuggestion(
+        id="s1", title="Run focused tests", prompt="pytest tests/intent_forecast"
+    )
     features = {
         "stage": "test",
         "suggestion_kind": "run_tests",

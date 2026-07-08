@@ -415,9 +415,7 @@ class PatchGenerator:
         return _QUOTE_RE.sub(b'"\\1"', normalised)
 
     @staticmethod
-    def files_differ_norm(
-        upstream_path: Path, src_path: Path, loose: bool = False
-    ) -> bool:
+    def files_differ_norm(upstream_path: Path, src_path: Path, loose: bool = False) -> bool:
         """Compare two files with normalised line endings.
 
         When ``loose`` is True, also normalise single-quote → double-quote inside
@@ -425,10 +423,9 @@ class PatchGenerator:
         equal (used by the ``--ignore-quote-style`` CLI flag).
         """
         if loose:
-            return (
-                PatchGenerator.read_normalised_loose(upstream_path)
-                != PatchGenerator.read_normalised_loose(src_path)
-            )
+            return PatchGenerator.read_normalised_loose(
+                upstream_path
+            ) != PatchGenerator.read_normalised_loose(src_path)
         return PatchGenerator.read_normalised(upstream_path) != PatchGenerator.read_normalised(
             src_path
         )

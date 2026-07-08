@@ -134,8 +134,7 @@ class DecompositionPlan:
         raw_resources = sc.get("resources")
         if isinstance(raw_resources, (list, tuple)):
             sc["resources"] = [
-                r.to_dict() if isinstance(r, _Resource) else r
-                for r in raw_resources
+                r.to_dict() if isinstance(r, _Resource) else r for r in raw_resources
             ]
         return sc
 
@@ -253,9 +252,7 @@ class TaskDecomposer:
             raise ValueError("goal must be a non-empty string")
         if max_steps < 1:
             raise ValueError("max_steps must be at least 1")
-        if scheduling_constraints is not None and not isinstance(
-            scheduling_constraints, dict
-        ):
+        if scheduling_constraints is not None and not isinstance(scheduling_constraints, dict):
             raise ValueError("scheduling_constraints must be a dict or None")
 
         decomposition_run_id = _new_id("D-")
@@ -301,9 +298,7 @@ class TaskDecomposer:
             assumptions=assumptions,
             ambiguity_report=ambiguity_report,
             validation_run=validation_run,
-            method_references=_collect_method_references(
-                tasks, self.method_library
-            ),
+            method_references=_collect_method_references(tasks, self.method_library),
             acceptance_template_references=_collect_acceptance_template_references(tasks),
             scheduling_constraints=scheduling_constraints,
             schedule=schedule,
@@ -544,16 +539,16 @@ class TaskDecomposer:
             "Each task must have at least one acceptance criterion. "
             "Dependencies must be acyclic and only reference IDs listed in tasks or existingTasks. "
             f"Emit at most {max_steps} tasks. "
-            "Shape: {\"tasks\": [{\"proposedTaskId\": \"tmp-...\", "
-            "\"subject\": \"...\", \"description\": \"...\", "
-            "\"activeForm\": \"...\", \"acceptanceCriteria\": [\"...\"], "
-            "\"blockedBy\": [\"tmp-...\"], "
-            "\"lkbMetadata\": {\"assertions\": [...], \"acceptance_proof\": \"...\", "
-            "\"assumptions\": [...], \"strict_acceptance\": false, "
-            "\"acceptance_template_id\": \"T-test-passes-001\", "
-            "\"method_ref\": \"M-add-api-endpoint-001\"}}], "
-            "\"dependencies\": [[\"tmp-a\", \"tmp-b\"]], "
-            "\"assumptions\": [\"...\"]}. "
+            'Shape: {"tasks": [{"proposedTaskId": "tmp-...", '
+            '"subject": "...", "description": "...", '
+            '"activeForm": "...", "acceptanceCriteria": ["..."], '
+            '"blockedBy": ["tmp-..."], '
+            '"lkbMetadata": {"assertions": [...], "acceptance_proof": "...", '
+            '"assumptions": [...], "strict_acceptance": false, '
+            '"acceptance_template_id": "T-test-passes-001", '
+            '"method_ref": "M-add-api-endpoint-001"}}], '
+            '"dependencies": [["tmp-a", "tmp-b"]], '
+            '"assumptions": ["..."]}. '
             "accepted lkbMetadata keys: assertions, acceptance_proof, "
             "assumptions, strict_acceptance, method_ref, acceptance_template_id.  method_ref is "
             "optional; when present it MUST be a method_id from the "
@@ -717,9 +712,7 @@ class TaskDecomposer:
             ambiguity_report=ambiguity_report,
             validation_run=None,
         )
-        issues.extend(
-            validate_method_compliance(method_plan, method_library=self.method_library)
-        )
+        issues.extend(validate_method_compliance(method_plan, method_library=self.method_library))
         issues.extend(validate_external_config_references(method_plan))
         issues.extend(validate_acceptance_template_references(method_plan))
 
@@ -911,7 +904,9 @@ def _extract_and_validate_plan(raw: str, max_steps: int) -> dict[str, Any]:
         _reject_unknown_keys(task, _TASK_KEYS, f"tasks[{index}]")
         task_id = task.get("proposedTaskId")
         if not isinstance(task_id, str) or not task_id:
-            raise TaskDecompositionError(f"tasks[{index}].proposedTaskId must be a non-empty string")
+            raise TaskDecompositionError(
+                f"tasks[{index}].proposedTaskId must be a non-empty string"
+            )
         if task_id in seen_ids:
             raise TaskDecompositionError(f"duplicate proposedTaskId: {task_id}")
         seen_ids.add(task_id)
@@ -956,9 +951,7 @@ def _extract_and_validate_plan(raw: str, max_steps: int) -> dict[str, Any]:
             raise TaskDecompositionError(f"dependencies[{dep_index}] must be a pair")
         prereq, dependent = dep
         if not isinstance(prereq, str) or not isinstance(dependent, str):
-            raise TaskDecompositionError(
-                f"dependencies[{dep_index}] entries must be strings"
-            )
+            raise TaskDecompositionError(f"dependencies[{dep_index}] entries must be strings")
         if prereq not in seen_ids:
             raise TaskDecompositionError(
                 f"dependencies[{dep_index}] references unknown task {prereq!r}"
@@ -1093,9 +1086,7 @@ def _acceptance_template_refs_for_task(task: ProposedTask) -> tuple[str, ...]:
 def _reject_unknown_keys(data: dict[str, Any], allowed: set[str], where: str) -> None:
     unknown = sorted(set(data) - allowed)
     if unknown:
-        raise TaskDecompositionError(
-            f"{where} contains unknown fields: {', '.join(unknown)}"
-        )
+        raise TaskDecompositionError(f"{where} contains unknown fields: {', '.join(unknown)}")
 
 
 def _require_string(data: dict[str, Any], key: str, where: str) -> str:
@@ -1125,9 +1116,7 @@ def _validate_lkb_metadata(lkb: dict[str, Any], where: str) -> None:
         if key in lkb:
             for idx, item in enumerate(lkb[key]):
                 if not isinstance(item, str):
-                    raise TaskDecompositionError(
-                        f"{where}.{key}[{idx}] must be a string"
-                    )
+                    raise TaskDecompositionError(f"{where}.{key}[{idx}] must be a string")
     if "acceptance_proof" in lkb and not isinstance(lkb["acceptance_proof"], (str, type(None))):
         raise TaskDecompositionError(f"{where}.acceptance_proof must be a string or null")
     # F-150: ``method_ref`` is optional; if present, it must be a non-empty
@@ -1150,22 +1139,17 @@ def _validate_lkb_metadata(lkb: dict[str, Any], where: str) -> None:
     # a boolean.  The flag is informational at the task level — the
     # actual scheduling parameters live in
     # ``DecompositionPlan.scheduling_constraints`` (set by the caller).
-    if "scheduling_required" in lkb and not isinstance(
-        lkb["scheduling_required"], bool
-    ):
-        raise TaskDecompositionError(
-            f"{where}.scheduling_required must be a boolean when present"
-        )
+    if "scheduling_required" in lkb and not isinstance(lkb["scheduling_required"], bool):
+        raise TaskDecompositionError(f"{where}.scheduling_required must be a boolean when present")
     # F-152: ``duration`` (positive int) and ``earliest_start``
     # (non-negative int) are optional per-task scheduling hints.  The
     # LKB scheduling pass picks them up to build a SchedulingTask.
     if "duration" in lkb and (
-        not isinstance(lkb["duration"], int) or isinstance(lkb["duration"], bool)
+        not isinstance(lkb["duration"], int)
+        or isinstance(lkb["duration"], bool)
         or lkb["duration"] < 1
     ):
-        raise TaskDecompositionError(
-            f"{where}.duration must be a positive integer when present"
-        )
+        raise TaskDecompositionError(f"{where}.duration must be a positive integer when present")
     if "earliest_start" in lkb and (
         not isinstance(lkb["earliest_start"], int)
         or isinstance(lkb["earliest_start"], bool)

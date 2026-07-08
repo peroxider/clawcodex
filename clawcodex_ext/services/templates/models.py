@@ -201,21 +201,15 @@ class TemplateVariable:
             raise ValueError("variable required must be a bool")
         if not isinstance(self.secret, bool):
             raise ValueError("variable secret must be a bool")
-        if self.default is not None and not isinstance(
-            self.default, (str, int, float, bool)
-        ):
-            raise ValueError(
-                "variable default must be str / int / float / bool / None"
-            )
+        if self.default is not None and not isinstance(self.default, (str, int, float, bool)):
+            raise ValueError("variable default must be str / int / float / bool / None")
         if self.pattern is not None:
             if not isinstance(self.pattern, str):
                 raise ValueError("variable pattern must be a string when provided")
             try:
                 re.compile(self.pattern)
             except re.error as exc:
-                raise ValueError(
-                    f"variable pattern is not a valid regex: {exc}"
-                ) from exc
+                raise ValueError(f"variable pattern is not a valid regex: {exc}") from exc
         if not isinstance(self.choices, tuple):
             raise ValueError("variable choices must be a tuple of strings")
         for choice in self.choices:
@@ -537,9 +531,7 @@ def min_clawcodex_version_of(template: Template) -> str | None:
     if raw is None:
         return None
     if not isinstance(raw, str):
-        raise ValueError(
-            "metadata.min_clawcodex_version must be a string when provided"
-        )
+        raise ValueError("metadata.min_clawcodex_version must be a string when provided")
     return raw or None
 
 

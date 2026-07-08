@@ -201,9 +201,7 @@ class TestKimiProvider(unittest.TestCase):
     def test_apply_kimi_request_quirks_thinking_disabled(self):
         """Disabled reasoning_config emits disabled thinking block."""
         provider = KimiProvider(api_key="test_key")
-        quirks = provider._apply_kimi_request_quirks(
-            {"reasoning_config": {"enabled": False}}
-        )
+        quirks = provider._apply_kimi_request_quirks({"reasoning_config": {"enabled": False}})
         self.assertEqual(quirks["extra_body"]["thinking"], {"type": "disabled"})
 
 

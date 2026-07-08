@@ -100,15 +100,13 @@ def seed_read_file_state_from_history(
                 # mark_file_read stats the file; if it races with a
                 # delete or a permission change, treat as a skip.
                 logger.debug(
-                    "F-125 read-file-state seed: mark_file_read failed "
-                    "for %s",
+                    "F-125 read-file-state seed: mark_file_read failed for %s",
                     path,
                     exc_info=True,
                 )
     if seeded:
         logger.debug(
-            "F-125 read-file-state seed: populated %d file fingerprint(s) "
-            "from resumed history",
+            "F-125 read-file-state seed: populated %d file fingerprint(s) from resumed history",
             seeded,
         )
     return seeded
@@ -163,9 +161,7 @@ def _get(obj: Any, key: str) -> Any:
     return getattr(obj, key, None)
 
 
-def _resolve_read_path(
-    input_data: dict, workspace_root: Path | None
-) -> Path | None:
+def _resolve_read_path(input_data: dict, workspace_root: Path | None) -> Path | None:
     """Resolve the ``file_path`` argument of a Read tool_use block.
 
     Accepts both ``file_path`` (canonical) and ``path`` (legacy alias)
@@ -185,7 +181,7 @@ def _resolve_read_path(
     if not p.is_absolute():
         if workspace_root is None:
             return None
-        p = (workspace_root / p)
+        p = workspace_root / p
     try:
         return p.resolve()
     except (OSError, RuntimeError):

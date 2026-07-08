@@ -38,8 +38,7 @@ def run_session_command(args: list[str]) -> int:
 
     print(f"Unknown session command: {subcommand}", file=sys.stderr)
     print(
-        "usage: clawcodex-dev session migrate --from-3-file "
-        "[--all] [--remove-legacy] [SESSION_ID]",
+        "usage: clawcodex-dev session migrate --from-3-file [--all] [--remove-legacy] [SESSION_ID]",
         file=sys.stderr,
     )
     return 2

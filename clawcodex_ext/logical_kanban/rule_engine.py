@@ -112,9 +112,7 @@ class Layer1RuleEngine:
             return self._pass(derived)
 
         if target_status == "in_progress":
-            return self._evaluate_in_progress(
-                snapshot, derived, target_task_id
-            )
+            return self._evaluate_in_progress(snapshot, derived, target_task_id)
 
         if target_status == "completed":
             return self._evaluate_completed(
@@ -182,7 +180,9 @@ class Layer1RuleEngine:
 
             if task_id in snapshot.blocked_ids:
                 active_blockers = [
-                    b for b in snapshot.blocked_by.get(task_id, ()) if b not in snapshot.completed_ids
+                    b
+                    for b in snapshot.blocked_by.get(task_id, ())
+                    if b not in snapshot.completed_ids
                 ]
                 premises: list[str] = []
                 for blocker in sorted(active_blockers):
@@ -251,11 +251,7 @@ class Layer1RuleEngine:
             # R-005: if strict acceptance is enabled and we are evaluating a
             # completion, surface acceptance-proof facts now. The actual denial
             # is handled in ``_evaluate_completed``.
-            if (
-                strict_acceptance
-                and target_task_id == task_id
-                and target_status == "completed"
-            ):
+            if strict_acceptance and target_task_id == task_id and target_status == "completed":
                 has_proof = self._resolve_acceptance_proof(
                     snapshot, task_id, acceptance_proof_present
                 )
@@ -322,9 +318,7 @@ class Layer1RuleEngine:
         acceptance_proof_present: bool | None,
     ) -> RuleEngineResult:
         if strict_acceptance:
-            has_proof = self._resolve_acceptance_proof(
-                snapshot, task_id, acceptance_proof_present
-            )
+            has_proof = self._resolve_acceptance_proof(snapshot, task_id, acceptance_proof_present)
             if not has_proof:
                 denial_fact = _DerivedFact(
                     fact=f"NotCanMoveTo({task_id}, completed)",
@@ -445,7 +439,9 @@ def _strip_slots(template: str) -> str:
     return _SLOT_FINDER.sub("", template).strip()
 
 
-def _resolve_method(method_id: str, library: tuple["EngineeringMethod", ...] | None) -> "EngineeringMethod | None":
+def _resolve_method(
+    method_id: str, library: tuple["EngineeringMethod", ...] | None
+) -> "EngineeringMethod | None":
     if not library:
         return None
     for method in library:
@@ -590,13 +586,8 @@ def validate_method_compliance(
             )
 
         # R-METHOD-003 — strict acceptance assertion must be present.
-        if (
-            method.acceptance_template is not None
-            and method.acceptance_template.strict_acceptance
-        ):
-            canonical = _strip_slots(
-                method.acceptance_template.assertion_template
-            )
+        if method.acceptance_template is not None and method.acceptance_template.strict_acceptance:
+            canonical = _strip_slots(method.acceptance_template.assertion_template)
             canonical_lower = canonical.lower()
             # Match either as a substring, or as the prefix before any
             # parenthesis — this lets the LLM fill in slots inline
@@ -647,9 +638,7 @@ def validate_external_config_references(
 
     issues: list[ValidationIssue] = []
     operation_ids = {
-        operation.operation_id
-        for operation in operations
-        if hasattr(operation, "operation_id")
+        operation.operation_id for operation in operations if hasattr(operation, "operation_id")
     }
 
     if operation_ids:
@@ -713,11 +702,7 @@ def validate_acceptance_template_references(
     if templates is None:
         templates = get_all_acceptance_templates()
 
-    known_ids = {
-        template.template_id
-        for template in templates
-        if hasattr(template, "template_id")
-    }
+    known_ids = {template.template_id for template in templates if hasattr(template, "template_id")}
     issues: list[ValidationIssue] = []
     for task in plan.tasks:
         for template_id in _acceptance_template_refs_for_task(task):
@@ -771,5 +756,7 @@ def _acceptance_template_refs_for_task(task: Any) -> tuple[str, ...]:
 def _acceptance_template_ids(text: str) -> tuple[str, ...]:
     refs = []
     refs.extend(_re.findall(r"\btemplate_ref\s*[:=]\s*(T-[a-z0-9]+(?:-[a-z0-9]+)*-\d{3})\b", text))
-    refs.extend(_re.findall(r"\bacceptance_template_id\s*[:=]\s*(T-[a-z0-9]+(?:-[a-z0-9]+)*-\d{3})\b", text))
+    refs.extend(
+        _re.findall(r"\bacceptance_template_id\s*[:=]\s*(T-[a-z0-9]+(?:-[a-z0-9]+)*-\d{3})\b", text)
+    )
     return tuple(refs)

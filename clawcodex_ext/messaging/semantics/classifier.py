@@ -24,12 +24,12 @@ if TYPE_CHECKING:
 _COMMAND_ROUTER = None
 
 _DELIVER_AS_MAP = {
-    'newPrompt': 'NEW_PROMPT',
-    'command': 'COMMAND',
-    'followUp': 'FOLLOW_UP',
-    'approval': 'APPROVAL',
-    'interrupt': 'INTERRUPT',
-    'contextOnly': 'CONTEXT_ONLY',
+    "newPrompt": "NEW_PROMPT",
+    "command": "COMMAND",
+    "followUp": "FOLLOW_UP",
+    "approval": "APPROVAL",
+    "interrupt": "INTERRUPT",
+    "contextOnly": "CONTEXT_ONLY",
 }
 
 
@@ -50,7 +50,7 @@ class MessageClassifier:
         if _command_router().route(message) is not None:
             return MessageSemantics.COMMAND
         # 3. approval only via structured metadata or bound wait-point
-        if has_pending_wait and message.semantic_tags and 'approval' in message.semantic_tags:
+        if has_pending_wait and message.semantic_tags and "approval" in message.semantic_tags:
             return MessageSemantics.APPROVAL
         # 4. busy ordinary text → queue-as-followUp
         if is_busy:
@@ -62,7 +62,7 @@ class MessageClassifier:
         MessageSemantics = _message_semantics()
         raw = None
         if message.raw and isinstance(message.raw, dict):
-            raw = message.raw.get('deliverAs')
+            raw = message.raw.get("deliverAs")
         if raw is None:
             # semantic_tags may carry an explicit semantic
             for tag in message.semantic_tags or []:
@@ -88,4 +88,4 @@ def _command_router():
     return _COMMAND_ROUTER
 
 
-__all__ = ['MessageClassifier']
+__all__ = ["MessageClassifier"]

@@ -14,6 +14,7 @@ from clawcodex_ext.native.modifiers import (
 
 def test_modifiers_registered():
     from clawcodex_ext.native import NativeModuleRegistry
+
     assert NativeModuleRegistry.is_registered("modifiers")
 
 
@@ -51,6 +52,7 @@ def test_modifiers_current_state_raises_when_unavailable():
     mod = ModifiersModule()
     mod._backend = None
     from clawcodex_ext.native import NativeModuleError
+
     with pytest.raises(NativeModuleError):
         mod.current_state()
 

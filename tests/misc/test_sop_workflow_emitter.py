@@ -7,8 +7,13 @@ from pathlib import Path
 from extensions.sop_converter.skill_grouper import GroupStrategy, group_source_components
 from extensions.sop_converter.source_parser import SourceCodeParser
 from extensions.sop_converter.workflow_mode.capability import StageCapabilityMapper
-from extensions.sop_converter.workflow_mode.extractors.adapters.generic import GenericPipelineExtractor
-from extensions.sop_converter.workflow_mode.schema import graph_to_engine_yaml_dict, validate_workflow_dict
+from extensions.sop_converter.workflow_mode.extractors.adapters.generic import (
+    GenericPipelineExtractor,
+)
+from extensions.sop_converter.workflow_mode.schema import (
+    graph_to_engine_yaml_dict,
+    validate_workflow_dict,
+)
 from extensions.sop_converter.workflow_mode.scan_context import SourceScanContext
 from extensions.orchestrator.workflow_engine import WorkflowSchema
 

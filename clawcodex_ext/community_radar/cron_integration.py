@@ -76,9 +76,7 @@ def _load_cron_tasks_path() -> Path | None:
         )
     except Exception:  # noqa: BLE001
         return None
-    base = os.environ.get("CLAWCODEX_HOME") or os.environ.get(
-        "CLAWCODEX_WORKSPACE_ROOT"
-    )
+    base = os.environ.get("CLAWCODEX_HOME") or os.environ.get("CLAWCODEX_WORKSPACE_ROOT")
     root = Path(base) if base else Path.cwd()
     return root / SCHEDULED_TASKS_RELATIVE_PATH
 
@@ -155,19 +153,21 @@ def install_cron_task(
 
     _log.info("installed Cron task %s (%s)", task_id, cron_expr)
     return CronTaskSummary(
-        task_id=task_id, installed=True, schedule=cron_expr,
+        task_id=task_id,
+        installed=True,
+        schedule=cron_expr,
         message=f"registered in {path}",
     )
 
 
-def uninstall_cron_task(
-    *, task_id: str = DEFAULT_CRON_TASK_ID
-) -> CronTaskSummary:
+def uninstall_cron_task(*, task_id: str = DEFAULT_CRON_TASK_ID) -> CronTaskSummary:
     """Remove a previously installed radar Cron task."""
     path = _load_cron_tasks_path()
     if path is None or not path.exists():
         return CronTaskSummary(
-            task_id=task_id, installed=False, schedule="",
+            task_id=task_id,
+            installed=False,
+            schedule="",
             message="no scheduled_tasks.json found",
         )
     try:
@@ -176,7 +176,9 @@ def uninstall_cron_task(
         raw = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(raw, list):
             return CronTaskSummary(
-                task_id=task_id, installed=False, schedule="",
+                task_id=task_id,
+                installed=False,
+                schedule="",
                 message="malformed scheduled_tasks.json",
             )
         remaining = [item for item in raw if item.get("id") != task_id]
@@ -186,23 +188,27 @@ def uninstall_cron_task(
         )
     except Exception as exc:  # noqa: BLE001
         return CronTaskSummary(
-            task_id=task_id, installed=False, schedule="",
+            task_id=task_id,
+            installed=False,
+            schedule="",
             message=f"failed to mutate {path}: {exc}",
         )
     return CronTaskSummary(
-        task_id=task_id, installed=True, schedule="",
+        task_id=task_id,
+        installed=True,
+        schedule="",
         message=f"removed from {path}",
     )
 
 
-def get_cron_task_status(
-    *, task_id: str = DEFAULT_CRON_TASK_ID
-) -> CronTaskSummary:
+def get_cron_task_status(*, task_id: str = DEFAULT_CRON_TASK_ID) -> CronTaskSummary:
     """Return whether the task is currently registered."""
     path = _load_cron_tasks_path()
     if path is None or not path.exists():
         return CronTaskSummary(
-            task_id=task_id, installed=False, schedule="",
+            task_id=task_id,
+            installed=False,
+            schedule="",
             message="no scheduled_tasks.json",
         )
     try:
@@ -211,23 +217,30 @@ def get_cron_task_status(
         raw = json.loads(path.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
         return CronTaskSummary(
-            task_id=task_id, installed=False, schedule="",
+            task_id=task_id,
+            installed=False,
+            schedule="",
             message="unreadable scheduled_tasks.json",
         )
     if not isinstance(raw, list):
         return CronTaskSummary(
-            task_id=task_id, installed=False, schedule="",
+            task_id=task_id,
+            installed=False,
+            schedule="",
             message="malformed scheduled_tasks.json",
         )
     for item in raw:
         if isinstance(item, dict) and item.get("id") == task_id:
             return CronTaskSummary(
-                task_id=task_id, installed=True,
+                task_id=task_id,
+                installed=True,
                 schedule=str(item.get("cron", "")),
                 message=f"found in {path}",
             )
     return CronTaskSummary(
-        task_id=task_id, installed=False, schedule="",
+        task_id=task_id,
+        installed=False,
+        schedule="",
         message=f"no entry in {path}",
     )
 
@@ -278,9 +291,11 @@ def _load_config_safely() -> RadarConfig:
     try:
         if path.suffix.lower() in {".yaml", ".yml"}:
             import yaml  # type: ignore
+
             data = yaml.safe_load(text)
         else:
             import json
+
             data = json.loads(text)
     except Exception:  # noqa: BLE001
         return RadarConfig()

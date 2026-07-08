@@ -138,7 +138,11 @@ class WorkflowOrchestrator:
         start_time = time.time()
 
         # 尝试从检查点恢复
-        if from_stage is None and self._checkpoint_mgr is not None and self._checkpoint_mgr.exists():
+        if (
+            from_stage is None
+            and self._checkpoint_mgr is not None
+            and self._checkpoint_mgr.exists()
+        ):
             checkpoint = self._checkpoint_mgr.load()
             if checkpoint and checkpoint.completed_stages:
                 last_completed = max(checkpoint.completed_stages)
@@ -222,7 +226,8 @@ class WorkflowOrchestrator:
 
         logger.info(
             "WorkflowOrchestrator: running for issue %s (%s)",
-            issue.identifier, issue.title,
+            issue.identifier,
+            issue.title,
         )
 
         return await self.run(from_stage=from_stage)
@@ -253,7 +258,8 @@ class WorkflowOrchestrator:
     def _on_workflow_start(self, event_type: str, event: dict[str, Any]) -> None:
         logger.info(
             "Workflow started: %s (%d stages)",
-            event.get("workflow_name"), event.get("total_stages"),
+            event.get("workflow_name"),
+            event.get("total_stages"),
         )
 
     def _on_stage_start(self, event_type: str, event: dict[str, Any]) -> None:
@@ -288,7 +294,8 @@ class WorkflowOrchestrator:
         total = self._engine.state.total_stages
         logger.info(
             "Workflow completed: cost=%.4f, duration=%.1fs",
-            total_cost, total_duration,
+            total_cost,
+            total_duration,
         )
         self._progress_sink.on_workflow_complete(total_cost, total_duration)
         self._audit.write_workflow_complete(total_cost, total_duration, completed, total)

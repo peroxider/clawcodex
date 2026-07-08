@@ -58,7 +58,7 @@ class GatewayIpcServer:
         self._server = await asyncio.start_unix_server(
             self._handle_client, path=str(self.socket_path)
         )
-        logger.info('gateway ipc server listening: %s', self.socket_path)
+        logger.info("gateway ipc server listening: %s", self.socket_path)
 
     async def close(self) -> None:
         if self._server is not None:
@@ -66,16 +66,16 @@ class GatewayIpcServer:
             await self._server.wait_closed()
             self._server = None
         for info in list(self._peers.values()):
-            writer = info.get('writer')
+            writer = info.get("writer")
             if writer is not None:
                 writer.close()
-                with __import__('contextlib').suppress(ConnectionError, RuntimeError):
+                with __import__("contextlib").suppress(ConnectionError, RuntimeError):
                     await writer.wait_closed()
         self._peers.clear()
         self._writer_locks.clear()
-        with __import__('contextlib').suppress(FileNotFoundError):
+        with __import__("contextlib").suppress(FileNotFoundError):
             self.socket_path.unlink()
-        logger.info('gateway ipc server closed')
+        logger.info("gateway ipc server closed")
 
     @property
     def connected_count(self) -> int:
@@ -88,19 +88,19 @@ class GatewayIpcServer:
         info = self._peers.get(session_id)
         if info is None:
             return False
-        return (self._clock() - info.get('last_seen', 0)) < self._heartbeat_timeout
+        return (self._clock() - info.get("last_seen", 0)) < self._heartbeat_timeout
 
     def peers_snapshot(self) -> list[dict[str, Any]]:
         peers: list[dict[str, Any]] = []
         for session_id, info in self._peers.items():
-            origin = str(info.get('origin') or '')
-            capabilities = list(info.get('capabilities') or [])
+            origin = str(info.get("origin") or "")
+            capabilities = list(info.get("capabilities") or [])
             peers.append(
                 {
-                    'session_id': session_id,
-                    'origin': origin,
-                    'host_type': _host_type(session_id, capabilities),
-                    'online': self.is_online(session_id),
+                    "session_id": session_id,
+                    "origin": origin,
+                    "host_type": _host_type(session_id, capabilities),
+                    "online": self.is_online(session_id),
                 }
             )
         return peers
@@ -122,15 +122,15 @@ class GatewayIpcServer:
         binding or peer offline — the caller falls back to the default host).
         """
         entry = None
-        if hasattr(self.gateway, 'binding'):
+        if hasattr(self.gateway, "binding"):
             entry = self.gateway.binding.get(origin)
         if entry is None:
-            logger.debug('gateway ipc: push_deliver no binding for origin=%s', origin[:24])
+            logger.debug("gateway ipc: push_deliver no binding for origin=%s", origin[:24])
             return False
         session_id = entry.target.session_id
         info = self._peers.get(session_id)
         if info is None:
-            logger.debug('gateway ipc: push_deliver peer %s not connected', session_id[:16])
+            logger.debug("gateway ipc: push_deliver peer %s not connected", session_id[:16])
             return False
         frame = GatewayFrame.deliver(
             delivery_id=delivery_id,
@@ -140,9 +140,9 @@ class GatewayIpcServer:
             semantic=semantic,
             context_token=context_token,
         )
-        await self._send(info['writer'], frame)
+        await self._send(info["writer"], frame)
         logger.info(
-            'gateway ipc: pushed DELIVER origin=%s session=%s delivery_id=%s',
+            "gateway ipc: pushed DELIVER origin=%s session=%s delivery_id=%s",
             origin[:24],
             session_id[:16],
             delivery_id[:16],
@@ -165,18 +165,18 @@ class GatewayIpcServer:
                 if frame.type is FrameType.REGISTER and frame.session_id:
                     peer_session = frame.session_id
                     existing = self._peers.get(peer_session)
-                    if existing is not None and existing.get('writer') is not writer:
+                    if existing is not None and existing.get("writer") is not writer:
                         await self._disconnect_peer(peer_session, existing)
                     if frame.origin:
                         await self._disconnect_conflicting_peers(frame.origin, frame.session_id)
                     host_type = _host_type(frame.session_id, frame.capabilities)
                     self._peers[peer_session] = {
-                        'writer': writer,
-                        'last_seen': self._clock(),
-                        'capabilities': list(frame.capabilities),
-                        'origin': frame.origin,
+                        "writer": writer,
+                        "last_seen": self._clock(),
+                        "capabilities": list(frame.capabilities),
+                        "origin": frame.origin,
                     }
-                    if frame.origin and hasattr(self.gateway, 'binding'):
+                    if frame.origin and hasattr(self.gateway, "binding"):
                         from .models import SessionTarget
 
                         self.gateway.binding.bind(
@@ -187,26 +187,26 @@ class GatewayIpcServer:
                             ),
                         )
                     logger.info(
-                        'gateway ipc: REGISTER session=%s host_type=%s origin=%s',
+                        "gateway ipc: REGISTER session=%s host_type=%s origin=%s",
                         frame.session_id[:24],
                         host_type,
-                        (frame.origin or '')[:32],
+                        (frame.origin or "")[:32],
                     )
                     await self._send(
                         writer,
                         GatewayFrame.ack(
                             delivery_id=frame.message_id,
-                            layer='accepted',
-                            message='registered',
+                            layer="accepted",
+                            message="registered",
                         ),
                     )
                     continue
                 if peer_session is not None:
                     info = self._peers.get(peer_session)
-                    if info is None or info.get('writer') is not writer:
+                    if info is None or info.get("writer") is not writer:
                         peer_session = None
                     else:
-                        info['last_seen'] = self._clock()
+                        info["last_seen"] = self._clock()
                 response = await self._dispatch(frame, peer_session, writer)
                 if response is not None:
                     await self._send(writer, response)
@@ -215,13 +215,13 @@ class GatewayIpcServer:
         finally:
             if peer_session is not None:
                 info = self._peers.get(peer_session)
-                if info is not None and info.get('writer') is writer:
+                if info is not None and info.get("writer") is writer:
                     self._peers.pop(peer_session, None)
-                    origin = info.get('origin')
-                    if origin and hasattr(self.gateway, 'binding'):
+                    origin = info.get("origin")
+                    if origin and hasattr(self.gateway, "binding"):
                         self.gateway.binding.mark_offline(origin, session_id=peer_session)
             writer.close()
-            with __import__('contextlib').suppress(ConnectionError, RuntimeError):
+            with __import__("contextlib").suppress(ConnectionError, RuntimeError):
                 await writer.wait_closed()
 
     async def _send(self, writer: asyncio.StreamWriter, frame: GatewayFrame) -> None:
@@ -237,20 +237,20 @@ class GatewayIpcServer:
                 writer.write(frame.encode())
                 await writer.drain()
         except (ConnectionError, RuntimeError) as exc:
-            logger.debug('gateway ipc: writer send failed: %s', exc)
+            logger.debug("gateway ipc: writer send failed: %s", exc)
 
     async def _dispatch(
         self, frame: GatewayFrame, peer_session: str | None, writer: asyncio.StreamWriter
     ) -> GatewayFrame | None:
         if frame.type is FrameType.HEARTBEAT:
             return GatewayFrame.ack(
-                delivery_id=frame.message_id, layer='accepted', message='heartbeat'
+                delivery_id=frame.message_id, layer="accepted", message="heartbeat"
             )
         if frame.type is FrameType.DELIVER:
             if peer_session is None:
                 return GatewayFrame.nack(
                     delivery_id=frame.delivery_id or frame.message_id,
-                    reason='peer not registered',
+                    reason="peer not registered",
                 )
             return await self._handle_deliver(frame)
         if frame.type is FrameType.OUTBOUND:
@@ -260,37 +260,37 @@ class GatewayIpcServer:
         if frame.type is FrameType.UNREGISTER:
             if peer_session is not None:
                 info = self._peers.pop(peer_session, None)
-                origin = info.get('origin') if info else None
-                if origin and hasattr(self.gateway, 'binding'):
+                origin = info.get("origin") if info else None
+                if origin and hasattr(self.gateway, "binding"):
                     self.gateway.binding.terminate(origin, session_id=peer_session)
             return GatewayFrame.ack(
-                delivery_id=frame.message_id, layer='accepted', message='unregistered'
+                delivery_id=frame.message_id, layer="accepted", message="unregistered"
             )
-        logger.debug('gateway ipc: ignored frame type=%s', frame.type)
+        logger.debug("gateway ipc: ignored frame type=%s", frame.type)
         return None
 
     async def _disconnect_conflicting_peers(self, origin: str, session_id: str) -> None:
         for existing_session, info in list(self._peers.items()):
             if existing_session == session_id:
                 continue
-            existing_origin = str(info.get('origin') or '')
+            existing_origin = str(info.get("origin") or "")
             if not _same_exclusive_origin_group(origin, existing_origin):
                 continue
             await self._disconnect_peer(existing_session, info)
             logger.info(
-                'gateway ipc: disconnected previous peer session=%s origin=%s',
+                "gateway ipc: disconnected previous peer session=%s origin=%s",
                 existing_session[:16],
                 existing_origin[:24],
             )
 
     async def _disconnect_matching_peers(self, origin: str) -> None:
         for existing_session, info in list(self._peers.items()):
-            existing_origin = str(info.get('origin') or '')
+            existing_origin = str(info.get("origin") or "")
             if not _same_exclusive_origin_group(origin, existing_origin):
                 continue
             await self._disconnect_peer(existing_session, info)
             logger.info(
-                'gateway ipc: disconnected peer via unbind session=%s origin=%s',
+                "gateway ipc: disconnected peer via unbind session=%s origin=%s",
                 existing_session[:16],
                 existing_origin[:24],
             )
@@ -299,28 +299,28 @@ class GatewayIpcServer:
         current = self._peers.get(session_id)
         if current is info:
             self._peers.pop(session_id, None)
-        writer = info.get('writer')
+        writer = info.get("writer")
         if writer is None:
             return
         writer.close()
-        with __import__('contextlib').suppress(ConnectionError, RuntimeError):
+        with __import__("contextlib").suppress(ConnectionError, RuntimeError):
             await writer.wait_closed()
 
     async def _handle_deliver(self, frame: GatewayFrame) -> GatewayFrame:
         from .models import InboundMessage
 
-        text = frame.text or ''
+        text = frame.text or ""
         semantic = None
         if frame.semantic:
             from .models import MessageSemantics
 
-            with __import__('contextlib').suppress(ValueError):
+            with __import__("contextlib").suppress(ValueError):
                 semantic = MessageSemantics(frame.semantic)
         inbound = InboundMessage(
-            origin=frame.origin or '',
+            origin=frame.origin or "",
             text=text,
-            message_id=frame.delivery_id or '',
-            channel='',
+            message_id=frame.delivery_id or "",
+            channel="",
             context_token=frame.context_token,
             semantic=semantic,
         )
@@ -328,17 +328,17 @@ class GatewayIpcServer:
             ack = await self.gateway.receive(inbound)
         except Exception as exc:  # noqa: BLE001
             logger.exception(
-                'gateway ipc: deliver handler error delivery_id=%s',
+                "gateway ipc: deliver handler error delivery_id=%s",
                 (frame.delivery_id or frame.message_id)[:16],
             )
             return GatewayFrame.nack(
-                delivery_id=frame.delivery_id or frame.message_id, reason=f'deliver error: {exc}'
+                delivery_id=frame.delivery_id or frame.message_id, reason=f"deliver error: {exc}"
             )
-        layer = ack.layer.value if hasattr(ack, 'layer') else 'accepted'
+        layer = ack.layer.value if hasattr(ack, "layer") else "accepted"
         return GatewayFrame.ack(
             delivery_id=frame.delivery_id or frame.message_id,
             layer=layer,
-            message=ack.message if hasattr(ack, 'message') else '',
+            message=ack.message if hasattr(ack, "message") else "",
         )
 
     async def _handle_outbound(self, frame: GatewayFrame) -> GatewayFrame | None:
@@ -348,16 +348,16 @@ class GatewayIpcServer:
         ``wechat:direct:{account}:{user}``); resolve them and call
         ``gateway.send`` so the OutboundDispatcher delivers to WeChat.
         """
-        origin = frame.origin or ''
-        text = frame.text or ''
+        origin = frame.origin or ""
+        text = frame.text or ""
         if not origin or not text:
             return GatewayFrame.nack(
-                delivery_id=frame.message_id, reason='outbound requires origin+text'
+                delivery_id=frame.message_id, reason="outbound requires origin+text"
             )
         channel, target = _resolve_origin(origin, self.gateway)
         if channel is None:
             return GatewayFrame.nack(
-                delivery_id=frame.message_id, reason=f'unresolvable origin {origin!r}'
+                delivery_id=frame.message_id, reason=f"unresolvable origin {origin!r}"
             )
         try:
             from .models import OutboundMessage
@@ -376,38 +376,38 @@ class GatewayIpcServer:
             )
             send_elapsed = time.monotonic() - send_started
         except Exception as exc:  # noqa: BLE001
-            logger.exception('gateway ipc: OUTBOUND send failed origin=%s', origin[:24])
-            return GatewayFrame.nack(delivery_id=frame.message_id, reason=f'send error: {exc}')
+            logger.exception("gateway ipc: OUTBOUND send failed origin=%s", origin[:24])
+            return GatewayFrame.nack(delivery_id=frame.message_id, reason=f"send error: {exc}")
         # A send slower than the client's ACK timeout means the client has
         # already logged "OUTBOUND timed out" and moved on — the ACK we are
         # about to return will be dropped. Surface this at WARNING so the
         # gateway log reconciles with the client-side timeout instead of
         # silently showing an INFO success line.
         client_timed_out = send_elapsed > IPC_CLIENT_ACK_TIMEOUT_SECONDS
-        if result is not None and getattr(result, 'ok', True) is False:
-            error_category = getattr(result, 'error_category', '')
-            category_value = getattr(error_category, 'value', '') or str(error_category or '')
-            message = getattr(result, 'message', None) or category_value or 'send failed'
+        if result is not None and getattr(result, "ok", True) is False:
+            error_category = getattr(result, "error_category", "")
+            category_value = getattr(error_category, "value", "") or str(error_category or "")
+            message = getattr(result, "message", None) or category_value or "send failed"
             logger.warning(
-                'gateway ipc: OUTBOUND send rejected origin=%s channel=%s category=%s attempts=%s '
-                'elapsed=%.1fs message=%s',
+                "gateway ipc: OUTBOUND send rejected origin=%s channel=%s category=%s attempts=%s "
+                "elapsed=%.1fs message=%s",
                 origin[:24],
                 channel,
                 category_value,
-                getattr(result, 'attempts', None),
+                getattr(result, "attempts", None),
                 send_elapsed,
                 message,
             )
             return GatewayFrame.nack(
                 delivery_id=frame.message_id,
-                reason=f'send failed: {message}',
+                reason=f"send failed: {message}",
             )
-        status = getattr(result, 'status', None)
-        status_value = getattr(status, 'value', '') or str(status or '')
-        if status_value == 'enqueued':
-            message = getattr(result, 'message', None) or 'enqueued'
+        status = getattr(result, "status", None)
+        status_value = getattr(status, "value", "") or str(status or "")
+        if status_value == "enqueued":
+            message = getattr(result, "message", None) or "enqueued"
             logger.info(
-                'gateway ipc: OUTBOUND enqueued origin=%s channel=%s len=%d elapsed=%.1fs message=%s',
+                "gateway ipc: OUTBOUND enqueued origin=%s channel=%s len=%d elapsed=%.1fs message=%s",
                 origin[:24],
                 channel,
                 len(text),
@@ -416,13 +416,13 @@ class GatewayIpcServer:
             )
             return GatewayFrame.ack(
                 delivery_id=frame.message_id,
-                layer='enqueued',
+                layer="enqueued",
                 message=message,
             )
         if client_timed_out:
             logger.warning(
-                'gateway ipc: OUTBOUND send slow origin=%s channel=%s len=%d elapsed=%.1fs '
-                '(client ACK timeout %.0fs likely exceeded; client may have logged timed out)',
+                "gateway ipc: OUTBOUND send slow origin=%s channel=%s len=%d elapsed=%.1fs "
+                "(client ACK timeout %.0fs likely exceeded; client may have logged timed out)",
                 origin[:24],
                 channel,
                 len(text),
@@ -431,45 +431,45 @@ class GatewayIpcServer:
             )
         else:
             logger.info(
-                'gateway ipc: OUTBOUND → send origin=%s channel=%s len=%d elapsed=%.1fs',
+                "gateway ipc: OUTBOUND → send origin=%s channel=%s len=%d elapsed=%.1fs",
                 origin[:24],
                 channel,
                 len(text),
                 send_elapsed,
             )
-        return GatewayFrame.ack(delivery_id=frame.message_id, layer='processed', message='sent')
+        return GatewayFrame.ack(delivery_id=frame.message_id, layer="processed", message="sent")
 
     async def _handle_event(self, frame: GatewayFrame) -> GatewayFrame | None:
-        etype = frame.event_type or ''
-        if etype == 'control.reload':
-            name = (frame.payload or {}).get('channel', '')
+        etype = frame.event_type or ""
+        if etype == "control.reload":
+            name = (frame.payload or {}).get("channel", "")
             ok = self.gateway.reload_channel(name)
             return GatewayFrame.ack(
                 delivery_id=frame.message_id,
-                layer='accepted' if ok else 'nack',
-                message=f'reload {name}: {"ok" if ok else "not found"}',
+                layer="accepted" if ok else "nack",
+                message=f"reload {name}: {'ok' if ok else 'not found'}",
             )
-        if etype == 'control.status':
+        if etype == "control.status":
             health = await self.gateway.health()
-            health['bindings'] = _binding_snapshot(self.gateway)
-            health['peers'] = self.peers_snapshot()
+            health["bindings"] = _binding_snapshot(self.gateway)
+            health["peers"] = self.peers_snapshot()
             # Echo the request message_id so the client's read loop can route
             # the reply back to the pending status() future.
             return GatewayFrame(
                 type=FrameType.EVENT,
                 message_id=frame.message_id,
-                event_type='control.status',
+                event_type="control.status",
                 payload=health,
             )
-        if etype == 'control.unbind':
-            origin = str((frame.payload or {}).get('origin') or '')
+        if etype == "control.unbind":
+            origin = str((frame.payload or {}).get("origin") or "")
             if not origin:
                 return GatewayFrame.nack(
-                    delivery_id=frame.message_id, reason='control.unbind requires origin'
+                    delivery_id=frame.message_id, reason="control.unbind requires origin"
                 )
             removed = []
-            if hasattr(self.gateway, 'binding'):
-                terminate_matching = getattr(self.gateway.binding, 'terminate_matching', None)
+            if hasattr(self.gateway, "binding"):
+                terminate_matching = getattr(self.gateway.binding, "terminate_matching", None)
                 if callable(terminate_matching):
                     removed = terminate_matching(origin)
                 else:
@@ -478,45 +478,45 @@ class GatewayIpcServer:
             await self._disconnect_matching_peers(origin)
             return GatewayFrame.ack(
                 delivery_id=frame.message_id,
-                layer='accepted',
-                message=f'unbound {len(removed)} binding(s)',
+                layer="accepted",
+                message=f"unbound {len(removed)} binding(s)",
             )
         return None
 
 
 def _host_type(session_id: str, capabilities: list[str]) -> str:
-    joined = ' '.join([session_id, *capabilities]).lower()
-    if 'repl' in joined:
-        return 'repl'
-    if 'orchestrator' in joined or 'issue' in joined or 'run' in joined:
-        return 'orchestrator'
-    return 'opt_in'
+    joined = " ".join([session_id, *capabilities]).lower()
+    if "repl" in joined:
+        return "repl"
+    if "orchestrator" in joined or "issue" in joined or "run" in joined:
+        return "orchestrator"
+    return "opt_in"
 
 
 def _binding_snapshot(gateway) -> list[dict[str, Any]]:
-    binding = getattr(gateway, 'binding', None)
-    all_bindings = getattr(binding, 'all_bindings', None)
+    binding = getattr(gateway, "binding", None)
+    all_bindings = getattr(binding, "all_bindings", None)
     if not callable(all_bindings):
         return []
     return [
         {
-            'origin': entry.origin,
-            'session_id': entry.target.session_id,
-            'host_type': entry.target.host_type,
-            'connection_state': entry.connection_state,
+            "origin": entry.origin,
+            "session_id": entry.target.session_id,
+            "host_type": entry.target.host_type,
+            "connection_state": entry.connection_state,
         }
         for entry in all_bindings()
     ]
 
 
 def _exclusive_origin_group(origin: str) -> str:
-    parts = origin.split(':')
-    if origin == 'im:direct:*:*':
-        return 'im:direct'
-    if len(parts) >= 4 and parts[0] == 'wechat' and parts[1] == 'direct':
-        return 'im:direct'
-    if len(parts) >= 4 and parts[0] == 'feishu' and parts[1] == 'dm':
-        return 'im:direct'
+    parts = origin.split(":")
+    if origin == "im:direct:*:*":
+        return "im:direct"
+    if len(parts) >= 4 and parts[0] == "wechat" and parts[1] == "direct":
+        return "im:direct"
+    if len(parts) >= 4 and parts[0] == "feishu" and parts[1] == "dm":
+        return "im:direct"
     return origin
 
 

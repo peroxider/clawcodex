@@ -67,29 +67,21 @@ class TestHeuristicRouter(unittest.TestCase):
         self.router = HeuristicRouter()
 
     def test_debate_keyword_in_title(self) -> None:
-        result = self.router.choose(
-            _FakeIssue(title="Design new caching layer", description="")
-        )
+        result = self.router.choose(_FakeIssue(title="Design new caching layer", description=""))
         self.assertEqual(result.mode, "debate")
         self.assertGreaterEqual(result.confidence, 0.5)
         self.assertIn("design", result.reason)
 
     def test_coordinator_keyword_in_title(self) -> None:
-        result = self.router.choose(
-            _FakeIssue(title="Refactor auth module", description="")
-        )
+        result = self.router.choose(_FakeIssue(title="Refactor auth module", description=""))
         self.assertEqual(result.mode, "coordinator")
 
     def test_pipeline_keyword_in_title(self) -> None:
-        result = self.router.choose(
-            _FakeIssue(title="Implement OAuth login flow", description="")
-        )
+        result = self.router.choose(_FakeIssue(title="Implement OAuth login flow", description=""))
         self.assertEqual(result.mode, "pipeline")
 
     def test_fallback_when_no_keywords(self) -> None:
-        result = self.router.choose(
-            _FakeIssue(title="Fix typo in README", description="")
-        )
+        result = self.router.choose(_FakeIssue(title="Fix typo in README", description=""))
         self.assertEqual(result.mode, "single")
         # Low confidence so ModeSelector falls back.
         self.assertLess(result.confidence, 0.5)
@@ -175,8 +167,7 @@ class TestLLMRouter(unittest.TestCase):
         stub = _StubHttpClient(
             response=_StubHttpResponse(
                 body=_make_openai_response(
-                    '{"mode": "pipeline", "reason": "needs design then impl", '
-                    '"confidence": 0.85}'
+                    '{"mode": "pipeline", "reason": "needs design then impl", "confidence": 0.85}'
                 )
             )
         )
@@ -188,15 +179,11 @@ class TestLLMRouter(unittest.TestCase):
         # Verify the call shape (one POST, Authorization header, model name).
         self.assertEqual(len(stub.calls), 1)
         call = stub.calls[0]
-        self.assertEqual(
-            call["headers"]["Authorization"], "Bearer test-key"
-        )
+        self.assertEqual(call["headers"]["Authorization"], "Bearer test-key")
         self.assertEqual(call["json"]["temperature"], 0.0)
         self.assertEqual(len(call["json"]["messages"]), 2)
         # User message must contain the issue title.
-        self.assertIn(
-            "Implement OAuth", call["json"]["messages"][1]["content"]
-        )
+        self.assertIn("Implement OAuth", call["json"]["messages"][1]["content"])
 
     def test_strips_code_fences_around_json(self) -> None:
         stub = _StubHttpClient(
@@ -313,9 +300,7 @@ class _StubRouter:
 
 class TestModeSelectorWithRouter(unittest.TestCase):
     def test_router_consulted_when_no_label(self) -> None:
-        router = _StubRouter(
-            RouterResult(mode="pipeline", reason="kw match", confidence=0.8)
-        )
+        router = _StubRouter(RouterResult(mode="pipeline", reason="kw match", confidence=0.8))
         selector = ModeSelector(router=router)
         decision = selector.choose(_FakeIssue())
         self.assertEqual(decision.mode, "pipeline")
@@ -335,9 +320,7 @@ class TestModeSelectorWithRouter(unittest.TestCase):
         self.assertEqual(len(router.choose_calls), 1)
 
     def test_explicit_label_skips_router(self) -> None:
-        router = _StubRouter(
-            RouterResult(mode="pipeline", reason="kw", confidence=0.9)
-        )
+        router = _StubRouter(RouterResult(mode="pipeline", reason="kw", confidence=0.9))
         selector = ModeSelector(router=router)
         decision = selector.choose(_FakeIssue(labels=["mode:debate"]))
         self.assertEqual(decision.mode, "debate")
@@ -354,9 +337,7 @@ class TestModeSelectorWithRouter(unittest.TestCase):
         self.assertIn("router raised", decision.reason)
 
     def test_router_low_confidence_falls_back(self) -> None:
-        router = _StubRouter(
-            RouterResult(mode="pipeline", reason="weak hit", confidence=0.2)
-        )
+        router = _StubRouter(RouterResult(mode="pipeline", reason="weak hit", confidence=0.2))
         selector = ModeSelector(router=router, min_confidence=0.5)
         decision = selector.choose(_FakeIssue())
         self.assertEqual(decision.mode, DEFAULT_MODE)
@@ -364,18 +345,14 @@ class TestModeSelectorWithRouter(unittest.TestCase):
         self.assertIn("confidence", decision.reason)
 
     def test_router_returns_unknown_mode_falls_back(self) -> None:
-        router = _StubRouter(
-            RouterResult(mode="wizardry", reason="?", confidence=0.99)
-        )
+        router = _StubRouter(RouterResult(mode="wizardry", reason="?", confidence=0.99))
         selector = ModeSelector(router=router)
         decision = selector.choose(_FakeIssue())
         self.assertEqual(decision.mode, DEFAULT_MODE)
         self.assertEqual(decision.source, "fallback")
 
     def test_router_returns_auto_treated_as_unknown(self) -> None:
-        router = _StubRouter(
-            RouterResult(mode="auto", reason="recursing!", confidence=0.99)
-        )
+        router = _StubRouter(RouterResult(mode="auto", reason="recursing!", confidence=0.99))
         selector = ModeSelector(router=router)
         decision = selector.choose(_FakeIssue())
         self.assertEqual(decision.mode, DEFAULT_MODE)
@@ -475,9 +452,7 @@ class TestPipelineModeRunner(unittest.TestCase):
         asyncio.run(runner.run(session, MagicMock()))
         # Each call must have observed run_id==None at entry — we
         # explicitly clear it so AgentRunner.run generates a fresh one.
-        self.assertEqual(
-            [c["run_id"] for c in agent.calls], [None, None, None]
-        )
+        self.assertEqual([c["run_id"] for c in agent.calls], [None, None, None])
 
     def test_run_kind_per_stage(self) -> None:
         agent = _StubAgentRunner()
@@ -556,9 +531,7 @@ class TestPipelineModeRunner(unittest.TestCase):
                 self.calls: list[dict[str, Any]] = []
 
             async def run(self, session: Any, workflow: Any, **hooks: Any) -> None:
-                self.calls.append(
-                    {"run_kind": session.run_kind, "prompt": session.prompt_override}
-                )
+                self.calls.append({"run_kind": session.run_kind, "prompt": session.prompt_override})
                 session.turn_count = 4
                 session.output_text = f"out:{session.run_kind}"
                 if session.run_id is None:
@@ -739,23 +712,17 @@ class TestOrchestratorModeWiring(unittest.TestCase):
         instance = MagicMock(spec=["_register_collaboration_modes"])
         Orch._register_collaboration_modes(
             instance,
-            workflow=WorkflowConfig.from_dict(
-                {"modes": {"enabled": ["single", "pipeline"]}}
-            ),
+            workflow=WorkflowConfig.from_dict({"modes": {"enabled": ["single", "pipeline"]}}),
             agent_runner=MagicMock(),
         )
-        self.assertEqual(
-            sorted(mode_registry.available()), ["pipeline", "single"]
-        )
+        self.assertEqual(sorted(mode_registry.available()), ["pipeline", "single"])
 
     def test_build_selector_with_heuristic_router(self) -> None:
         Orch = self._stub_orchestrator()
         instance = MagicMock(spec=["_build_mode_selector"])
         selector = Orch._build_mode_selector(
             instance,
-            workflow=WorkflowConfig.from_dict(
-                {"modes": {"router": {"kind": "heuristic"}}}
-            ),
+            workflow=WorkflowConfig.from_dict({"modes": {"router": {"kind": "heuristic"}}}),
         )
         self.assertIsInstance(selector, ModeSelector)
         # Smoke: router does its thing.
@@ -766,9 +733,7 @@ class TestOrchestratorModeWiring(unittest.TestCase):
     def test_build_selector_with_no_router(self) -> None:
         Orch = self._stub_orchestrator()
         instance = MagicMock(spec=["_build_mode_selector"])
-        selector = Orch._build_mode_selector(
-            instance, workflow=WorkflowConfig.from_dict({})
-        )
+        selector = Orch._build_mode_selector(instance, workflow=WorkflowConfig.from_dict({}))
         decision = selector.choose(_FakeIssue(title="Refactor auth"))
         # No router → never selects "coordinator" even though the title would match.
         self.assertEqual(decision.mode, "single")

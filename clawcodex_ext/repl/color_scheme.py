@@ -270,9 +270,9 @@ def build_rich_theme(palette: REPLPalette | None = None) -> dict:
         "user_bg": p.user_bg,
         "diff_add": p.diff_add,
         "diff_remove": p.diff_remove,
-        "key_label": p.warning,     # amber — key names (model=, configured=)
+        "key_label": p.warning,  # amber — key names (model=, configured=)
         "value_text": p.secondary,  # purple — string values (MiniMax-M3, yes)
-        "version_num": p.info,      # sky-blue — version numbers (2.0)
+        "version_num": p.info,  # sky-blue — version numbers (2.0)
         # ── ANSI aliases (unified → OKLCH) ────────────────────────────
         # Every ``[red]`` / ``[green]`` / ``[yellow]`` … in the codebase
         # now renders through the OKLCH palette without touching source.

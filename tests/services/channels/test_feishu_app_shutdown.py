@@ -31,7 +31,7 @@ class _SdkLikeWsClient:
 
     async def _receive_message_loop(self) -> None:
         await self._close_seen
-        raise RuntimeError('sent 1000 (OK); no close frame received')
+        raise RuntimeError("sent 1000 (OK); no close frame received")
 
     def close_from_disconnect(self) -> None:
         if not self._close_seen.done():

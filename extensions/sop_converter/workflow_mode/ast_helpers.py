@@ -182,7 +182,11 @@ def _iter_module_named_assignments(tree: ast.Module):
 
 def find_dict_assignments(tree: ast.Module) -> list[tuple[str, ast.Dict]]:
     """Literal ``{...}`` dict assignments only (backward compatible)."""
-    return [(name, expr) for name, expr in find_dict_mapping_assignments(tree) if isinstance(expr, ast.Dict)]
+    return [
+        (name, expr)
+        for name, expr in find_dict_mapping_assignments(tree)
+        if isinstance(expr, ast.Dict)
+    ]
 
 
 def find_dict_mapping_assignments(tree: ast.Module) -> list[tuple[str, ast.expr]]:

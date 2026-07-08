@@ -102,9 +102,7 @@ def _build_tfidf(
         tf = Counter(tokens)
         # Length-normalise TF so long descriptions don't dominate.
         length = max(len(tokens), 1)
-        weighted = {
-            term: (count / length) * idf.get(term, 1.0) for term, count in tf.items()
-        }
+        weighted = {term: (count / length) * idf.get(term, 1.0) for term, count in tf.items()}
         vectors.append(_Vector(counts=Counter(weighted)))
     return vectors, idf
 
@@ -216,9 +214,7 @@ class FeatureDeduplicator:
         # -- Pre-compute tokens and TF-IDF vectors -----------------------
         texts: list[str] = []
         for r in rec_list:
-            texts.append(
-                f"{r.title or ''} {r.description or ''}".strip().lower()
-            )
+            texts.append(f"{r.title or ''} {r.description or ''}".strip().lower())
         token_lists = [_tokenise(t) for t in texts]
         vectors, _ = _build_tfidf(token_lists)
         # Map record identity → original index for O(1) vector lookup.

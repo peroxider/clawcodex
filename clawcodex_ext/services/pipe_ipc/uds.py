@@ -28,7 +28,9 @@ class UdsPipeServer:
         self.socket_path.parent.mkdir(parents=True, exist_ok=True)
         if self.socket_path.exists():
             self.socket_path.unlink()
-        self._server = await asyncio.start_unix_server(self._handle_client, path=str(self.socket_path))
+        self._server = await asyncio.start_unix_server(
+            self._handle_client, path=str(self.socket_path)
+        )
 
     async def close(self) -> None:
         if self._server is not None:

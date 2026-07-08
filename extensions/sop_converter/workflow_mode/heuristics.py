@@ -24,6 +24,7 @@ from .scan_context import SourceScanContext
 
 _STAGE_DIR_NAMES = ("stage_impls", "stages", "pipeline")
 
+
 @dataclass
 class HeuristicRule:
     name: str
@@ -56,13 +57,18 @@ def _check_stage_enum(ctx: SourceScanContext, **_kwargs) -> HeuristicMatch:
                 best_evidence = f"class {cls.name}(IntEnum)"
     if best_score > 0:
         return HeuristicMatch(
-            name="stage_enum", weight=weight, matched=True,
-            evidence=best_evidence, score=best_score,
+            name="stage_enum",
+            weight=weight,
+            matched=True,
+            evidence=best_evidence,
+            score=best_score,
         )
     return _empty_match("stage_enum", weight)
 
 
-def _check_state_transition(ctx: SourceScanContext, *, enum_names: set[str] | None = None) -> HeuristicMatch:
+def _check_state_transition(
+    ctx: SourceScanContext, *, enum_names: set[str] | None = None
+) -> HeuristicMatch:
     weight = 0.20
     names = enum_names or ctx.enum_member_names
     if not names:
@@ -76,7 +82,9 @@ def _check_state_transition(ctx: SourceScanContext, *, enum_names: set[str] | No
             pairs = parse_enum_dict_mapping(dict_node, enum_classes, member_to_value)
             if pairs:
                 return HeuristicMatch(
-                    name="state_transition", weight=weight, matched=True,
+                    name="state_transition",
+                    weight=weight,
+                    matched=True,
                     evidence=f"{var_name} ({len(pairs)} transitions)",
                     score=weight,
                 )
@@ -92,7 +100,9 @@ def _check_state_transition(ctx: SourceScanContext, *, enum_names: set[str] | No
                 overlap = sum(1 for k in keys if k in names) / len(keys)
                 if overlap > 0.5:
                     return HeuristicMatch(
-                        name="state_transition", weight=weight, matched=True,
+                        name="state_transition",
+                        weight=weight,
+                        matched=True,
                         evidence=f"{var_name} (name overlap {overlap:.0%})",
                         score=weight,
                     )
@@ -106,7 +116,9 @@ def _check_io_contract(ctx: SourceScanContext, **_kwargs) -> HeuristicMatch:
             ann = class_annotation_names(cls)
             if "input_files" in ann or "output_files" in ann:
                 return HeuristicMatch(
-                    name="io_contract", weight=weight, matched=True,
+                    name="io_contract",
+                    weight=weight,
+                    matched=True,
                     evidence=f"@dataclass {cls.name}",
                     score=weight,
                 )
@@ -118,7 +130,9 @@ def _check_control_flow(ctx: SourceScanContext, **_kwargs) -> HeuristicMatch:
     for tree in ctx.trees.values():
         for func in find_func_by_prefix(tree):
             return HeuristicMatch(
-                name="control_flow", weight=weight, matched=True,
+                name="control_flow",
+                weight=weight,
+                matched=True,
                 evidence=f"def {func.name}(...)",
                 score=weight,
             )
@@ -133,7 +147,9 @@ def _check_stage_dirs(ctx: SourceScanContext, **_kwargs) -> HeuristicMatch:
             py_count = sum(1 for _ in child.glob("*.py"))
             if py_count > 0:
                 return HeuristicMatch(
-                    name="stage_dir", weight=weight, matched=True,
+                    name="stage_dir",
+                    weight=weight,
+                    matched=True,
                     evidence=f"directory {child.name}/ ({py_count} .py files)",
                     score=weight,
                 )
@@ -148,7 +164,9 @@ def _check_gate_definition(ctx: SourceScanContext, **_kwargs) -> HeuristicMatch:
                 call_name = get_name(value) if isinstance(value, ast.Call) else None
                 if call_name in ("frozenset", "set") or isinstance(value, ast.Set):
                     return HeuristicMatch(
-                        name="gate_definition", weight=weight, matched=True,
+                        name="gate_definition",
+                        weight=weight,
+                        matched=True,
                         evidence=var_name,
                         score=weight,
                     )

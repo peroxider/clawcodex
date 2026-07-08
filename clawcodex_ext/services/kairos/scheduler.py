@@ -131,9 +131,7 @@ class TickScheduler(PeriodicDaemon):
         # launched. Set under PeriodicDaemon's lock so we never race the
         # thread creation branch in super().start().
         with self._lock:
-            already = (
-                self._thread is not None and self._thread.is_alive()
-            )
+            already = self._thread is not None and self._thread.is_alive()
             if already:
                 return False
             self._stop_event.clear()
@@ -192,8 +190,7 @@ class TickScheduler(PeriodicDaemon):
             scheduled_monotonic = next_fire
             actual_monotonic = scheduled_monotonic + jitter_applied
             try:
-                self._fire(scheduled_monotonic, actual_monotonic,
-                           jitter_applied)
+                self._fire(scheduled_monotonic, actual_monotonic, jitter_applied)
             except Exception:  # noqa: BLE001
                 self._logger.exception(
                     "tick scheduler %r fire raised; continuing",

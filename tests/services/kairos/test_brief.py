@@ -83,9 +83,7 @@ class TestBriefSummaryBuilderOutput:
         assert "last:" not in out
 
     def test_metadata_hidden_by_default(self) -> None:
-        out = BriefSummaryBuilder().build(
-            _snapshot(metadata={"plan_id": "P-86"})
-        )
+        out = BriefSummaryBuilder().build(_snapshot(metadata={"plan_id": "P-86"}))
         assert "plan_id" not in out
         assert "meta:" not in out
 

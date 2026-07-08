@@ -181,6 +181,7 @@ async def test_spawn_worker_transient_then_stop(state_dir, short_backoff):
     but if stop_event is set during the backoff, the worker stays stopped."""
     runtime = WorkerRuntime(kind="loop")
     stop = asyncio.Event()
+
     # Backoff is short — schedule stop_event to fire DURING the backoff
     # so the supervisor aborts the restart attempt.
     async def kick_stop():
@@ -314,9 +315,7 @@ async def test_graceful_shutdown_terminates_live_process(state_dir):
 
     script = state_dir / "long.py"
     # Sleep longer than the graceful timeout we'll pass.
-    script.write_text(
-        "import time, sys; time.sleep(60); sys.exit(0)\n", encoding="utf-8"
-    )
+    script.write_text("import time, sys; time.sleep(60); sys.exit(0)\n", encoding="utf-8")
 
     def fake_argv(kind):
         return [sys.executable, str(script)]

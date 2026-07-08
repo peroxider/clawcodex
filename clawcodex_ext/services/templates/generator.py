@@ -19,11 +19,12 @@ def _is_relative_to(path: Path, root: Path) -> bool:
 class TemplateGenerator:
     """Write rendered template content with containment and overwrite checks."""
 
-    def __init__(self, *, workspace_root: Path | str, allowed_roots: tuple[Path | str, ...] = ()) -> None:
+    def __init__(
+        self, *, workspace_root: Path | str, allowed_roots: tuple[Path | str, ...] = ()
+    ) -> None:
         self.workspace_root = Path(workspace_root).expanduser().resolve()
         self.allowed_roots = tuple(
-            [self.workspace_root]
-            + [Path(root).expanduser().resolve() for root in allowed_roots]
+            [self.workspace_root] + [Path(root).expanduser().resolve() for root in allowed_roots]
         )
 
     def generate(self, rendered: RenderedTemplate, *, overwrite: bool = False) -> Path:

@@ -371,7 +371,11 @@ class TestWebSearchTool(ToolSystemTests):
     def test_web_search_subdomain_matching(self) -> None:
         """Subdomain matching: sub.example.com matches example.com."""
         hits = [
-            {"title": "Sub Example", "url": "https://sub.example.com/page", "snippet": "Sub snippet"},
+            {
+                "title": "Sub Example",
+                "url": "https://sub.example.com/page",
+                "snippet": "Sub snippet",
+            },
             {"title": "Bad Example", "url": "https://badexample.com/", "snippet": "Bad snippet"},
         ]
         with self._mock_tavily(hits):

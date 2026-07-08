@@ -35,7 +35,7 @@ class CollapseKind(str, Enum):
 
     NOOP = "noop"
     PARTIAL = "partial"  # Collapse only the oldest N messages.
-    FULL = "full"        # Collapse everything except the most recent K.
+    FULL = "full"  # Collapse everything except the most recent K.
 
 
 @dataclass(frozen=True)
@@ -163,9 +163,7 @@ class Emergency413Trigger:
         if context.last_error is None:
             return CollapseDecision(kind=CollapseKind.NOOP, reason="no error")
         if not self.predicate(context.last_error):
-            return CollapseDecision(
-                kind=CollapseKind.NOOP, reason="error is not 413-class"
-            )
+            return CollapseDecision(kind=CollapseKind.NOOP, reason="error is not 413-class")
         # Always go full when we're in emergency mode; keep_recent is
         # just a safety floor.
         return CollapseDecision(

@@ -30,15 +30,15 @@ class BindingEntry:
     origin: str
     target: SessionTarget
     registered_at: float = field(default_factory=time.time)
-    connection_state: str = 'active'  # active | offline | terminated
+    connection_state: str = "active"  # active | offline | terminated
 
     def to_dict(self) -> dict:
         return {
-            'origin': self.origin,
-            'session_id': self.target.session_id,
-            'host_type': self.target.host_type,
-            'registered_at': self.registered_at,
-            'connection_state': self.connection_state,
+            "origin": self.origin,
+            "session_id": self.target.session_id,
+            "host_type": self.target.host_type,
+            "registered_at": self.registered_at,
+            "connection_state": self.connection_state,
         }
 
 
@@ -71,17 +71,17 @@ class BindingPolicy:
         # REPL binding and a specific-origin orchestrator binding replace each
         # other as well.
         if previous is not None and previous.target != target:
-            self._auditor('binding_override', entry, previous)
+            self._auditor("binding_override", entry, previous)
             logger.info(
-                'binding override: origin=%s session=%s (was session=%s)',
+                "binding override: origin=%s session=%s (was session=%s)",
                 key[:24],
                 entry.target.session_id[:16],
                 previous.target.session_id[:16],
             )
         elif previous is None:
-            self._auditor('binding_created', entry, None)
+            self._auditor("binding_created", entry, None)
             logger.info(
-                'binding created: origin=%s session=%s host_type=%s',
+                "binding created: origin=%s session=%s host_type=%s",
                 key[:24],
                 entry.target.session_id[:16],
                 entry.target.host_type,
@@ -94,7 +94,7 @@ class BindingPolicy:
     def get(self, origin: OriginKey | str) -> BindingEntry | None:
         for candidate in _binding_candidates(str(origin)):
             entry = self._bindings.get(candidate)
-            if entry is not None and entry.connection_state != 'terminated':
+            if entry is not None and entry.connection_state != "terminated":
                 return entry
         return None
 
@@ -104,10 +104,10 @@ class BindingPolicy:
     def mark_offline(self, origin: OriginKey | str, *, session_id: str | None = None) -> None:
         entry = self._bindings.get(str(origin))
         if entry is not None and _matches_session(entry, session_id):
-            entry.connection_state = 'offline'
-            self._auditor('binding_offline', entry, None)
+            entry.connection_state = "offline"
+            self._auditor("binding_offline", entry, None)
             logger.info(
-                'binding offline: origin=%s session=%s',
+                "binding offline: origin=%s session=%s",
                 str(origin)[:24],
                 entry.target.session_id[:16],
             )
@@ -115,11 +115,11 @@ class BindingPolicy:
     def terminate(self, origin: OriginKey | str, *, session_id: str | None = None) -> None:
         entry = self._bindings.get(str(origin))
         if entry is not None and _matches_session(entry, session_id):
-            entry.connection_state = 'terminated'
-            self._auditor('binding_terminated', entry, None)
+            entry.connection_state = "terminated"
+            self._auditor("binding_terminated", entry, None)
             self._bindings.pop(str(origin), None)
             logger.info(
-                'binding terminated: origin=%s session=%s',
+                "binding terminated: origin=%s session=%s",
                 str(origin)[:24],
                 entry.target.session_id[:16],
             )
@@ -132,11 +132,11 @@ class BindingPolicy:
             if not _same_exclusive_binding_group(key, existing_key):
                 continue
             entry = self._bindings.pop(existing_key)
-            entry.connection_state = 'terminated'
-            self._auditor('binding_terminated', entry, None)
+            entry.connection_state = "terminated"
+            self._auditor("binding_terminated", entry, None)
             removed.append(entry)
             logger.info(
-                'binding terminated (matching): origin=%s session=%s',
+                "binding terminated (matching): origin=%s session=%s",
                 existing_key[:24],
                 entry.target.session_id[:16],
             )
@@ -149,30 +149,30 @@ class BindingPolicy:
 def _binding_candidates(origin: str) -> list[str]:
     """Return exact-to-broad binding keys for an inbound origin."""
     candidates = [origin]
-    parts = origin.split(':')
+    parts = origin.split(":")
     if origin == IM_DIRECT_ALL_ORIGIN:
         return candidates
-    if len(parts) >= 4 and parts[0] == 'wechat' and parts[1] == 'direct':
-        account = parts[2] or '*'
-        candidates.append(f'wechat:direct:{account}:*')
+    if len(parts) >= 4 and parts[0] == "wechat" and parts[1] == "direct":
+        account = parts[2] or "*"
+        candidates.append(f"wechat:direct:{account}:*")
         candidates.append(WECHAT_DIRECT_ALL_ORIGIN)
         candidates.append(IM_DIRECT_ALL_ORIGIN)
-    elif len(parts) >= 4 and parts[0] == 'feishu' and parts[1] == 'dm':
-        app_id = parts[2] or '*'
-        candidates.append(f'feishu:dm:{app_id}:*')
+    elif len(parts) >= 4 and parts[0] == "feishu" and parts[1] == "dm":
+        app_id = parts[2] or "*"
+        candidates.append(f"feishu:dm:{app_id}:*")
         candidates.append(FEISHU_DM_ALL_ORIGIN)
         candidates.append(IM_DIRECT_ALL_ORIGIN)
     return candidates
 
 
 def _exclusive_binding_group(origin: str) -> str:
-    parts = origin.split(':')
+    parts = origin.split(":")
     if origin == IM_DIRECT_ALL_ORIGIN:
-        return 'im:direct'
-    if len(parts) >= 4 and parts[0] == 'wechat' and parts[1] == 'direct':
-        return 'im:direct'
-    if len(parts) >= 4 and parts[0] == 'feishu' and parts[1] == 'dm':
-        return 'im:direct'
+        return "im:direct"
+    if len(parts) >= 4 and parts[0] == "wechat" and parts[1] == "direct":
+        return "im:direct"
+    if len(parts) >= 4 and parts[0] == "feishu" and parts[1] == "dm":
+        return "im:direct"
     return origin
 
 
@@ -184,4 +184,4 @@ def _matches_session(entry: BindingEntry, session_id: str | None) -> bool:
     return session_id is None or entry.target.session_id == session_id
 
 
-__all__ = ['BindingAuditor', 'BindingEntry', 'BindingPolicy']
+__all__ = ["BindingAuditor", "BindingEntry", "BindingPolicy"]

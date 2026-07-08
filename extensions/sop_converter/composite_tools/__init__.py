@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 def to_kebab_case(name: str) -> str:
     """Convert a dotted or CamelCase name to kebab-case."""
     import re
+
     name = re.sub(r"([a-z])([A-Z])", r"\1-\2", name)
     name = re.sub(r"[._]+", "-", name)
     return name.lower()
@@ -99,10 +100,7 @@ def _composite_to_agent_tool_spec(
 
     # The call_impl is a bash one-liner that prints the stage manifest.
     # The agent reads this to understand the macro workflow.
-    call_impl = (
-        f"echo 'Composite tool: {spec.name}' && "
-        f"echo 'Stages: {stages_json}'"
-    )
+    call_impl = f"echo 'Composite tool: {spec.name}' && echo 'Stages: {stages_json}'"
 
     bundle_id = bundle_dir.name if bundle_dir else None
 
@@ -185,6 +183,7 @@ def emit_composite_workflow_yaml(
         return out_path
 
     import yaml
+
     out_path = out / "workflow.yaml"
     header = f"# Composite tool: {spec.name}\n"
     body = yaml.safe_dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False)

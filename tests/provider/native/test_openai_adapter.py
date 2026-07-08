@@ -115,9 +115,7 @@ def test_chat_stream_yields_content_deltas(monkeypatch: pytest.MonkeyPatch) -> N
             _StubStreamChunk(None),
         ]
     )
-    chunks = list(
-        provider.chat_stream([ChatMessage(role="user", content="hi")])
-    )
+    chunks = list(provider.chat_stream([ChatMessage(role="user", content="hi")]))
     assert chunks == ["Hel", "lo"]
 
 

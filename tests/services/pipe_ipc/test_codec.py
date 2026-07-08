@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from clawcodex_ext.services.pipe_ipc import PipeJsonCodec, PipeMessage, PipeMessageType, decode_message, encode_message
+from clawcodex_ext.services.pipe_ipc import (
+    PipeJsonCodec,
+    PipeMessage,
+    PipeMessageType,
+    decode_message,
+    encode_message,
+)
 
 
 def test_encode_message_uses_jsonl() -> None:

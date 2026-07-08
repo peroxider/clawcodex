@@ -10,7 +10,9 @@ from ..protocol import ToolResult
 
 
 def _structured_output_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
-    context.outbox.append(GenericOutboxEvent.from_dict({"tool": "StructuredOutput", "structured_output": tool_input}))
+    context.outbox.append(
+        GenericOutboxEvent.from_dict({"tool": "StructuredOutput", "structured_output": tool_input})
+    )
     return ToolResult(
         name="StructuredOutput",
         output={

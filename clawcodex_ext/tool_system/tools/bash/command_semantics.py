@@ -64,6 +64,7 @@ def _test_semantic(exit_code: int, _stdout: str, _stderr: str) -> CommandInterpr
 # F-107: PowerShell-specific semantics
 # ---------------------------------------------------------------------------
 
+
 def _select_string_semantic(exit_code: int, _stdout: str, _stderr: str) -> CommandInterpretation:
     """select-string / sls: 0 = matched, 1 = no match, 2 = error (same as grep)."""
     return CommandInterpretation(

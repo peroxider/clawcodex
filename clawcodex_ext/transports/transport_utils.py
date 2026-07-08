@@ -73,7 +73,7 @@ def is_env_truthy(value: str | None) -> bool:
     """TS ``isEnvTruthy`` parity — 1/true/yes/on (case-insensitive)."""
     if value is None:
         return False
-    return value.lower() in ('1', 'true', 'yes', 'on')
+    return value.lower() in ("1", "true", "yes", "on")
 
 
 def get_transport_for_url(
@@ -103,16 +103,16 @@ def get_transport_for_url(
     url_str = url if isinstance(url, str) else str(url)
     parsed = httpx.URL(url_str)
 
-    if is_env_truthy(os.environ.get('CLAUDE_CODE_USE_CCR_V2')):
+    if is_env_truthy(os.environ.get("CLAUDE_CODE_USE_CCR_V2")):
         # Rewrite the scheme + append the /worker/events/stream path.
         # Use plain string manipulation to mirror the TS literal approach
         # and avoid httpx.URL.copy_with(path=) URL-encoding edge cases.
         sse_url_str = url_str
-        if sse_url_str.startswith('wss://'):
-            sse_url_str = 'https://' + sse_url_str[len('wss://') :]
-        elif sse_url_str.startswith('ws://'):
-            sse_url_str = 'http://' + sse_url_str[len('ws://') :]
-        sse_url_str = sse_url_str.rstrip('/') + '/worker/events/stream'
+        if sse_url_str.startswith("wss://"):
+            sse_url_str = "https://" + sse_url_str[len("wss://") :]
+        elif sse_url_str.startswith("ws://"):
+            sse_url_str = "http://" + sse_url_str[len("ws://") :]
+        sse_url_str = sse_url_str.rstrip("/") + "/worker/events/stream"
         # SSETransport's auth-refresh callback is named `get_auth_headers`
         # (not `refresh_headers`). The factory adapts; renaming the
         # parameter is deferred per cli-gap-analysis.md §4.7.
@@ -123,8 +123,8 @@ def get_transport_for_url(
             get_auth_headers=refresh_headers,
         )
 
-    if parsed.scheme in ('ws', 'wss'):
-        if is_env_truthy(os.environ.get('CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2')):
+    if parsed.scheme in ("ws", "wss"):
+        if is_env_truthy(os.environ.get("CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2")):
             return HybridTransport(
                 url_str,
                 headers=headers,
@@ -138,4 +138,4 @@ def get_transport_for_url(
             refresh_headers=refresh_headers,
         )
 
-    raise ValueError(f'Unsupported protocol: {parsed.scheme}')
+    raise ValueError(f"Unsupported protocol: {parsed.scheme}")

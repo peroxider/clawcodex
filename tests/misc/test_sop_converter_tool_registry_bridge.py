@@ -150,7 +150,8 @@ class TestStripOptionalUnion(unittest.TestCase):
 
     def test_union_typing(self) -> None:
         self.assertEqual(
-            _strip_optional_union("Union[str, None]"), "str",
+            _strip_optional_union("Union[str, None]"),
+            "str",
         )
 
     def test_pipe_union(self) -> None:
@@ -166,7 +167,8 @@ class TestStripOptionalUnion(unittest.TestCase):
     def test_nonetype_recognised(self) -> None:
         # "NoneType" is treated the same as "None".
         self.assertEqual(
-            _strip_optional_union("Optional[NoneType, str]"), "str",
+            _strip_optional_union("Optional[NoneType, str]"),
+            "str",
         )
 
 
@@ -207,18 +209,22 @@ class TestTypeHintToJsonType(unittest.TestCase):
 
     def test_optional_typing_reduces_first(self) -> None:
         self.assertEqual(
-            _type_hint_to_json_type("Optional[int]"), "integer",
+            _type_hint_to_json_type("Optional[int]"),
+            "integer",
         )
         self.assertEqual(
-            _type_hint_to_json_type("str | None"), "string",
+            _type_hint_to_json_type("str | None"),
+            "string",
         )
 
     def test_iterable_returns_array(self) -> None:
         self.assertEqual(
-            _type_hint_to_json_type("Iterable[str]"), "array",
+            _type_hint_to_json_type("Iterable[str]"),
+            "array",
         )
         self.assertEqual(
-            _type_hint_to_json_type("Sequence[int]"), "array",
+            _type_hint_to_json_type("Sequence[int]"),
+            "array",
         )
 
 
@@ -235,8 +241,7 @@ class TestToKebabCase(unittest.TestCase):
         self.assertEqual(_to_kebab_case("LLM.invoke"), "llm-invoke")
 
     def test_underscore_separator(self) -> None:
-        self.assertEqual(_to_kebab_case("video_ops.transcode"),
-                         "video-ops-transcode")
+        self.assertEqual(_to_kebab_case("video_ops.transcode"), "video-ops-transcode")
 
     def test_double_underscore(self) -> None:
         # "__" also acts as a separator.
@@ -551,7 +556,9 @@ class TestGenerateWrapperScript(unittest.TestCase):
 
             init_params = [
                 _make_param("name", "str", required=True),
-                _make_param("teammate_mode", "WidgetMode", required=False, default="WidgetMode.BUILD_MODE"),
+                _make_param(
+                    "teammate_mode", "WidgetMode", required=False, default="WidgetMode.BUILD_MODE"
+                ),
             ]
             op = SourceOperation(
                 name="run",
@@ -559,7 +566,9 @@ class TestGenerateWrapperScript(unittest.TestCase):
                 class_name="Handler",
                 file_stem="handler",
                 parameters=[
-                    _make_param("status", "WidgetStatus", required=False, default="WidgetStatus.IDLE"),
+                    _make_param(
+                        "status", "WidgetStatus", required=False, default="WidgetStatus.IDLE"
+                    ),
                 ],
             )
             script_path = _generate_wrapper_script(
@@ -658,7 +667,9 @@ class TestOperationToSpec(unittest.TestCase):
     def test_class_method_kebab_name(self) -> None:
         op = _make_op(name="invoke", class_name="LLM")
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
             comp_name="core",
         )
         # {comp}.{class}.{method} → "core.LLM.invoke" → kebab.
@@ -667,7 +678,9 @@ class TestOperationToSpec(unittest.TestCase):
     def test_class_method_without_comp_name(self) -> None:
         op = _make_op(name="invoke", class_name="LLM")
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
         )
         # Falls back to {class}.{method}.
         self.assertEqual(spec.name, "llm-invoke")
@@ -675,7 +688,9 @@ class TestOperationToSpec(unittest.TestCase):
     def test_standalone_function_with_comp(self) -> None:
         op = _make_op(name="load_config", class_name=None, file_stem="utils")
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
             comp_name="helpers",
         )
         self.assertEqual(spec.name, "helpers-load-config")
@@ -683,7 +698,9 @@ class TestOperationToSpec(unittest.TestCase):
     def test_standalone_function_no_comp_falls_back_to_file_stem(self) -> None:
         op = _make_op(name="load_config", class_name=None, file_stem="utils")
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
         )
         self.assertEqual(spec.name, "utils-load-config")
 
@@ -692,21 +709,27 @@ class TestOperationToSpec(unittest.TestCase):
         # kebab-case conversion. "load_config" → "load-config".
         op = _make_op(name="load_config", class_name=None, file_stem="")
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
         )
         self.assertEqual(spec.name, "load-config")
 
     def test_call_type_is_bash(self) -> None:
         op = _make_op(name="x")
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
         )
         self.assertEqual(spec.call_type, "bash")
 
     def test_call_impl_uses_script_path(self) -> None:
         op = _make_op(name="x")
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
         )
         # The bash command should reference the script path and method.
         self.assertIn(self.script_path, spec.call_impl)
@@ -720,7 +743,9 @@ class TestOperationToSpec(unittest.TestCase):
             parameters=[_make_param("foo", "str")],
         )
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
         )
         schema = spec.input_schema
         self.assertEqual(schema["type"], "object")
@@ -735,7 +760,9 @@ class TestOperationToSpec(unittest.TestCase):
             parameters=[_make_param("foo", "str", required=False)],
         )
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
         )
         # "required" key is omitted when there are no required params.
         self.assertNotIn("required", spec.input_schema)
@@ -748,7 +775,9 @@ class TestOperationToSpec(unittest.TestCase):
             ],
         )
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
         )
         self.assertEqual(
             spec.input_schema["properties"]["foo"]["description"],
@@ -761,16 +790,21 @@ class TestOperationToSpec(unittest.TestCase):
             parameters=[_make_param("foo", "str", default="bar")],
         )
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
         )
         self.assertEqual(
-            spec.input_schema["properties"]["foo"]["default"], "bar",
+            spec.input_schema["properties"]["foo"]["default"],
+            "bar",
         )
 
     def test_aliases_with_comp_name(self) -> None:
         op = _make_op(name="x", class_name="C")
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
             comp_name="alpha",
         )
         # First alias is the fully-qualified {comp}.{class}.{method}.
@@ -781,7 +815,9 @@ class TestOperationToSpec(unittest.TestCase):
         # additional short alias drops the first segment.
         op = _make_op(name="x", class_name="C")
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
             comp_name="openjiuwen.core",
         )
         # Original alias present.
@@ -792,7 +828,9 @@ class TestOperationToSpec(unittest.TestCase):
     def test_source_is_sop_converter(self) -> None:
         op = _make_op(name="x")
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
         )
         self.assertEqual(spec.source, "sop-converter")
 
@@ -823,7 +861,9 @@ class TestOperationToSpec(unittest.TestCase):
             ],
         )
         spec = operation_to_spec(
-            op, source_dir="/tmp", script_path=self.script_path,
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
         )
         self.assertIn("foo", spec.input_schema["properties"])
         self.assertNotIn("*args", spec.input_schema["properties"])
@@ -846,10 +886,14 @@ class TestRegisterComponentTools(unittest.TestCase):
             source_dir.mkdir()
             op = _make_op(name="invoke", class_name="LLM")
             comp = _make_component(
-                name="core", file_path="proj/core", operations=[op],
+                name="core",
+                file_path="proj/core",
+                operations=[op],
             )
             name_map = register_component_tools(
-                [comp], str(source_dir), persist=False,
+                [comp],
+                str(source_dir),
+                persist=False,
             )
         # The name map should contain a kebab-case entry for the
         # grouper-style name "{comp}.{method}".
@@ -862,13 +906,19 @@ class TestRegisterComponentTools(unittest.TestCase):
             source_dir = Path(tmp) / "proj"
             source_dir.mkdir()
             op = _make_op(
-                name="helper_fn", class_name=None, file_stem="helpers",
+                name="helper_fn",
+                class_name=None,
+                file_stem="helpers",
             )
             comp = _make_component(
-                name="utils", file_path="proj/utils", operations=[op],
+                name="utils",
+                file_path="proj/utils",
+                operations=[op],
             )
             name_map = register_component_tools(
-                [comp], str(source_dir), persist=False,
+                [comp],
+                str(source_dir),
+                persist=False,
             )
         self.assertEqual(name_map["utils.helper_fn"], "utils-helper-fn")
 
@@ -878,10 +928,14 @@ class TestRegisterComponentTools(unittest.TestCase):
             source_dir.mkdir()
             op = _make_op(name="x", class_name="C")
             comp = _make_component(
-                name="comp", file_path="proj/comp", operations=[op],
+                name="comp",
+                file_path="proj/comp",
+                operations=[op],
             )
             name_map = register_component_tools(
-                [comp], str(source_dir), persist=False,
+                [comp],
+                str(source_dir),
+                persist=False,
             )
         # Three name forms all point at the same kebab spec.
         kebab = name_map["comp.x"]
@@ -896,10 +950,14 @@ class TestRegisterComponentTools(unittest.TestCase):
             source_dir.mkdir()
             op = _make_op(name="x", class_name="C")
             comp = _make_component(
-                name="comp", file_path="proj/comp", operations=[op],
+                name="comp",
+                file_path="proj/comp",
+                operations=[op],
             )
             register_component_tools(
-                [comp], str(source_dir), persist=False,
+                [comp],
+                str(source_dir),
+                persist=False,
             )
         # A wrapper script should be created in the temp scripts dir.
         scripts = list(self.scripts_dir.iterdir())
@@ -913,10 +971,14 @@ class TestRegisterComponentTools(unittest.TestCase):
             source_dir.mkdir()
             op = _make_op(name="x", class_name="C")
             comp = _make_component(
-                name="comp", file_path="proj/comp", operations=[op],
+                name="comp",
+                file_path="proj/comp",
+                operations=[op],
             )
             register_component_tools(
-                [comp], str(source_dir), persist=True,
+                [comp],
+                str(source_dir),
+                persist=True,
             )
         # A spec file should appear in the tool dir.
         specs = list(self.tool_dir.glob("*.json"))
@@ -930,22 +992,31 @@ class TestRegisterComponentTools(unittest.TestCase):
             source_dir.mkdir()
             op = _make_op(name="x", class_name="C")
             comp = _make_component(
-                name="comp", file_path="proj/comp", operations=[op],
+                name="comp",
+                file_path="proj/comp",
+                operations=[op],
             )
             # First call writes the spec.
             register_component_tools(
-                [comp], str(source_dir), persist=True, overwrite=True,
+                [comp],
+                str(source_dir),
+                persist=True,
+                overwrite=True,
             )
             # Specs on disk.
             initial_specs = sorted(self.tool_dir.glob("*.json"))
             # Touch the spec file's mtime to detect a re-write.
             for spec_path in initial_specs:
                 spec_path.write_text(
-                    json.dumps({"modified": True}), encoding="utf-8",
+                    json.dumps({"modified": True}),
+                    encoding="utf-8",
                 )
             # Second call with overwrite=False → should NOT rewrite.
             register_component_tools(
-                [comp], str(source_dir), persist=True, overwrite=False,
+                [comp],
+                str(source_dir),
+                persist=True,
+                overwrite=False,
             )
             # The file still has the modified marker.
             for spec_path in self.tool_dir.glob("*.json"):
@@ -960,10 +1031,14 @@ class TestRegisterComponentTools(unittest.TestCase):
             op1 = _make_op(name="a", class_name="C")
             op2 = _make_op(name="b", class_name="C")
             comp = _make_component(
-                name="comp", file_path="proj/comp", operations=[op1, op2],
+                name="comp",
+                file_path="proj/comp",
+                operations=[op1, op2],
             )
             register_component_tools(
-                [comp], str(source_dir), persist=False,
+                [comp],
+                str(source_dir),
+                persist=False,
             )
         # Single wrapper script for both methods.
         scripts = list(self.scripts_dir.iterdir())
@@ -975,14 +1050,19 @@ class TestRegisterComponentTools(unittest.TestCase):
             source_dir.mkdir()
             class_op = _make_op(name="a", class_name="C", file_stem="mod")
             func_op = _make_op(
-                name="b", class_name=None, file_stem="mod",
+                name="b",
+                class_name=None,
+                file_stem="mod",
             )
             comp = _make_component(
-                name="comp", file_path="proj/comp",
+                name="comp",
+                file_path="proj/comp",
                 operations=[class_op, func_op],
             )
             register_component_tools(
-                [comp], str(source_dir), persist=False,
+                [comp],
+                str(source_dir),
+                persist=False,
             )
         # Two scripts: one for the class, one for the function file.
         self.assertEqual(len(list(self.scripts_dir.iterdir())), 2)
@@ -992,7 +1072,9 @@ class TestRegisterComponentTools(unittest.TestCase):
             source_dir = Path(tmp) / "proj"
             source_dir.mkdir()
             name_map = register_component_tools(
-                [], str(source_dir), persist=False,
+                [],
+                str(source_dir),
+                persist=False,
             )
         self.assertEqual(name_map, {})
 
@@ -1103,7 +1185,7 @@ class SharedMemoryManager:
         self.assertIn("def ensure_dir(team_memory_dir, sys_operation=None)", stub)
 
     def test_wrapper_with_optional_init_param_is_runnable(self) -> None:
-        source = '''
+        source = """
 class SharedMemoryManager:
     def __init__(self, team_memory_dir: str, sys_operation=None) -> None:
         self.team_memory_dir = team_memory_dir
@@ -1112,7 +1194,7 @@ class SharedMemoryManager:
         import os
         os.makedirs(self.team_memory_dir, exist_ok=True)
         return self.team_memory_dir
-'''
+"""
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             pkg = tmp / "demo_pkg"

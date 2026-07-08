@@ -112,6 +112,7 @@ def ensure_nested_transcript_initialized() -> None:
     if _nested_transcript_initialized:
         return
     from clawcodex_ext.agent.transcript import init as _init_nested_transcript
+
     _init_nested_transcript()
     _nested_transcript_initialized = True
 

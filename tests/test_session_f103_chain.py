@@ -453,9 +453,7 @@ class TestSessionLoadIntegration(unittest.TestCase):
         from clawcodex_ext.agent.session import _load_from_enhanced_transcript
 
         path = Path(self.tmpdir) / session_id / "transcript.jsonl"
-        loaded = _load_from_enhanced_transcript(
-            session_id, path, chain_filter=False
-        )
+        loaded = _load_from_enhanced_transcript(session_id, path, chain_filter=False)
         self.assertIsNotNone(loaded)
         uuids = [getattr(m, "uuid", None) for m in loaded.conversation.messages]
         # All chat messages (including dead branches) are returned

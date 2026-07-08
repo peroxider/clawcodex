@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 # writes rather than interleaving lines.
 try:
     import fcntl as _fcntl  # type: ignore[import-not-found]
+
     _HAS_FCNTL = True
 except ImportError:
     _fcntl = None
@@ -72,6 +73,7 @@ def _locked_append(file_path: Path) -> Iterator[Any]:
                     pass
         finally:
             fh.close()
+
 
 # Default directories
 SESSIONS_DIR = Path.home() / ".clawcodex" / "sessions"

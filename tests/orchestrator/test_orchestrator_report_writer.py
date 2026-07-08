@@ -194,6 +194,7 @@ class TestCopyWithFallback(unittest.TestCase):
     def test_fallback_path_uses_tmp_replace(self) -> None:
         # Force shutil.copy2 to fail → fallback should write a tmp + os.replace.
         import shutil as _shutil
+
         with patch.object(_shutil, "copy2", side_effect=OSError("boom")):
             _copy_with_fallback(self.src, self.dst)
         self.assertEqual(self.dst.read_text(), "hello")
@@ -248,9 +249,7 @@ class TestRenderMarkdown(unittest.TestCase):
         self.assertIn("`skipped`", md)
 
     def test_tool_events_line_included_when_set(self) -> None:
-        md = _render_markdown(
-            self._report(tool_events_path="/tmp/events.ndjson")
-        )
+        md = _render_markdown(self._report(tool_events_path="/tmp/events.ndjson"))
         self.assertIn("Tool events:", md)
         self.assertIn("/tmp/events.ndjson", md)
 
@@ -481,14 +480,7 @@ class TestWriteToolEvents(unittest.TestCase):
         )
         # Persistent events file should exist with same content.
         persistent_events = (
-            self.home
-            / ".clawcodex"
-            / "reports"
-            / "t"
-            / "o"
-            / "r"
-            / "1"
-            / "r1.events.ndjson"
+            self.home / ".clawcodex" / "reports" / "t" / "o" / "r" / "1" / "r1.events.ndjson"
         )
         self.assertTrue(persistent_events.exists())
         self.assertEqual(persistent_events.read_text(), '{"tool": "bash"}\n')
@@ -513,14 +505,7 @@ class TestWriteToolEvents(unittest.TestCase):
         )
         # Persistent events file must not exist.
         persistent_events = (
-            self.home
-            / ".clawcodex"
-            / "reports"
-            / "t"
-            / "o"
-            / "r"
-            / "1"
-            / "r1.events.ndjson"
+            self.home / ".clawcodex" / "reports" / "t" / "o" / "r" / "1" / "r1.events.ndjson"
         )
         self.assertFalse(persistent_events.exists())
 

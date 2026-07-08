@@ -37,15 +37,22 @@ class IntentForecastService:
 
     def generate(self, *, trigger: str, force: bool = False) -> ForecastResult:
         if not force and not self.config.enabled:
-            return ForecastResult(generated=False, suggestions=[], reason="Intent Forecast is disabled.")
-        context = self.context or IntentForecastContextBuilder(
-            conversation=self.conversation,
-            workspace_root=self.workspace_root,
-            config=self.config,
-        ).build()
+            return ForecastResult(
+                generated=False, suggestions=[], reason="Intent Forecast is disabled."
+            )
+        context = (
+            self.context
+            or IntentForecastContextBuilder(
+                conversation=self.conversation,
+                workspace_root=self.workspace_root,
+                config=self.config,
+            ).build()
+        )
         suggestions: list[ForecastSuggestion] = []
         if self.provider is not None:
-            messages = build_forecast_messages(context, max_input_tokens=self.config.max_input_tokens)
+            messages = build_forecast_messages(
+                context, max_input_tokens=self.config.max_input_tokens
+            )
             try:
                 response = self.provider.chat(
                     messages=messages,
@@ -82,7 +89,9 @@ class IntentForecastService:
             context=context,
             trigger=trigger,
         )
-        return ForecastResult(generated=True, suggestions=suggestions[:3], fingerprint=context.fingerprint)
+        return ForecastResult(
+            generated=True, suggestions=suggestions[:3], fingerprint=context.fingerprint
+        )
 
 
 def parse_forecast_response(raw: str, *, min_confidence: float) -> list[ForecastSuggestion]:
@@ -144,7 +153,9 @@ def no_suggestion_gate(
         or context.workspace.get("git_status")
         or task_state.get("blocked_reason")
         or task_state.get("pending_tests")
-        or any(float(session.get("relevance_score") or 0) >= 0.5 for session in context.sessions[:3])
+        or any(
+            float(session.get("relevance_score") or 0) >= 0.5 for session in context.sessions[:3]
+        )
     )
     if not strong_signal and not manual:
         return []

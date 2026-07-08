@@ -151,6 +151,7 @@ def _dispatch_shutdown_request(
     """Set ``shutdown_requested=True`` on the recipient's teammate
     state. Cooperative termination — the teammate winds down at a
     natural stopping point."""
+
     def _set(prev: Any) -> Any:
         if not _looks_like_teammate_task_state(prev):
             return prev
@@ -347,6 +348,7 @@ def _enqueue_user_message(
 ) -> None:
     """Append a plain-text message to the teammate's
     ``pending_user_messages`` queue."""
+
     def _append(prev: Any) -> Any:
         if not _looks_like_teammate_task_state(prev):
             return prev

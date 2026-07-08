@@ -18,9 +18,7 @@ _SYMBOLS_BY_MODULE: dict[str, tuple[str, ...]] = {
     "clawcodex_ext.auth.oauth": ("OAuthFlow", "OAuthTokens"),
 }
 _SYMBOL_MODULES = {
-    symbol: module_name
-    for module_name, symbols in _SYMBOLS_BY_MODULE.items()
-    for symbol in symbols
+    symbol: module_name for module_name, symbols in _SYMBOLS_BY_MODULE.items() for symbol in symbols
 }
 
 __all__ = list(_SYMBOL_MODULES)

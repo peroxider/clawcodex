@@ -34,7 +34,7 @@ PushHandler = Callable[[InboundMessage], Awaitable[bool]]
 
 # host_types that route to an opt-in peer over IPC push instead of the
 # default in-process handler.
-_OPT_IN_HOST_TYPES = frozenset({'repl', 'orchestrator', 'opt_in'})
+_OPT_IN_HOST_TYPES = frozenset({"repl", "orchestrator", "opt_in"})
 
 
 class InboundDispatcher:
@@ -73,10 +73,10 @@ class InboundDispatcher:
     async def process(self, message: InboundMessage) -> AckReceipt:
         delivery_id = str(uuid.uuid4())
         # 1. dedupe
-        key = message.message_id or f'{message.origin}:{message.text}'
+        key = message.message_id or f"{message.origin}:{message.text}"
         if not self._store.check_and_record(key, message_id=message.message_id):
-            logger.debug('im_gateway: duplicate inbound skipped origin=%s', message.origin[:32])
-            return AckReceipt(delivery_id, AckLayer.ACCEPTED, message='duplicate; skipped')
+            logger.debug("im_gateway: duplicate inbound skipped origin=%s", message.origin[:32])
+            return AckReceipt(delivery_id, AckLayer.ACCEPTED, message="duplicate; skipped")
         # 2. classify — honor a caller-supplied semantic (e.g. from a
         # busy-aware handler re-dispatch), else classify fresh.
         if message.semantic is None:
@@ -84,23 +84,23 @@ class InboundDispatcher:
         # 3. route — reject if opt-in target is offline (no offline payload store)
         if self._router.is_offline(message.origin):
             self._store.audit(
-                'target_offline',
+                "target_offline",
                 delivery_id=delivery_id,
                 origin=message.origin,
                 message_id=message.message_id,
             )
             logger.info(
-                'im_gateway: target offline origin=%s; accepted but not delivered',
+                "im_gateway: target offline origin=%s; accepted but not delivered",
                 message.origin[:32],
             )
             return AckReceipt(
                 delivery_id,
                 AckLayer.ACCEPTED,
-                message='target_offline; rebind or use default session',
+                message="target_offline; rebind or use default session",
             )
         target = self._router.route(message.origin)
         logger.info(
-            'im_gateway: route origin=%s semantic=%s target=%s host_type=%s',
+            "im_gateway: route origin=%s semantic=%s target=%s host_type=%s",
             message.origin[:32],
             message.semantic.value if message.semantic else None,
             target.session_id[:32],
@@ -108,20 +108,20 @@ class InboundDispatcher:
         )
         # 3.5 opt-in runtime 白名单门禁：只放行白名单内的斜杠命令，
         # 其余斜杠命令在网关层直接拒绝（不 push、不入队）。
-        if target.host_type == 'repl':
-            allowed, reason = check_repl_command(message.text or '')
+        if target.host_type == "repl":
+            allowed, reason = check_repl_command(message.text or "")
             if not allowed:
                 self._store.audit(
-                    'repl_command_blocked',
+                    "repl_command_blocked",
                     delivery_id=delivery_id,
                     origin=message.origin,
-                    command=(message.text or '')[:64],
+                    command=(message.text or "")[:64],
                     reason=reason,
                 )
                 logger.info(
-                    'im_gateway: REPL command blocked origin=%s cmd=%s',
+                    "im_gateway: REPL command blocked origin=%s cmd=%s",
                     message.origin[:32],
-                    (message.text or '')[:32],
+                    (message.text or "")[:32],
                 )
                 return AckReceipt(
                     delivery_id,
@@ -129,20 +129,20 @@ class InboundDispatcher:
                     message=reason,
                     notify_user=True,
                 )
-        elif target.host_type == 'orchestrator':
-            allowed, reason = check_orchestrator_command(message.text or '')
+        elif target.host_type == "orchestrator":
+            allowed, reason = check_orchestrator_command(message.text or "")
             if not allowed:
                 self._store.audit(
-                    'orchestrator_command_blocked',
+                    "orchestrator_command_blocked",
                     delivery_id=delivery_id,
                     origin=message.origin,
-                    command=(message.text or '')[:64],
+                    command=(message.text or "")[:64],
                     reason=reason,
                 )
                 logger.info(
-                    'im_gateway: orchestrator command blocked origin=%s cmd=%s',
+                    "im_gateway: orchestrator command blocked origin=%s cmd=%s",
                     message.origin[:32],
-                    (message.text or '')[:32],
+                    (message.text or "")[:32],
                 )
                 return AckReceipt(
                     delivery_id,
@@ -157,13 +157,13 @@ class InboundDispatcher:
             try:
                 delivered = await self._push_handler(message)
             except Exception:  # noqa: BLE001
-                logger.exception('im_gateway: push_handler error origin=%s', message.origin[:32])
+                logger.exception("im_gateway: push_handler error origin=%s", message.origin[:32])
                 delivered = False
             if delivered:
-                return AckReceipt(delivery_id, AckLayer.ENQUEUED, message='pushed to opt-in peer')
+                return AckReceipt(delivery_id, AckLayer.ENQUEUED, message="pushed to opt-in peer")
             # push failed (peer offline) → fall through to default handler
             logger.warning(
-                'im_gateway: opt-in push failed origin=%s; falling back to default',
+                "im_gateway: opt-in push failed origin=%s; falling back to default",
                 message.origin[:32],
             )
         # 5. dispatch → handler
@@ -171,7 +171,7 @@ class InboundDispatcher:
             result = await self._handler(message)
             if result is not None:
                 return result
-        return AckReceipt(delivery_id, AckLayer.ACCEPTED, message='accepted')
+        return AckReceipt(delivery_id, AckLayer.ACCEPTED, message="accepted")
 
 
-__all__ = ['InboundDispatcher', 'InboundHandler']
+__all__ = ["InboundDispatcher", "InboundHandler"]

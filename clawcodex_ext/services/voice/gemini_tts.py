@@ -21,6 +21,7 @@ The ``google-genai`` SDK is a *heavy* optional dep — the factory in
 is unaffected. ``get_tts_provider("gemini")`` raises ``ImportError``
 with a clear ``pip install google-genai`` hint when the SDK is absent.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -83,7 +84,9 @@ class GeminiTTSProvider(TTSProvider):
     """
 
     def __init__(self, *, api_key: Optional[str] = None) -> None:
-        self._api_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        self._api_key = (
+            api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        )
 
     def _require_key(self) -> str:
         if not self._api_key:
@@ -192,6 +195,7 @@ class GeminiTTSProvider(TTSProvider):
                 elif isinstance(data, str):
                     # Some SDK versions return base64-str; decode defensively.
                     import base64
+
                     try:
                         pcm.extend(base64.b64decode(data))
                     except Exception:

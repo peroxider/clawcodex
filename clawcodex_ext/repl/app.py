@@ -56,10 +56,10 @@ class ClawCodexExtREPL(ClawcodexREPL):
 
     def __init__(
         self,
-        provider_name: str = 'glm',
+        provider_name: str = "glm",
         stream: bool = False,
         *,
-        permission_mode: str = 'default',
+        permission_mode: str = "default",
         is_bypass_permissions_mode_available: bool = False,
         # Downstream-only parameters ------------------------------------
         resume_session_id: str | None = None,
@@ -69,7 +69,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
         tool_context: Any | None = None,
         workspace_root: Path | None = None,
         runtime_context: Any | None = None,
-        append_system_prompt: str = '',
+        append_system_prompt: str = "",
     ) -> None:
         # ---- Shared setup (identical to upstream) ----
         self._permission_mode = permission_mode
@@ -119,22 +119,22 @@ class ClawCodexExtREPL(ClawcodexREPL):
             self._cron_queued_prompts: deque[str] = deque(maxlen=100)
             self._queued_prompts_lock = threading.Lock()
             self._original_built_ins = [
-                '/',
-                '/help',
-                '/exit',
-                '/quit',
-                '/q',
-                '/clear',
-                '/save',
-                '/load',
-                '/stream',
-                '/render-last',
-                '/tools',
-                '/tool',
-                '/skills',
-                '/init',
-                '/tui',
-                '/login',
+                "/",
+                "/help",
+                "/exit",
+                "/quit",
+                "/q",
+                "/clear",
+                "/save",
+                "/load",
+                "/stream",
+                "/render-last",
+                "/tools",
+                "/tool",
+                "/skills",
+                "/init",
+                "/tui",
+                "/login",
             ]
             self._built_in_commands = list(self._original_built_ins)
 
@@ -158,9 +158,9 @@ class ClawCodexExtREPL(ClawcodexREPL):
             loaded_session = Session.resume(resume_session_id)
             if loaded_session is not None:
                 self.session = loaded_session
-                self.console.print(f'[success]Resumed session: {resume_session_id}[/success]')
+                self.console.print(f"[success]Resumed session: {resume_session_id}[/success]")
                 self.console.print(
-                    f'[dim]Provider: {loaded_session.provider}, Model: {loaded_session.model}[/dim]'
+                    f"[dim]Provider: {loaded_session.provider}, Model: {loaded_session.model}[/dim]"
                 )
                 self._sync_conversation_from_transcript(resume_session_id)
                 # Sync historical messages into _engine_messages so the
@@ -178,8 +178,8 @@ class ClawCodexExtREPL(ClawcodexREPL):
                 self._warn_if_background_runner_active(resume_session_id)
             else:
                 self.console.print(
-                    f'[warning]Session not found: {resume_session_id}. '
-                    'Starting new session.[/warning]'
+                    f"[warning]Session not found: {resume_session_id}. "
+                    "Starting new session.[/warning]"
                 )
                 self.session = Session.create(provider_name, self.provider.model)
         else:
@@ -187,10 +187,10 @@ class ClawCodexExtREPL(ClawcodexREPL):
 
         # ---- Tool registry + context ----
         def _get_mcp_servers_for_prompt() -> list[str]:
-            ctx = getattr(self, 'tool_context', None)
+            ctx = getattr(self, "tool_context", None)
             if ctx is None:
                 return []
-            clients = getattr(ctx, 'mcp_clients', None) or {}
+            clients = getattr(ctx, "mcp_clients", None) or {}
             return list(clients.keys())
 
         from src.tool_system.defaults import build_default_registry
@@ -212,7 +212,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
                         self._is_bypass_permissions_mode_available
                     ),
                 ),
-                session_id=getattr(self.session, 'session_id', None),
+                session_id=getattr(self.session, "session_id", None),
             )
         else:
             self.tool_context = tool_context
@@ -221,10 +221,10 @@ class ClawCodexExtREPL(ClawcodexREPL):
                 mode=self._permission_mode,  # type: ignore[arg-type]
                 is_bypass_permissions_mode_available=(self._is_bypass_permissions_mode_available),
             )
-        self.tool_context.session_id = getattr(self.session, 'session_id', None)
+        self.tool_context.session_id = getattr(self.session, "session_id", None)
         self.tool_context.ask_user = self._ask_user_questions
         self._current_status = None
-        if self._permission_mode == 'bypassPermissions':
+        if self._permission_mode == "bypassPermissions":
             self.tool_context.allow_docs = True
             self.tool_context.permission_handler = lambda _tn, _msg, _sug: (True, False)
         else:
@@ -274,7 +274,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
         self._active_live_status: Any = None
         # Wire is_loading on the pre-existing cron scheduler (created by
         # RuntimeContext.build before this REPL was constructed).
-        _cron_sched = getattr(self.tool_context, 'cron_scheduler', None)
+        _cron_sched = getattr(self.tool_context, "cron_scheduler", None)
         if _cron_sched is not None:
             _cron_sched.is_loading = lambda: self._active_live_status is not None
         self._expandable_blocks: deque[tuple[str, str]] = deque(maxlen=20)
@@ -297,27 +297,27 @@ class ClawCodexExtREPL(ClawcodexREPL):
 
         # ---- Original built-in commands ----
         self._original_built_ins = [
-            '/',
-            '/help',
-            '/exit',
-            '/quit',
-            '/q',
-            '/repl',
-            '/clear',
-            '/save',
-            '/load',
-            '/stream',
-            '/render-last',
-            '/tools',
-            '/tool',
-            '/skills',
-            '/init',
-            '/model',
-            '/provider',
-            '/env',
-            '/tui',
-            '/login',
-            '/permission',
+            "/",
+            "/help",
+            "/exit",
+            "/quit",
+            "/q",
+            "/repl",
+            "/clear",
+            "/save",
+            "/load",
+            "/stream",
+            "/render-last",
+            "/tools",
+            "/tool",
+            "/skills",
+            "/init",
+            "/model",
+            "/provider",
+            "/env",
+            "/tui",
+            "/login",
+            "/permission",
         ]
         self._built_in_commands = list(self._original_built_ins)
 
@@ -376,7 +376,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
         # Warm the slash-command suggestion cache in the background.
         threading.Thread(
             target=self._warm_slash_suggestions_cache,
-            name='slash-suggestions-warm',
+            name="slash-suggestions-warm",
             daemon=True,
         ).start()
 
@@ -384,13 +384,13 @@ class ClawCodexExtREPL(ClawcodexREPL):
         from prompt_toolkit.key_binding import KeyBindings
 
         self.bindings = KeyBindings()
-        if hasattr(self.bindings, 'add'):
+        if hasattr(self.bindings, "add"):
 
-            @self.bindings.add('/')
+            @self.bindings.add("/")
             def _show_slash_completions(event):
                 buf = event.current_buffer
-                was_empty = buf.text == ''
-                buf.insert_text('/')
+                was_empty = buf.text == ""
+                buf.insert_text("/")
                 if was_empty:
                     buf.start_completion(select_first=False)
 
@@ -403,15 +403,15 @@ class ClawCodexExtREPL(ClawcodexREPL):
                 if token is not None:
                     buf.start_completion(select_first=False)
 
-            @self.bindings.add('backspace')
+            @self.bindings.add("backspace")
             def _backspace_refreshes_slash_menu(event):
                 _refresh_slash_menu_after_deletion(event, lambda b: b.delete_before_cursor(count=1))
 
-            @self.bindings.add('delete')
+            @self.bindings.add("delete")
             def _delete_refreshes_slash_menu(event):
                 _refresh_slash_menu_after_deletion(event, lambda b: b.delete(count=1))
 
-            @self.bindings.add('c-m')
+            @self.bindings.add("c-m")
             def _enter_submits_or_backslash_newline(event):
                 buf = event.current_buffer
                 if buf.complete_state:
@@ -419,17 +419,17 @@ class ClawCodexExtREPL(ClawcodexREPL):
                     return
                 text = buf.text
                 pos = buf.cursor_position
-                if pos > 0 and text[pos - 1] == '\\':
+                if pos > 0 and text[pos - 1] == "\\":
                     buf.delete_before_cursor(count=1)
-                    buf.insert_text('\n')
+                    buf.insert_text("\n")
                     return
                 buf.validate_and_handle()
 
-            @self.bindings.add('escape', 'c-m')
+            @self.bindings.add("escape", "c-m")
             def _meta_or_shift_enter_inserts_newline(event):
-                event.current_buffer.insert_text('\n')
+                event.current_buffer.insert_text("\n")
 
-            @self.bindings.add('c-o')
+            @self.bindings.add("c-o")
             def _expand_last(event):
                 try:
                     from prompt_toolkit.application import run_in_terminal
@@ -438,7 +438,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
                 except Exception:
                     self._do_expand_last()
 
-            @self.bindings.add('s-tab')  # type: ignore[attr-defined]
+            @self.bindings.add("s-tab")  # type: ignore[attr-defined]
             def _cycle_permission_mode(event):  # type: ignore[no-untyped-def]
                 """Shift+Tab: cycle through permission modes.
 
@@ -460,10 +460,10 @@ class ClawCodexExtREPL(ClawcodexREPL):
             from src.settings.settings import get_settings as _get_settings
 
             _settings = _get_settings()
-            _accept_key = getattr(_settings, 'accept_suggestion_key', 'c-e') or 'c-e'
-            _accept_tab_alias = bool(getattr(_settings, 'accept_suggestion_tab_alias', True))
+            _accept_key = getattr(_settings, "accept_suggestion_key", "c-e") or "c-e"
+            _accept_tab_alias = bool(getattr(_settings, "accept_suggestion_tab_alias", True))
         except Exception:
-            _accept_key = 'c-e'
+            _accept_key = "c-e"
             _accept_tab_alias = True
 
         self._file_history = FileHistory(str(history_file))
@@ -538,7 +538,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
         self.command_context.session = self.session
         self.command_context.intent_forecast_controller = getattr(
             self,
-            '_intent_forecast_controller',
+            "_intent_forecast_controller",
             None,
         )
 
@@ -573,15 +573,15 @@ class ClawCodexExtREPL(ClawcodexREPL):
         mode inline in the spinner row. Otherwise fall through to
         :meth:`console.print` so the change is visible between turns.
         """
-        status = getattr(self, '_active_live_status', None)
+        status = getattr(self, "_active_live_status", None)
         if status is not None:
             try:
-                status.update(f'mode: {mode}')
+                status.update(f"mode: {mode}")
             except Exception:
                 pass
             return
         try:
-            self.console.print(f'[success]Permission mode: {mode}[/success]')
+            self.console.print(f"[success]Permission mode: {mode}[/success]")
         except Exception:
             pass
 
@@ -596,18 +596,18 @@ class ClawCodexExtREPL(ClawcodexREPL):
             meta = storage.get_metadata()
             if meta is not None:
                 self._session_metadata = {
-                    'session_id': meta.session_id,
-                    'title': meta.title or '',
-                    'model': meta.model or '',
-                    'cwd': meta.cwd or '',
-                    'last_user_input': meta.last_user_input or '',
-                    'message_count': meta.message_count,
-                    'start_time': meta.start_time,
-                    'last_updated': meta.last_updated,
+                    "session_id": meta.session_id,
+                    "title": meta.title or "",
+                    "model": meta.model or "",
+                    "cwd": meta.cwd or "",
+                    "last_user_input": meta.last_user_input or "",
+                    "message_count": meta.message_count,
+                    "start_time": meta.start_time,
+                    "last_updated": meta.last_updated,
                 }
                 # Display title if set
                 if meta.title:
-                    self.console.print(f'[dim]Session title: {meta.title}[/dim]')
+                    self.console.print(f"[dim]Session title: {meta.title}[/dim]")
         except Exception:
             self._session_metadata = None
 
@@ -643,10 +643,10 @@ class ClawCodexExtREPL(ClawcodexREPL):
         """Override chat() to track the last user input in metadata."""
 
         self._update_metadata_last_input(user_input)
-        controller = getattr(self, '_away_summary_controller', None)
+        controller = getattr(self, "_away_summary_controller", None)
         if controller is not None:
             controller.on_run_start()
-        forecast = getattr(self, '_intent_forecast_controller', None)
+        forecast = getattr(self, "_intent_forecast_controller", None)
         if forecast is not None:
             forecast.on_run_start()
         try:
@@ -660,7 +660,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
                     forecast.on_run_finish()
                 except Exception:
                     pass
-            im_reply = getattr(self, '_im_reply_controller', None)
+            im_reply = getattr(self, "_im_reply_controller", None)
             if im_reply is not None:
                 try:
                     im_reply.on_assistant_turn_complete()
@@ -676,7 +676,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
             self._intent_forecast_controller = None
             return
 
-        old = getattr(self, '_intent_forecast_controller', None)
+        old = getattr(self, "_intent_forecast_controller", None)
         if old is not None:
             try:
                 old.close()
@@ -692,7 +692,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
 
         self._intent_forecast_controller = IntentForecastController(
             provider_getter=lambda: self.provider,
-            model_getter=lambda: getattr(self.provider, 'model', None),
+            model_getter=lambda: getattr(self.provider, "model", None),
             session_getter=lambda: self.session,
             workspace_root=Path(self.workspace_root),
             display=_display,
@@ -702,7 +702,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
         )
         try:
             self._intent_forecast_controller.on_mount()
-            if getattr(self, 'command_context', None) is not None:
+            if getattr(self, "command_context", None) is not None:
                 self.command_context.intent_forecast_controller = self._intent_forecast_controller
         except Exception:
             pass

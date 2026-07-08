@@ -69,10 +69,12 @@ def _execute_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResul
         return ToolResult(
             name="Execute",
             output={"result": None, "tool_name": tool_name},
-            new_messages=[_wrap_user_message(
-                f'Tool "{tool_name}" not found. Use SearchExtraTools to '
-                "discover available tools."
-            )],
+            new_messages=[
+                _wrap_user_message(
+                    f'Tool "{tool_name}" not found. Use SearchExtraTools to '
+                    "discover available tools."
+                )
+            ],
         )
 
     # isEnabled gate — deferred tools may be disabled (e.g. Remote Control
@@ -82,9 +84,7 @@ def _execute_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResul
         return ToolResult(
             name="Execute",
             output={"result": None, "tool_name": tool_name},
-            new_messages=[_wrap_user_message(
-                f'Tool "{tool_name}" is currently disabled.'
-            )],
+            new_messages=[_wrap_user_message(f'Tool "{tool_name}" is currently disabled.')],
         )
 
     # Schema-validate params against the target tool BEFORE delegating.
@@ -101,9 +101,9 @@ def _execute_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResul
             return ToolResult(
                 name="Execute",
                 output={"result": None, "tool_name": tool_name},
-                new_messages=[_wrap_user_message(
-                    f'Invalid parameters for tool "{tool_name}": {exc}'
-                )],
+                new_messages=[
+                    _wrap_user_message(f'Invalid parameters for tool "{tool_name}": {exc}')
+                ],
             )
 
     # Target-level input validation (semantic checks beyond JSON schema).
@@ -114,10 +114,12 @@ def _execute_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResul
             return ToolResult(
                 name="Execute",
                 output={"result": None, "tool_name": tool_name},
-                new_messages=[_wrap_user_message(
-                    f'Invalid parameters for tool "{tool_name}": '
-                    f"{getattr(validation, 'message', '')}"
-                )],
+                new_messages=[
+                    _wrap_user_message(
+                        f'Invalid parameters for tool "{tool_name}": '
+                        f"{getattr(validation, 'message', '')}"
+                    )
+                ],
             )
 
     # Permission check — delegate to the target tool's own check so the
@@ -131,9 +133,9 @@ def _execute_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResul
             return ToolResult(
                 name="Execute",
                 output={"result": None, "tool_name": tool_name},
-                new_messages=[_wrap_user_message(
-                    f'Permission denied for tool "{tool_name}": {msg}'
-                )],
+                new_messages=[
+                    _wrap_user_message(f'Permission denied for tool "{tool_name}": {msg}')
+                ],
             )
 
     # Delegate execution to the target tool. We call the tool's ``call``
@@ -147,9 +149,7 @@ def _execute_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResul
             name="Execute",
             output={"result": None, "tool_name": tool_name},
             is_error=True,
-            new_messages=[_wrap_user_message(
-                f'Tool "{tool_name}" raised: {exc}'
-            )],
+            new_messages=[_wrap_user_message(f'Tool "{tool_name}" raised: {exc}')],
         )
 
     return ToolResult(
@@ -213,7 +213,5 @@ ExecuteTool: Tool = build_tool(
     is_concurrency_safe=lambda _input: False,
     is_read_only=lambda _input: False,
     map_result_to_api=_map_result_to_api,
-    to_auto_classifier_input=lambda input_data: (
-        f"Execute {input_data.get('tool_name', '')}"
-    ),
+    to_auto_classifier_input=lambda input_data: f"Execute {input_data.get('tool_name', '')}",
 )

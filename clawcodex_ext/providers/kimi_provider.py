@@ -69,7 +69,9 @@ class KimiProvider(OpenAICompatibleProvider):
             kwargs["http_client"] = httpx.Client(verify=False, timeout=60.0)
         return OpenAI(**kwargs)
 
-    def _prepare_tools(self, tools: Optional[list[dict[str, Any]]]) -> Optional[list[dict[str, Any]]]:
+    def _prepare_tools(
+        self, tools: Optional[list[dict[str, Any]]]
+    ) -> Optional[list[dict[str, Any]]]:
         """Convert tools to OpenAI format and sanitize for Moonshot quirks.
 
         Moonshot rejects standard JSON-Schema shapes that OpenAI accepts,

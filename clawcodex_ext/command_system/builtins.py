@@ -1327,9 +1327,7 @@ def resume_command_call(args: str, context: CommandContext) -> LocalCommandResul
         try:
             metas = SessionStorage.list_sessions(limit=50)
             if not metas:
-                return LocalCommandResult(
-                    type="text", value="No past sessions found."
-                )
+                return LocalCommandResult(type="text", value="No past sessions found.")
             lines = ["Available sessions (use /resume <session_id> to resume):\n"]
             for i, m in enumerate(metas, 1):
                 sid = m.session_id
@@ -1337,9 +1335,7 @@ def resume_command_call(args: str, context: CommandContext) -> LocalCommandResul
                 if preview:
                     preview = preview[:60]
                 lines.append(f"  {i:>3}. {sid[:12]}…  {preview}")
-            lines.append(
-                "\n  Use /resume <session_id> or /load <session_id> to restore a session."
-            )
+            lines.append("\n  Use /resume <session_id> or /load <session_id> to restore a session.")
             return LocalCommandResult(type="text", value="\n".join(lines))
         except Exception:
             return LocalCommandResult(

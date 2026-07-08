@@ -103,7 +103,9 @@ def _match_skill_by_operations(
     best: SkillSpec | None = None
     best_score = 0
     for skill in skills:
-        overlap = sum(1 for t in skill.allowed_tools if t.split(".")[-1] in func_names or t in func_names)
+        overlap = sum(
+            1 for t in skill.allowed_tools if t.split(".")[-1] in func_names or t in func_names
+        )
         if overlap > best_score:
             best_score = overlap
             best = skill
@@ -165,7 +167,9 @@ class StageCapabilityMapper:
                 impl_path = resolve_arc_stage_impl_path(source_dir, pipeline_dir, stage)
             if impl_path is None:
                 impl_path = _stage_impl_path(
-                    source_dir, stage, skip_executor=is_arc and bool(stage.entry_function),
+                    source_dir,
+                    stage,
+                    skip_executor=is_arc and bool(stage.entry_function),
                 )
 
             paths = [impl_path] if impl_path else []

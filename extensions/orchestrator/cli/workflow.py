@@ -385,7 +385,10 @@ def _run_init(args: argparse.Namespace) -> int:
     if args.workflow_yaml:
         yaml_out = Path(args.workflow_yaml_output).expanduser().resolve()
         if yaml_out.exists():
-            print(f"✗ {yaml_out} already exists — remove it first or use --workflow-yaml-output", file=sys.stderr)
+            print(
+                f"✗ {yaml_out} already exists — remove it first or use --workflow-yaml-output",
+                file=sys.stderr,
+            )
             return 1
 
         yaml_tpl_path = _template_path("workflow.yaml")
@@ -395,7 +398,8 @@ def _run_init(args: argparse.Namespace) -> int:
         yaml_values = values.copy()
         yaml_values["WORKFLOW_NAME"] = val(
             args.workflow_name if hasattr(args, "workflow_name") else "",
-            "Workflow name", f"{repo or 'project'}-code-review",
+            "Workflow name",
+            f"{repo or 'project'}-code-review",
         )
         yaml_values["PROJECT_NAME"] = repo or owner or "project"
         yaml_values["PROVIDER"] = "anthropic"
@@ -412,7 +416,9 @@ def _run_init(args: argparse.Namespace) -> int:
     if yaml_out:
         print(f"    2. Edit {yaml_out.name} — customize workflow stages for your project")
         print(f"    3. Set the required env var: export {token_env}=<your-token>")
-        print(f"    4. Start: clawcodex orchestrator server start --workflow {out.name} --workflow-yaml {yaml_out.name}")
+        print(
+            f"    4. Start: clawcodex orchestrator server start --workflow {out.name} --workflow-yaml {yaml_out.name}"
+        )
     else:
         print(f"    2. Set the required env var: export {token_env}=<your-token>")
         print(f"    3. Start: clawcodex orchestrator server start --workflow {out.name}")

@@ -156,7 +156,7 @@ async def _call_llm_judge(
     rubric = config.rubric or (
         "Evaluate the following output on a scale of 0.0 to 1.0. "
         "Consider completeness, correctness, clarity, and adherence to requirements. "
-        "Respond with a JSON object: {\"score\": <float>, \"reasoning\": \"<explanation>\"}"
+        'Respond with a JSON object: {"score": <float>, "reasoning": "<explanation>"}'
     )
 
     prompt = f"""{rubric}
@@ -222,7 +222,7 @@ def _parse_llm_response(response: str) -> tuple[float, str]:
         pass
 
     # 尝试正则提取评分
-    score_match = re.search(r'(?:score|评分)[:\s]*([0-9]*\.?[0-9]+)', response, re.IGNORECASE)
+    score_match = re.search(r"(?:score|评分)[:\s]*([0-9]*\.?[0-9]+)", response, re.IGNORECASE)
     if score_match:
         try:
             score = float(score_match.group(1))
@@ -253,16 +253,26 @@ def _fallback_scoring(content: str, config: LLMJudgeConfig) -> float:
         score += 0.2
 
     # 包含结构化标记
-    if re.search(r'#{1,3}\s', content):  # Markdown 标题
+    if re.search(r"#{1,3}\s", content):  # Markdown 标题
         score += 0.1
-    if re.search(r'```', content):  # 代码块
+    if re.search(r"```", content):  # 代码块
         score += 0.1
-    if re.search(r'[-*]\s', content):  # 列表
+    if re.search(r"[-*]\s", content):  # 列表
         score += 0.1
 
     # 包含关键词（技术文档常见）
-    tech_keywords = ['implementation', 'design', 'test', 'result', 'output',
-                     'summary', 'conclusion', 'analysis', 'data', 'config']
+    tech_keywords = [
+        "implementation",
+        "design",
+        "test",
+        "result",
+        "output",
+        "summary",
+        "conclusion",
+        "analysis",
+        "data",
+        "config",
+    ]
     found = sum(1 for kw in tech_keywords if kw.lower() in content.lower())
     if found > 0:
         score += min(found * 0.05, 0.2)

@@ -182,9 +182,9 @@ class CausalEngine:
     """
 
     def __init__(self, *, max_cache_entries: int = _CAUSAL_CACHE_LIMIT) -> None:
-        self._cache: OrderedDict[
-            tuple[str, tuple[str, str, str, str], str], CausalEffect
-        ] = OrderedDict()
+        self._cache: OrderedDict[tuple[str, tuple[str, str, str, str], str], CausalEffect] = (
+            OrderedDict()
+        )
         self._max_cache = max(1, int(max_cache_entries))
         self._lock = threading.Lock()
 
@@ -258,9 +258,7 @@ class CausalEngine:
             # edge's mechanism is irrelevant — we report ``null`` so the
             # caller can distinguish "no edge" from "edge exists but the
             # intervention value doesn't apply".
-            mechanism: CausalMechanism = (
-                edge.mechanism if effect > 0.0 else "null"
-            )
+            mechanism: CausalMechanism = edge.mechanism if effect > 0.0 else "null"
         else:
             path = _shortest_path(graph, treatment_node, outcome_node)
             if path is None or len(path) < 2:

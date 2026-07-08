@@ -22,6 +22,7 @@ the agent-reply pipeline.
 End-of-stream is signalled by pushing a :class:`TTSChunk` with
 ``is_final=True``; the player drains the buffer then releases the device.
 """
+
 from __future__ import annotations
 
 import asyncio

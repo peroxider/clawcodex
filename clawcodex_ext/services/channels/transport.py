@@ -27,7 +27,7 @@ from .exceptions import InvalidWebhookURLError, TransportError
 
 DEFAULT_TIMEOUT_SECONDS = 10.0
 
-_ALLOWED_LOOPBACK_HOSTS = frozenset({'localhost', '127.0.0.1', '::1'})
+_ALLOWED_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 def validate_webhook_url(
@@ -53,22 +53,22 @@ def validate_webhook_url(
     on any violation.
     """
     if not isinstance(url, str) or not url:
-        raise InvalidWebhookURLError('webhook url must be a non-empty string')
+        raise InvalidWebhookURLError("webhook url must be a non-empty string")
     parsed = urllib.parse.urlparse(url)
-    scheme = (parsed.scheme or '').lower()
-    if scheme == 'https':
+    scheme = (parsed.scheme or "").lower()
+    if scheme == "https":
         pass
-    elif scheme == 'http' and allow_http:
+    elif scheme == "http" and allow_http:
         pass
     else:
-        raise InvalidWebhookURLError(f'webhook url must use https (got scheme {scheme!r})')
+        raise InvalidWebhookURLError(f"webhook url must use https (got scheme {scheme!r})")
     if not parsed.hostname:
-        raise InvalidWebhookURLError('webhook url must include a hostname')
+        raise InvalidWebhookURLError("webhook url must include a hostname")
 
     host = parsed.hostname
     if host.lower() in _ALLOWED_LOOPBACK_HOSTS and not allow_loopback:
         raise InvalidWebhookURLError(
-            f'webhook url loopback host {host!r} is not allowed by default'
+            f"webhook url loopback host {host!r} is not allowed by default"
         )
 
     # When the host is itself a literal IP address, validate it directly so
@@ -81,20 +81,20 @@ def validate_webhook_url(
         literal_ip = None
     if literal_ip is not None:
         if literal_ip.is_loopback and not allow_loopback:
-            raise InvalidWebhookURLError(f'webhook url host {host!r} is a loopback address')
+            raise InvalidWebhookURLError(f"webhook url host {host!r} is a loopback address")
         if literal_ip.is_private and not allow_loopback:
-            raise InvalidWebhookURLError(f'webhook url host {host!r} is a private address')
+            raise InvalidWebhookURLError(f"webhook url host {host!r} is a private address")
         if literal_ip.is_link_local:
-            raise InvalidWebhookURLError(f'webhook url host {host!r} is a link-local address')
+            raise InvalidWebhookURLError(f"webhook url host {host!r} is a link-local address")
         if literal_ip.is_multicast or literal_ip.is_reserved or literal_ip.is_unspecified:
-            raise InvalidWebhookURLError(f'webhook url host {host!r} is a reserved address')
+            raise InvalidWebhookURLError(f"webhook url host {host!r} is a reserved address")
 
     if resolve_host:
         try:
             infos = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
         except socket.gaierror as exc:
             raise InvalidWebhookURLError(
-                f'webhook url host {host!r} could not be resolved: {exc}'
+                f"webhook url host {host!r} could not be resolved: {exc}"
             ) from exc
         for info in infos:
             sockaddr = info[4]
@@ -104,17 +104,17 @@ def validate_webhook_url(
             except ValueError:
                 continue
             if ip.is_loopback and not allow_loopback:
-                raise InvalidWebhookURLError(f'webhook url resolves to loopback {ip_str}')
+                raise InvalidWebhookURLError(f"webhook url resolves to loopback {ip_str}")
             if ip.is_private and not allow_loopback:
-                raise InvalidWebhookURLError(f'webhook url resolves to private address {ip_str}')
+                raise InvalidWebhookURLError(f"webhook url resolves to private address {ip_str}")
             if ip.is_link_local:
-                raise InvalidWebhookURLError(f'webhook url resolves to link-local address {ip_str}')
+                raise InvalidWebhookURLError(f"webhook url resolves to link-local address {ip_str}")
             if ip.is_multicast or ip.is_reserved or ip.is_unspecified:
-                raise InvalidWebhookURLError(f'webhook url resolves to reserved address {ip_str}')
+                raise InvalidWebhookURLError(f"webhook url resolves to reserved address {ip_str}")
     return url
 
 
-_TOKEN_RE = re.compile(r'/(?P<token>[A-Za-z0-9_\-]{6,})/?$')
+_TOKEN_RE = re.compile(r"/(?P<token>[A-Za-z0-9_\-]{6,})/?$")
 
 
 def redact_webhook_url(url: str) -> str:
@@ -125,11 +125,11 @@ def redact_webhook_url(url: str) -> str:
     hostname, and path prefix are preserved.
     """
     if not isinstance(url, str) or not url:
-        return ''
+        return ""
     parsed = urllib.parse.urlparse(url)
-    parts = parsed.path.rsplit('/', 1)
+    parts = parsed.path.rsplit("/", 1)
     if len(parts) == 2 and _TOKEN_RE.search(parsed.path):
-        redacted_path = parts[0] + '/***'
+        redacted_path = parts[0] + "/***"
     else:
         redacted_path = parsed.path
     return urllib.parse.urlunparse(
@@ -137,9 +137,9 @@ def redact_webhook_url(url: str) -> str:
             parsed.scheme,
             parsed.netloc,
             redacted_path,
-            '',
-            '',
-            '',
+            "",
+            "",
+            "",
         )
     )
 
@@ -147,7 +147,7 @@ def redact_webhook_url(url: str) -> str:
 @dataclass
 class TransportResponse:
     status: int
-    body: bytes = b''
+    body: bytes = b""
     headers: Mapping[str, str] = field(default_factory=dict)
 
 
@@ -161,7 +161,7 @@ class ChannelTransport(ABC):
         headers: Mapping[str, str] | None = None,
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> TransportResponse:
-        raise TransportError('transport GET is not implemented')
+        raise TransportError("transport GET is not implemented")
 
     @abstractmethod
     async def post(
@@ -193,7 +193,7 @@ class UrllibChannelTransport(ChannelTransport):
         def _send() -> TransportResponse:
             request = urllib.request.Request(
                 url=url,
-                method='GET',
+                method="GET",
                 headers=dict(headers or {}),
             )
             try:
@@ -206,15 +206,15 @@ class UrllibChannelTransport(ChannelTransport):
             except urllib.error.HTTPError as exc:
                 return TransportResponse(
                     status=exc.code,
-                    body=exc.read() if hasattr(exc, 'read') else b'',
+                    body=exc.read() if hasattr(exc, "read") else b"",
                     headers=dict(exc.headers.items()) if exc.headers else {},
                 )
             except urllib.error.URLError as exc:
-                raise TransportError(f'transport error: {exc.reason}') from exc
+                raise TransportError(f"transport error: {exc.reason}") from exc
             except (TimeoutError, socket.timeout) as exc:
-                raise TransportError(f'transport timeout: {exc}') from exc
+                raise TransportError(f"transport timeout: {exc}") from exc
             except OSError as exc:
-                raise TransportError(f'transport os error: {exc}') from exc
+                raise TransportError(f"transport os error: {exc}") from exc
 
         return await asyncio.to_thread(_send)
 
@@ -233,7 +233,7 @@ class UrllibChannelTransport(ChannelTransport):
             request = urllib.request.Request(
                 url=url,
                 data=body,
-                method='POST',
+                method="POST",
                 headers=dict(headers or {}),
             )
             try:
@@ -248,21 +248,21 @@ class UrllibChannelTransport(ChannelTransport):
                 # separately so we surface the status and payload.
                 return TransportResponse(
                     status=exc.code,
-                    body=exc.read() if hasattr(exc, 'read') else b'',
+                    body=exc.read() if hasattr(exc, "read") else b"",
                     headers=dict(exc.headers.items()) if exc.headers else {},
                 )
             except urllib.error.URLError as exc:
-                raise TransportError(f'transport error: {exc.reason}') from exc
+                raise TransportError(f"transport error: {exc.reason}") from exc
             except (TimeoutError, socket.timeout) as exc:
-                raise TransportError(f'transport timeout: {exc}') from exc
+                raise TransportError(f"transport timeout: {exc}") from exc
             except OSError as exc:
-                raise TransportError(f'transport os error: {exc}') from exc
+                raise TransportError(f"transport os error: {exc}") from exc
 
         return await asyncio.to_thread(_send)
 
 
 def encode_json_body(payload: Any) -> bytes:
-    return json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
 def decode_json_body(
@@ -286,26 +286,26 @@ def decode_json_body(
     """
     try:
         if isinstance(body, bytes):
-            return json.loads(body.decode('utf-8'))
+            return json.loads(body.decode("utf-8"))
         return json.loads(body)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         if raise_on_error:
-            raise TransportError(f'JSON decode failed: {exc}') from exc
+            raise TransportError(f"JSON decode failed: {exc}") from exc
         return default
 
 
-def default_headers(content_type: str = 'application/json') -> dict[str, str]:
-    return {'Content-Type': content_type, 'User-Agent': 'clawcodex-channels/0.1'}
+def default_headers(content_type: str = "application/json") -> dict[str, str]:
+    return {"Content-Type": content_type, "User-Agent": "clawcodex-channels/0.1"}
 
 
 __all__ = [
-    'DEFAULT_TIMEOUT_SECONDS',
-    'ChannelTransport',
-    'TransportResponse',
-    'UrllibChannelTransport',
-    'decode_json_body',
-    'default_headers',
-    'encode_json_body',
-    'redact_webhook_url',
-    'validate_webhook_url',
+    "DEFAULT_TIMEOUT_SECONDS",
+    "ChannelTransport",
+    "TransportResponse",
+    "UrllibChannelTransport",
+    "decode_json_body",
+    "default_headers",
+    "encode_json_body",
+    "redact_webhook_url",
+    "validate_webhook_url",
 ]

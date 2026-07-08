@@ -107,12 +107,8 @@ def test_chat_stream_yields_text(monkeypatch: pytest.MonkeyPatch) -> None:
     client = MagicMock()
     client.chat.completions.create.return_value = iter(
         [
-            SimpleNamespace(
-                choices=[SimpleNamespace(delta=SimpleNamespace(content="He"))]
-            ),
-            SimpleNamespace(
-                choices=[SimpleNamespace(delta=SimpleNamespace(content="llo"))]
-            ),
+            SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="He"))]),
+            SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="llo"))]),
         ]
     )
     fake_openai = MagicMock(return_value=client)

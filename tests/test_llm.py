@@ -171,7 +171,6 @@ class TestDefaultResolution:
 
 
 class TestLlmErrors:
-
     @pytest.mark.asyncio
     async def test_raises_on_missing_api_key(self) -> None:
         """API key 未配置时抛出 RuntimeError。"""

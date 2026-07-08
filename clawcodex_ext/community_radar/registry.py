@@ -303,9 +303,7 @@ class SourceRegistry:
     # Domain auto-detection
     # ------------------------------------------------------------------
 
-    def auto_detect_domains(
-        self, cache_dir: Path | str, *, github_token: str | None = None
-    ) -> int:
+    def auto_detect_domains(self, cache_dir: Path | str, *, github_token: str | None = None) -> int:
         """Detect domains for sources still marked ``general``.
 
         Calls :func:`detect_repo_domain` (which hits the GitHub API and
@@ -320,9 +318,7 @@ class SourceRegistry:
             if source.domain != SourceDomain.GENERAL.value:
                 continue
             try:
-                detected = detect_repo_domain(
-                    source.repo, cache_dir, github_token=github_token
-                )
+                detected = detect_repo_domain(source.repo, cache_dir, github_token=github_token)
             except Exception as exc:
                 _log.debug("domain detection failed for %s: %s", source.name, exc)
                 continue
@@ -332,9 +328,7 @@ class SourceRegistry:
             }:
                 source.domain = detected
                 updated += 1
-                _log.info(
-                    "auto-detected domain=%s for source=%s", detected, source.name
-                )
+                _log.info("auto-detected domain=%s for source=%s", detected, source.name)
         if updated:
             self.save()
         return updated

@@ -84,7 +84,9 @@ class StageResult:
     duration_seconds: float = 0.0
     decision_outcome: str | None = None
     decision_next_stage: int | None = None
-    timestamp: str = field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    timestamp: str = field(
+        default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    )
 
 
 @dataclass
@@ -101,7 +103,9 @@ class WorkflowState:
     stage_results: dict[int, StageResult] = field(default_factory=dict)
     stage_statuses: dict[int, StageStatus] = field(default_factory=dict)
     cost_accumulated_usd: float = 0.0
-    started_at: str = field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    started_at: str = field(
+        default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    )
     finished_at: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     rollback_events: list[dict[str, Any]] = field(default_factory=list)
@@ -134,12 +138,14 @@ class WorkflowState:
 
     def add_rollback_event(self, from_stage: int, to_stage: int, reason: str = "") -> None:
         """记录回滚事件。"""
-        self.rollback_events.append({
-            "from_stage": from_stage,
-            "to_stage": to_stage,
-            "reason": reason,
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        })
+        self.rollback_events.append(
+            {
+                "from_stage": from_stage,
+                "to_stage": to_stage,
+                "reason": reason,
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+        )
 
     def mark_workflow_finished(self) -> None:
         self.finished_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

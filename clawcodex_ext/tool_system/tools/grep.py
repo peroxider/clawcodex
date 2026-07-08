@@ -609,6 +609,7 @@ _GREP_PROMPT = """A powerful search tool built on ripgrep
 
 # -- Tool definition -----------------------------------------------------------
 
+
 def _grep_check_permissions(tool_input: dict, context):
     """Path-based read permission, mirroring TS ``GrepTool.checkPermissions`` →
     ``checkReadPermissionForTool``. The default search dir (cwd) and any path

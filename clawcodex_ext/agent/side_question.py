@@ -137,6 +137,7 @@ _WRAPPED_TEMPLATE = """<system-reminder>这是一个侧边问题（side question
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SideQuestionResult:
     """Result of a side question."""
@@ -148,6 +149,7 @@ class SideQuestionResult:
 # ---------------------------------------------------------------------------
 # Core wrapper
 # ---------------------------------------------------------------------------
+
 
 async def run_side_question(
     question: str,
@@ -214,6 +216,7 @@ async def run_side_question(
 # ---------------------------------------------------------------------------
 # Response extraction
 # ---------------------------------------------------------------------------
+
 
 def extract_side_question_response(messages: list[Message]) -> str | None:
     """Extract the text response from the fork's message stream.

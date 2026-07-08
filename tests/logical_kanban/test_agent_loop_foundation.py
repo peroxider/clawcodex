@@ -51,12 +51,12 @@ def test_feature_on_denies_blocked_task_status_write(
 ) -> None:
     _set_lkb(monkeypatch, True)
     ctx = ToolContext(workspace_root=tmp_path)
-    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output[
-        "task"
-    ]["id"]
-    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output[
-        "task"
-    ]["id"]
+    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output["task"][
+        "id"
+    ]
+    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output["task"][
+        "id"
+    ]
     TaskUpdateTool.call({"taskId": blocked, "addBlockedBy": [blocker]}, ctx)
 
     result = TaskUpdateTool.call({"taskId": blocked, "status": "in_progress"}, ctx)
@@ -74,9 +74,7 @@ def test_feature_on_allows_unblocked_task_status_write(
 ) -> None:
     _set_lkb(monkeypatch, True)
     ctx = ToolContext(workspace_root=tmp_path)
-    task_id = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx).output["task"][
-        "id"
-    ]
+    task_id = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx).output["task"]["id"]
 
     result = TaskUpdateTool.call({"taskId": task_id, "status": "in_progress"}, ctx)
 
@@ -134,12 +132,12 @@ def test_feature_on_denied_mixed_update_does_not_mutate_any_task_fields(
 ) -> None:
     _set_lkb(monkeypatch, True)
     ctx = ToolContext(workspace_root=tmp_path)
-    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output[
-        "task"
-    ]["id"]
-    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output[
-        "task"
-    ]["id"]
+    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output["task"][
+        "id"
+    ]
+    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output["task"][
+        "id"
+    ]
     TaskUpdateTool.call({"taskId": blocked, "addBlockedBy": [blocker]}, ctx)
     before = dict(ctx.tasks[blocked])
 
@@ -167,12 +165,12 @@ def test_feature_on_task_get_list_and_output_expose_lkb_metadata(
 
     _set_lkb(monkeypatch, True)
     ctx = ToolContext(workspace_root=tmp_path)
-    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output[
-        "task"
-    ]["id"]
-    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output[
-        "task"
-    ]["id"]
+    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output["task"][
+        "id"
+    ]
+    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output["task"][
+        "id"
+    ]
     TaskUpdateTool.call({"taskId": blocked, "addBlockedBy": [blocker]}, ctx)
 
     denied = TaskUpdateTool.call({"taskId": blocked, "status": "in_progress"}, ctx)
@@ -184,9 +182,10 @@ def test_feature_on_task_get_list_and_output_expose_lkb_metadata(
     assert got["status"] == "pending"
     assert got["lkb"]["derivedStatus"] == "blocked"
     assert got["lkb"]["blockedBy"] == [blocker]
-    assert got["lkb"]["latestDenialReason"]["validationRunId"] == denied.output["lkb"][
-        "validationRunId"
-    ]
+    assert (
+        got["lkb"]["latestDenialReason"]["validationRunId"]
+        == denied.output["lkb"]["validationRunId"]
+    )
     assert listed_blocked["blockedBy"] == [blocker]
     assert listed_blocked["lkb"]["blockedReason"] == f"Blocked by incomplete task(s): {blocker}."
     assert task_output["lkb"]["validation_status"] == "denied"
@@ -199,12 +198,12 @@ def test_feature_on_completing_blocker_then_retrying_blocked_task_succeeds(
 ) -> None:
     _set_lkb(monkeypatch, True)
     ctx = ToolContext(workspace_root=tmp_path)
-    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output[
-        "task"
-    ]["id"]
-    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output[
-        "task"
-    ]["id"]
+    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output["task"][
+        "id"
+    ]
+    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output["task"][
+        "id"
+    ]
     TaskUpdateTool.call({"taskId": blocked, "addBlockedBy": [blocker]}, ctx)
 
     denied = TaskUpdateTool.call({"taskId": blocked, "status": "in_progress"}, ctx)
@@ -225,9 +224,7 @@ def test_feature_on_strict_acceptance_denies_completion_without_proof(
     _set_lkb(monkeypatch, True)
     ctx = ToolContext(workspace_root=tmp_path)
     get_logical_kanban(ctx).strict_acceptance_enabled = True
-    task_id = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx).output["task"][
-        "id"
-    ]
+    task_id = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx).output["task"]["id"]
     TaskUpdateTool.call({"taskId": task_id, "status": "in_progress"}, ctx)
 
     result = TaskUpdateTool.call({"taskId": task_id, "status": "completed"}, ctx)
@@ -246,9 +243,7 @@ def test_feature_on_strict_acceptance_allows_completion_with_proof(
     _set_lkb(monkeypatch, True)
     ctx = ToolContext(workspace_root=tmp_path)
     get_logical_kanban(ctx).strict_acceptance_enabled = True
-    task_id = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx).output["task"][
-        "id"
-    ]
+    task_id = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx).output["task"]["id"]
     TaskUpdateTool.call({"taskId": task_id, "status": "in_progress"}, ctx)
 
     result = TaskUpdateTool.call(
@@ -272,12 +267,12 @@ def test_context_adapter_derives_blocked_and_ready_without_mutating_context(
     from clawcodex_ext.logical_kanban.context_adapter import build_facts_snapshot
 
     ctx = ToolContext(workspace_root=tmp_path)
-    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output[
-        "task"
-    ]["id"]
-    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output[
-        "task"
-    ]["id"]
+    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output["task"][
+        "id"
+    ]
+    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output["task"][
+        "id"
+    ]
     TaskUpdateTool.call({"taskId": blocked, "addBlockedBy": [blocker]}, ctx)
 
     before = {task_id: dict(task) for task_id, task in ctx.tasks.items()}
@@ -301,12 +296,12 @@ def test_feature_on_delete_cascades_only_after_validation(
 ) -> None:
     _set_lkb(monkeypatch, True)
     ctx = ToolContext(workspace_root=tmp_path)
-    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output[
-        "task"
-    ]["id"]
-    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output[
-        "task"
-    ]["id"]
+    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output["task"][
+        "id"
+    ]
+    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output["task"][
+        "id"
+    ]
     TaskUpdateTool.call({"taskId": blocked, "addBlockedBy": [blocker]}, ctx)
 
     missing = TaskUpdateTool.call({"taskId": "missing", "status": "deleted"}, ctx)
@@ -422,12 +417,12 @@ def test_context_adapter_repairs_blocks_blocked_by_mismatch_for_task_list(
     from clawcodex_ext.logical_kanban.context_adapter import build_facts_snapshot
 
     ctx = ToolContext(workspace_root=tmp_path)
-    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output[
-        "task"
-    ]["id"]
-    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output[
-        "task"
-    ]["id"]
+    blocker = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, ctx).output["task"][
+        "id"
+    ]
+    blocked = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, ctx).output["task"][
+        "id"
+    ]
     TaskUpdateTool.call({"taskId": blocker, "addBlocks": [blocked]}, ctx)
 
     snapshot = build_facts_snapshot(ctx)
@@ -437,18 +432,14 @@ def test_context_adapter_repairs_blocks_blocked_by_mismatch_for_task_list(
     assert f"Blocks({blocker}, {blocked})" in snapshot.facts
     assert f"Requires({blocker}, {blocked})" in snapshot.facts
     assert blocked_entry["blockedBy"] == [blocker]
-    assert [warning.code for warning in snapshot.warnings] == [
-        "dependency_direction_mismatch"
-    ]
+    assert [warning.code for warning in snapshot.warnings] == ["dependency_direction_mismatch"]
 
 
 def test_context_adapter_reports_dangling_blockers_as_warnings(tmp_path: Path) -> None:
     from clawcodex_ext.logical_kanban.context_adapter import build_facts_snapshot
 
     ctx = ToolContext(workspace_root=tmp_path)
-    task_id = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx).output["task"][
-        "id"
-    ]
+    task_id = TaskCreateTool.call({"subject": "Task", "description": "D"}, ctx).output["task"]["id"]
     TaskUpdateTool.call({"taskId": task_id, "addBlockedBy": ["missing"]}, ctx)
 
     snapshot = build_facts_snapshot(ctx)
@@ -496,12 +487,10 @@ def test_feature_on_denies_cyclic_readiness_transition(
 ) -> None:
     _set_lkb(monkeypatch, True)
     ctx = ToolContext(workspace_root=tmp_path)
-    first = TaskCreateTool.call({"subject": "First", "description": "D1"}, ctx).output[
-        "task"
-    ]["id"]
-    second = TaskCreateTool.call({"subject": "Second", "description": "D2"}, ctx).output[
-        "task"
-    ]["id"]
+    first = TaskCreateTool.call({"subject": "First", "description": "D1"}, ctx).output["task"]["id"]
+    second = TaskCreateTool.call({"subject": "Second", "description": "D2"}, ctx).output["task"][
+        "id"
+    ]
     TaskUpdateTool.call({"taskId": first, "addBlockedBy": [second]}, ctx)
     reciprocal = TaskUpdateTool.call({"taskId": second, "addBlockedBy": [first]}, ctx)
 

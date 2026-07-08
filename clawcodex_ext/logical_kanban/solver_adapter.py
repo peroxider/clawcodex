@@ -26,28 +26,26 @@ if TYPE_CHECKING:
     from .types import FactsSnapshot
 
 
-SolverResult = Literal['pass', 'fail', 'unknown', 'timeout', 'error']
+SolverResult = Literal["pass", "fail", "unknown", "timeout", "error"]
 
 
 # Characters that are unsafe in most solver surface syntaxes (SMT-LIB, Datalog,
 # ASP).  We replace them with an underscore and append a stable hex suffix so
 # the mapping remains deterministic and reversible for debugging.
-_UNSAFE_SOLVER_CHARS = re.compile(r'[^a-zA-Z0-9_\-:.]')
+_UNSAFE_SOLVER_CHARS = re.compile(r"[^a-zA-Z0-9_\-:.]")
 
 
 # Z3 SMT-adapter: predicates we materialise from the snapshot.
 # Other fact strings (Owner, Title, custom user predicates) are intentionally
 # skipped because the F-131 glossary restricts Layer-4 reasoning to the 17
 # canonical predicates recorded in ``clawcodex_ext/logical_kanban/glossary.py``.
-_Z3_OBSERVED_PREDICATES = frozenset(
-    {'Task', 'Blocks', 'Requires', 'HasAcceptanceProof'}
-)
-_Z3_DERIVED_BLOCKED_PREDICATE = 'Blocked'
-_Z3_DERIVED_READY_PREDICATE = 'Ready'
-_Z3_DERIVED_NOT_READY_PREDICATE = 'NotReady'
+_Z3_OBSERVED_PREDICATES = frozenset({"Task", "Blocks", "Requires", "HasAcceptanceProof"})
+_Z3_DERIVED_BLOCKED_PREDICATE = "Blocked"
+_Z3_DERIVED_READY_PREDICATE = "Ready"
+_Z3_DERIVED_NOT_READY_PREDICATE = "NotReady"
 
 
-_FACT_PATTERN = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*)\((.*)\)\s*$', re.DOTALL)
+_FACT_PATTERN = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\((.*)\)\s*$", re.DOTALL)
 
 
 def encode_solver_literal(text: str, *, max_length: int = 256) -> str:
@@ -60,9 +58,9 @@ def encode_solver_literal(text: str, *, max_length: int = 256) -> str:
     if not isinstance(text, str):
         text = str(text)
     truncated = text[:max_length]
-    safe = _UNSAFE_SOLVER_CHARS.sub('_', truncated)
-    suffix = format(hash(truncated) & 0xFFFF, '04x')
-    return f'{safe}_h{suffix}'
+    safe = _UNSAFE_SOLVER_CHARS.sub("_", truncated)
+    suffix = format(hash(truncated) & 0xFFFF, "04x")
+    return f"{safe}_h{suffix}"
 
 
 def _parse_fact(fact: str) -> tuple[str, tuple[str, ...]] | None:
@@ -87,7 +85,7 @@ def _parse_fact(fact: str) -> tuple[str, tuple[str, ...]] | None:
     if args_raw.startswith('"') and args_raw.endswith('"') and len(args_raw) >= 2:
         args.append(args_raw[1:-1])
         return name, tuple(args)
-    for arg in args_raw.split(','):
+    for arg in args_raw.split(","):
         token = arg.strip()
         if len(token) >= 2 and token.startswith('"') and token.endswith('"'):
             token = token[1:-1]
@@ -109,19 +107,19 @@ def encode_solver_facts(request: SolverRequest) -> str:
     for task_id, task in snapshot.normalized_tasks.items():
         rows.append(
             {
-                'task_id': task_id,
-                'status': task['status'],
-                'subject_ref': encode_solver_literal(task.get('subject', '')),
-                'description_ref': encode_solver_literal(task.get('description', '')),
+                "task_id": task_id,
+                "status": task["status"],
+                "subject_ref": encode_solver_literal(task.get("subject", "")),
+                "description_ref": encode_solver_literal(task.get("description", "")),
             }
         )
     return json.dumps(
         {
-            'target_task_id': request.target_task_id,
-            'target_status': request.target_status,
-            'strict_acceptance': request.strict_acceptance,
-            'tasks': rows,
-            'facts': list(snapshot.facts),
+            "target_task_id": request.target_task_id,
+            "target_status": request.target_status,
+            "strict_acceptance": request.strict_acceptance,
+            "tasks": rows,
+            "facts": list(snapshot.facts),
         },
         sort_keys=True,
         default=str,
@@ -132,7 +130,7 @@ def encode_solver_facts(request: SolverRequest) -> str:
 class SolverRequest:
     """Canonical input passed to every solver adapter."""
 
-    snapshot: 'FactsSnapshot'
+    snapshot: "FactsSnapshot"
     target_task_id: str | None = None
     target_status: str | None = None
     strict_acceptance: bool = False
@@ -147,26 +145,26 @@ class SolverResponse:
     derived_facts: tuple[str, ...] = ()
     proof_trace: tuple[dict[str, Any], ...] = ()
     violated_rule: str | None = None
-    message: str = ''
+    message: str = ""
     cycle_tasks: tuple[str, ...] = ()
     counterexample: dict[str, Any] | None = None
     error_info: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
-            'result': self.result,
-            'derivedFacts': list(self.derived_facts),
-            'proofTrace': list(self.proof_trace),
-            'message': self.message,
+            "result": self.result,
+            "derivedFacts": list(self.derived_facts),
+            "proofTrace": list(self.proof_trace),
+            "message": self.message,
         }
         if self.violated_rule is not None:
-            out['violatedRule'] = self.violated_rule
+            out["violatedRule"] = self.violated_rule
         if self.cycle_tasks:
-            out['cycleTasks'] = list(self.cycle_tasks)
+            out["cycleTasks"] = list(self.cycle_tasks)
         if self.counterexample is not None:
-            out['counterexample'] = self.counterexample
+            out["counterexample"] = self.counterexample
         if self.error_info is not None:
-            out['errorInfo'] = self.error_info
+            out["errorInfo"] = self.error_info
         return out
 
 
@@ -211,7 +209,7 @@ class Layer1SolverAdapter(SolverAdapter):
 
     @property
     def name(self) -> str:
-        return 'layer1-python'
+        return "layer1-python"
 
     @property
     def version(self) -> str:
@@ -236,9 +234,9 @@ class Layer1SolverAdapter(SolverAdapter):
             )
         except Exception as exc:  # pragma: no cover - defensive only
             return SolverResponse(
-                result='error',
-                message=f'Layer-1 rule engine raised {type(exc).__name__}: {exc}',
-                error_info={'exception': type(exc).__name__, 'detail': str(exc)},
+                result="error",
+                message=f"Layer-1 rule engine raised {type(exc).__name__}: {exc}",
+                error_info={"exception": type(exc).__name__, "detail": str(exc)},
             )
         return SolverResponse(
             result=result.result,  # type: ignore[arg-type]
@@ -274,7 +272,7 @@ class DatalogSolverAdapter(SolverAdapter):
     solver.
     """
 
-    engine_name = 'datalog-souffle'
+    engine_name = "datalog-souffle"
 
     @property
     def name(self) -> str:
@@ -283,25 +281,29 @@ class DatalogSolverAdapter(SolverAdapter):
     @property
     def version(self) -> str:
         if not self.available():
-            return 'unavailable'
+            return "unavailable"
         try:
             _returncode, stdout, _stderr = run_external_solver(
-                ['souffle', '--version'],
-                limits=SolverResourceLimits(timeout_seconds=5, max_memory_mb=64, max_output_bytes=4096),
+                ["souffle", "--version"],
+                limits=SolverResourceLimits(
+                    timeout_seconds=5, max_memory_mb=64, max_output_bytes=4096
+                ),
             )
-            return (stdout or 'unknown').strip().splitlines()[0]
+            return (stdout or "unknown").strip().splitlines()[0]
         except SolverLimitError as exc:
-            return f'unavailable ({exc.reason})'
+            return f"unavailable ({exc.reason})"
         except Exception as exc:  # pragma: no cover
-            return f'unavailable ({type(exc).__name__})'
+            return f"unavailable ({type(exc).__name__})"
 
     def available(self) -> bool:
-        if shutil.which('souffle') is None:
+        if shutil.which("souffle") is None:
             return False
         try:
             run_external_solver(
-                ['souffle', '--version'],
-                limits=SolverResourceLimits(timeout_seconds=5, max_memory_mb=64, max_output_bytes=4096),
+                ["souffle", "--version"],
+                limits=SolverResourceLimits(
+                    timeout_seconds=5, max_memory_mb=64, max_output_bytes=4096
+                ),
             )
             return True
         except Exception:
@@ -317,20 +319,20 @@ class DatalogSolverAdapter(SolverAdapter):
         # the ``engine_unavailable`` branch even when ``souffle`` is on PATH.
         if not self.available():
             return SolverResponse(
-                result='unknown',
-                message='Soufflé Datalog engine is not installed.',
-                error_info={'reason': 'engine_unavailable'},
+                result="unknown",
+                message="Soufflé Datalog engine is not installed.",
+                error_info={"reason": "engine_unavailable"},
             )
         try:
             return self._solve_impl(request, timeout_seconds)
         except Exception as exc:  # noqa: BLE001 - adapter must never raise
             return SolverResponse(
-                result='error',
-                message=f'Datalog adapter raised {type(exc).__name__}: {exc}',
+                result="error",
+                message=f"Datalog adapter raised {type(exc).__name__}: {exc}",
                 error_info={
-                    'reason': 'exception',
-                    'exception': type(exc).__name__,
-                    'detail': str(exc),
+                    "reason": "exception",
+                    "exception": type(exc).__name__,
+                    "detail": str(exc),
                 },
             )
 
@@ -359,9 +361,9 @@ class DatalogSolverAdapter(SolverAdapter):
         import os
         import tempfile
 
-        with tempfile.TemporaryDirectory(prefix='lkb-datalog-') as tmpdir:
-            program_path = os.path.join(tmpdir, 'lkb_program.dl')
-            facts_dir = os.path.join(tmpdir, 'facts')
+        with tempfile.TemporaryDirectory(prefix="lkb-datalog-") as tmpdir:
+            program_path = os.path.join(tmpdir, "lkb_program.dl")
+            facts_dir = os.path.join(tmpdir, "facts")
             os.makedirs(facts_dir, exist_ok=True)
 
             # Soufflé reads ``.input`` relations from a facts directory whose
@@ -369,77 +371,77 @@ class DatalogSolverAdapter(SolverAdapter):
             # the facts alongside the program so Soufflé finds them.
             self._write_facts(request, snapshot, facts_dir)
 
-            with open(program_path, 'w', encoding='utf-8') as handle:
+            with open(program_path, "w", encoding="utf-8") as handle:
                 handle.write(program_text)
 
             try:
                 returncode, stdout, stderr = run_external_solver(
-                    ['souffle', '-D', facts_dir, program_path],
+                    ["souffle", "-D", facts_dir, program_path],
                     limits=limits,
                 )
             except SolverLimitError as exc:
-                if exc.reason == 'timeout':
+                if exc.reason == "timeout":
                     return SolverResponse(
-                        result='timeout',
-                        message=f'Soufflé exceeded the {timeout_seconds}s timeout.',
+                        result="timeout",
+                        message=f"Soufflé exceeded the {timeout_seconds}s timeout.",
                         error_info={
-                            'reason': 'timeout',
-                            'timeout_seconds': timeout_seconds,
+                            "reason": "timeout",
+                            "timeout_seconds": timeout_seconds,
                         },
                     )
                 return SolverResponse(
-                    result='unknown',
-                    message=f'Soufflé resource limit hit: {exc.reason}.',
-                    error_info={'reason': exc.reason},
+                    result="unknown",
+                    message=f"Soufflé resource limit hit: {exc.reason}.",
+                    error_info={"reason": exc.reason},
                 )
 
             violation_rows = self._read_violation_rows(facts_dir)
             verdict = self._classify_violations(request, violation_rows)
 
-        if verdict[0] == 'fail':
+        if verdict[0] == "fail":
             _, violated_rule, message, premises = verdict
             return SolverResponse(
-                result='fail',
+                result="fail",
                 derived_facts=(),
                 violated_rule=violated_rule,
                 message=message,
                 proof_trace=(
                     {
-                        'rule': violated_rule,
-                        'premises': list(premises),
-                        'conclusion': (
-                            f'Soufflé derived a violation for '
-                            f'target={request.target_task_id} '
-                            f'status={request.target_status}.'
+                        "rule": violated_rule,
+                        "premises": list(premises),
+                        "conclusion": (
+                            f"Soufflé derived a violation for "
+                            f"target={request.target_task_id} "
+                            f"status={request.target_status}."
                         ),
-                        'solverVersion': f'lkb-souffle/{self.version}',
+                        "solverVersion": f"lkb-souffle/{self.version}",
                     },
                 ),
             )
 
-        if verdict[0] == 'pass':
+        if verdict[0] == "pass":
             return SolverResponse(
-                result='pass',
+                result="pass",
                 derived_facts=tuple(sorted(set(snapshot.facts))),
                 proof_trace=(
                     {
-                        'rule': 'DL-SAT',
-                        'premises': ['Snapshot facts + Layer-1 constraints + Proposal'],
-                        'conclusion': (
-                            f'Soufflé found no violation for '
-                            f'target={request.target_task_id} '
-                            f'status={request.target_status}.'
+                        "rule": "DL-SAT",
+                        "premises": ["Snapshot facts + Layer-1 constraints + Proposal"],
+                        "conclusion": (
+                            f"Soufflé found no violation for "
+                            f"target={request.target_task_id} "
+                            f"status={request.target_status}."
                         ),
-                        'solverVersion': f'lkb-souffle/{self.version}',
+                        "solverVersion": f"lkb-souffle/{self.version}",
                     },
                 ),
-                message='Soufflé satisfied the proposal under all encoded invariants.',
+                message="Soufflé satisfied the proposal under all encoded invariants.",
             )
 
         # ``error`` verdict (compilation failure or stray return code).
         _, _, message, error_info = verdict
         return SolverResponse(
-            result='error',
+            result="error",
             message=message,
             error_info=error_info,
         )
@@ -456,7 +458,7 @@ class DatalogSolverAdapter(SolverAdapter):
     def _build_program(
         self,
         request: SolverRequest,
-        snapshot: 'FactsSnapshot',
+        snapshot: "FactsSnapshot",
     ) -> str:
         """Build the Soufflé ``.dl`` program.
 
@@ -470,139 +472,118 @@ class DatalogSolverAdapter(SolverAdapter):
         3. Integrity-constraint style rules translating the Layer-1 MVP
            rule set (R-002 / R-005 / R-006) into ``violation/1`` derivations.
         """
-        lines: list[str] = ['// Generated by lkb-datalog']
+        lines: list[str] = ["// Generated by lkb-datalog"]
         lines.extend(
             (
-                '.decl task(t: symbol)',
-                '.input task',
-                '.decl blocks(a: symbol, b: symbol)',
-                '.input blocks',
-                '.decl requires(a: symbol, b: symbol)',
-                '.input requires',
-                '.decl done(t: symbol)',
-                '.input done',
-                '.decl doing(t: symbol)',
-                '.input doing',
-                '.decl pending(t: symbol)',
-                '.input pending',
-                '.decl blocked(t: symbol)',
-                '.input blocked',
-                '.decl in_cycle(t: symbol)',
-                '.input in_cycle',
-                '.decl has_acceptance_proof(t: symbol)',
-                '.input has_acceptance_proof',
-                '.decl do_proposal(t: symbol)',
-                '.input do_proposal',
-                '.decl complete_proposal(t: symbol)',
-                '.input complete_proposal',
-                '.decl reopen_proposal(t: symbol)',
-                '.input reopen_proposal',
-                '.decl strict_acceptance()',
-                '.input strict_acceptance',
-                '.decl violation(t: symbol)',
-                '.output violation',
+                ".decl task(t: symbol)",
+                ".input task",
+                ".decl blocks(a: symbol, b: symbol)",
+                ".input blocks",
+                ".decl requires(a: symbol, b: symbol)",
+                ".input requires",
+                ".decl done(t: symbol)",
+                ".input done",
+                ".decl doing(t: symbol)",
+                ".input doing",
+                ".decl pending(t: symbol)",
+                ".input pending",
+                ".decl blocked(t: symbol)",
+                ".input blocked",
+                ".decl in_cycle(t: symbol)",
+                ".input in_cycle",
+                ".decl has_acceptance_proof(t: symbol)",
+                ".input has_acceptance_proof",
+                ".decl do_proposal(t: symbol)",
+                ".input do_proposal",
+                ".decl complete_proposal(t: symbol)",
+                ".input complete_proposal",
+                ".decl reopen_proposal(t: symbol)",
+                ".input reopen_proposal",
+                ".decl strict_acceptance()",
+                ".input strict_acceptance",
+                ".decl violation(t: symbol)",
+                ".output violation",
             )
         )
 
         # R-002: blocked cannot enter in_progress.
-        lines.append(
-            'violation(T) :- do_proposal(T), blocked(T).'
-        )
+        lines.append("violation(T) :- do_proposal(T), blocked(T).")
         # R-006: cycle cannot enter in_progress.
-        lines.append(
-            'violation(T) :- do_proposal(T), in_cycle(T).'
-        )
+        lines.append("violation(T) :- do_proposal(T), in_cycle(T).")
         # R-005: strict acceptance + completion requires proof.
         lines.append(
-            'violation(T) :- complete_proposal(T), strict_acceptance(), '
-            '!has_acceptance_proof(T).'
+            "violation(T) :- complete_proposal(T), strict_acceptance(), !has_acceptance_proof(T)."
         )
         # Proposal sanity: target must be a known task.
-        lines.append(
-            'violation(T) :- do_proposal(T), !task(T).'
-        )
-        lines.append(
-            'violation(T) :- complete_proposal(T), !task(T).'
-        )
-        lines.append(
-            'violation(T) :- reopen_proposal(T), !task(T).'
-        )
-        return '\n'.join(lines) + '\n'
+        lines.append("violation(T) :- do_proposal(T), !task(T).")
+        lines.append("violation(T) :- complete_proposal(T), !task(T).")
+        lines.append("violation(T) :- reopen_proposal(T), !task(T).")
+        return "\n".join(lines) + "\n"
 
     def _write_facts(
         self,
         request: SolverRequest,
-        snapshot: 'FactsSnapshot',
+        snapshot: "FactsSnapshot",
         facts_dir: str,
     ) -> None:
         """Materialise Soufflé ``.facts`` files for every ``.input`` relation."""
         import os
 
         # Tasks
-        with open(
-            os.path.join(facts_dir, 'task.facts'), 'w', encoding='utf-8'
-        ) as handle:
+        with open(os.path.join(facts_dir, "task.facts"), "w", encoding="utf-8") as handle:
             for task_id in sorted(snapshot.normalized_tasks):
-                handle.write(f'{self._atom(task_id)}\n')
+                handle.write(f"{self._atom(task_id)}\n")
 
         # Blocks / Requires
         seen_blocks: set[tuple[str, str]] = set()
         seen_requires: set[tuple[str, str]] = set()
-        blocks_path = os.path.join(facts_dir, 'blocks.facts')
-        requires_path = os.path.join(facts_dir, 'requires.facts')
-        with open(blocks_path, 'w', encoding='utf-8') as blocks_handle:
-            with open(requires_path, 'w', encoding='utf-8') as requires_handle:
+        blocks_path = os.path.join(facts_dir, "blocks.facts")
+        requires_path = os.path.join(facts_dir, "requires.facts")
+        with open(blocks_path, "w", encoding="utf-8") as blocks_handle:
+            with open(requires_path, "w", encoding="utf-8") as requires_handle:
                 for fact in snapshot.facts:
                     parsed = _parse_fact(fact)
                     if parsed is None:
                         continue
                     name, args = parsed
-                    if name == 'Blocks' and len(args) == 2:
+                    if name == "Blocks" and len(args) == 2:
                         key = (args[0], args[1])
                         if key in seen_blocks:
                             continue
                         seen_blocks.add(key)
-                        blocks_handle.write(
-                            f'{self._atom(args[0])}\t{self._atom(args[1])}\n'
-                        )
-                    elif name == 'Requires' and len(args) == 2:
+                        blocks_handle.write(f"{self._atom(args[0])}\t{self._atom(args[1])}\n")
+                    elif name == "Requires" and len(args) == 2:
                         key = (args[0], args[1])
                         if key in seen_requires:
                             continue
                         seen_requires.add(key)
-                        requires_handle.write(
-                            f'{self._atom(args[0])}\t{self._atom(args[1])}\n'
-                        )
+                        requires_handle.write(f"{self._atom(args[0])}\t{self._atom(args[1])}\n")
 
         # Status predicates
         self._write_unary_facts(
-            os.path.join(facts_dir, 'done.facts'),
+            os.path.join(facts_dir, "done.facts"),
             snapshot.completed_ids,
         )
         in_progress_ids = sorted(
             task_id
             for task_id, task in snapshot.normalized_tasks.items()
-            if task.get('status') == 'in_progress'
+            if task.get("status") == "in_progress"
         )
-        self._write_unary_facts(
-            os.path.join(facts_dir, 'doing.facts'), in_progress_ids
-        )
+        self._write_unary_facts(os.path.join(facts_dir, "doing.facts"), in_progress_ids)
         pending_ids = sorted(
             task_id
             for task_id, task in snapshot.normalized_tasks.items()
-            if task.get('status') == 'pending'
+            if task.get("status") == "pending"
         )
-        self._write_unary_facts(
-            os.path.join(facts_dir, 'pending.facts'), pending_ids
-        )
+        self._write_unary_facts(os.path.join(facts_dir, "pending.facts"), pending_ids)
 
         # Snapshot-derived predicates
         self._write_unary_facts(
-            os.path.join(facts_dir, 'blocked.facts'),
+            os.path.join(facts_dir, "blocked.facts"),
             sorted(snapshot.blocked_ids),
         )
         self._write_unary_facts(
-            os.path.join(facts_dir, 'in_cycle.facts'),
+            os.path.join(facts_dir, "in_cycle.facts"),
             sorted(snapshot.cycle_task_ids),
         )
 
@@ -610,48 +591,46 @@ class DatalogSolverAdapter(SolverAdapter):
         acceptance_ids = sorted(
             task_id
             for task_id, task in snapshot.normalized_tasks.items()
-            if (task.get('metadata') or {}).get('lkb', {}).get('acceptance_proof')
+            if (task.get("metadata") or {}).get("lkb", {}).get("acceptance_proof")
         )
         self._write_unary_facts(
-            os.path.join(facts_dir, 'has_acceptance_proof.facts'),
+            os.path.join(facts_dir, "has_acceptance_proof.facts"),
             acceptance_ids,
         )
 
         # Proposal
         target = request.target_task_id
         target_status = request.target_status
+        with open(os.path.join(facts_dir, "do_proposal.facts"), "w", encoding="utf-8") as handle:
+            if target_status == "in_progress" and target is not None:
+                handle.write(f"{self._atom(target)}\n")
         with open(
-            os.path.join(facts_dir, 'do_proposal.facts'), 'w', encoding='utf-8'
+            os.path.join(facts_dir, "complete_proposal.facts"),
+            "w",
+            encoding="utf-8",
         ) as handle:
-            if target_status == 'in_progress' and target is not None:
-                handle.write(f'{self._atom(target)}\n')
+            if target_status == "completed" and target is not None:
+                handle.write(f"{self._atom(target)}\n")
         with open(
-            os.path.join(facts_dir, 'complete_proposal.facts'),
-            'w',
-            encoding='utf-8',
+            os.path.join(facts_dir, "reopen_proposal.facts"),
+            "w",
+            encoding="utf-8",
         ) as handle:
-            if target_status == 'completed' and target is not None:
-                handle.write(f'{self._atom(target)}\n')
-        with open(
-            os.path.join(facts_dir, 'reopen_proposal.facts'),
-            'w',
-            encoding='utf-8',
-        ) as handle:
-            if target_status == 'pending' and target is not None:
-                handle.write(f'{self._atom(target)}\n')
+            if target_status == "pending" and target is not None:
+                handle.write(f"{self._atom(target)}\n")
 
         # Strict acceptance flag
         with open(
-            os.path.join(facts_dir, 'strict_acceptance.facts'),
-            'w',
-            encoding='utf-8',
+            os.path.join(facts_dir, "strict_acceptance.facts"),
+            "w",
+            encoding="utf-8",
         ) as handle:
             if request.strict_acceptance:
-                handle.write('1\n')
+                handle.write("1\n")
 
     @staticmethod
     def _write_unary_facts(path: str, task_ids: list[str]) -> None:
-        with open(path, 'w', encoding='utf-8') as handle:
+        with open(path, "w", encoding="utf-8") as handle:
             for task_id in task_ids:
                 handle.write(f'"{encode_solver_literal(task_id)}"\n')
 
@@ -660,11 +639,11 @@ class DatalogSolverAdapter(SolverAdapter):
         """Read the ``violation.csv`` file produced by Soufflé."""
         import os
 
-        path = os.path.join(facts_dir, 'violation.csv')
+        path = os.path.join(facts_dir, "violation.csv")
         if not os.path.exists(path):
             return ()
         rows: list[str] = []
-        with open(path, 'r', encoding='utf-8') as handle:
+        with open(path, "r", encoding="utf-8") as handle:
             for line in handle:
                 line = line.strip()
                 if not line:
@@ -695,70 +674,63 @@ class DatalogSolverAdapter(SolverAdapter):
         snapshot = request.snapshot
 
         if not violation_rows:
-            return ('pass', None, '', None)
+            return ("pass", None, "", None)
 
         if (
             target is not None
-            and target_status == 'in_progress'
+            and target_status == "in_progress"
             and target in snapshot.cycle_task_ids
         ):
             cycle = tuple(sorted(snapshot.cycle_task_ids))
             return (
-                'fail',
-                'R-006',
-                f'Task {target} is part of a dependency cycle '
-                f'({{{", ".join(cycle)}}}) and cannot enter in_progress.',
-                tuple(f'Cycle({t})' for t in cycle),
+                "fail",
+                "R-006",
+                f"Task {target} is part of a dependency cycle "
+                f"({{{', '.join(cycle)}}}) and cannot enter in_progress.",
+                tuple(f"Cycle({t})" for t in cycle),
             )
-        if (
-            target is not None
-            and target_status == 'in_progress'
-            and target in snapshot.blocked_ids
-        ):
+        if target is not None and target_status == "in_progress" and target in snapshot.blocked_ids:
             blockers = tuple(
                 sorted(
-                    b for b in snapshot.blocked_by.get(target, ())
+                    b
+                    for b in snapshot.blocked_by.get(target, ())
                     if b not in snapshot.completed_ids
                 )
             )
             return (
-                'fail',
-                'R-002',
-                f'Task {target} cannot enter in_progress because its '
-                f'active blockers remain: {", ".join(blockers) or "<unknown>"}.',
-                tuple(f'Requires({b}, {target})' for b in blockers),
+                "fail",
+                "R-002",
+                f"Task {target} cannot enter in_progress because its "
+                f"active blockers remain: {', '.join(blockers) or '<unknown>'}.",
+                tuple(f"Requires({b}, {target})" for b in blockers),
             )
         if (
             request.strict_acceptance
             and target is not None
-            and target_status == 'completed'
+            and target_status == "completed"
             and not request.acceptance_proof_present
         ):
             return (
-                'fail',
-                'R-005',
-                f'Task {target} requires an acceptance proof in strict mode.',
+                "fail",
+                "R-005",
+                f"Task {target} requires an acceptance proof in strict mode.",
                 (
-                    f'StrictAcceptance({target})',
-                    f'Not(HasAcceptanceProof({target}))',
+                    f"StrictAcceptance({target})",
+                    f"Not(HasAcceptanceProof({target}))",
                 ),
             )
-        if (
-            target is not None
-            and target not in snapshot.normalized_tasks
-        ):
+        if target is not None and target not in snapshot.normalized_tasks:
             return (
-                'fail',
-                'LKB-TRANSITION-001',
-                f'Task {target} is not present in the current snapshot.',
-                (f'Task({target})',),
+                "fail",
+                "LKB-TRANSITION-001",
+                f"Task {target} is not present in the current snapshot.",
+                (f"Task({target})",),
             )
         return (
-            'fail',
-            'DL-UNSAT',
-            f'Soufflé produced {len(violation_rows)} violation row(s); '
-            'no Layer-1 rule matched.',
-            ('Snapshot facts + Layer-1 constraints + Proposal',),
+            "fail",
+            "DL-UNSAT",
+            f"Soufflé produced {len(violation_rows)} violation row(s); no Layer-1 rule matched.",
+            ("Snapshot facts + Layer-1 constraints + Proposal",),
         )
 
 
@@ -780,7 +752,7 @@ class ClingoSolverAdapter(SolverAdapter):
     raw natural-language text never reaches solver input as a raw string.
     """
 
-    engine_name = 'asp-clingo'
+    engine_name = "asp-clingo"
 
     def __init__(self) -> None:
         self._cached_clingo: Any | None = None
@@ -793,11 +765,11 @@ class ClingoSolverAdapter(SolverAdapter):
     def version(self) -> str:
         clingo = self._import_clingo()
         if clingo is None:
-            return 'unavailable'
+            return "unavailable"
         try:
-            return getattr(clingo, '__version__', 'unknown')
+            return getattr(clingo, "__version__", "unknown")
         except Exception:  # pragma: no cover - defensive only
-            return 'unknown'
+            return "unknown"
 
     def available(self) -> bool:
         return self._import_clingo() is not None
@@ -812,27 +784,27 @@ class ClingoSolverAdapter(SolverAdapter):
         # the ``engine_unavailable`` branch.
         if not self.available():
             return SolverResponse(
-                result='unknown',
-                message='clingo Python bindings are not installed.',
-                error_info={'reason': 'engine_unavailable'},
+                result="unknown",
+                message="clingo Python bindings are not installed.",
+                error_info={"reason": "engine_unavailable"},
             )
         clingo = self._import_clingo()
         if clingo is None:  # pragma: no cover - redundant guard
             return SolverResponse(
-                result='unknown',
-                message='clingo Python bindings are not installed.',
-                error_info={'reason': 'engine_unavailable'},
+                result="unknown",
+                message="clingo Python bindings are not installed.",
+                error_info={"reason": "engine_unavailable"},
             )
         try:
             return self._solve_impl(clingo, request, timeout_seconds)
         except Exception as exc:  # noqa: BLE001 - adapter must never raise
             return SolverResponse(
-                result='error',
-                message=f'Clingo adapter raised {type(exc).__name__}: {exc}',
+                result="error",
+                message=f"Clingo adapter raised {type(exc).__name__}: {exc}",
                 error_info={
-                    'reason': 'exception',
-                    'exception': type(exc).__name__,
-                    'detail': str(exc),
+                    "reason": "exception",
+                    "exception": type(exc).__name__,
+                    "detail": str(exc),
                 },
             )
 
@@ -862,18 +834,18 @@ class ClingoSolverAdapter(SolverAdapter):
         # integrity-constraint bodies (e.g. ``blocked(T)``, ``in_cycle(T)``).
         # The default logger writes them to stderr, which would clutter
         # caller output without adding any decision-relevant signal.
-        atom_undefined = getattr(clingo.MessageCode, 'AtomUndefined', None)
+        atom_undefined = getattr(clingo.MessageCode, "AtomUndefined", None)
         logger = self._make_clingo_logger(atom_undefined)
         control = clingo.Control(logger=logger)
         # ``models = 0`` — we only care about the existence of any answer
         # set, not enumerating all of them. Conflicts limit provides a soft
         # budget so clingo does not run away on large snapshots; the
         # wall-clock guard is enforced upstream by ``SolverPipeline``.
-        control.configuration.solve.models = '0'
+        control.configuration.solve.models = "0"
         try:
-            control.configuration.solve['--solve-limit'] = (
+            control.configuration.solve["--solve-limit"] = (
                 str(int(timeout_seconds * 1000)),
-                'time',
+                "time",
             )
         except (KeyError, TypeError):
             # Older clingo versions: just skip the limit. Wall-clock is still
@@ -882,29 +854,29 @@ class ClingoSolverAdapter(SolverAdapter):
 
         program_text, _prelude = self._build_program(request, snapshot)
         try:
-            control.add('base', [], program_text)
+            control.add("base", [], program_text)
         except Exception as exc:
             return SolverResponse(
-                result='error',
-                message=f'Clingo rejected the generated program: {exc}',
-                error_info={'reason': 'program_parse_error', 'detail': str(exc)},
+                result="error",
+                message=f"Clingo rejected the generated program: {exc}",
+                error_info={"reason": "program_parse_error", "detail": str(exc)},
             )
         try:
-            control.ground([('base', [])])
+            control.ground([("base", [])])
         except Exception as exc:
             return SolverResponse(
-                result='error',
-                message=f'Clingo failed to ground the program: {exc}',
-                error_info={'reason': 'grounding_error', 'detail': str(exc)},
+                result="error",
+                message=f"Clingo failed to ground the program: {exc}",
+                error_info={"reason": "grounding_error", "detail": str(exc)},
             )
 
         try:
             solve_result = control.solve(yield_=False)
         except Exception as exc:
             return SolverResponse(
-                result='error',
-                message=f'Clingo solve raised {type(exc).__name__}: {exc}',
-                error_info={'reason': 'solver_exception', 'detail': str(exc)},
+                result="error",
+                message=f"Clingo solve raised {type(exc).__name__}: {exc}",
+                error_info={"reason": "solver_exception", "detail": str(exc)},
             )
 
         # clingo 5.x uses ``bool`` for the satisfiable bit and a separate
@@ -913,39 +885,39 @@ class ClingoSolverAdapter(SolverAdapter):
         derived_facts = tuple(sorted(set(snapshot.facts)))
         if solve_result.satisfiable:
             return SolverResponse(
-                result='pass',
+                result="pass",
                 derived_facts=derived_facts,
                 proof_trace=(
                     {
-                        'rule': 'ASP-SAT',
-                        'premises': ['Snapshot facts + Layer-1 constraints + Proposal'],
-                        'conclusion': (
-                            f'Clingo found an answer set for '
-                            f'target={request.target_task_id} '
-                            f'status={request.target_status}.'
+                        "rule": "ASP-SAT",
+                        "premises": ["Snapshot facts + Layer-1 constraints + Proposal"],
+                        "conclusion": (
+                            f"Clingo found an answer set for "
+                            f"target={request.target_task_id} "
+                            f"status={request.target_status}."
                         ),
-                        'solverVersion': f'lkb-clingo/{self.version}',
+                        "solverVersion": f"lkb-clingo/{self.version}",
                     },
                 ),
-                message='Clingo found an answer set satisfying the proposal.',
+                message="Clingo found an answer set satisfying the proposal.",
             )
         if solve_result.unsatisfiable:
             violated, message, premises = self._classify_unsat(request)
             return SolverResponse(
-                result='fail',
+                result="fail",
                 derived_facts=(),
                 violated_rule=violated,
                 message=message,
                 proof_trace=(
                     {
-                        'rule': violated,
-                        'premises': list(premises),
-                        'conclusion': (
-                            f'No answer set satisfies the proposal '
-                            f'(target={request.target_task_id}, '
-                            f'status={request.target_status}).'
+                        "rule": violated,
+                        "premises": list(premises),
+                        "conclusion": (
+                            f"No answer set satisfies the proposal "
+                            f"(target={request.target_task_id}, "
+                            f"status={request.target_status})."
                         ),
-                        'solverVersion': f'lkb-clingo/{self.version}',
+                        "solverVersion": f"lkb-clingo/{self.version}",
                     },
                 ),
             )
@@ -953,9 +925,9 @@ class ClingoSolverAdapter(SolverAdapter):
         # producing a verdict; surface as ``unknown`` so the pipeline
         # aggregation treats it as uncertain rather than as a fail.
         return SolverResponse(
-            result='unknown',
-            message='Clingo returned UNKNOWN within the configured budget.',
-            error_info={'reason': 'asp_unknown'},
+            result="unknown",
+            message="Clingo returned UNKNOWN within the configured budget.",
+            error_info={"reason": "asp_unknown"},
         )
 
     # ------------------------------------------------------------------
@@ -994,14 +966,14 @@ class ClingoSolverAdapter(SolverAdapter):
         def logger(code: Any, message: str) -> None:
             if atom_undefined is not None and code == atom_undefined:
                 return
-            print(f'clingo[{code}]: {message}', file=sys.stderr)
+            print(f"clingo[{code}]: {message}", file=sys.stderr)
 
         return logger
 
     def _build_program(
         self,
         request: SolverRequest,
-        snapshot: 'FactsSnapshot',
+        snapshot: "FactsSnapshot",
     ) -> tuple[str, dict[str, Any]]:
         """Return ``(program_text, prelude_metadata)``.
 
@@ -1018,111 +990,97 @@ class ClingoSolverAdapter(SolverAdapter):
            atom.
         7. Integrity constraints matching the Layer-1 rules.
         """
-        lines: list[str] = ['% Generated by lkb-clingo-asp']
+        lines: list[str] = ["% Generated by lkb-clingo-asp"]
         target = request.target_task_id
         target_status = request.target_status
 
         # 1. task atoms
-        lines.append('% --- task universe ---')
+        lines.append("% --- task universe ---")
         for task_id in sorted(snapshot.normalized_tasks):
-            lines.append(f'task({self._asp_string(task_id)}).')
+            lines.append(f"task({self._asp_string(task_id)}).")
 
         # 2. dependency edges via the canonical fact list
-        lines.append('% --- observed dependency edges ---')
+        lines.append("% --- observed dependency edges ---")
         seen_edges: set[tuple[str, str]] = set()
         for fact in snapshot.facts:
             parsed = _parse_fact(fact)
             if parsed is None:
                 continue
             name, args = parsed
-            if name == 'Blocks' and len(args) == 2:
-                key = ('blocks', args[0], args[1])
+            if name == "Blocks" and len(args) == 2:
+                key = ("blocks", args[0], args[1])
                 if key in seen_edges:
                     continue
-                seen_edges.add(('blocks', args[0], args[1]))
-                lines.append(
-                    f'blocks({self._asp_string(args[0])}, {self._asp_string(args[1])}).'
-                )
-            elif name == 'Requires' and len(args) == 2:
-                key = ('requires', args[0], args[1])
+                seen_edges.add(("blocks", args[0], args[1]))
+                lines.append(f"blocks({self._asp_string(args[0])}, {self._asp_string(args[1])}).")
+            elif name == "Requires" and len(args) == 2:
+                key = ("requires", args[0], args[1])
                 if key in seen_edges:
                     continue
-                seen_edges.add(('requires', args[0], args[1]))
-                lines.append(
-                    f'requires({self._asp_string(args[0])}, {self._asp_string(args[1])}).'
-                )
+                seen_edges.add(("requires", args[0], args[1]))
+                lines.append(f"requires({self._asp_string(args[0])}, {self._asp_string(args[1])}).")
 
         # 3. terminal statuses & acceptance proofs
-        lines.append('% --- terminal statuses + acceptance proofs ---')
+        lines.append("% --- terminal statuses + acceptance proofs ---")
         for task_id in sorted(snapshot.completed_ids):
-            lines.append(f'done({self._asp_string(task_id)}).')
+            lines.append(f"done({self._asp_string(task_id)}).")
         for task_id, task in snapshot.normalized_tasks.items():
-            metadata = task.get('metadata') or {}
-            lkb = metadata.get('lkb') or {}
-            if lkb.get('acceptance_proof'):
-                lines.append(
-                    f'has_acceptance_proof({self._asp_string(task_id)}).'
-                )
+            metadata = task.get("metadata") or {}
+            lkb = metadata.get("lkb") or {}
+            if lkb.get("acceptance_proof"):
+                lines.append(f"has_acceptance_proof({self._asp_string(task_id)}).")
 
         # 4. snapshot-derived
-        lines.append('% --- snapshot-derived facts ---')
+        lines.append("% --- snapshot-derived facts ---")
         for tid in sorted(snapshot.blocked_ids):
-            lines.append(f'blocked({self._asp_string(tid)}).')
+            lines.append(f"blocked({self._asp_string(tid)}).")
         for tid in sorted(snapshot.cycle_task_ids):
-            lines.append(f'in_cycle({self._asp_string(tid)}).')
+            lines.append(f"in_cycle({self._asp_string(tid)}).")
 
         # 5. strict acceptance flag
         if request.strict_acceptance:
-            lines.append('strict_acceptance.')
+            lines.append("strict_acceptance.")
 
         # 6. proposal
-        lines.append('% --- proposal ---')
+        lines.append("% --- proposal ---")
         if target is not None:
             if target not in snapshot.normalized_tasks:
                 # Mirror the SMT adapter's behaviour: surface as a structured
                 # denial via the integrity-constraint approach below. Emit a
                 # sentinel ``target/1`` atom without ``task/1`` so the
                 # integrity constraint can detect the mismatch.
-                lines.append(f'target({self._asp_string(target)}).')
+                lines.append(f"target({self._asp_string(target)}).")
             else:
-                lines.append(f'target({self._asp_string(target)}).')
-                if target_status == 'in_progress':
-                    lines.append(
-                        f'do_proposal({self._asp_string(target)}).'
-                    )
-                elif target_status == 'completed':
-                    lines.append(
-                        f'complete_proposal({self._asp_string(target)}).'
-                    )
-                elif target_status == 'pending':
-                    lines.append(
-                        f'reopen_proposal({self._asp_string(target)}).'
-                    )
+                lines.append(f"target({self._asp_string(target)}).")
+                if target_status == "in_progress":
+                    lines.append(f"do_proposal({self._asp_string(target)}).")
+                elif target_status == "completed":
+                    lines.append(f"complete_proposal({self._asp_string(target)}).")
+                elif target_status == "pending":
+                    lines.append(f"reopen_proposal({self._asp_string(target)}).")
                 # other statuses are silently absent — the integrity
                 # constraints will simply not fire, and clingo reports SAT.
 
         # 7. integrity constraints (== Layer-1 rule violations)
-        lines.append('% --- integrity constraints (Layer-1 rules) ---')
+        lines.append("% --- integrity constraints (Layer-1 rules) ---")
         # R-002: blocked cannot enter in_progress
-        lines.append(':- do_proposal(T), blocked(T).')
+        lines.append(":- do_proposal(T), blocked(T).")
         # R-006: cycle cannot enter in_progress
-        lines.append(':- do_proposal(T), in_cycle(T).')
+        lines.append(":- do_proposal(T), in_cycle(T).")
         # R-005: strict acceptance + completion requires proof
-        lines.append(
-            ':- complete_proposal(T), strict_acceptance, not has_acceptance_proof(T).'
-        )
+        lines.append(":- complete_proposal(T), strict_acceptance, not has_acceptance_proof(T).")
         # target sanity
-        lines.append(':- target(T), not task(T).')
+        lines.append(":- target(T), not task(T).")
 
         prelude = {
-            'target': target,
-            'target_status': target_status,
-            'strict_acceptance': request.strict_acceptance,
-            'tasks': len(snapshot.normalized_tasks),
-            'edges': len(seen_edges),
-            'messages': [],
+            "target": target,
+            "target_status": target_status,
+            "strict_acceptance": request.strict_acceptance,
+            "tasks": len(snapshot.normalized_tasks),
+            "edges": len(seen_edges),
+            "messages": [],
         }
-        return '\n'.join(lines) + '\n', prelude
+        return "\n".join(lines) + "\n", prelude
 
     @staticmethod
     def _classify_unsat(
@@ -1131,62 +1089,56 @@ class ClingoSolverAdapter(SolverAdapter):
         target = request.target_task_id
         target_status = request.target_status
         snapshot = request.snapshot
-        if (
-            target is not None
-            and target not in snapshot.normalized_tasks
-        ):
+        if target is not None and target not in snapshot.normalized_tasks:
             return (
-                'LKB-TRANSITION-001',
-                f'Task {target} is not present in the current snapshot.',
-                (f'Task({target})',),
+                "LKB-TRANSITION-001",
+                f"Task {target} is not present in the current snapshot.",
+                (f"Task({target})",),
             )
         if (
             target is not None
-            and target_status == 'in_progress'
+            and target_status == "in_progress"
             and target in snapshot.cycle_task_ids
         ):
             cycle = tuple(sorted(snapshot.cycle_task_ids))
             return (
-                'R-006',
-                f'Task {target} is part of a dependency cycle '
-                f'({{{", ".join(cycle)}}}) and cannot enter in_progress.',
-                tuple(f'Cycle({t})' for t in cycle),
+                "R-006",
+                f"Task {target} is part of a dependency cycle "
+                f"({{{', '.join(cycle)}}}) and cannot enter in_progress.",
+                tuple(f"Cycle({t})" for t in cycle),
             )
-        if (
-            target is not None
-            and target_status == 'in_progress'
-            and target in snapshot.blocked_ids
-        ):
+        if target is not None and target_status == "in_progress" and target in snapshot.blocked_ids:
             blockers = tuple(
                 sorted(
-                    b for b in snapshot.blocked_by.get(target, ())
+                    b
+                    for b in snapshot.blocked_by.get(target, ())
                     if b not in snapshot.completed_ids
                 )
             )
             return (
-                'R-002',
-                f'Task {target} cannot enter in_progress because its '
-                f'active blockers remain: {", ".join(blockers) or "<unknown>"}.',
-                tuple(f'Requires({b}, {target})' for b in blockers),
+                "R-002",
+                f"Task {target} cannot enter in_progress because its "
+                f"active blockers remain: {', '.join(blockers) or '<unknown>'}.",
+                tuple(f"Requires({b}, {target})" for b in blockers),
             )
         if (
             request.strict_acceptance
             and target is not None
-            and target_status == 'completed'
+            and target_status == "completed"
             and not request.acceptance_proof_present
         ):
             return (
-                'R-005',
-                f'Task {target} requires an acceptance proof in strict mode.',
+                "R-005",
+                f"Task {target} requires an acceptance proof in strict mode.",
                 (
-                    f'StrictAcceptance({target})',
-                    f'Not(HasAcceptanceProof({target}))',
+                    f"StrictAcceptance({target})",
+                    f"Not(HasAcceptanceProof({target}))",
                 ),
             )
         return (
-            'ASP-UNSAT',
-            'Clingo proved the proposal unsatisfiable; no Layer-1 rule matched.',
-            ('Snapshot facts + Layer-1 constraints + Proposal',),
+            "ASP-UNSAT",
+            "Clingo proved the proposal unsatisfiable; no Layer-1 rule matched.",
+            ("Snapshot facts + Layer-1 constraints + Proposal",),
         )
 
 
@@ -1215,7 +1167,7 @@ class Z3SolverAdapter(SolverAdapter):
 
     #: Identifier used in audit/error payloads. Pulled out as a class constant
     #: so tests can match on it without coupling to the class hierarchy.
-    engine_name = 'smt-z3'
+    engine_name = "smt-z3"
 
     def __init__(self) -> None:
         self._cached_z3: Any | None = None
@@ -1228,11 +1180,11 @@ class Z3SolverAdapter(SolverAdapter):
     def version(self) -> str:
         z3 = self._import_z3()
         if z3 is None:
-            return 'unavailable'
+            return "unavailable"
         try:
             return z3.get_version_string()
         except Exception:  # pragma: no cover - defensive only
-            return 'unknown'
+            return "unknown"
 
     def available(self) -> bool:
         return self._import_z3() is not None
@@ -1249,27 +1201,27 @@ class Z3SolverAdapter(SolverAdapter):
         # even when the ``z3-solver`` package is installed in the env.
         if not self.available():
             return SolverResponse(
-                result='unknown',
-                message='Z3 Python bindings are not installed.',
-                error_info={'reason': 'engine_unavailable'},
+                result="unknown",
+                message="Z3 Python bindings are not installed.",
+                error_info={"reason": "engine_unavailable"},
             )
         z3 = self._import_z3()
         if z3 is None:  # pragma: no cover - redundant guard after ``available``
             return SolverResponse(
-                result='unknown',
-                message='Z3 Python bindings are not installed.',
-                error_info={'reason': 'engine_unavailable'},
+                result="unknown",
+                message="Z3 Python bindings are not installed.",
+                error_info={"reason": "engine_unavailable"},
             )
         try:
             return self._solve_impl(z3, request, timeout_seconds)
         except Exception as exc:  # noqa: BLE001 - adapter must never raise
             return SolverResponse(
-                result='error',
-                message=f'Z3 adapter raised {type(exc).__name__}: {exc}',
+                result="error",
+                message=f"Z3 adapter raised {type(exc).__name__}: {exc}",
                 error_info={
-                    'reason': 'exception',
-                    'exception': type(exc).__name__,
-                    'detail': str(exc),
+                    "reason": "exception",
+                    "exception": type(exc).__name__,
+                    "detail": str(exc),
                 },
             )
 
@@ -1301,8 +1253,8 @@ class Z3SolverAdapter(SolverAdapter):
         """Translate ``request`` into SMT assertions and run Z3."""
         timeout_ms = max(1, int(timeout_seconds * 1000))
         solver = z3.Solver()
-        solver.set('timeout', timeout_ms)
-        solver.set('smt.ematching', True)
+        solver.set("timeout", timeout_ms)
+        solver.set("smt.ematching", True)
 
         snapshot = request.snapshot
         predicate_cache: dict[tuple[str, tuple[str, ...]], Any] = {}
@@ -1327,13 +1279,13 @@ class Z3SolverAdapter(SolverAdapter):
             solver.add(predicate(name, *args) == True)
 
         for task_id, task in snapshot.normalized_tasks.items():
-            metadata = task.get('metadata') or {}
-            lkb_metadata = metadata.get('lkb') or {}
-            if lkb_metadata.get('acceptance_proof'):
-                solver.add(predicate('HasAcceptanceProof', task_id) == True)
-            if task.get('status') == 'completed':
+            metadata = task.get("metadata") or {}
+            lkb_metadata = metadata.get("lkb") or {}
+            if lkb_metadata.get("acceptance_proof"):
+                solver.add(predicate("HasAcceptanceProof", task_id) == True)
+            if task.get("status") == "completed":
                 # Terminal state — encode as observed ``Done`` fact.
-                solver.add(predicate('Done', task_id) == True)
+                solver.add(predicate("Done", task_id) == True)
 
         # ------------------------------------------------------------------
         # Step 2 — assert derivations produced by the Layer-1 rule engine
@@ -1343,9 +1295,7 @@ class Z3SolverAdapter(SolverAdapter):
         for ready_id in sorted(snapshot.ready_ids):
             solver.add(predicate(_Z3_DERIVED_READY_PREDICATE, ready_id) == True)
         for cycle_id in sorted(snapshot.cycle_task_ids):
-            solver.add(
-                predicate(_Z3_DERIVED_NOT_READY_PREDICATE, cycle_id) == True
-            )
+            solver.add(predicate(_Z3_DERIVED_NOT_READY_PREDICATE, cycle_id) == True)
 
         # ------------------------------------------------------------------
         # Step 3 — encode Layer-1 MVP invariant rules as Z3 implications.
@@ -1354,19 +1304,17 @@ class Z3SolverAdapter(SolverAdapter):
         # ------------------------------------------------------------------
         for task_id in sorted(snapshot.normalized_tasks):
             blocked = predicate(_Z3_DERIVED_BLOCKED_PREDICATE, task_id)
-            doing = predicate('Doing', task_id)
+            doing = predicate("Doing", task_id)
             solver.add(z3.Implies(blocked == True, doing == False))
 
             if task_id in snapshot.cycle_task_ids:
-                notready = predicate(
-                    _Z3_DERIVED_NOT_READY_PREDICATE, task_id
-                )
+                notready = predicate(_Z3_DERIVED_NOT_READY_PREDICATE, task_id)
                 solver.add(z3.Implies(notready == True, doing == False))
 
         if request.strict_acceptance:
             for task_id in sorted(snapshot.normalized_tasks):
-                done = predicate('Done', task_id)
-                proof = predicate('HasAcceptanceProof', task_id)
+                done = predicate("Done", task_id)
+                proof = predicate("HasAcceptanceProof", task_id)
                 solver.add(z3.Implies(done == True, proof == True))
 
         # ------------------------------------------------------------------
@@ -1376,84 +1324,81 @@ class Z3SolverAdapter(SolverAdapter):
         target_status = request.target_status
         if (target is None) != (target_status is None):
             return SolverResponse(
-                result='unknown',
-                message='target_task_id and target_status must be provided together.',
-                error_info={'reason': 'incomplete_query'},
+                result="unknown",
+                message="target_task_id and target_status must be provided together.",
+                error_info={"reason": "incomplete_query"},
             )
         if target is not None and target_status is not None:
             if target not in snapshot.normalized_tasks:
                 return SolverResponse(
-                    result='fail',
-                    violated_rule='LKB-TRANSITION-001',
-                    message=f'Task {target} is not present in the current snapshot.',
+                    result="fail",
+                    violated_rule="LKB-TRANSITION-001",
+                    message=f"Task {target} is not present in the current snapshot.",
                     proof_trace=(
                         self._proof_entry(
-                            'LKB-TRANSITION-001',
-                            (f'Task({target})',),
-                            f'Not(Exists Task({target}))',
+                            "LKB-TRANSITION-001",
+                            (f"Task({target})",),
+                            f"Not(Exists Task({target}))",
                         ),
                     ),
                 )
-            if target_status == 'in_progress':
-                solver.add(predicate('Doing', target) == True)
-            elif target_status == 'completed':
-                solver.add(predicate('Done', target) == True)
+            if target_status == "in_progress":
+                solver.add(predicate("Doing", target) == True)
+            elif target_status == "completed":
+                solver.add(predicate("Done", target) == True)
                 # Re-opening ``completed → pending`` should still be allowed,
                 # so we leave ``Pending(target)`` unconstrained. The mutex
                 # check below also removes the contradiction if Pending(True)
                 # collides with Done(True).
-                solver.add(z3.Implies(
-                    predicate('Done', target) == True,
-                    predicate('Pending', target) == False,
-                ))
-                if (
-                    request.strict_acceptance
-                    and not request.acceptance_proof_present
-                ):
+                solver.add(
+                    z3.Implies(
+                        predicate("Done", target) == True,
+                        predicate("Pending", target) == False,
+                    )
+                )
+                if request.strict_acceptance and not request.acceptance_proof_present:
                     # Pin the proof predicate to ``False`` so the strict-mode
                     # invariant ``Done ⇒ HasAcceptanceProof`` becomes
                     # unsatisfiable together with ``Done(target) = True``.
-                    solver.add(
-                        predicate('HasAcceptanceProof', target) == False
-                    )
-            elif target_status == 'pending':
-                solver.add(predicate('Pending', target) == True)
-            elif target_status == 'deleted':
+                    solver.add(predicate("HasAcceptanceProof", target) == False)
+            elif target_status == "pending":
+                solver.add(predicate("Pending", target) == True)
+            elif target_status == "deleted":
                 # Delete is a structural change and does not interact with
                 # the state-machine invariants encoded here. Surface as
                 # ``unknown`` so the pipeline falls back to Layer-1's
                 # structural validator.
                 return SolverResponse(
-                    result='unknown',
-                    message='Z3 adapter does not encode delete transitions.',
-                    error_info={'reason': 'unsupported_status'},
+                    result="unknown",
+                    message="Z3 adapter does not encode delete transitions.",
+                    error_info={"reason": "unsupported_status"},
                 )
             else:
                 return SolverResponse(
-                    result='unknown',
-                    message=f'Unsupported target status: {target_status!r}.',
-                    error_info={'reason': 'unsupported_status'},
+                    result="unknown",
+                    message=f"Unsupported target status: {target_status!r}.",
+                    error_info={"reason": "unsupported_status"},
                 )
 
         verdict = solver.check()
         derived_facts = tuple(sorted(set(snapshot.facts)))
         if verdict == z3.sat:
             return SolverResponse(
-                result='pass',
+                result="pass",
                 derived_facts=derived_facts,
                 proof_trace=(
                     self._proof_entry(
-                        'Z3-SAT',
-                        ('Snapshot facts + Layer-1 invariants + Proposal',),
-                        f'Z3 satisfied the proposal (target={target}, status={target_status}).',
+                        "Z3-SAT",
+                        ("Snapshot facts + Layer-1 invariants + Proposal",),
+                        f"Z3 satisfied the proposal (target={target}, status={target_status}).",
                     ),
                 ),
-                message='Z3 satisfied the proposal under all encoded invariants.',
+                message="Z3 satisfied the proposal under all encoded invariants.",
             )
         if verdict == z3.unsat:
             violated, message, premises = self._classify_unsat(request)
             return SolverResponse(
-                result='fail',
+                result="fail",
                 derived_facts=(),
                 violated_rule=violated,
                 message=message,
@@ -1461,14 +1406,14 @@ class Z3SolverAdapter(SolverAdapter):
                     self._proof_entry(
                         violated,
                         premises,
-                        f'No consistent world satisfies the proposal (target={target}, status={target_status}).',
+                        f"No consistent world satisfies the proposal (target={target}, status={target_status}).",
                     ),
                 ),
             )
         return SolverResponse(
-            result='unknown',
-            message='Z3 returned UNKNOWN within the timeout.',
-            error_info={'reason': 'z3_unknown'},
+            result="unknown",
+            message="Z3 returned UNKNOWN within the timeout.",
+            error_info={"reason": "z3_unknown"},
         )
 
     @staticmethod
@@ -1480,9 +1425,9 @@ class Z3SolverAdapter(SolverAdapter):
         identifiers.
         """
         if not args:
-            return f'LKB_{name}'
+            return f"LKB_{name}"
         parts = [name] + [encode_solver_literal(arg) for arg in args]
-        return '_'.join(parts)
+        return "_".join(parts)
 
     @staticmethod
     def _proof_entry(
@@ -1491,10 +1436,10 @@ class Z3SolverAdapter(SolverAdapter):
         conclusion: str,
     ) -> dict[str, Any]:
         return {
-            'rule': rule,
-            'premises': list(premises),
-            'conclusion': conclusion,
-            'solverVersion': 'lkb-z3',
+            "rule": rule,
+            "premises": list(premises),
+            "conclusion": conclusion,
+            "solverVersion": "lkb-z3",
         }
 
     @staticmethod
@@ -1510,52 +1455,49 @@ class Z3SolverAdapter(SolverAdapter):
         # reason, and the user-facing rule should reflect that.
         if (
             target is not None
-            and target_status == 'in_progress'
+            and target_status == "in_progress"
             and target in snapshot.cycle_task_ids
         ):
             cycle = tuple(sorted(snapshot.cycle_task_ids))
             return (
-                'R-006',
-                f'Task {target} is part of a dependency cycle '
-                f'({{{", ".join(cycle)}}}) and cannot enter in_progress.',
-                tuple(f'Cycle({t})' for t in cycle),
+                "R-006",
+                f"Task {target} is part of a dependency cycle "
+                f"({{{', '.join(cycle)}}}) and cannot enter in_progress.",
+                tuple(f"Cycle({t})" for t in cycle),
             )
-        if (
-            target is not None
-            and target_status == 'in_progress'
-            and target in snapshot.blocked_ids
-        ):
+        if target is not None and target_status == "in_progress" and target in snapshot.blocked_ids:
             blockers = tuple(
                 sorted(
-                    b for b in snapshot.blocked_by.get(target, ())
+                    b
+                    for b in snapshot.blocked_by.get(target, ())
                     if b not in snapshot.completed_ids
                 )
             )
-            premises = tuple(f'Requires({b}, {target})' for b in blockers)
+            premises = tuple(f"Requires({b}, {target})" for b in blockers)
             return (
-                'R-002',
-                f'Task {target} cannot enter in_progress because its '
-                f'active blockers remain: {", ".join(blockers) or "<unknown>"}.',
+                "R-002",
+                f"Task {target} cannot enter in_progress because its "
+                f"active blockers remain: {', '.join(blockers) or '<unknown>'}.",
                 premises,
             )
         if (
             request.strict_acceptance
             and target is not None
-            and target_status == 'completed'
+            and target_status == "completed"
             and not request.acceptance_proof_present
         ):
             return (
-                'R-005',
-                f'Task {target} requires an acceptance proof in strict mode.',
+                "R-005",
+                f"Task {target} requires an acceptance proof in strict mode.",
                 (
-                    f'StrictAcceptance({target})',
-                    f'Not(HasAcceptanceProof({target}))',
+                    f"StrictAcceptance({target})",
+                    f"Not(HasAcceptanceProof({target}))",
                 ),
             )
         return (
-            'Z3-UNSAT',
-            'Z3 proved the proposal unsatisfiable; no Layer-1 rule matched.',
-            ('Snapshot facts + Layer-1 invariants + Proposal',),
+            "Z3-UNSAT",
+            "Z3 proved the proposal unsatisfiable; no Layer-1 rule matched.",
+            ("Snapshot facts + Layer-1 invariants + Proposal",),
         )
 
 
@@ -1586,8 +1528,8 @@ class AtpTptpSolverAdapter(SolverAdapter):
     no external binary is required.
     """
 
-    engine_name = 'atp-tptp'
-    _PROVER_VERSION = 'lkb-atp/0.1.0'
+    engine_name = "atp-tptp"
+    _PROVER_VERSION = "lkb-atp/0.1.0"
 
     def __init__(self) -> None:
         self._last_tptp_program: str | None = None
@@ -1613,12 +1555,12 @@ class AtpTptpSolverAdapter(SolverAdapter):
             return self._solve_impl(request, timeout_seconds)
         except Exception as exc:  # noqa: BLE001 - adapter must never raise
             return SolverResponse(
-                result='error',
-                message=f'ATP/TPTP adapter raised {type(exc).__name__}: {exc}',
+                result="error",
+                message=f"ATP/TPTP adapter raised {type(exc).__name__}: {exc}",
                 error_info={
-                    'reason': 'exception',
-                    'exception': type(exc).__name__,
-                    'detail': str(exc),
+                    "reason": "exception",
+                    "exception": type(exc).__name__,
+                    "detail": str(exc),
                 },
             )
 
@@ -1653,7 +1595,7 @@ class AtpTptpSolverAdapter(SolverAdapter):
         has_proof_ids = frozenset(
             task_id
             for task_id, task in snapshot.normalized_tasks.items()
-            if (task.get('metadata') or {}).get('lkb', {}).get('acceptance_proof')
+            if (task.get("metadata") or {}).get("lkb", {}).get("acceptance_proof")
         )
         completed_ids = frozenset(snapshot.completed_ids)
         snapshot_task_ids = frozenset(snapshot.normalized_tasks)
@@ -1674,10 +1616,7 @@ class AtpTptpSolverAdapter(SolverAdapter):
         # Cache the TPTP program emitted for this request so callers can
         # inspect / replay it via vampire or eprover.
         emit_constants: tuple[str, ...] = tuple(
-            sorted(
-                set(constants)
-                | ({request.target_task_id} if request.target_task_id else set())
-            )
+            sorted(set(constants) | ({request.target_task_id} if request.target_task_id else set()))
         )
         self._last_tptp_program = emit_tptp_program(
             constants=emit_constants,
@@ -1689,47 +1628,47 @@ class AtpTptpSolverAdapter(SolverAdapter):
             proposal_status=request.target_status,
         )
 
-        if verdict == 'pass':
+        if verdict == "pass":
             return SolverResponse(
-                result='pass',
+                result="pass",
                 derived_facts=tuple(sorted(set(snapshot.facts))),
                 proof_trace=(
                     {
-                        'rule': 'ATP-SAT',
-                        'premises': ['Snapshot facts + Layer-1 FOL invariants + Proposal'],
-                        'conclusion': (
-                            f'TPTP prover found a model satisfying the proposal '
-                            f'(target={request.target_task_id}, '
-                            f'status={request.target_status}).'
+                        "rule": "ATP-SAT",
+                        "premises": ["Snapshot facts + Layer-1 FOL invariants + Proposal"],
+                        "conclusion": (
+                            f"TPTP prover found a model satisfying the proposal "
+                            f"(target={request.target_task_id}, "
+                            f"status={request.target_status})."
                         ),
-                        'solverVersion': self.version,
-                        'clauseCount': meta.get('clause_count'),
+                        "solverVersion": self.version,
+                        "clauseCount": meta.get("clause_count"),
                     },
                 ),
                 message=(
-                    'In-process FOL prover found no contradiction against the '
-                    'proposal; the LKB invariants hold.'
+                    "In-process FOL prover found no contradiction against the "
+                    "proposal; the LKB invariants hold."
                 ),
             )
 
-        if verdict == 'fail':
+        if verdict == "fail":
             violated, message, premises = self._classify_unsat(request)
             return SolverResponse(
-                result='fail',
+                result="fail",
                 derived_facts=(),
                 violated_rule=violated,
                 message=message,
                 proof_trace=(
                     {
-                        'rule': violated,
-                        'premises': list(premises),
-                        'conclusion': (
-                            f'TPTP prover derived $false from the proposal '
-                            f'(target={request.target_task_id}, '
-                            f'status={request.target_status}).'
+                        "rule": violated,
+                        "premises": list(premises),
+                        "conclusion": (
+                            f"TPTP prover derived $false from the proposal "
+                            f"(target={request.target_task_id}, "
+                            f"status={request.target_status})."
                         ),
-                        'solverVersion': self.version,
-                        'clauseCount': meta.get('clause_count'),
+                        "solverVersion": self.version,
+                        "clauseCount": meta.get("clause_count"),
                     },
                 ),
             )
@@ -1738,11 +1677,11 @@ class AtpTptpSolverAdapter(SolverAdapter):
         # outcome. Surface as ``unknown`` so the pipeline treats it as
         # uncertain rather than fail.
         return SolverResponse(
-            result='unknown',
-            message='In-process FOL prover could not decide inside the budget.',
+            result="unknown",
+            message="In-process FOL prover could not decide inside the budget.",
             error_info={
-                'reason': str(meta.get('reason', 'no_decision')),
-                'clause_count': meta.get('clause_count'),
+                "reason": str(meta.get("reason", "no_decision")),
+                "clause_count": meta.get("clause_count"),
             },
         )
 
@@ -1761,57 +1700,54 @@ class AtpTptpSolverAdapter(SolverAdapter):
         snapshot = request.snapshot
         if target is not None and target not in snapshot.normalized_tasks:
             return (
-                'LKB-TRANSITION-001',
-                f'Task {target} is not present in the current snapshot.',
-                (f'Task({target})',),
+                "LKB-TRANSITION-001",
+                f"Task {target} is not present in the current snapshot.",
+                (f"Task({target})",),
             )
         if (
             target is not None
-            and target_status == 'in_progress'
+            and target_status == "in_progress"
             and target in snapshot.cycle_task_ids
         ):
             cycle = tuple(sorted(snapshot.cycle_task_ids))
             return (
-                'R-006',
-                f'Task {target} is part of a dependency cycle '
-                f'({{{", ".join(cycle)}}}) and cannot enter in_progress.',
-                tuple(f'Cycle({t})' for t in cycle),
+                "R-006",
+                f"Task {target} is part of a dependency cycle "
+                f"({{{', '.join(cycle)}}}) and cannot enter in_progress.",
+                tuple(f"Cycle({t})" for t in cycle),
             )
-        if (
-            target is not None
-            and target_status == 'in_progress'
-            and target in snapshot.blocked_ids
-        ):
+        if target is not None and target_status == "in_progress" and target in snapshot.blocked_ids:
             blockers = tuple(
                 sorted(
-                    b for b in snapshot.blocked_by.get(target, ())
+                    b
+                    for b in snapshot.blocked_by.get(target, ())
                     if b not in snapshot.completed_ids
                 )
             )
             return (
-                'R-002',
-                f'Task {target} cannot enter in_progress because its '
-                f'active blockers remain: {", ".join(blockers) or "<unknown>"}.',
-                tuple(f'Requires({b}, {target})' for b in blockers),
+                "R-002",
+                f"Task {target} cannot enter in_progress because its "
+                f"active blockers remain: {', '.join(blockers) or '<unknown>'}.",
+                tuple(f"Requires({b}, {target})" for b in blockers),
             )
         if (
             request.strict_acceptance
             and target is not None
-            and target_status == 'completed'
+            and target_status == "completed"
             and not request.acceptance_proof_present
         ):
             return (
-                'R-005',
-                f'Task {target} requires an acceptance proof in strict mode.',
+                "R-005",
+                f"Task {target} requires an acceptance proof in strict mode.",
                 (
-                    f'StrictAcceptance({target})',
-                    f'Not(HasAcceptanceProof({target}))',
+                    f"StrictAcceptance({target})",
+                    f"Not(HasAcceptanceProof({target}))",
                 ),
             )
         return (
-            'ATP-UNSAT',
-            'TPTP prover proved the proposal unsatisfiable; no Layer-1 rule matched.',
-            ('Snapshot facts + Layer-1 FOL invariants + Proposal',),
+            "ATP-UNSAT",
+            "TPTP prover proved the proposal unsatisfiable; no Layer-1 rule matched.",
+            ("Snapshot facts + Layer-1 FOL invariants + Proposal",),
         )
 
 
@@ -1829,11 +1765,11 @@ class LlmKnowledgeAdapter(SolverAdapter):
 
     @property
     def name(self) -> str:
-        return 'llm-knowledge'
+        return "llm-knowledge"
 
     @property
     def version(self) -> str:
-        return 'llm-knowledge-v1'
+        return "llm-knowledge-v1"
 
     def available(self) -> bool:
         return self.provider is not None
@@ -1847,92 +1783,92 @@ class LlmKnowledgeAdapter(SolverAdapter):
         del timeout_seconds  # Reserved for future per-call timeout plumbing.
         if not self.available():
             return SolverResponse(
-                result='unknown',
-                message='LLM knowledge adapter has no provider.',
-                error_info={'reason': 'engine_unavailable'},
+                result="unknown",
+                message="LLM knowledge adapter has no provider.",
+                error_info={"reason": "engine_unavailable"},
             )
         prompt = self._build_prompt(request)
         try:
             from clawcodex_ext.providers.base import ChatMessage
 
-            response = self.provider.chat([ChatMessage(role='user', content=prompt)])
+            response = self.provider.chat([ChatMessage(role="user", content=prompt)])
             raw = response.content
         except Exception as exc:  # noqa: BLE001 - adapter must never raise
             return SolverResponse(
-                result='unknown',
-                message=f'LLM knowledge adapter call failed: {type(exc).__name__}.',
+                result="unknown",
+                message=f"LLM knowledge adapter call failed: {type(exc).__name__}.",
                 error_info={
-                    'reason': 'exception',
-                    'exception': type(exc).__name__,
-                    'detail': str(exc),
+                    "reason": "exception",
+                    "exception": type(exc).__name__,
+                    "detail": str(exc),
                 },
             )
         verdict = self._parse_verdict(raw)
-        if verdict == 'fail':
+        if verdict == "fail":
             return SolverResponse(
-                result='fail',
-                message='LLM conservative veto: the proposal may violate a domain constraint.',
-                error_info={'reason': 'llm_conservative_veto'},
+                result="fail",
+                message="LLM conservative veto: the proposal may violate a domain constraint.",
+                error_info={"reason": "llm_conservative_veto"},
                 proof_trace=(
                     {
-                        'rule': 'LLM-KNOWLEDGE-VETO',
-                        'premises': ['llm-knowledge inference'],
-                        'conclusion': 'LLM returned fail; conservative aggregation denies.',
-                        'solverVersion': self.version,
+                        "rule": "LLM-KNOWLEDGE-VETO",
+                        "premises": ["llm-knowledge inference"],
+                        "conclusion": "LLM returned fail; conservative aggregation denies.",
+                        "solverVersion": self.version,
                     },
                 ),
             )
-        if verdict == 'pass':
+        if verdict == "pass":
             return SolverResponse(
-                result='pass',
-                message='LLM knowledge adapter returned pass.',
+                result="pass",
+                message="LLM knowledge adapter returned pass.",
                 proof_trace=(
                     {
-                        'rule': 'LLM-KNOWLEDGE-PASS',
-                        'premises': ['llm-knowledge inference'],
-                        'conclusion': 'LLM returned pass; advisory only.',
-                        'solverVersion': self.version,
+                        "rule": "LLM-KNOWLEDGE-PASS",
+                        "premises": ["llm-knowledge inference"],
+                        "conclusion": "LLM returned pass; advisory only.",
+                        "solverVersion": self.version,
                     },
                 ),
             )
         return SolverResponse(
-            result='unknown',
-            message='LLM knowledge adapter returned unknown or unparseable verdict.',
+            result="unknown",
+            message="LLM knowledge adapter returned unknown or unparseable verdict.",
         )
 
     def _build_prompt(self, request: SolverRequest) -> str:
         snapshot_summary = encode_solver_facts(request)
         return (
-            'You are a conservative validator for a logical kanban system. '
-            'Given the following snapshot and proposed transition, return '
+            "You are a conservative validator for a logical kanban system. "
+            "Given the following snapshot and proposed transition, return "
             'strictly JSON with shape {"verdict": "pass|fail|unknown"}. '
             'Return "fail" only if you are confident the transition violates '
             'a domain constraint. If uncertain, return "unknown".\n'
-            f'{snapshot_summary}\n'
-            'JSON:'
+            f"{snapshot_summary}\n"
+            "JSON:"
         )
 
     def _parse_verdict(self, raw: str) -> str:
         if not isinstance(raw, str):
-            return 'unknown'
+            return "unknown"
         text = raw.strip()
-        if text.startswith('```'):
+        if text.startswith("```"):
             lines = text.splitlines()
-            if lines[0].startswith('```'):
+            if lines[0].startswith("```"):
                 lines = lines[1:]
-            if lines and lines[-1].startswith('```'):
+            if lines and lines[-1].startswith("```"):
                 lines = lines[:-1]
-            text = '\n'.join(lines).strip()
+            text = "\n".join(lines).strip()
         try:
             parsed = json.loads(text)
         except json.JSONDecodeError:
-            return 'unknown'
+            return "unknown"
         if not isinstance(parsed, dict):
-            return 'unknown'
-        verdict = parsed.get('verdict')
-        if verdict in ('pass', 'fail', 'unknown'):
+            return "unknown"
+        verdict = parsed.get("verdict")
+        if verdict in ("pass", "fail", "unknown"):
             return verdict
-        return 'unknown'
+        return "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -1990,19 +1926,19 @@ def extended_adapters(
 
 
 __all__ = [
-    'AtpTptpSolverAdapter',
-    'ClingoSolverAdapter',
-    'DatalogSolverAdapter',
-    'Layer1SolverAdapter',
-    'LlmKnowledgeAdapter',
-    'SolverAdapter',
-    'SolverRequest',
-    'SolverResponse',
-    'SolverResult',
-    'Z3SolverAdapter',
-    'all_adapters',
-    'default_adapters',
-    'encode_solver_facts',
-    'encode_solver_literal',
-    'extended_adapters',
+    "AtpTptpSolverAdapter",
+    "ClingoSolverAdapter",
+    "DatalogSolverAdapter",
+    "Layer1SolverAdapter",
+    "LlmKnowledgeAdapter",
+    "SolverAdapter",
+    "SolverRequest",
+    "SolverResponse",
+    "SolverResult",
+    "Z3SolverAdapter",
+    "all_adapters",
+    "default_adapters",
+    "encode_solver_facts",
+    "encode_solver_literal",
+    "extended_adapters",
 ]  # noqa: E501

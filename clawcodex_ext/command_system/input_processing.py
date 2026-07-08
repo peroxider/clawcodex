@@ -832,9 +832,7 @@ def format_unknown_agent_mention_error(
     if known:
         suggestions: list[str] = []
         for unknown in unknown_types:
-            for match in difflib.get_close_matches(
-                unknown, known, n=max_suggestions, cutoff=0.5
-            ):
+            for match in difflib.get_close_matches(unknown, known, n=max_suggestions, cutoff=0.5):
                 if match not in suggestions:
                     suggestions.append(match)
         if suggestions:

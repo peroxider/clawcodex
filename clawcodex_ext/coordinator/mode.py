@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 # Env-var gate. Mirrors ``coordinatorMode.ts:36-41``.
-_COORDINATOR_MODE_ENV: Final[str] = 'CLAUDE_CODE_COORDINATOR_MODE'
+_COORDINATOR_MODE_ENV: Final[str] = "CLAUDE_CODE_COORDINATOR_MODE"
 
 
 def is_coordinator_mode() -> bool:
@@ -54,7 +54,7 @@ def is_coordinator_mode() -> bool:
     return is_env_truthy(_COORDINATOR_MODE_ENV)
 
 
-SessionMode = Literal['coordinator', 'normal']
+SessionMode = Literal["coordinator", "normal"]
 
 
 def match_session_mode(session_mode: SessionMode | None) -> str | None:
@@ -75,22 +75,22 @@ def match_session_mode(session_mode: SessionMode | None) -> str | None:
         return None
 
     current_is_coordinator = is_coordinator_mode()
-    session_is_coordinator = session_mode == 'coordinator'
+    session_is_coordinator = session_mode == "coordinator"
 
     if current_is_coordinator == session_is_coordinator:
         return None
 
     if session_is_coordinator:
-        os.environ[_COORDINATOR_MODE_ENV] = '1'
+        os.environ[_COORDINATOR_MODE_ENV] = "1"
     else:
         # ``del`` rather than setting to "" so future reads return
         # absent, not falsy-stringy.
         os.environ.pop(_COORDINATOR_MODE_ENV, None)
 
     return (
-        'Entered coordinator mode to match resumed session.'
+        "Entered coordinator mode to match resumed session."
         if session_is_coordinator
-        else 'Exited coordinator mode to match resumed session.'
+        else "Exited coordinator mode to match resumed session."
     )
 
 
@@ -104,10 +104,10 @@ def match_session_mode(session_mode: SessionMode | None) -> str | None:
 # constant name is intentional — pin the bytes the model sees.
 INTERNAL_WORKER_TOOLS: Final[frozenset[str]] = frozenset(
     {
-        'TeamCreate',
-        'TeamDelete',
-        'SendMessage',
-        'StructuredOutput',
+        "TeamCreate",
+        "TeamDelete",
+        "SendMessage",
+        "StructuredOutput",
     }
 )
 
@@ -119,26 +119,26 @@ INTERNAL_WORKER_TOOLS: Final[frozenset[str]] = frozenset(
 # stay off so meaningful work still requires delegation.
 _COORDINATOR_ALLOWED_TOOLS: Final[frozenset[str]] = frozenset(
     {
-        'Agent',
-        'SendMessage',
-        'TeamCreate',
-        'TaskStop',
-        'Read',
-        'WebSearch',
-        'WebFetch',
-        'get_goal',
-        'create_goal',
-        'update_goal',
+        "Agent",
+        "SendMessage",
+        "TeamCreate",
+        "TaskStop",
+        "Read",
+        "WebSearch",
+        "WebFetch",
+        "get_goal",
+        "create_goal",
+        "update_goal",
     }
 )
 
 
-def filter_coordinator_tools(all_tools: Iterable['Tool']) -> list['Tool']:
+def filter_coordinator_tools(all_tools: Iterable["Tool"]) -> list["Tool"]:
     """Return the coordinator's allowed tool set — delegation + lightweight read-only tools."""
     return [t for t in all_tools if t.name in _COORDINATOR_ALLOWED_TOOLS]
 
 
-def filter_worker_tools(all_tools: Iterable['Tool']) -> list['Tool']:
+def filter_worker_tools(all_tools: Iterable["Tool"]) -> list["Tool"]:
     """Return everything except ``INTERNAL_WORKER_TOOLS``.
 
     Workers receive standard tools (Read / Edit / Bash / etc.) plus
@@ -157,7 +157,7 @@ def filter_worker_tools(all_tools: Iterable['Tool']) -> list['Tool']:
 # ``coordinatorMode.ts:88-91`` (``[BASH_TOOL_NAME, FILE_READ_TOOL_NAME,
 # FILE_EDIT_TOOL_NAME]``). Kept as a module-level tuple so the
 # round-2 ch10 sort-and-render path has one source of truth.
-_SIMPLE_MODE_WORKER_TOOLS: Final[tuple[str, ...]] = ('Bash', 'Read', 'Edit')
+_SIMPLE_MODE_WORKER_TOOLS: Final[tuple[str, ...]] = ("Bash", "Read", "Edit")
 
 
 def _build_worker_tools_string() -> str:
@@ -177,10 +177,10 @@ def _build_worker_tools_string() -> str:
     or removing a tool from the async-allowed set automatically
     flows through to the coordinator's user context.
     """
-    if is_env_truthy('CLAUDE_CODE_SIMPLE'):
-        return ', '.join(sorted(_SIMPLE_MODE_WORKER_TOOLS))
+    if is_env_truthy("CLAUDE_CODE_SIMPLE"):
+        return ", ".join(sorted(_SIMPLE_MODE_WORKER_TOOLS))
     eligible = ASYNC_AGENT_ALLOWED_TOOLS - INTERNAL_WORKER_TOOLS
-    return ', '.join(sorted(eligible))
+    return ", ".join(sorted(eligible))
 
 
 def get_coordinator_user_context(
@@ -212,31 +212,31 @@ def get_coordinator_user_context(
 
     worker_tools = _build_worker_tools_string()
 
-    parts = [f'Workers spawned via Agent have access to these tools: {worker_tools}']
+    parts = [f"Workers spawned via Agent have access to these tools: {worker_tools}"]
 
-    mcp_server_names = sorted({getattr(c, 'name', '') for c in (mcp_clients or [])} - {''})
+    mcp_server_names = sorted({getattr(c, "name", "") for c in (mcp_clients or [])} - {""})
     if mcp_server_names:
         parts.append(
-            'Workers also have access to MCP tools from connected MCP '
-            f'servers: {", ".join(mcp_server_names)}'
+            "Workers also have access to MCP tools from connected MCP "
+            f"servers: {', '.join(mcp_server_names)}"
         )
 
     if scratchpad_dir:
         parts.append(
-            f'Scratchpad directory: {scratchpad_dir}\n'
-            'Workers can read and write here without permission '
-            'prompts. Use this for durable cross-worker knowledge — '
-            'structure files however fits the work.'
+            f"Scratchpad directory: {scratchpad_dir}\n"
+            "Workers can read and write here without permission "
+            "prompts. Use this for durable cross-worker knowledge — "
+            "structure files however fits the work."
         )
 
-    return {'workerToolsContext': '\n\n'.join(parts)}
+    return {"workerToolsContext": "\n\n".join(parts)}
 
 
 __all__ = [
-    'is_coordinator_mode',
-    'match_session_mode',
-    'INTERNAL_WORKER_TOOLS',
-    'filter_coordinator_tools',
-    'filter_worker_tools',
-    'get_coordinator_user_context',
+    "is_coordinator_mode",
+    "match_session_mode",
+    "INTERNAL_WORKER_TOOLS",
+    "filter_coordinator_tools",
+    "filter_worker_tools",
+    "get_coordinator_user_context",
 ]

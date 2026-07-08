@@ -153,7 +153,7 @@ def _coalesce_patches(
     merged = dict(base)
     for key, value in overlay.items():
         if (
-            key in ('external_metadata', 'internal_metadata')
+            key in ("external_metadata", "internal_metadata")
             and isinstance(merged.get(key), dict)
             and isinstance(value, dict)
         ):

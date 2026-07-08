@@ -24,12 +24,12 @@ def _make_dispatcher(tmp_path):
     return InboundDispatcher(store, router), store, bp, router
 
 
-def _msg(text, raw=None, tags=None, mid='m1') -> InboundMessage:
+def _msg(text, raw=None, tags=None, mid="m1") -> InboundMessage:
     return InboundMessage(
-        origin='wechat:direct:default:u',
+        origin="wechat:direct:default:u",
         text=text,
         message_id=mid,
-        channel='wechat-main',
+        channel="wechat-main",
         raw=raw,
         semantic_tags=tags or [],
     )
@@ -41,14 +41,14 @@ def _msg(text, raw=None, tags=None, mid='m1') -> InboundMessage:
 @pytest.mark.asyncio
 async def test_plain_text_does_not_classify_as_interrupt_or_context_only(tmp_path) -> None:
     disp, _, _, _ = _make_dispatcher(tmp_path)
-    await disp.process(_msg('停下当前任务', mid='m1'))
+    await disp.process(_msg("停下当前任务", mid="m1"))
     assert _last(disp) in (MessageSemantics.NEW_PROMPT,)
 
 
 @pytest.mark.asyncio
 async def test_natural_language_interrupt_intent_is_newprompt(tmp_path) -> None:
     disp, _, _, _ = _make_dispatcher(tmp_path)
-    m = _msg('中断这个任务', mid='m1')
+    m = _msg("中断这个任务", mid="m1")
     await disp.process(m)
     assert m.semantic is MessageSemantics.NEW_PROMPT
 
@@ -59,7 +59,7 @@ async def test_natural_language_interrupt_intent_is_newprompt(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_control_verb_classified_as_command(tmp_path) -> None:
     disp, _, _, _ = _make_dispatcher(tmp_path)
-    m = _msg('/pause AGENTSDK-15', mid='m1')
+    m = _msg("/pause AGENTSDK-15", mid="m1")
     await disp.process(m)
     assert m.semantic is MessageSemantics.COMMAND
 
@@ -67,7 +67,7 @@ async def test_control_verb_classified_as_command(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_structured_interrupt_classified(tmp_path) -> None:
     disp, _, _, _ = _make_dispatcher(tmp_path)
-    m = _msg('x', raw={'deliverAs': 'interrupt'}, mid='m1')
+    m = _msg("x", raw={"deliverAs": "interrupt"}, mid="m1")
     await disp.process(m)
     assert m.semantic is MessageSemantics.INTERRUPT
 
@@ -79,10 +79,10 @@ async def test_structured_interrupt_classified(tmp_path) -> None:
 async def test_busy_plain_text_classifies_as_followup(tmp_path) -> None:
     disp, _, _, router = _make_dispatcher(tmp_path)
     # bind an opt-in target so routing is deterministic
-    o = OriginKey.wechat('default', 'u')
-    router._binding.bind(o, SessionTarget('repl_main', 'repl'))
+    o = OriginKey.wechat("default", "u")
+    router._binding.bind(o, SessionTarget("repl_main", "repl"))
     # simulate busy: classify explicitly then process
-    m = _msg('顺便更新注释', mid='m1')
+    m = _msg("顺便更新注释", mid="m1")
     m.semantic = disp.classify(m, is_busy=True)
     assert m.semantic is MessageSemantics.FOLLOW_UP
     ack = await disp.process(m)
@@ -95,7 +95,7 @@ async def test_busy_plain_text_classifies_as_followup(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_explicit_followup_command_is_command(tmp_path) -> None:
     disp, _, _, _ = _make_dispatcher(tmp_path)
-    m = _msg('/agent follow-up note', mid='m1')
+    m = _msg("/agent follow-up note", mid="m1")
     await disp.process(m)
     assert m.semantic is MessageSemantics.COMMAND
 
@@ -106,11 +106,11 @@ async def test_explicit_followup_command_is_command(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_context_only_only_via_metadata(tmp_path) -> None:
     disp, _, _, _ = _make_dispatcher(tmp_path)
-    m = _msg('any text', raw={'deliverAs': 'contextOnly'}, mid='m1')
+    m = _msg("any text", raw={"deliverAs": "contextOnly"}, mid="m1")
     await disp.process(m)
     assert m.semantic is MessageSemantics.CONTEXT_ONLY
     # plain "context" wording is NOT contextOnly
-    m2 = _msg('add context about X', mid='m2')
+    m2 = _msg("add context about X", mid="m2")
     await disp.process(m2)
     assert m2.semantic is MessageSemantics.NEW_PROMPT
 
@@ -127,13 +127,13 @@ def test_host_agent_contract_and_claim() -> None:
     from extensions.im_gateway.host_agent import HostAgentContract, HostAgentManager
 
     contract = HostAgentContract()
-    assert contract.session_id('wechat:direct:default:u') == 'im:default:wechat:direct:default:u'
+    assert contract.session_id("wechat:direct:default:u") == "im:default:wechat:direct:default:u"
     mgr = HostAgentManager(contract)
-    sid = mgr.claim('wechat:direct:default:u')
-    assert mgr.is_hosted('wechat:direct:default:u')
-    assert mgr.session_for('wechat:direct:default:u') == sid
-    mgr.release('wechat:direct:default:u')
-    assert not mgr.is_hosted('wechat:direct:default:u')
+    sid = mgr.claim("wechat:direct:default:u")
+    assert mgr.is_hosted("wechat:direct:default:u")
+    assert mgr.session_for("wechat:direct:default:u") == sid
+    mgr.release("wechat:direct:default:u")
+    assert not mgr.is_hosted("wechat:direct:default:u")
 
 
 @pytest.mark.asyncio
@@ -148,7 +148,7 @@ async def test_host_agent_reply_routes_to_outbound(tmp_path) -> None:
             sent.append(msg)
 
     mgr = HostAgentManager()
-    await mgr.reply('wechat:direct:default:user_gz', 'hello back', outbound=_Out())
+    await mgr.reply("wechat:direct:default:user_gz", "hello back", outbound=_Out())
     assert len(sent) == 1
-    assert sent[0].channel == 'wechat'
-    assert sent[0].target == 'user_gz'
+    assert sent[0].channel == "wechat"
+    assert sent[0].target == "user_gz"

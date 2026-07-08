@@ -144,9 +144,7 @@ class TruthMaintenanceSystem:
 
         for parent_id in derived_from:
             record.derived_from.add(parent_id)
-            parent = self._assertions.setdefault(
-                parent_id, AssertionRecord(assertion_id=parent_id)
-            )
+            parent = self._assertions.setdefault(parent_id, AssertionRecord(assertion_id=parent_id))
             parent.derived_to.add(assertion_id)
 
         record.task_ids.update(task_ids)
@@ -189,7 +187,9 @@ class TruthMaintenanceSystem:
         record.invalidated_reason = reason or "assumption invalidated"
 
         if self._on_invalidate is not None:
-            self._on_invalidate(assumption_id, record.assertion_id, reason or "assumption invalidated")
+            self._on_invalidate(
+                assumption_id, record.assertion_id, reason or "assumption invalidated"
+            )
 
         for assertion_id in list(record.dependent_assertions):
             self._mark_assertion_stale(
@@ -285,7 +285,9 @@ class TruthMaintenanceSystem:
 
     def get_stale_assertion_ids(self) -> frozenset[str]:
         return frozenset(
-            assertion_id for assertion_id, record in self._assertions.items() if record.status == "stale"
+            assertion_id
+            for assertion_id, record in self._assertions.items()
+            if record.status == "stale"
         )
 
     @property
@@ -304,9 +306,7 @@ class TruthMaintenanceSystem:
 
     def get_assertions_for_task(self, task_id: str) -> tuple[AssertionRecord, ...]:
         return tuple(
-            assertion
-            for assertion in self._assertions.values()
-            if task_id in assertion.task_ids
+            assertion for assertion in self._assertions.values() if task_id in assertion.task_ids
         )
 
     def to_dict(self) -> dict[str, Any]:

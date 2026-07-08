@@ -84,7 +84,8 @@ _FILE_RE = re.compile(
         (?: :(?P<end_col2>\d+))?
       )
     )?
-    """ % "|".join(re.escape(e.lstrip(".")) for e in _DEFAULT_FILE_EXTS),
+    """
+    % "|".join(re.escape(e.lstrip(".")) for e in _DEFAULT_FILE_EXTS),
     re.VERBOSE,
 )
 
@@ -96,7 +97,7 @@ _FUNCTION_RE = re.compile(
 
 # Tracker issue:  ``#123`` / ``ORG-456`` / ``[ORG-789]``
 _TRACKER_RE = re.compile(
-    r"(?<![\w./-])"                                 # no previous word char
+    r"(?<![\w./-])"  # no previous word char
     r"(?:\[(?P<prefix1>[A-Z][A-Z0-9]{1,9})-(?P<num1>\d+)\]"
     r"|\#(?P<num2>\d+)"
     r"|(?<!#)(?P<prefix2>[A-Z][A-Z0-9]{1,9})-(?P<num3>\d+))"
@@ -108,9 +109,7 @@ _GIT_SHA_RE = re.compile(r"(?<![\w])(?P<sha>[0-9a-f]{7,40})(?![\w])")
 
 # Git blob — ``@<sha>:<path>``.  Path is the same heuristic as FILE_RE
 # but we relax the extension requirement.
-_GIT_BLOB_RE = re.compile(
-    r"@(?P<sha>[0-9a-f]{7,40}):(?P<path>[A-Za-z0-9_./\-]+)"
-)
+_GIT_BLOB_RE = re.compile(r"@(?P<sha>[0-9a-f]{7,40}):(?P<path>[A-Za-z0-9_./\-]+)")
 
 # Bare URL — covers http(s) / vscode / idea / subl / file / ssh / git
 _URL_RE = re.compile(
@@ -236,12 +235,15 @@ class AnchorParser:
 
         # Git blob (must come before plain git_sha because ``@`` prefix)
         for m in _GIT_BLOB_RE.finditer(text):
-            yield "git_blob", LodestoneAnchor(
-                kind="git_blob",
-                raw=m.group(0),
-                git_sha=m.group("sha"),
-                file_path=m.group("path"),
-                span=(m.start(), m.end()),
+            yield (
+                "git_blob",
+                LodestoneAnchor(
+                    kind="git_blob",
+                    raw=m.group(0),
+                    git_sha=m.group("sha"),
+                    file_path=m.group("path"),
+                    span=(m.start(), m.end()),
+                ),
             )
 
         # Tracker issue
@@ -250,20 +252,26 @@ class AnchorParser:
             num = m.group("num1") or m.group("num2") or m.group("num3")
             kind: AnchorKind = "tracker_issue"
             host = prefix.lower() if prefix else "gitcode"
-            yield kind, LodestoneAnchor(
-                kind=kind,
-                raw=m.group(0),
-                tracker_key=(host, num),
-                span=(m.start(), m.end()),
+            yield (
+                kind,
+                LodestoneAnchor(
+                    kind=kind,
+                    raw=m.group(0),
+                    tracker_key=(host, num),
+                    span=(m.start(), m.end()),
+                ),
             )
 
         # Git sha
         for m in _GIT_SHA_RE.finditer(text):
-            yield "git_commit", LodestoneAnchor(
-                kind="git_commit",
-                raw=m.group(0),
-                git_sha=m.group("sha"),
-                span=(m.start(), m.end()),
+            yield (
+                "git_commit",
+                LodestoneAnchor(
+                    kind="git_commit",
+                    raw=m.group(0),
+                    git_sha=m.group("sha"),
+                    span=(m.start(), m.end()),
+                ),
             )
 
         # Function refs
@@ -273,30 +281,39 @@ class AnchorParser:
             # them above and they show up here as ``file.py``.
             if sym in {"file", "file.py", "src.file"} and "." in sym:
                 continue
-            yield "function_ref", LodestoneAnchor(
-                kind="function_ref",
-                raw=m.group(0),
-                symbol=sym,
-                span=(m.start(), m.end()),
+            yield (
+                "function_ref",
+                LodestoneAnchor(
+                    kind="function_ref",
+                    raw=m.group(0),
+                    symbol=sym,
+                    span=(m.start(), m.end()),
+                ),
             )
 
         # URL
         for m in _URL_RE.finditer(text):
             url, _ = _strip_trailing_punct(m.group("url"))
-            yield "url", LodestoneAnchor(
-                kind="url",
-                raw=m.group(0),
-                url=url,
-                span=(m.start(), m.end()),
+            yield (
+                "url",
+                LodestoneAnchor(
+                    kind="url",
+                    raw=m.group(0),
+                    url=url,
+                    span=(m.start(), m.end()),
+                ),
             )
 
         # User-extensible patterns
         for kind, pattern in self._extra:
             for m in pattern.finditer(text):
-                yield kind, LodestoneAnchor(
-                    kind=kind,
-                    raw=m.group(0),
-                    span=(m.start(), m.end()),
+                yield (
+                    kind,
+                    LodestoneAnchor(
+                        kind=kind,
+                        raw=m.group(0),
+                        span=(m.start(), m.end()),
+                    ),
                 )
 
 

@@ -92,9 +92,7 @@ def _format_message_summary(msg: Message) -> str:
         if text_blocks:
             parts.append(f"{text_blocks} text")
         if tool_uses:
-            tool_names = [
-                b.name for b in content if isinstance(b, ToolUseBlock)
-            ]
+            tool_names = [b.name for b in content if isinstance(b, ToolUseBlock)]
             parts.append(f"{tool_uses} tool({', '.join(tool_names)})")
         if tool_results:
             parts.append(f"{tool_results} result")
@@ -129,9 +127,12 @@ def _snip_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
         filtered: list[Message] = []
         for m in messages:
             content_text = (
-                m.content if isinstance(m.content, str)
+                m.content
+                if isinstance(m.content, str)
                 else " ".join(
-                    b.text if isinstance(b, TextBlock) else json.dumps(getattr(b, "input", {}), ensure_ascii=False)
+                    b.text
+                    if isinstance(b, TextBlock)
+                    else json.dumps(getattr(b, "input", {}), ensure_ascii=False)
                     for b in (m.content or [])
                     if isinstance(b, (TextBlock, ToolUseBlock))
                 )
@@ -219,17 +220,13 @@ SnipTool: Tool = build_tool(
             },
             "count": {
                 "type": "integer",
-                "description": (
-                    "Number of consecutive messages to return.  "
-                    "Default: 5."
-                ),
+                "description": ("Number of consecutive messages to return.  Default: 5."),
             },
             "role": {
                 "type": "string",
                 "enum": ["user", "assistant", "system", "tool"],
                 "description": (
-                    "If set, only messages with this role are returned.  "
-                    "Omit to include all roles."
+                    "If set, only messages with this role are returned.  Omit to include all roles."
                 ),
             },
             "query": {

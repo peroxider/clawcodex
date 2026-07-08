@@ -57,7 +57,7 @@ class TestStage3hModuleImport:
 
     def test_ext_repl_core_importable(self):
         """``clawcodex_ext.repl.core`` 可导入。
-        
+
         这是 ``ClawcodexREPL`` 的 canonical 位置，``src.repl.core`` 的
         lazy-proxy 通过 ``__getattr__`` 指向此处。若此处断裂则 REPL 完全不可用。
         """
@@ -101,7 +101,7 @@ class TestStage3hModuleImport:
 
     def test_cli_dispatch_can_import_tui_should_use(self):
         """CLI dispatch 路径上的 ``should_use_tui`` 可正常导入。
-        
+
         回归防护：```dispatch.py:635`` 执行 ``from src.entrypoints.tui import should_use_tui``
         不应因 lazy-proxy 链断裂而炸。
         """
@@ -111,7 +111,7 @@ class TestStage3hModuleImport:
 
     def test_frontend_plugins_module_imports_cleanly(self):
         """``clawcodex_ext.frontend`` 包导入不抛异常。
-        
+
         该 __init__.py 触发所有 ``@register_frontend`` 装饰器，若任一插件
         注册时产生 import 失败，整个 frontend 系统不可用。
         """
@@ -232,7 +232,7 @@ class TestStage3hTuiAppImport:
 
     def test_tui_app_importable_when_textual_available(self):
         """``ClawCodexTUI`` (src) 和 ``ClawCodexExtTUI`` (ext) 可导入。
-        
+
         ``clawcodex_ext.tui.app.ClawCodexExtTUI`` 是 TUI frontend 使用的
         actual app 类，``src.tui.app.ClawCodexTUI`` 是上游基类。
         """
@@ -249,7 +249,7 @@ class TestStage3hTuiAppImport:
 
     def test_tui_ext_entrypoint_importable_when_textual_available(self):
         """``clawcodex_ext.tui.entrypoint`` 全模块可导入。
-        
+
         这包括 ``ClawCodexExtTUI``、``TUIOptions`` 及各种 tool context 的导入。
         """
         try:
@@ -472,7 +472,7 @@ class TestStage3hCliSubprocess:
 
     def test_cli_tui_remembers_slash_commands_importable(self):
         """``clawcodex_ext.repl.core`` 内部 slash 命令系统不因导入而炸。
-        
+
         回归防护：CLI ``--tui`` 路径上会触发 ``src.entrypoints.tui`` 的导入，
         进而触发 ``clawcodex_ext`` 包初始化。若命令系统注册链断裂，
         import 阶段即 crash。
@@ -502,7 +502,7 @@ class TestStage3hImportChain:
 
     def test_frontend_tui_plugin_imports_cleanly(self):
         """``clawcodex_ext.frontend.tui`` 模块导入不抛异常。
-        
+
         该模块被 ``clawcodex_ext.frontend.__init__`` 在 ``import clawcodex_ext.frontend``
         时自动触发。若内部 import 链断裂（如 ``run_tui`` 引用了不存在的 symbol），
         整个 frontend 系统不可用。
@@ -530,10 +530,10 @@ class TestStage3hImportChain:
 
     def test_ext_repl_app_initialization_without_provider(self):
         """``ClawCodexExtREPL`` 可不传 provider 参数构造（缺 api key 降级模式）。
-        
+
         这模拟了用户运行 ``clawcodex --no-tui`` 但未配置 provider 的场景：
         REPL 应进入降级模式（``_api_key_missing = True``），而非 crash。
-        
+
         注意：如果测试环境已有 provider 配置，``_api_key_missing`` 可能为
         False，但这不影响测试通过 — 核心是构造过程不抛异常。
         """
@@ -592,7 +592,9 @@ class TestStage3hImportChain:
 
         # dispatch_local_command 拦截 /model → open_dialog="model"
         result = dispatch_local_command(
-            "/model", session=MagicMock(), workspace_root=Path("/tmp"),
+            "/model",
+            session=MagicMock(),
+            workspace_root=Path("/tmp"),
             tool_registry=MagicMock(),
         )
         assert isinstance(result, CommandDispatchResult)
@@ -603,7 +605,9 @@ class TestStage3hImportChain:
 
         # /models 别名同样拦截
         result_plural = dispatch_local_command(
-            "/models", session=MagicMock(), workspace_root=Path("/tmp"),
+            "/models",
+            session=MagicMock(),
+            workspace_root=Path("/tmp"),
             tool_registry=MagicMock(),
         )
         assert result_plural.handled is True

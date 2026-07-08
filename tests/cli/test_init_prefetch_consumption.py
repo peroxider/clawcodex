@@ -157,7 +157,9 @@ class InitConsumesPrefetchesTests(unittest.TestCase):
         mdm_payload: str | None,
     ):
         # Patch the symbols where init.py imported them — not at source.
-        keychain_patch = mock.patch("clawcodex_ext.init.wait_and_read_keychain", return_value=keychain_value)
+        keychain_patch = mock.patch(
+            "clawcodex_ext.init.wait_and_read_keychain", return_value=keychain_value
+        )
         mdm_patch = mock.patch("clawcodex_ext.init.wait_and_read_mdm", return_value=mdm_payload)
         # Avoid spawning real Popens during the test.
         ks_patch = mock.patch(

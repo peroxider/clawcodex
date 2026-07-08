@@ -213,6 +213,7 @@ class AnchorRenderer:
     def _registry_for_resolve(self, ctx: AnchorContext):  # pragma: no cover
         # Lazy-import: avoid a circular import at module load.
         from .targets import build_default_registry
+
         return build_default_registry(ctx.config)
 
 
@@ -275,7 +276,7 @@ def _render_template(template: str, vars_map: dict[str, str]) -> str:
     out: list[str] = []
     last = 0
     for m in _PLACEHOLDER_RE.finditer(template):
-        out.append(template[last:m.start()])
+        out.append(template[last : m.start()])
         key = m.group(1)
         if key not in vars_map:
             raise TemplateFormatError(f"unknown placeholder: {key!r}")
@@ -348,6 +349,7 @@ def _template_vars(anchor: LodestoneAnchor, ctx: Optional[AnchorContext]) -> dic
 
 def _empty_config():
     from .models import LodestoneConfig
+
     return LodestoneConfig()
 
 
@@ -366,6 +368,7 @@ def _owner_repo(ctx: AnchorContext) -> tuple[str, str]:
     # Try to parse from remote URL.
     if ctx.remote_url:
         from .fingerprint import parse_remote_url
+
         parsed = parse_remote_url(ctx.remote_url)
         if parsed:
             return parsed[1], parsed[2]

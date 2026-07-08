@@ -124,7 +124,11 @@ def _cmd_parse(args: str, context: CommandContext) -> LocalCommandResult:
 def _cmd_resolve(args: str, context: CommandContext) -> LocalCommandResult:
     service = _service(context)
     ctx = _ctx(context)
-    out = service.resolve_text(args, sink="markdown", workspace_root=_workspace_root(context)) if False else None  # noqa
+    out = (
+        service.resolve_text(args, sink="markdown", workspace_root=_workspace_root(context))
+        if False
+        else None
+    )  # noqa
     parser = AnchorParser()
     anchors = parser.parse(args.strip())
     if not anchors:
@@ -251,7 +255,9 @@ def _cmd_targets_list(_args: str, context: CommandContext) -> LocalCommandResult
     registry: AnchorTargetRegistry = _service(context).registry
     lines = []
     for t in registry.list():
-        lines.append(f"{t.target_id:>22}  kind={t.kind:>14}  remote={t.is_remote}  template={t.template}")
+        lines.append(
+            f"{t.target_id:>22}  kind={t.kind:>14}  remote={t.is_remote}  template={t.template}"
+        )
     return LocalCommandResult(type="text", value="\n".join(lines) or "(no targets registered)")
 
 
@@ -259,7 +265,9 @@ def _cmd_targets_test(args: str, context: CommandContext) -> LocalCommandResult:
     registry: AnchorTargetRegistry = _service(context).registry
     parts = args.strip().split(maxsplit=1)
     if len(parts) < 2:
-        return LocalCommandResult(type="text", value="usage: /link targets test <target-id> <anchor>")
+        return LocalCommandResult(
+            type="text", value="usage: /link targets test <target-id> <anchor>"
+        )
     target_id, anchor_text = parts
     target = registry.get(target_id)
     if target is None:

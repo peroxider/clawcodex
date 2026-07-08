@@ -142,9 +142,7 @@ class TestCheckRebaseRateLimit(unittest.TestCase):
 
     def test_at_limit_returns_false(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            reg = _make_registry_record(
-                Path(tmp), rebase_attempt_count=3
-            )
+            reg = _make_registry_record(Path(tmp), rebase_attempt_count=3)
             orch = _make_orchestrator(tracker=MagicMock(), registry=reg)
             issue = _make_issue()
             # Default max_rebase_attempts_per_issue = 3.
@@ -155,9 +153,7 @@ class TestCheckRebaseRateLimit(unittest.TestCase):
 
     def test_at_limit_with_force_bypasses(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            reg = _make_registry_record(
-                Path(tmp), rebase_attempt_count=3
-            )
+            reg = _make_registry_record(Path(tmp), rebase_attempt_count=3)
             orch = _make_orchestrator(tracker=MagicMock(), registry=reg)
             issue = _make_issue()
             self.assertTrue(orch._check_rebase_rate_limit(issue, force=True))
@@ -234,8 +230,7 @@ class TestProcessRebaseIntent(unittest.IsolatedAsyncioTestCase):
             orch._log_audit_event.assert_called()
             # Audit event is "rebase_conflict".
             event_names = [
-                call.kwargs.get("event")
-                for call in orch._log_audit_event.call_args_list
+                call.kwargs.get("event") for call in orch._log_audit_event.call_args_list
             ]
             self.assertIn("rebase_conflict", event_names)
 
@@ -249,9 +244,7 @@ class TestProcessRebaseIntent(unittest.IsolatedAsyncioTestCase):
     async def test_missing_workspace_returns_none(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            reg = _make_registry_record(
-                tmp_path, workspace_path=None
-            )
+            reg = _make_registry_record(tmp_path, workspace_path=None)
             orch = _make_orchestrator(tracker=MagicMock(), registry=reg)
             result = await orch._process_rebase_intent(_make_issue())
             self.assertIsNone(result)
@@ -296,9 +289,7 @@ class TestProcessPendingRebaseConflicts(unittest.IsolatedAsyncioTestCase):
             await orch._process_pending_rebase_conflicts()
             orch._launch_rebase_resolution.assert_awaited_once()
             # First arg is the Issue.
-            self.assertEqual(
-                orch._launch_rebase_resolution.await_args.args[0].id, "7"
-            )
+            self.assertEqual(orch._launch_rebase_resolution.await_args.args[0].id, "7")
 
     async def test_rate_limited_records_skipped(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -344,9 +335,7 @@ class TestProcessPrConflictScan(unittest.IsolatedAsyncioTestCase):
             workflow.pr_conflict_scan = PrConflictScanConfig(enabled=True)
             tracker = MagicMock()
             tracker.fetch_pull_request_mergeable = AsyncMock()
-            orch = _make_orchestrator(
-                tracker=tracker, registry=reg, workflow=workflow
-            )
+            orch = _make_orchestrator(tracker=tracker, registry=reg, workflow=workflow)
             await orch._process_pr_conflict_scan()
             tracker.fetch_pull_request_mergeable.assert_not_called()
 
@@ -367,14 +356,10 @@ class TestProcessPrConflictScan(unittest.IsolatedAsyncioTestCase):
                 has_conflicts=True,
                 behind_by=2,
             )
-            tracker.fetch_pull_request_mergeable = AsyncMock(
-                return_value=conflict_status
-            )
+            tracker.fetch_pull_request_mergeable = AsyncMock(return_value=conflict_status)
             issue = _make_issue()
             tracker.fetch_issue_states_by_ids = AsyncMock(return_value={"7": issue})
-            orch = _make_orchestrator(
-                tracker=tracker, registry=reg, workflow=workflow
-            )
+            orch = _make_orchestrator(tracker=tracker, registry=reg, workflow=workflow)
             orch._process_rebase_intent = AsyncMock()
             await orch._process_pr_conflict_scan()
             tracker.fetch_pull_request_mergeable.assert_awaited_once()
@@ -387,12 +372,8 @@ class TestProcessPrConflictScan(unittest.IsolatedAsyncioTestCase):
             workflow = WorkflowConfig()
             workflow.pr_conflict_scan = PrConflictScanConfig(enabled=True)
             tracker = MagicMock()
-            tracker.fetch_pull_request_mergeable = AsyncMock(
-                return_value=None
-            )
-            orch = _make_orchestrator(
-                tracker=tracker, registry=reg, workflow=workflow
-            )
+            tracker.fetch_pull_request_mergeable = AsyncMock(return_value=None)
+            orch = _make_orchestrator(tracker=tracker, registry=reg, workflow=workflow)
             orch._process_rebase_intent = AsyncMock()
             await orch._process_pr_conflict_scan()
             # None from tracker → daemon scan is a no-op on GitCode.

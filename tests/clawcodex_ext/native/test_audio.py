@@ -16,6 +16,7 @@ def test_audio_module_registered():
     assert load("audio_capture") is not None or True  # 取决于环境
     # 即使后端缺失，注册表仍包含
     from clawcodex_ext.native import NativeModuleRegistry
+
     assert NativeModuleRegistry.is_registered("audio_capture")
 
 
@@ -62,5 +63,6 @@ def test_audio_record_raises_when_unavailable(monkeypatch):
     # 强制后端为 None
     mod._backend = None
     from clawcodex_ext.native import NativeModuleError
+
     with pytest.raises(NativeModuleError):
         asyncio.run(mod.record(duration_sec=0.1))

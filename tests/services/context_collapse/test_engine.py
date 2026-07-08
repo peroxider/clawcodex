@@ -93,9 +93,7 @@ def test_evaluate_noop_does_not_mutate_store() -> None:
 
 
 def test_evaluate_under_budget_is_noop() -> None:
-    engine = CollapseEngine(
-        config=CollapseEngineConfig(context_window=100_000)
-    )
+    engine = CollapseEngine(config=CollapseEngineConfig(context_window=100_000))
     decision = engine.evaluate([_msg("tiny", uuid="a")])
     assert decision.kind is CollapseKind.NOOP
 
@@ -116,21 +114,15 @@ def test_evaluate_over_budget_returns_full() -> None:
 def test_evaluate_threads_last_error() -> None:
     engine = CollapseEngine()
     err = ContextLengthExceededError("boom")
-    decision = engine.evaluate(
-        [_msg("x", uuid="a")], last_error=err
-    )
+    decision = engine.evaluate([_msg("x", uuid="a")], last_error=err)
     # The default composite trigger sees the error via the 413 sub-trigger.
     assert decision.kind is CollapseKind.FULL
 
 
 def test_evaluate_threads_hints() -> None:
     """Hints are forwarded into the TriggerContext but do not change behavior."""
-    engine = CollapseEngine(
-        config=CollapseEngineConfig(context_window=100_000)
-    )
-    decision = engine.evaluate(
-        [_msg("x", uuid="a")], hints={"model": "test"}
-    )
+    engine = CollapseEngine(config=CollapseEngineConfig(context_window=100_000))
+    decision = engine.evaluate([_msg("x", uuid="a")], hints={"model": "test"})
     assert decision.kind is CollapseKind.NOOP
 
 
@@ -194,9 +186,7 @@ def test_apply_partial_archives_first_n() -> None:
 def test_apply_partial_with_zero_count_falls_back_to_32() -> None:
     engine = CollapseEngine()
     msgs = [_msg(f"x{i}", uuid=f"u{i}") for i in range(50)]
-    decision = CollapseDecision(
-        kind=CollapseKind.PARTIAL, reason="forced", count=0
-    )
+    decision = CollapseDecision(kind=CollapseKind.PARTIAL, reason="forced", count=0)
     result = engine.apply(msgs, decision)
     assert result.applied is True
     assert result.archived_count == 32
@@ -212,9 +202,7 @@ def test_apply_partial_with_missing_count_falls_back_to_32() -> None:
 
 def test_apply_full_with_empty_messages_returns_not_applied() -> None:
     engine = CollapseEngine()
-    decision = CollapseDecision(
-        kind=CollapseKind.FULL, reason="forced", count=0
-    )
+    decision = CollapseDecision(kind=CollapseKind.FULL, reason="forced", count=0)
     result = engine.apply([], decision)
     assert result.applied is False
     assert "nothing to archive" in result.notes
@@ -224,9 +212,7 @@ def test_apply_preserves_existing_commits() -> None:
     engine = CollapseEngine()
     engine.store.add_commit(["u1"], "old summary")
     msgs = [_msg(f"x{i}", uuid=f"u{i}") for i in range(5)]
-    decision = CollapseDecision(
-        kind=CollapseKind.PARTIAL, reason="forced", count=2
-    )
+    decision = CollapseDecision(kind=CollapseKind.PARTIAL, reason="forced", count=2)
     engine.apply(msgs, decision)
     assert len(engine.store.commits) == 2
     assert engine.store.commits[0].summary == "old summary"
@@ -244,9 +230,7 @@ def test_apply_summary_uses_registered_generator() -> None:
 
     engine = CollapseEngine(summary_generator=CountingSummary())
     msgs = [_msg(f"x{i}", uuid=f"u{i}") for i in range(5)]
-    decision = CollapseDecision(
-        kind=CollapseKind.PARTIAL, reason="forced", count=3
-    )
+    decision = CollapseDecision(kind=CollapseKind.PARTIAL, reason="forced", count=3)
     result = engine.apply(msgs, decision)
     assert result.summary == "CUSTOM-SUMMARY"
     assert seen == [3]
@@ -260,9 +244,7 @@ def test_apply_extracts_uuid_from_object_messages() -> None:
 
     engine = CollapseEngine()
     msgs = [M(f"x{i}", uuid=f"u{i}") for i in range(5)]
-    decision = CollapseDecision(
-        kind=CollapseKind.PARTIAL, reason="forced", count=2
-    )
+    decision = CollapseDecision(kind=CollapseKind.PARTIAL, reason="forced", count=2)
     engine.apply(msgs, decision)
     assert engine.store.commits[0].archived == ["u0", "u1"]
 
@@ -273,9 +255,7 @@ def test_apply_extracts_uuid_from_object_messages() -> None:
 
 
 def test_decide_and_apply_noop() -> None:
-    engine = CollapseEngine(
-        config=CollapseEngineConfig(context_window=100_000)
-    )
+    engine = CollapseEngine(config=CollapseEngineConfig(context_window=100_000))
     result = engine.decide_and_apply([_msg("tiny", uuid="a")])
     assert result.applied is False
 
@@ -296,9 +276,7 @@ def test_decide_and_apply_collapses_over_budget() -> None:
 
 
 def test_decide_and_apply_propagates_error_to_trigger() -> None:
-    engine = CollapseEngine(
-        config=CollapseEngineConfig(context_window=100_000)
-    )
+    engine = CollapseEngine(config=CollapseEngineConfig(context_window=100_000))
     err = ContextLengthExceededError("over")
     # Many messages so the FULL keep_recent=2 actually archives something.
     msgs = [_msg(f"x{i}", uuid=f"u{i}") for i in range(10)]
@@ -310,13 +288,9 @@ def test_decide_and_apply_propagates_error_to_trigger() -> None:
 
 def test_decide_and_apply_noop_when_keep_recent_exceeds_messages() -> None:
     """When keep_recent >= len(messages), the FULL collapse archives nothing."""
-    engine = CollapseEngine(
-        config=CollapseEngineConfig(context_window=100_000, keep_recent=10)
-    )
+    engine = CollapseEngine(config=CollapseEngineConfig(context_window=100_000, keep_recent=10))
     err = ContextLengthExceededError("over")
-    result = engine.decide_and_apply(
-        [_msg("x", uuid="a")], last_error=err
-    )
+    result = engine.decide_and_apply([_msg("x", uuid="a")], last_error=err)
     assert result.applied is False
     assert "nothing to archive" in result.notes
 
@@ -327,9 +301,7 @@ def test_decide_and_apply_noop_when_keep_recent_exceeds_messages() -> None:
 
 
 def test_recover_from_413_collapses_and_records_note() -> None:
-    engine = CollapseEngine(
-        config=CollapseEngineConfig(context_window=100_000, keep_recent=2)
-    )
+    engine = CollapseEngine(config=CollapseEngineConfig(context_window=100_000, keep_recent=2))
     msgs = [_msg(f"x{i}", uuid=f"u{i}") for i in range(20)]
     err = ContextLengthExceededError("over")
     result = engine.recover_from_413(msgs, err)
@@ -343,16 +315,12 @@ def test_recover_from_413_raises_when_max_attempts_invalid() -> None:
     engine = CollapseEngine()
     msgs = [_msg("x", uuid="a")]
     with pytest.raises(ValueError):
-        engine.recover_from_413(
-            msgs, ContextLengthExceededError("x"), max_attempts=0
-        )
+        engine.recover_from_413(msgs, ContextLengthExceededError("x"), max_attempts=0)
 
 
 def test_recover_from_413_raises_when_no_messages_to_archive() -> None:
     """With only 1 message and keep_recent=4, FULL archives 0; result is no-op."""
-    engine = CollapseEngine(
-        config=CollapseEngineConfig(keep_recent=10)
-    )
+    engine = CollapseEngine(config=CollapseEngineConfig(keep_recent=10))
     msgs = [_msg("x", uuid="a")]
     err = ContextLengthExceededError("over")
     with pytest.raises(ContextLengthExceededError):
@@ -387,13 +355,9 @@ def test_recover_from_413_raises_when_trigger_says_noop() -> None:
 
 
 def test_split_full_with_keep_larger_than_messages() -> None:
-    engine = CollapseEngine(
-        config=CollapseEngineConfig(keep_recent=100)
-    )
+    engine = CollapseEngine(config=CollapseEngineConfig(keep_recent=100))
     msgs = [_msg(f"x{i}", uuid=f"u{i}") for i in range(5)]
-    decision = CollapseDecision(
-        kind=CollapseKind.FULL, reason="forced", count=100
-    )
+    decision = CollapseDecision(kind=CollapseKind.FULL, reason="forced", count=100)
     result = engine.apply(msgs, decision)
     # keep >= len => no archive
     assert result.applied is False
@@ -402,22 +366,16 @@ def test_split_full_with_keep_larger_than_messages() -> None:
 def test_split_full_with_zero_keep_archives_all() -> None:
     engine = CollapseEngine()
     msgs = [_msg(f"x{i}", uuid=f"u{i}") for i in range(5)]
-    decision = CollapseDecision(
-        kind=CollapseKind.FULL, reason="forced", count=0
-    )
+    decision = CollapseDecision(kind=CollapseKind.FULL, reason="forced", count=0)
     result = engine.apply(msgs, decision)
     assert result.applied is True
     assert result.archived_count == 5
 
 
 def test_split_partial_with_negative_count_falls_back() -> None:
-    engine = CollapseEngine(
-        config=CollapseEngineConfig(partial_archive_count=8)
-    )
+    engine = CollapseEngine(config=CollapseEngineConfig(partial_archive_count=8))
     msgs = [_msg(f"x{i}", uuid=f"u{i}") for i in range(20)]
-    decision = CollapseDecision(
-        kind=CollapseKind.PARTIAL, reason="forced", count=-1
-    )
+    decision = CollapseDecision(kind=CollapseKind.PARTIAL, reason="forced", count=-1)
     result = engine.apply(msgs, decision)
     # count<=0 falls back to 32
     assert result.archived_count == 20  # capped at len(msgs)
@@ -432,9 +390,7 @@ def test_split_partial_with_negative_count_falls_back() -> None:
 def test_engine_thread_safe_under_concurrent_apply() -> None:
     """Many threads applying decisions concurrently should not corrupt the store."""
     engine = CollapseEngine()
-    decision = CollapseDecision(
-        kind=CollapseKind.PARTIAL, reason="forced", count=2
-    )
+    decision = CollapseDecision(kind=CollapseKind.PARTIAL, reason="forced", count=2)
 
     def worker(i: int) -> None:
         msgs = [_msg(f"x{i}-{j}", uuid=f"u{i}-{j}") for j in range(4)]
@@ -462,9 +418,7 @@ def test_engine_thread_safe_under_concurrent_apply() -> None:
 
 def test_engine_thread_safe_under_concurrent_evaluate() -> None:
     engine = CollapseEngine(
-        config=CollapseEngineConfig(
-            context_window=200, threshold_fraction=0.05
-        )
+        config=CollapseEngineConfig(context_window=200, threshold_fraction=0.05)
     )
     msgs = [_msg(f"x{i}", uuid=f"u{i}") for i in range(20)]
     results: list[CollapseDecision] = []

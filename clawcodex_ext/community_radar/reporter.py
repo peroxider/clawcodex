@@ -39,6 +39,7 @@ from .models import (
     get_root,
     utc_now_iso,
 )
+
 _log = logging.getLogger(__name__)
 
 
@@ -136,9 +137,7 @@ def _render_inline_markdown(
         lines.append("| 项目 | 特性 | 影响评估 |")
         lines.append("|------|------|---------|")
         for record in digest.breaking_changes:
-            lines.append(
-                f"| {record.source} | {_escape(record.title)} | {_impact_for(record)} |"
-            )
+            lines.append(f"| {record.source} | {_escape(record.title)} | {_impact_for(record)} |")
     else:
         lines.append("（无）")
     lines.append("")
@@ -156,9 +155,7 @@ def _render_inline_markdown(
         lines.append("### 按子分类")
         lines.append("")
     if digest.stats.by_category:
-        for category, count in sorted(
-            digest.stats.by_category.items(), key=lambda kv: -kv[1]
-        ):
+        for category, count in sorted(digest.stats.by_category.items(), key=lambda kv: -kv[1]):
             lines.append(f"- {category}: {count}")
     else:
         lines.append("（无）")
@@ -232,32 +229,36 @@ def _render_jinja_markdown(
     period_label = {"weekly": "周报", "monthly": "月报"}.get(digest.period, digest.period)
     llm_assisted = digest.summary.endswith("(LLM-assisted)") or "LLM 辅助" in digest.summary
 
-    by_category = sorted(
-        digest.stats.by_category.items(), key=lambda kv: -kv[1]
-    )
-    by_root_category = sorted(
-        digest.stats.by_root_category.items(), key=lambda kv: -kv[1]
-    )
+    by_category = sorted(digest.stats.by_category.items(), key=lambda kv: -kv[1])
+    by_root_category = sorted(digest.stats.by_root_category.items(), key=lambda kv: -kv[1])
     trending_rows = []
     for item in digest.trending:
         related = " + ".join([item.record.source, *item.record.related_projects])
-        trending_rows.append({
-            "title": item.record.title,
-            "sources": related,
-            "score": item.score.overall,
-            "category": item.record.category.value,
-            "desc": _short_desc(item.record.description),
-        })
+        trending_rows.append(
+            {
+                "title": item.record.title,
+                "sources": related,
+                "score": item.score.overall,
+                "category": item.record.category.value,
+                "desc": _short_desc(item.record.description),
+            }
+        )
 
     new_feature_rows = []
     for record in digest.new_features:
-        related = "同时出现于: " + ", ".join(record.related_projects) if record.related_projects else "（仅此项目）"
-        new_feature_rows.append({
-            "title": record.title,
-            "desc": _short_desc(record.description),
-            "feature_type": record.feature_type.value,
-            "related": related,
-        })
+        related = (
+            "同时出现于: " + ", ".join(record.related_projects)
+            if record.related_projects
+            else "（仅此项目）"
+        )
+        new_feature_rows.append(
+            {
+                "title": record.title,
+                "desc": _short_desc(record.description),
+                "feature_type": record.feature_type.value,
+                "related": related,
+            }
+        )
 
     breaking_rows = [
         {
@@ -367,10 +368,7 @@ def _summarise(features: list[FeatureRecord]) -> str:
     counts = Counter(r.category.value for r in features)
     top_categories = [name for name, _ in counts.most_common(3)]
     bullet = "、".join(top_categories) if top_categories else "无"
-    return (
-        f"本期共发现 {len(features)} 条候选特性，主要集中在 "
-        f"{bullet} 方向。"
-    )
+    return f"本期共发现 {len(features)} 条候选特性，主要集中在 {bullet} 方向。"
 
 
 # ---------------------------------------------------------------------------
@@ -412,10 +410,7 @@ def _load_digest_from_json(path: Path) -> CommunityDigest | None:
     if not isinstance(data, dict) or "period" not in data:
         return None
     try:
-        new_features = [
-            FeatureRecord.from_dict(r)
-            for r in data.get("new_features", []) or []
-        ]
+        new_features = [FeatureRecord.from_dict(r) for r in data.get("new_features", []) or []]
         trending_raw = data.get("trending", []) or []
         trending = []
         for item in trending_raw:
@@ -432,19 +427,14 @@ def _load_digest_from_json(path: Path) -> CommunityDigest | None:
                 architecture_fit=float(score_dims.get("architecture_fit", 0)),
             )
             trending.append(ScoredFeature(record=record, score=score))
-        breaking = [
-            FeatureRecord.from_dict(r)
-            for r in data.get("breaking_changes", []) or []
-        ]
+        breaking = [FeatureRecord.from_dict(r) for r in data.get("breaking_changes", []) or []]
         stats_raw = data.get("stats", {})
         stats = DigestStats(
             total_versions=int(stats_raw.get("total_versions", 0)),
             total_features=int(stats_raw.get("total_features", 0)),
             by_category=stats_raw.get("by_category", {}),
             by_root_category=stats_raw.get("by_root_category", {}),
-            top_projects=[
-                tuple(item) for item in stats_raw.get("top_projects", [])
-            ],
+            top_projects=[tuple(item) for item in stats_raw.get("top_projects", [])],
         )
         return CommunityDigest(
             period=str(data["period"]),
@@ -491,29 +481,23 @@ def compare_digests(
         if sf.record.id not in curr_ids:
             curr_ids[sf.record.id] = sf.record
 
-    new = [
-        curr_ids[fid]
-        for fid in curr_ids
-        if fid not in prev_ids
-    ]
-    disappeared = [
-        prev_ids[fid]
-        for fid in prev_ids
-        if fid not in curr_ids
-    ]
+    new = [curr_ids[fid] for fid in curr_ids if fid not in prev_ids]
+    disappeared = [prev_ids[fid] for fid in prev_ids if fid not in curr_ids]
 
     score_changed: list[dict[str, Any]] = []
     for fid in set(prev_scores) & set(curr_scores):
         delta = curr_scores[fid] - prev_scores[fid]
         if abs(delta) >= score_delta_threshold:
             rec = curr_ids.get(fid) or prev_ids.get(fid)
-            score_changed.append({
-                "id": fid,
-                "title": rec.title if rec else fid,
-                "old_score": round(prev_scores[fid], 1),
-                "new_score": round(curr_scores[fid], 1),
-                "delta": round(delta, 1),
-            })
+            score_changed.append(
+                {
+                    "id": fid,
+                    "title": rec.title if rec else fid,
+                    "old_score": round(prev_scores[fid], 1),
+                    "new_score": round(curr_scores[fid], 1),
+                    "delta": round(delta, 1),
+                }
+            )
 
     return HistoryComparison(
         previous_period=previous.period,
@@ -535,9 +519,7 @@ def _render_comparison_section(comparison: HistoryComparison) -> str:
     )
     lines.append("## 变化对比 (vs 上期)")
     lines.append("")
-    lines.append(
-        f"> 对比基准: {comparison.previous_generated_at} ({prev_label})"
-    )
+    lines.append(f"> 对比基准: {comparison.previous_generated_at} ({prev_label})")
     lines.append("")
 
     # New features
@@ -615,9 +597,7 @@ class CommunityReporter:
         template_dir: Path | str | None = None,
     ) -> None:
         self.config = config or RadarConfig()
-        self._explicit_template_dir = (
-            Path(template_dir) if template_dir is not None else None
-        )
+        self._explicit_template_dir = Path(template_dir) if template_dir is not None else None
 
     # ------------------------------------------------------------------
     # Digest construction
@@ -794,26 +774,28 @@ def render_proposals(digest: CommunityDigest) -> dict[str, Any]:
         record = item.record
         score = item.score
         candidate_action = _candidate_action(record, score)
-        proposals.append({
-            "id": record.id,
-            "title": record.title,
-            "description": record.description,
-            "category": record.category.value,
-            "feature_type": record.feature_type.value,
-            "source_projects": [record.source, *record.related_projects],
-            "score": {
-                "overall": score.overall,
-                "popularity": score.popularity,
-                "maturity": score.maturity,
-                "adaptation_cost": score.adaptation_cost,
-                "strategic_value": score.strategic_value,
-                "architecture_fit": score.architecture_fit,
-            },
-            "candidate_action": candidate_action,
-            "tags": list(record.tags),
-            "released_at": record.released_at,
-            "url": record.url,
-        })
+        proposals.append(
+            {
+                "id": record.id,
+                "title": record.title,
+                "description": record.description,
+                "category": record.category.value,
+                "feature_type": record.feature_type.value,
+                "source_projects": [record.source, *record.related_projects],
+                "score": {
+                    "overall": score.overall,
+                    "popularity": score.popularity,
+                    "maturity": score.maturity,
+                    "adaptation_cost": score.adaptation_cost,
+                    "strategic_value": score.strategic_value,
+                    "architecture_fit": score.architecture_fit,
+                },
+                "candidate_action": candidate_action,
+                "tags": list(record.tags),
+                "released_at": record.released_at,
+                "url": record.url,
+            }
+        )
     return {
         "schema_version": "1.0",
         "generated_at": digest.generated_at,

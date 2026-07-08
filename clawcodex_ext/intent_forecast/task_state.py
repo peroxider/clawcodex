@@ -29,7 +29,9 @@ def build_task_state(
     """Build a small structured view of the active task."""
 
     user_intent = user_intent or {}
-    recent_user = str(user_intent.get("latest_user_input") or _latest_role_text(current_messages, "user"))
+    recent_user = str(
+        user_intent.get("latest_user_input") or _latest_role_text(current_messages, "user")
+    )
     initial_user = str(user_intent.get("initial_user_input") or "")
     recent_assistant = _latest_role_text(current_messages, "assistant")
     recent_text = "\n".join(msg.get("content", "") for msg in current_messages[-8:])
@@ -67,11 +69,15 @@ def classify_intent_stage(
     """Classify the user's current work stage with lightweight rules."""
 
     user_intent = user_intent or {}
-    recent_user = str(user_intent.get("latest_user_input") or _latest_role_text(current_messages, "user")).lower()
+    recent_user = str(
+        user_intent.get("latest_user_input") or _latest_role_text(current_messages, "user")
+    ).lower()
     initial_user = str(user_intent.get("initial_user_input") or "").lower()
     user_text = "\n".join(item for item in (initial_user, recent_user) if item)
     recent_all = "\n".join(msg.get("content", "") for msg in current_messages[-6:]).lower()
-    if _contains_any(user_text, ("pause", "later", "hold", "stop", "先暂停", "等下", "稍后", "暂停")):
+    if _contains_any(
+        user_text, ("pause", "later", "hold", "stop", "先暂停", "等下", "稍后", "暂停")
+    ):
         return "pause"
     if _contains_any(user_text, ("commit", "pr", "diff", "提交", "拉取请求", "变更摘要")):
         return "commit"
@@ -79,11 +85,17 @@ def classify_intent_stage(
         return "document"
     if _contains_any(user_text, ("review", "审查", "检查风险", "代码审查")):
         return "review"
-    if task_state.get("blocked_reason") or _contains_any(recent_all, ("traceback", "failed", "error", "失败", "报错")):
+    if task_state.get("blocked_reason") or _contains_any(
+        recent_all, ("traceback", "failed", "error", "失败", "报错")
+    ):
         return "debug"
-    if task_state.get("pending_tests") or _contains_any(user_text, ("test", "pytest", "测试", "验证")):
+    if task_state.get("pending_tests") or _contains_any(
+        user_text, ("test", "pytest", "测试", "验证")
+    ):
         return "test"
-    if _contains_any(user_text, ("implement", "build", "fix", "add", "补全", "实现", "修复", "接入")):
+    if _contains_any(
+        user_text, ("implement", "build", "fix", "add", "补全", "实现", "修复", "接入")
+    ):
         return "implement"
     if _contains_any(user_text, ("plan", "design", "方案", "规划", "拆分")):
         return "plan"
@@ -163,7 +175,15 @@ def _last_failure(recent_text: str, workspace: dict[str, Any]) -> str:
     if failures:
         return str(failures[0])[:240]
     lower = recent_text.lower()
-    markers = ("traceback", "assertionerror", "failed", "error:", "permission denied", "失败", "报错")
+    markers = (
+        "traceback",
+        "assertionerror",
+        "failed",
+        "error:",
+        "permission denied",
+        "失败",
+        "报错",
+    )
     if not any(marker in lower for marker in markers):
         return ""
     for line in reversed(recent_text.splitlines()):
@@ -173,7 +193,9 @@ def _last_failure(recent_text: str, workspace: dict[str, Any]) -> str:
 
 
 def _pending_tests(workspace: dict[str, Any]) -> list[str]:
-    if workspace.get("last_command_exit") == 0 and _looks_like_test_command(str(workspace.get("last_command") or "")):
+    if workspace.get("last_command_exit") == 0 and _looks_like_test_command(
+        str(workspace.get("last_command") or "")
+    ):
         return []
     mapping = workspace.get("changed_test_mapping")
     if isinstance(mapping, list) and mapping:

@@ -70,6 +70,7 @@ class ContractValidator:
             kwargs = {k: v for k, v in spec.items() if k != "type"}
             if validator_type in self._async_validators:
                 import asyncio
+
                 if asyncio.iscoroutinefunction(fn):
                     return await fn(**kwargs)
             result = fn(**kwargs)
@@ -86,6 +87,7 @@ class ContractValidator:
     async def validate_all(self, specs: list[dict[str, Any]]) -> list[ValidationResult]:
         """执行所有验证器（支持异步）。"""
         import asyncio
+
         results = []
         for spec in specs:
             results.append(await self.validate(spec))
@@ -94,6 +96,7 @@ class ContractValidator:
     def validate_sync(self, spec: dict[str, Any]) -> ValidationResult:
         """同步执行单个验证器。"""
         import asyncio
+
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
@@ -119,13 +122,17 @@ def _validate_file_exists(path: str = "", **kwargs: Any) -> ValidationResult:
     return ValidationResult(passed=False, validator_type="file_exists", message=f"{path} not found")
 
 
-def _validate_file_size(path: str = "", min_bytes: int = 0, max_bytes: int | None = None, **kwargs: Any) -> ValidationResult:
+def _validate_file_size(
+    path: str = "", min_bytes: int = 0, max_bytes: int | None = None, **kwargs: Any
+) -> ValidationResult:
     """验证文件大小。"""
     p = _resolve_path(path)
     try:
         size = p.stat().st_size
     except FileNotFoundError:
-        return ValidationResult(passed=False, validator_type="file_size", message=f"{path} not found")
+        return ValidationResult(
+            passed=False, validator_type="file_size", message=f"{path} not found"
+        )
 
     if size < min_bytes:
         return ValidationResult(
@@ -149,7 +156,9 @@ def _validate_file_size(path: str = "", min_bytes: int = 0, max_bytes: int | Non
     )
 
 
-def _validate_regex(path: str = "", pattern: str = "", min_matches: int = 1, **kwargs: Any) -> ValidationResult:
+def _validate_regex(
+    path: str = "", pattern: str = "", min_matches: int = 1, **kwargs: Any
+) -> ValidationResult:
     """正则匹配验证。"""
     p = _resolve_path(path)
     try:
@@ -162,7 +171,9 @@ def _validate_regex(path: str = "", pattern: str = "", min_matches: int = 1, **k
     try:
         matches = re.findall(pattern, content)
     except re.error as exc:
-        return ValidationResult(passed=False, validator_type="regex", message=f"Invalid pattern: {exc}")
+        return ValidationResult(
+            passed=False, validator_type="regex", message=f"Invalid pattern: {exc}"
+        )
 
     if len(matches) < min_matches:
         return ValidationResult(
@@ -179,13 +190,17 @@ def _validate_regex(path: str = "", pattern: str = "", min_matches: int = 1, **k
     )
 
 
-def _validate_line_count(path: str = "", min_lines: int = 1, max_lines: int | None = None, **kwargs: Any) -> ValidationResult:
+def _validate_line_count(
+    path: str = "", min_lines: int = 1, max_lines: int | None = None, **kwargs: Any
+) -> ValidationResult:
     """行数验证。"""
     p = _resolve_path(path)
     try:
         content = p.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return ValidationResult(passed=False, validator_type="line_count", message=f"{path} not found")
+        return ValidationResult(
+            passed=False, validator_type="line_count", message=f"{path} not found"
+        )
 
     count = len(content.splitlines())
     if count < min_lines:
@@ -210,28 +225,43 @@ def _validate_line_count(path: str = "", min_lines: int = 1, max_lines: int | No
     )
 
 
-def _validate_json_schema(path: str = "", schema: dict[str, Any] | None = None, **kwargs: Any) -> ValidationResult:
+def _validate_json_schema(
+    path: str = "", schema: dict[str, Any] | None = None, **kwargs: Any
+) -> ValidationResult:
     """JSON Schema 验证。"""
     p = _resolve_path(path)
     try:
         content = p.read_text(encoding="utf-8")
         data = json.loads(content)
     except FileNotFoundError:
-        return ValidationResult(passed=False, validator_type="json_schema", message=f"{path} not found")
+        return ValidationResult(
+            passed=False, validator_type="json_schema", message=f"{path} not found"
+        )
     except json.JSONDecodeError as exc:
-        return ValidationResult(passed=False, validator_type="json_schema", message=f"Invalid JSON: {exc}")
+        return ValidationResult(
+            passed=False, validator_type="json_schema", message=f"Invalid JSON: {exc}"
+        )
 
     if schema is None:
-        return ValidationResult(passed=True, validator_type="json_schema", message="No schema provided, assumed valid")
+        return ValidationResult(
+            passed=True, validator_type="json_schema", message="No schema provided, assumed valid"
+        )
 
     try:
         import jsonschema
+
         jsonschema.validate(instance=data, schema=schema)
-        return ValidationResult(passed=True, validator_type="json_schema", message="JSON schema valid")
+        return ValidationResult(
+            passed=True, validator_type="json_schema", message="JSON schema valid"
+        )
     except ImportError:
-        return ValidationResult(passed=False, validator_type="json_schema", message="jsonschema library not installed")
+        return ValidationResult(
+            passed=False, validator_type="json_schema", message="jsonschema library not installed"
+        )
     except jsonschema.ValidationError as exc:
-        return ValidationResult(passed=False, validator_type="json_schema", message=f"Schema violation: {exc.message}")
+        return ValidationResult(
+            passed=False, validator_type="json_schema", message=f"Schema violation: {exc.message}"
+        )
 
 
 def _validate_custom(command: str = "", expected_exit: int = 0, **kwargs: Any) -> ValidationResult:
@@ -260,7 +290,9 @@ def _validate_custom(command: str = "", expected_exit: int = 0, **kwargs: Any) -
     except subprocess.TimeoutExpired:
         return ValidationResult(passed=False, validator_type="custom", message="Command timed out")
     except Exception as exc:
-        return ValidationResult(passed=False, validator_type="custom", message=f"Command error: {exc}")
+        return ValidationResult(
+            passed=False, validator_type="custom", message=f"Command error: {exc}"
+        )
 
 
 async def _validate_llm_judge_proxy(**kwargs: Any) -> ValidationResult:
@@ -269,4 +301,5 @@ async def _validate_llm_judge_proxy(**kwargs: Any) -> ValidationResult:
     将参数转发到 llm_judge 模块。
     """
     from .llm_judge import validate_llm_judge
+
     return await validate_llm_judge(kwargs)

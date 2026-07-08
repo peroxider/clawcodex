@@ -150,24 +150,48 @@ _FILE_EDIT_TOOLS: tuple[str, ...] = ("Write", "Edit", "MultiEdit", "NotebookEdit
 #     dynamic ``mcp__*`` (external/untrusted boundary).
 #   * plan-mode meta tools: EnterPlanMode / ExitPlanMode (ExitPlanMode is the
 #     plan-confirmation gate).
-NO_PERMISSION_TOOLS: frozenset[str] = frozenset({
-    # Interactive / output (the interaction or output IS the action)
-    "AskUserQuestion", "SendUserMessage", "StructuredOutput",
-    # Read-only / introspection
-    "WebSearch", "ToolSearch", "LSP", "advisor", "Brief", "Status",
-    "ClipboardRead",
-    # Bookkeeping / harness state (no external side effects)
-    "TodoWrite", "ClipboardWrite", "Sleep",
-    "get_goal", "create_goal", "update_goal",
-    "TaskCreate", "TaskGet", "TaskList", "TaskUpdate", "TaskOutput", "TaskStop",
-    # Orchestration / coordination — every sub-action they spawn is itself
-    # permission-checked, so the spawn is not the gate.
-    "Agent", "Workflow", "TeamCreate", "TeamDelete",
-    # Scheduling — the scheduled run is permission-checked when it fires.
-    "CronCreate", "CronList", "CronDelete",
-    # Local, reversible git-worktree management.
-    "EnterWorktree", "ExitWorktree",
-})
+NO_PERMISSION_TOOLS: frozenset[str] = frozenset(
+    {
+        # Interactive / output (the interaction or output IS the action)
+        "AskUserQuestion",
+        "SendUserMessage",
+        "StructuredOutput",
+        # Read-only / introspection
+        "WebSearch",
+        "ToolSearch",
+        "LSP",
+        "advisor",
+        "Brief",
+        "Status",
+        "ClipboardRead",
+        # Bookkeeping / harness state (no external side effects)
+        "TodoWrite",
+        "ClipboardWrite",
+        "Sleep",
+        "get_goal",
+        "create_goal",
+        "update_goal",
+        "TaskCreate",
+        "TaskGet",
+        "TaskList",
+        "TaskUpdate",
+        "TaskOutput",
+        "TaskStop",
+        # Orchestration / coordination — every sub-action they spawn is itself
+        # permission-checked, so the spawn is not the gate.
+        "Agent",
+        "Workflow",
+        "TeamCreate",
+        "TeamDelete",
+        # Scheduling — the scheduled run is permission-checked when it fires.
+        "CronCreate",
+        "CronList",
+        "CronDelete",
+        # Local, reversible git-worktree management.
+        "EnterWorktree",
+        "ExitWorktree",
+    }
+)
 
 
 def _allowed_roots_for_check(
@@ -406,10 +430,7 @@ def has_permissions_to_use_tool_inner(
     # honored, and placed AFTER the deny/ask RULE checks above so configured
     # rules win. Mode-independent — matching TS, where these tools' own
     # checkPermissions returns allow regardless of permission mode.
-    if (
-        tool_permission_result.behavior == "passthrough"
-        and tool.name in NO_PERMISSION_TOOLS
-    ):
+    if tool_permission_result.behavior == "passthrough" and tool.name in NO_PERMISSION_TOOLS:
         return PermissionAllowDecision(
             behavior="allow",
             updated_input=_get_updated_input_or_fallback(tool_permission_result, tool_input),
@@ -563,9 +584,7 @@ def _coerce_to_ask_decision(
     tool_use_context: Any | None = None,
 ) -> PermissionAskDecision:
     if isinstance(result, PermissionAskDecision):
-        return _with_default_suggestions(
-            result, tool_name, tool_input, context, tool_use_context
-        )
+        return _with_default_suggestions(result, tool_name, tool_input, context, tool_use_context)
     return _with_default_suggestions(
         PermissionAskDecision(
             behavior="ask",
@@ -752,10 +771,9 @@ def prepare_permission_matcher(rule_content: str) -> Callable[[str], bool]:
                 if not parts:
                     return False
                 head = parts[0].rsplit("/", 1)[-1]
-                normalized = (
-                    head if len(parts) == 1 else f"{head} {parts[1]}"
-                )
+                normalized = head if len(parts) == 1 else f"{head} {parts[1]}"
                 return normalized == prefix or normalized.startswith(prefix + " ")
+
             return _prefix_matcher
         else:
 

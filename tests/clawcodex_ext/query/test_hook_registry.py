@@ -1,4 +1,5 @@
 """Tests for clawcodex_ext/query/hook_registry.py (P102-D)."""
+
 from __future__ import annotations
 
 import pytest
@@ -104,12 +105,22 @@ class TestCallHooks:
         assert result == (["msg"], "sys")
 
     def test_all_phases(self):
-        for phase in ("pre_llm", "post_llm", "pre_tool", "post_tool", "on_turn_start", "on_turn_end"):
+        for phase in (
+            "pre_llm",
+            "post_llm",
+            "pre_tool",
+            "post_tool",
+            "on_turn_start",
+            "on_turn_end",
+        ):
             clear_hooks(phase)
+
             def make_hook(p):
                 def hook(*args, **kwargs):
                     return args
+
                 return hook
+
             register_loop_hook(f"hook_{phase}", make_hook(phase), phase)
             assert len(list_hooks(phase)) == 1
 

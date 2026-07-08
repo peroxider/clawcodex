@@ -144,8 +144,8 @@ _JUDGE_PROMPT_SYNTHESIZE: str = (
     "from B that combine cleanly).\n"
     "3. Write your synthesized approach as a numbered plan of concrete "
     "steps — each step should CITE which proposer(s) contributed it, e.g. "
-    "\"1. Use lazy init (proposer_a) but wrap it in a threading.Lock "
-    "(proposer_b) for concurrent access.\"\n"
+    '"1. Use lazy init (proposer_a) but wrap it in a threading.Lock '
+    '(proposer_b) for concurrent access."\n'
     "4. Implement the synthesized plan: edit the files, run tests if relevant.\n"
     "5. Output a brief summary of what you implemented + which proposer "
     "contributed each material decision.\n\n"
@@ -180,13 +180,10 @@ class DebateModeRunner:
         judge_mode: str = "pick",
     ) -> None:
         if not proposers:
-            raise ValueError(
-                "DebateModeRunner requires at least one proposer stage"
-            )
+            raise ValueError("DebateModeRunner requires at least one proposer stage")
         if isolation not in _VALID_ISOLATIONS:
             raise ValueError(
-                f"isolation must be one of {sorted(_VALID_ISOLATIONS)}, "
-                f"got {isolation!r}"
+                f"isolation must be one of {sorted(_VALID_ISOLATIONS)}, got {isolation!r}"
             )
         if parallel and isolation != "worktree":
             raise ValueError(
@@ -194,17 +191,13 @@ class DebateModeRunner:
                 "(each parallel branch needs its own physical workspace)"
             )
         if judge_mode not in {"pick", "synthesize"}:
-            raise ValueError(
-                f"judge_mode must be 'pick' or 'synthesize', got {judge_mode!r}"
-            )
+            raise ValueError(f"judge_mode must be 'pick' or 'synthesize', got {judge_mode!r}")
         self._agent_runner = agent_runner
         self._proposers: tuple[str, ...] = tuple(proposers)
         self._judge_model = judge_model.strip() if judge_model else None
         self._isolation = isolation
         self._proposer_models: dict[str, str] = {
-            k: v
-            for k, v in (proposer_models or {}).items()
-            if v and v.strip()
+            k: v for k, v in (proposer_models or {}).items() if v and v.strip()
         }
         # Warn about keys that don't correspond to any proposer — silent
         # no-op is the classic "why isn't my config working" trap.
@@ -266,8 +259,7 @@ class DebateModeRunner:
         original_workspace_path = getattr(session.workspace, "path", None)
 
         logger.info(
-            "Debate issue=%s isolation=%s judge_model=%s parallel=%s "
-            "proposer_models=%s",
+            "Debate issue=%s isolation=%s judge_model=%s parallel=%s proposer_models=%s",
             session.issue.id,
             self._isolation,
             self._judge_model or "(default)",
@@ -303,9 +295,7 @@ class DebateModeRunner:
         self._reset_session_for_next_stage(session)
         if self._isolation == "reset":
             self._reset_workspace_to(session, baseline_ref)
-        session.prompt_override = self._build_judge_prompt(
-            proposer_results, session
-        )
+        session.prompt_override = self._build_judge_prompt(proposer_results, session)
         session.run_kind = f"debate:{_JUDGE_STAGE}"
         logger.info(
             "Debate issue=%s judge starting (over %d proposers, model=%s)",
@@ -349,9 +339,7 @@ class DebateModeRunner:
             worktree_path = self._apply_isolation_before_stage(
                 session, baseline_ref, stage_label=name
             )
-            session.prompt_override = self._build_proposer_prompt(
-                name, session, lens=lens
-            )
+            session.prompt_override = self._build_proposer_prompt(name, session, lens=lens)
             session.run_kind = f"debate:{name}"
             proposer_model = self._proposer_models.get(name)
             logger.info(
@@ -368,13 +356,9 @@ class DebateModeRunner:
                 with self._proposer_model_override(workflow, name, proposer_model):
                     await self._agent_runner.run(session, workflow, **hooks)
             finally:
-                self._restore_workspace_after_stage(
-                    session, original_workspace_path, worktree_path
-                )
+                self._restore_workspace_after_stage(session, original_workspace_path, worktree_path)
             tail = (session.output_text or "")[-_PROPOSER_OUTPUT_TAIL_CHARS:]
-            results.append(
-                _StageResult(stage=name, status=session.status, output=tail)
-            )
+            results.append(_StageResult(stage=name, status=session.status, output=tail))
             logger.info(
                 "Debate issue=%s proposer=%s finished (status=%s)",
                 session.issue.id,
@@ -446,9 +430,7 @@ class DebateModeRunner:
                 name,
                 branch_session.status,
             )
-            return _StageResult(
-                stage=name, status=branch_session.status, output=tail
-            )
+            return _StageResult(stage=name, status=branch_session.status, output=tail)
 
         # return_exceptions=True keeps parallel semantics ROBUST — one
         # proposer's failure doesn't cancel the other + doesn't propagate
@@ -467,9 +449,7 @@ class DebateModeRunner:
             # None (str(None) == "None" would masquerade as a real path).
             for _name, _bs, wt_path in branches:
                 if wt_path is not None:
-                    self._remove_worktree(
-                        session, wt_path, original_workspace_path
-                    )
+                    self._remove_worktree(session, wt_path, original_workspace_path)
 
         # Convert per-branch exceptions to _StageResult(status='failed')
         # so the caller sees a uniform list-of-results and can decide
@@ -496,9 +476,7 @@ class DebateModeRunner:
         return results
 
     @staticmethod
-    def _fork_session_for_branch(
-        session: "AgentSession", branch_name: str
-    ) -> Any:
+    def _fork_session_for_branch(session: "AgentSession", branch_name: str) -> Any:
         """Create a per-branch session for parallel execution.
 
         We can't share the original ``session`` across coroutines because
@@ -562,9 +540,7 @@ class DebateModeRunner:
     class _ProposerModelOverride:
         """Same try/finally pattern as judge_model override — but for one proposer."""
 
-        def __init__(
-            self, workflow: Any, proposer_name: str, model: str | None
-        ) -> None:
+        def __init__(self, workflow: Any, proposer_name: str, model: str | None) -> None:
             self._workflow = workflow
             self._name = proposer_name
             self._model = model
@@ -581,8 +557,7 @@ class DebateModeRunner:
             agent_cfg.model = self._model
             self._touched = True
             logger.info(
-                "Debate proposer=%s: temporarily overriding "
-                "workflow.agent.model %s → %s",
+                "Debate proposer=%s: temporarily overriding workflow.agent.model %s → %s",
                 self._name,
                 self._original,
                 self._model,
@@ -626,9 +601,7 @@ class DebateModeRunner:
             self._reset_workspace_to(session, baseline_ref)
             return None
         if self._isolation == "worktree":
-            return self._create_worktree_and_swap(
-                session, baseline_ref, stage_label=stage_label
-            )
+            return self._create_worktree_and_swap(session, baseline_ref, stage_label=stage_label)
         # "none" — no-op, full contamination tolerated.
         return None
 
@@ -675,10 +648,7 @@ class DebateModeRunner:
         safe_stage = _SAFE_NAME_RE.sub("_", stage_label)[:40] or "stage"
         issue_id = getattr(session.issue, "id", "issue") or "issue"
         safe_issue = _SAFE_NAME_RE.sub("_", issue_id)[:40]
-        worktree_path = (
-            Path(original_path).parent
-            / f".debate-worktree-{safe_issue}-{safe_stage}"
-        )
+        worktree_path = Path(original_path).parent / f".debate-worktree-{safe_issue}-{safe_stage}"
         # If a leftover worktree from a previous run exists, remove it.
         if worktree_path.exists():
             self._remove_worktree(session, worktree_path, original_path)
@@ -710,8 +680,7 @@ class DebateModeRunner:
                 return None
         except Exception as exc:  # pragma: no cover — defensive
             logger.warning(
-                "Debate issue=%s git worktree add raised %s — "
-                "degrading to reset isolation",
+                "Debate issue=%s git worktree add raised %s — degrading to reset isolation",
                 session.issue.id,
                 exc,
             )
@@ -798,8 +767,7 @@ class DebateModeRunner:
             agent_cfg.model = self._judge_model
             self._touched = True
             logger.info(
-                "Debate judge: temporarily overriding workflow.agent.model "
-                "%s → %s",
+                "Debate judge: temporarily overriding workflow.agent.model %s → %s",
                 self._original_model,
                 self._judge_model,
             )
@@ -872,9 +840,7 @@ class DebateModeRunner:
             return None
 
     @staticmethod
-    def _reset_workspace_to(
-        session: "AgentSession", baseline_ref: str | None
-    ) -> None:
+    def _reset_workspace_to(session: "AgentSession", baseline_ref: str | None) -> None:
         """Hard-reset workspace to the baseline HEAD + clean untracked.
 
         No-op when ``baseline_ref`` is None (non-git workspace).
@@ -968,9 +934,7 @@ class DebateModeRunner:
             )
         proposals_block = "\n\n".join(chunks) if chunks else "(no proposals were produced)"
         template = (
-            _JUDGE_PROMPT_SYNTHESIZE
-            if self._judge_mode == "synthesize"
-            else _JUDGE_PROMPT_PICK
+            _JUDGE_PROMPT_SYNTHESIZE if self._judge_mode == "synthesize" else _JUDGE_PROMPT_PICK
         )
         body = template.format(proposals=proposals_block)
         return f"{body}\n\n{self._format_issue_block(session)}"

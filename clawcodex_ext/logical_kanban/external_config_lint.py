@@ -70,7 +70,9 @@ def lint_method_library(methods: Iterable[EngineeringMethod]) -> list[LintIssue]
     for method in methods:
         if method.method_id in seen:
             issues.append(
-                LintIssue("error", "method.duplicate_id", f"Duplicate method_id {method.method_id!r}")
+                LintIssue(
+                    "error", "method.duplicate_id", f"Duplicate method_id {method.method_id!r}"
+                )
             )
         seen.add(method.method_id)
         if not _METHOD_ID_RE.match(method.method_id):
@@ -217,7 +219,12 @@ def lint_ontology(graph: OntologyGraph) -> list[LintIssue]:
     issues: list[LintIssue] = []
     if not graph.classes:
         issues.append(
-            LintIssue("warning", "ontology.no_classes", "Ontology does not define owl:Class entries.", source=graph.source)
+            LintIssue(
+                "warning",
+                "ontology.no_classes",
+                "Ontology does not define owl:Class entries.",
+                source=graph.source,
+            )
         )
     for ref in sorted(graph.domain_refs | graph.range_refs):
         if ref not in graph.classes:

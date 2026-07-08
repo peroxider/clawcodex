@@ -60,7 +60,10 @@ class CostTracker:
                 f"({self.budget.warn_threshold_pct:.0%} threshold reached)"
             )
 
-        if not self._warned_stage and self._stage_usd >= self.budget.max_per_stage_usd * self.budget.warn_threshold_pct:
+        if (
+            not self._warned_stage
+            and self._stage_usd >= self.budget.max_per_stage_usd * self.budget.warn_threshold_pct
+        ):
             self._warned_stage = True
             warnings.append(
                 f"Stage cost warning: ${self._stage_usd:.2f} / ${self.budget.max_per_stage_usd:.2f}"

@@ -310,14 +310,10 @@ class FeatureRegistry:
         for name, flag in self._features.items():
             for dep in flag.deps:
                 if dep not in self._features:
-                    errors.append(
-                        f"Feature '{name}' depends on unregistered feature '{dep}'"
-                    )
+                    errors.append(f"Feature '{name}' depends on unregistered feature '{dep}'")
             for mx in flag.mutex_with:
                 if mx not in self._features:
-                    errors.append(
-                        f"Feature '{name}' mutex-with unregistered feature '{mx}'"
-                    )
+                    errors.append(f"Feature '{name}' mutex-with unregistered feature '{mx}'")
             # Self-reference
             if name in flag.deps:
                 errors.append(f"Feature '{name}' has a self-referential dependency")

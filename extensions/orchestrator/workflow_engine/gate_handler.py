@@ -183,7 +183,9 @@ class GateHandler:
             status=StageStatus.GATE_APPROVED,
         )
 
-    async def reject_manual(self, stage_id: int, state: WorkflowState, reason: str = "") -> StageResult:
+    async def reject_manual(
+        self, stage_id: int, state: WorkflowState, reason: str = ""
+    ) -> StageResult:
         """手动拒绝 GATE 阶段。"""
         return StageResult(
             stage_id=stage_id,

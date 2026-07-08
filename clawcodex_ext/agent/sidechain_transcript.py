@@ -204,8 +204,7 @@ def record_btw_invocation(
         return path
     except Exception:
         logger.warning(
-            "F-122-H: failed to record /btw sidechain transcript "
-            "(session=%s, question=%r)",
+            "F-122-H: failed to record /btw sidechain transcript (session=%s, question=%r)",
             session_id,
             (question or "")[:80],
             exc_info=True,

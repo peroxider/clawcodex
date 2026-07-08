@@ -274,11 +274,7 @@ class TestResumeUnified:
         assert not json_path.exists()
         # The transcript ends with a session_snapshot line.
         transcript_path = mock_sessions_dir / session_id / "transcript.jsonl"
-        lines = [
-            line
-            for line in transcript_path.read_text().splitlines()
-            if line.strip()
-        ]
+        lines = [line for line in transcript_path.read_text().splitlines() if line.strip()]
         assert lines, "transcript.jsonl is empty after save"
         snapshot = json.loads(lines[-1])
         assert snapshot.get("type") == "session_snapshot"

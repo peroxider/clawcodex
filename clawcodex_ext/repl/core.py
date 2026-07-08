@@ -36,12 +36,12 @@ try:
     # This matches the TypeScript reference's behavior in ``useTextInput.ts``
     # which explicitly treats both CSI 13;2u and CSI 27;2;13~ as "insert
     # newline" on Shift+Enter.
-    if not hasattr(_pt_ansi_seq, '_clawcodex_shift_enter_registered'):
-        _pt_ansi_seq.ANSI_SEQUENCES['\x1b[13;2u'] = (
+    if not hasattr(_pt_ansi_seq, "_clawcodex_shift_enter_registered"):
+        _pt_ansi_seq.ANSI_SEQUENCES["\x1b[13;2u"] = (
             _PTKeys.Escape,
             _PTKeys.ControlM,
         )
-        _pt_ansi_seq.ANSI_SEQUENCES['\x1b[27;2;13~'] = (
+        _pt_ansi_seq.ANSI_SEQUENCES["\x1b[27;2;13~"] = (
             _PTKeys.Escape,
             _PTKeys.ControlM,
         )
@@ -138,7 +138,7 @@ class _SlashOnlyCompleter(Completer):
         words = self._words_provider() or []
         seen: set[str] = set()
         for word in words:
-            if not isinstance(word, str) or not word.startswith('/'):
+            if not isinstance(word, str) or not word.startswith("/"):
                 continue
             name = word[1:]
             key = name.lower()
@@ -165,20 +165,20 @@ class _SlashOnlyCompleter(Completer):
         """
 
         for sugg, matched_alias in rank_suggestions(suggestions, partial):
-            alias_text = f' ({matched_alias})' if matched_alias else ''
-            display_text = f'/{sugg.name}{alias_text}'
-            display_styled = [('class:completion.command', display_text)]
-            description = (getattr(sugg, 'description', '') or '').strip()
-            tag = getattr(sugg, 'tag', None)
+            alias_text = f" ({matched_alias})" if matched_alias else ""
+            display_text = f"/{sugg.name}{alias_text}"
+            display_styled = [("class:completion.command", display_text)]
+            description = (getattr(sugg, "description", "") or "").strip()
+            tag = getattr(sugg, "tag", None)
             meta_parts: list[tuple[str, str]] = []
             if tag:
-                meta_parts.append(('class:completion.tag', f'[{tag}] '))
+                meta_parts.append(("class:completion.tag", f"[{tag}] "))
             if description:
                 # Collapse internal whitespace so multi-line descriptions
                 # render as one row in the prompt_toolkit menu.
-                meta_parts.append(('class:completion.description', ' '.join(description.split())))
+                meta_parts.append(("class:completion.description", " ".join(description.split())))
             yield Completion(
-                text=f'/{sugg.name}',
+                text=f"/{sugg.name}",
                 start_position=start_position,
                 display=display_styled,
                 display_meta=meta_parts if meta_parts else None,
@@ -267,8 +267,8 @@ class _MessageHistoryCompleter(Completer):
             yield Completion(
                 text=full_msg,
                 start_position=start_position,
-                display=full_msg[:80] + ('...' if len(full_msg) > 80 else ''),
-                display_meta='history',
+                display=full_msg[:80] + ("..." if len(full_msg) > 80 else ""),
+                display_meta="history",
             )
 
 
@@ -337,7 +337,7 @@ finalize_cron_run = None  # type: ignore[assignment,misc]
 # shape (``create`` / ``resume`` / ``load``) so existing call sites like
 # ``Session.create(...)`` keep working without a second import.
 def _lazy_runtime_placeholder(func: Callable[..., Any]) -> Callable[..., Any]:
-    setattr(func, '_clawcodex_lazy_runtime_placeholder', True)
+    setattr(func, "_clawcodex_lazy_runtime_placeholder", True)
     return func
 
 
@@ -345,7 +345,7 @@ def _is_lazy_runtime_placeholder(name: str) -> bool:
     return bool(
         getattr(
             globals().get(name),
-            '_clawcodex_lazy_runtime_placeholder',
+            "_clawcodex_lazy_runtime_placeholder",
             False,
         )
     )
@@ -383,8 +383,8 @@ class _LazySession:
 
     @staticmethod
     def resume(*args: Any, **kwargs: Any) -> Any:
-        patched_load = getattr(_LazySession, 'load', None)
-        if type(patched_load).__module__ == 'unittest.mock':
+        patched_load = getattr(_LazySession, "load", None)
+        if type(patched_load).__module__ == "unittest.mock":
             return patched_load(*args, **kwargs)
         from src.agent import Session as _Session
 
@@ -401,7 +401,7 @@ Session = _LazySession
 
 
 def _session_id_from_session(session: Any) -> str | None:
-    session_id = getattr(session, 'session_id', None)
+    session_id = getattr(session, "session_id", None)
     if isinstance(session_id, str) and session_id.strip():
         return session_id
     return None
@@ -496,13 +496,13 @@ def _load_heavy_runtime() -> None:
     from clawcodex_ext.permissions import permission_mode_short_title
     from clawcodex_ext.services.pricing import compute_session_cost, format_cost_usd
 
-    if _is_lazy_runtime_placeholder('get_provider_config'):
+    if _is_lazy_runtime_placeholder("get_provider_config"):
         get_provider_config = _get_provider_config
-    if _is_lazy_runtime_placeholder('get_provider_class'):
+    if _is_lazy_runtime_placeholder("get_provider_class"):
         get_provider_class = _get_provider_class
-    if _is_lazy_runtime_placeholder('build_provider_from_config'):
+    if _is_lazy_runtime_placeholder("build_provider_from_config"):
         build_provider_from_config = _build_provider_from_config
-    if not _is_lazy_runtime_placeholder('Session'):
+    if not _is_lazy_runtime_placeholder("Session"):
         Session = _Session
 
     _load_cron_runtime()
@@ -512,17 +512,17 @@ def _load_heavy_runtime() -> None:
 
 _CRON_WAKE = object()
 
-_CRON_PROMPT_PRELUDE = 'This prompt was generated automatically from a scheduled task.'
+_CRON_PROMPT_PRELUDE = "This prompt was generated automatically from a scheduled task."
 
 
-def _wrap_cron_prompt(prompt: str, *, task_id: str = '') -> str:
+def _wrap_cron_prompt(prompt: str, *, task_id: str = "") -> str:
     """Wrap a cron prompt with context so the LLM knows it's automated."""
     now = datetime.now()
-    time_str = now.strftime('%b %d %-I:%M%p').lower()
-    header = f'✻ Running scheduled task ({time_str})'
+    time_str = now.strftime("%b %d %-I:%M%p").lower()
+    header = f"✻ Running scheduled task ({time_str})"
     if task_id:
-        header += f' · {task_id}'
-    return f'{header}\n\n{_CRON_PROMPT_PRELUDE}\n\n---\n\n{prompt}'
+        header += f" · {task_id}"
+    return f"{header}\n\n{_CRON_PROMPT_PRELUDE}\n\n---\n\n{prompt}"
 
 
 try:
@@ -540,25 +540,25 @@ def _format_edit_summary_text(adds: int, removes: int) -> str:
     """
 
     if adds <= 0 and removes <= 0:
-        return ''
+        return ""
     parts: list[str] = []
     if adds > 0:
-        parts.append(f'Added {adds} {"line" if adds == 1 else "lines"}')
+        parts.append(f"Added {adds} {'line' if adds == 1 else 'lines'}")
     if removes > 0:
-        verb = 'Removed' if adds == 0 else 'removed'
-        parts.append(f'{verb} {removes} {"line" if removes == 1 else "lines"}')
-    return ', '.join(parts)
+        verb = "Removed" if adds == 0 else "removed"
+        parts.append(f"{verb} {removes} {'line' if removes == 1 else 'lines'}")
+    return ", ".join(parts)
 
 
 # Tool names whose consecutive calls should be coalesced into a single
 # ``TaskListV2`` snapshot in the transcript. See
 # ``typescript/src/components/TaskListV2.tsx`` for the reference UI.
 _TASK_WIDGET_TOOL_NAMES: set[str] = {
-    'TaskCreate',
-    'TaskUpdate',
-    'TaskList',
-    'TaskGet',
-    'TodoWrite',
+    "TaskCreate",
+    "TaskUpdate",
+    "TaskList",
+    "TaskGet",
+    "TodoWrite",
 }
 
 
@@ -573,9 +573,9 @@ def _ghost_hint_for(key: str, *, has_tab_alias: bool = True) -> str:
     from clawcodex_ext.utils.key_format import display_key, to_prompt_toolkit_key
 
     base = display_key(key)
-    if has_tab_alias and to_prompt_toolkit_key(key) != 'tab':
-        base = f'{base} or {display_key("tab")}'
-    return f' ({base} to accept)'
+    if has_tab_alias and to_prompt_toolkit_key(key) != "tab":
+        base = f"{base} or {display_key('tab')}"
+    return f" ({base} to accept)"
 
 
 # Module-level state tracking ghost-text suggestion visibility.
@@ -591,7 +591,7 @@ def _ghost_hint_for(key: str, *, has_tab_alias: bool = True) -> str:
 # is typically mounted at a time per process. Multi-session REPLs (none
 # exist upstream) would need to thread per-buffer state through the
 # filter — out of scope for plan 3.
-_ghost_state: dict[str, object] = {'suggestion': None, 'complete_active': False}
+_ghost_state: dict[str, object] = {"suggestion": None, "complete_active": False}
 
 
 class _HintedAutoSuggest(AutoSuggestFromHistory):
@@ -602,7 +602,7 @@ class _HintedAutoSuggest(AutoSuggestFromHistory):
     keeping the displayed hint in sync.
     """
 
-    def __init__(self, accept_key: str = 'c-e', *, has_tab_alias: bool = True) -> None:
+    def __init__(self, accept_key: str = "c-e", *, has_tab_alias: bool = True) -> None:
         super().__init__()
         self._accept_key = accept_key
         self._hint = _ghost_hint_for(accept_key, has_tab_alias=has_tab_alias)
@@ -611,15 +611,15 @@ class _HintedAutoSuggest(AutoSuggestFromHistory):
         suggestion = super().get_suggestion(buffer, document)
         # Refresh the module-level visibility snapshot so the Tab
         # binding's filter can decide whether to fire.
-        _ghost_state['suggestion'] = suggestion.text if suggestion else None
-        _ghost_state['complete_active'] = bool(getattr(buffer, 'complete_state', None))
+        _ghost_state["suggestion"] = suggestion.text if suggestion else None
+        _ghost_state["complete_active"] = bool(getattr(buffer, "complete_state", None))
         if suggestion and suggestion.text:
             return Suggestion(suggestion.text + self._hint)
         return suggestion
 
 
 def _patch_accept_suggestion_bindings(
-    bindings, accept_key: str = 'c-e', *, has_tab_alias: bool = True
+    bindings, accept_key: str = "c-e", *, has_tab_alias: bool = True
 ):
     """Override the accept key so it strips the hint before inserting.
 
@@ -653,7 +653,7 @@ def _patch_accept_suggestion_bindings(
     def _accept(event):
         _accept_ghost(event.current_buffer)
 
-    if has_tab_alias and pt_key != 'tab':
+    if has_tab_alias and pt_key != "tab":
         # Context-aware Tab: only fire when ghost is showing and no
         # completion popup is active. The filter is a no-arg closure
         # that reads the module-level snapshot kept fresh by
@@ -661,11 +661,11 @@ def _patch_accept_suggestion_bindings(
         # returns False, prompt_toolkit's default Tab handler runs
         # (cycle completion menu / insert a tab).
         def _tab_filter() -> bool:
-            return _ghost_state.get('suggestion') is not None and not _ghost_state.get(
-                'complete_active', False
+            return _ghost_state.get("suggestion") is not None and not _ghost_state.get(
+                "complete_active", False
             )
 
-        @bindings.add('tab', filter=Condition(_tab_filter))
+        @bindings.add("tab", filter=Condition(_tab_filter))
         def _tab_accept(event):
             _accept_ghost(event.current_buffer)
 
@@ -690,10 +690,10 @@ class ClawcodexREPL:
 
     def __init__(
         self,
-        provider_name: str = 'glm',
+        provider_name: str = "glm",
         stream: bool = False,
         *,
-        permission_mode: str = 'default',
+        permission_mode: str = "default",
         is_bypass_permissions_mode_available: bool = False,
         **kwargs: Any,
     ):
@@ -728,17 +728,17 @@ class ClawcodexREPL:
 
         # Load configuration
         config = get_provider_config(provider_name)
-        if not config.get('api_key'):
-            self.console.print('[error]Error: API key not configured.[/error]')
-            self.console.print('Run [bold]clawcodex login[/bold] to configure.')
+        if not config.get("api_key"):
+            self.console.print("[error]Error: API key not configured.[/error]")
+            self.console.print("Run [bold]clawcodex login[/bold] to configure.")
             sys.exit(1)
 
         # Initialize provider
         provider_class = get_provider_class(provider_name)
         self.provider = provider_class(
-            api_key=config['api_key'],
-            base_url=config.get('base_url'),
-            model=config.get('default_model'),
+            api_key=config["api_key"],
+            base_url=config.get("base_url"),
+            model=config.get("default_model"),
         )
 
         # Create session
@@ -749,10 +749,10 @@ class ClawcodexREPL:
         # Agent tool's prompt builder won't read this until much later,
         # so reading ``self.tool_context.mcp_clients`` lazily is safe.
         def _get_mcp_servers_for_prompt() -> list[str]:
-            ctx = getattr(self, 'tool_context', None)
+            ctx = getattr(self, "tool_context", None)
             if ctx is None:
                 return []
-            clients = getattr(ctx, 'mcp_clients', None) or {}
+            clients = getattr(ctx, "mcp_clients", None) or {}
             return list(clients.keys())
 
         self.tool_registry = build_default_registry(
@@ -783,7 +783,7 @@ class ClawcodexREPL:
         self.tool_context.ask_user = self._ask_user_questions
         # Permission handler with status control for proper input handling
         self._current_status = None
-        if self._permission_mode == 'bypassPermissions':
+        if self._permission_mode == "bypassPermissions":
             # The bypass mode short-circuits the registry's permission check
             # before the handler is ever consulted, but a few tools call the
             # handler directly (e.g. the doc-write gate). Auto-allow there
@@ -877,34 +877,34 @@ class ClawcodexREPL:
 
         # Original built-in commands - define this FIRST!
         self._original_built_ins = [
-            '/',
-            '/help',
-            '/exit',
-            '/quit',
-            '/q',
-            '/clear',
-            '/save',
-            '/load',
-            '/stream',
-            '/render-last',
-            '/tools',
-            '/tool',
-            '/skills',
-            '/init',
-            '/tui',
+            "/",
+            "/help",
+            "/exit",
+            "/quit",
+            "/q",
+            "/clear",
+            "/save",
+            "/load",
+            "/stream",
+            "/render-last",
+            "/tools",
+            "/tool",
+            "/skills",
+            "/init",
+            "/tui",
             # TUI-only commands — listed here so the "unknown command → palette"
             # intercept (line 3056) does NOT swallow them before the TUI-only
             # handler (line 3089) can print the proper message.
-            '/diff',
-            '/mcp',
-            '/tasks',
-            '/rewind',
-            '/repl',
-            '/effort',
-            '/history',
-            '/idle',
-            '/theme',
-            '/permission',
+            "/diff",
+            "/mcp",
+            "/tasks",
+            "/rewind",
+            "/repl",
+            "/effort",
+            "/history",
+            "/idle",
+            "/theme",
+            "/permission",
         ]
         self._built_in_commands = list(self._original_built_ins)
 
@@ -957,7 +957,7 @@ class ClawcodexREPL:
         # cost. Daemon thread so it can't block REPL shutdown.
         threading.Thread(
             target=self._warm_slash_suggestions_cache,
-            name='slash-suggestions-warm',
+            name="slash-suggestions-warm",
             daemon=True,
         ).start()
 
@@ -985,9 +985,9 @@ class ClawcodexREPL:
         # behavior below so Enter still submits (prompt_toolkit's default
         # in multiline mode is "insert newline").
         self.bindings = KeyBindings()
-        if hasattr(self.bindings, 'add'):
+        if hasattr(self.bindings, "add"):
 
-            @self.bindings.add('/')  # type: ignore[attr-defined]
+            @self.bindings.add("/")  # type: ignore[attr-defined]
             def _show_slash_completions(event):  # type: ignore[no-untyped-def]
                 # Always insert the literal ``/`` — earlier versions
                 # short-circuited when the buffer was non-empty and
@@ -997,8 +997,8 @@ class ClawcodexREPL:
                 # character of the buffer (mirrors the TS reference's
                 # ``commandSuggestions`` trigger rule).
                 buf = event.current_buffer
-                was_empty = buf.text == ''
-                buf.insert_text('/')
+                was_empty = buf.text == ""
+                buf.insert_text("/")
                 if was_empty:
                     buf.start_completion(select_first=False)
 
@@ -1019,15 +1019,15 @@ class ClawcodexREPL:
                 if token is not None:
                     buf.start_completion(select_first=False)
 
-            @self.bindings.add('backspace')  # type: ignore[attr-defined]
+            @self.bindings.add("backspace")  # type: ignore[attr-defined]
             def _backspace_refreshes_slash_menu(event):  # type: ignore[no-untyped-def]
                 _refresh_slash_menu_after_deletion(event, lambda b: b.delete_before_cursor(count=1))
 
-            @self.bindings.add('delete')  # type: ignore[attr-defined]
+            @self.bindings.add("delete")  # type: ignore[attr-defined]
             def _delete_refreshes_slash_menu(event):  # type: ignore[no-untyped-def]
                 _refresh_slash_menu_after_deletion(event, lambda b: b.delete(count=1))
 
-            @self.bindings.add('c-m')  # type: ignore[attr-defined]
+            @self.bindings.add("c-m")  # type: ignore[attr-defined]
             def _enter_submits_or_backslash_newline(event):  # type: ignore[no-untyped-def]
                 """Enter: submit, or convert trailing ``\\`` into a newline.
 
@@ -1042,18 +1042,18 @@ class ClawcodexREPL:
                     return
                 text = buf.text
                 pos = buf.cursor_position
-                if pos > 0 and text[pos - 1] == '\\':
+                if pos > 0 and text[pos - 1] == "\\":
                     buf.delete_before_cursor(count=1)
-                    buf.insert_text('\n')
+                    buf.insert_text("\n")
                     return
                 buf.validate_and_handle()
 
-            @self.bindings.add('escape', 'c-m')  # type: ignore[attr-defined]
+            @self.bindings.add("escape", "c-m")  # type: ignore[attr-defined]
             def _meta_or_shift_enter_inserts_newline(event):  # type: ignore[no-untyped-def]
                 """Meta+Enter (and Kitty-protocol Shift+Enter): insert ``\\n``."""
-                event.current_buffer.insert_text('\n')
+                event.current_buffer.insert_text("\n")
 
-            @self.bindings.add('c-o')  # type: ignore[attr-defined]
+            @self.bindings.add("c-o")  # type: ignore[attr-defined]
             def _expand_last(event):  # type: ignore[no-untyped-def]
                 """Ctrl+O: re-print the most recent truncated block in
                 full as a fresh block below the prompt. ``run_in_terminal``
@@ -1095,10 +1095,10 @@ class ClawcodexREPL:
             from src.settings.settings import get_settings as _get_settings
 
             _settings = _get_settings()
-            _accept_key = getattr(_settings, 'accept_suggestion_key', 'c-e') or 'c-e'
-            _accept_tab_alias = bool(getattr(_settings, 'accept_suggestion_tab_alias', True))
+            _accept_key = getattr(_settings, "accept_suggestion_key", "c-e") or "c-e"
+            _accept_tab_alias = bool(getattr(_settings, "accept_suggestion_tab_alias", True))
         except Exception:
-            _accept_key = 'c-e'
+            _accept_key = "c-e"
             _accept_tab_alias = True
 
         self.prompt_session = PromptSession(
@@ -1131,8 +1131,8 @@ class ClawcodexREPL:
         """
 
         try:
-            provider = getattr(self.provider, 'provider_name', None) or self.provider_name or '?'
-            model = getattr(self.provider, 'model', '') or '?'
+            provider = getattr(self.provider, "provider_name", None) or self.provider_name or "?"
+            model = getattr(self.provider, "model", "") or "?"
             cwd_full = str(self.tool_context.cwd or self.tool_context.workspace_root)
             cwd = self._shorten_path_text(cwd_full) or cwd_full
             # Optional advisor segment — appears between cwd and turns
@@ -1141,22 +1141,22 @@ class ClawcodexREPL:
             # provider + main model, so a stale config under an
             # unsupported provider shows "(inactive)" rather than lying.
             advisor_seg = format_advisor_status(self.provider, model)
-            advisor_part = f' {advisor_seg} ·' if advisor_seg else ''
+            advisor_part = f" {advisor_seg} ·" if advisor_seg else ""
             # Advisor token counts — accumulated on the ToolContext
             # by ``src/tool_system/tools/advisor.py`` per consultation.
             # Surface them next to the worker's counts so the user can
             # see how much of the spend went to the reviewer model.
             # Hidden when zero so the toolbar stays compact for users
             # who haven't enabled the advisor.
-            adv_in = int(getattr(self.tool_context, 'advisor_input_tokens', 0) or 0)
-            adv_out = int(getattr(self.tool_context, 'advisor_output_tokens', 0) or 0)
+            adv_in = int(getattr(self.tool_context, "advisor_input_tokens", 0) or 0)
+            adv_out = int(getattr(self.tool_context, "advisor_output_tokens", 0) or 0)
             advisor_tokens = (
-                f' (advisor: {adv_in} in / {adv_out} out)' if (adv_in or adv_out) else ''
+                f" (advisor: {adv_in} in / {adv_out} out)" if (adv_in or adv_out) else ""
             )
             # Model context window — show max context length for the
             # current model (e.g. "ctx: 200k"). Falls back silently
             # when model name is unknown or lookup fails.
-            proactive_part = ''
+            proactive_part = ""
             try:
                 from clawcodex_ext.repl.proactive_integration import (
                     format_proactive_status,
@@ -1164,10 +1164,10 @@ class ClawcodexREPL:
 
                 proactive_status = format_proactive_status()
                 if proactive_status:
-                    proactive_part = f' 路 {proactive_status}'
+                    proactive_part = f" 路 {proactive_status}"
             except Exception:
-                proactive_part = ''
-            ctx_part = ''
+                proactive_part = ""
+            ctx_part = ""
             try:
                 from clawcodex_ext.context_system.context_analyzer import (
                     get_context_window_for_model,
@@ -1175,9 +1175,9 @@ class ClawcodexREPL:
 
                 ctx_win = get_context_window_for_model(model)
                 if ctx_win > 0:
-                    ctx_part = f' · ctx: {ctx_win // 1000}k'
+                    ctx_part = f" · ctx: {ctx_win // 1000}k"
             except Exception:
-                ctx_part = ''
+                ctx_part = ""
             # USD cost — directional estimate based on the upstream
             # model's published per-token price. Proxies (litellm,
             # openrouter, bedrock) may charge different rates; the
@@ -1188,9 +1188,9 @@ class ClawcodexREPL:
                 from src.settings.settings import get_settings as _gs
 
                 _settings = _gs()
-                _advisor_model = (getattr(_settings, 'advisor_model', '') or '').strip()
+                _advisor_model = (getattr(_settings, "advisor_model", "") or "").strip()
             except Exception:
-                _advisor_model = ''
+                _advisor_model = ""
             worker_cost, advisor_cost, total_cost = compute_session_cost(
                 worker_model=model,
                 worker_input_tokens=self._stats_input_tokens,
@@ -1201,27 +1201,27 @@ class ClawcodexREPL:
             )
             # Space-separated label (matches TUI's "cost N" pattern;
             # avoids the REPL/TUI label-style split critic flagged).
-            cost_part = f' · cost {format_cost_usd(total_cost)}' if total_cost > 0 else ''
+            cost_part = f" · cost {format_cost_usd(total_cost)}" if total_cost > 0 else ""
             _in = self._stats_input_tokens
             _out = self._stats_output_tokens
-            _fmt = lambda n: f'{n / 1000:.1f}k' if n >= 1000 else str(n)
+            _fmt = lambda n: f"{n / 1000:.1f}k" if n >= 1000 else str(n)
             return (
-                f' {provider} · {model} · {cwd} · '
-                f'mode: {permission_mode_short_title(self._permission_mode)} · '
-                f'turns: {self._stats_turns} · '
-                f'tokens: {_fmt(_in)} in / '
-                f'{_fmt(_out)} out'
-                f'{ctx_part}'
-                f'{advisor_tokens}'
-                f'{cost_part}'
-                f' '
+                f" {provider} · {model} · {cwd} · "
+                f"mode: {permission_mode_short_title(self._permission_mode)} · "
+                f"turns: {self._stats_turns} · "
+                f"tokens: {_fmt(_in)} in / "
+                f"{_fmt(_out)} out"
+                f"{ctx_part}"
+                f"{advisor_tokens}"
+                f"{cost_part}"
+                f" "
             )
         except Exception:
             # Never let the toolbar break the input prompt. Runs on every
             # redraw (per-keystroke), so log at debug level to surface the
             # cause when troubleshooting without flooding normal sessions.
-            logger.debug('bottom toolbar render failed', exc_info=True)
-            return ''
+            logger.debug("bottom toolbar render failed", exc_info=True)
+            return ""
 
     def _echo_user_input(self, text: str) -> None:
         """Print a user message to the transcript (transparent background).
@@ -1238,11 +1238,11 @@ class ClawcodexREPL:
         try:
             color = self._repl_palette.prompt_fg
         except Exception:
-            color = ''
+            color = ""
         from rich.text import Text
 
-        body = text.replace('\n', '\n  ')
-        prefix = Text('❯ ', style=f'bold {color}')
+        body = text.replace("\n", "\n  ")
+        prefix = Text("❯ ", style=f"bold {color}")
         self.console.print(
             prefix + Text(body),
             markup=False,
@@ -1258,8 +1258,8 @@ class ClawcodexREPL:
         with the primary ``❯ `` prompt.
         """
         if is_soft_wrap:
-            return ' ' * width
-        marker = '… '
+            return " " * width
+        marker = "… "
         if width <= len(marker):
             return marker[:width]
         return marker.rjust(width)
@@ -1268,7 +1268,7 @@ class ClawcodexREPL:
         self,
         options: list[tuple[str, str]],
         *,
-        title: str = '',
+        title: str = "",
         allow_other: bool = False,
         multi_select: bool = False,
     ) -> int | list[int] | None:
@@ -1303,47 +1303,47 @@ class ClawcodexREPL:
         def get_menu_fragments():
             fragments: list[tuple[str, str]] = []
             if title:
-                fragments.append(('[bold]', f'\n{title}\n\n'))
+                fragments.append(("[bold]", f"\n{title}\n\n"))
             for i, (label, desc) in enumerate(options):
                 is_cursor = i == cursor[0]
                 is_sel = multi_select and i in (selected or set())
-                prefix = '▸' if is_cursor else ' '
-                check = '✓' if is_sel else ' '
-                item_style = 'class:arrow-cursor' if is_cursor else ''
-                fragments.append((item_style, f'  {prefix} {check} {i + 1}. {label}'))
+                prefix = "▸" if is_cursor else " "
+                check = "✓" if is_sel else " "
+                item_style = "class:arrow-cursor" if is_cursor else ""
+                fragments.append((item_style, f"  {prefix} {check} {i + 1}. {label}"))
                 if desc:
-                    fragments.append(('class:dim', f'    {desc}'))
-                fragments.append(('', '\n'))
+                    fragments.append(("class:dim", f"    {desc}"))
+                fragments.append(("", "\n"))
             if allow_other:
                 i = len(options)
                 is_cursor = i == cursor[0]
-                prefix = '▸' if is_cursor else ' '
-                item_style = 'class:arrow-cursor' if is_cursor else ''
-                fragments.append((item_style, f'  {prefix}   {i + 1}. Other'))
-                fragments.append(('class:dim', '  (provide custom text)'))
-                fragments.append(('', '\n'))
+                prefix = "▸" if is_cursor else " "
+                item_style = "class:arrow-cursor" if is_cursor else ""
+                fragments.append((item_style, f"  {prefix}   {i + 1}. Other"))
+                fragments.append(("class:dim", "  (provide custom text)"))
+                fragments.append(("", "\n"))
             if multi_select:
                 hint = (
-                    '  ↑↓ navigate · Space toggle · Enter confirm · 1-9 quick select · Esc cancel'
+                    "  ↑↓ navigate · Space toggle · Enter confirm · 1-9 quick select · Esc cancel"
                 )
             else:
-                hint = '  ↑↓ navigate · Enter select · 1-9 quick select · Esc cancel'
-            fragments.append(('class:dim', f'\n{hint}'))
+                hint = "  ↑↓ navigate · Enter select · 1-9 quick select · Esc cancel"
+            fragments.append(("class:dim", f"\n{hint}"))
             return fragments
 
         kb = KeyBindings()
 
-        @kb.add('up')
+        @kb.add("up")
         def _move_up(event):
             cursor[0] = max(0, cursor[0] - 1)
             event.app.invalidate()
 
-        @kb.add('down')
+        @kb.add("down")
         def _move_down(event):
             cursor[0] = min(total - 1, cursor[0] + 1)
             event.app.invalidate()
 
-        @kb.add('enter')
+        @kb.add("enter")
         def _handle_enter(event):
             if multi_select:
                 sel_list = sorted(selected) if selected else [0]
@@ -1351,7 +1351,7 @@ class ClawcodexREPL:
             else:
                 event.app.exit(result=cursor[0])
 
-        @kb.add('space')
+        @kb.add("space")
         def _handle_space(event):
             if multi_select:
                 if cursor[0] < len(options):
@@ -1365,11 +1365,11 @@ class ClawcodexREPL:
             else:
                 event.app.exit(result=cursor[0])
 
-        @kb.add('escape')
+        @kb.add("escape")
         def _handle_escape(event):
             event.app.exit(result=None)
 
-        @kb.add('c-c')
+        @kb.add("c-c")
         def _handle_ctrl_c(event):
             event.app.exit(result=None)
 
@@ -1395,8 +1395,8 @@ class ClawcodexREPL:
 
         pt_style = Style.from_dict(
             {
-                'arrow-cursor': 'bold',
-                'dim': 'fg:gray',
+                "arrow-cursor": "bold",
+                "dim": "fg:gray",
             }
         )
 
@@ -1430,7 +1430,7 @@ class ClawcodexREPL:
             return [0]
         return result
 
-    def _arrow_select(self, options, title='', allow_other=False, multi_select=False):
+    def _arrow_select(self, options, title="", allow_other=False, multi_select=False):
         """Public wrapper for :meth:`_run_arrow_menu` callable from outside the class.
 
         This exists so :class:`ReplUIHost` can receive a simple callable
@@ -1452,15 +1452,15 @@ class ClawcodexREPL:
                 pass
 
         answers: dict[str, str] = {}
-        use_arrow = get_selection_mode() == 'arrow'
+        use_arrow = get_selection_mode() == "arrow"
         for q in questions:
             if isinstance(q, str):
-                q = {'question': q}
+                q = {"question": q}
             if not isinstance(q, dict):
                 continue
-            question_text = str(q.get('question', '')).strip()
-            options = q.get('options') or []
-            multi = bool(q.get('multiSelect', False))
+            question_text = str(q.get("question", "")).strip()
+            options = q.get("options") or []
+            multi = bool(q.get("multiSelect", False))
             if not question_text or not isinstance(options, list) or len(options) < 2:
                 continue
 
@@ -1469,11 +1469,11 @@ class ClawcodexREPL:
             opt_pairs: list[tuple[str, str]] = []
             for opt in options:
                 if isinstance(opt, str):
-                    opt = {'label': opt, 'description': ''}
+                    opt = {"label": opt, "description": ""}
                 if not isinstance(opt, dict):
                     continue
-                label = str(opt.get('label', '')).strip()
-                desc = str(opt.get('description', '')).strip()
+                label = str(opt.get("label", "")).strip()
+                desc = str(opt.get("description", "")).strip()
                 labels.append(label)
                 opt_pairs.append((label, desc))
 
@@ -1492,7 +1492,7 @@ class ClawcodexREPL:
                     selected_labels = []
                     for idx in result:
                         if idx == other_idx:
-                            free = self._safe_input('Other > ').strip()
+                            free = self._safe_input("Other > ").strip()
                             if free:
                                 selected_labels.append(free)
                         elif 0 <= idx < len(labels):
@@ -1501,39 +1501,39 @@ class ClawcodexREPL:
                         selected_labels = [labels[0]]
                 else:
                     if result == other_idx:
-                        free = self._safe_input('Other > ').strip()
+                        free = self._safe_input("Other > ").strip()
                         selected_labels = [free] if free else [labels[0]]
                     elif 0 <= result < len(labels):
                         selected_labels = [labels[result]]
                     else:
                         selected_labels = [labels[0]]
 
-                answers[question_text] = ', '.join(selected_labels) if multi else selected_labels[0]
+                answers[question_text] = ", ".join(selected_labels) if multi else selected_labels[0]
             else:
-                self.console.print(f'\n[bold]{question_text}[/bold]')
+                self.console.print(f"\n[bold]{question_text}[/bold]")
                 for i, (label, desc) in enumerate(opt_pairs, start=1):
-                    self.console.print(f'  {i}. {label}  [dim]{desc}[/dim]')
+                    self.console.print(f"  {i}. {label}  [dim]{desc}[/dim]")
                 other_idx = len(labels) + 1
-                self.console.print(f'  {other_idx}. Other  [dim]Provide custom text[/dim]')
+                self.console.print(f"  {other_idx}. Other  [dim]Provide custom text[/dim]")
 
-                prompt = 'Select (comma-separated) > ' if multi else 'Select > '
+                prompt = "Select (comma-separated) > " if multi else "Select > "
                 raw = self._safe_input(prompt).strip()
                 if not raw:
-                    choice_str = '1'
+                    choice_str = "1"
                 else:
                     choice_str = raw
 
                 selected: list[str] = []
-                parts = [p.strip() for p in choice_str.split(',') if p.strip()]
+                parts = [p.strip() for p in choice_str.split(",") if p.strip()]
                 if not parts:
-                    parts = ['1']
+                    parts = ["1"]
                 for part in parts:
                     try:
                         idx = int(part)
                     except ValueError:
                         idx = -1
                     if idx == other_idx:
-                        free = self._safe_input('Other > ').strip()
+                        free = self._safe_input("Other > ").strip()
                         if free:
                             selected.append(free)
                         continue
@@ -1541,7 +1541,7 @@ class ClawcodexREPL:
                         selected.append(labels[idx - 1])
                 if not selected:
                     selected = [labels[0]]
-                answers[question_text] = ', '.join(selected) if multi else selected[0]
+                answers[question_text] = ", ".join(selected) if multi else selected[0]
 
         # Restart spinner after getting answers
         if self._current_status is not None:
@@ -1582,38 +1582,38 @@ class ClawcodexREPL:
                 except Exception:
                     pass
 
-            self.console.print('')
-            self.console.print(f'[bold][warning]⚠ Permission Required[/warning][/bold]')
-            self.console.print(f'  {message}')
-            self.console.print('')
+            self.console.print("")
+            self.console.print(f"[bold][warning]⚠ Permission Required[/warning][/bold]")
+            self.console.print(f"  {message}")
+            self.console.print("")
 
             # Determine if this is a setting that can be enabled
             can_enable_setting = False
             setting_to_enable: str | None = None
 
             msg_lower = message.lower()
-            if 'allow_docs' in msg_lower or 'documentation files' in msg_lower:
+            if "allow_docs" in msg_lower or "documentation files" in msg_lower:
                 if not self.tool_context.allow_docs:
                     can_enable_setting = True
-                    setting_to_enable = 'allow_docs'
+                    setting_to_enable = "allow_docs"
 
             # Build options
             options: list[tuple[str, str]] = [
-                ('y', 'Yes, allow this action'),
-                ('n', 'No, deny this action'),
+                ("y", "Yes, allow this action"),
+                ("n", "No, deny this action"),
             ]
             if can_enable_setting:
-                options.insert(0, ('e', f'Enable {setting_to_enable} and allow'))
+                options.insert(0, ("e", f"Enable {setting_to_enable} and allow"))
 
-            im_reply = getattr(self, '_im_reply_controller', None)
-            send_permission_prompt = getattr(im_reply, 'send_permission_prompt', None)
+            im_reply = getattr(self, "_im_reply_controller", None)
+            send_permission_prompt = getattr(im_reply, "send_permission_prompt", None)
             # IM-driven turns may have the permission decision come from
             # WeChat (a menu number/letter reply). Keyboard-driven turns
             # keep using the terminal as before. ``peek_reply_origin`` is
             # non-None only while an IM message is driving this turn.
             im_origin = None
-            im_client = getattr(im_reply, '_client', None) if im_reply is not None else None
-            peek_origin = getattr(im_client, 'peek_reply_origin', None)
+            im_client = getattr(im_reply, "_client", None) if im_reply is not None else None
+            peek_origin = getattr(im_client, "peek_reply_origin", None)
             if callable(peek_origin):
                 try:
                     im_origin = peek_origin()
@@ -1641,13 +1641,13 @@ class ClawcodexREPL:
                     except Exception:
                         pass
 
-                if get_selection_mode() == 'arrow':
+                if get_selection_mode() == "arrow":
                     opt_pairs: list[tuple[str, str]] = []
                     for key, desc in options:
-                        opt_pairs.append((f'[{key}] {desc}', ''))
+                        opt_pairs.append((f"[{key}] {desc}", ""))
                     result = self._run_arrow_menu(
                         opt_pairs,
-                        title='Permission Required',
+                        title="Permission Required",
                         allow_other=False,
                         multi_select=False,
                     )
@@ -1674,33 +1674,33 @@ class ClawcodexREPL:
                             self._permission_decision_cache[cache_key] = False
                             return False, False
 
-                self.console.print('[bold]Options:[/bold]')
+                self.console.print("[bold]Options:[/bold]")
                 for i, (key, desc) in enumerate(options, start=1):
-                    self.console.print(f'  {i}. [{key}] {desc}')
-                self.console.print('')
+                    self.console.print(f"  {i}. [{key}] {desc}")
+                self.console.print("")
 
-                choice = self._safe_input('Select option> ').strip().lower()
+                choice = self._safe_input("Select option> ").strip().lower()
 
             if can_enable_setting:
-                if choice in ('1', 'e', 'enable'):
+                if choice in ("1", "e", "enable"):
                     self._enable_permission_setting(setting_to_enable)
                     self._permission_decision_cache[cache_key] = True
                     return True, False
-                elif choice in ('2', 'y', 'yes', ''):
+                elif choice in ("2", "y", "yes", ""):
                     self._permission_decision_cache[cache_key] = True
                     return True, False
-                elif choice in ('3', 'n', 'no'):
+                elif choice in ("3", "n", "no"):
                     self._permission_decision_cache[cache_key] = False
                     return False, False
             else:
-                if choice in ('1', 'y', 'yes', ''):
+                if choice in ("1", "y", "yes", ""):
                     self._permission_decision_cache[cache_key] = True
                     return True, False
-                elif choice in ('2', 'n', 'no'):
+                elif choice in ("2", "n", "no"):
                     self._permission_decision_cache[cache_key] = False
                     return False, False
 
-            self.console.print('[dim]Invalid choice, defaulting to deny.[/dim]')
+            self.console.print("[dim]Invalid choice, defaulting to deny.[/dim]")
             return False, False
 
     def _wait_im_permission_choice(
@@ -1729,9 +1729,9 @@ class ClawcodexREPL:
         for idx, (key, _desc) in enumerate(options, start=1):
             valid.add(str(idx))
             valid.add(key.lower())
-        valid.update({'yes', 'no'})
+        valid.update({"yes", "no"})
 
-        state: dict = {'event': threading.Event(), 'choice': None, 'valid': valid}
+        state: dict = {"event": threading.Event(), "choice": None, "valid": valid}
         # Lazy-init the lock: the running REPL is ClawCodexExtREPL, whose
         # __init__ overrides without super().__init__(), so the attr set in
         # ClawcodexREPL.__init__ may be absent. _handle_permission_request is
@@ -1739,15 +1739,15 @@ class ClawcodexREPL:
         # time — the lazy create is race-free in practice, and the probe
         # (_handle_im_permission_reply) reads the same attr after we publish
         # _im_permission_wait below.
-        lock = getattr(self, '_im_permission_lock', None)
+        lock = getattr(self, "_im_permission_lock", None)
         if lock is None:
             lock = threading.Lock()
             self._im_permission_lock = lock
         with lock:
             self._im_permission_wait = state
 
-        im_reply = getattr(self, '_im_reply_controller', None)
-        send_permission_prompt = getattr(im_reply, 'send_permission_prompt', None)
+        im_reply = getattr(self, "_im_reply_controller", None)
+        send_permission_prompt = getattr(im_reply, "send_permission_prompt", None)
         if callable(send_permission_prompt):
             try:
                 send_permission_prompt(
@@ -1760,38 +1760,38 @@ class ClawcodexREPL:
                 pass
 
         try:
-            timeout = float(os.environ.get('CLAWCODEX_IM_PERMISSION_TIMEOUT', '300'))
+            timeout = float(os.environ.get("CLAWCODEX_IM_PERMISSION_TIMEOUT", "300"))
         except (TypeError, ValueError):
             timeout = 300.0
         deadline = time.monotonic() + timeout
         try:
-            while not state['event'].wait(timeout=0.5):
+            while not state["event"].wait(timeout=0.5):
                 if time.monotonic() >= deadline:
                     self.console.print(
-                        '[dim]IM permission reply timed out, defaulting to deny.[/dim]'
+                        "[dim]IM permission reply timed out, defaulting to deny.[/dim]"
                     )
-                    state['choice'] = 'n'
+                    state["choice"] = "n"
                     break
         except KeyboardInterrupt:
-            state['choice'] = 'n'
+            state["choice"] = "n"
         finally:
             with lock:
                 self._im_permission_wait = None
-        return state['choice'] or 'n'
+        return state["choice"] or "n"
 
     def _enable_permission_setting(self, setting_name: str | None) -> None:
         """Enable a permission setting in the tool context."""
         if not setting_name:
             return
 
-        self.console.print(f'\n[dim]Enabling {setting_name}...[/dim]')
+        self.console.print(f"\n[dim]Enabling {setting_name}...[/dim]")
 
-        if setting_name == 'allow_docs':
+        if setting_name == "allow_docs":
             self.tool_context.allow_docs = True
-            self.console.print(f'[success]✓ {setting_name} enabled for this session[/success]')
+            self.console.print(f"[success]✓ {setting_name} enabled for this session[/success]")
             return
 
-        self.console.print(f'[dim]Could not enable {setting_name}.[/dim]')
+        self.console.print(f"[dim]Could not enable {setting_name}.[/dim]")
 
     def _init_command_system(self):
         """Initialize the new command system."""
@@ -1848,12 +1848,12 @@ class ClawcodexREPL:
         # Add commands from the new command system
         try:
             for cmd in self.command_registry.list_commands():
-                cmd_name = f'/{cmd.name}'
+                cmd_name = f"/{cmd.name}"
                 if cmd_name not in self._built_in_commands:
                     self._built_in_commands.append(cmd_name)
                 # Add aliases
                 for alias in cmd.aliases:
-                    alias_name = f'/{alias}'
+                    alias_name = f"/{alias}"
                     if alias_name not in self._built_in_commands:
                         self._built_in_commands.append(alias_name)
         except Exception:
@@ -1911,7 +1911,7 @@ class ClawcodexREPL:
                         if n == 0:
                             status_ref[0].update(status_message)
                         else:
-                            status_ref[0].update(f'{status_message} ({n} queued)')
+                            status_ref[0].update(f"{status_message} ({n} queued)")
 
                 try:
                     with _pt_patch_stdout(raw=True):
@@ -1942,17 +1942,17 @@ class ClawcodexREPL:
         """
         if not result.success:
             if result.error:
-                self.console.print(f'[error]{result.error}[/error]')
+                self.console.print(f"[error]{result.error}[/error]")
             return True
 
-        if result.result_type == 'text':
+        if result.result_type == "text":
             if result.text:
                 # F-122-F: long /btw answers carry scrollable=True. Route
                 # them through the keyboard-scrolled viewer so the user
                 # can navigate instead of seeing a wall of text scroll
                 # past. Falls back to a flat print when prompt_toolkit is
                 # unavailable or the body fits without paging.
-                if getattr(result, 'scrollable', False):
+                if getattr(result, "scrollable", False):
                     self._print_scrollable_text(
                         result.text,
                         command=result.command_name,
@@ -1965,35 +1965,35 @@ class ClawcodexREPL:
                 self.console.print()
             return True
 
-        elif result.result_type == 'prompt':
+        elif result.result_type == "prompt":
             # For PromptCommand, extract the text content and send to LLM
-            prompt_text = ''
+            prompt_text = ""
             for item in result.prompt_content:
-                if item.get('type') == 'text':
-                    prompt_text = item.get('text', '')
+                if item.get("type") == "text":
+                    prompt_text = item.get("text", "")
                     break
 
             if prompt_text:
                 # Send the prompt to the LLM for interactive execution
                 # Use higher max_turns for complex commands like /init
-                self.console.print('[dim]Initializing workspace setup...[/dim]')
+                self.console.print("[dim]Initializing workspace setup...[/dim]")
                 self.chat(prompt_text)
             return True
 
-        elif result.result_type == 'skip':
+        elif result.result_type == "skip":
             # Command handled silently
             return True
 
         return False
 
-    def _print_local_command_text(self, text: str, *, command: str = '') -> None:
+    def _print_local_command_text(self, text: str, *, command: str = "") -> None:
         """Print local command output, rendering only /recap as Markdown."""
 
-        if command == 'recap' and self._is_recap_text(text):
+        if command == "recap" and self._is_recap_text(text):
             self.console.print()
             self.console.print(Markdown(text))
             return
-        self.console.print('\n' + text)
+        self.console.print("\n" + text)
 
     # ------------------------------------------------------------------
     # F-122-F: scrollable answer viewer for /btw side questions
@@ -2009,7 +2009,7 @@ class ClawcodexREPL:
     _SCROLL_VIEWER_RESERVED_LINES = 4  # header (2) + footer hint (2)
     _SCROLL_VIEWER_MIN_WINDOW = 5  # never paginate fewer than this many lines
 
-    def _print_scrollable_text(self, text: str, *, command: str = '') -> None:
+    def _print_scrollable_text(self, text: str, *, command: str = "") -> None:
         """Render *text* in a keyboard-scrollable viewer (F-122-F).
 
         The viewer opens only if the body exceeds one terminal page; if the
@@ -2022,11 +2022,11 @@ class ClawcodexREPL:
 
         # Strip the leading newline that _handle_command_result's caller
         # would have inserted; the viewer renders its own header.
-        body = text.lstrip('\n')
+        body = text.lstrip("\n")
 
         # Estimate line count cheaply so we can decide whether to paginate
         # at all. If the body fits on the terminal, skip the viewer.
-        lines = body.splitlines() or ['']
+        lines = body.splitlines() or [""]
         try:
             import shutil
 
@@ -2039,13 +2039,13 @@ class ClawcodexREPL:
         )
         if len(lines) <= window:
             # Body fits on one screen — no viewer needed.
-            self.console.print('\n' + body)
+            self.console.print("\n" + body)
             return
 
         if not _HAS_PROMPT_TOOLKIT:
             # Best-effort fallback: print everything, mark a hint line.
-            self.console.print('\n' + body)
-            self.console.print('[dim](prompt_toolkit unavailable — answer not paginated)[/dim]')
+            self.console.print("\n" + body)
+            self.console.print("[dim](prompt_toolkit unavailable — answer not paginated)[/dim]")
             return
 
         self._run_scroll_viewer(body, lines=lines, window=window, command=command)
@@ -2081,25 +2081,25 @@ class ClawcodexREPL:
             # Header — no leading 💡: the body already carries the
             # answer's decoration prefix; the header is purely a
             # navigational banner (command + cursor).
-            label = command or 'answer'
+            label = command or "answer"
             fragments.append(
-                ('class:scroll-header', f'\n  /{label}  '),
+                ("class:scroll-header", f"\n  /{label}  "),
             )
             fragments.append(
-                ('class:scroll-meta', f'(lines {start + 1}-{end} of {total})\n\n'),
+                ("class:scroll-meta", f"(lines {start + 1}-{end} of {total})\n\n"),
             )
             # Visible window
             for i in range(start, end):
-                fragments.append(('', lines[i] + '\n'))
+                fragments.append(("", lines[i] + "\n"))
             # Pad short pages so the footer stays at a stable position.
             shown = end - start
             for _ in range(window - shown):
-                fragments.append(('', '~\n'))
+                fragments.append(("", "~\n"))
             # Footer hint
             fragments.append(
                 (
-                    'class:scroll-footer',
-                    '\n  ↑↓ scroll · PgUp/PgDn page · Home/End jump · Space/Enter/Esc/q close',
+                    "class:scroll-footer",
+                    "\n  ↑↓ scroll · PgUp/PgDn page · Home/End jump · Space/Enter/Esc/q close",
                 ),
             )
             return fragments
@@ -2133,24 +2133,24 @@ class ClawcodexREPL:
             offset[0] = total
             event.app.invalidate()
 
-        kb.add('up')(_line_up)
-        kb.add('down')(_line_down)
-        kb.add('pageup')(_page_up)
-        kb.add('pagedown')(_page_down)
-        kb.add('home')(_home)
-        kb.add('end')(_end)
-        kb.add('space')(_close)
-        kb.add('enter')(_close)
-        kb.add('escape')(_close)
-        kb.add('q')(_close)
-        kb.add('Q')(_close)
-        kb.add('c-c')(_close)
+        kb.add("up")(_line_up)
+        kb.add("down")(_line_down)
+        kb.add("pageup")(_page_up)
+        kb.add("pagedown")(_page_down)
+        kb.add("home")(_home)
+        kb.add("end")(_end)
+        kb.add("space")(_close)
+        kb.add("enter")(_close)
+        kb.add("escape")(_close)
+        kb.add("q")(_close)
+        kb.add("Q")(_close)
+        kb.add("c-c")(_close)
 
         pt_style = Style.from_dict(
             {
-                'scroll-header': 'bold fg:cyan',
-                'scroll-meta': 'fg:gray',
-                'scroll-footer': 'fg:gray italic',
+                "scroll-header": "bold fg:cyan",
+                "scroll-meta": "fg:gray",
+                "scroll-footer": "fg:gray italic",
             }
         )
 
@@ -2174,7 +2174,7 @@ class ClawcodexREPL:
 
     @staticmethod
     def _is_recap_text(text: str) -> bool:
-        return text.strip().startswith(('Recapitulate\n', 'Away Summary\n'))
+        return text.strip().startswith(("Recapitulate\n", "Away Summary\n"))
 
     def _get_slash_command_words(self) -> list[str]:
         words = list(self._built_in_commands)
@@ -2183,7 +2183,7 @@ class ClawcodexREPL:
 
             cwd = self.tool_context.cwd or self.tool_context.workspace_root
             for s in get_all_skills(project_root=cwd):
-                words.append(f'/{s.name}')
+                words.append(f"/{s.name}")
         except Exception:
             pass
         deduped: list[str] = []
@@ -2207,10 +2207,10 @@ class ClawcodexREPL:
         """
 
         try:
-            conv = getattr(self, 'session', None)
+            conv = getattr(self, "session", None)
             if conv is None:
                 return []
-            messages = getattr(conv, 'messages', None)
+            messages = getattr(conv, "messages", None)
             if messages is None:
                 return []
             from clawcodex_ext.types.messages import UserMessage
@@ -2225,7 +2225,7 @@ class ClawcodexREPL:
                         result.append(content)
                     elif isinstance(content, list):
                         for block in content:
-                            if hasattr(block, 'text'):
+                            if hasattr(block, "text"):
                                 result.append(block.text)
             return result
         except Exception:
@@ -2235,12 +2235,12 @@ class ClawcodexREPL:
     # Used to seed descriptions for the prompt_toolkit completion menu so
     # ``/save`` etc. show meta text alongside the registry-backed entries.
     _REPL_EXTRA_BUILTIN_DESCRIPTIONS: dict[str, str] = {
-        'save': 'Save the conversation to a file',
-        'load': 'Load a saved conversation',
-        'tool': 'Inspect or invoke a single tool',
-        'init': 'Initialize a CLAUDE.md for this workspace',
-        'tui': 'Switch to the Textual TUI',
-        'gateway': 'Connect, status, or disconnect the IM gateway',
+        "save": "Save the conversation to a file",
+        "load": "Load a saved conversation",
+        "tool": "Inspect or invoke a single tool",
+        "init": "Initialize a CLAUDE.md for this workspace",
+        "tui": "Switch to the Textual TUI",
+        "gateway": "Connect, status, or disconnect the IM gateway",
     }
 
     _SLASH_SUGGESTIONS_TTL_S = 30.0
@@ -2275,7 +2275,7 @@ class ClawcodexREPL:
             cwd = self.tool_context.cwd or self.tool_context.workspace_root
             base = build_command_suggestions(cwd, self.tool_context)
 
-            have = {s.name.lower() for s in base if hasattr(s, 'name')}
+            have = {s.name.lower() for s in base if hasattr(s, "name")}
             extra: list[Any] = []
             for name, description in self._REPL_EXTRA_BUILTIN_DESCRIPTIONS.items():
                 if name in have:
@@ -2284,9 +2284,9 @@ class ClawcodexREPL:
             # Built-ins lead the menu, then registry/skills (the order
             # ``build_command_suggestions`` already produces).
             result: list[Any] = [
-                *(s for s in base if getattr(s, 'source', '') == 'builtin'),
+                *(s for s in base if getattr(s, "source", "") == "builtin"),
                 *extra,
-                *(s for s in base if getattr(s, 'source', '') != 'builtin'),
+                *(s for s in base if getattr(s, "source", "") != "builtin"),
             ]
         except Exception:
             result = []
@@ -2322,14 +2322,14 @@ class ClawcodexREPL:
         try:
             from prompt_toolkit.completion import merge_completers
 
-            if not hasattr(self, '_at_completer') or self._at_completer is None:
+            if not hasattr(self, "_at_completer") or self._at_completer is None:
                 self._at_completer = AtFileCompleter(cwd=str(self.tool_context.workspace_root))
-            if not hasattr(self, '_slash_completer') or self._slash_completer is None:
+            if not hasattr(self, "_slash_completer") or self._slash_completer is None:
                 self._slash_completer = _SlashOnlyCompleter(
                     self._get_slash_command_words,
                     suggestions_provider=self._get_slash_command_suggestions,
                 )
-            if not hasattr(self, '_agent_completer') or self._agent_completer is None:
+            if not hasattr(self, "_agent_completer") or self._agent_completer is None:
                 self._agent_completer = AgentMentionCompleter(self._available_agents)
             self.completer = merge_completers(
                 [
@@ -2340,22 +2340,22 @@ class ClawcodexREPL:
                 ]
             )
             if (
-                hasattr(self, 'prompt_session')
-                and getattr(self.prompt_session, 'completer', None) is not None
+                hasattr(self, "prompt_session")
+                and getattr(self.prompt_session, "completer", None) is not None
             ):
                 self.prompt_session.completer = self.completer
         except Exception:
             return
 
     def _show_slash_palette(self, query: str | None = None) -> None:
-        q = (query or '').strip().lower()
-        self.console.print('\n[bold]Available commands and skills:[/bold]')
+        q = (query or "").strip().lower()
+        self.console.print("\n[bold]Available commands and skills:[/bold]")
 
         # Collect all commands
         all_commands: list[tuple[str, str, str]] = []  # (name, description, type)
         seen: set[str] = set()
 
-        def add_command(name: str, desc: str, cmd_type: str = 'command') -> None:
+        def add_command(name: str, desc: str, cmd_type: str = "command") -> None:
             if name in seen:
                 return
             seen.add(name)
@@ -2365,18 +2365,18 @@ class ClawcodexREPL:
 
         # Add built-in commands
         for cmd in self._original_built_ins:
-            if cmd == '/':
+            if cmd == "/":
                 continue
-            add_command(cmd, '', 'command')
+            add_command(cmd, "", "command")
 
         # Add commands from new command system
         try:
             for cmd in self.command_registry.list_commands():
-                cmd_name = f'/{cmd.name}'
+                cmd_name = f"/{cmd.name}"
                 if cmd_name in self._original_built_ins:
                     continue
-                alias_str = f' (aliases: {", ".join(cmd.aliases)})' if cmd.aliases else ''
-                add_command(f'{cmd_name}{alias_str}', cmd.description, 'command')
+                alias_str = f" (aliases: {', '.join(cmd.aliases)})" if cmd.aliases else ""
+                add_command(f"{cmd_name}{alias_str}", cmd.description, "command")
         except Exception:
             pass
 
@@ -2388,8 +2388,8 @@ class ClawcodexREPL:
             skills = list(get_all_skills(project_root=cwd))
             skills.sort(key=lambda s: s.name.lower())
             for s in skills:
-                desc = (s.description or '').strip()
-                add_command(f'/{s.name}', desc, 'skill')
+                desc = (s.description or "").strip()
+                add_command(f"/{s.name}", desc, "skill")
         except Exception:
             pass
 
@@ -2397,21 +2397,21 @@ class ClawcodexREPL:
         all_commands.sort(key=lambda x: x[0].lower())
         if not all_commands and q:
             # No matches for the query — show a helpful hint instead of an empty list
-            self.console.print(f'  [dim]No matching commands for [warning]/{q}[/warning].[/dim]')
+            self.console.print(f"  [dim]No matching commands for [warning]/{q}[/warning].[/dim]")
             self.console.print(
-                f'  [dim]Type [secondary]/[/secondary] to browse all available commands or [secondary]/help[/secondary] for details.[/dim]'
+                f"  [dim]Type [secondary]/[/secondary] to browse all available commands or [secondary]/help[/secondary] for details.[/dim]"
             )
         else:
             for name, desc, cmd_type in all_commands:
-                if cmd_type == 'skill':
-                    self.console.print(f'  [secondary]{name}[/secondary]')
+                if cmd_type == "skill":
+                    self.console.print(f"  [secondary]{name}[/secondary]")
                     if desc:
-                        self.console.print(f'    [dim]{desc}[/dim]')
+                        self.console.print(f"    [dim]{desc}[/dim]")
                 else:
                     if desc:
-                        self.console.print(f'  {name}  [dim]- {desc}[/dim]')
+                        self.console.print(f"  {name}  [dim]- {desc}[/dim]")
                     else:
-                        self.console.print(f'  {name}')
+                        self.console.print(f"  {name}")
 
         self.console.print()
 
@@ -2432,19 +2432,19 @@ class ClawcodexREPL:
         adds = 0
         removes = 0
         for hunk in hunks:
-            for raw in hunk.get('lines') or []:
-                if raw.startswith('+'):
+            for raw in hunk.get("lines") or []:
+                if raw.startswith("+"):
                     adds += 1
-                elif raw.startswith('-'):
+                elif raw.startswith("-"):
                     removes += 1
 
-        summary = _format_edit_summary_text(adds, removes) or 'no changes'
-        summary_text = Text(summary, style='dim')
+        summary = _format_edit_summary_text(adds, removes) or "no changes"
+        summary_text = Text(summary, style="dim")
 
         # Snap to a sane width: ``self.console.width`` falls back to 80
         # when stdout is not a TTY. Fenced to 1 so degenerate widths don't
         # produce negative padding.
-        console_width = max(1, getattr(self.console, 'width', 0) or 80)
+        console_width = max(1, getattr(self.console, "width", 0) or 80)
 
         # Color bar starts at the line-number column and ends 7 cols
         # short of the right terminal edge, leaving visible breathing
@@ -2458,9 +2458,9 @@ class ClawcodexREPL:
         for hunk in hunks:
             if truncated:
                 break
-            old_lineno = int(hunk.get('oldStart', 0) or 0)
-            new_lineno = int(hunk.get('newStart', 0) or 0)
-            for raw in hunk.get('lines') or []:
+            old_lineno = int(hunk.get("oldStart", 0) or 0)
+            new_lineno = int(hunk.get("newStart", 0) or 0)
+            for raw in hunk.get("lines") or []:
                 if rendered >= self._EDIT_DIFF_MAX_LINES:
                     truncated = True
                     break
@@ -2468,8 +2468,8 @@ class ClawcodexREPL:
                 # their source ``\n`` (Edit calls splitlines(keepends=True)
                 # before unified_diff). Strip it here so we don't double up
                 # on newlines and produce blank rows between every entry.
-                stripped = raw.rstrip('\n').rstrip('\r')
-                if stripped.startswith('+'):
+                stripped = raw.rstrip("\n").rstrip("\r")
+                if stripped.startswith("+"):
                     # Colors mirror ``typescript/src/utils/theme.ts darkTheme``
                     # (``diffAdded: 'rgb(34,92,43)'``,
                     # ``diffRemoved: 'rgb(122,41,54)'``). The bar begins
@@ -2477,67 +2477,67 @@ class ClawcodexREPL:
                     # (i.e. the gutter carries a 1-col leading bg pad).
                     body = stripped[1:]
                     num_str = str(new_lineno)
-                    lead = ' ' * max(0, 4 - len(num_str) - 1)
-                    gutter = f' {num_str} '
+                    lead = " " * max(0, 4 - len(num_str) - 1)
+                    gutter = f" {num_str} "
                     visible = len(gutter) + 1 + cell_len(body)
                     padding = max(0, target_right - len(lead) - visible)
                     diff.append(lead)
-                    diff.append(gutter, style=f'on {self._repl_palette.diff_add}')
-                    diff.append('+', style=f'bold on {self._repl_palette.diff_add}')
-                    diff.append(body + ' ' * padding, style=f'on {self._repl_palette.diff_add}')
-                    diff.append('\n')
+                    diff.append(gutter, style=f"on {self._repl_palette.diff_add}")
+                    diff.append("+", style=f"bold on {self._repl_palette.diff_add}")
+                    diff.append(body + " " * padding, style=f"on {self._repl_palette.diff_add}")
+                    diff.append("\n")
                     new_lineno += 1
-                elif stripped.startswith('-'):
+                elif stripped.startswith("-"):
                     body = stripped[1:]
                     num_str = str(old_lineno)
-                    lead = ' ' * max(0, 4 - len(num_str) - 1)
-                    gutter = f' {num_str} '
+                    lead = " " * max(0, 4 - len(num_str) - 1)
+                    gutter = f" {num_str} "
                     visible = len(gutter) + 1 + cell_len(body)
                     padding = max(0, target_right - len(lead) - visible)
                     diff.append(lead)
-                    diff.append(gutter, style=f'on {self._repl_palette.diff_remove}')
-                    diff.append('-', style=f'bold on {self._repl_palette.diff_remove}')
-                    diff.append(body + ' ' * padding, style=f'on {self._repl_palette.diff_remove}')
-                    diff.append('\n')
+                    diff.append(gutter, style=f"on {self._repl_palette.diff_remove}")
+                    diff.append("-", style=f"bold on {self._repl_palette.diff_remove}")
+                    diff.append(body + " " * padding, style=f"on {self._repl_palette.diff_remove}")
+                    diff.append("\n")
                     old_lineno += 1
                 else:
-                    body = stripped[1:] if stripped.startswith(' ') else stripped
+                    body = stripped[1:] if stripped.startswith(" ") else stripped
                     # Context lines have no bg; keep gutter width aligned
                     # with add/remove rows so columns line up.
-                    diff.append(f'{old_lineno:>4}  ' + body + '\n', style='dim')
+                    diff.append(f"{old_lineno:>4}  " + body + "\n", style="dim")
                     old_lineno += 1
                     new_lineno += 1
                 rendered += 1
 
         if truncated:
-            total = sum(len(h.get('lines') or []) for h in hunks)
+            total = sum(len(h.get("lines") or []) for h in hunks)
             remaining = max(0, total - rendered)
             diff.append(
-                f'     … +{remaining} more diff {"line" if remaining == 1 else "lines"}\n',
-                style='dim',
+                f"     … +{remaining} more diff {'line' if remaining == 1 else 'lines'}\n",
+                style="dim",
             )
 
         return Group(summary_text, diff) if Group is not None else summary_text
 
     def _format_tool_result_preview(
         self,
-        block: 'ToolResultBlock',
+        block: "ToolResultBlock",
         tool_info: tuple[str, dict] | None,
     ):
         """Return either a plain string or a Rich renderable (Edit diff)."""
         import json as _json
 
         raw = block.content if isinstance(block.content, str) else str(block.content)
-        tool_name = tool_info[0] if tool_info else ''
+        tool_name = tool_info[0] if tool_info else ""
 
         # Prefer the original ToolResult.output threaded through as
         # in-process metadata — `block.content` is the API-mapped string
         # (e.g. "The file X has been updated successfully.") and no longer
         # carries structured fields like Edit's `structuredPatch`.
         parsed: dict | None = None
-        meta_output = getattr(block, 'metadata', None)
+        meta_output = getattr(block, "metadata", None)
         if isinstance(meta_output, dict):
-            tool_output = meta_output.get('tool_output')
+            tool_output = meta_output.get("tool_output")
             if isinstance(tool_output, dict):
                 parsed = tool_output
         if parsed is None:
@@ -2548,242 +2548,242 @@ class ClawcodexREPL:
             except Exception:
                 pass
 
-        if tool_name == 'Read':
+        if tool_name == "Read":
             if parsed:
-                t = parsed.get('type', '')
-                if t == 'file_unchanged':
-                    return 'Unchanged since last read'
-                f = parsed.get('file', {})
-                n = f.get('numLines', 0)
-                if t == 'text':
-                    return f'Read {n} {"line" if n == 1 else "lines"}'
-                if t == 'notebook':
-                    cells = f.get('cells', [])
-                    return f'Read {len(cells)} cells'
-                if t == 'pdf':
-                    return 'Read PDF'
-                if t == 'image':
-                    return 'Read image'
-            if 'unchanged' in raw.lower():
-                return 'Unchanged since last read'
-            return 'Read file'
+                t = parsed.get("type", "")
+                if t == "file_unchanged":
+                    return "Unchanged since last read"
+                f = parsed.get("file", {})
+                n = f.get("numLines", 0)
+                if t == "text":
+                    return f"Read {n} {'line' if n == 1 else 'lines'}"
+                if t == "notebook":
+                    cells = f.get("cells", [])
+                    return f"Read {len(cells)} cells"
+                if t == "pdf":
+                    return "Read PDF"
+                if t == "image":
+                    return "Read image"
+            if "unchanged" in raw.lower():
+                return "Unchanged since last read"
+            return "Read file"
 
-        if tool_name == 'Bash':
+        if tool_name == "Bash":
             stdout = raw
             if parsed:
-                stdout = parsed.get('stdout', '')
-                stderr = parsed.get('stderr', '')
+                stdout = parsed.get("stdout", "")
+                stderr = parsed.get("stderr", "")
                 if not stdout and not stderr:
-                    return '(No output)'
+                    return "(No output)"
                 if not stdout:
                     stdout = stderr
             if not stdout or not stdout.strip():
-                return '(No output)'
-            lines = stdout.rstrip('\n').split('\n')
+                return "(No output)"
+            lines = stdout.rstrip("\n").split("\n")
             total_chars = len(stdout)
             if len(lines) <= self._MAX_PREVIEW_LINES + 1 and total_chars <= 200:
-                return stdout.rstrip('\n')
+                return stdout.rstrip("\n")
             if len(lines) <= self._MAX_PREVIEW_LINES + 1:
                 first_line = lines[0]
                 if len(first_line) > 120:
-                    return f'{first_line[:120]}…\n… +{total_chars - 120} chars'
-                return f'{stdout[:200]}…\n… +{total_chars - 200} chars'
-            preview = '\n'.join(lines[: self._MAX_PREVIEW_LINES])
+                    return f"{first_line[:120]}…\n… +{total_chars - 120} chars"
+                return f"{stdout[:200]}…\n… +{total_chars - 200} chars"
+            preview = "\n".join(lines[: self._MAX_PREVIEW_LINES])
             remaining = len(lines) - self._MAX_PREVIEW_LINES
-            return f'{preview}\n… +{remaining} lines'
+            return f"{preview}\n… +{remaining} lines"
 
-        if tool_name == 'Glob':
+        if tool_name == "Glob":
             if parsed:
-                n = parsed.get('numFiles', 0)
-                return f'Found {n} {"file" if n == 1 else "files"}'
-            return 'done'
+                n = parsed.get("numFiles", 0)
+                return f"Found {n} {'file' if n == 1 else 'files'}"
+            return "done"
 
-        if tool_name == 'Grep':
+        if tool_name == "Grep":
             if parsed:
-                mode = parsed.get('mode', 'files_with_matches')
-                if mode == 'content':
-                    n = parsed.get('numLines', 0)
-                    return f'Found {n} {"line" if n == 1 else "lines"}'
-                if mode == 'count':
-                    n = parsed.get('numMatches', 0)
-                    nf = parsed.get('numFiles', 0)
-                    return f'Found {n} {"match" if n == 1 else "matches"} across {nf} {"file" if nf == 1 else "files"}'
-                n = parsed.get('numFiles', 0)
-                return f'Found {n} {"file" if n == 1 else "files"}'
-            return 'done'
+                mode = parsed.get("mode", "files_with_matches")
+                if mode == "content":
+                    n = parsed.get("numLines", 0)
+                    return f"Found {n} {'line' if n == 1 else 'lines'}"
+                if mode == "count":
+                    n = parsed.get("numMatches", 0)
+                    nf = parsed.get("numFiles", 0)
+                    return f"Found {n} {'match' if n == 1 else 'matches'} across {nf} {'file' if nf == 1 else 'files'}"
+                n = parsed.get("numFiles", 0)
+                return f"Found {n} {'file' if n == 1 else 'files'}"
+            return "done"
 
-        if tool_name == 'Write':
+        if tool_name == "Write":
             # Port of ``typescript/src/tools/FileWriteTool/UI.tsx`` —
             # ``FileWriteToolCreatedMessage`` renders ``Wrote N lines to
             # <path>`` followed by the first MAX_LINES_TO_RENDER (10) lines
             # of the new content and a ``… +M lines`` footer when truncated.
             # Update results render a diff in the TS UI; we keep that as a
             # follow-up and only show the header for now.
-            path = ''
-            content = ''
+            path = ""
+            content = ""
             if tool_info and isinstance(tool_info[1], dict):
-                path = tool_info[1].get('file_path') or tool_info[1].get('filePath') or ''
-                c = tool_info[1].get('content')
+                path = tool_info[1].get("file_path") or tool_info[1].get("filePath") or ""
+                c = tool_info[1].get("content")
                 if isinstance(c, str):
                     content = c
             if parsed:
-                path = parsed.get('filePath') or parsed.get('path') or path
+                path = parsed.get("filePath") or parsed.get("path") or path
                 if not content:
-                    c = parsed.get('content')
+                    c = parsed.get("content")
                     if isinstance(c, str):
                         content = c
             if not path:
-                return 'done'
+                return "done"
 
             # Distinguish create vs update from the API result string emitted
             # by ``_map_result_to_api`` in ``src/tool_system/tools/write.py``.
-            is_update = 'has been updated successfully' in raw
+            is_update = "has been updated successfully" in raw
 
             short = self._shorten_path_text(path)
             # ``countLines`` parity: trailing newline is a terminator.
             if content:
-                parts = content.split('\n')
-                n = len(parts) - 1 if content.endswith('\n') else len(parts)
+                parts = content.split("\n")
+                n = len(parts) - 1 if content.endswith("\n") else len(parts)
             else:
                 n = 0
 
             header = (
-                f'Wrote {n} {"line" if n == 1 else "lines"} to {short}'
+                f"Wrote {n} {'line' if n == 1 else 'lines'} to {short}"
                 if n
-                else f'Wrote to {short}'
+                else f"Wrote to {short}"
             )
             if is_update or not content:
                 return header
 
             MAX = 10
-            content_lines = content.split('\n')
+            content_lines = content.split("\n")
             # Drop the trailing empty element produced by a terminator newline
             # so we don't render a phantom blank line N+1.
-            if content.endswith('\n') and content_lines and content_lines[-1] == '':
+            if content.endswith("\n") and content_lines and content_lines[-1] == "":
                 content_lines = content_lines[:-1]
             preview_lines = content_lines[:MAX]
-            body = '\n'.join(
-                f'     {i:>3}  {line}' for i, line in enumerate(preview_lines, start=1)
+            body = "\n".join(
+                f"     {i:>3}  {line}" for i, line in enumerate(preview_lines, start=1)
             )
             extra = max(0, len(content_lines) - MAX)
             footer = (
-                f'\n     … +{extra} {"line" if extra == 1 else "lines"} (ctrl+o to expand)'
+                f"\n     … +{extra} {'line' if extra == 1 else 'lines'} (ctrl+o to expand)"
                 if extra
-                else ''
+                else ""
             )
             if extra:
                 # Stash the full content so ``ctrl+o`` can re-print it as
                 # a fresh block below. We can't mutate the truncated
                 # block in scrollback once it's printed, so the
                 # expansion appends instead of swapping in place.
-                self._stash_expandable(f'Write({short})', content)
+                self._stash_expandable(f"Write({short})", content)
             if not body:
                 return header
-            return f'{header}\n{body}{footer}'
+            return f"{header}\n{body}{footer}"
 
-        if tool_name in ('Edit', 'MultiEdit'):
+        if tool_name in ("Edit", "MultiEdit"):
             # Port of ``typescript/src/components/FileEditToolUpdatedMessage.tsx``:
             # show ``Added X lines, removed Y lines`` plus the line-numbered
             # diff with red/green markers, instead of a bare ``done``.
             if parsed:
-                hunks = parsed.get('structuredPatch') or []
+                hunks = parsed.get("structuredPatch") or []
                 if hunks:
                     return self._format_edit_diff_preview(hunks)
-                if parsed.get('type') == 'create':
-                    path = parsed.get('filePath') or parsed.get('path') or ''
-                    content = parsed.get('content') or ''
+                if parsed.get("type") == "create":
+                    path = parsed.get("filePath") or parsed.get("path") or ""
+                    content = parsed.get("content") or ""
                     if path:
                         if content:
-                            parts = content.split('\n')
-                            n = len(parts) - 1 if content.endswith('\n') else len(parts)
+                            parts = content.split("\n")
+                            n = len(parts) - 1 if content.endswith("\n") else len(parts)
                         else:
                             n = 0
                         short = self._shorten_path_text(path)
                         return (
-                            f'Wrote {n} {"line" if n == 1 else "lines"} to {short}'
+                            f"Wrote {n} {'line' if n == 1 else 'lines'} to {short}"
                             if n
-                            else f'Wrote to {short}'
+                            else f"Wrote to {short}"
                         )
-            return 'done'
+            return "done"
 
-        if tool_name == 'TaskCreate':
+        if tool_name == "TaskCreate":
             if parsed:
-                task = parsed.get('task') or {}
-                subject = task.get('subject') or ''
-                task_id = task.get('id') or ''
+                task = parsed.get("task") or {}
+                subject = task.get("subject") or ""
+                task_id = task.get("id") or ""
                 if subject:
-                    return f'Created task #{task_id}: {subject}'
+                    return f"Created task #{task_id}: {subject}"
                 if task_id:
-                    return f'Created task #{task_id}'
-            return 'Task created'
+                    return f"Created task #{task_id}"
+            return "Task created"
 
-        if tool_name == 'TaskUpdate':
+        if tool_name == "TaskUpdate":
             if parsed:
-                changed = parsed.get('updatedFields') or []
-                task_id = parsed.get('taskId') or ''
-                status_change = parsed.get('statusChange') or {}
+                changed = parsed.get("updatedFields") or []
+                task_id = parsed.get("taskId") or ""
+                status_change = parsed.get("statusChange") or {}
                 if status_change:
                     return (
-                        f'Task #{task_id}: {status_change.get("from")} → {status_change.get("to")}'
+                        f"Task #{task_id}: {status_change.get('from')} → {status_change.get('to')}"
                     )
-                if 'deleted' in changed:
-                    return f'Task #{task_id} deleted'
+                if "deleted" in changed:
+                    return f"Task #{task_id} deleted"
                 if changed:
-                    return f'Task #{task_id} updated ({", ".join(changed)})'
-            return 'Task updated'
+                    return f"Task #{task_id} updated ({', '.join(changed)})"
+            return "Task updated"
 
-        if tool_name == 'TaskList':
+        if tool_name == "TaskList":
             if parsed:
-                tasks = parsed.get('tasks') or []
-                return f'Listed {len(tasks)} task{"" if len(tasks) == 1 else "s"}'
-            return 'Listed tasks'
+                tasks = parsed.get("tasks") or []
+                return f"Listed {len(tasks)} task{'' if len(tasks) == 1 else 's'}"
+            return "Listed tasks"
 
-        if tool_name == 'TaskGet':
-            if parsed and parsed.get('task'):
-                t = parsed['task']
-                return f'Task #{t.get("id")}: {t.get("subject")} ({t.get("status")})'
-            return 'Task not found'
+        if tool_name == "TaskGet":
+            if parsed and parsed.get("task"):
+                t = parsed["task"]
+                return f"Task #{t.get('id')}: {t.get('subject')} ({t.get('status')})"
+            return "Task not found"
 
-        if tool_name in ('Agent', 'Task'):
+        if tool_name in ("Agent", "Task"):
             # Show the subagent's terminal outcome instead of the raw JSON
             # envelope (which dumps prompt / agent_id / token counts inline).
-            content_text = ''
-            agent_type = ''
+            content_text = ""
+            agent_type = ""
             tool_uses_count: int | None = None
             duration_ms: int | None = None
             if parsed:
-                agent_type = str(parsed.get('agent_type') or '')
-                blocks = parsed.get('content')
+                agent_type = str(parsed.get("agent_type") or "")
+                blocks = parsed.get("content")
                 if isinstance(blocks, list):
                     parts = []
                     for b in blocks:
-                        if isinstance(b, dict) and b.get('type') == 'text':
-                            t = b.get('text')
+                        if isinstance(b, dict) and b.get("type") == "text":
+                            t = b.get("text")
                             if isinstance(t, str):
                                 parts.append(t)
-                    content_text = '\n'.join(parts).strip()
+                    content_text = "\n".join(parts).strip()
                 elif isinstance(blocks, str):
                     content_text = blocks.strip()
-                tu = parsed.get('total_tool_use_count')
+                tu = parsed.get("total_tool_use_count")
                 if isinstance(tu, int):
                     tool_uses_count = tu
-                dur = parsed.get('total_duration_ms')
+                dur = parsed.get("total_duration_ms")
                 if isinstance(dur, int):
                     duration_ms = dur
             head_bits: list[str] = []
             if agent_type:
-                head_bits.append(f'@{agent_type}')
+                head_bits.append(f"@{agent_type}")
             stats: list[str] = []
             if isinstance(tool_uses_count, int):
-                stats.append(f'{tool_uses_count} tool use{"" if tool_uses_count == 1 else "s"}')
+                stats.append(f"{tool_uses_count} tool use{'' if tool_uses_count == 1 else 's'}")
             if isinstance(duration_ms, int) and duration_ms > 0:
                 if duration_ms >= 1000:
-                    stats.append(f'{duration_ms / 1000:.1f}s')
+                    stats.append(f"{duration_ms / 1000:.1f}s")
                 else:
-                    stats.append(f'{duration_ms}ms')
+                    stats.append(f"{duration_ms}ms")
             if stats:
-                head_bits.append('(' + ', '.join(stats) + ')')
-            head = ' '.join(head_bits) if head_bits else 'Agent done'
+                head_bits.append("(" + ", ".join(stats) + ")")
+            head = " ".join(head_bits) if head_bits else "Agent done"
             if not content_text:
                 return head
             # Show the first non-empty content line plus an ellipsis hint when
@@ -2793,37 +2793,37 @@ class ClawcodexREPL:
                 return head
             first = lines[0]
             if len(first) > 200:
-                first = first[:197] + '…'
+                first = first[:197] + "…"
             if len(lines) > 1:
-                return f'{head}\n{first}\n… +{len(lines) - 1} more line{"" if len(lines) - 1 == 1 else "s"}'
-            return f'{head}\n{first}'
+                return f"{head}\n{first}\n… +{len(lines) - 1} more line{'' if len(lines) - 1 == 1 else 's'}"
+            return f"{head}\n{first}"
 
-        if tool_name == 'TodoWrite':
+        if tool_name == "TodoWrite":
             if parsed:
-                new = parsed.get('newTodos') or []
-                done = sum(1 for t in new if t.get('status') == 'completed')
-                in_prog = sum(1 for t in new if t.get('status') == 'in_progress')
-                pending = sum(1 for t in new if t.get('status') == 'pending')
+                new = parsed.get("newTodos") or []
+                done = sum(1 for t in new if t.get("status") == "completed")
+                in_prog = sum(1 for t in new if t.get("status") == "in_progress")
+                pending = sum(1 for t in new if t.get("status") == "pending")
                 return (
-                    f'{len(new)} todo{"" if len(new) == 1 else "s"} '
-                    f'({done} done, {in_prog} in progress, {pending} open)'
+                    f"{len(new)} todo{'' if len(new) == 1 else 's'} "
+                    f"({done} done, {in_prog} in progress, {pending} open)"
                 )
-            return 'Todos updated'
+            return "Todos updated"
 
         if not raw or len(raw) < 80:
-            return raw or 'done'
-        lines = raw.rstrip('\n').split('\n')
+            return raw or "done"
+        lines = raw.rstrip("\n").split("\n")
         total_chars = len(raw)
         if len(lines) <= self._MAX_PREVIEW_LINES + 1 and total_chars <= 200:
-            return raw.rstrip('\n')
+            return raw.rstrip("\n")
         if len(lines) <= self._MAX_PREVIEW_LINES + 1:
             first_line = lines[0]
             if len(first_line) > 120:
-                return f'{first_line[:120]}…\n… +{total_chars - 120} chars'
-            return f'{raw[:200]}…\n… +{total_chars - 200} chars'
-        preview = '\n'.join(lines[: self._MAX_PREVIEW_LINES])
+                return f"{first_line[:120]}…\n… +{total_chars - 120} chars"
+            return f"{raw[:200]}…\n… +{total_chars - 200} chars"
+        preview = "\n".join(lines[: self._MAX_PREVIEW_LINES])
         remaining = len(lines) - self._MAX_PREVIEW_LINES
-        return f'{preview}\n… +{remaining} lines'
+        return f"{preview}\n… +{remaining} lines"
 
     def _available_agents(self) -> list[Any]:
         """Return the list of agent definitions that can be invoked via ``@agent-...``.
@@ -2842,12 +2842,12 @@ class ClawcodexREPL:
             return []
 
         extra = getattr(
-            getattr(self.tool_context, 'options', None),
-            'agent_definitions',
+            getattr(self.tool_context, "options", None),
+            "agent_definitions",
             None,
         )
         if isinstance(extra, dict):
-            active = extra.get('active_agents')
+            active = extra.get("active_agents")
             if isinstance(active, list) and active:
                 return list(active)
 
@@ -2856,7 +2856,7 @@ class ClawcodexREPL:
             return get_agents_for_mentions(
                 cwd,
                 tool_context=self.tool_context,
-                runtime_context=getattr(self, 'runtime_context', None),
+                runtime_context=getattr(self, "runtime_context", None),
             )
         except Exception:
             return list(get_built_in_agents())
@@ -2864,7 +2864,7 @@ class ClawcodexREPL:
     def _enqueue_prompt(self, text: str) -> None:
         """Append a user-typed prompt to the user queue from any thread."""
 
-        text = (text or '').strip()
+        text = (text or "").strip()
         if not text:
             return
         with self._queued_prompts_lock:
@@ -2889,7 +2889,7 @@ class ClawcodexREPL:
         (uses ``call_soon_threadsafe``); a no-op when no prompt is active
         (the next loop iteration drains the queue naturally).
         """
-        loop = getattr(self, '_cron_loop', None)
+        loop = getattr(self, "_cron_loop", None)
         if loop is None or not loop.is_running():
             return
         loop.call_soon_threadsafe(self._exit_pending_prompt_for_im)
@@ -2901,13 +2901,13 @@ class ClawcodexREPL:
         actually pending (``app.future`` set) — calling it with no active
         prompt crashes prompt_toolkit. Same guard ``_watch_outbox`` uses.
         """
-        ps = getattr(self, 'prompt_session', None)
+        ps = getattr(self, "prompt_session", None)
         if ps is None:
             return
-        app = getattr(ps, 'app', None)
+        app = getattr(ps, "app", None)
         if app is None:
             return
-        if getattr(app, 'future', None) is not None:
+        if getattr(app, "future", None) is not None:
             app.exit(result=_CRON_WAKE)
 
     def _get_chat_loop(self):
@@ -2923,7 +2923,7 @@ class ClawcodexREPL:
         to ``get_event_loop()`` when ``_cron_loop`` is absent (headless/test
         paths without ``run()``).
         """
-        loop = getattr(self, '_cron_loop', None)
+        loop = getattr(self, "_cron_loop", None)
         if loop is not None:
             return loop
         return asyncio.get_event_loop()
@@ -2937,9 +2937,9 @@ class ClawcodexREPL:
                 return True
             except Exception:
                 return False
-        abort_controller = getattr(self, '_direct_abort_controller', None)
+        abort_controller = getattr(self, "_direct_abort_controller", None)
         if abort_controller is not None and not abort_controller.signal.aborted:
-            abort_controller.abort('user_interrupt')
+            abort_controller.abort("user_interrupt")
             return True
         return False
 
@@ -2949,7 +2949,7 @@ class ClawcodexREPL:
         Cron prompts are consumed with lower priority than user input —
         see ``_pop_queued_prompt``.
         """
-        text = (text or '').strip()
+        text = (text or "").strip()
         if not text:
             return
         with self._queued_prompts_lock:
@@ -2963,15 +2963,15 @@ class ClawcodexREPL:
         """
         with self._queued_prompts_lock:
             if self._queued_prompts:
-                return (self._queued_prompts.popleft(), 'user')
+                return (self._queued_prompts.popleft(), "user")
             if self._cron_queued_prompts:
-                return (self._cron_queued_prompts.popleft(), 'cron')
+                return (self._cron_queued_prompts.popleft(), "cron")
             return None
 
     def _ensure_background_output_queue(self) -> None:
-        if not hasattr(self, '_background_outputs_lock'):
+        if not hasattr(self, "_background_outputs_lock"):
             self._background_outputs_lock = threading.Lock()
-        if not hasattr(self, '_background_outputs'):
+        if not hasattr(self, "_background_outputs"):
             self._background_outputs = []
 
     def _enqueue_background_output(self, text: str) -> None:
@@ -2986,7 +2986,7 @@ class ClawcodexREPL:
             self._background_outputs.clear()
         for text in outputs:
             if self._is_recap_text(text):
-                self._print_local_command_text(text, command='recap')
+                self._print_local_command_text(text, command="recap")
                 continue
             self.console.print(text)
 
@@ -3007,8 +3007,8 @@ class ClawcodexREPL:
             """Watch for cron events and wake the prompt when found."""
             while True:
                 await asyncio.sleep(1.0)
-                outbox = getattr(self.tool_context, 'outbox', None)
-                if outbox and getattr(app, 'future', None) is not None:
+                outbox = getattr(self.tool_context, "outbox", None)
+                if outbox and getattr(app, "future", None) is not None:
                     app.exit(result=_CRON_WAKE)
                     return
 
@@ -3016,16 +3016,16 @@ class ClawcodexREPL:
         buffer_changed_handler = None
         default_buffer = None
         try:
-            controller = getattr(self, '_intent_forecast_controller', None)
+            controller = getattr(self, "_intent_forecast_controller", None)
             default_buffer = getattr(
-                getattr(self.prompt_session, 'app', None), 'default_buffer', None
+                getattr(self.prompt_session, "app", None), "default_buffer", None
             )
             if controller is not None and default_buffer is not None:
 
                 def _on_text_changed(_sender) -> None:
                     try:
                         controller.on_prompt_draft_changed(
-                            str(getattr(default_buffer, 'text', '') or '')
+                            str(getattr(default_buffer, "text", "") or "")
                         )
                     except Exception:
                         pass
@@ -3035,7 +3035,7 @@ class ClawcodexREPL:
                     default_buffer.on_text_changed += buffer_changed_handler
                 except Exception:
                     buffer_changed_handler = None
-            return await self.prompt_session.prompt_async('❯ ')
+            return await self.prompt_session.prompt_async("❯ ")
         finally:
             if buffer_changed_handler is not None and default_buffer is not None:
                 try:
@@ -3070,57 +3070,57 @@ class ClawcodexREPL:
         """
         if not _HAS_CRON:
             return
-        if not hasattr(self, '_cron_active_tasks'):
+        if not hasattr(self, "_cron_active_tasks"):
             self._cron_active_tasks = {}
-        outbox = getattr(self.tool_context, 'outbox', None)
+        outbox = getattr(self.tool_context, "outbox", None)
         if not outbox:
             return
         drained: list[str] = []
         while outbox:
             entry = outbox.pop(0)
-            if hasattr(entry, 'get'):
-                etype = entry.get('type', '')
-                if etype == 'cron_prompt':
-                    prompt = (entry.get('prompt') or '').strip()
-                    task_id = entry.get('task_id', '')
-                    run_id = entry.get('run_id', '')
+            if hasattr(entry, "get"):
+                etype = entry.get("type", "")
+                if etype == "cron_prompt":
+                    prompt = (entry.get("prompt") or "").strip()
+                    task_id = entry.get("task_id", "")
+                    run_id = entry.get("run_id", "")
                     if task_id and task_id in self._cron_active_tasks:
-                        self._finalize_cron_run(run_id, 'cancelled')
+                        self._finalize_cron_run(run_id, "cancelled")
                         continue
                     if prompt:
                         if task_id and run_id:
                             self._cron_active_tasks[task_id] = run_id
                         drained.append(_wrap_cron_prompt(prompt, task_id=task_id))
-                elif etype == 'cron_missed':
-                    notification = (entry.get('notification') or '').strip()
+                elif etype == "cron_missed":
+                    notification = (entry.get("notification") or "").strip()
                     if notification:
                         drained.append(notification)
             elif isinstance(entry, dict):
                 # Fallback for legacy dict entries (backward compat)
-                etype = entry.get('type', '')
-                if etype == 'cron_prompt':
-                    prompt = (entry.get('prompt') or '').strip()
-                    task_id = entry.get('task_id', '')
-                    run_id = entry.get('run_id', '')
+                etype = entry.get("type", "")
+                if etype == "cron_prompt":
+                    prompt = (entry.get("prompt") or "").strip()
+                    task_id = entry.get("task_id", "")
+                    run_id = entry.get("run_id", "")
                     if task_id and task_id in self._cron_active_tasks:
-                        self._finalize_cron_run(run_id, 'cancelled')
+                        self._finalize_cron_run(run_id, "cancelled")
                         continue
                     if prompt:
                         if task_id and run_id:
                             self._cron_active_tasks[task_id] = run_id
                         drained.append(_wrap_cron_prompt(prompt, task_id=task_id))
-                elif etype == 'cron_missed':
-                    notification = (entry.get('notification') or '').strip()
+                elif etype == "cron_missed":
+                    notification = (entry.get("notification") or "").strip()
                     if notification:
                         drained.append(notification)
         for text in drained:
             self._enqueue_cron_prompt(text)
 
     def _extract_cron_task_id(self, user_input: str) -> str | None:
-        first_line = user_input.split('\n', 1)[0]
-        if not first_line.startswith('✻ Running scheduled task'):
+        first_line = user_input.split("\n", 1)[0]
+        if not first_line.startswith("✻ Running scheduled task"):
             return None
-        sep = ' · '
+        sep = " · "
         idx = first_line.find(sep)
         if idx == -1:
             return None
@@ -3128,7 +3128,7 @@ class ClawcodexREPL:
         return task_id if task_id else None
 
     def _claim_cron_task(self, task_id: str) -> str | None:
-        active = getattr(self, '_cron_active_tasks', None)
+        active = getattr(self, "_cron_active_tasks", None)
         if active is None:
             return None
         run_id = active.get(task_id)
@@ -3164,11 +3164,11 @@ class ClawcodexREPL:
     def _finalize_cron_task(
         self,
         task_id: str,
-        status: str = 'completed',
+        status: str = "completed",
         *,
         error: str | None = None,
     ) -> None:
-        active = getattr(self, '_cron_active_tasks', None)
+        active = getattr(self, "_cron_active_tasks", None)
         if active is None:
             return
         run_id = active.pop(task_id, None)
@@ -3212,7 +3212,7 @@ class ClawcodexREPL:
         self._thinking_chunks.clear()
 
     @property
-    def _p(self) -> 'REPLPalette':
+    def _p(self) -> "REPLPalette":
         """Convenience access to the active REPL palette."""
         return self._repl_palette
 
@@ -3221,8 +3221,8 @@ class ClawcodexREPL:
 
         n = self._queued_count()
         if n == 0:
-            return 'Thinking…'
-        return f'Thinking… ({n} queued)'
+            return "Thinking…"
+        return f"Thinking… ({n} queued)"
 
     def _safe_input(self, prompt: str) -> str:
         """Read a line from the user.
@@ -3282,51 +3282,51 @@ class ClawcodexREPL:
         if not self._expandable_blocks:
             return
         label, content = self._expandable_blocks[-1]
-        lines = content.split('\n')
+        lines = content.split("\n")
         # Trim the trailing empty element produced by a terminator newline
         # so we don't render a phantom blank line at the end.
-        if content.endswith('\n') and lines and lines[-1] == '':
+        if content.endswith("\n") and lines and lines[-1] == "":
             lines = lines[:-1]
-        self.console.print(f'  [dim]── Expanded {label} ──[/dim]', highlight=False)
+        self.console.print(f"  [dim]── Expanded {label} ──[/dim]", highlight=False)
         for i, line in enumerate(lines, start=1):
             # markup=False / highlight=False so a stray ``[`` or ``$`` in
             # the file content can't be interpreted as Rich markup or a
             # syntax token.
             self.console.print(
-                f'     {i:>3}  {line}',
+                f"     {i:>3}  {line}",
                 markup=False,
                 highlight=False,
                 soft_wrap=True,
             )
-        self.console.print('  [dim]── End ──[/dim]', highlight=False)
+        self.console.print("  [dim]── End ──[/dim]", highlight=False)
 
     def _expand_thinking(self) -> None:
         """Print stashed thinking content when user presses ctrl+o."""
         if not self._thinking_chunks:
             return
-        thinking_text = ''.join(self._thinking_chunks)
-        lines = thinking_text.split('\n')
-        if thinking_text.endswith('\n') and lines and lines[-1] == '':
+        thinking_text = "".join(self._thinking_chunks)
+        lines = thinking_text.split("\n")
+        if thinking_text.endswith("\n") and lines and lines[-1] == "":
             lines = lines[:-1]
-        self.console.print('  [dim]── Expanded thinking ──[/dim]', highlight=False)
+        self.console.print("  [dim]── Expanded thinking ──[/dim]", highlight=False)
         for i, line in enumerate(lines, start=1):
             self.console.print(
-                f'     {i:>3}  {line}',
+                f"     {i:>3}  {line}",
                 markup=False,
                 highlight=False,
                 soft_wrap=True,
             )
-        self.console.print('  [dim]── End ──[/dim]', highlight=False)
+        self.console.print("  [dim]── End ──[/dim]", highlight=False)
         self._thinking_chunks.clear()
 
     def _shorten_path_text(self, text: str) -> str:
         root = str(self.tool_context.workspace_root)
         cwd = str(self.tool_context.cwd or self.tool_context.workspace_root)
         for base in (cwd, root):
-            prefix = base.rstrip('/') + '/'
+            prefix = base.rstrip("/") + "/"
             if text.startswith(prefix):
-                return './' + text[len(prefix) :]
-            text = text.replace(prefix, '')
+                return "./" + text[len(prefix) :]
+            text = text.replace(prefix, "")
         return text
 
     # ------------------------------------------------------------------
@@ -3347,52 +3347,52 @@ class ClawcodexREPL:
 
         def _sort_key(entry: dict[str, Any]) -> tuple[int, str]:
             try:
-                return (0, f'{int(entry["id"]):08d}')
+                return (0, f"{int(entry['id']):08d}")
             except (TypeError, ValueError):
-                return (1, str(entry.get('id', '')))
+                return (1, str(entry.get("id", "")))
 
         sorted_tasks = sorted(tasks, key=_sort_key)
 
-        completed = sum(1 for t in sorted_tasks if t['status'] == 'completed')
-        in_progress = sum(1 for t in sorted_tasks if t['status'] == 'in_progress')
+        completed = sum(1 for t in sorted_tasks if t["status"] == "completed")
+        in_progress = sum(1 for t in sorted_tasks if t["status"] == "in_progress")
         pending = len(sorted_tasks) - completed - in_progress
 
-        parts = [f'[bold]{completed}[/bold] done']
+        parts = [f"[bold]{completed}[/bold] done"]
         if in_progress > 0:
-            parts.append(f'[bold]{in_progress}[/bold] in progress')
-        parts.append(f'[bold]{pending}[/bold] open')
+            parts.append(f"[bold]{in_progress}[/bold] in progress")
+        parts.append(f"[bold]{pending}[/bold] open")
         header = (
-            f'[success]●[/success] [bold][info]Tasks[/info][/bold] '
-            f'[dim]([bold]{len(sorted_tasks)}[/bold] total: {", ".join(parts)})[/dim]'
+            f"[success]●[/success] [bold][info]Tasks[/info][/bold] "
+            f"[dim]([bold]{len(sorted_tasks)}[/bold] total: {', '.join(parts)})[/dim]"
         )
         self.console.print(header)
 
-        unresolved = {t['id'] for t in sorted_tasks if t['status'] != 'completed'}
+        unresolved = {t["id"] for t in sorted_tasks if t["status"] != "completed"}
 
         for task in sorted_tasks:
-            status = task['status']
-            subject = str(task.get('subject') or '')
-            if status == 'completed':
-                icon, style, subject_style = '✓', 'green', 'dim strike'
-            elif status == 'in_progress':
-                icon, style, subject_style = '◼', 'cyan', 'bold'
+            status = task["status"]
+            subject = str(task.get("subject") or "")
+            if status == "completed":
+                icon, style, subject_style = "✓", "green", "dim strike"
+            elif status == "in_progress":
+                icon, style, subject_style = "◼", "cyan", "bold"
             else:
-                icon, style, subject_style = '◻', 'dim', ''
+                icon, style, subject_style = "◻", "dim", ""
 
-            blocked_by = [bid for bid in (task.get('blockedBy') or []) if bid in unresolved]
-            owner = task.get('owner')
+            blocked_by = [bid for bid in (task.get("blockedBy") or []) if bid in unresolved]
+            owner = task.get("owner")
             suffix_parts: list[str] = []
             if owner:
-                suffix_parts.append(f'[dim] (@{owner})[/dim]')
+                suffix_parts.append(f"[dim] (@{owner})[/dim]")
             if blocked_by:
-                blockers = ', '.join(f'#{bid}' for bid in sorted(blocked_by))
-                suffix_parts.append(f'[dim] ▸ blocked by {blockers}[/dim]')
-            suffix = ''.join(suffix_parts)
+                blockers = ", ".join(f"#{bid}" for bid in sorted(blocked_by))
+                suffix_parts.append(f"[dim] ▸ blocked by {blockers}[/dim]")
+            suffix = "".join(suffix_parts)
 
             subject_markup = (
-                f'[{subject_style}]{subject}[/{subject_style}]' if subject_style else subject
+                f"[{subject_style}]{subject}[/{subject_style}]" if subject_style else subject
             )
-            self.console.print(f'  [{style}]{icon}[/{style}] {subject_markup}{suffix}')
+            self.console.print(f"  [{style}]{icon}[/{style}] {subject_markup}{suffix}")
 
     def _collect_task_entries(self) -> list[dict[str, Any]]:
         """Return a normalised list of task dicts from the tool context.
@@ -3402,33 +3402,33 @@ class ClawcodexREPL:
         the same shape: ``{id, status, subject, owner?, blockedBy?}``.
         """
         entries: list[dict[str, Any]] = []
-        v2 = getattr(self.tool_context, 'tasks', None) or {}
+        v2 = getattr(self.tool_context, "tasks", None) or {}
         if isinstance(v2, dict) and v2:
             for tid, t in v2.items():
                 if not isinstance(t, dict):
                     continue
                 entries.append(
                     {
-                        'id': str(t.get('id', tid)),
-                        'status': t.get('status', 'pending'),
-                        'subject': t.get('subject', ''),
-                        'owner': t.get('owner'),
-                        'blockedBy': list(t.get('blockedBy') or []),
+                        "id": str(t.get("id", tid)),
+                        "status": t.get("status", "pending"),
+                        "subject": t.get("subject", ""),
+                        "owner": t.get("owner"),
+                        "blockedBy": list(t.get("blockedBy") or []),
                     }
                 )
             return entries
 
-        todos = getattr(self.tool_context, 'todos', None) or []
+        todos = getattr(self.tool_context, "todos", None) or []
         for td in todos:
             if not isinstance(td, dict):
                 continue
             entries.append(
                 {
-                    'id': str(td.get('id', '')),
-                    'status': td.get('status', 'pending'),
-                    'subject': td.get('content') or td.get('activeForm') or '',
-                    'owner': None,
-                    'blockedBy': [],
+                    "id": str(td.get("id", "")),
+                    "status": td.get("status", "pending"),
+                    "subject": td.get("content") or td.get("activeForm") or "",
+                    "owner": None,
+                    "blockedBy": [],
                 }
             )
         return entries
@@ -3437,7 +3437,7 @@ class ClawcodexREPL:
         cwd = str(Path.cwd())
         home = str(Path.home())
         if cwd.startswith(home):
-            return cwd.replace(home, '~', 1)
+            return cwd.replace(home, "~", 1)
         return cwd
 
     def _truncate_middle(self, text: str, limit: int) -> str:
@@ -3447,7 +3447,7 @@ class ClawcodexREPL:
             return text[:limit]
         head = max(1, (limit - 1) // 2)
         tail = max(1, limit - head - 1)
-        return f'{text[:head]}…{text[-tail:]}'
+        return f"{text[:head]}…{text[-tail:]}"
 
     def _handoff_to_textual_tui(self) -> None:
         """Switch from the Rich REPL into the Textual TUI for this session.
@@ -3462,20 +3462,20 @@ class ClawcodexREPL:
             from src.tui.app import ClawCodexTUI
         except Exception as exc:
             self.console.print(
-                f'[error]Textual TUI is unavailable: {exc}[/error]\n'
+                f"[error]Textual TUI is unavailable: {exc}[/error]\n"
                 "[dim]Install it with `pip install 'textual>=0.79'`.[/dim]"
             )
             return
 
         if self.tool_context is None:
             self.console.print(
-                '[error]TUI requires an API key to function.[/error]\n'
-                '[dim]Use [bold]/login[/bold] to configure, or set [info]ANTHROPIC_API_KEY[/info] env var, then restart.[/dim]'
+                "[error]TUI requires an API key to function.[/error]\n"
+                "[dim]Use [bold]/login[/bold] to configure, or set [info]ANTHROPIC_API_KEY[/info] env var, then restart.[/dim]"
             )
             return
 
         self.console.print(
-            '[dim]Entering Textual TUI. Press Ctrl+B to exit to shell, or /exit / Ctrl+D to return to CLI.[/dim]'
+            "[dim]Entering Textual TUI. Press Ctrl+B to exit to shell, or /exit / Ctrl+D to return to CLI.[/dim]"
         )
         app = ClawCodexTUI(
             provider=self.provider,
@@ -3493,12 +3493,12 @@ class ClawcodexREPL:
         except KeyboardInterrupt:
             pass
         except Exception as exc:
-            self.console.print(f'[error]TUI exited with error: {exc}[/error]')
+            self.console.print(f"[error]TUI exited with error: {exc}[/error]")
         finally:
             # Dump the transcript we captured right before exit so the
             # conversation stays in the host's scrollback — matching
             # ink's non-fullscreen behaviour.
-            snapshot = getattr(app, 'exit_snapshot', None) or []
+            snapshot = getattr(app, "exit_snapshot", None) or []
             for piece in snapshot:
                 try:
                     self.console.print(piece)
@@ -3506,37 +3506,37 @@ class ClawcodexREPL:
                     continue
 
             # Ctrl+B → background exit (agent running in background)
-            if isinstance(result, tuple) and result[0] == '__BACKGROUND_EXIT__':
-                session_id = result[1] if len(result) > 1 else ''
+            if isinstance(result, tuple) and result[0] == "__BACKGROUND_EXIT__":
+                session_id = result[1] if len(result) > 1 else ""
                 has_bg_agent = result[2] if len(result) > 2 else False
                 if has_bg_agent:
                     self.console.print(
-                        '\n  [bold][success]Agent is running in background[/success][/bold]'
+                        "\n  [bold][success]Agent is running in background[/success][/bold]"
                     )
                 else:
                     if session_id:
                         self.console.print(
-                            f'\n  [bold][warning]Session {session_id} saved.[/warning][/bold]'
+                            f"\n  [bold][warning]Session {session_id} saved.[/warning][/bold]"
                         )
                     else:
-                        self.console.print('\n  [warning]Session saved.[/warning]')
-                self.console.print('[dim]Exiting clawcodex...[/dim]')
+                        self.console.print("\n  [warning]Session saved.[/warning]")
+                self.console.print("[dim]Exiting clawcodex...[/dim]")
                 raise SystemExit(0)
 
             # Ctrl+B → full exit to terminal shell (not back to CLI)
-            if isinstance(result, tuple) and result[0] == '__FULL_EXIT__':
-                session_id = result[1] if len(result) > 1 else ''
+            if isinstance(result, tuple) and result[0] == "__FULL_EXIT__":
+                session_id = result[1] if len(result) > 1 else ""
                 if session_id:
                     self.console.print(
-                        f'\n  [bold][warning]Session {session_id} saved.[/warning][/bold] Resume with:\n'
-                        f'    [info]clawcodex --tui --resume {session_id}[/info]'
+                        f"\n  [bold][warning]Session {session_id} saved.[/warning][/bold] Resume with:\n"
+                        f"    [info]clawcodex --tui --resume {session_id}[/info]"
                     )
                 else:
-                    self.console.print('\n  [dim]Session saved.[/dim]')
-                self.console.print('[dim]Exiting clawcodex...[/dim]')
+                    self.console.print("\n  [dim]Session saved.[/dim]")
+                self.console.print("[dim]Exiting clawcodex...[/dim]")
                 raise SystemExit(0)
 
-            self.console.print('[dim]Returned from Textual TUI.[/dim]')
+            self.console.print("[dim]Returned from Textual TUI.[/dim]")
 
     def _sync_conversation_from_transcript(self, session_id: str) -> None:
         """Sync conversation from JSONL transcript to get full history.
@@ -3568,8 +3568,8 @@ class ClawcodexREPL:
             messages = []
             for entry in entries:
                 if (
-                    entry.get('role') == 'system'
-                    and entry.get('content') == '__background_complete__'
+                    entry.get("role") == "system"
+                    and entry.get("content") == "__background_complete__"
                 ):
                     continue  # Skip completion marker
                 try:
@@ -3613,21 +3613,21 @@ class ClawcodexREPL:
         except Exception:
             return
 
-        if not info or info.get('status') != 'running':
+        if not info or info.get("status") != "running":
             return
 
-        pid = info.get('pid')
-        pid_str = f' (pid {pid})' if pid is not None else ''
+        pid = info.get("pid")
+        pid_str = f" (pid {pid})" if pid is not None else ""
         self.console.print(
-            f'\n[warning]⏎ Background agent{pid_str} is still running for this session.[/warning]'
+            f"\n[warning]⏎ Background agent{pid_str} is still running for this session.[/warning]"
         )
         self.console.print(
-            '[dim]The history shown below is partial — it only reflects what the '
-            'background agent has produced so far.[/dim]'
+            "[dim]The history shown below is partial — it only reflects what the "
+            "background agent has produced so far.[/dim]"
         )
         self.console.print(
-            f'[dim]To see the complete output once it finishes, exit and re-run:[/dim]\n'
-            f'  [info]clawcodex --resume {session_id}[/info]'
+            f"[dim]To see the complete output once it finishes, exit and re-run:[/dim]\n"
+            f"  [info]clawcodex --resume {session_id}[/info]"
         )
 
     def _replay_resume_history(self) -> None:
@@ -3648,7 +3648,7 @@ class ClawcodexREPL:
         from src.tool_system.renderers import summarize_tool_use
 
         self.console.print()
-        self.console.print('[dim]─── resumed conversation history ───[/dim]')
+        self.console.print("[dim]─── resumed conversation history ───[/dim]")
 
         # Build a tool_use_id → (name, input) map so we can show
         # the right header above each ToolResultBlock.
@@ -3659,33 +3659,33 @@ class ClawcodexREPL:
         tool_block_needs_leading_space = False
 
         for msg in self.session.conversation.messages:
-            role = getattr(msg, 'role', '') or ''
-            content = getattr(msg, 'content', None)
+            role = getattr(msg, "role", "") or ""
+            content = getattr(msg, "content", None)
 
-            if role == 'system':
+            if role == "system":
                 # F-103: Render away_summary (Recapitulate) system messages
                 # instead of skipping them, matching live-chat behaviour where
                 # _print_local_command_text renders /recap output as Markdown.
-                subtype = getattr(msg, 'subtype', None) or ''
-                if subtype == 'away_summary':
+                subtype = getattr(msg, "subtype", None) or ""
+                if subtype == "away_summary":
                     try:
                         from clawcodex_ext.away_summary.messages import (
                             format_away_summary_for_display,
                         )
 
-                        display = format_away_summary_for_display(getattr(msg, 'content', '') or '')
+                        display = format_away_summary_for_display(getattr(msg, "content", "") or "")
                     except Exception:
-                        display = str(getattr(msg, 'content', '') or '')
+                        display = str(getattr(msg, "content", "") or "")
                     self.console.print()
                     self.console.print(Markdown(display))
-                elif subtype == 'intent_forecast':
-                    display = str(getattr(msg, 'content', '') or '')
+                elif subtype == "intent_forecast":
+                    display = str(getattr(msg, "content", "") or "")
                     if display:
                         self.console.print()
                         self.console.print(Markdown(display))
                 continue
 
-            if role == 'user':
+            if role == "user":
                 if isinstance(content, list):
                     for block in content:
                         if isinstance(block, ToolResultBlock):
@@ -3703,7 +3703,7 @@ class ClawcodexREPL:
                                     else str(block.content)
                                 )
                                 self.console.print(
-                                    f'[error]  ⎿  {escape(err_text) if err_text else "Error"}[/error]'
+                                    f"[error]  ⎿  {escape(err_text) if err_text else 'Error'}[/error]"
                                 )
                             else:
                                 preview = self._format_tool_result_preview(
@@ -3711,31 +3711,31 @@ class ClawcodexREPL:
                                     tool_use_map.get(block.tool_use_id),
                                 )
                                 if isinstance(preview, str):
-                                    if '\n' in preview:
-                                        first, *rest = preview.split('\n')
-                                        self.console.print(f'[dim]  ⎿  {first}[/dim]')
+                                    if "\n" in preview:
+                                        first, *rest = preview.split("\n")
+                                        self.console.print(f"[dim]  ⎿  {first}[/dim]")
                                         for ln in rest:
-                                            self.console.print(f'[dim]     {ln}[/dim]')
+                                            self.console.print(f"[dim]     {ln}[/dim]")
                                     else:
-                                        self.console.print(f'[dim]  ⎿  {preview}[/dim]')
+                                        self.console.print(f"[dim]  ⎿  {preview}[/dim]")
                                 else:
-                                    self.console.print('[dim]  ⎿  [/dim]', end='')
+                                    self.console.print("[dim]  ⎿  [/dim]", end="")
                                     self.console.print(preview)
                             tool_block_needs_leading_space = True
                         elif isinstance(block, TextBlock):
-                            text = block.text or ''
+                            text = block.text or ""
                             if text:
                                 self._echo_user_input(text)
                 elif isinstance(content, str) and content:
                     self._echo_user_input(content)
                 continue
 
-            if role == 'assistant':
+            if role == "assistant":
                 # Use the agent type from tool_context (set by @agent-mention
                 # or agent config) just like live chat does — fall back to
                 # "Assistant" for the default case.
                 _agent_label = (
-                    getattr(getattr(self, 'tool_context', None), 'agent_type', None) or 'Assistant'
+                    getattr(getattr(self, "tool_context", None), "agent_type", None) or "Assistant"
                 )
                 # Only print the agent label when the message has visible
                 # text content.  Tool-only messages (ToolUseBlock without
@@ -3748,13 +3748,13 @@ class ClawcodexREPL:
                 _has_text = False
                 if isinstance(content, list):
                     _has_text = any(
-                        isinstance(b, TextBlock) and b.text and b.text != '[No content]'
+                        isinstance(b, TextBlock) and b.text and b.text != "[No content]"
                         for b in content
                     )
                 elif isinstance(content, str):
                     _has_text = bool(content.strip())
                 if _has_text:
-                    self.console.print(f'\n[bold]{_agent_label}[/bold]')
+                    self.console.print(f"\n[bold]{_agent_label}[/bold]")
                 if isinstance(content, list):
                     for block in content:
                         if isinstance(block, TextBlock) and block.text:
@@ -3762,7 +3762,7 @@ class ClawcodexREPL:
                             # create_assistant_message injects for empty
                             # responses — matches live-chat behaviour where
                             # _run_query skips empty TextBlocks.
-                            if block.text == '[No content]':
+                            if block.text == "[No content]":
                                 continue
                             self.console.print(Markdown(block.text))
                         elif isinstance(block, ToolUseBlock):
@@ -3771,22 +3771,22 @@ class ClawcodexREPL:
                             if isinstance(summary, str) and summary:
                                 summary = self._shorten_path_text(summary)
                             if summary:
-                                call_args = f'[dim]([/dim]{escape(summary)}[dim])[/dim]'
+                                call_args = f"[dim]([/dim]{escape(summary)}[dim])[/dim]"
                             else:
-                                call_args = ''
+                                call_args = ""
                             pending_tool_use_prints[block.id] = (
-                                f'[success]●[/success] [bold][info]{block.name}[/info][/bold]'
-                                + (f' {call_args}' if call_args else '')
+                                f"[success]●[/success] [bold][info]{block.name}[/info][/bold]"
+                                + (f" {call_args}" if call_args else "")
                             )
                         elif isinstance(block, ThinkingBlock):
                             # Replay thinking blocks matching live-chat behaviour:
                             # visible → print directly; hidden → stash for Ctrl+O.
-                            thinking_text = block.thinking or ''
+                            thinking_text = block.thinking or ""
                             if thinking_text:
                                 if self._thinking_visible:
                                     self.console.print(
                                         thinking_text,
-                                        end='',
+                                        end="",
                                         markup=False,
                                         highlight=False,
                                         soft_wrap=True,
@@ -3808,45 +3808,45 @@ class ClawcodexREPL:
             self.console.print(header)
             tool_block_needs_leading_space = True
 
-        self.console.print('\n[dim]─── end of history ───[/dim]')
+        self.console.print("\n[dim]─── end of history ───[/dim]")
 
     def _flatten_message_content(self, content: Any) -> str:
         """Normalise Message.content (string or block list) to text."""
         if content is None:
-            return ''
+            return ""
         if isinstance(content, str):
             return content
         if isinstance(content, list):
             parts: list[str] = []
             for item in content:
                 # Handle dataclass blocks (TextBlock, ToolUseBlock, ToolResultBlock, etc.)
-                item_type = getattr(item, 'type', None) if hasattr(item, 'type') else None
+                item_type = getattr(item, "type", None) if hasattr(item, "type") else None
                 if item_type is None and isinstance(item, dict):
-                    item_type = item.get('type')
+                    item_type = item.get("type")
 
-                if item_type == 'text':
-                    text = getattr(item, 'text', None) or (
-                        item.get('text') if isinstance(item, dict) else ''
+                if item_type == "text":
+                    text = getattr(item, "text", None) or (
+                        item.get("text") if isinstance(item, dict) else ""
                     )
                     if text:
                         parts.append(text)
-                elif item_type == 'tool_use':
-                    name = getattr(item, 'name', None) or (
-                        item.get('name') if isinstance(item, dict) else ''
+                elif item_type == "tool_use":
+                    name = getattr(item, "name", None) or (
+                        item.get("name") if isinstance(item, dict) else ""
                     )
                     if not name and isinstance(item, dict):
-                        name = item.get('input', {}).get('description', '')
+                        name = item.get("input", {}).get("description", "")
                     if name:
-                        parts.append(f'[tool:{name}]')
-                elif item_type == 'tool_result':
-                    result = getattr(item, 'content', None) or (
-                        item.get('content') if isinstance(item, dict) else ''
+                        parts.append(f"[tool:{name}]")
+                elif item_type == "tool_result":
+                    result = getattr(item, "content", None) or (
+                        item.get("content") if isinstance(item, dict) else ""
                     )
                     if result:
                         parts.append(str(result))
                 elif item_type is None and isinstance(item, str):
                     parts.append(item)
-            return '\n'.join(p for p in parts if p).strip()
+            return "\n".join(p for p in parts if p).strip()
         return str(content)
 
     def _format_history_line(self, msg: Any) -> str | None:
@@ -3858,12 +3858,12 @@ class ClawcodexREPL:
         responses, the ``[AWAY SUMMARY]`` system injection, and any
         other message whose flattened content is empty.
         """
-        if getattr(msg, 'isMeta', False) or getattr(msg, 'isVirtual', False):
+        if getattr(msg, "isMeta", False) or getattr(msg, "isVirtual", False):
             return None
         # AWAY SUMMARY uses subtype="away_summary" with isMeta=False,
         # so the isMeta check above does not catch it. Mirror
         # clawcodex_ext/away_summary/fingerprint.py:81-83 detection.
-        if msg.role == 'system' and getattr(msg, 'subtype', None) == 'away_summary':
+        if msg.role == "system" and getattr(msg, "subtype", None) == "away_summary":
             return None
         text = self._flatten_message_content(msg.content).strip()
         if not text:
@@ -3874,24 +3874,24 @@ class ClawcodexREPL:
             return None
         # Belt-and-braces: if subtype was lost on disk round-trip,
         # content-prefix still catches the AWAY SUMMARY injection.
-        if text.startswith('[AWAY SUMMARY]'):
+        if text.startswith("[AWAY SUMMARY]"):
             return None
         role_colors = {
-            'user': 'blue',
-            'assistant': 'green',
-            'system': 'magenta',
+            "user": "blue",
+            "assistant": "green",
+            "system": "magenta",
         }
-        role_color = role_colors.get(msg.role, 'yellow')
-        preview = text[:100].replace('\n', ' ')
-        suffix = '...' if len(text) > 100 else ''
-        return f'[{role_color}]{msg.role}[/{role_color}]: {preview}{suffix}'
+        role_color = role_colors.get(msg.role, "yellow")
+        preview = text[:100].replace("\n", " ")
+        suffix = "..." if len(text) > 100 else ""
+        return f"[{role_color}]{msg.role}[/{role_color}]: {preview}{suffix}"
 
     def _print_startup_header(self):
         from src import __version__
 
         display_path = self._display_cwd()
-        provider_label = f'{self.provider_name.upper()} Provider'
-        model_label = self.provider.model if self.provider else 'N/A'
+        provider_label = f"{self.provider_name.upper()} Provider"
+        model_label = self.provider.model if self.provider else "N/A"
 
         if (
             Panel is None
@@ -3901,35 +3901,35 @@ class ClawcodexREPL:
             or Text is None
             or Columns is None
         ):
-            print(f'ClawCodex v{__version__}')
-            print(f'{model_label} · {provider_label}')
-            print(f'{display_path}\n')
+            print(f"ClawCodex v{__version__}")
+            print(f"{model_label} · {provider_label}")
+            print(f"{display_path}\n")
             return
 
-        width = getattr(self.console, 'width', 80)
+        width = getattr(self.console, "width", 80)
         content_width = max(28, min(width - 12, 72))
         table = Table.grid(padding=(0, 1))
-        table.add_column(style='bright_black', justify='right', no_wrap=True)
-        table.add_column(style='white', ratio=1)
+        table.add_column(style="bright_black", justify="right", no_wrap=True)
+        table.add_column(style="white", ratio=1)
         table.add_row(
-            'Version',
+            "Version",
             Text.assemble(
-                ('ClawCodex', f'bold {self._p.text}'),
-                ('  ', ''),
-                (f'v{__version__}', f'bold {self._p.info}'),
+                ("ClawCodex", f"bold {self._p.text}"),
+                ("  ", ""),
+                (f"v{__version__}", f"bold {self._p.info}"),
             ),
         )
-        table.add_row('Model', Text(model_label, style=f'bold {self._p.secondary}'))
-        table.add_row('Provider', Text(provider_label, style=f'bold {self._p.success}'))
+        table.add_row("Model", Text(model_label, style=f"bold {self._p.secondary}"))
+        table.add_row("Provider", Text(provider_label, style=f"bold {self._p.success}"))
         table.add_row(
-            'Workspace',
+            "Workspace",
             Text(
                 self._truncate_middle(display_path, content_width - 12),
-                style=f'bold {self._p.primary}',
+                style=f"bold {self._p.primary}",
             ),
         )
 
-        footer = Text('/help  •  /tools  •  /tui  •  /stream  •  /exit', style='dim')
+        footer = Text("/help  •  /tools  •  /tui  •  /stream  •  /exit", style="dim")
 
         # F-97 telemetry notice — show when both stats collection and error
         # reporting are enabled.  Best-effort & swallowed on failure so a
@@ -3942,27 +3942,27 @@ class ClawcodexREPL:
                 telemetry_notice = Group(
                     Align.center(
                         Text(
-                            'Telemetry: stats ✓ · error reporting ✓  — /telemetry to configure',
-                            style='dim italic',
+                            "Telemetry: stats ✓ · error reporting ✓  — /telemetry to configure",
+                            style="dim italic",
                         )
                     ),
                     Align.center(
                         Text(
-                            'Collects usage data & error reports; may be uploaded periodically.',
-                            style='dim italic',
+                            "Collects usage data & error reports; may be uploaded periodically.",
+                            style="dim italic",
                         )
                     ),
                 )
-                body = Group(table, telemetry_notice, Text(''), Align.center(footer))
+                body = Group(table, telemetry_notice, Text(""), Align.center(footer))
             else:
-                body = Group(table, Text(''), Align.center(footer))
+                body = Group(table, Text(""), Align.center(footer))
         except Exception:
-            body = Group(table, Text(''), Align.center(footer))
+            body = Group(table, Text(""), Align.center(footer))
         header = Panel(
             body,
-            border_style='bright_black',
-            title='[bold][info] CLAWCODEX [/info][/bold]',
-            subtitle='[dim]interactive terminal[/dim]',
+            border_style="bright_black",
+            title="[bold][info] CLAWCODEX [/info][/bold]",
+            subtitle="[dim]interactive terminal[/dim]",
             padding=(1, 2),
         )
         self.console.print(header)
@@ -3972,8 +3972,8 @@ class ClawcodexREPL:
 
         if is_coordinator_mode():
             self.console.print(
-                '[bold][warning]  ⚡ Coordinator Mode ACTIVE[/warning][/bold]  '
-                '[dim]— Agent / SendMessage / TaskStop only[/dim]'
+                "[bold][warning]  ⚡ Coordinator Mode ACTIVE[/warning][/bold]  "
+                "[dim]— Agent / SendMessage / TaskStop only[/dim]"
             )
             self.console.print()
 
@@ -3984,19 +3984,19 @@ class ClawcodexREPL:
         """Run the REPL."""
         self._print_startup_header()
 
-        if getattr(self, '_api_key_missing', False):
+        if getattr(self, "_api_key_missing", False):
             self.console.print(
-                '[warning]No API key configured — REPL is in read-only mode.[/warning]'
+                "[warning]No API key configured — REPL is in read-only mode.[/warning]"
             )
             self.console.print(
-                'Use [bold]/login[/bold] to configure, or set [info]ANTHROPIC_API_KEY[/info] env var, then restart.'
+                "Use [bold]/login[/bold] to configure, or set [info]ANTHROPIC_API_KEY[/info] env var, then restart."
             )
-            self.console.print('Type [bold]/exit[/bold] to quit.\n')
+            self.console.print("Type [bold]/exit[/bold] to quit.\n")
 
         # Print conversation history when resuming a session
         # — renders identically to live chat output so the user sees
         # the same transcript they would have seen before exiting.
-        resumed = getattr(self, '_resume_session_id', None)
+        resumed = getattr(self, "_resume_session_id", None)
         if resumed and self.session.conversation.messages:
             self._replay_resume_history()
 
@@ -4006,7 +4006,7 @@ class ClawcodexREPL:
         self._cron_loop = asyncio.new_event_loop()
         # IM gateway opt-in: connect + register now that the loop is up
         # (installed by install_repl_extensions via _gateway_init).
-        im_init = getattr(self, '_gateway_init', None)
+        im_init = getattr(self, "_gateway_init", None)
         if im_init is not None:
             try:
                 self._cron_loop.run_until_complete(im_init(self._cron_loop))
@@ -4016,7 +4016,7 @@ class ClawcodexREPL:
             self._run_main_loop()
         finally:
             # tear down the IM gateway client if it was connected
-            im_client = getattr(self, '_gateway_client', None)
+            im_client = getattr(self, "_gateway_client", None)
             if im_client is not None:
                 try:
                     self._cron_loop.run_until_complete(im_client.close())
@@ -4046,8 +4046,8 @@ class ClawcodexREPL:
                     # transcript output.
                     # For cron prompts, only display the header line (first line)
                     # to avoid showing the prelude text to the user.
-                    if source == 'cron':
-                        first_line = queued.split('\n')[0]
+                    if source == "cron":
+                        first_line = queued.split("\n")[0]
                         self._echo_user_input(first_line)
                     else:
                         self._echo_user_input(queued)
@@ -4063,8 +4063,8 @@ class ClawcodexREPL:
                     # up front so that newlines (via Shift+Enter / Meta+Enter
                     # / ``\`` + Enter) can live in the buffer. Plain Enter
                     # still submits via our custom ``c-m`` binding.
-                    if getattr(self, '_api_key_missing', False):
-                        user_input = input('❯ ')
+                    if getattr(self, "_api_key_missing", False):
+                        user_input = input("❯ ")
                     else:
                         # Phase B-2 wake: run prompt_async with a
                         # concurrent outbox watcher in the same event loop.
@@ -4090,7 +4090,7 @@ class ClawcodexREPL:
                     except Exception:
                         pass
                     self._print_resume_hint()
-                    self.console.print('\n[primary]Goodbye![/primary]')
+                    self.console.print("\n[primary]Goodbye![/primary]")
                     break
 
                 if user_input is _CRON_WAKE:
@@ -4102,24 +4102,24 @@ class ClawcodexREPL:
                 if not user_input.strip():
                     continue
 
-                if user_input.startswith('/'):
-                    controller = getattr(self, '_intent_forecast_controller', None)
+                if user_input.startswith("/"):
+                    controller = getattr(self, "_intent_forecast_controller", None)
                     if controller is not None:
-                        controller.on_user_interaction('slash')
+                        controller.on_user_interaction("slash")
                     self.handle_command(user_input)
                     continue
 
-                if user_input.startswith('!'):
-                    controller = getattr(self, '_intent_forecast_controller', None)
+                if user_input.startswith("!"):
+                    controller = getattr(self, "_intent_forecast_controller", None)
                     if controller is not None:
-                        controller.on_user_interaction('bash')
+                        controller.on_user_interaction("bash")
                     # Bash mode: direct execution, no agent turn.
                     # Feeds the bash input + output into the conversation
                     # (so the model sees what happened on its next turn).
                     from src.services.bash_mode import run_bash_mode_command
 
                     command = user_input[1:]
-                    self._echo_user_input(f'! {command}')
+                    self._echo_user_input(f"! {command}")
                     outcome = run_bash_mode_command(command, self.tool_context)
 
                     # Append conversation texts so the model sees them
@@ -4133,19 +4133,19 @@ class ClawcodexREPL:
                             self.console.print(outcome.stdout, markup=False, highlight=False)
                         if outcome.stderr:
                             self.console.print(
-                                f'[dim]{outcome.stderr}[/dim]',
+                                f"[dim]{outcome.stderr}[/dim]",
                                 markup=False,
                                 highlight=False,
                             )
                     else:
                         self.console.print(
-                            f'[error]! {command}: {outcome.error or outcome.stderr or "Unknown error"}[/error]',
+                            f"[error]! {command}: {outcome.error or outcome.stderr or 'Unknown error'}[/error]",
                             markup=False,
                             highlight=False,
                         )
                     continue
 
-                if user_input.startswith('#'):
+                if user_input.startswith("#"):
                     # C9 memory-note append: persist the note to
                     # ~/.claude/CLAUDE.md and show an acknowledgement,
                     # no agent turn.
@@ -4156,11 +4156,11 @@ class ClawcodexREPL:
                     from pathlib import Path
 
                     note = user_input[1:]
-                    ok = append_memory_note(str(Path.home() / '.claude' / 'CLAUDE.md'), note)
+                    ok = append_memory_note(str(Path.home() / ".claude" / "CLAUDE.md"), note)
                     if ok:
-                        self.console.print(f'[success]{pick_saving_message()}[/success]')
+                        self.console.print(f"[success]{pick_saving_message()}[/success]")
                     else:
-                        self.console.print('[error]Failed to save memory note[/error]')
+                        self.console.print("[error]Failed to save memory note[/error]")
                     continue
 
                 _cron_task_id = self._extract_cron_task_id(user_input)
@@ -4170,26 +4170,26 @@ class ClawcodexREPL:
                     _chat_success = self.chat(user_input)
                 except KeyboardInterrupt:
                     if _cron_task_id:
-                        self._finalize_cron_task(_cron_task_id, 'cancelled')
+                        self._finalize_cron_task(_cron_task_id, "cancelled")
                     raise
                 except SystemExit:
                     if _cron_task_id:
-                        self._finalize_cron_task(_cron_task_id, 'cancelled')
+                        self._finalize_cron_task(_cron_task_id, "cancelled")
                     raise
                 except Exception as exc:
                     if _cron_task_id:
                         self._finalize_cron_task(
                             _cron_task_id,
-                            'failed',
-                            error=f'{type(exc).__name__}: {exc}',
+                            "failed",
+                            error=f"{type(exc).__name__}: {exc}",
                         )
                     raise
                 if _cron_task_id:
                     if _chat_success is False:
                         self._finalize_cron_task(
                             _cron_task_id,
-                            'failed',
-                            error='Scheduled task execution returned without completing.',
+                            "failed",
+                            error="Scheduled task execution returned without completing.",
                         )
                     else:
                         self._finalize_cron_task(_cron_task_id)
@@ -4205,7 +4205,7 @@ class ClawcodexREPL:
                     self.session.save()
                 except Exception:
                     pass
-                self.console.print('\n[warning]Interrupted. Type /exit to quit.[/warning]')
+                self.console.print("\n[warning]Interrupted. Type /exit to quit.[/warning]")
                 self._print_resume_hint()
                 continue
             except EOFError:
@@ -4214,21 +4214,21 @@ class ClawcodexREPL:
                 except Exception:
                     pass
                 self._print_resume_hint()
-                self.console.print('\n[primary]Goodbye![/primary]')
+                self.console.print("\n[primary]Goodbye![/primary]")
                 break
 
     def _send_im_command_feedback(self, command: str) -> None:
-        raw = str(command or '').strip()
-        if not raw.startswith('/') or raw == '/':
+        raw = str(command or "").strip()
+        if not raw.startswith("/") or raw == "/":
             return
-        im_reply = getattr(self, '_im_reply_controller', None)
-        send_feedback = getattr(im_reply, 'send_command_feedback', None)
+        im_reply = getattr(self, "_im_reply_controller", None)
+        send_feedback = getattr(im_reply, "send_command_feedback", None)
         if not callable(send_feedback):
             return
         try:
             send_feedback(raw)
         except Exception:  # noqa: BLE001
-            logger.debug('IM command feedback failed', exc_info=True)
+            logger.debug("IM command feedback failed", exc_info=True)
 
     def handle_command(self, command: str):
         """Handle slash commands."""
@@ -4240,38 +4240,38 @@ class ClawcodexREPL:
 
     def _handle_command(self, command: str):
         raw = command.strip()
-        if raw == '/':
+        if raw == "/":
             self._show_slash_palette()
             return
 
         # ── REPL-native handlers — must run BEFORE the palette check ───
-        if raw.startswith('/') and ' ' not in raw:
+        if raw.startswith("/") and " " not in raw:
             candidate = raw[1:].lower()
-            if candidate == 'diff':
+            if candidate == "diff":
                 self._handle_repl_diff()
                 return
-            if candidate == 'mcp':
+            if candidate == "mcp":
                 self._handle_repl_mcp()
                 return
-            if candidate == 'tasks':
+            if candidate == "tasks":
                 self._handle_repl_tasks()
                 return
-            if candidate == 'rewind':
+            if candidate == "rewind":
                 self._handle_repl_rewind()
                 return
-            if candidate == 'effort':
-                self._handle_repl_effort('')
+            if candidate == "effort":
+                self._handle_repl_effort("")
                 return
-            if candidate == 'history':
+            if candidate == "history":
                 self._handle_repl_history()
                 return
-            if candidate == 'idle':
+            if candidate == "idle":
                 self._handle_repl_idle()
                 return
 
         if (
-            raw.startswith('/')
-            and ' ' not in raw
+            raw.startswith("/")
+            and " " not in raw
             and raw.lower() not in (c.lower() for c in self._built_in_commands)
         ):
             query = raw[1:]
@@ -4280,68 +4280,68 @@ class ClawcodexREPL:
                 return
 
         # ── New-command-system try path ──────────────────────────────────
-        if raw.startswith('/'):
+        if raw.startswith("/"):
             parts = raw[1:].split(maxsplit=1)
             cmd_name = parts[0].lower()
-            args_raw = parts[1] if len(parts) > 1 else ''
+            args_raw = parts[1] if len(parts) > 1 else ""
 
             # Check if this command exists in the new command system
             # but skip the ones we handle specially
             # Note: /context, /compact, /skill need special handling, don't route through new system
             # /init is handled via new command system (PromptCommand) so it's NOT in special_commands
             special_commands = {
-                'exit',
-                'quit',
-                'q',
-                'help',
-                'tools',
-                'tool',
-                'save',
-                'load',
-                'stream',
-                'render-last',
-                'skill',
-                'context',
-                'compact',  # These need special handling
-                'permission',  # REPL-native permission mode command
-                'tui',  # handoff to Textual TUI
-                'resume',  # REPL-native session resume with browser
+                "exit",
+                "quit",
+                "q",
+                "help",
+                "tools",
+                "tool",
+                "save",
+                "load",
+                "stream",
+                "render-last",
+                "skill",
+                "context",
+                "compact",  # These need special handling
+                "permission",  # REPL-native permission mode command
+                "tui",  # handoff to Textual TUI
+                "resume",  # REPL-native session resume with browser
                 # TUI-only commands — keep only the truly TUI-specific ones here
-                'repl',
-                'theme',
+                "repl",
+                "theme",
                 # F-43 runtime commands: /provider and /model are routed via
                 # the new command system (clawcodex_ext/cli/runtime_commands.py)
                 # and work in both REPL and TUI; do NOT mark them TUI-only.
-                '',
+                "",
             }
 
             # Handle truly TUI-only commands (/repl, /theme)
-            if cmd_name in ('repl', 'theme'):
+            if cmd_name in ("repl", "theme"):
                 self.console.print(
-                    f'[dim]/{cmd_name} is only available in the Textual TUI. Use /tui to switch.[/dim]'
+                    f"[dim]/{cmd_name} is only available in the Textual TUI. Use /tui to switch.[/dim]"
                 )
                 return
 
             # ── REPL-native implementations for Phase-2/3 commands ──────
-            if cmd_name == 'diff':
+            if cmd_name == "diff":
                 self._handle_repl_diff()
                 return
-            if cmd_name == 'mcp':
+            if cmd_name == "mcp":
                 self._handle_repl_mcp()
                 return
-            if cmd_name == 'tasks':
+            if cmd_name == "tasks":
                 self._handle_repl_tasks()
                 return
-            if cmd_name == 'rewind':
+            if cmd_name == "rewind":
                 self._handle_repl_rewind()
                 return
-            if cmd_name == 'effort':
+            if cmd_name == "effort":
                 self._handle_repl_effort(args_raw)
                 return
-            if cmd_name == 'history':
+            if cmd_name == "history":
                 self._handle_repl_history()
                 return
-            if cmd_name == 'idle':
+            if cmd_name == "idle":
                 self._handle_repl_idle()
                 return
 
@@ -4349,7 +4349,7 @@ class ClawcodexREPL:
             args = args_raw
 
             # Handle /init through the new command system (PromptCommand path)
-            if cmd_name == 'init':
+            if cmd_name == "init":
                 # Use async path for PromptCommand
                 try:
                     result = self._run_command_async_with_status(cmd_name, args)
@@ -4357,12 +4357,12 @@ class ClawcodexREPL:
                     if result.success:
                         self._handle_command_result(result)
                     elif result.error:
-                        self.console.print(f'[error]{result.error}[/error]')
+                        self.console.print(f"[error]{result.error}[/error]")
                 except Exception as e:
-                    self.console.print(f'[error]Error executing /init: {e}[/error]')
+                    self.console.print(f"[error]Error executing /init: {e}[/error]")
                 return
 
-            if cmd_name == 'permission':
+            if cmd_name == "permission":
                 self._handle_permission_command(args)
                 return
 
@@ -4373,7 +4373,7 @@ class ClawcodexREPL:
                     handled, result_text = self._try_execute_new_command(cmd_name, args)
                     if handled:
                         if result_text:
-                            self.console.print('\n' + result_text)
+                            self.console.print("\n" + result_text)
                         self.console.print()
                         return
                 except Exception:
@@ -4385,10 +4385,10 @@ class ClawcodexREPL:
                     result = self._run_command_async_with_status(
                         cmd_name,
                         args,
-                        status_message='Recapping...'
-                        if cmd_name == 'recap'
-                        else 'Answering...'
-                        if cmd_name == 'btw'
+                        status_message="Recapping..."
+                        if cmd_name == "recap"
+                        else "Answering..."
+                        if cmd_name == "btw"
                         else None,
                     )
 
@@ -4409,43 +4409,43 @@ class ClawcodexREPL:
         # Fall back to original command handling
         cmd = raw.lower()
 
-        if cmd in ['/exit', '/quit', '/q']:
+        if cmd in ["/exit", "/quit", "/q"]:
             # Save session and print resume hint before exiting.
             try:
                 self.session.save()
             except Exception:
                 pass
-            self.console.print('[primary]Goodbye![/primary]')
+            self.console.print("[primary]Goodbye![/primary]")
             # Delegate to the centralised helper so the hint format matches
             # CCB's ``printResumeHint()`` and shares the process-wide
             # idempotency latch with the atexit cleanup.
             self._print_resume_hint()
             raise SystemExit(0)
 
-        elif cmd == '/login':
+        elif cmd == "/login":
             self.console.print(
-                '[info]Use [bold]clawcodex login[/bold] in a separate terminal to configure your API key.[/info]'
+                "[info]Use [bold]clawcodex login[/bold] in a separate terminal to configure your API key.[/info]"
             )
-            self.console.print('[dim]Then restart clawcodex to use the REPL.[/dim]')
+            self.console.print("[dim]Then restart clawcodex to use the REPL.[/dim]")
 
-        elif cmd == '/tui':
+        elif cmd == "/tui":
             self._handoff_to_textual_tui()
 
-        elif cmd == '/help':
+        elif cmd == "/help":
             self.show_help()
 
-        elif cmd == '/tools':
+        elif cmd == "/tools":
             names = [spec.name for spec in self.tool_registry.list_tools()]
             names.sort(key=str.lower)
-            self.console.print('\n[bold]Available tools:[/bold]')
+            self.console.print("\n[bold]Available tools:[/bold]")
             for name in names:
-                self.console.print(f'  - {name}')
+                self.console.print(f"  - {name}")
             self.console.print()
 
-        elif cmd.startswith('/tool'):
+        elif cmd.startswith("/tool"):
             parts = command.strip().split(maxsplit=2)
             if len(parts) < 2:
-                self.console.print('[error]Usage: /tool <name> <json-input>[/error]')
+                self.console.print("[error]Usage: /tool <name> <json-input>[/error]")
                 return
             name = parts[1]
             payload = {}
@@ -4453,71 +4453,71 @@ class ClawcodexREPL:
                 try:
                     payload = json.loads(parts[2])
                 except json.JSONDecodeError as e:
-                    self.console.print(f'[error]Invalid JSON input: {e}[/error]')
+                    self.console.print(f"[error]Invalid JSON input: {e}[/error]")
                     return
             try:
                 result = self.tool_registry.dispatch(
                     ToolCall(name=name, input=payload), self.tool_context
                 )
             except Exception as e:
-                self.console.print(f'[error]Tool error: {e}[/error]')
+                self.console.print(f"[error]Tool error: {e}[/error]")
                 return
-            self.console.print('\n[bold]Tool result:[/bold]')
+            self.console.print("\n[bold]Tool result:[/bold]")
             self.console.print(json.dumps(result.output, indent=2, ensure_ascii=False))
             self.console.print()
 
-        elif cmd == '/clear':
+        elif cmd == "/clear":
             # Try new command system first, fall back to original
             try:
-                handled, result_text = self._try_execute_new_command('clear', '')
+                handled, result_text = self._try_execute_new_command("clear", "")
                 if handled and result_text:
-                    self.console.print('\n[success]' + result_text + '[/success]')
+                    self.console.print("\n[success]" + result_text + "[/success]")
                     return
             except Exception:
                 pass
             # Original implementation
             self.session.conversation.clear()
             self._engine_messages = []
-            self.console.print('[success]Conversation cleared.[/success]')
+            self.console.print("[success]Conversation cleared.[/success]")
 
-        elif cmd == '/save':
+        elif cmd == "/save":
             self.save_session()
 
-        elif cmd == '/stream' or cmd.startswith('/stream '):
+        elif cmd == "/stream" or cmd.startswith("/stream "):
             parts = raw.split(maxsplit=1)
             if len(parts) == 1:
-                status = 'enabled' if self.stream else 'disabled'
-                self.console.print(f'[success]Stream mode {status}.[/success]')
+                status = "enabled" if self.stream else "disabled"
+                self.console.print(f"[success]Stream mode {status}.[/success]")
                 return
 
             action = parts[1].strip().lower()
-            if action in {'on', 'true', '1', 'enable', 'enabled'}:
+            if action in {"on", "true", "1", "enable", "enabled"}:
                 self.stream = True
-            elif action in {'off', 'false', '0', 'disable', 'disabled'}:
+            elif action in {"off", "false", "0", "disable", "disabled"}:
                 self.stream = False
-            elif action == 'toggle':
+            elif action == "toggle":
                 self.stream = not self.stream
             else:
-                self.console.print('[error]Usage: /stream [on|off|toggle][/error]')
+                self.console.print("[error]Usage: /stream [on|off|toggle][/error]")
                 return
 
-            status = 'enabled' if self.stream else 'disabled'
-            self.console.print(f'[success]Stream mode {status}.[/success]')
+            status = "enabled" if self.stream else "disabled"
+            self.console.print(f"[success]Stream mode {status}.[/success]")
 
-        elif cmd == '/render-last':
+        elif cmd == "/render-last":
             rendered = self._render_last_assistant_message()
             if not rendered:
-                self.console.print('[warning]No assistant response available to render.[/warning]')
+                self.console.print("[warning]No assistant response available to render.[/warning]")
 
-        elif cmd.startswith('/load'):
+        elif cmd.startswith("/load"):
             parts = command.strip().split(maxsplit=1)
             if len(parts) < 2:
-                self.console.print('[error]Usage: /load <session-id>[/error]')
+                self.console.print("[error]Usage: /load <session-id>[/error]")
             else:
                 session_id = parts[1]
                 self.load_session(session_id)
 
-        elif cmd.startswith('/resume'):
+        elif cmd.startswith("/resume"):
             parts = command.strip().split(maxsplit=1)
             if len(parts) >= 2 and parts[1].strip():
                 # Session ID provided — load directly
@@ -4533,7 +4533,7 @@ class ClawcodexREPL:
                     if selected_id:
                         self.load_session(selected_id)
                     else:
-                        self.console.print('[dim]Session selection cancelled.[/dim]')
+                        self.console.print("[dim]Session selection cancelled.[/dim]")
                 except Exception as exc:
                     # Fallback: list sessions as text
                     try:
@@ -4541,108 +4541,108 @@ class ClawcodexREPL:
 
                         metas = SessionStorage.list_sessions(limit=50)
                         if not metas:
-                            self.console.print('[yellow]No past sessions found.[/yellow]')
+                            self.console.print("[yellow]No past sessions found.[/yellow]")
                         else:
-                            self.console.print('\n[bold]Available sessions:[/bold]')
+                            self.console.print("\n[bold]Available sessions:[/bold]")
                             for i, m in enumerate(metas, 1):
                                 sid = m.session_id[:12]
                                 preview = (
-                                    getattr(m, 'title', '')
-                                    or getattr(m, 'last_user_input', '')
-                                    or ''
+                                    getattr(m, "title", "")
+                                    or getattr(m, "last_user_input", "")
+                                    or ""
                                 )
                                 if preview:
                                     preview = preview[:60]
-                                self.console.print(f'  {i:>3}. {sid}…  {preview}')
+                                self.console.print(f"  {i:>3}. {sid}…  {preview}")
                             self.console.print(
-                                '\n[dim]Use [bold]/resume <session-id>[/bold] '
-                                'or [bold]/load <session-id>[/bold] '
-                                'to restore a session.[/dim]'
+                                "\n[dim]Use [bold]/resume <session-id>[/bold] "
+                                "or [bold]/load <session-id>[/bold] "
+                                "to restore a session.[/dim]"
                             )
                     except Exception:
                         self.console.print(
-                            '[yellow]No past sessions found. '
-                            'Interactive browser unavailable.[/yellow]'
+                            "[yellow]No past sessions found. "
+                            "Interactive browser unavailable.[/yellow]"
                         )
 
-        elif cmd == '/skill':
+        elif cmd == "/skill":
             self._handle_skill_command()
 
-        elif cmd == '/context':
+        elif cmd == "/context":
             # Populate command context config for context analysis
-            self.command_context.config['provider'] = self.provider
-            self.command_context.config['model'] = self.provider.model
-            self.command_context.config['tool_schemas'] = [
+            self.command_context.config["provider"] = self.provider
+            self.command_context.config["model"] = self.provider.model
+            self.command_context.config["tool_schemas"] = [
                 tool_to_api_schema(spec) for spec in self.tool_registry.list_tools()
             ]
-            self.command_context.config['system_prompt'] = ''
+            self.command_context.config["system_prompt"] = ""
             # Try new command system
             try:
-                handled, result_text = self._try_execute_new_command('context', '')
+                handled, result_text = self._try_execute_new_command("context", "")
                 if handled and result_text:
                     self.console.print(Markdown(result_text))
                     return
             except Exception:
                 pass
-            self.console.print('[warning]/context analysis unavailable in this context.[/warning]')
+            self.console.print("[warning]/context analysis unavailable in this context.[/warning]")
 
-        elif cmd == '/compact':
+        elif cmd == "/compact":
             # Populate command context config for compact
-            self.command_context.config['provider'] = self.provider
-            self.command_context.config['model'] = self.provider.model
-            self.command_context.config['system_prompt'] = ''
+            self.command_context.config["provider"] = self.provider
+            self.command_context.config["model"] = self.provider.model
+            self.command_context.config["system_prompt"] = ""
             # Try new command system
             try:
-                handled, result_text = self._try_execute_new_command('compact', '')
+                handled, result_text = self._try_execute_new_command("compact", "")
                 if handled and result_text:
-                    self.console.print('\n[success]' + result_text + '[/success]')
+                    self.console.print("\n[success]" + result_text + "[/success]")
                     return
             except Exception:
                 pass
             # Simple fallback: just clear conversation
             self.session.conversation.clear()
             self._engine_messages = []
-            self.console.print('[success]Conversation cleared.[/success]')
+            self.console.print("[success]Conversation cleared.[/success]")
 
-        elif cmd.startswith('/provider'):
+        elif cmd.startswith("/provider"):
             # Safety fallback: /provider may have failed through the new
             # command system path (F-43). Try direct sync execution.
             parts = raw.split(maxsplit=1)
-            provider_args = parts[1] if len(parts) > 1 else ''
+            provider_args = parts[1] if len(parts) > 1 else ""
             try:
-                handled, text = self._try_execute_new_command('provider', provider_args)
+                handled, text = self._try_execute_new_command("provider", provider_args)
                 if handled:
                     if text:
-                        self.console.print('\n' + text)
+                        self.console.print("\n" + text)
                     self.console.print()
                 else:
                     # Execution failed — show error text to the user
-                    self.console.print(f'\n[error]{text or "Unknown error"}[/error]\n')
+                    self.console.print(f"\n[error]{text or 'Unknown error'}[/error]\n")
             except Exception as exc:
-                self.console.print(f'\n[error]Failed to execute /provider command: {exc}[/error]\n')
+                self.console.print(f"\n[error]Failed to execute /provider command: {exc}[/error]\n")
 
-        elif cmd.startswith('/model'):
+        elif cmd.startswith("/model"):
             # Safety fallback: same as /provider above.
             parts = raw.split(maxsplit=1)
-            model_args = parts[1] if len(parts) > 1 else ''
+            model_args = parts[1] if len(parts) > 1 else ""
             try:
-                handled, text = self._try_execute_new_command('model', model_args)
+                handled, text = self._try_execute_new_command("model", model_args)
                 if handled:
                     if text:
-                        self.console.print('\n' + text)
+                        self.console.print("\n" + text)
                     self.console.print()
                 else:
-                    self.console.print(f'\n[error]{text or "Unknown error"}[/error]\n')
+                    self.console.print(f"\n[error]{text or 'Unknown error'}[/error]\n")
             except Exception as exc:
-                self.console.print(f'\n[error]Failed to execute /model command: {exc}[/error]\n')
+                self.console.print(f"\n[error]Failed to execute /model command: {exc}[/error]\n")
 
         else:
-            if raw.startswith('/'):
+            if raw.startswith("/"):
                 if self._try_run_skill_slash(raw):
                     return
-            self.console.print(f'[error]Unknown command: {command}[/error]')
+            self.console.print(f"[error]Unknown command: {command}[/error]")
             self.console.print(
-                '  [dim]Type [secondary]/[/secondary] to browse all available commands or [secondary]/help[/secondary] for details.[/dim]'
+                "  [dim]Type [secondary]/[/secondary] to browse all available commands or [secondary]/help[/secondary] for details.[/dim]"
             )
 
     # ── REPL-native handlers for Phase-2/3 commands ────────────────────
@@ -4655,14 +4655,14 @@ class ClawcodexREPL:
             content = msg.content
             if isinstance(content, list):
                 for block in content:
-                    item_type = getattr(block, 'type', None)
-                    if item_type == 'tool_result':
-                        result_text = getattr(block, 'content', None) or ''
-                        if isinstance(result_text, str) and 'patch' in result_text.lower():
+                    item_type = getattr(block, "type", None)
+                    if item_type == "tool_result":
+                        result_text = getattr(block, "content", None) or ""
+                        if isinstance(result_text, str) and "patch" in result_text.lower():
                             # Try to extract file path + patch from structured edit result
-                            result_data = getattr(block, 'content', None)
+                            result_data = getattr(block, "content", None)
                             if isinstance(result_data, str):
-                                files.append(('(inline)', result_data, ''))
+                                files.append(("(inline)", result_data, ""))
             if files:
                 break  # Only look at the last tool result batch
 
@@ -4674,32 +4674,32 @@ class ClawcodexREPL:
                 diff = get_session_diff(cwd=str(self.tool_context.workspace_root))
                 if diff.files_changed:
                     self.console.print(
-                        f'\n[bold][info]Pending changes[/info][/bold] [dim]({diff.files_changed} files, +{diff.insertions} -{diff.deletions})[/dim]'
+                        f"\n[bold][info]Pending changes[/info][/bold] [dim]({diff.files_changed} files, +{diff.insertions} -{diff.deletions})[/dim]"
                     )
                     self.console.print(
                         diff.patch[:4000]
-                        + ('\n[dim]… (truncated)[/dim]' if len(diff.patch) > 4000 else '')
+                        + ("\n[dim]… (truncated)[/dim]" if len(diff.patch) > 4000 else "")
                     )
                     self.console.print()
                     return
             except Exception:
                 pass
-            self.console.print('[dim]No pending diffs to display.[/dim]')
+            self.console.print("[dim]No pending diffs to display.[/dim]")
             return
 
-        self.console.print(f'\n[bold][info]Diff — {len(files)} file(s) changed[/info][/bold]')
+        self.console.print(f"\n[bold][info]Diff — {len(files)} file(s) changed[/info][/bold]")
         for path, patch, _summary in files[:10]:
-            self.console.print(f'  [bold]{path}[/bold]')
+            self.console.print(f"  [bold]{path}[/bold]")
             lines = patch.splitlines()
             for line in lines[:30]:
-                if line.startswith('+'):
-                    self.console.print(f'    [success]{line}[/success]')
-                elif line.startswith('-'):
-                    self.console.print(f'    [error]{line}[/error]')
-                elif line.startswith('@@'):
-                    self.console.print(f'    [info]{line}[/info]')
+                if line.startswith("+"):
+                    self.console.print(f"    [success]{line}[/success]")
+                elif line.startswith("-"):
+                    self.console.print(f"    [error]{line}[/error]")
+                elif line.startswith("@@"):
+                    self.console.print(f"    [info]{line}[/info]")
             if len(lines) > 30:
-                self.console.print(f'    [dim]… {len(lines) - 30} more lines[/dim]')
+                self.console.print(f"    [dim]… {len(lines) - 30} more lines[/dim]")
         self.console.print()
 
     def _handle_repl_mcp(self) -> None:
@@ -4708,44 +4708,44 @@ class ClawcodexREPL:
             from src.config import load_config
 
             cfg = load_config() or {}
-            raw = cfg.get('mcp_servers') or cfg.get('mcpServers') or {}
+            raw = cfg.get("mcp_servers") or cfg.get("mcpServers") or {}
         except Exception:
             raw = {}
 
         servers: list[dict[str, str]] = []
         if isinstance(raw, dict):
             for server_id, entry in raw.items():
-                name = entry.get('name', server_id) if isinstance(entry, dict) else server_id
+                name = entry.get("name", server_id) if isinstance(entry, dict) else server_id
                 status = (
-                    entry.get('status', 'disconnected')
+                    entry.get("status", "disconnected")
                     if isinstance(entry, dict)
-                    else 'disconnected'
+                    else "disconnected"
                 )
-                tools = entry.get('tools', []) if isinstance(entry, dict) else []
+                tools = entry.get("tools", []) if isinstance(entry, dict) else []
                 servers.append(
                     {
-                        'id': str(server_id),
-                        'name': str(name),
-                        'status': str(status),
-                        'tools': str(len(tools)),
+                        "id": str(server_id),
+                        "name": str(name),
+                        "status": str(status),
+                        "tools": str(len(tools)),
                     }
                 )
 
         if not servers:
-            self.console.print('[dim]No MCP servers configured.[/dim]')
+            self.console.print("[dim]No MCP servers configured.[/dim]")
             return
 
-        self.console.print(f'\n[bold][info]MCP Servers ({len(servers)})[/info][/bold]')
+        self.console.print(f"\n[bold][info]MCP Servers ({len(servers)})[/info][/bold]")
         for s in servers:
             status_style = (
-                'green'
-                if s['status'] == 'connected'
-                else 'yellow'
-                if s['status'] in ('connecting', 'running')
-                else 'dim'
+                "green"
+                if s["status"] == "connected"
+                else "yellow"
+                if s["status"] in ("connecting", "running")
+                else "dim"
             )
             self.console.print(
-                f'  [bold]{s["name"]}[/bold] — [{status_style}]{s["status"]}[/{status_style}]  [dim]({s["tools"]} tools)[/dim]'
+                f"  [bold]{s['name']}[/bold] — [{status_style}]{s['status']}[/{status_style}]  [dim]({s['tools']} tools)[/dim]"
             )
         self.console.print()
 
@@ -4753,86 +4753,86 @@ class ClawcodexREPL:
         """Show background task snapshot."""
         tasks = self._collect_task_entries()
         if not tasks:
-            self.console.print('[dim]No active tasks.[/dim]')
+            self.console.print("[dim]No active tasks.[/dim]")
             return
         self._render_task_snapshot()
 
     def _handle_repl_rewind(self) -> None:
         """List conversation messages and let user rewind to a chosen turn."""
         msgs = self.session.conversation.messages
-        user_msgs = [(i, m) for i, m in enumerate(msgs) if m.role == 'user']
+        user_msgs = [(i, m) for i, m in enumerate(msgs) if m.role == "user"]
 
         if not user_msgs:
-            self.console.print('[dim]Nothing to rewind — no user messages in conversation.[/dim]')
+            self.console.print("[dim]Nothing to rewind — no user messages in conversation.[/dim]")
             return
 
         self.console.print(
-            f'\n[bold][info]Conversation history ({len(user_msgs)} user turns)[/info][/bold]'
+            f"\n[bold][info]Conversation history ({len(user_msgs)} user turns)[/info][/bold]"
         )
         for idx, (orig_idx, msg) in enumerate(user_msgs):
             text = self._flatten_message_content(msg.content)
-            preview = text[:80].replace('\n', ' ')
+            preview = text[:80].replace("\n", " ")
             self.console.print(
-                f'  [bold]{idx + 1}[/bold]  {preview}[dim]…[/dim]'
+                f"  [bold]{idx + 1}[/bold]  {preview}[dim]…[/dim]"
                 if len(text) > 80
-                else f'  [bold]{idx + 1}[/bold]  {preview}'
+                else f"  [bold]{idx + 1}[/bold]  {preview}"
             )
 
         self.console.print()
-        choice = self._safe_input('Rewind to turn (number) or leave empty to cancel: ').strip()
+        choice = self._safe_input("Rewind to turn (number) or leave empty to cancel: ").strip()
         if not choice:
-            self.console.print('[dim]Rewind cancelled.[/dim]')
+            self.console.print("[dim]Rewind cancelled.[/dim]")
             return
 
         try:
             target = int(choice) - 1
             if target < 0 or target >= len(user_msgs):
-                self.console.print('[error]Invalid turn number.[/error]')
+                self.console.print("[error]Invalid turn number.[/error]")
                 return
             orig_idx = user_msgs[target][0]
             # Truncate conversation to before this message
             self.session.conversation.messages = msgs[:orig_idx]
             self._engine_messages = []
-            self.console.print(f'[success]Rewound to turn {target + 1}.[/success]')
+            self.console.print(f"[success]Rewound to turn {target + 1}.[/success]")
         except (ValueError, IndexError):
-            self.console.print('[error]Invalid input. Use a number from the list.[/error]')
+            self.console.print("[error]Invalid input. Use a number from the list.[/error]")
 
     def _handle_repl_effort(self, args: str) -> None:
         """Show or set reasoning effort level."""
-        current = getattr(self, '_effort', None)
+        current = getattr(self, "_effort", None)
         args = args.strip()
 
         if not args:
             self.console.print(
-                f'\n[bold][info]Reasoning effort[/info][/bold]  [dim]current:[/dim] {current or "[success]auto[/success]"}'
+                f"\n[bold][info]Reasoning effort[/info][/bold]  [dim]current:[/dim] {current or '[success]auto[/success]'}"
             )
             self.console.print(
-                '  Usage: [bold]/effort <level>[/bold]  where level is: [dim]auto, low, medium, high[/dim]'
+                "  Usage: [bold]/effort <level>[/bold]  where level is: [dim]auto, low, medium, high[/dim]"
             )
             self.console.print()
             return
 
-        valid = {'auto', 'low', 'medium', 'high'}
+        valid = {"auto", "low", "medium", "high"}
         if args.lower() in valid:
             self._effort = args.lower()
-            self.console.print(f'[success]Reasoning effort set to {self._effort}.[/success]')
+            self.console.print(f"[success]Reasoning effort set to {self._effort}.[/success]")
         else:
             self.console.print(
-                f'[error]Invalid effort level: {args}. Use one of: {", ".join(sorted(valid))}[/error]'
+                f"[error]Invalid effort level: {args}. Use one of: {', '.join(sorted(valid))}[/error]"
             )
 
     def _handle_repl_history(self) -> None:
         """Show recent session history."""
         events = list(self.history_log.events)
         if not events:
-            self.console.print('[dim]No history events recorded this session.[/dim]')
+            self.console.print("[dim]No history events recorded this session.[/dim]")
             return
 
-        self.console.print(f'\n[bold][info]Session History ({len(events)} events)[/info][/bold]')
+        self.console.print(f"\n[bold][info]Session History ({len(events)} events)[/info][/bold]")
         for ev in events[-20:]:  # Show last 20
-            self.console.print(f'  [bold]{ev.title}[/bold]')
+            self.console.print(f"  [bold]{ev.title}[/bold]")
             if ev.detail:
-                self.console.print(f'    [dim]{ev.detail[:120]}[/dim]')
+                self.console.print(f"    [dim]{ev.detail[:120]}[/dim]")
         self.console.print()
 
     def _handle_repl_idle(self) -> None:
@@ -4844,37 +4844,37 @@ class ClawcodexREPL:
         except Exception:
             cfg = None
 
-        self.console.print('\n[bold][info]Idle Configuration[/info][/bold]')
+        self.console.print("\n[bold][info]Idle Configuration[/info][/bold]")
         if cfg is not None:
             self.console.print(
-                f'  Auto-summary:    [success]enabled[/success]'
+                f"  Auto-summary:    [success]enabled[/success]"
                 if cfg.enabled
-                else f'  Auto-summary:    [dim]disabled[/dim]'
+                else f"  Auto-summary:    [dim]disabled[/dim]"
             )
             self.console.print(
-                f'  Idle timeout:    [bold]{cfg.idle_seconds}s[/bold] ({cfg.idle_seconds // 60} min)'
+                f"  Idle timeout:    [bold]{cfg.idle_seconds}s[/bold] ({cfg.idle_seconds // 60} min)"
             )
-            self.console.print(f'  Min turns:       {cfg.min_turns}')
+            self.console.print(f"  Min turns:       {cfg.min_turns}")
             self.console.print(
-                f'  /recap command:  [success]available[/success]'
+                f"  /recap command:  [success]available[/success]"
                 if cfg.recap_command_enabled
-                else f'  /recap command:  [dim]disabled[/dim]'
+                else f"  /recap command:  [dim]disabled[/dim]"
             )
             self.console.print()
             self.console.print(
-                '  [dim]Set these via [bold]settings.away_summary[/bold] in your config file.[/dim]'
+                "  [dim]Set these via [bold]settings.away_summary[/bold] in your config file.[/dim]"
             )
         else:
-            self.console.print('  [dim]Away summary config not available.[/dim]')
+            self.console.print("  [dim]Away summary config not available.[/dim]")
         self.console.print()
-        self.console.print('  [dim]On idle return you can:[/dim]')
-        self.console.print('  [dim]  Continue — resume the conversation[/dim]')
-        self.console.print('  [dim]  /clear   — start a fresh conversation[/dim]')
+        self.console.print("  [dim]On idle return you can:[/dim]")
+        self.console.print("  [dim]  Continue — resume the conversation[/dim]")
+        self.console.print("  [dim]  /clear   — start a fresh conversation[/dim]")
         self.console.print()
 
     # ── End of REPL-native handlers ─────────────────────────────────────
 
-    def _handle_permission_command(self, args: str = '') -> None:
+    def _handle_permission_command(self, args: str = "") -> None:
         """Handle the /permission command.
 
         Without arguments: show current mode + interactive selection menu.
@@ -4892,16 +4892,16 @@ class ClawcodexREPL:
         if mode:
             # Direct mode selection
             if mode not in EXTERNAL_PERMISSION_MODES:
-                valid = ', '.join(EXTERNAL_PERMISSION_MODES)
+                valid = ", ".join(EXTERNAL_PERMISSION_MODES)
                 self.console.print(
                     f"[error]Invalid permission mode: '{mode}'[/error]\n"
-                    f'[dim]Valid modes: {valid}[/dim]'
+                    f"[dim]Valid modes: {valid}[/dim]"
                 )
                 return
 
             self._apply_permission_mode(mode)
             title = permission_mode_title(mode)
-            self.console.print(f'[success]Permission mode set to: {title}[/success]')
+            self.console.print(f"[success]Permission mode set to: {title}[/success]")
             return
 
         # Interactive mode: show current mode + numbered menu
@@ -4911,29 +4911,29 @@ class ClawcodexREPL:
 
         self.console.print()
         self.console.print(
-            f'[bold]Current permission mode:[/bold] {current_title} ({current_short})'
+            f"[bold]Current permission mode:[/bold] {current_title} ({current_short})"
         )
         self.console.print()
-        self.console.print('[bold]Select a permission mode:[/bold]')
+        self.console.print("[bold]Select a permission mode:[/bold]")
 
         modes = list(EXTERNAL_PERMISSION_MODES)
         for i, m in enumerate(modes, 1):
             title = permission_mode_title(m)
             desc = self._permission_mode_description(m)
-            marker = ' ✓' if m == current else ''
+            marker = " ✓" if m == current else ""
             self.console.print(
-                f'  [info]{i}.[/info] {title}{" [success]" + marker + "[/success]" if marker else ""}'
+                f"  [info]{i}.[/info] {title}{' [success]' + marker + '[/success]' if marker else ''}"
             )
-            self.console.print(f'       [dim]{desc}[/dim]')
+            self.console.print(f"       [dim]{desc}[/dim]")
 
         self.console.print()
-        self.console.print('  [dim]or any other key to cancel[/dim]')
+        self.console.print("  [dim]or any other key to cancel[/dim]")
         self.console.print()
 
         try:
-            choice = self._safe_input('Choose mode [1-5]: ').strip()
+            choice = self._safe_input("Choose mode [1-5]: ").strip()
         except (EOFError, KeyboardInterrupt):
-            self.console.print('[dim]Cancelled.[/dim]')
+            self.console.print("[dim]Cancelled.[/dim]")
             return
 
         if not choice:
@@ -4944,27 +4944,27 @@ class ClawcodexREPL:
             if 1 <= idx <= len(modes):
                 chosen = modes[idx - 1]
                 if chosen == current:
-                    self.console.print('[dim]Already in that mode.[/dim]')
+                    self.console.print("[dim]Already in that mode.[/dim]")
                     return
                 self._apply_permission_mode(chosen)
                 title = permission_mode_title(chosen)
-                self.console.print(f'[success]Permission mode set to: {title}[/success]')
+                self.console.print(f"[success]Permission mode set to: {title}[/success]")
             else:
-                self.console.print(f'[error]Invalid choice: {idx}. Enter 1–{len(modes)}.[/error]')
+                self.console.print(f"[error]Invalid choice: {idx}. Enter 1–{len(modes)}.[/error]")
         except ValueError:
-            self.console.print('[dim]Cancelled.[/dim]')
+            self.console.print("[dim]Cancelled.[/dim]")
 
     @staticmethod
     def _permission_mode_description(mode: PermissionMode) -> str:
         """Return a human-readable description for each permission mode."""
         descriptions = {
-            'default': 'Prompt before every tool use (default behavior)',
-            'plan': 'No write operations — only plan and read code',
-            'acceptEdits': 'Auto-accept file edits; ask for other tools',
-            'bypassPermissions': 'Auto-approve all tool requests (caution!)',
-            'dontAsk': 'Never prompt — fail if permission would be needed',
+            "default": "Prompt before every tool use (default behavior)",
+            "plan": "No write operations — only plan and read code",
+            "acceptEdits": "Auto-accept file edits; ask for other tools",
+            "bypassPermissions": "Auto-approve all tool requests (caution!)",
+            "dontAsk": "Never prompt — fail if permission would be needed",
         }
-        return descriptions.get(mode, '')
+        return descriptions.get(mode, "")
 
     def _apply_permission_mode(self, mode: PermissionMode) -> None:
         """Apply a specific permission mode via the runtime controller.
@@ -4999,74 +4999,74 @@ class ClawcodexREPL:
         mode inline in the spinner row. Otherwise fall through to
         :meth:`console.print` so the change is visible between turns.
         """
-        status = getattr(self, '_active_live_status', None)
+        status = getattr(self, "_active_live_status", None)
         if status is not None:
             try:
-                status.update(f'mode: {mode}')
+                status.update(f"mode: {mode}")
             except Exception:
                 pass
             return
         try:
-            self.console.print(f'[dim]Permission mode: {mode}[/dim]')
+            self.console.print(f"[dim]Permission mode: {mode}[/dim]")
         except Exception:
             pass
 
     def _try_run_skill_slash(self, raw: str) -> bool:
         text = raw.strip()
-        if not text.startswith('/'):
+        if not text.startswith("/"):
             return False
         body = text[1:]
         if not body:
             return False
         if body.split(maxsplit=1)[0].lower() in {
-            c.lstrip('/').lower() for c in self._built_in_commands if c != '/'
+            c.lstrip("/").lower() for c in self._built_in_commands if c != "/"
         }:
             return False
 
         parts = body.split(maxsplit=1)
         skill_name = parts[0].strip()
-        args = parts[1] if len(parts) > 1 else ''
+        args = parts[1] if len(parts) > 1 else ""
         if not skill_name:
             return False
 
         try:
             result = self.tool_registry.dispatch(
-                ToolCall(name='Skill', input={'skill': skill_name, 'args': args}),
+                ToolCall(name="Skill", input={"skill": skill_name, "args": args}),
                 self.tool_context,
             )
         except Exception as e:
-            self.console.print(f'[error]Skill error: {e}[/error]')
+            self.console.print(f"[error]Skill error: {e}[/error]")
             return True
 
         payload = result.output if isinstance(result.output, dict) else {}
-        if result.is_error or not payload.get('success'):
+        if result.is_error or not payload.get("success"):
             err = (
-                payload.get('error')
-                if isinstance(payload.get('error'), str)
-                else 'Unknown skill error'
+                payload.get("error")
+                if isinstance(payload.get("error"), str)
+                else "Unknown skill error"
             )
-            self.console.print(f'[error]{err}[/error]')
+            self.console.print(f"[error]{err}[/error]")
             return True
 
-        self.console.print(f'[dim]Launching skill: {payload.get("commandName", skill_name)}[/dim]')
+        self.console.print(f"[dim]Launching skill: {payload.get('commandName', skill_name)}[/dim]")
         meta_parts: list[str] = []
-        loaded = payload.get('loadedFrom')
+        loaded = payload.get("loadedFrom")
         if isinstance(loaded, str) and loaded:
-            meta_parts.append(f'source={loaded}')
-        model = payload.get('model')
+            meta_parts.append(f"source={loaded}")
+        model = payload.get("model")
         if isinstance(model, str) and model:
-            meta_parts.append(f'model={model}')
-        tools = payload.get('allowedTools')
+            meta_parts.append(f"model={model}")
+        tools = payload.get("allowedTools")
         if isinstance(tools, list) and tools:
-            shown = ', '.join(str(t) for t in tools[:6])
-            more = f' (+{len(tools) - 6})' if len(tools) > 6 else ''
-            meta_parts.append(f'tools={shown}{more}')
+            shown = ", ".join(str(t) for t in tools[:6])
+            more = f" (+{len(tools) - 6})" if len(tools) > 6 else ""
+            meta_parts.append(f"tools={shown}{more}")
         if meta_parts:
-            self.console.print(f'[dim]{" · ".join(meta_parts)}[/dim]')
+            self.console.print(f"[dim]{' · '.join(meta_parts)}[/dim]")
 
-        prompt = payload.get('prompt')
+        prompt = payload.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip():
-            self.console.print('[error]Skill produced empty prompt[/error]')
+            self.console.print("[error]Skill produced empty prompt[/error]")
             return True
 
         self.chat(prompt)
@@ -5112,10 +5112,10 @@ class ClawcodexREPL:
             skills.sort(key=lambda s: s.name.lower())
 
             if not skills:
-                self.console.print('\n[bold]Available Skills:[/bold]')
-                self.console.print('[dim]No skills found.[/dim]')
+                self.console.print("\n[bold]Available Skills:[/bold]")
+                self.console.print("[dim]No skills found.[/dim]")
                 self.console.print(
-                    '[dim]Create skills in ~/.clawcodex/skills/ or ~/.claude/skills/ or .clawcodex/skills/ in your project.[/dim]'
+                    "[dim]Create skills in ~/.clawcodex/skills/ or ~/.claude/skills/ or .clawcodex/skills/ in your project.[/dim]"
                 )
                 return
 
@@ -5124,23 +5124,23 @@ class ClawcodexREPL:
 
             by_source: dict[str, list] = defaultdict(list)
             for s in skills:
-                loaded = getattr(s, 'loaded_from', '') or 'unknown'
+                loaded = getattr(s, "loaded_from", "") or "unknown"
                 by_source[loaded].append(s)
 
-            self.console.print(f'\n[bold]Available Skills ({len(skills)}):[/bold]')
+            self.console.print(f"\n[bold]Available Skills ({len(skills)}):[/bold]")
             for source in sorted(by_source.keys()):
                 source_skills = by_source[source]
-                self.console.print(f'\n[info]{source.title()} Skills:[/info]')
+                self.console.print(f"\n[info]{source.title()} Skills:[/info]")
                 for s in source_skills:
-                    desc = (getattr(s, 'description', None) or '').strip()
-                    user_invocable = getattr(s, 'user_invocable', True)
-                    inv_str = '' if user_invocable else ' [dim](not user-invocable)[/dim]'
-                    self.console.print(f'  [success]/{s.name}[/success]{inv_str}')
+                    desc = (getattr(s, "description", None) or "").strip()
+                    user_invocable = getattr(s, "user_invocable", True)
+                    inv_str = "" if user_invocable else " [dim](not user-invocable)[/dim]"
+                    self.console.print(f"  [success]/{s.name}[/success]{inv_str}")
                     if desc:
-                        self.console.print(f'    [dim]{desc}[/dim]')
+                        self.console.print(f"    [dim]{desc}[/dim]")
             self.console.print()
         except Exception as e:
-            self.console.print(f'[error]Error loading skills: {e}[/error]')
+            self.console.print(f"[error]Error loading skills: {e}[/error]")
 
     def _is_recoverable_tool_error(self, tool_name: str, tool_output) -> bool:
         if not isinstance(tool_name, str):
@@ -5148,17 +5148,17 @@ class ClawcodexREPL:
         if not isinstance(tool_output, dict):
             return False
         name = tool_name.strip().lower()
-        err = tool_output.get('error')
+        err = tool_output.get("error")
         if not isinstance(err, str):
             return False
         e = err.lower()
-        if name == 'read' and e.startswith('file not found:'):
-            p = err.split(':', 2)[-1].strip()
+        if name == "read" and e.startswith("file not found:"):
+            p = err.split(":", 2)[-1].strip()
             if (
-                '/.clawcodex/skills/' in p
-                or '\\.clawcodex\\skills\\' in p
-                or '/.claude/skills/' in p
-                or '\\.claude\\skills\\' in p
+                "/.clawcodex/skills/" in p
+                or "\\.clawcodex\\skills\\" in p
+                or "/.claude/skills/" in p
+                or "\\.claude\\skills\\" in p
             ):
                 return True
         return False
@@ -5170,92 +5170,92 @@ class ClawcodexREPL:
         return isinstance(self.provider, (AnthropicProvider, MinimaxProvider))
 
     def _build_direct_stream_payload(self) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        style_name = getattr(self.tool_context, 'output_style_name', None)
-        style_dir = getattr(self.tool_context, 'output_style_dir', None)
+        style_name = getattr(self.tool_context, "output_style_name", None)
+        style_dir = getattr(self.tool_context, "output_style_dir", None)
         style_prompt = resolve_output_style(style_name, style_dir).prompt
 
         if self._provider_uses_system_kwarg():
             return self.session.conversation.get_messages(), (
-                {'system': style_prompt} if style_prompt.strip() else {}
+                {"system": style_prompt} if style_prompt.strip() else {}
             )
 
         messages: list[dict[str, Any]] = []
         for msg in self.session.conversation.messages:
             if isinstance(msg.content, str):
-                messages.append({'role': msg.role, 'content': msg.content})
+                messages.append({"role": msg.role, "content": msg.content})
         if style_prompt.strip():
-            messages = [{'role': 'system', 'content': style_prompt}, *messages]
+            messages = [{"role": "system", "content": style_prompt}, *messages]
         return messages, {}
 
     def _should_try_direct_stream(self, user_input: str) -> bool:
         if not self.stream:
             return False
         text = user_input.strip().lower()
-        if not text or text.startswith('/'):
+        if not text or text.startswith("/"):
             return False
         if len(text) > 240:
             return False
 
         code_task_markers = (
-            '/',
-            '\\',
-            'src/',
-            'tests/',
-            '.py',
-            '.ts',
-            '.md',
-            'file',
-            'files',
-            'read',
-            'write',
-            'edit',
-            'modify',
-            'change',
-            'search',
-            'grep',
-            'glob',
-            'bash',
-            'shell',
-            'command',
-            'run',
-            'test',
-            'fix',
-            'bug',
-            'refactor',
-            'repo',
-            'repository',
-            'project',
-            'workspace',
-            'folder',
-            'directory',
-            'function',
-            'class',
-            'module',
-            'code',
-            'implementation',
-            'readme',
-            'pyproject',
-            'package.json',
-            'git',
-            'commit',
-            'diff',
-            'tool',
-            '文件',
-            '代码',
-            '仓库',
-            '项目',
-            '目录',
-            '读取',
-            '写入',
-            '修改',
-            '搜索',
-            '运行',
-            '测试',
-            '修复',
-            '命令',
-            '工具',
-            '函数',
-            '类',
+            "/",
+            "\\",
+            "src/",
+            "tests/",
+            ".py",
+            ".ts",
+            ".md",
+            "file",
+            "files",
+            "read",
+            "write",
+            "edit",
+            "modify",
+            "change",
+            "search",
+            "grep",
+            "glob",
+            "bash",
+            "shell",
+            "command",
+            "run",
+            "test",
+            "fix",
+            "bug",
+            "refactor",
+            "repo",
+            "repository",
+            "project",
+            "workspace",
+            "folder",
+            "directory",
+            "function",
+            "class",
+            "module",
+            "code",
+            "implementation",
+            "readme",
+            "pyproject",
+            "package.json",
+            "git",
+            "commit",
+            "diff",
+            "tool",
+            "文件",
+            "代码",
+            "仓库",
+            "项目",
+            "目录",
+            "读取",
+            "写入",
+            "修改",
+            "搜索",
+            "运行",
+            "测试",
+            "修复",
+            "命令",
+            "工具",
+            "函数",
+            "类",
         )
         return not any(marker in text for marker in code_task_markers)
 
@@ -5268,7 +5268,7 @@ class ClawcodexREPL:
         instead of waiting for the next chunk to arrive.
         """
 
-        abort_controller = getattr(self, '_direct_abort_controller', None)
+        abort_controller = getattr(self, "_direct_abort_controller", None)
         if abort_controller is None:
             abort_controller = AbortController()
         abort_signal = abort_controller.signal
@@ -5309,7 +5309,7 @@ class ClawcodexREPL:
                 if abort_signal.aborted:
                     return None
                 return None
-            full_response = ''.join(chunks) or None
+            full_response = "".join(chunks) or None
         except Exception:
             # Provider raised (e.g. AbortError from user cancel, or a
             # real error). If the abort controller was tripped, the user
@@ -5324,7 +5324,7 @@ class ClawcodexREPL:
 
     def _get_last_assistant_text(self) -> str | None:
         for message in reversed(self.session.conversation.messages):
-            if message.role != 'assistant':
+            if message.role != "assistant":
                 continue
             content = message.content
             if isinstance(content, str) and content.strip():
@@ -5332,12 +5332,12 @@ class ClawcodexREPL:
             if isinstance(content, list):
                 parts: list[str] = []
                 for block in content:
-                    block_type = getattr(block, 'type', None)
-                    if block_type == 'text':
-                        text = getattr(block, 'text', '')
+                    block_type = getattr(block, "type", None)
+                    if block_type == "text":
+                        text = getattr(block, "text", "")
                         if isinstance(text, str) and text:
                             parts.append(text)
-                joined = ''.join(parts).strip()
+                joined = "".join(parts).strip()
                 if joined:
                     return joined
         return None
@@ -5346,7 +5346,7 @@ class ClawcodexREPL:
         text = self._get_last_assistant_text()
         if not text:
             return False
-        self.console.print('\n[bold]Last Assistant Response[/bold]')
+        self.console.print("\n[bold]Last Assistant Response[/bold]")
         self.console.print(Markdown(text))
         self.console.print()
         return True
@@ -5368,7 +5368,7 @@ class ClawcodexREPL:
         this load-bearing behaviour has a direct unit-test surface
         (test_repl_conversation_sanitization).
         """
-        if getattr(msg, '_api_error', None) == 'image_unsupported':
+        if getattr(msg, "_api_error", None) == "image_unsupported":
             from clawcodex_ext.context_system.microcompact import (
                 strip_images_from_typed_messages,
             )
@@ -5413,7 +5413,7 @@ class ClawcodexREPL:
         unknown_agents = find_unknown_agent_mentions(user_input, available_agents)
         if unknown_agents:
             self.console.print(
-                f'[error]{format_unknown_agent_mention_error(unknown_agents, available_agents)}[/error]'
+                f"[error]{format_unknown_agent_mention_error(unknown_agents, available_agents)}[/error]"
             )
             return True
 
@@ -5440,10 +5440,10 @@ class ClawcodexREPL:
             for att in agent_attachments:
                 if _sop_bundle_active:
                     self.console.print(
-                        f'[dim]  ⎿  @{att["agent_type"]} → delegating via overview agent[/dim]'
+                        f"[dim]  ⎿  @{att['agent_type']} → delegating via overview agent[/dim]"
                     )
                 else:
-                    self.console.print(f'[dim]  ⎿  Invoking agent @{att["agent_type"]}[/dim]')
+                    self.console.print(f"[dim]  ⎿  Invoking agent @{att['agent_type']}[/dim]")
 
         if agent_attachments and not at_attachments and not _sop_bundle_active:
             from clawcodex_ext.repl.mentioned_agent import (
@@ -5454,7 +5454,7 @@ class ClawcodexREPL:
             if should_run_mentioned_agent_directly(agent_attachments, at_attachments):
                 if run_mentioned_agent_direct(
                     self,
-                    agent_type=agent_attachments[0]['agent_type'],
+                    agent_type=agent_attachments[0]["agent_type"],
                     user_input=user_input,
                 ):
                     return True
@@ -5462,24 +5462,24 @@ class ClawcodexREPL:
         all_attachments = list(at_attachments) + list(agent_attachments)
         if all_attachments:
             attachment_text = format_at_mention_attachments(all_attachments)
-            user_input = f'{attachment_text}\n\n{user_input}' if attachment_text else user_input
+            user_input = f"{attachment_text}\n\n{user_input}" if attachment_text else user_input
             for att in at_attachments:
-                kind = att.get('kind')
-                if kind == 'image':
+                kind = att.get("kind")
+                if kind == "image":
                     # TS shows "Read 1 file (ctrl+o to expand)" for image
                     # @-mentions; we mirror the user-facing intent without
                     # the count (one mention -> one line).
-                    self.console.print(f'[dim]  ⎿  Read image {att["display_path"]}[/dim]')
-                elif kind == 'binary':
+                    self.console.print(f"[dim]  ⎿  Read image {att['display_path']}[/dim]")
+                elif kind == "binary":
                     # Binary file (PDF, archive, ...) — show what happened
                     # so the user isn't surprised that no content was
                     # inlined. The reminder text already nudges the model
                     # toward the Read tool.
-                    self.console.print(f'[dim]  ⎿  Skipped binary file {att["display_path"]}[/dim]')
+                    self.console.print(f"[dim]  ⎿  Skipped binary file {att['display_path']}[/dim]")
                 else:
-                    label = 'directory' if kind == 'directory' else 'file'
+                    label = "directory" if kind == "directory" else "file"
                     self.console.print(
-                        f'[dim]  ⎿  Listed {label} {att["display_path"]}{"/" if kind == "directory" else ""}[/dim]'
+                        f"[dim]  ⎿  Listed {label} {att['display_path']}{'/' if kind == 'directory' else ''}[/dim]"
                     )
 
         # Companion intro — build and prepend companion intro attachment
@@ -5496,7 +5496,7 @@ class ClawcodexREPL:
         if intro_attachments:
             intro_text = format_companion_intro_attachments(intro_attachments)
             if intro_text:
-                user_input = f'{intro_text}\n\n{user_input}' if user_input else intro_text
+                user_input = f"{intro_text}\n\n{user_input}" if user_input else intro_text
             from clawcodex_ext.types.messages import AttachmentMessage
 
             self.session.conversation.messages.append(
@@ -5525,10 +5525,10 @@ class ClawcodexREPL:
 
         try:
             # Show the agent name (from @agent-mention) or default to "Assistant"
-            _agent_label = 'Assistant'
+            _agent_label = "Assistant"
             if agent_attachments:
-                _agent_label = agent_attachments[0].get('agent_type', 'Assistant')
-            self.console.print(f'\n[bold]{_agent_label}[/bold]')
+                _agent_label = agent_attachments[0].get("agent_type", "Assistant")
+            self.console.print(f"\n[bold]{_agent_label}[/bold]")
 
             stream_started = False
 
@@ -5550,18 +5550,18 @@ class ClawcodexREPL:
                     if not chunk:
                         return
                     _stop_status_once()
-                    self.console.print(chunk, end='', markup=False, highlight=False, soft_wrap=True)
+                    self.console.print(chunk, end="", markup=False, highlight=False, soft_wrap=True)
 
                 self._direct_abort_controller = AbortController()
 
                 def _cancel_direct_stream() -> None:
                     if self._direct_abort_controller is not None:
-                        self._direct_abort_controller.abort('user_interrupt')
+                        self._direct_abort_controller.abort("user_interrupt")
                     # Immediate visual feedback — update the LiveStatus message
-                    status = getattr(self, '_active_live_status', None)
+                    status = getattr(self, "_active_live_status", None)
                     if status is not None:
                         try:
-                            status.update('[warning]Cancelling…[/warning]')
+                            status.update("[warning]Cancelling…[/warning]")
                         except Exception:
                             pass
 
@@ -5583,7 +5583,7 @@ class ClawcodexREPL:
                     # Also cancel the direct stream so it stops
                     # consuming tokens immediately.
                     if self._direct_abort_controller is not None:
-                        self._direct_abort_controller.abort('background')
+                        self._direct_abort_controller.abort("background")
 
                 self._im_active_cancel = _cancel_direct_stream
                 try:
@@ -5617,7 +5617,7 @@ class ClawcodexREPL:
                 if pending:
                     self._enqueue_prompt(pending)
                 if direct_response is not None:
-                    self.console.print('\n')
+                    self.console.print("\n")
                     # Per-turn save: persist JSONL transcript only (lightweight).
                     try:
                         self.session.save_transcript()
@@ -5636,19 +5636,19 @@ class ClawcodexREPL:
 
             from src.outputStyles import resolve_output_style
 
-            style_name = getattr(self.tool_context, 'output_style_name', None)
-            style_dir = getattr(self.tool_context, 'output_style_dir', None)
+            style_name = getattr(self.tool_context, "output_style_name", None)
+            style_dir = getattr(self.tool_context, "output_style_dir", None)
             style_prompt = resolve_output_style(style_name, style_dir).prompt
 
             from clawcodex_ext.tool_system import get_team_aware_tool_list
             from clawcodex_ext.agent.agent_tool_utils import filter_tools_for_startup_agent
 
             tools = get_team_aware_tool_list(self.tool_registry, self.tool_context.team)
-            startup_agent = getattr(self.tool_context, 'startup_agent', None)
+            startup_agent = getattr(self.tool_context, "startup_agent", None)
             if startup_agent is None:
-                rc = getattr(self, 'runtime_context', None)
+                rc = getattr(self, "runtime_context", None)
                 if rc is not None:
-                    startup_agent = getattr(rc.options, 'startup_agent', None)
+                    startup_agent = getattr(rc.options, "startup_agent", None)
             tools = filter_tools_for_startup_agent(tools, startup_agent)
 
             # Coordinator Mode — when ``CLAUDE_CODE_COORDINATOR_MODE=true``,
@@ -5666,7 +5666,7 @@ class ClawcodexREPL:
             if is_coordinator_mode():
                 tools = filter_coordinator_tools(tools)
                 # Get MCP clients for worker context block
-                mcp_clients = getattr(self.tool_context, 'mcp_clients', None) or {}
+                mcp_clients = getattr(self.tool_context, "mcp_clients", None) or {}
                 engine_system_prompt = get_coordinator_system_prompt()
                 engine_user_context = get_coordinator_user_context(
                     mcp_clients=mcp_clients.values(),
@@ -5680,9 +5680,9 @@ class ClawcodexREPL:
                 engine_user_context = None
                 append_prompt = style_prompt
                 # Inject resolved agent system prompt if present
-                extra = getattr(self, '_append_system_prompt', '')
+                extra = getattr(self, "_append_system_prompt", "")
                 if extra:
-                    append_prompt = f'{append_prompt}\n\n{extra}'
+                    append_prompt = f"{append_prompt}\n\n{extra}"
 
             prior_messages = list(self._engine_messages)
 
@@ -5700,12 +5700,12 @@ class ClawcodexREPL:
             )
             engine = QueryEngine(engine_config)
 
-            response_text = ''
+            response_text = ""
             last_text_was_printed = False
 
             async def _run_query() -> tuple[str, bool]:
                 nonlocal stream_started
-                last_text = ''
+                last_text = ""
                 last_text_was_printed = False
                 api_call_count = 0
                 tool_use_map: dict[str, tuple[str, dict]] = {}
@@ -5751,7 +5751,7 @@ class ClawcodexREPL:
                     if self._thinking_visible:
                         # Print thinking content directly when visible
                         self.console.print(
-                            chunk, end='', markup=False, highlight=False, soft_wrap=True
+                            chunk, end="", markup=False, highlight=False, soft_wrap=True
                         )
                     else:
                         # Stash for later expansion via ctrl+o
@@ -5762,7 +5762,7 @@ class ClawcodexREPL:
                     on_thinking_chunk=_on_thinking_chunk,
                 ):
                     if isinstance(msg, StreamEvent):
-                        if msg.type == 'stream_request_start':
+                        if msg.type == "stream_request_start":
                             api_call_count += 1
                             # Reset spinner status to "Thinking…" when a
                             # new API round-trip starts, so the user sees
@@ -5782,10 +5782,10 @@ class ClawcodexREPL:
                         # image content. See QueryEngine.submit_message for
                         # the engine side of this pair.
                         self._sanitize_conversation_for_api_error(msg)
-                        usage = getattr(msg, 'usage', None)
+                        usage = getattr(msg, "usage", None)
                         if isinstance(usage, dict):
-                            in_toks = int(usage.get('input_tokens', 0) or 0)
-                            out_toks = int(usage.get('output_tokens', 0) or 0)
+                            in_toks = int(usage.get("input_tokens", 0) or 0)
+                            out_toks = int(usage.get("output_tokens", 0) or 0)
                             self._stats_input_tokens += in_toks
                             self._stats_output_tokens += out_toks
                             turn_tokens += in_toks + out_toks
@@ -5816,7 +5816,7 @@ class ClawcodexREPL:
                                     # so "Thinking…" → "● Bash" / "● Read"
                                     # instead of a static message.
                                     if _engine_status_ref:
-                                        _engine_status_ref[0].update(f'● {block.name}')
+                                        _engine_status_ref[0].update(f"● {block.name}")
                                     if block.name in _TASK_WIDGET_TOOL_NAMES:
                                         task_tool_ids.add(block.id)
                                         pending_task_flush = True
@@ -5840,23 +5840,23 @@ class ClawcodexREPL:
                                     # meaningful to show so ``● ToolName`` reads
                                     # cleaner than a literal ``ToolName()``.
                                     if summary:
-                                        call_args = f'[dim]([/dim]{escape(summary)}[dim])[/dim]'
+                                        call_args = f"[dim]([/dim]{escape(summary)}[dim])[/dim]"
                                     else:
-                                        call_args = ''
+                                        call_args = ""
                                     pending_tool_use_prints[block.id] = (
-                                        f'[success]●[/success] [bold][info]{block.name}[/info][/bold]'
-                                        + (f' {call_args}' if call_args else '')
+                                        f"[success]●[/success] [bold][info]{block.name}[/info][/bold]"
+                                        + (f" {call_args}" if call_args else "")
                                     )
                         continue
 
                     if isinstance(msg, SystemMessage):
-                        subtype = getattr(msg, 'subtype', None)
-                        if subtype == 'max_turns_reached':
+                        subtype = getattr(msg, "subtype", None)
+                        if subtype == "max_turns_reached":
                             _stop_status_once()
                             stream_started = True
                             self.console.print(
-                                f'[warning]Reached maximum number of turns. '
-                                f'The task may be incomplete.[/warning]'
+                                f"[warning]Reached maximum number of turns. "
+                                f"The task may be incomplete.[/warning]"
                             )
                         continue
 
@@ -5882,7 +5882,7 @@ class ClawcodexREPL:
                                                 else str(block.content)
                                             )
                                             self.console.print(
-                                                f'[error]  ⎿  {escape(err_text) if err_text else "Error"}[/error]'
+                                                f"[error]  ⎿  {escape(err_text) if err_text else 'Error'}[/error]"
                                             )
                                         continue
                                     # Print the deferred ``● Tool(args)``
@@ -5903,7 +5903,7 @@ class ClawcodexREPL:
                                             else str(block.content)
                                         )
                                         self.console.print(
-                                            f'[error]  ⎿  {escape(err_text) if err_text else "Error"}[/error]'
+                                            f"[error]  ⎿  {escape(err_text) if err_text else 'Error'}[/error]"
                                         )
                                     else:
                                         preview = self._format_tool_result_preview(
@@ -5915,19 +5915,19 @@ class ClawcodexREPL:
                                             # continuation lines under the
                                             # ``⎿`` glyph so they read as part
                                             # of the same result block.
-                                            if '\n' in preview:
-                                                first, *rest = preview.split('\n')
-                                                self.console.print(f'[dim]  ⎿  {first}[/dim]')
+                                            if "\n" in preview:
+                                                first, *rest = preview.split("\n")
+                                                self.console.print(f"[dim]  ⎿  {first}[/dim]")
                                                 for ln in rest:
-                                                    self.console.print(f'[dim]     {ln}[/dim]')
+                                                    self.console.print(f"[dim]     {ln}[/dim]")
                                             else:
-                                                self.console.print(f'[dim]  ⎿  {preview}[/dim]')
+                                                self.console.print(f"[dim]  ⎿  {preview}[/dim]")
                                         else:
                                             # Rich renderable (e.g. Edit diff
                                             # Group) — emit the prefix then
                                             # the renderable so its internal
                                             # styling survives the dim wrap.
-                                            self.console.print('[dim]  ⎿  [/dim]', end='')
+                                            self.console.print("[dim]  ⎿  [/dim]", end="")
                                             self.console.print(preview)
                                     tool_block_needs_leading_space = True
                         continue
@@ -5956,10 +5956,10 @@ class ClawcodexREPL:
                 # Immediate visual feedback — update the LiveStatus message
                 # so the user sees "Cancelling…" without waiting for the
                 # abort to propagate through the provider stream.
-                status = getattr(self, '_active_live_status', None)
+                status = getattr(self, "_active_live_status", None)
                 if status is not None:
                     try:
-                        status.update('[warning]Cancelling…[/warning]')
+                        status.update("[warning]Cancelling…[/warning]")
                     except Exception:
                         pass
 
@@ -6080,28 +6080,28 @@ class ClawcodexREPL:
         except Exception as e:
             error_str = str(e)
 
-            if '401' in error_str or 'authentication' in error_str.lower() or '令牌' in error_str:
-                self.console.print(f'\n[error]❌ Authentication Error: {escape(str(e))}[/error]')
+            if "401" in error_str or "authentication" in error_str.lower() or "令牌" in error_str:
+                self.console.print(f"\n[error]❌ Authentication Error: {escape(str(e))}[/error]")
                 self.console.print(
-                    '\n[warning]Your API key appears to be invalid or expired.[/warning]'
+                    "\n[warning]Your API key appears to be invalid or expired.[/warning]"
                 )
 
                 from rich.prompt import Prompt
 
                 choice = Prompt.ask(
-                    '\nWould you like to reconfigure your API key now?',
-                    choices=['y', 'n'],
-                    default='y',
+                    "\nWould you like to reconfigure your API key now?",
+                    choices=["y", "n"],
+                    default="y",
                 )
 
-                if choice == 'y':
+                if choice == "y":
                     self._handle_relogin()
                 else:
                     self.console.print(
-                        '\n[dim]You can run [bold]clawcodex login[/bold] later to update your API key.[/dim]'
+                        "\n[dim]You can run [bold]clawcodex login[/bold] later to update your API key.[/dim]"
                     )
             else:
-                self.console.print(f'\n[error]Error: {escape(str(e))}[/error]')
+                self.console.print(f"\n[error]Error: {escape(str(e))}[/error]")
                 import traceback
 
                 traceback.print_exc()
@@ -6116,7 +6116,7 @@ class ClawcodexREPL:
         implementation (including the process-wide idempotency latch)."""
         from clawcodex_ext.utils.resume_hint import print_resume_hint
 
-        print_resume_hint(getattr(self.session, 'session_id', None))
+        print_resume_hint(getattr(self.session, "session_id", None))
 
     def _handle_background_escape(self) -> None:
         """Handle Ctrl+B background escape: fork the agent into a background process.
@@ -6152,17 +6152,17 @@ class ClawcodexREPL:
         )
 
         if pid is not None:
-            self.console.print(f'\n[success]⏎ Agent sent to background (pid {pid}).[/success]')
-            self.console.print('[dim]Exiting...[/dim]')
+            self.console.print(f"\n[success]⏎ Agent sent to background (pid {pid}).[/success]")
+            self.console.print("[dim]Exiting...[/dim]")
             self._print_resume_hint()
             raise SystemExit(0)
         else:
             # Windows graceful degradation — no os.fork(), subprocess
             # launch may also have failed.
             self.console.print(
-                '\n[warning]Background mode is not supported on this platform.[/warning]'
+                "\n[warning]Background mode is not supported on this platform.[/warning]"
             )
-            self.console.print('[dim]Press Ctrl+C to cancel the current run instead.[/dim]')
+            self.console.print("[dim]Press Ctrl+C to cancel the current run instead.[/dim]")
 
     def _handle_relogin(self):
         """Handle re-authentication when credentials fail."""
@@ -6170,69 +6170,69 @@ class ClawcodexREPL:
         from src.config import set_api_key, set_default_provider
         from src.providers import PROVIDER_INFO
 
-        self.console.print('\n[bold][primary]Reconfigure Provider Credentials[/primary][/bold]\n')
+        self.console.print("\n[bold][primary]Reconfigure Provider Credentials[/primary][/bold]\n")
 
         provider_names = list(PROVIDER_INFO.keys())
-        self.console.print('[bold]Available providers:[/bold]')
+        self.console.print("[bold]Available providers:[/bold]")
         for name, info in PROVIDER_INFO.items():
             self.console.print(
-                f'  [info]{name}[/info] - {info["label"]} (default model: {info["default_model"]})'
+                f"  [info]{name}[/info] - {info['label']} (default model: {info['default_model']})"
             )
         self.console.print()
 
         provider = Prompt.ask(
-            'Select LLM provider',
+            "Select LLM provider",
             choices=provider_names,
-            default=self.provider_name if self.provider_name in provider_names else 'anthropic',
+            default=self.provider_name if self.provider_name in provider_names else "anthropic",
         )
 
         info = PROVIDER_INFO[provider]
 
-        if provider == 'openai-codex':
+        if provider == "openai-codex":
             from src.auth.codex_oauth import login_codex_device_flow
             from src.config import get_provider_config
 
             login_codex_device_flow(console=self.console)
             config = get_provider_config(provider)
             self.console.print(
-                f'\n[dim]Available models:[/dim] {", ".join(info["available_models"])}'
+                f"\n[dim]Available models:[/dim] {', '.join(info['available_models'])}"
             )
-            self.console.print(f'[dim]Default:[/dim] [bold]{info["default_model"]}[/bold]')
+            self.console.print(f"[dim]Default:[/dim] [bold]{info['default_model']}[/bold]")
             default_model = Prompt.ask(
-                f'{provider.upper()} Default Model',
-                default=config.get('default_model') or info['default_model'],
+                f"{provider.upper()} Default Model",
+                default=config.get("default_model") or info["default_model"],
             )
             set_api_key(
                 provider,
-                api_key='',
-                base_url=config.get('base_url') or info['default_base_url'],
+                api_key="",
+                base_url=config.get("base_url") or info["default_base_url"],
                 default_model=default_model,
             )
             set_default_provider(provider)
-            self.console.print('\n[success]OpenAI Codex login completed successfully![/success]\n')
+            self.console.print("\n[success]OpenAI Codex login completed successfully![/success]\n")
         else:
-            api_key = Prompt.ask(f'Enter {provider.upper()} API Key', password=True)
+            api_key = Prompt.ask(f"Enter {provider.upper()} API Key", password=True)
 
             if not api_key:
-                self.console.print('\n[error]Error: API Key cannot be empty[/error]')
+                self.console.print("\n[error]Error: API Key cannot be empty[/error]")
                 return
 
-            self.console.print(f'\n[dim]Default:[/dim] {info["default_base_url"]}')
-            base_url = Prompt.ask(f'{provider.upper()} Base URL', default=info['default_base_url'])
+            self.console.print(f"\n[dim]Default:[/dim] {info['default_base_url']}")
+            base_url = Prompt.ask(f"{provider.upper()} Base URL", default=info["default_base_url"])
 
             self.console.print(
-                f'\n[dim]Available models:[/dim] {", ".join(info["available_models"])}'
+                f"\n[dim]Available models:[/dim] {', '.join(info['available_models'])}"
             )
-            self.console.print(f'[dim]Default:[/dim] [bold]{info["default_model"]}[/bold]')
+            self.console.print(f"[dim]Default:[/dim] [bold]{info['default_model']}[/bold]")
             default_model = Prompt.ask(
-                f'{provider.upper()} Default Model', default=info['default_model']
+                f"{provider.upper()} Default Model", default=info["default_model"]
             )
 
             set_api_key(provider, api_key=api_key, base_url=base_url, default_model=default_model)
             set_default_provider(provider)
 
             self.console.print(
-                f'\n[success]{provider.upper()} API Key updated successfully![/success]\n'
+                f"\n[success]{provider.upper()} API Key updated successfully![/success]\n"
             )
 
         self.provider = build_provider_from_config(provider)
@@ -6240,10 +6240,10 @@ class ClawcodexREPL:
 
         # Rebuild tool registry with new provider so Agent tool works
         def _get_mcp_servers_for_prompt() -> list[str]:
-            ctx = getattr(self, 'tool_context', None)
+            ctx = getattr(self, "tool_context", None)
             if ctx is None:
                 return []
-            clients = getattr(ctx, 'mcp_clients', None) or {}
+            clients = getattr(ctx, "mcp_clients", None) or {}
             return list(clients.keys())
 
         self.tool_registry = build_default_registry(
@@ -6252,13 +6252,13 @@ class ClawcodexREPL:
         )
 
         self.console.print(
-            '[success]✓ Provider reinitialized. You can continue chatting![/success]\n'
+            "[success]✓ Provider reinitialized. You can continue chatting![/success]\n"
         )
 
     def save_session(self):
         """Save current session."""
         self.session.save()
-        self.console.print(f'[success]Session saved: {self.session.session_id}[/success]')
+        self.console.print(f"[success]Session saved: {self.session.session_id}[/success]")
 
     def load_session(self, session_id: str):
         """Load a previous session.
@@ -6278,7 +6278,7 @@ class ClawcodexREPL:
 
         loaded_session = Session.resume(session_id)
         if loaded_session is None:
-            self.console.print(f'[error]Session not found: {session_id}[/error]')
+            self.console.print(f"[error]Session not found: {session_id}[/error]")
             return
 
         # Replace current session (bootstrap id + cost already restored
@@ -6289,18 +6289,18 @@ class ClawcodexREPL:
         # starting with an empty mutable-message list (which would cause
         # the model to lose all prior context on resume).
         self._engine_messages = list(loaded_session.conversation.messages)
-        self.console.print(f'[success]Session loaded: {session_id}[/success]')
+        self.console.print(f"[success]Session loaded: {session_id}[/success]")
         self.console.print(
-            f'[dim]Provider: {loaded_session.provider}, Model: {loaded_session.model}[/dim]'
+            f"[dim]Provider: {loaded_session.provider}, Model: {loaded_session.model}[/dim]"
         )
-        self.console.print(f'[dim]Messages: {len(loaded_session.conversation.messages)}[/dim]')
+        self.console.print(f"[dim]Messages: {len(loaded_session.conversation.messages)}[/dim]")
         restored_cost = get_total_cost_usd()
         if restored_cost > 0:
-            self.console.print(f'[dim]Restored cost: ${restored_cost:.4f}[/dim]')
+            self.console.print(f"[dim]Restored cost: ${restored_cost:.4f}[/dim]")
 
         # Show last 5 messages; meta/virtual injections and empty turns are skipped.
         if loaded_session.conversation.messages:
-            self.console.print('\n[bold]Conversation History:[/bold]')
+            self.console.print("\n[bold]Conversation History:[/bold]")
             for msg in loaded_session.conversation.messages[-5:]:
                 line = self._format_history_line(msg)
                 if line is None:

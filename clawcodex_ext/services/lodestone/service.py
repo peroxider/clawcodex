@@ -80,7 +80,9 @@ class LodestoneService:
     def update_config(self, **changes: object) -> LodestoneConfig:
         """Return a new :class:`LodestoneConfig` with ``changes`` applied."""
         merged = {**self._config.__dict__, **changes}
-        self._config = LodestoneConfig(**{k: v for k, v in merged.items() if k in LodestoneConfig.__dataclass_fields__})
+        self._config = LodestoneConfig(
+            **{k: v for k, v in merged.items() if k in LodestoneConfig.__dataclass_fields__}
+        )
         with self._lock:
             self._registry.update_config(self._config)
         return self._config
@@ -114,7 +116,9 @@ class LodestoneService:
         for anchor in sorted_anchors:
             if anchor.span is None:
                 continue
-            rendered = self._resolver.resolve(anchor, ctx=ctx, sink=sink, target_override=target_override)
+            rendered = self._resolver.resolve(
+                anchor, ctx=ctx, sink=sink, target_override=target_override
+            )
             out = out[: anchor.span[0]] + rendered.rendered + out[anchor.span[1] :]
         return out
 
@@ -149,6 +153,7 @@ class LodestoneService:
     def _parser(self):
         # Lazy-import to break load-cycle (parser ↔ models); no global state.
         from .parser import AnchorParser
+
         return AnchorParser()
 
 
@@ -163,6 +168,7 @@ def _build_context(
 ) -> AnchorContext:
     if workspace_root is not None:
         from .fingerprint import detect_workspace_fingerprint, build_anchor_context
+
         fp = detect_workspace_fingerprint(workspace_root, use_cache=False)
         ctx = build_anchor_context(
             workspace_root,

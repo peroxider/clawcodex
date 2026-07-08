@@ -104,8 +104,11 @@ def _action_inspect(tool_input: dict[str, Any], context: ToolContext) -> ToolRes
     except BgSessionNotFoundError as exc:
         return ToolResult(
             name="BgSession",
-            output={"error": "not_found", "message": str(exc),
-                    "available": [_summarize(s) for s in mgr.list_sessions()]},
+            output={
+                "error": "not_found",
+                "message": str(exc),
+                "available": [_summarize(s) for s in mgr.list_sessions()],
+            },
             is_error=True,
         )
     return ToolResult(name="BgSession", output=_detail(sess))
@@ -120,7 +123,9 @@ def _action_attach(tool_input: dict[str, Any], context: ToolContext) -> ToolResu
     ws = _safe_workspace(context)
     try:
         result = mgr.attach(
-            sid, follow=follow, current_workspace=ws,
+            sid,
+            follow=follow,
+            current_workspace=ws,
             allow_cross_workspace=bool(tool_input.get("all_workspaces", False)),
         )
     except BgSessionNotFoundError as exc:
@@ -212,17 +217,19 @@ def _summarize(s: Any) -> dict[str, Any]:
 
 def _detail(s: Any) -> dict[str, Any]:
     d = _summarize(s)
-    d.update({
-        "task_id": s.task_id,
-        "team_id": s.team_id,
-        "description": s.description,
-        "transcript_path": str(s.transcript_path) if s.transcript_path else None,
-        "marker_path": str(s.marker_path) if s.marker_path else None,
-        "updated_at": s.updated_at,
-        "completed_at": s.completed_at,
-        "last_activity_at": s.last_activity_at,
-        "error": s.error,
-    })
+    d.update(
+        {
+            "task_id": s.task_id,
+            "team_id": s.team_id,
+            "description": s.description,
+            "transcript_path": str(s.transcript_path) if s.transcript_path else None,
+            "marker_path": str(s.marker_path) if s.marker_path else None,
+            "updated_at": s.updated_at,
+            "completed_at": s.completed_at,
+            "last_activity_at": s.last_activity_at,
+            "error": s.error,
+        }
+    )
     return d
 
 
@@ -254,9 +261,7 @@ def _require_str(tool_input: dict[str, Any], key: str) -> str:
 def _bg_session_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     action = tool_input.get("action")
     if action not in ("list", "inspect", "attach", "stop", "cleanup"):
-        raise ToolInputError(
-            "action must be one of: list, inspect, attach, stop, cleanup"
-        )
+        raise ToolInputError("action must be one of: list, inspect, attach, stop, cleanup")
     handlers = {
         "list": _action_list,
         "inspect": _action_inspect,

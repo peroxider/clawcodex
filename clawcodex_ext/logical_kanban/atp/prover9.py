@@ -6,5 +6,5 @@ from .base import ExternalAtpSolverAdapter
 
 
 class Prover9SolverAdapter(ExternalAtpSolverAdapter):
-    engine_name = 'atp-prover9'
-    binary_name = 'prover9'
+    engine_name = "atp-prover9"
+    binary_name = "prover9"

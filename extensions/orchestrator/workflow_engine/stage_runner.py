@@ -116,10 +116,13 @@ class StageRunner:
                 last_error = str(exc)
                 logger.warning(
                     "Stage %s attempt %d/%d failed: %s",
-                    stage_node.id, attempt + 1, self.MAX_RETRIES + 1, exc,
+                    stage_node.id,
+                    attempt + 1,
+                    self.MAX_RETRIES + 1,
+                    exc,
                 )
                 if attempt < self.MAX_RETRIES:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
 
         return StageRunResult(
             stage_id=stage_node.id,
@@ -147,9 +150,13 @@ class StageRunner:
             if result.approved or attempt >= max_retries:
                 return result
 
-            logger.warning("GATE stage %s attempt %d/%d rejected, retrying...",
-                           stage_node.id, attempt + 1, max_retries + 1)
-            await asyncio.sleep(2 ** attempt)
+            logger.warning(
+                "GATE stage %s attempt %d/%d rejected, retrying...",
+                stage_node.id,
+                attempt + 1,
+                max_retries + 1,
+            )
+            await asyncio.sleep(2**attempt)
 
         return GateRunResult(
             stage_id=stage_node.id,
@@ -178,10 +185,15 @@ class StageRunner:
                         next_stage=next_stage,
                     )
             except Exception as exc:
-                logger.warning("Decision stage %s attempt %d/%d failed: %s",
-                               stage_node.id, attempt + 1, max_retries + 1, exc)
+                logger.warning(
+                    "Decision stage %s attempt %d/%d failed: %s",
+                    stage_node.id,
+                    attempt + 1,
+                    max_retries + 1,
+                    exc,
+                )
                 if attempt < max_retries:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                 else:
                     return DecisionRunResult(stage_id=stage_node.id, outcome="proceed")
 
@@ -190,7 +202,9 @@ class StageRunner:
     # ── Agent 阶段执行 (DD-5: 合成 Issue 适配器) ─────────────────
 
     async def _execute_agent_stage(
-        self, stage_node: StageNode, state: WorkflowState,
+        self,
+        stage_node: StageNode,
+        state: WorkflowState,
     ) -> StageRunResult:
         """通过合成 Issue + AgentRunner 执行 Agent 阶段。"""
         # 记录阶段开始前的总成本，用于计算阶段增量
@@ -222,7 +236,9 @@ class StageRunner:
         )
 
     async def _run_synthetic_issue(
-        self, prompt: str, stage_node: StageNode,
+        self,
+        prompt: str,
+        stage_node: StageNode,
     ) -> "AgentSession | None":
         """构建合成 Issue 并调用 AgentRunner (DD-5)。"""
         from ..issue import Issue
@@ -279,7 +295,9 @@ class StageRunner:
     async def _run_auto_gate(self, stage_node: StageNode, state: WorkflowState) -> GateRunResult:
         """自动 GATE：基于 validator 结果判定。"""
         if not stage_node.validators:
-            return GateRunResult(stage_id=stage_node.id, approved=True, reason="no validators, auto-approved")
+            return GateRunResult(
+                stage_id=stage_node.id, approved=True, reason="no validators, auto-approved"
+            )
 
         from .validators import ContractValidator
 
@@ -290,11 +308,14 @@ class StageRunner:
         return GateRunResult(
             stage_id=stage_node.id,
             approved=all_passed,
-            reason="All validators passed" if all_passed
+            reason="All validators passed"
+            if all_passed
             else f"Validators failed: {[r.message for r in results if not r.passed]}",
         )
 
-    async def _run_threshold_gate(self, stage_node: StageNode, state: WorkflowState) -> GateRunResult:
+    async def _run_threshold_gate(
+        self, stage_node: StageNode, state: WorkflowState
+    ) -> GateRunResult:
         """阈值 GATE：通过合成 Issue + LLM 评分判定。"""
         try:
             prompt = (
@@ -311,11 +332,14 @@ class StageRunner:
             return GateRunResult(
                 stage_id=stage_node.id,
                 approved=approved,
-                reason=f"Score {score:.2f} >= threshold {stage_node.gate_threshold}" if approved
+                reason=f"Score {score:.2f} >= threshold {stage_node.gate_threshold}"
+                if approved
                 else f"Score {score:.2f} < threshold {stage_node.gate_threshold}",
             )
         except Exception as exc:
-            return GateRunResult(stage_id=stage_node.id, approved=False, reason=f"Threshold gate error: {exc}")
+            return GateRunResult(
+                stage_id=stage_node.id, approved=False, reason=f"Threshold gate error: {exc}"
+            )
 
     # ── DECISION 处理 ─────────────────────────────────────────────
 
@@ -415,7 +439,7 @@ class StageRunner:
             if state.issue_context:
                 parts = ["## Issue Context"]
                 parts.append(f"Title: {state.issue_context.get('title', 'N/A')}")
-                desc = state.issue_context.get('description', '')
+                desc = state.issue_context.get("description", "")
                 if desc:
                     parts.append(f"Description: {desc}")
                 return "\n".join(parts)
@@ -423,6 +447,7 @@ class StageRunner:
 
         try:
             from ..prompt_builder import PromptBuilder
+
             return PromptBuilder.render(issue=issue)
         except Exception as exc:
             logger.warning("PromptBuilder.render failed, using fallback: %s", exc)
@@ -438,6 +463,7 @@ class StageRunner:
         """从核心 bootstrap 状态获取当前累计成本。"""
         try:
             from src.bootstrap.state import get_total_cost_usd
+
             return get_total_cost_usd()
         except Exception:
             return 0.0
@@ -446,6 +472,7 @@ class StageRunner:
     def _extract_score(text: str) -> float:
         """从 LLM 输出中提取评分 (0.0-1.0)。"""
         import re
+
         match = re.search(r"(?:score|评分)[:\s]*([0-9]*\.?[0-9]+)", text, re.IGNORECASE)
         if match:
             try:

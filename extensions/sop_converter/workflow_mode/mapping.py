@@ -43,7 +43,10 @@ def build_workflow_stages(
     stage_by_id = {s.id: s for s in graph.stages}
     return [
         extracted_stage_to_workflow_stage(
-            node, graph, stage_by_id=stage_by_id, skill_agent_map=skill_agent_map,
+            node,
+            graph,
+            stage_by_id=stage_by_id,
+            skill_agent_map=skill_agent_map,
         )
         for node in sorted(graph.stages, key=lambda s: s.id)
     ]
@@ -85,7 +88,10 @@ def build_workflow_stages_with_map(
         else:
             stages.append(
                 extracted_stage_to_workflow_stage(
-                    node, graph, stage_by_id=stage_by_id, skill_agent_map=merged_map,
+                    node,
+                    graph,
+                    stage_by_id=stage_by_id,
+                    skill_agent_map=merged_map,
                 )
             )
     return stages
@@ -148,4 +154,3 @@ def sync_overview_component_agents(
             )
         )
     return synced
-

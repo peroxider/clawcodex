@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from clawcodex_ext.services.pipe_ipc import PipeMessage, PipeMessageType, UdsPipeClient, UdsPipeServer
+from clawcodex_ext.services.pipe_ipc import (
+    PipeMessage,
+    PipeMessageType,
+    UdsPipeClient,
+    UdsPipeServer,
+)
 from clawcodex_ext.services.pipe_ipc.codec import PipeJsonCodec
 
 pytestmark = pytest.mark.skipif(
@@ -136,7 +141,14 @@ async def test_server_drops_malformed_frame_and_keeps_connection(tmp_path: Path)
                 break
             await asyncio.sleep(0.02)
 
-        assert any(msg.source_id == "probe" for msg in seen), "server should still process frames after a bad line"
-        assert not any(msg.type is PipeMessageType.HEARTBEAT and msg.source_id == "probe" and msg.payload.get("error") for msg in seen), "user callback must not be invoked for decode failures"
+        assert any(msg.source_id == "probe" for msg in seen), (
+            "server should still process frames after a bad line"
+        )
+        assert not any(
+            msg.type is PipeMessageType.HEARTBEAT
+            and msg.source_id == "probe"
+            and msg.payload.get("error")
+            for msg in seen
+        ), "user callback must not be invoked for decode failures"
     finally:
         await server.close()

@@ -1,4 +1,5 @@
 """Tests for clawcodex_ext/query/recovery_strategies.py (P102-B)."""
+
 from __future__ import annotations
 
 import pytest
@@ -31,8 +32,11 @@ class TestRegisterRecoveryStrategy:
         """Verify that built-in strategies are registered on import."""
         # Re-register builtins since fixture cleared them
         from clawcodex_ext.query.recovery_strategies import _register_builtin_strategies
+
         _register_builtin_strategies()
-        strategies = find_recovery_strategies("max_output_tokens", QueryState(messages=[], tool_use_context=None))
+        strategies = find_recovery_strategies(
+            "max_output_tokens", QueryState(messages=[], tool_use_context=None)
+        )
         names = {s.name for s in strategies}
         assert MAX_OUTPUT_TOKENS_ESCALATE in names
         assert MAX_OUTPUT_TOKENS_RECOVERY in names

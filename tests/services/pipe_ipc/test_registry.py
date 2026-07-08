@@ -59,9 +59,7 @@ def test_concurrent_writes_persist_all_peers(tmp_path: Path) -> None:
     registry = PipeRegistry(tmp_path)
 
     def writer(i: int) -> None:
-        registry.register(
-            PipePeer(instance_id=f"peer-{i}", hostname="h", pid=1234 + i)
-        )
+        registry.register(PipePeer(instance_id=f"peer-{i}", hostname="h", pid=1234 + i))
 
     threads = [threading.Thread(target=writer, args=(i,)) for i in range(32)]
     for thread in threads:
@@ -71,8 +69,6 @@ def test_concurrent_writes_persist_all_peers(tmp_path: Path) -> None:
 
     restored = PipeRegistry(tmp_path)
     assert restored.peer_count == 32
-    assert {peer.instance_id for peer in restored.list_peers()} == {
-        f"peer-{i}" for i in range(32)
-    }
+    assert {peer.instance_id for peer in restored.list_peers()} == {f"peer-{i}" for i in range(32)}
     # Tmp files should be cleaned up after rename, never leaving stale .tmp.
     assert not list(tmp_path.glob(".peers.json.*.tmp"))

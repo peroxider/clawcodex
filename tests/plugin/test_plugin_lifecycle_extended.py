@@ -182,9 +182,7 @@ class TestBasePluginLifecycleViaManager:
             "    async def on_unload(self) -> None:\n"
             "        pass\n"
         )
-        (plugin_dir / "plugin.json").write_text(
-            '{"name": "async-load", "version": "1.0.0"}'
-        )
+        (plugin_dir / "plugin.json").write_text('{"name": "async-load", "version": "1.0.0"}')
 
         plugin = _make_plugin("async-load", path=str(plugin_dir))
         register_plugin(plugin)
@@ -231,7 +229,12 @@ class TestPluginContext:
 
 class TestSandboxHealthChecks:
     def test_health_check_none_mode(self):
-        from src.plugins.sandbox import SandboxedPlugin, SandboxConfig, SandboxMode, health_check_sandbox
+        from src.plugins.sandbox import (
+            SandboxedPlugin,
+            SandboxConfig,
+            SandboxMode,
+            health_check_sandbox,
+        )
 
         plugin = _make_plugin("health-none")
         sb = SandboxedPlugin(
@@ -398,6 +401,7 @@ class TestPluginManagerCleanup:
         mgr.unload_all()
         assert mgr._instances == {}
         from src.plugins.sandbox import get_all_sandboxes
+
         assert get_all_sandboxes() == []
 
     def test_manager_str_repr(self):
@@ -414,6 +418,7 @@ class TestLoaderLifecycleCallbacks:
         register_plugin(plugin)
         # Internal: _lifecycle_callbacks should have entry after register
         from src.plugins.loader import _lifecycle_callbacks
+
         assert "callback-test" in _lifecycle_callbacks
         assert "on_load" in _lifecycle_callbacks["callback-test"]
         assert "on_unload" in _lifecycle_callbacks["callback-test"]
@@ -424,6 +429,7 @@ class TestLoaderLifecycleCallbacks:
         plugin = _make_plugin("callback-rm")
         register_plugin(plugin)
         from src.plugins.loader import unregister_plugin, _lifecycle_callbacks
+
         unregister_plugin("callback-rm")
         assert "callback-rm" not in _lifecycle_callbacks
 
@@ -431,5 +437,6 @@ class TestLoaderLifecycleCallbacks:
         plugin = _make_plugin("callback-clear")
         register_plugin(plugin)
         from src.plugins.loader import clear_loaded_plugins, _lifecycle_callbacks
+
         clear_loaded_plugins()
         assert "callback-clear" not in _lifecycle_callbacks

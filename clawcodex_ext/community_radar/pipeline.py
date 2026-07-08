@@ -130,10 +130,9 @@ class CommunityRadarPipeline:
         # classifier's domain-blocking logic can work correctly.
         if self.registry is not None:
             import os as _os
+
             token = _os.environ.get("GITHUB_TOKEN")
-            detected = self.registry.auto_detect_domains(
-                self.config.cache_dir, github_token=token
-            )
+            detected = self.registry.auto_detect_domains(self.config.cache_dir, github_token=token)
             if detected:
                 _log.info("auto-detected domain for %d source(s)", detected)
                 sources = self._load_sources()
@@ -163,8 +162,7 @@ class CommunityRadarPipeline:
             records = self.classifier.classify_many(records)
             records = self.deduplicator.deduplicate(records)
             scored = [
-                ScoredFeature(record=record, score=self.scorer.score(record))
-                for record in records
+                ScoredFeature(record=record, score=self.scorer.score(record)) for record in records
             ]
             versions_total = sum(len(fr.releases) for fr in fetch_results)
             errors: list[str] = []
@@ -192,9 +190,7 @@ class CommunityRadarPipeline:
 
             if notify_flag and write_result is not None:
                 try:
-                    notifications = self.notifier.broadcast(
-                        digest, write_result
-                    )
+                    notifications = self.notifier.broadcast(digest, write_result)
                 except Exception as exc:  # noqa: BLE001
                     _log.warning("notification broadcast failed: %s", exc)
                     notifications = {"error": str(exc)}  # type: ignore[assignment]
@@ -237,9 +233,7 @@ class CommunityRadarPipeline:
     def _extract(self, fetch_results: list) -> list[FeatureRecord]:
         records: list[FeatureRecord] = []
         for fetch_result in fetch_results:
-            records.extend(
-                self.extractor.extract_many(fetch_result.releases, fetch_result.source)
-            )
+            records.extend(self.extractor.extract_many(fetch_result.releases, fetch_result.source))
         return records
 
 

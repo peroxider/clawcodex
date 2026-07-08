@@ -6,4 +6,5 @@ facades that forward to the corresponding ``clawcodex_ext.bridge.X``
 implementations. This ``__init__.py`` intentionally stays minimal to avoid
 circular imports with those facades.
 """
+
 from __future__ import annotations

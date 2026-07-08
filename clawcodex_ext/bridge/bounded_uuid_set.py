@@ -33,11 +33,11 @@ DEFAULT_CAPACITY = 2000
 class BoundedUUIDSet:
     """FIFO-bounded set; oldest entry evicted when capacity is reached."""
 
-    __slots__ = ('_capacity', '_ring', '_set')
+    __slots__ = ("_capacity", "_ring", "_set")
 
     def __init__(self, capacity: int = DEFAULT_CAPACITY) -> None:
         if capacity <= 0:
-            raise ValueError('BoundedUUIDSet capacity must be > 0')
+            raise ValueError("BoundedUUIDSet capacity must be > 0")
         self._capacity: int = capacity
         # ``deque(maxlen=N)`` automatically discards the leftmost element
         # when ``append`` would exceed ``N``. We mirror that eviction in
@@ -78,4 +78,4 @@ class BoundedUUIDSet:
         self._set.clear()
 
 
-__all__ = ['DEFAULT_CAPACITY', 'BoundedUUIDSet']
+__all__ = ["DEFAULT_CAPACITY", "BoundedUUIDSet"]

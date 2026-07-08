@@ -78,8 +78,14 @@ class TestRecordSkill:
         assert rows[0]["kind"] == "skill"
 
     def test_record_skill_with_params(self, stats_path: str):
-        record_skill("deploy", dur_ms=15000.0, ok=False, error="conn refused",
-                     params={"target": "prod"}, skill_version="1.2")
+        record_skill(
+            "deploy",
+            dur_ms=15000.0,
+            ok=False,
+            error="conn refused",
+            params={"target": "prod"},
+            skill_version="1.2",
+        )
         flush()
         rows = get_stats(kind="skill")
         assert rows[0]["skill"] == "deploy"
@@ -127,7 +133,7 @@ class TestGetSummary:
         assert summary["by_name"]["Read"] == 2
         assert summary["by_name"]["Bash"] == 1
         assert summary["error_rate"] == 0.25
-        assert summary["avg_duration_ms"] == pytest.approx((10+20+100+500)/4, 0.1)
+        assert summary["avg_duration_ms"] == pytest.approx((10 + 20 + 100 + 500) / 4, 0.1)
 
     def test_summary_empty(self):
         summary = get_summary()
@@ -163,6 +169,7 @@ class TestVisualizerStatsParser:
     def parser(self, stats_path: str):
         """Provide a parser pointing to the same temp stats file."""
         from extensions.visualizer.parsers.stats_parser import StatsFileParser
+
         return StatsFileParser(path=stats_path)
 
     def test_parser_summary(self, parser, stats_path: str):
@@ -174,7 +181,7 @@ class TestVisualizerStatsParser:
         assert summary["total_calls"] == 3
         assert summary["by_kind"]["tool"] == 2
         assert summary["by_kind"]["skill"] == 1
-        assert summary["error_rate"] == pytest.approx(1/3, 0.01)
+        assert summary["error_rate"] == pytest.approx(1 / 3, 0.01)
 
     def test_parser_recent(self, parser, stats_path: str):
         for i in range(5):

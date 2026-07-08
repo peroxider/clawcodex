@@ -48,7 +48,7 @@ def register_bridge_tool(
 
     call_impl = (
         f'python3 "{dest}" --stage-id {{stage_id}} '
-        f'--run-dir {{run_dir}} --project-dir {{project_dir}}'
+        f"--run-dir {{run_dir}} --project-dir {{project_dir}}"
     )
     input_schema = {
         "type": "object",

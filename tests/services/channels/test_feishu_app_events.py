@@ -16,28 +16,28 @@ from clawcodex_ext.services.channels.feishu_settings import FeishuAppSettings
 
 def _settings() -> FeishuAppSettings:
     return FeishuAppSettings(
-        channel_id='feishu',
-        connection_mode='websocket',
-        app_id='cli_app',
-        app_secret='secret',
-        allowed_user_open_id='ou_allowed',
-        bot_open_id='ou_bot',
+        channel_id="feishu",
+        connection_mode="websocket",
+        app_id="cli_app",
+        app_secret="secret",
+        allowed_user_open_id="ou_allowed",
+        bot_open_id="ou_bot",
     )
 
 
 def _sdk_inbound(
     *,
-    message_id: str = 'om_msg_1',
-    chat_id: str = 'oc_chat',
-    chat_type: str = 'p2p',
-    open_id: str = 'ou_allowed',
-    text: str = 'hello',
+    message_id: str = "om_msg_1",
+    chat_id: str = "oc_chat",
+    chat_type: str = "p2p",
+    open_id: str = "ou_allowed",
+    text: str = "hello",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         id=message_id,
         content_text=text,
         create_time=123,
-        raw_content_type='text',
+        raw_content_type="text",
         conversation=SimpleNamespace(chat_id=chat_id, chat_type=chat_type),
         sender=SimpleNamespace(open_id=open_id),
     )
@@ -47,39 +47,39 @@ def test_feishu_translate_inbound_maps_sdk_inbound_to_gateway_inbound() -> None:
     inbound = translate_inbound(_sdk_inbound(), _settings())
 
     assert inbound is not None
-    assert inbound.origin == 'feishu:dm:cli_app:ou_allowed'
-    assert inbound.channel == 'feishu'
-    assert inbound.message_id == 'om_msg_1'
-    assert inbound.text == 'hello'
-    assert inbound.context_token == 'oc_chat'
-    assert inbound.from_user_id == 'ou_allowed'
-    assert inbound.raw['chat_id'] == 'oc_chat'
-    assert inbound.raw['create_time'] == 123
+    assert inbound.origin == "feishu:dm:cli_app:ou_allowed"
+    assert inbound.channel == "feishu"
+    assert inbound.message_id == "om_msg_1"
+    assert inbound.text == "hello"
+    assert inbound.context_token == "oc_chat"
+    assert inbound.from_user_id == "ou_allowed"
+    assert inbound.raw["chat_id"] == "oc_chat"
+    assert inbound.raw["create_time"] == 123
 
 
 def test_feishu_translate_inbound_drops_non_p2p() -> None:
-    assert translate_inbound(_sdk_inbound(chat_type='group'), _settings()) is None
+    assert translate_inbound(_sdk_inbound(chat_type="group"), _settings()) is None
 
 
 def test_feishu_translate_inbound_applies_optional_allowlist() -> None:
-    assert translate_inbound(_sdk_inbound(open_id='ou_other'), _settings()) is None
+    assert translate_inbound(_sdk_inbound(open_id="ou_other"), _settings()) is None
 
 
 def test_feishu_translate_inbound_drops_self_echo() -> None:
-    assert translate_inbound(_sdk_inbound(open_id='ou_bot'), _settings()) is None
+    assert translate_inbound(_sdk_inbound(open_id="ou_bot"), _settings()) is None
 
 
 def test_feishu_translate_inbound_drops_empty_text() -> None:
-    assert translate_inbound(_sdk_inbound(text='   '), _settings()) is None
+    assert translate_inbound(_sdk_inbound(text="   "), _settings()) is None
 
 
 def test_feishu_translate_inbound_allowlist_empty_admits_all() -> None:
     settings = FeishuAppSettings(
-        channel_id='feishu',
-        connection_mode='websocket',
-        app_id='cli_app',
-        app_secret='secret',
-        allowed_user_open_id='',
-        bot_open_id='ou_bot',
+        channel_id="feishu",
+        connection_mode="websocket",
+        app_id="cli_app",
+        app_secret="secret",
+        allowed_user_open_id="",
+        bot_open_id="ou_bot",
     )
-    assert translate_inbound(_sdk_inbound(open_id='ou_anyone'), settings) is not None
+    assert translate_inbound(_sdk_inbound(open_id="ou_anyone"), settings) is not None

@@ -26,6 +26,7 @@ backpressure surprises. If the consumer is slow, frames are dropped with a
 debug log; for 16 kHz mono PCM that's a 32 KB/s stream and a single
 awaitable slot is more than enough headroom.
 """
+
 from __future__ import annotations
 
 import asyncio

@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from ..extractors.models import StageContract
 
-VALIDATOR_TYPES = frozenset({
-    "file_exists",
-    "file_size",
-    "regex",
-    "line_count",
-    "json_schema",
-    "custom",
-})
+VALIDATOR_TYPES = frozenset(
+    {
+        "file_exists",
+        "file_size",
+        "regex",
+        "line_count",
+        "json_schema",
+        "custom",
+    }
+)
 
 
 def contract_to_validators(contract: StageContract) -> list[dict]:

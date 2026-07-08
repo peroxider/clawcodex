@@ -71,11 +71,11 @@ class DaemonPaths:
         base.mkdir(parents=True, exist_ok=True)
         return cls(
             state_dir=base,
-            pid_file=base / 'gateway.pid',
-            lock_file=base / 'gateway.lock',
-            sock_file=base / 'gateway.sock',
-            health_file=base / 'health.json',
-            log_file=base / 'gateway.log',
+            pid_file=base / "gateway.pid",
+            lock_file=base / "gateway.lock",
+            sock_file=base / "gateway.sock",
+            health_file=base / "health.json",
+            log_file=base / "gateway.log",
         )
 
 
@@ -96,13 +96,13 @@ def read_pid(paths: DaemonPaths) -> int | None:
     if not paths.pid_file.exists():
         return None
     try:
-        return int(paths.pid_file.read_text(encoding='utf-8').strip())
+        return int(paths.pid_file.read_text(encoding="utf-8").strip())
     except (ValueError, OSError):
         return None
 
 
 def write_pid(paths: DaemonPaths, pid: int) -> None:
-    paths.pid_file.write_text(f'{pid}\n', encoding='utf-8')
+    paths.pid_file.write_text(f"{pid}\n", encoding="utf-8")
 
 
 def cleanup_stale(paths: DaemonPaths) -> bool:
@@ -140,22 +140,22 @@ def acquire_lock(paths: DaemonPaths) -> int | None:
 
 def write_health(paths: DaemonPaths, **fields) -> None:
     data = {
-        'running': True,
-        'pid': os.getpid(),
-        'started_at': fields.get('started_at', time.time()),
-        'channels': fields.get('channels', []),
-        'channel_status': fields.get('channel_status', {}),
-        'state_dir': str(paths.state_dir),
-        'socket': str(paths.sock_file),
+        "running": True,
+        "pid": os.getpid(),
+        "started_at": fields.get("started_at", time.time()),
+        "channels": fields.get("channels", []),
+        "channel_status": fields.get("channel_status", {}),
+        "state_dir": str(paths.state_dir),
+        "socket": str(paths.sock_file),
     }
-    paths.health_file.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+    paths.health_file.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
 
 def read_health(paths: DaemonPaths) -> dict | None:
     if not paths.health_file.exists():
         return None
     try:
-        return json.loads(paths.health_file.read_text(encoding='utf-8'))
+        return json.loads(paths.health_file.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
 
@@ -163,7 +163,7 @@ def read_health(paths: DaemonPaths) -> dict | None:
 def startup_health_wait_seconds(paths: DaemonPaths) -> float:
     """CLI wait budget for daemon health after spawning the child process."""
     try:
-        config = load_config(paths.state_dir / 'channels.yaml')
+        config = load_config(paths.state_dir / "channels.yaml")
     except Exception:  # noqa: BLE001
         return 45.0
     timeout = 0.0
@@ -171,8 +171,8 @@ def startup_health_wait_seconds(paths: DaemonPaths) -> float:
         if not channel.enabled or channel.type is not ChannelType.FEISHU:
             continue
         extra = channel.extra or {}
-        mode = str(extra.get('connection_mode') or 'websocket').lower()
-        if mode != 'websocket':
+        mode = str(extra.get("connection_mode") or "websocket").lower()
+        if mode != "websocket":
             continue
         settings = FeishuAppSettings.from_config(channel)
         timeout = max(timeout, settings.startup_connect_timeout_seconds)
@@ -183,11 +183,11 @@ def startup_health_wait_seconds(paths: DaemonPaths) -> float:
 
 def _channel_status_ready(status: object) -> bool:
     text = str(status)
-    return any(marker in text for marker in ('connected', 'logged_in'))
+    return any(marker in text for marker in ("connected", "logged_in"))
 
 
 def _channel_status_retrying(status: object) -> bool:
-    return str(status) == 'websocket:retrying'
+    return str(status) == "websocket:retrying"
 
 
 # -- daemon process ------------------------------------------------------
@@ -204,14 +204,14 @@ def _resolve_log_level(verbose: bool, env: str | None) -> int:
     if env:
         env = env.strip().upper()
         levels = {
-            'DEBUG': logging.DEBUG,
-            'INFO': logging.INFO,
-            'WARNING': logging.WARNING,
-            'ERROR': logging.ERROR,
+            "DEBUG": logging.DEBUG,
+            "INFO": logging.INFO,
+            "WARNING": logging.WARNING,
+            "ERROR": logging.ERROR,
         }
         if env in levels:
             return levels[env]
-    if os.environ.get('CLAWCODEX_DEBUG', '').lower() in ('1', 'true', 'yes'):
+    if os.environ.get("CLAWCODEX_DEBUG", "").lower() in ("1", "true", "yes"):
         return logging.DEBUG
     if verbose:
         return logging.DEBUG
@@ -247,28 +247,28 @@ async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
         str(paths.log_file),
         maxBytes=10 * 1024 * 1024,  # 10 MiB
         backupCount=3,
-        encoding='utf-8',
+        encoding="utf-8",
     )
-    handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     handler.setLevel(log_level)
     # Replace any existing handlers so the daemon subprocess owns its logging.
     root.handlers.clear()
     root.addHandler(handler)
     # Channel + gateway internals follow the resolved level; keep noisy libs
     # at WARNING so urllib/asyncio don't flood the log.
-    logging.getLogger('clawcodex_ext.services.channels').setLevel(log_level)
-    logging.getLogger('clawcodex_ext.services.im_gateway').setLevel(log_level)
+    logging.getLogger("clawcodex_ext.services.channels").setLevel(log_level)
+    logging.getLogger("clawcodex_ext.services.im_gateway").setLevel(log_level)
     # The lark_oapi SDK forces its own logger to INFO in Client.__init__,
     # which floods the log with WS connect/ping INFO lines even when the user
     # didn't pass --verbose. Pin it to the resolved level so non-verbose runs
     # stay quiet (WARNING+), and --verbose still gets SDK DEBUG detail.
-    logging.getLogger('Lark').setLevel(log_level)
-    logging.getLogger('lark_oapi').setLevel(log_level)
-    logging.getLogger('websockets').setLevel(log_level)
+    logging.getLogger("Lark").setLevel(log_level)
+    logging.getLogger("lark_oapi").setLevel(log_level)
+    logging.getLogger("websockets").setLevel(log_level)
 
     fd = acquire_lock(paths)
     if fd is None:
-        print('error: another gateway daemon holds the lock', file=sys.stderr)
+        print("error: another gateway daemon holds the lock", file=sys.stderr)
         return 1
     cleanup_stale(paths)
 
@@ -283,7 +283,7 @@ async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
     from clawcodex_ext.services.channels.feishu_sdk import feishu_dependencies_available
 
     if feishu_dependencies_available():
-        threading.Thread(target=_warm_feishu_sdk, daemon=True, name='feishu-sdk-warm').start()
+        threading.Thread(target=_warm_feishu_sdk, daemon=True, name="feishu-sdk-warm").start()
 
     # Write the PID file BEFORE starting channel adapters. A slow / hanging /
     # crashing adapter start (e.g. the Feishu WS connect loop) used to block
@@ -295,7 +295,7 @@ async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
     write_pid(paths, os.getpid())
 
     try:
-        config = load_config(paths.state_dir / 'channels.yaml')
+        config = load_config(paths.state_dir / "channels.yaml")
         # Force the gateway's reliability store to live under the daemon's
         # state_dir (the YAML default points at ~/.clawcodex/gateway).
         config.state_dir = str(paths.state_dir)
@@ -308,18 +308,18 @@ async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
         channel_status = await gateway.wait_channels_ready(timeout=0.0)
         for cid, status in channel_status.items():
             if _channel_status_ready(status):
-                logger.info('gateway channel ready: %s -> %s', cid, status)
+                logger.info("gateway channel ready: %s -> %s", cid, status)
             elif _channel_status_retrying(status):
                 logger.warning(
-                    'gateway channel degraded after initial connect failure: %s -> %s '
-                    '(retrying in background; see log)',
+                    "gateway channel degraded after initial connect failure: %s -> %s "
+                    "(retrying in background; see log)",
                     cid,
                     status,
                 )
             else:
                 logger.warning(
-                    'gateway channel NOT ready after startup window: %s -> %s '
-                    '(degraded; see log; messages may be dropped until it connects)',
+                    "gateway channel NOT ready after startup window: %s -> %s "
+                    "(degraded; see log; messages may be dropped until it connects)",
                     cid,
                     status,
                 )
@@ -328,7 +328,7 @@ async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
         from clawcodex_ext.services.im_gateway.stub_agent import make_stub_handler
 
         gateway.set_handler(make_stub_handler(gateway.outbound))
-        logger.info('gateway inbound handler registered: unbound guidance handler')
+        logger.info("gateway inbound handler registered: unbound guidance handler")
 
         # Open the GatewayIpcProtocol UDS listener (register/heartbeat/deliver/ack
         # + control reload/status). P2/P3 frames are handled by GatewayIpcServer.
@@ -350,7 +350,7 @@ async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
             )
 
         gateway.set_push_handler(_push_to_opt_in)
-        logger.info('gateway opt-in push handler registered')
+        logger.info("gateway opt-in push handler registered")
 
         write_health(
             paths,
@@ -377,7 +377,7 @@ async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
         )
     )
     logger.info(
-        'gateway retention loop started: interval=%ss',
+        "gateway retention loop started: interval=%ss",
         config.reliability.retention_cron_interval_seconds,
     )
 
@@ -406,7 +406,7 @@ async def _retention_loop(state_dir: str, interval: int, reliability) -> None:
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001
-            logger.exception('im_gateway retention loop iteration failed')
+            logger.exception("im_gateway retention loop iteration failed")
 
 
 async def _shutdown(
@@ -444,42 +444,42 @@ class GatewayDaemon:
     def status(self) -> int:
         pid = read_pid(self.paths)
         if pid is None or not is_pid_alive(pid):
-            print('Gateway daemon: NOT RUNNING')
+            print("Gateway daemon: NOT RUNNING")
             if pid is not None:
-                print(f'  (stale PID {pid}; cleaned up)')
+                print(f"  (stale PID {pid}; cleaned up)")
                 cleanup_stale(self.paths)
             return 0
         health = read_health(self.paths) or {}
-        uptime_s = int(time.time() - health.get('started_at', time.time()))
-        print('Gateway daemon: RUNNING')
-        print(f'  PID            : {pid}')
-        print(f'  Uptime         : {uptime_s}s')
-        print(f'  Socket         : {self.paths.sock_file}')
-        print(f'  Log            : {self.paths.log_file}')
-        print(f'  Channels       : {", ".join(health.get("channels") or []) or "(none)"}')
-        print(f'  State dir      : {self.paths.state_dir}')
+        uptime_s = int(time.time() - health.get("started_at", time.time()))
+        print("Gateway daemon: RUNNING")
+        print(f"  PID            : {pid}")
+        print(f"  Uptime         : {uptime_s}s")
+        print(f"  Socket         : {self.paths.sock_file}")
+        print(f"  Log            : {self.paths.log_file}")
+        print(f"  Channels       : {', '.join(health.get('channels') or []) or '(none)'}")
+        print(f"  State dir      : {self.paths.state_dir}")
         return 0
 
     def start(self, *, verbose: bool = False) -> int:
         pid = read_pid(self.paths)
         if pid is not None and is_pid_alive(pid):
-            print(f'Gateway daemon already running (PID {pid}).')
+            print(f"Gateway daemon already running (PID {pid}).")
             return self.status()
         cleanup_stale(self.paths)
         # Attach the log file as the subprocess's stdout+stderr so any
         # unhandled crash dumps that bypass the logging framework are captured.
         # RotatingFileHandler inside serve() handles normal log rotation.
-        log_fh = self.paths.log_file.open('a', encoding='utf-8')
+        log_fh = self.paths.log_file.open("a", encoding="utf-8")
         serve_args = [
             sys.executable,
-            '-m',
-            'extensions.im_gateway.server',
-            'serve',
-            '--state-dir',
+            "-m",
+            "extensions.im_gateway.server",
+            "serve",
+            "--state-dir",
             str(self.paths.state_dir),
         ]
         if verbose:
-            serve_args.append('--verbose')
+            serve_args.append("--verbose")
         proc = subprocess.Popen(
             serve_args,
             stdout=log_fh,
@@ -501,13 +501,13 @@ class GatewayDaemon:
                 break
             if proc.poll() is not None:
                 print(
-                    f'error: gateway daemon exited early (code {proc.returncode}); see {self.paths.log_file}',
+                    f"error: gateway daemon exited early (code {proc.returncode}); see {self.paths.log_file}",
                     file=sys.stderr,
                 )
                 return 1
             time.sleep(0.1)
         else:
-            print('error: gateway daemon did not write PID in 10s', file=sys.stderr)
+            print("error: gateway daemon did not write PID in 10s", file=sys.stderr)
             return 1
 
         # Wait for the health file so we can report per-channel connectivity.
@@ -519,7 +519,7 @@ class GatewayDaemon:
         while time.time() < health_deadline:
             if proc.poll() is not None:
                 print(
-                    f'error: gateway daemon exited early (code {proc.returncode}); see {self.paths.log_file}',
+                    f"error: gateway daemon exited early (code {proc.returncode}); see {self.paths.log_file}",
                     file=sys.stderr,
                 )
                 return 1
@@ -528,27 +528,27 @@ class GatewayDaemon:
                 break
             time.sleep(0.3)
 
-        print(f'Gateway daemon started · pid {new_pid}')
-        channel_status = (health or {}).get('channel_status') or {}
+        print(f"Gateway daemon started · pid {new_pid}")
+        channel_status = (health or {}).get("channel_status") or {}
         if channel_status:
             for cid, status in channel_status.items():
                 if _channel_status_ready(status):
-                    print(f'  channel {cid}: {status}')
+                    print(f"  channel {cid}: {status}")
                 elif _channel_status_retrying(status):
                     print(
-                        f'  channel {cid}: {status} — initial connect failed; '
-                        f'retrying in background; see {self.paths.log_file}',
+                        f"  channel {cid}: {status} — initial connect failed; "
+                        f"retrying in background; see {self.paths.log_file}",
                         file=sys.stderr,
                     )
                 else:
                     print(
-                        f'  channel {cid}: NOT connected ({status}) — see '
-                        f'{self.paths.log_file}; messages may be dropped',
+                        f"  channel {cid}: NOT connected ({status}) — see "
+                        f"{self.paths.log_file}; messages may be dropped",
                         file=sys.stderr,
                     )
         elif health is None:
             print(
-                f'  warning: daemon still starting (no health yet); see {self.paths.log_file}',
+                f"  warning: daemon still starting (no health yet); see {self.paths.log_file}",
                 file=sys.stderr,
             )
         return 0
@@ -556,7 +556,7 @@ class GatewayDaemon:
     def stop(self, *, timeout: float = 5.0) -> int:
         pid = read_pid(self.paths)
         if pid is None or not is_pid_alive(pid):
-            print('Gateway daemon: already stopped')
+            print("Gateway daemon: already stopped")
             cleanup_stale(self.paths)
             return 0
         try:
@@ -572,7 +572,7 @@ class GatewayDaemon:
         if is_pid_alive(pid):
             os.kill(pid, signal.SIGKILL)
         cleanup_stale(self.paths)
-        print('Gateway daemon stopped.')
+        print("Gateway daemon stopped.")
         return 0
 
     def restart(self, *, verbose: bool = False) -> int:
@@ -586,21 +586,21 @@ class GatewayDaemon:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog='extensions.im_gateway.server')
-    sub = parser.add_subparsers(dest='cmd', required=True)
-    serve_p = sub.add_parser('serve', help='run the daemon (foreground)')
-    serve_p.add_argument('--state-dir', default=None)
+    parser = argparse.ArgumentParser(prog="extensions.im_gateway.server")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    serve_p = sub.add_parser("serve", help="run the daemon (foreground)")
+    serve_p.add_argument("--state-dir", default=None)
     serve_p.add_argument(
-        '-v',
-        '--verbose',
-        action='store_true',
-        help='enable DEBUG-level IM logging (default: WARNING; use --verbose or set '
-        'CLAWCODEX_GATEWAY_LOG_LEVEL=INFO|DEBUG)',
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="enable DEBUG-level IM logging (default: WARNING; use --verbose or set "
+        "CLAWCODEX_GATEWAY_LOG_LEVEL=INFO|DEBUG)",
     )
     args = parser.parse_args(argv)
-    if args.cmd == 'serve':
+    if args.cmd == "serve":
         paths = DaemonPaths.for_state_dir(args.state_dir)
-        log_level = _resolve_log_level(args.verbose, os.environ.get('CLAWCODEX_GATEWAY_LOG_LEVEL'))
+        log_level = _resolve_log_level(args.verbose, os.environ.get("CLAWCODEX_GATEWAY_LOG_LEVEL"))
         try:
             return asyncio.run(serve(paths, log_level=log_level))
         except KeyboardInterrupt:
@@ -608,5 +608,5 @@ def main(argv: list[str] | None = None) -> int:
     return 2
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())

@@ -103,9 +103,7 @@ class NativeGrokProvider(NativeProvider):
 
         request: dict[str, Any] = {
             "model": self._get_model(**kwargs),
-            "messages": _convert_anthropic_messages_to_openai(
-                self._prepare_messages(messages)
-            ),
+            "messages": _convert_anthropic_messages_to_openai(self._prepare_messages(messages)),
         }
         if tools:
             request["tools"] = tools

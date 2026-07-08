@@ -257,29 +257,104 @@ _RULES: tuple[_CategoryRule, ...] = (
         conditional_keywords=(
             # "policy" is robot_policy only near embodied terms; otherwise
             # it's usage-policy / permissions-policy in software projects.
-            ("policy", 0.9, ("robot", "robotics", "vla", "manipulation", "grasping",
-                             "trajectory", "locomotion", "end-effector", "actuator")),
+            (
+                "policy",
+                0.9,
+                (
+                    "robot",
+                    "robotics",
+                    "vla",
+                    "manipulation",
+                    "grasping",
+                    "trajectory",
+                    "locomotion",
+                    "end-effector",
+                    "actuator",
+                ),
+            ),
             # "navigation" in the context of robotics, SLAM, or habitat.
-            ("navigation", 1.3, ("robot", "robotics", "embodied", "habitat", "slam",
-                                 "lidar", "locomotion", "manipulation")),
+            (
+                "navigation",
+                1.3,
+                (
+                    "robot",
+                    "robotics",
+                    "embodied",
+                    "habitat",
+                    "slam",
+                    "lidar",
+                    "locomotion",
+                    "manipulation",
+                ),
+            ),
             # "imitation" alone is too broad; anchor it to robotics terms.
-            ("imitation", 1.2, ("robot", "robotics", "learning", "policy",
-                                "manipulation", "trajectory", "grasping", "locomotion")),
+            (
+                "imitation",
+                1.2,
+                (
+                    "robot",
+                    "robotics",
+                    "learning",
+                    "policy",
+                    "manipulation",
+                    "trajectory",
+                    "grasping",
+                    "locomotion",
+                ),
+            ),
             # "trajectory" means physical motion path in robotics but
             # conversation/action trace in software agents.
-            ("trajectory", 1.1, ("robot", "robotics", "manipulation", "kinematic",
-                                 "actuator", "grasping", "locomotion", "end-effector")),
+            (
+                "trajectory",
+                1.1,
+                (
+                    "robot",
+                    "robotics",
+                    "manipulation",
+                    "kinematic",
+                    "actuator",
+                    "grasping",
+                    "locomotion",
+                    "end-effector",
+                ),
+            ),
             # "manipulation" is robotic manipulation when near embodied
             # terms; otherwise it's data/string/node manipulation.
-            ("manipulation", 1.4, ("robot", "robotics", "grasping", "dexterous",
-                                   "end-effector", "actuator", "locomotion",
-                                   "embodied", "teleoperation")),
+            (
+                "manipulation",
+                1.4,
+                (
+                    "robot",
+                    "robotics",
+                    "grasping",
+                    "dexterous",
+                    "end-effector",
+                    "actuator",
+                    "locomotion",
+                    "embodied",
+                    "teleoperation",
+                ),
+            ),
         ),
         conditional_sub_tags=(
-            ("policy", "robot_policy", ("robot", "robotics", "vla", "manipulation",
-                                         "grasping", "trajectory", "locomotion")),
-            ("imitation", "imitation_learning", ("robot", "robotics", "learning",
-                                                  "policy", "manipulation")),
+            (
+                "policy",
+                "robot_policy",
+                (
+                    "robot",
+                    "robotics",
+                    "vla",
+                    "manipulation",
+                    "grasping",
+                    "trajectory",
+                    "locomotion",
+                ),
+            ),
+            (
+                "imitation",
+                "imitation_learning",
+                ("robot", "robotics", "learning", "policy", "manipulation"),
+            ),
         ),
     ),
     _CategoryRule(
@@ -310,28 +385,99 @@ _RULES: tuple[_CategoryRule, ...] = (
         # Without anchors generic terms like "rendering" catch UI rendering
         # in software projects, "scene" catches narrative scenes, etc.
         conditional_keywords=(
-            ("rendering", 1.1, ("nerf", "gaussian", "splatting", "point cloud", "3d",
-                                "mesh", "depth", "volumetric", "radiance", "scene",
-                                "reconstruction")),
-            ("scene", 0.9, ("nerf", "gaussian", "3d", "reconstruction", "rendering",
-                            "point cloud", "volumetric")),
-            ("reconstruction", 1.2, ("nerf", "gaussian", "3d", "point cloud", "mesh",
-                                     "slam", "volumetric", "depth")),
-            ("depth", 1.0, ("nerf", "gaussian", "point cloud", "3d", "lidar",
-                            "rendering", "volumetric", "scene")),
+            (
+                "rendering",
+                1.1,
+                (
+                    "nerf",
+                    "gaussian",
+                    "splatting",
+                    "point cloud",
+                    "3d",
+                    "mesh",
+                    "depth",
+                    "volumetric",
+                    "radiance",
+                    "scene",
+                    "reconstruction",
+                ),
+            ),
+            (
+                "scene",
+                0.9,
+                (
+                    "nerf",
+                    "gaussian",
+                    "3d",
+                    "reconstruction",
+                    "rendering",
+                    "point cloud",
+                    "volumetric",
+                ),
+            ),
+            (
+                "reconstruction",
+                1.2,
+                ("nerf", "gaussian", "3d", "point cloud", "mesh", "slam", "volumetric", "depth"),
+            ),
+            (
+                "depth",
+                1.0,
+                (
+                    "nerf",
+                    "gaussian",
+                    "point cloud",
+                    "3d",
+                    "lidar",
+                    "rendering",
+                    "volumetric",
+                    "scene",
+                ),
+            ),
             ("segmentation", 1.0, ("point cloud", "3d", "lidar", "voxel", "mesh", "scene")),
-            ("3d", 1.0, ("nerf", "gaussian", "point cloud", "rendering", "slam", "mesh",
-                         "voxel", "reconstruction", "scene", "depth")),
-            ("spatial", 1.5, ("nerf", "gaussian", "3d", "point cloud", "slam",
-                              "reconstruction", "rendering", "mesh")),
-            ("geometric", 1.1, ("nerf", "gaussian", "3d", "point cloud", "mesh",
-                                "reconstruction")),
-            ("world model", 1.4, ("nerf", "gaussian", "3d", "spatial", "point cloud",
-                                  "scene", "rendering")),
+            (
+                "3d",
+                1.0,
+                (
+                    "nerf",
+                    "gaussian",
+                    "point cloud",
+                    "rendering",
+                    "slam",
+                    "mesh",
+                    "voxel",
+                    "reconstruction",
+                    "scene",
+                    "depth",
+                ),
+            ),
+            (
+                "spatial",
+                1.5,
+                (
+                    "nerf",
+                    "gaussian",
+                    "3d",
+                    "point cloud",
+                    "slam",
+                    "reconstruction",
+                    "rendering",
+                    "mesh",
+                ),
+            ),
+            ("geometric", 1.1, ("nerf", "gaussian", "3d", "point cloud", "mesh", "reconstruction")),
+            (
+                "world model",
+                1.4,
+                ("nerf", "gaussian", "3d", "spatial", "point cloud", "scene", "rendering"),
+            ),
         ),
         conditional_sub_tags=(
-            ("world model", "world_model", ("nerf", "gaussian", "3d", "spatial",
-                                             "point cloud", "scene")),
+            (
+                "world model",
+                "world_model",
+                ("nerf", "gaussian", "3d", "spatial", "point cloud", "scene"),
+            ),
         ),
     ),
 )
@@ -392,7 +538,9 @@ class FeatureClassifier:
         # source_name → SourceDomain value, used by _check_domain to
         # prevent cross-domain misclassification (e.g. a software-eng
         # project tagged as EMBODIED_AI just because it mentions "robot").
-        self._source_domain_map: dict[str, str] = dict(source_domain_map) if source_domain_map else {}
+        self._source_domain_map: dict[str, str] = (
+            dict(source_domain_map) if source_domain_map else {}
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -494,9 +642,7 @@ class FeatureClassifier:
             return kw in haystack
         return bool(re.search(rf"\b{re.escape(kw)}\b", haystack))
 
-    def _pick_category(
-        self, scores: dict[FeatureCategory, float]
-    ) -> FeatureCategory:
+    def _pick_category(self, scores: dict[FeatureCategory, float]) -> FeatureCategory:
         if not scores:
             return FeatureCategory.UNKNOWN
         max_score = max(scores.values())
@@ -508,9 +654,7 @@ class FeatureClassifier:
                 return cat
         return tied[0]
 
-    def _check_domain(
-        self, category: FeatureCategory, source: str
-    ) -> FeatureCategory:
+    def _check_domain(self, category: FeatureCategory, source: str) -> FeatureCategory:
         """Reject ``category`` when it contradicts the source's known domain.
 
         A ``code_agent`` source mentioning "robot" in a gallery

@@ -69,7 +69,10 @@ _CATEGORY_PATH: dict[FeatureCategory, tuple[FeatureCategory, ...]] = {
     FeatureCategory.OBSERVABILITY: (FeatureCategory.CODE_AGENT, FeatureCategory.OBSERVABILITY),
     FeatureCategory.INFRA: (FeatureCategory.CODE_AGENT, FeatureCategory.INFRA),
     FeatureCategory.EMBODIED_AI: (FeatureCategory.EMBODIED_AI,),
-    FeatureCategory.SPATIAL_INTELLIGENCE: (FeatureCategory.EMBODIED_AI, FeatureCategory.SPATIAL_INTELLIGENCE),
+    FeatureCategory.SPATIAL_INTELLIGENCE: (
+        FeatureCategory.EMBODIED_AI,
+        FeatureCategory.SPATIAL_INTELLIGENCE,
+    ),
     FeatureCategory.UNKNOWN: (FeatureCategory.UNKNOWN,),
 }
 
@@ -187,9 +190,7 @@ class WatchSource:
         if not isinstance(name, str) or not name:
             raise ValueError("WatchSource requires a non-empty 'name'")
         if not isinstance(repo, str) or "/" not in repo:
-            raise ValueError(
-                f"WatchSource[{name}] requires 'repo' in 'owner/name' form"
-            )
+            raise ValueError(f"WatchSource[{name}] requires 'repo' in 'owner/name' form")
         keywords = data.get("roadmap_keywords") or data.get("roadmapKeywords") or []
         if not isinstance(keywords, list):
             keywords = []
@@ -206,8 +207,7 @@ class WatchSource:
             track_commits=bool(data.get("track_commits", False)),
             track_prs=bool(data.get("track_prs", False)),
             track_issues=bool(data.get("track_issues", False)),
-            release_tag_filter=data.get("release_tag_filter")
-            or data.get("releaseTagFilter"),
+            release_tag_filter=data.get("release_tag_filter") or data.get("releaseTagFilter"),
             changelog_path=data.get("changelog_path") or data.get("changelogPath"),
             notes=data.get("notes"),
             roadmap_keywords=[str(k) for k in keywords],
@@ -399,9 +399,14 @@ class FeatureRecord:
         related = data.get("related_projects") or []
         tags = data.get("tags") or []
         return cls(
-            id=str(data.get("id") or make_feature_id(
-                data.get("source", ""), data.get("title", ""), str(data.get("feature_type", "new"))
-            )),
+            id=str(
+                data.get("id")
+                or make_feature_id(
+                    data.get("source", ""),
+                    data.get("title", ""),
+                    str(data.get("feature_type", "new")),
+                )
+            ),
             source=str(data.get("source", "")),
             title=str(data.get("title", "")),
             description=str(data.get("description", "") or ""),

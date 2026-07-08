@@ -74,5 +74,5 @@ def _is_coordinator_mode_active() -> bool:
 
 
 __all__ = [
-    'get_team_aware_tool_list',
+    "get_team_aware_tool_list",
 ]

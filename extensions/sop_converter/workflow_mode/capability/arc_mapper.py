@@ -10,7 +10,7 @@ from ..extractors.models import ExtractedStage
 from ..extractors.models import WorkflowGraph
 
 
-_EXECUTOR_MODULE_NAMES = {'executor.py', 'pipeline.py', 'runner.py', 'workflow.py'}
+_EXECUTOR_MODULE_NAMES = {"executor.py", "pipeline.py", "runner.py", "workflow.py"}
 
 
 def is_executor_module_path(path: str | Path | None) -> bool:
@@ -32,10 +32,10 @@ def resolve_arc_stage_impl_path(
     if stage.file_path and not is_executor_module_path(stage.file_path):
         candidates.append(source_dir / stage.file_path)
 
-    stage_slug = stage.name.replace('-', '_')
-    label_slug = (stage.label or stage.name).replace('-', '_').lower()
+    stage_slug = stage.name.replace("-", "_")
+    label_slug = (stage.label or stage.name).replace("-", "_").lower()
     for stem in dict.fromkeys((stage_slug, label_slug)):
-        candidates.append(pipeline_dir / f'{stem}.py')
+        candidates.append(pipeline_dir / f"{stem}.py")
 
     for candidate in candidates:
         if candidate.is_file():
@@ -76,16 +76,16 @@ def ensure_arc_stage_skills(
                 fallback_tools.append(tool)
 
     for stage in graph.stages:
-        skill_name = f'{stage.name}-skill'
+        skill_name = f"{stage.name}-skill"
         if skill_name in existing:
             continue
-        description = stage.description or f'Execute the {stage.label or stage.name} stage.'
+        description = stage.description or f"Execute the {stage.label or stage.name} stage."
         skills.append(
             SkillSpec(
                 name=skill_name,
                 description=description,
                 allowed_tools=list(fallback_tools),
-                when_to_use=f'Use for the {stage.label or stage.name} workflow stage.',
+                when_to_use=f"Use for the {stage.label or stage.name} workflow stage.",
             )
         )
         existing.add(skill_name)

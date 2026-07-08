@@ -169,9 +169,9 @@ def test_permission_handler_resolves_state_after_timeout(
 
     t.join(timeout=2.0)
     assert not t.is_alive()
-    assert all(
-        p.request_id != pending_id for p in state.pending_permissions
-    ), "state queue not drained after timeout-driven auto-deny"
+    assert all(p.request_id != pending_id for p in state.pending_permissions), (
+        "state queue not drained after timeout-driven auto-deny"
+    )
 
 
 # ----------------------------------------------------------------------
@@ -242,9 +242,9 @@ def test_ask_user_handler_resolves_state_after_timeout(short_timeout) -> None:
 
     t.join(timeout=2.0)
     assert not t.is_alive()
-    assert all(
-        p.request_id != pending_id for p in state.pending_ask_users
-    ), "state queue not drained after AskUser timeout"
+    assert all(p.request_id != pending_id for p in state.pending_ask_users), (
+        "state queue not drained after AskUser timeout"
+    )
 
 
 # ----------------------------------------------------------------------

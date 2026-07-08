@@ -17,7 +17,9 @@ class FallbackRule:
     apply: Callable[[ForecastContext, float], ForecastSuggestion | None]
 
 
-def fallback_suggestions(context: ForecastContext, *, min_confidence: float) -> list[ForecastSuggestion]:
+def fallback_suggestions(
+    context: ForecastContext, *, min_confidence: float
+) -> list[ForecastSuggestion]:
     if context.intent_stage == "pause":
         return []
     suggestions: list[ForecastSuggestion] = []
@@ -46,15 +48,21 @@ def fallback_rules() -> list[FallbackRule]:
 
 
 def _open_question(context: ForecastContext, min_confidence: float) -> ForecastSuggestion | None:
-    questions = [str(item) for item in (context.task_state or {}).get("open_questions") or [] if str(item)]
+    questions = [
+        str(item) for item in (context.task_state or {}).get("open_questions") or [] if str(item)
+    ]
     if not questions:
         return None
     zh = _zh(context)
     question = questions[0]
     return _suggestion(
         title="先回答待确认问题" if zh else "Resolve the open question",
-        prompt=f"请先围绕这个待确认问题继续：{question}" if zh else f"Continue by resolving this open question first: {question}",
-        reason="最近 assistant 刚提出澄清问题，继续实现前应先补齐决策信息。" if zh else "The latest assistant turn asked for clarification, so resolve that decision before implementation.",
+        prompt=f"请先围绕这个待确认问题继续：{question}"
+        if zh
+        else f"Continue by resolving this open question first: {question}",
+        reason="最近 assistant 刚提出澄清问题，继续实现前应先补齐决策信息。"
+        if zh
+        else "The latest assistant turn asked for clarification, so resolve that decision before implementation.",
         confidence=max(min_confidence, 0.72),
         refs=["task_state:open_questions"],
     )
@@ -67,8 +75,12 @@ def _recent_failure(context: ForecastContext, min_confidence: float) -> Forecast
     zh = _zh(context)
     return _suggestion(
         title="修复最近失败" if zh else "Fix the recent failure",
-        prompt=f"请优先定位并修复最近的失败：{blocked}" if zh else f"Prioritize diagnosing and fixing the recent failure: {blocked}",
-        reason="任务状态显示最近存在阻塞或测试失败。" if zh else "Task state shows a recent blocker or test failure.",
+        prompt=f"请优先定位并修复最近的失败：{blocked}"
+        if zh
+        else f"Prioritize diagnosing and fixing the recent failure: {blocked}",
+        reason="任务状态显示最近存在阻塞或测试失败。"
+        if zh
+        else "Task state shows a recent blocker or test failure.",
         confidence=max(min_confidence, 0.76),
         refs=["task_state:blocked_reason"],
     )
@@ -76,15 +88,21 @@ def _recent_failure(context: ForecastContext, min_confidence: float) -> Forecast
 
 def _focused_tests(context: ForecastContext, min_confidence: float) -> ForecastSuggestion | None:
     stage = str(context.intent_stage or "explore")
-    tests = [str(item) for item in (context.task_state or {}).get("pending_tests") or [] if str(item)]
+    tests = [
+        str(item) for item in (context.task_state or {}).get("pending_tests") or [] if str(item)
+    ]
     if not tests or stage not in {"test", "debug", "implement"}:
         return None
     zh = _zh(context)
     tests_text = ", ".join(tests[:3])
     return _suggestion(
         title="运行相关测试" if zh else "Run focused tests",
-        prompt=f"请运行相关测试并根据结果继续处理：{tests_text}" if zh else f"Run the focused tests and continue from the results: {tests_text}",
-        reason="当前变更已经映射到可验证的测试范围。" if zh else "The current changes map to a focused verification set.",
+        prompt=f"请运行相关测试并根据结果继续处理：{tests_text}"
+        if zh
+        else f"Run the focused tests and continue from the results: {tests_text}",
+        reason="当前变更已经映射到可验证的测试范围。"
+        if zh
+        else "The current changes map to a focused verification set.",
         confidence=max(min_confidence, 0.7),
         refs=["task_state:pending_tests"],
     )
@@ -96,8 +114,12 @@ def _document(context: ForecastContext, min_confidence: float) -> ForecastSugges
     zh = _zh(context)
     return _suggestion(
         title="继续完善文档" if zh else "Continue documentation work",
-        prompt="请基于当前变更继续完善相关文档，并检查文档内容是否与已实现行为一致。" if zh else "Continue updating the relevant documentation from the current changes and check that it matches the implemented behavior.",
-        reason="最近用户请求或变更指向文档阶段。" if zh else "The recent user request or changed files point to documentation work.",
+        prompt="请基于当前变更继续完善相关文档，并检查文档内容是否与已实现行为一致。"
+        if zh
+        else "Continue updating the relevant documentation from the current changes and check that it matches the implemented behavior.",
+        reason="最近用户请求或变更指向文档阶段。"
+        if zh
+        else "The recent user request or changed files point to documentation work.",
         confidence=max(min_confidence, 0.66),
         refs=["intent_stage:document"],
     )
@@ -109,47 +131,69 @@ def _commit(context: ForecastContext, min_confidence: float) -> ForecastSuggesti
     zh = _zh(context)
     return _suggestion(
         title="整理当前变更" if zh else "Prepare the current changes",
-        prompt="请查看当前 diff，整理变更摘要和剩余风险，并确认是否适合提交。" if zh else "Review the current diff, summarize the changes and remaining risks, and confirm whether it is ready to commit.",
-        reason="当前意图阶段更接近提交前整理。" if zh else "The current intent stage is closest to pre-commit preparation.",
+        prompt="请查看当前 diff，整理变更摘要和剩余风险，并确认是否适合提交。"
+        if zh
+        else "Review the current diff, summarize the changes and remaining risks, and confirm whether it is ready to commit.",
+        reason="当前意图阶段更接近提交前整理。"
+        if zh
+        else "The current intent stage is closest to pre-commit preparation.",
         confidence=max(min_confidence, 0.65),
         refs=["intent_stage:commit"],
     )
 
 
-def _intent_forecast_focus(context: ForecastContext, min_confidence: float) -> ForecastSuggestion | None:
+def _intent_forecast_focus(
+    context: ForecastContext, min_confidence: float
+) -> ForecastSuggestion | None:
     if not _has_focus(context, "intent_forecast"):
         return None
     zh = _zh(context)
     return _suggestion(
         title="验证 Intent Forecast 修复" if zh else "Verify Intent Forecast fixes",
-        prompt="请检查当前 Intent Forecast 相关变更，运行 tests/intent_forecast 回归测试，并确认自动触发、/forecast 和 CLI 的推荐都与当前功能相关。" if zh else "Review the current Intent Forecast changes, run the tests/intent_forecast regression suite, and confirm auto, /forecast, and CLI suggestions stay relevant to the active feature.",
-        reason="当前工作区变更集中在 intent_forecast 功能上。" if zh else "Current workspace changes are concentrated in the intent_forecast feature.",
+        prompt="请检查当前 Intent Forecast 相关变更，运行 tests/intent_forecast 回归测试，并确认自动触发、/forecast 和 CLI 的推荐都与当前功能相关。"
+        if zh
+        else "Review the current Intent Forecast changes, run the tests/intent_forecast regression suite, and confirm auto, /forecast, and CLI suggestions stay relevant to the active feature.",
+        reason="当前工作区变更集中在 intent_forecast 功能上。"
+        if zh
+        else "Current workspace changes are concentrated in the intent_forecast feature.",
         confidence=max(min_confidence, 0.68),
         refs=["git:changed-files", "focus:intent_forecast"],
     )
 
 
-def _intent_forecast_tests(context: ForecastContext, min_confidence: float) -> ForecastSuggestion | None:
+def _intent_forecast_tests(
+    context: ForecastContext, min_confidence: float
+) -> ForecastSuggestion | None:
     if not _has_focus(context, "intent_forecast"):
         return None
     zh = _zh(context)
     return _suggestion(
         title="运行 Intent Forecast 回归测试" if zh else "Run Intent Forecast regression tests",
-        prompt="请运行 tests/intent_forecast，确认 CLI、/forecast 和自动触发的过滤与保存逻辑正常。" if zh else "Run tests/intent_forecast to verify CLI, /forecast, and automatic forecast filtering and persistence.",
-        reason="当前修改涉及 forecast 生成、过滤和持久化，适合先做针对性回归。" if zh else "Current changes touch forecast generation, filtering, and persistence, so focused regression tests are the safest next step.",
+        prompt="请运行 tests/intent_forecast，确认 CLI、/forecast 和自动触发的过滤与保存逻辑正常。"
+        if zh
+        else "Run tests/intent_forecast to verify CLI, /forecast, and automatic forecast filtering and persistence.",
+        reason="当前修改涉及 forecast 生成、过滤和持久化，适合先做针对性回归。"
+        if zh
+        else "Current changes touch forecast generation, filtering, and persistence, so focused regression tests are the safest next step.",
         confidence=max(min_confidence, 0.64),
         refs=["tests:intent_forecast"],
     )
 
 
-def _intent_forecast_history(context: ForecastContext, min_confidence: float) -> ForecastSuggestion | None:
+def _intent_forecast_history(
+    context: ForecastContext, min_confidence: float
+) -> ForecastSuggestion | None:
     if not _has_focus(context, "intent_forecast"):
         return None
     zh = _zh(context)
     return _suggestion(
         title="检查最新 Forecast 历史记录" if zh else "Inspect latest Forecast history",
-        prompt="请查看 ~/.clawcodex/intent_forecast/history.jsonl 的最新记录，确认建议不再包含无关模块或权限模式误判。" if zh else "Inspect the latest ~/.clawcodex/intent_forecast/history.jsonl records and confirm suggestions no longer include unrelated module or permission-mode claims.",
-        reason="统一 history sidecar 会保留每次 forecast 结果，可直接验证过滤效果。" if zh else "The unified history sidecar keeps every forecast result, making it direct evidence for filtering quality.",
+        prompt="请查看 ~/.clawcodex/intent_forecast/history.jsonl 的最新记录，确认建议不再包含无关模块或权限模式误判。"
+        if zh
+        else "Inspect the latest ~/.clawcodex/intent_forecast/history.jsonl records and confirm suggestions no longer include unrelated module or permission-mode claims.",
+        reason="统一 history sidecar 会保留每次 forecast 结果，可直接验证过滤效果。"
+        if zh
+        else "The unified history sidecar keeps every forecast result, making it direct evidence for filtering quality.",
         confidence=max(min_confidence, 0.6),
         refs=["history:intent_forecast"],
     )
@@ -169,7 +213,9 @@ def _workspace_review(context: ForecastContext, min_confidence: float) -> Foreca
     zh = _zh(context)
     return _suggestion(
         title="检查当前工作区变更" if zh else "Review current workspace changes",
-        prompt="请检查当前 git 变更，识别未完成的工作，并提出下一步实现计划。" if zh else "Review the current git changes, identify unfinished work, and propose the next implementation step.",
+        prompt="请检查当前 git 变更，识别未完成的工作，并提出下一步实现计划。"
+        if zh
+        else "Review the current git changes, identify unfinished work, and propose the next implementation step.",
         reason="工作区存在未提交变更。" if zh else "The workspace has uncommitted changes.",
         confidence=max(min_confidence, 0.5),
         refs=["git:status"],
@@ -187,14 +233,20 @@ def _recent_user(context: ForecastContext, min_confidence: float) -> ForecastSug
     zh = _zh(context)
     return _suggestion(
         title="继续最近的任务" if zh else "Continue the recent task",
-        prompt=f"请基于最新用户请求和当前工作区状态继续推进：\n\n{recent_user}" if zh else f"Continue from the latest user request and current workspace state:\n\n{recent_user}",
-        reason="最近的用户消息是当前最强的本地信号。" if zh else "The most recent user message is the strongest local signal.",
+        prompt=f"请基于最新用户请求和当前工作区状态继续推进：\n\n{recent_user}"
+        if zh
+        else f"Continue from the latest user request and current workspace state:\n\n{recent_user}",
+        reason="最近的用户消息是当前最强的本地信号。"
+        if zh
+        else "The most recent user message is the strongest local signal.",
         confidence=max(min_confidence, 0.55),
         refs=["conversation:recent-user"],
     )
 
 
-def _session_next_action(context: ForecastContext, min_confidence: float) -> ForecastSuggestion | None:
+def _session_next_action(
+    context: ForecastContext, min_confidence: float
+) -> ForecastSuggestion | None:
     for session in context.sessions:
         summary = session.get("summary") if isinstance(session, dict) else None
         candidates = summary.get("next_action_candidates") if isinstance(summary, dict) else None
@@ -203,8 +255,12 @@ def _session_next_action(context: ForecastContext, min_confidence: float) -> For
             title = str(candidates[0])[:160]
             return _suggestion(
                 title=title,
-                prompt=f"请继续推进最近会话中的下一步行动：{title}" if zh else f"Continue this next action from the recent session: {title}",
-                reason="最近会话摘要将它列为下一步行动。" if zh else "A recent session summary listed this as a next action.",
+                prompt=f"请继续推进最近会话中的下一步行动：{title}"
+                if zh
+                else f"Continue this next action from the recent session: {title}",
+                reason="最近会话摘要将它列为下一步行动。"
+                if zh
+                else "A recent session summary listed this as a next action.",
                 confidence=max(min_confidence, 0.48),
                 refs=[f"session:{session.get('session_id', '')}"],
             )

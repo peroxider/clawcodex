@@ -56,14 +56,18 @@ class FakeForecastService:
             generated=True,
             fingerprint="fp",
             suggestions=[
-                ForecastSuggestion(id="s1", title="Initial suggestion", prompt="do initial", confidence=0.8)
+                ForecastSuggestion(
+                    id="s1", title="Initial suggestion", prompt="do initial", confidence=0.8
+                )
             ],
         )
 
 
 def test_controller_arms_on_mount_and_fires(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
-    monkeypatch.setattr("clawcodex_ext.intent_forecast.controller.IntentForecastService", FakeForecastService)
+    monkeypatch.setattr(
+        "clawcodex_ext.intent_forecast.controller.IntentForecastService", FakeForecastService
+    )
     timers = FakeTimerFactory()
     displayed = []
     conv = _empty_conversation()
@@ -213,7 +217,9 @@ def test_accept_submits_last_result(tmp_path) -> None:
         ForecastResult(
             generated=True,
             fingerprint="fp",
-            suggestions=[ForecastSuggestion(id="s1", title="A", prompt="do accepted", confidence=0.8)],
+            suggestions=[
+                ForecastSuggestion(id="s1", title="A", prompt="do accepted", confidence=0.8)
+            ],
         )
     )
 
@@ -241,7 +247,9 @@ def test_accept_records_started_and_completed(monkeypatch, tmp_path) -> None:
         ForecastResult(
             generated=True,
             fingerprint="fp",
-            suggestions=[ForecastSuggestion(id="s1", title="A", prompt="do accepted", confidence=0.8)],
+            suggestions=[
+                ForecastSuggestion(id="s1", title="A", prompt="do accepted", confidence=0.8)
+            ],
         )
     )
 
@@ -273,7 +281,9 @@ def test_accept_records_correction(monkeypatch, tmp_path) -> None:
         ForecastResult(
             generated=True,
             fingerprint="fp",
-            suggestions=[ForecastSuggestion(id="s1", title="A", prompt="do accepted", confidence=0.8)],
+            suggestions=[
+                ForecastSuggestion(id="s1", title="A", prompt="do accepted", confidence=0.8)
+            ],
         )
     )
 

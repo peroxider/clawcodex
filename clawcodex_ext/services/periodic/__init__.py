@@ -56,9 +56,7 @@ class PeriodicDaemon:
         if not isinstance(name, str) or not name:
             raise ValueError("name must be a non-empty string")
         if not isinstance(tick_seconds, (int, float)) or tick_seconds <= 0:
-            raise ValueError(
-                f"tick_seconds must be a positive number (got {tick_seconds!r})"
-            )
+            raise ValueError(f"tick_seconds must be a positive number (got {tick_seconds!r})")
         self._name = name
         self._tick_seconds = float(tick_seconds)
         self._logger = logger_obj or logger

@@ -101,6 +101,7 @@ def cycle_permission_mode(
     """
     next_mode = get_next_permission_mode(context)
     from src.permissions.updates import apply_permission_update
+
     next_context = apply_permission_update(
         context,
         PermissionUpdateSetMode(

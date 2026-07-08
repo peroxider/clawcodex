@@ -124,9 +124,7 @@ class AgnesImageProvider(ImageProvider):
         #   { "data": [{ "url": "...", "revised_prompt": "..." }] }
         items = data.get("data", [])
         if not items:
-            raise RuntimeError(
-                f"Image generation returned empty data: {data}"
-            )
+            raise RuntimeError(f"Image generation returned empty data: {data}")
 
         first = items[0]
         return ImageResult(

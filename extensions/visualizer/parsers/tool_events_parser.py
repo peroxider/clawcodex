@@ -85,11 +85,7 @@ class ToolEventsParser:
             if bar is None:
                 continue
             use_id = entry.get("tool_use_id")
-            if (
-                entry.get("tool") == "Agent"
-                and use_id
-                and str(use_id) in agent_id_by_use
-            ):
+            if entry.get("tool") == "Agent" and use_id and str(use_id) in agent_id_by_use:
                 bar.detail["agent_id"] = agent_id_by_use[str(use_id)]
                 joined_use_ids.add(str(use_id))
             bars.append(bar)

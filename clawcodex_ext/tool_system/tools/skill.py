@@ -114,6 +114,7 @@ def _validate_skill_input(tool_input: dict[str, Any], context: ToolContext) -> V
 # Permission check (adapted from TS SkillTool/SkillTool.ts checkPermissions)
 # ---------------------------------------------------------------------------
 
+
 def _skill_check_permissions(tool_input: dict[str, Any], context: ToolContext) -> Any:
     """Resolve permission for a skill invocation.
 
@@ -319,9 +320,7 @@ def _run_markdown_skill(skill_name: str, args: str, context: ToolContext) -> Too
     )
 
 
-def _permission_context_with_skill_bash_rules(
-    base: Any, allowed_tools: list[str] | None
-) -> Any:
+def _permission_context_with_skill_bash_rules(base: Any, allowed_tools: list[str] | None) -> Any:
     """Return ``base`` with the skill's ``Bash(...)`` allowed-tools added as
     session allow rules.
 
@@ -333,9 +332,7 @@ def _permission_context_with_skill_bash_rules(
     """
     from dataclasses import replace
 
-    bash_rules = [
-        t for t in (allowed_tools or []) if t == "Bash" or t.startswith("Bash(")
-    ]
+    bash_rules = [t for t in (allowed_tools or []) if t == "Bash" or t.startswith("Bash(")]
     if not bash_rules:
         return base
     # Use the ``command`` source (TS injects allowed-tools as the slash
@@ -461,9 +458,7 @@ def _build_context_modifier(skill: Any) -> Any:
         if allowed_tools:
             current_tools = ctx.options.tools
             if not current_tools:
-                current_tools = (
-                    list(ctx.tool_registry.list_tools()) if ctx.tool_registry else []
-                )
+                current_tools = list(ctx.tool_registry.list_tools()) if ctx.tool_registry else []
             filtered = []
             for tool in current_tools:
                 if getattr(tool, "is_mcp", False) or tool.name.startswith("mcp__"):

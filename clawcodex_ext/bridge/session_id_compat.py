@@ -24,8 +24,8 @@ from __future__ import annotations
 
 from typing import Callable
 
-_CSE_PREFIX = 'cse_'
-_SESSION_PREFIX = 'session_'
+_CSE_PREFIX = "cse_"
+_SESSION_PREFIX = "session_"
 
 _cse_shim_enabled: Callable[[], bool] | None = None
 
@@ -81,7 +81,7 @@ def _reset_shim_gate_for_testing() -> None:
 
 
 __all__ = [
-    'set_cse_shim_gate',
-    'to_compat_session_id',
-    'to_infra_session_id',
+    "set_cse_shim_gate",
+    "to_compat_session_id",
+    "to_infra_session_id",
 ]

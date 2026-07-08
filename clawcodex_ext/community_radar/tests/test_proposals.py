@@ -134,8 +134,10 @@ def test_candidate_action_skip_when_low_overall() -> None:
     # Override strategic_value/architecture_fit so the high-alignment
     # branch doesn't fire — only overall is dragged below 60.
     score = _score(
-        record.id, overall=20.0,
-        strategic_value=10.0, architecture_fit=10.0,
+        record.id,
+        overall=20.0,
+        strategic_value=10.0,
+        architecture_fit=10.0,
     )
     assert _candidate_action(record, score) == "skip"
 

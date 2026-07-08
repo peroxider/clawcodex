@@ -16,62 +16,62 @@ from __future__ import annotations
 REPL_ALLOWED_COMMANDS: frozenset[str] = frozenset(
     {
         # 会话控制（用户明确放行）
-        '/stop',
-        '/clear',
-        '/reset',
-        '/new',
-        '/goal',
+        "/stop",
+        "/clear",
+        "/reset",
+        "/new",
+        "/goal",
         # 只读查询
-        '/help',
-        '/?',
-        '/cost',
-        '/history',
-        '/context',
-        '/recap',
-        '/btw',
-        '/cron-list',
-        '/cron-status',
-        '/cron-runs',
-        '/tools',
-        '/skills',
-        '/diff',
-        '/mcp',
-        '/tasks',
-        '/idle',
-        '/doctor',
-        '/release-notes',
+        "/help",
+        "/?",
+        "/cost",
+        "/history",
+        "/context",
+        "/recap",
+        "/btw",
+        "/cron-list",
+        "/cron-status",
+        "/cron-runs",
+        "/tools",
+        "/skills",
+        "/diff",
+        "/mcp",
+        "/tasks",
+        "/idle",
+        "/doctor",
+        "/release-notes",
     }
 )
 
 ORCHESTRATOR_ALLOWED_COMMANDS: frozenset[str] = frozenset(
     {
-        '/server status',
-        '/issue list',
-        '/issue show',
-        '/issue tail',
-        '/issue stop',
-        '/issue pause',
-        '/issue resume',
-        '/issue takeover',
-        '/issue clarify',
-        '/issue inject',
-        '/issue workspace',
+        "/server status",
+        "/issue list",
+        "/issue show",
+        "/issue tail",
+        "/issue stop",
+        "/issue pause",
+        "/issue resume",
+        "/issue takeover",
+        "/issue clarify",
+        "/issue inject",
+        "/issue workspace",
     }
 )
 
 
 def _block_reason(cmd_token: str) -> str:
     """构造拒绝消息，回显被拒绝的命令。"""
-    return f'`{cmd_token}` 非命令白名单，已被 gateway 禁止执行。'
+    return f"`{cmd_token}` 非命令白名单，已被 gateway 禁止执行。"
 
 
 def _unsupported_reason(command_display: str) -> str:
-    return f'不支持 {command_display} 执行'
+    return f"不支持 {command_display} 执行"
 
 
 def _slash_parts(text: str) -> list[str]:
-    stripped = (text or '').strip()
-    if not stripped.startswith('/'):
+    stripped = (text or "").strip()
+    if not stripped.startswith("/"):
         return []
     return stripped.split(maxsplit=2)
 
@@ -85,14 +85,14 @@ def check_repl_command(text: str) -> tuple[bool, str]:
     """
     parts = _slash_parts(text)
     if not parts:
-        return True, ''
+        return True, ""
     # 取第一个 token 作为命令名（含前导 /），小写比较
     cmd_token = parts[0].lower()
     # 单独的 "/"（无命令名）放行，REPL 侧处理为 slash palette
-    if cmd_token == '/':
-        return True, ''
+    if cmd_token == "/":
+        return True, ""
     if cmd_token in REPL_ALLOWED_COMMANDS:
-        return True, ''
+        return True, ""
     return False, _block_reason(cmd_token)
 
 
@@ -104,19 +104,19 @@ def check_orchestrator_command(text: str) -> tuple[bool, str]:
     """
     parts = _slash_parts(text)
     if not parts:
-        return True, ''
+        return True, ""
     first = parts[0].lower()
-    second = parts[1].lower() if len(parts) > 1 else ''
-    command_display = first if not second else f'{first} {second}'
+    second = parts[1].lower() if len(parts) > 1 else ""
+    command_display = first if not second else f"{first} {second}"
     command_key = command_display
     if command_key in ORCHESTRATOR_ALLOWED_COMMANDS:
-        return True, ''
+        return True, ""
     return False, _unsupported_reason(command_display)
 
 
 __all__ = [
-    'ORCHESTRATOR_ALLOWED_COMMANDS',
-    'REPL_ALLOWED_COMMANDS',
-    'check_orchestrator_command',
-    'check_repl_command',
+    "ORCHESTRATOR_ALLOWED_COMMANDS",
+    "REPL_ALLOWED_COMMANDS",
+    "check_orchestrator_command",
+    "check_repl_command",
 ]

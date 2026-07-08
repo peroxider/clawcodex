@@ -181,8 +181,7 @@ def graph_to_engine_yaml_dict(
         return chain[-1][1] if chain else dep
 
     rewritten_deps: dict[int, list[int]] = {
-        stage.id: [_resolve_dep(d) for d in base_deps.get(stage.id, [])]
-        for stage in graph.stages
+        stage.id: [_resolve_dep(d) for d in base_deps.get(stage.id, [])] for stage in graph.stages
     }
 
     stages_out: list[dict[str, Any]] = []

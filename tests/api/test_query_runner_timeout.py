@@ -74,10 +74,7 @@ async def test_stream_yields_timeout_when_headless_future_never_completes() -> N
             events = [event async for event in runner.stream()]
 
         # The debug log must record the timeout for postmortem review.
-        rows = [
-            json.loads(line)
-            for line in debug_log.read_text(encoding="utf-8").splitlines()
-        ]
+        rows = [json.loads(line) for line in debug_log.read_text(encoding="utf-8").splitlines()]
         timeout_rows = [row for row in rows if row["stage"] == "query_runner.timeout"]
 
     completes = [event for event in events if isinstance(event, SessionComplete)]
@@ -159,16 +156,13 @@ async def test_stream_completes_normally_when_future_finishes_in_budget() -> Non
         ):
             events = [event async for event in runner.stream()]
 
-        rows = [
-            json.loads(line)
-            for line in debug_log.read_text(encoding="utf-8").splitlines()
-        ]
+        rows = [json.loads(line) for line in debug_log.read_text(encoding="utf-8").splitlines()]
 
     completes = [event for event in events if isinstance(event, SessionComplete)]
     assert completes[-1].reason == "success"
-    assert not any(
-        row["stage"] == "query_runner.timeout" for row in rows
-    ), "no timeout event should fire on a fast session"
+    assert not any(row["stage"] == "query_runner.timeout" for row in rows), (
+        "no timeout event should fire on a fast session"
+    )
 
 
 @pytest.mark.asyncio
@@ -219,10 +213,7 @@ async def test_stream_records_remaining_event_count_on_timeout() -> None:
             # Bound the drain so a regression doesn't hang the test.
             await asyncio.wait_for(_drain(), timeout=2.0)
 
-        rows = [
-            json.loads(line)
-            for line in debug_log.read_text(encoding="utf-8").splitlines()
-        ]
+        rows = [json.loads(line) for line in debug_log.read_text(encoding="utf-8").splitlines()]
         timeout_rows = [row for row in rows if row["stage"] == "query_runner.timeout"]
 
     assert timeout_rows, "expected a query_runner.timeout debug event"

@@ -17,6 +17,7 @@ from clawcodex_ext.tool_system.tools.lodestone import LodestoneTool
 
 def _ctx(workspace_root: Path | None = None):
     from clawcodex_ext.tool_system.context import ToolContext
+
     ws = workspace_root or Path("/abs").resolve()
     return ToolContext(workspace_root=ws, cwd=ws)
 
@@ -30,6 +31,7 @@ def _reset_lodestone_singleton():
 
 def test_tool_registered_in_extension_tool_pool():
     from extensions.tool_system_ext.registration import EXTENSION_TOOLS
+
     assert LodestoneTool in EXTENSION_TOOLS
 
 
@@ -72,9 +74,7 @@ def test_tool_open_dispatches_url(monkeypatch):
     from clawcodex_ext.services.lodestone import renderer as lodestone_renderer
 
     captured: list[str] = []
-    monkeypatch.setattr(
-        lodestone_renderer, "open_uri", lambda url: captured.append(url)
-    )
+    monkeypatch.setattr(lodestone_renderer, "open_uri", lambda url: captured.append(url))
     result = LodestoneTool.call(
         {"action": "open", "text": "src/foo.py:42", "sink": "markdown"},
         _ctx(),
@@ -87,6 +87,7 @@ def test_tool_open_dispatches_url(monkeypatch):
 def test_tool_open_errors_when_no_url(monkeypatch):
     """An anchor with no usable target should record an error."""
     from clawcodex_ext.services.lodestone.config import save_config
+
     cfg = LodestoneConfig(enabled=True, renderer="text", custom_targets=())
     save_config(cfg)
     result = LodestoneTool.call(
@@ -106,9 +107,7 @@ def test_tool_rejects_unknown_action():
 
 def test_tool_rejects_bad_sink():
     with pytest.raises(ToolInputError):
-        LodestoneTool.call(
-            {"action": "render", "text": "x.py:1", "sink": "html"}, _ctx()
-        )
+        LodestoneTool.call({"action": "render", "text": "x.py:1", "sink": "html"}, _ctx())
 
 
 def test_tool_disabled_returns_plain_text(monkeypatch):

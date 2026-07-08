@@ -37,9 +37,23 @@ def _console() -> Console:
 
 
 # 每个语义名都要测试的 markup 模式
-_SEMANTIC_NAMES = ["error", "success", "warning", "info", "primary",
-                   "secondary", "muted", "agent", "tool", "call",
-                   "result", "spinner", "user_bg", "diff_add", "diff_remove"]
+_SEMANTIC_NAMES = [
+    "error",
+    "success",
+    "warning",
+    "info",
+    "primary",
+    "secondary",
+    "muted",
+    "agent",
+    "tool",
+    "call",
+    "result",
+    "spinner",
+    "user_bg",
+    "diff_add",
+    "diff_remove",
+]
 
 
 class TestStage3eReplColors:
@@ -102,10 +116,7 @@ class TestStage3eReplColors:
     def test_mixed_standalone_and_nested(self) -> None:
         """混合场景：同一 ``print()`` 中既有独立标签也有嵌套标签。"""
         c = _console()
-        c.print(
-            "[bold][agent]Assistant[/agent][/bold]\n"
-            "[muted]  ⎿  done[/muted]"
-        )
+        c.print("[bold][agent]Assistant[/agent][/bold]\n[muted]  ⎿  done[/muted]")
 
     # ── 边界情况 ──────────────────────────────────────────────────────
 
@@ -151,9 +162,20 @@ from clawcodex_ext.repl.live_status import LiveStatus
 
 _PTK_BASE_STYLE = "class:status"
 _OKLCH_SEMANTIC_TAGS = [
-    "error", "success", "warning", "info",
-    "primary", "secondary", "muted", "agent", "tool",
-    "call", "result", "spinner", "diff_add", "diff_remove",
+    "error",
+    "success",
+    "warning",
+    "info",
+    "primary",
+    "secondary",
+    "muted",
+    "agent",
+    "tool",
+    "call",
+    "result",
+    "spinner",
+    "diff_add",
+    "diff_remove",
 ]
 _ANSI_TAGS_FOR_PTK = ["red", "green", "yellow", "blue", "cyan", "magenta", "white"]
 
@@ -167,15 +189,12 @@ class TestStage3ePromptToolkitMarkup:
     @pytest.mark.parametrize("name", _OKLCH_SEMANTIC_TAGS)
     def test_oklch_semantic_tag_maps_to_hex(self, name: str) -> None:
         """每个 OKLCH 语义名都映射成 ``fg:#xxxxxx``，不再出现裸语义名。"""
-        parts = LiveStatus._parse_rich_markup(
-            f"[{name}]sample text[/{name}]", _PTK_BASE_STYLE
-        )
+        parts = LiveStatus._parse_rich_markup(f"[{name}]sample text[/{name}]", _PTK_BASE_STYLE)
         styled = [s for s, _ in parts if s != _PTK_BASE_STYLE]
         assert styled, f"[{name}] 没有产生任何 styled 行"
         for style in styled:
             assert "fg:#" in style, (
-                f"[{name}] 样式里缺 fg:#xxxxxx：{style!r} "
-                f"—— 可能是裸语义名泄露到 prompt_toolkit"
+                f"[{name}] 样式里缺 fg:#xxxxxx：{style!r} —— 可能是裸语义名泄露到 prompt_toolkit"
             )
             for tok in style.split():
                 if tok.startswith("fg:") or tok.startswith("bg:"):
@@ -188,9 +207,7 @@ class TestStage3ePromptToolkitMarkup:
     @pytest.mark.parametrize("name", _ANSI_TAGS_FOR_PTK)
     def test_ansi_alias_tag_maps_to_hex(self, name: str) -> None:
         """``[red]`` / ``[yellow]`` 等 ANSI 别名也映射到 hex。"""
-        parts = LiveStatus._parse_rich_markup(
-            f"[{name}]text[/{name}]", _PTK_BASE_STYLE
-        )
+        parts = LiveStatus._parse_rich_markup(f"[{name}]text[/{name}]", _PTK_BASE_STYLE)
         styled = [s for s, _ in parts if s != _PTK_BASE_STYLE]
         assert styled
         for style in styled:
@@ -204,17 +221,11 @@ class TestStage3ePromptToolkitMarkup:
         这正是 ESC/Ctrl+C 时跑出 ``Unhandled exception in event loop``
         那条 traceback 的来源。
         """
-        parts = LiveStatus._parse_rich_markup(
-            "[warning]Cancelling…[/warning]", _PTK_BASE_STYLE
-        )
-        cancel_styles = [
-            s for s, txt in parts if txt and s != _PTK_BASE_STYLE
-        ]
+        parts = LiveStatus._parse_rich_markup("[warning]Cancelling…[/warning]", _PTK_BASE_STYLE)
+        cancel_styles = [s for s, txt in parts if txt and s != _PTK_BASE_STYLE]
         assert cancel_styles, "未找到 Cancelling 文本对应的样式行"
         for style in cancel_styles:
-            assert "fg:#" in style, (
-                f"cancel 样式缺 fg:#xxxxxx：{style!r}"
-            )
+            assert "fg:#" in style, f"cancel 样式缺 fg:#xxxxxx：{style!r}"
             assert "warning" not in style.split(), (
                 f"裸语义名 'warning' 泄露到 prompt_toolkit 样式：{style!r}"
             )
@@ -225,9 +236,7 @@ class TestStage3ePromptToolkitMarkup:
             "[not_a_real_tag]text[/not_a_real_tag]", _PTK_BASE_STYLE
         )
         for style, _ in parts:
-            assert "not_a_real_tag" not in style.split(), (
-                f"未知 tag 被裸传到样式：{style!r}"
-            )
+            assert "not_a_real_tag" not in style.split(), f"未知 tag 被裸传到样式：{style!r}"
 
     def test_plain_text_unchanged(self) -> None:
         """无 markup 的纯文本保持 base_style。"""
@@ -236,9 +245,7 @@ class TestStage3ePromptToolkitMarkup:
 
     def test_mixed_markup_and_plain_text(self) -> None:
         """普通文本与 markup 混合时，普通段保持 base_style，标记段带 fg:。"""
-        parts = LiveStatus._parse_rich_markup(
-            "before [success]ok[/success] after", _PTK_BASE_STYLE
-        )
+        parts = LiveStatus._parse_rich_markup("before [success]ok[/success] after", _PTK_BASE_STYLE)
         assert (_PTK_BASE_STYLE, "before ") in parts
         assert (_PTK_BASE_STYLE, " after") in parts
         ok_styles = [s for s, txt in parts if txt == "ok"]

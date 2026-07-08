@@ -29,90 +29,90 @@ class _ScriptedInput:
 
 
 def test_select_returns_zero_based_index_for_chosen_option() -> None:
-    ui = InteractiveInput(input_fn=_ScriptedInput(['2']))
-    idx = ui.select([('feishu', ''), ('wechat', '')], title='频道选择')
+    ui = InteractiveInput(input_fn=_ScriptedInput(["2"]))
+    idx = ui.select([("feishu", ""), ("wechat", "")], title="频道选择")
     assert idx == 1
 
 
 def test_select_first_option_returns_zero() -> None:
-    ui = InteractiveInput(input_fn=_ScriptedInput(['1']))
-    idx = ui.select([('feishu', ''), ('wechat', '')])
+    ui = InteractiveInput(input_fn=_ScriptedInput(["1"]))
+    idx = ui.select([("feishu", ""), ("wechat", "")])
     assert idx == 0
 
 
 def test_select_empty_line_returns_none_meaning_esc() -> None:
-    ui = InteractiveInput(input_fn=_ScriptedInput(['']))
-    idx = ui.select([('feishu', ''), ('wechat', '')])
+    ui = InteractiveInput(input_fn=_ScriptedInput([""]))
+    idx = ui.select([("feishu", ""), ("wechat", "")])
     assert idx is None
 
 
 def test_select_invalid_then_valid_re_prompts() -> None:
-    ui = InteractiveInput(input_fn=_ScriptedInput(['x', '9', '1']))
-    idx = ui.select([('feishu', ''), ('wechat', '')])
+    ui = InteractiveInput(input_fn=_ScriptedInput(["x", "9", "1"]))
+    idx = ui.select([("feishu", ""), ("wechat", "")])
     assert idx == 0
 
 
 def test_select_out_of_range_re_prompts() -> None:
-    ui = InteractiveInput(input_fn=_ScriptedInput(['3', '1']))
-    idx = ui.select([('feishu', ''), ('wechat', '')])
+    ui = InteractiveInput(input_fn=_ScriptedInput(["3", "1"]))
+    idx = ui.select([("feishu", ""), ("wechat", "")])
     assert idx == 0
 
 
 def test_select_shows_numbered_options_with_title() -> None:
-    script = _ScriptedInput(['1'])
+    script = _ScriptedInput(["1"])
     ui = InteractiveInput(input_fn=script)
-    ui.select([('feishu', ''), ('wechat', '')], title='频道选择')
+    ui.select([("feishu", ""), ("wechat", "")], title="频道选择")
     # The title and numbered options are printed (not prompted) — capture stdout instead
     # Here we assert the prompt shown to input_fn contains the select hint
-    assert any('选择' in p for p in script.prompts)
+    assert any("选择" in p for p in script.prompts)
 
 
 # -- InteractiveInput.prompt (injected input_fn path) -----------------------
 
 
 def test_prompt_returns_stripped_value() -> None:
-    ui = InteractiveInput(input_fn=_ScriptedInput(['  hello  ']))
-    assert ui.prompt('name: ') == 'hello'
+    ui = InteractiveInput(input_fn=_ScriptedInput(["  hello  "]))
+    assert ui.prompt("name: ") == "hello"
 
 
 def test_prompt_empty_line_returns_none_meaning_esc() -> None:
-    ui = InteractiveInput(input_fn=_ScriptedInput(['']))
-    assert ui.prompt('name: ') is None
+    ui = InteractiveInput(input_fn=_ScriptedInput([""]))
+    assert ui.prompt("name: ") is None
 
 
 def test_prompt_records_prompt_string() -> None:
-    script = _ScriptedInput(['value'])
+    script = _ScriptedInput(["value"])
     ui = InteractiveInput(input_fn=script)
-    ui.prompt('webhook URL: ')
-    assert script.prompts == ['webhook URL: ']
+    ui.prompt("webhook URL: ")
+    assert script.prompts == ["webhook URL: "]
 
 
 # -- InteractiveInput.confirm (injected input_fn path) ----------------------
 
 
 def test_confirm_yes_returns_true() -> None:
-    ui = InteractiveInput(input_fn=_ScriptedInput(['y']))
-    assert ui.confirm('确认? (y/n): ') is True
+    ui = InteractiveInput(input_fn=_ScriptedInput(["y"]))
+    assert ui.confirm("确认? (y/n): ") is True
 
 
 def test_confirm_yes_full_word_returns_true() -> None:
-    ui = InteractiveInput(input_fn=_ScriptedInput(['yes']))
-    assert ui.confirm('确认? ') is True
+    ui = InteractiveInput(input_fn=_ScriptedInput(["yes"]))
+    assert ui.confirm("确认? ") is True
 
 
 def test_confirm_no_returns_false() -> None:
-    ui = InteractiveInput(input_fn=_ScriptedInput(['n']))
-    assert ui.confirm('确认? ') is False
+    ui = InteractiveInput(input_fn=_ScriptedInput(["n"]))
+    assert ui.confirm("确认? ") is False
 
 
 def test_confirm_empty_line_returns_none_meaning_esc() -> None:
-    ui = InteractiveInput(input_fn=_ScriptedInput(['']))
-    assert ui.confirm('确认? ') is None
+    ui = InteractiveInput(input_fn=_ScriptedInput([""]))
+    assert ui.confirm("确认? ") is None
 
 
 def test_confirm_invalid_then_yes() -> None:
-    ui = InteractiveInput(input_fn=_ScriptedInput(['maybe', 'y']))
-    assert ui.confirm('确认? ') is True
+    ui = InteractiveInput(input_fn=_ScriptedInput(["maybe", "y"]))
+    assert ui.confirm("确认? ") is True
 
 
 # -- arrow_select module function: guard behaviour --------------------------
@@ -121,15 +121,15 @@ def test_confirm_invalid_then_yes() -> None:
 def test_arrow_select_returns_none_when_prompt_toolkit_missing(monkeypatch) -> None:
     from clawcodex_ext.cli import _interactive
 
-    monkeypatch.setattr(_interactive, '_HAS_PROMPT_TOOLKIT', False)
-    assert _interactive.arrow_select([('a', ''), ('b', '')]) is None
+    monkeypatch.setattr(_interactive, "_HAS_PROMPT_TOOLKIT", False)
+    assert _interactive.arrow_select([("a", ""), ("b", "")]) is None
 
 
 def test_arrow_select_returns_none_for_empty_options(monkeypatch) -> None:
     from clawcodex_ext.cli import _interactive
 
     # Even when prompt_toolkit is available, no options => None
-    monkeypatch.setattr(_interactive, '_HAS_PROMPT_TOOLKIT', True)
+    monkeypatch.setattr(_interactive, "_HAS_PROMPT_TOOLKIT", True)
     assert _interactive.arrow_select([]) is None
 
 
@@ -139,17 +139,17 @@ def test_arrow_select_returns_none_for_empty_options(monkeypatch) -> None:
 def test_select_falls_back_to_input_fn_when_prompt_toolkit_missing(monkeypatch) -> None:
     from clawcodex_ext.cli import _interactive
 
-    monkeypatch.setattr(_interactive, '_HAS_PROMPT_TOOLKIT', False)
-    ui = _interactive.InteractiveInput(input_fn=_ScriptedInput(['1']))
-    assert ui.select([('a', ''), ('b', '')]) == 0
+    monkeypatch.setattr(_interactive, "_HAS_PROMPT_TOOLKIT", False)
+    ui = _interactive.InteractiveInput(input_fn=_ScriptedInput(["1"]))
+    assert ui.select([("a", ""), ("b", "")]) == 0
 
 
 def test_prompt_falls_back_to_input_fn_when_prompt_toolkit_missing(monkeypatch) -> None:
     from clawcodex_ext.cli import _interactive
 
-    monkeypatch.setattr(_interactive, '_HAS_PROMPT_TOOLKIT', False)
-    ui = _interactive.InteractiveInput(input_fn=_ScriptedInput(['value']))
-    assert ui.prompt('x: ') == 'value'
+    monkeypatch.setattr(_interactive, "_HAS_PROMPT_TOOLKIT", False)
+    ui = _interactive.InteractiveInput(input_fn=_ScriptedInput(["value"]))
+    assert ui.prompt("x: ") == "value"
 
 
 # -- _clear_rendered_lines: ANSI 清行辅助函数 ----------------------------
@@ -161,7 +161,7 @@ def test_clear_rendered_lines_writes_ansi_escape(capsys) -> None:
 
     _interactive._clear_rendered_lines(3)
     captured = capsys.readouterr()
-    assert captured.out == '\033[3A\033[J'
+    assert captured.out == "\033[3A\033[J"
 
 
 def test_clear_rendered_lines_zero_is_noop(capsys) -> None:
@@ -170,7 +170,7 @@ def test_clear_rendered_lines_zero_is_noop(capsys) -> None:
 
     _interactive._clear_rendered_lines(0)
     captured = capsys.readouterr()
-    assert captured.out == ''
+    assert captured.out == ""
 
 
 def test_clear_rendered_lines_negative_is_noop(capsys) -> None:
@@ -179,4 +179,4 @@ def test_clear_rendered_lines_negative_is_noop(capsys) -> None:
 
     _interactive._clear_rendered_lines(-1)
     captured = capsys.readouterr()
-    assert captured.out == ''
+    assert captured.out == ""

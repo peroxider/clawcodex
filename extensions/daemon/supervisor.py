@@ -95,9 +95,7 @@ class Supervisor:
         # Reject if another supervisor is already running.
         status, _ = query_daemon_status(self.config.name, state_dir=self.state_dir)
         if status == DaemonStatus.RUNNING:
-            raise DaemonAlreadyRunningError(
-                f"daemon {self.config.name!r} is already running"
-            )
+            raise DaemonAlreadyRunningError(f"daemon {self.config.name!r} is already running")
 
         # Persist identity before any spawn so a crash here still
         # leaves a queryable state.

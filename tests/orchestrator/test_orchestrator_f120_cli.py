@@ -101,9 +101,7 @@ class TestRebaseParser(unittest.TestCase):
 
     def test_rebase_reason(self) -> None:
         parser = self._build_parser()
-        args = parser.parse_args(
-            ["issue", "rebase", "--id", "7", "--reason", "stale base"]
-        )
+        args = parser.parse_args(["issue", "rebase", "--id", "7", "--reason", "stale base"])
         self.assertEqual(args.reason, "stale base")
 
     def test_rebase_missing_id_is_error(self) -> None:

@@ -157,7 +157,7 @@ class LKBProofWidget(Static):
                 sev = amb.get("severity", "?")
                 amb_kind = amb.get("kind", "?")
                 lines.append(
-                    Text(f"  ? \"{phrase}\"", style="yellow")
+                    Text(f'  ? "{phrase}"', style="yellow")
                     + Text(f"  ({sev} / {amb_kind})", style="dim")
                 )
 

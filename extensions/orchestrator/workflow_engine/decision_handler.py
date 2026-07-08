@@ -33,12 +33,15 @@ class DecisionHistory:
 
     def record(self, stage_id: int, outcome: str, next_stage: int | None = None) -> None:
         import time
-        self.records.append(DecisionRecord(
-            stage_id=stage_id,
-            outcome=outcome,
-            timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            next_stage=next_stage,
-        ))
+
+        self.records.append(
+            DecisionRecord(
+                stage_id=stage_id,
+                outcome=outcome,
+                timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                next_stage=next_stage,
+            )
+        )
 
     def count(self, outcome: str, stage_id: int) -> int:
         """统计特定阶段+结果的次数。"""
@@ -109,7 +112,9 @@ class DecisionHandler:
             times = self._history.count(outcome, node.id)
             if times >= max_times:
                 exhausted_action = decision_spec.get("on_exhaust", "rollback")
-                rollback_to = decision_spec.get("rollback_to", node.depends_on[0] if node.depends_on else None)
+                rollback_to = decision_spec.get(
+                    "rollback_to", node.depends_on[0] if node.depends_on else None
+                )
                 self._history.record(node.id, outcome, None)
                 return DecisionResult(
                     outcome=outcome,

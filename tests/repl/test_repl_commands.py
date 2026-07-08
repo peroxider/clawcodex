@@ -41,9 +41,7 @@ class TestREPLNativeSlashCommands(unittest.TestCase):
         with open(config_file, "w") as f:
             json.dump(test_config, f)
 
-        self._global_config_patcher = patch.object(
-            config_module, "GLOBAL_CONFIG_FILE", config_file
-        )
+        self._global_config_patcher = patch.object(config_module, "GLOBAL_CONFIG_FILE", config_file)
         self._global_config_patcher.start()
         config_module._default_manager = None
 
@@ -104,9 +102,7 @@ class TestREPLNativeSlashCommands(unittest.TestCase):
         check does not intercept bare ``/resume``."""
         repl = self._make_repl()
         cmd_names = [c.lower() for c in repl._built_in_commands]
-        assert "/resume" in cmd_names, (
-            "/resume not found in _built_in_commands"
-        )
+        assert "/resume" in cmd_names, "/resume not found in _built_in_commands"
 
     # ------------------------------------------------------------------
     # /permission
@@ -117,9 +113,7 @@ class TestREPLNativeSlashCommands(unittest.TestCase):
         check does not intercept bare ``/permission``."""
         repl = self._make_repl()
         cmd_names = [c.lower() for c in repl._built_in_commands]
-        assert "/permission" in cmd_names, (
-            "/permission not found in _built_in_commands"
-        )
+        assert "/permission" in cmd_names, "/permission not found in _built_in_commands"
 
     def test_permission_with_mode_direct(self):
         """``/permission plan`` should set permission mode directly."""
@@ -261,9 +255,7 @@ class TestREPLNativeSlashCommands(unittest.TestCase):
         repl.handle_command("/tools")
         # Should print "Available tools:" header
         calls = [str(c) for c in repl.console.print.call_args_list]
-        assert any("Available tools" in c for c in calls), (
-            f"Expected tool listing, got: {calls}"
-        )
+        assert any("Available tools" in c for c in calls), f"Expected tool listing, got: {calls}"
 
     # ------------------------------------------------------------------
     # No-arg palette guard
@@ -280,14 +272,13 @@ class TestREPLNativeSlashCommands(unittest.TestCase):
             lower = cmd.lower()
             assert lower in repl._built_in_commands or lower.lstrip("/") in [
                 c.lstrip("/").lower() for c in repl._built_in_commands
-            ], (
-                f"{cmd} in _built_in_commands but check logic may fail"
-            )
+            ], f"{cmd} in _built_in_commands but check logic may fail"
 
 
 # ---------------------------------------------------------------------------
 # /resume command system integration tests (standalone functions)
 # ---------------------------------------------------------------------------
+
 
 def test_resume_command_call_without_args_returns_text():
     """``resume_command_call`` without args returns a result, not a crash."""

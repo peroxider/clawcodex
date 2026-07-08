@@ -17,10 +17,12 @@ def _run_convert(args: list[str]) -> subprocess.CompletedProcess:
 
     # Use handler directly for reliability in tests
     rc = _handle_convert(args)
+
     class Result:
         returncode = rc
         stdout = ""
         stderr = ""
+
     return Result()  # type: ignore[return-value]
 
 
@@ -36,26 +38,33 @@ def test_overview_workflow_stages_fwa(tmp_path):
 
     out = tmp_path / "out"
     out.mkdir()
-    rc = _handle_convert([
-        str(FIXTURES / "fixture_fwa_project"),
-        "--out", str(out),
-        "--all",
-        "--mode", "fwa",
-    ])
+    rc = _handle_convert(
+        [
+            str(FIXTURES / "fixture_fwa_project"),
+            "--out",
+            str(out),
+            "--all",
+            "--mode",
+            "fwa",
+        ]
+    )
     assert rc == 0
     overview = out / ".claude" / "agents" / "clawcodex-overview.md"
-  # overview only when 2+ agents - fwa fixture might have 1 component per file
+    # overview only when 2+ agents - fwa fixture might have 1 component per file
     agents = list((out / ".claude" / "agents").glob("*.md"))
     assert agents
+
 
 def test_preview_includes_workflow(tmp_path, capsys):
     from clawcodex_ext.cli.sop_cmd.commands import _handle_convert
 
-    rc = _handle_convert([
-        str(FIXTURES / "fixture_fwa_project"),
-        "--preview",
-        "--all",
-    ])
+    rc = _handle_convert(
+        [
+            str(FIXTURES / "fixture_fwa_project"),
+            "--preview",
+            "--all",
+        ]
+    )
     assert rc == 0
     captured = capsys.readouterr()
     assert "Workflow extraction" in captured.out or "Workflow mode" in captured.out

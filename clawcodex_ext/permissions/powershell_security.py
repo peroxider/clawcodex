@@ -41,38 +41,95 @@ PWSHSafetyLevel = Literal["safe", "read_only", "write", "destructive", "dangerou
 # Verb prefixes and their safety level
 # Get-*, Select-*, Where-*, Measure-*, Out-* (when not writing to file),
 # Format-*, Compare-*, Group-*, Sort-*, Tee-*, Convert*-*
-READ_ONLY_VERBS: frozenset[str] = frozenset({
-    "get", "select", "where", "measure", "out", "format", "compare",
-    "group", "sort", "tee", "convertfrom", "convertto", "convert",
-    "import", "write",    # Write-Host/Write-Output are safe; Write-* that writes to file handled separately
-    "read", "show", "dump", "find", "search", "test", "resolve",
-    "trace",
-})
+READ_ONLY_VERBS: frozenset[str] = frozenset(
+    {
+        "get",
+        "select",
+        "where",
+        "measure",
+        "out",
+        "format",
+        "compare",
+        "group",
+        "sort",
+        "tee",
+        "convertfrom",
+        "convertto",
+        "convert",
+        "import",
+        "write",  # Write-Host/Write-Output are safe; Write-* that writes to file handled separately
+        "read",
+        "show",
+        "dump",
+        "find",
+        "search",
+        "test",
+        "resolve",
+        "trace",
+    }
+)
 
 # Set-*, Add-*, Copy-*, Move-*, Rename-*, Export-*, Out-File (file output),
 # New-* (creates objects/items), Remove-* (safe removals without -Recurse),
 # Clear-* (clear content without -Force), Update-*, Register-*, Unregister-*
-WRITE_VERBS: frozenset[str] = frozenset({
-    "set", "add", "copy", "move", "rename", "export", "update",
-    "register", "unregister", "publish", "save", "submit", "sync",
-    "switch", "use", "wait", "enable", "disable", "mount", "dismount",
-    "approve", "deny", "complete", "confirm", "connect", "disconnect",
-    "install", "uninstall", "block", "grant", "revoke",
-    "merge", "split", "join",
-})
+WRITE_VERBS: frozenset[str] = frozenset(
+    {
+        "set",
+        "add",
+        "copy",
+        "move",
+        "rename",
+        "export",
+        "update",
+        "register",
+        "unregister",
+        "publish",
+        "save",
+        "submit",
+        "sync",
+        "switch",
+        "use",
+        "wait",
+        "enable",
+        "disable",
+        "mount",
+        "dismount",
+        "approve",
+        "deny",
+        "complete",
+        "confirm",
+        "connect",
+        "disconnect",
+        "install",
+        "uninstall",
+        "block",
+        "grant",
+        "revoke",
+        "merge",
+        "split",
+        "join",
+    }
+)
 
 # Remove-Item with -Recurse/-Force, Clear-* with -Force, Drop-*,
 # Invoke-SqlCmd with destructive SQL, Format-* -Force (drive format),
 # Stop-* (stop process/service)
-DESTRUCTIVE_VERBS: frozenset[str] = frozenset({
-    "stop", "debug", "undefine",
-})
+DESTRUCTIVE_VERBS: frozenset[str] = frozenset(
+    {
+        "stop",
+        "debug",
+        "undefine",
+    }
+)
 
 # Invoke-Expression (iex) — arbitrary code execution
 # Start-Process -Verb RunAs — privilege escalation
-DANGEROUS_CMD: frozenset[str] = frozenset({
-    "invoke-expression", "iex",
-})
+DANGEROUS_CMD: frozenset[str] = frozenset(
+    {
+        "invoke-expression",
+        "iex",
+    }
+)
 
 # Dangerous patterns in command text
 DANGEROUS_PATTERNS: list[re.Pattern] = [
@@ -97,6 +154,7 @@ WRITE_REDIRECT = re.compile(r">>?|out-file|add-content|set-content", re.IGNORECA
 @dataclass(frozen=True)
 class PwshSafetyAnalysis:
     """Result of PowerShell command safety analysis."""
+
     safety: PWSHSafetyLevel
     commands: list[str]
     reason: str = ""
@@ -131,9 +189,7 @@ def _get_verb_noun(cmd_text: str) -> tuple[str, str]:
 def _has_dangerous_redirection(cmd_text: str) -> bool:
     """Check for dangerous redirection patterns."""
     # > / >> to system paths
-    dangerous_targets = re.compile(
-        r'(>>?\s*(\\|\$|system32|windows|boot|dev|proc))', re.IGNORECASE
-    )
+    dangerous_targets = re.compile(r"(>>?\s*(\\|\$|system32|windows|boot|dev|proc))", re.IGNORECASE)
     return bool(dangerous_targets.search(cmd_text))
 
 
@@ -174,9 +230,7 @@ def analyze_powershell_safety(command: str) -> PwshSafetyAnalysis:
             continue
 
         # Check for destructive flags (Recurse, Force)
-        has_destructive_flag = any(
-            flag.search(cmd_text) for flag in DESTRUCTIVE_FLAGS
-        )
+        has_destructive_flag = any(flag.search(cmd_text) for flag in DESTRUCTIVE_FLAGS)
 
         if verb in DESTRUCTIVE_VERBS:
             overall_safety = _max_safety(overall_safety, "destructive")
@@ -200,7 +254,13 @@ def analyze_powershell_safety(command: str) -> PwshSafetyAnalysis:
         # Note: checked before WRITE_VERBS since "write" is in WRITE_VERBS
         # Must use the full Verb-Noun form (verb+'-'+noun), not just verb
         cmd_lower = verb.lower() + ("-" + noun.lower() if noun else "")
-        if cmd_lower in ("write-host", "write-output", "write-warning", "write-verbose", "write-debug"):
+        if cmd_lower in (
+            "write-host",
+            "write-output",
+            "write-warning",
+            "write-verbose",
+            "write-debug",
+        ):
             overall_safety = _max_safety(overall_safety, "safe")
             continue
         if verb.lower() in ("echo", "true", "false"):
@@ -228,7 +288,16 @@ def analyze_powershell_safety(command: str) -> PwshSafetyAnalysis:
             else:
                 overall_safety = _max_safety(overall_safety, "write")
             continue
-        if verb.lower() in ("cp", "copy", "copy-item", "mv", "move", "move-item", "ren", "rename-item"):
+        if verb.lower() in (
+            "cp",
+            "copy",
+            "copy-item",
+            "mv",
+            "move",
+            "move-item",
+            "ren",
+            "rename-item",
+        ):
             overall_safety = _max_safety(overall_safety, "write")
             continue
         if verb.lower() in ("ni", "new-item", "sc", "set-content"):
@@ -278,20 +347,83 @@ def _is_powershell_verb_noun(cmd: str) -> bool:
     if "-" not in cmd:
         return False
     verb = cmd.split("-")[0].lower()
-    return verb in ("get", "set", "new", "remove", "invoke", "write", "out",
-                     "clear", "export", "import", "add", "where", "select",
-                     "measure", "push", "pop", "rename", "start", "stop",
-                     "restart", "format", "convert", "compare", "group",
-                     "sort", "foreach", "find", "search", "read", "show",
-                     "dump", "wait", "disable", "enable", "register",
-                     "unregister", "mount", "dismount", "copy", "move",
-                     "join", "split", "resume", "suspend", "use", "complete",
-                     "enter", "exit", "lock", "unlock", "optimize", "repair",
-                     "reset", "resolve", "save", "switch", "sync", "test",
-                     "trace", "update", "approve", "deny", "confirm",
-                     "connect", "disconnect", "install", "uninstall",
-                     "block", "grant", "revoke", "merge", "publish",
-                     "submit", "debug", "undefine")
+    return verb in (
+        "get",
+        "set",
+        "new",
+        "remove",
+        "invoke",
+        "write",
+        "out",
+        "clear",
+        "export",
+        "import",
+        "add",
+        "where",
+        "select",
+        "measure",
+        "push",
+        "pop",
+        "rename",
+        "start",
+        "stop",
+        "restart",
+        "format",
+        "convert",
+        "compare",
+        "group",
+        "sort",
+        "foreach",
+        "find",
+        "search",
+        "read",
+        "show",
+        "dump",
+        "wait",
+        "disable",
+        "enable",
+        "register",
+        "unregister",
+        "mount",
+        "dismount",
+        "copy",
+        "move",
+        "join",
+        "split",
+        "resume",
+        "suspend",
+        "use",
+        "complete",
+        "enter",
+        "exit",
+        "lock",
+        "unlock",
+        "optimize",
+        "repair",
+        "reset",
+        "resolve",
+        "save",
+        "switch",
+        "sync",
+        "test",
+        "trace",
+        "update",
+        "approve",
+        "deny",
+        "confirm",
+        "connect",
+        "disconnect",
+        "install",
+        "uninstall",
+        "block",
+        "grant",
+        "revoke",
+        "merge",
+        "publish",
+        "submit",
+        "debug",
+        "undefine",
+    )
 
 
 def check_powershell_command_safety(

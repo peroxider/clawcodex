@@ -36,252 +36,252 @@ logger = logging.getLogger(__name__)
 def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
     """Register ``server`` sub-subcommands (status | stop | start)."""
     server_parser = subparsers.add_parser(
-        'server',
-        help='Manage the orchestrator daemon process',
-        description='Start, stop, or check the status of the orchestrator daemon. '
-        'All commands are idempotent — running them multiple times '
-        'has no ill effect.',
+        "server",
+        help="Manage the orchestrator daemon process",
+        description="Start, stop, or check the status of the orchestrator daemon. "
+        "All commands are idempotent — running them multiple times "
+        "has no ill effect.",
     )
     server_sub = server_parser.add_subparsers(
-        dest='server_subcommand',
+        dest="server_subcommand",
         required=True,
     )
 
     # --- server status ---
     status_parser = server_sub.add_parser(
-        'status',
-        help='Show orchestrator daemon status',
-        description='Display whether the orchestrator daemon is running, its PID, '
-        'uptime, workspace root, and project slug. Idempotent (pure read).',
+        "status",
+        help="Show orchestrator daemon status",
+        description="Display whether the orchestrator daemon is running, its PID, "
+        "uptime, workspace root, and project slug. Idempotent (pure read).",
     )
     status_parser.add_argument(
-        '--workspace',
+        "--workspace",
         type=str,
         default=None,
-        metavar='PATH',
-        help='Explicit workspace root path (optional auto-detection override)',
+        metavar="PATH",
+        help="Explicit workspace root path (optional auto-detection override)",
     )
     status_parser.add_argument(
-        '--workflow',
+        "--workflow",
         type=str,
         default=None,
-        metavar='PATH',
-        help='Path to WORKFLOW.md (helps resolve workspace when metadata is missing)',
+        metavar="PATH",
+        help="Path to WORKFLOW.md (helps resolve workspace when metadata is missing)",
     )
 
     # --- server stop ---
     stop_parser = server_sub.add_parser(
-        'stop',
-        help='Stop the orchestrator daemon gracefully',
-        description='Send SIGTERM to the orchestrator process and clean up metadata. '
-        'Idempotent: if the daemon is already stopped, exits 0 silently.',
+        "stop",
+        help="Stop the orchestrator daemon gracefully",
+        description="Send SIGTERM to the orchestrator process and clean up metadata. "
+        "Idempotent: if the daemon is already stopped, exits 0 silently.",
     )
     stop_parser.add_argument(
-        '--workspace',
+        "--workspace",
         type=str,
         default=None,
-        metavar='PATH',
-        help='Explicit workspace root path (optional auto-detection override)',
+        metavar="PATH",
+        help="Explicit workspace root path (optional auto-detection override)",
     )
     stop_parser.add_argument(
-        '--workflow',
+        "--workflow",
         type=str,
         default=None,
-        metavar='PATH',
-        help='Path to WORKFLOW.md (helps resolve workspace when metadata is missing)',
+        metavar="PATH",
+        help="Path to WORKFLOW.md (helps resolve workspace when metadata is missing)",
     )
     stop_parser.add_argument(
-        '--force',
-        action='store_true',
-        help='Use SIGKILL instead of SIGTERM (force immediate termination)',
+        "--force",
+        action="store_true",
+        help="Use SIGKILL instead of SIGTERM (force immediate termination)",
     )
     stop_parser.add_argument(
-        '--timeout',
+        "--timeout",
         type=float,
         default=5.0,
-        metavar='SECONDS',
-        help='Seconds to wait after SIGTERM before SIGKILL (default: 5.0)',
+        metavar="SECONDS",
+        help="Seconds to wait after SIGTERM before SIGKILL (default: 5.0)",
     )
     stop_parser.add_argument(
-        '--all',
-        action='store_true',
-        help='Stop all running orchestrator daemons and clean up all stale metadata. '
-        'Useful after test suites or when multiple workflows were started.',
+        "--all",
+        action="store_true",
+        help="Stop all running orchestrator daemons and clean up all stale metadata. "
+        "Useful after test suites or when multiple workflows were started.",
     )
 
     # --- server start ---
     start_parser = server_sub.add_parser(
-        'start',
-        help='Start the orchestrator daemon',
-        description='Launch the orchestrator with a workflow file. '
-        'Optionally enable the declarative workflow engine via --workflow-yaml '
-        'for multi-stage DAG execution with quality gates and decision branches.',
-        epilog='Examples:\n'
-        '  clawcodex orchestrator server start --workflow ./workflow.md\n'
-        '  clawcodex orchestrator server start --workflow ./workflow.md --workflow-yaml ./workflow.yaml\n'
-        '  clawcodex orchestrator server start --workflow ./workflow.md --workflow-yaml ./workflow.yaml --dashboard',
+        "start",
+        help="Start the orchestrator daemon",
+        description="Launch the orchestrator with a workflow file. "
+        "Optionally enable the declarative workflow engine via --workflow-yaml "
+        "for multi-stage DAG execution with quality gates and decision branches.",
+        epilog="Examples:\n"
+        "  clawcodex orchestrator server start --workflow ./workflow.md\n"
+        "  clawcodex orchestrator server start --workflow ./workflow.md --workflow-yaml ./workflow.yaml\n"
+        "  clawcodex orchestrator server start --workflow ./workflow.md --workflow-yaml ./workflow.yaml --dashboard",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     start_parser.add_argument(
-        '--workflow',
+        "--workflow",
         type=str,
         required=False,
-        metavar='PATH',
-        help='Path to WORKFLOW.md file',
+        metavar="PATH",
+        help="Path to WORKFLOW.md file",
     )
     start_parser.add_argument(
-        '--workflow-yaml',
+        "--workflow-yaml",
         type=str,
         default=None,
-        metavar='PATH',
-        help='Path to workflow.yaml for declarative workflow engine (F-110)',
+        metavar="PATH",
+        help="Path to workflow.yaml for declarative workflow engine (F-110)",
     )
     start_parser.add_argument(
-        '--dashboard',
-        action='store_true',
-        help='Show embedded status dashboard',
+        "--dashboard",
+        action="store_true",
+        help="Show embedded status dashboard",
     )
     start_parser.add_argument(
-        '--port',
+        "--port",
         type=int,
         default=None,
-        help='LiveView dashboard port',
+        help="LiveView dashboard port",
     )
     start_parser.add_argument(
-        '--gateway',
-        dest='gateway',
-        action='store_true',
-        help='Opt into all supported direct/private messages via the IM gateway',
+        "--gateway",
+        dest="gateway",
+        action="store_true",
+        help="Opt into all supported direct/private messages via the IM gateway",
     )
     start_parser.add_argument(
-        '--im-gateway',
-        dest='gateway',
-        action='store_true',
+        "--im-gateway",
+        dest="gateway",
+        action="store_true",
         help=argparse.SUPPRESS,
     )
     start_parser.add_argument(
-        '--gateway-origin',
-        dest='gateway_origin',
+        "--gateway-origin",
+        dest="gateway_origin",
         type=str,
         default=None,
-        metavar='ORIGIN',
+        metavar="ORIGIN",
         help=(
-            'Advanced: opt into the IM gateway for a specific origin, e.g. '
-            'wechat:direct:default:user_id'
+            "Advanced: opt into the IM gateway for a specific origin, e.g. "
+            "wechat:direct:default:user_id"
         ),
     )
     start_parser.add_argument(
-        '--im-gateway-origin',
-        dest='gateway_origin',
+        "--im-gateway-origin",
+        dest="gateway_origin",
         type=str,
         default=None,
-        metavar='ORIGIN',
+        metavar="ORIGIN",
         help=argparse.SUPPRESS,
     )
     start_parser.add_argument(
-        '--gateway-sock',
-        dest='gateway_sock',
+        "--gateway-sock",
+        dest="gateway_sock",
         type=str,
         default=None,
-        metavar='PATH',
+        metavar="PATH",
         help=(
-            'Gateway daemon Unix socket for --gateway-origin '
-            '(default: ~/.clawcodex/gateway/gateway.sock)'
+            "Gateway daemon Unix socket for --gateway-origin "
+            "(default: ~/.clawcodex/gateway/gateway.sock)"
         ),
     )
     start_parser.add_argument(
-        '--im-gateway-sock',
-        dest='gateway_sock',
+        "--im-gateway-sock",
+        dest="gateway_sock",
         type=str,
         default=None,
-        metavar='PATH',
+        metavar="PATH",
         help=argparse.SUPPRESS,
     )
 
     # --- server connect-gateway ---
     connect_parser = server_sub.add_parser(
-        'connect-gateway',
-        help='Ask a running daemon to connect to the IM gateway',
+        "connect-gateway",
+        help="Ask a running daemon to connect to the IM gateway",
         description=(
-            'Submit an IM gateway connect request to an already-running orchestrator daemon. '
-            'The daemon handles the request on its next control-file poll.'
+            "Submit an IM gateway connect request to an already-running orchestrator daemon. "
+            "The daemon handles the request on its next control-file poll."
         ),
     )
     connect_parser.add_argument(
-        '--workspace',
+        "--workspace",
         type=str,
         default=None,
-        metavar='PATH',
-        help='Explicit workspace root path (optional auto-detection override)',
+        metavar="PATH",
+        help="Explicit workspace root path (optional auto-detection override)",
     )
     connect_parser.add_argument(
-        '--workflow',
+        "--workflow",
         type=str,
         default=None,
-        metavar='PATH',
-        help='Path to WORKFLOW.md (helps resolve workspace when metadata is missing)',
+        metavar="PATH",
+        help="Path to WORKFLOW.md (helps resolve workspace when metadata is missing)",
     )
     connect_parser.add_argument(
-        '--gateway',
-        dest='gateway',
+        "--gateway",
+        dest="gateway",
         type=str,
         default=None,
-        metavar='ORIGIN',
+        metavar="ORIGIN",
         help=(
-            'Optional specific origin to bind, e.g. wechat:direct:default:user_id. '
-            'Omit for all supported direct/private IM messages.'
+            "Optional specific origin to bind, e.g. wechat:direct:default:user_id. "
+            "Omit for all supported direct/private IM messages."
         ),
     )
     connect_parser.add_argument(
-        '--im-gateway',
-        dest='gateway',
+        "--im-gateway",
+        dest="gateway",
         type=str,
         default=None,
-        metavar='ORIGIN',
+        metavar="ORIGIN",
         help=argparse.SUPPRESS,
     )
     connect_parser.add_argument(
-        '--gateway-sock',
-        dest='gateway_sock',
+        "--gateway-sock",
+        dest="gateway_sock",
         type=str,
         default=None,
-        metavar='PATH',
+        metavar="PATH",
         help=(
-            'Gateway daemon Unix socket for connect-gateway '
-            '(default: ~/.clawcodex/gateway/gateway.sock)'
+            "Gateway daemon Unix socket for connect-gateway "
+            "(default: ~/.clawcodex/gateway/gateway.sock)"
         ),
     )
     connect_parser.add_argument(
-        '--im-gateway-sock',
-        dest='gateway_sock',
+        "--im-gateway-sock",
+        dest="gateway_sock",
         type=str,
         default=None,
-        metavar='PATH',
+        metavar="PATH",
         help=argparse.SUPPRESS,
     )
 
     # --- server disconnect-gateway ---
     disconnect_parser = server_sub.add_parser(
-        'disconnect-gateway',
-        help='Ask a running daemon to disconnect from the IM gateway',
+        "disconnect-gateway",
+        help="Ask a running daemon to disconnect from the IM gateway",
         description=(
-            'Submit an IM gateway disconnect request to an already-running orchestrator daemon. '
-            'The daemon handles the request on its next control-file poll.'
+            "Submit an IM gateway disconnect request to an already-running orchestrator daemon. "
+            "The daemon handles the request on its next control-file poll."
         ),
     )
     disconnect_parser.add_argument(
-        '--workspace',
+        "--workspace",
         type=str,
         default=None,
-        metavar='PATH',
-        help='Explicit workspace root path (optional auto-detection override)',
+        metavar="PATH",
+        help="Explicit workspace root path (optional auto-detection override)",
     )
     disconnect_parser.add_argument(
-        '--workflow',
+        "--workflow",
         type=str,
         default=None,
-        metavar='PATH',
-        help='Path to WORKFLOW.md (helps resolve workspace when metadata is missing)',
+        metavar="PATH",
+        help="Path to WORKFLOW.md (helps resolve workspace when metadata is missing)",
     )
 
 
@@ -293,15 +293,15 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
 def run(args: argparse.Namespace) -> int:
     """Dispatch to the appropriate server subcommand."""
     cmd = args.server_subcommand
-    if cmd == 'status':
+    if cmd == "status":
         return _run_status(args)
-    elif cmd == 'stop':
+    elif cmd == "stop":
         return _run_stop(args)
-    elif cmd == 'start':
+    elif cmd == "start":
         return _run_start(args)
-    elif cmd == 'connect-gateway':
+    elif cmd == "connect-gateway":
         return _run_connect_gateway(args)
-    elif cmd == 'disconnect-gateway':
+    elif cmd == "disconnect-gateway":
         return _run_disconnect_gateway(args)
     print(f"error: unknown server subcommand '{cmd}'", file=sys.stderr)
     return 2
@@ -323,7 +323,7 @@ def _find_metadata(args: argparse.Namespace) -> tuple[Path | None, dict | None]:
     )
 
     # 0. 多项目歧义检测：无显式参数且有多个存活项目时提示
-    if not getattr(args, 'workspace', None) and not getattr(args, 'workflow', None):
+    if not getattr(args, "workspace", None) and not getattr(args, "workflow", None):
         from extensions.orchestrator.workspace_locator import (
             get_live_projects,
             print_multi_project_hint,
@@ -331,50 +331,50 @@ def _find_metadata(args: argparse.Namespace) -> tuple[Path | None, dict | None]:
 
         live = get_live_projects()
         if len(live) > 1:
-            subcmd = getattr(args, 'server_subcommand', 'server')
-            print_multi_project_hint(live, f'orchestrator server {subcmd}')
+            subcmd = getattr(args, "server_subcommand", "server")
+            print_multi_project_hint(live, f"orchestrator server {subcmd}")
             return None, None
 
     # Priority: explicit --workspace > --workflow > env var > latest metadata
     workspace_root = get_workspace_root(
-        workspace_arg=getattr(args, 'workspace', None),
-        workflow_path=getattr(args, 'workflow', None),
+        workspace_arg=getattr(args, "workspace", None),
+        workflow_path=getattr(args, "workflow", None),
     )
     if workspace_root:
         slug = _slug_from_workspace(str(workspace_root))
-        metadata_path = Path.home() / '.clawcodex' / 'orchestrator' / slug / 'metadata.json'
+        metadata_path = Path.home() / ".clawcodex" / "orchestrator" / slug / "metadata.json"
         if metadata_path.exists():
             import json
 
             try:
-                data = json.loads(metadata_path.read_text(encoding='utf-8'))
+                data = json.loads(metadata_path.read_text(encoding="utf-8"))
                 return metadata_path, data
             except Exception:
                 pass
         # Fallback: search by workspace_root matching
-        metadata_dir = Path.home() / '.clawcodex' / 'orchestrator'
+        metadata_dir = Path.home() / ".clawcodex" / "orchestrator"
         if metadata_dir.exists():
             for md_dir in metadata_dir.iterdir():
-                mf = md_dir / 'metadata.json'
+                mf = md_dir / "metadata.json"
                 if mf.exists():
                     import json
 
                     try:
-                        data = json.loads(mf.read_text(encoding='utf-8'))
-                        if data.get('workspace_root') == str(workspace_root):
+                        data = json.loads(mf.read_text(encoding="utf-8"))
+                        if data.get("workspace_root") == str(workspace_root):
                             return mf, data
                     except Exception:
                         pass
 
     # Fallback: latest metadata (only when no explicit --workspace/--workflow)
-    has_explicit = getattr(args, 'workspace', None) or getattr(args, 'workflow', None)
+    has_explicit = getattr(args, "workspace", None) or getattr(args, "workflow", None)
     if not has_explicit:
         latest = _find_latest_metadata()
         if latest and latest.exists():
             import json
 
             try:
-                data = json.loads(latest.read_text(encoding='utf-8'))
+                data = json.loads(latest.read_text(encoding="utf-8"))
                 return latest, data
             except Exception:
                 pass
@@ -386,10 +386,10 @@ def _slug_from_workspace(ws_str: str) -> str:
     """Generate a deterministic slug from a workspace path string."""
     parts = [
         p
-        for p in ws_str.strip().replace('/', '-').replace('\\', '-').split('-')
-        if p and p not in ('tmp', '.clawcodex', '~')
+        for p in ws_str.strip().replace("/", "-").replace("\\", "-").split("-")
+        if p and p not in ("tmp", ".clawcodex", "~")
     ]
-    return '-'.join(parts[-3:]) if parts else 'default'
+    return "-".join(parts[-3:]) if parts else "default"
 
 
 def _is_pid_alive(pid: int) -> bool:
@@ -405,13 +405,13 @@ def _format_uptime(started_at: float) -> str:
     """Format uptime as human-readable string."""
     elapsed = time.time() - started_at
     if elapsed < 60:
-        return f'{int(elapsed)}s'
+        return f"{int(elapsed)}s"
     elif elapsed < 3600:
-        return f'{int(elapsed / 60)}m {int(elapsed % 60)}s'
+        return f"{int(elapsed / 60)}m {int(elapsed % 60)}s"
     else:
         hours = int(elapsed / 3600)
         minutes = int((elapsed % 3600) / 60)
-        return f'{hours}h {minutes}m'
+        return f"{hours}h {minutes}m"
 
 
 # ---------------------------------------------------------------------------
@@ -424,37 +424,37 @@ def _run_status(args: argparse.Namespace) -> int:
     meta_path, meta = _find_metadata(args)
 
     if meta is None:
-        print('Orchestrator daemon: NOT RUNNING')
-        print('  No orchestrator metadata found.')
+        print("Orchestrator daemon: NOT RUNNING")
+        print("  No orchestrator metadata found.")
         print("  Hint: Start with 'clawcodex orchestrator server start --workflow WORKFLOW.md'")
         return 0  # idempotent: not-running is a valid status, not an error
 
-    pid = meta.get('pid')
-    started_at = meta.get('started_at', 0)
-    project_slug = meta.get('project_slug', 'unknown')
-    workspace_root = meta.get('workspace_root', 'unknown')
-    workflow_path = meta.get('workflow_path')
+    pid = meta.get("pid")
+    started_at = meta.get("started_at", 0)
+    project_slug = meta.get("project_slug", "unknown")
+    workspace_root = meta.get("workspace_root", "unknown")
+    workflow_path = meta.get("workflow_path")
 
     if pid and _is_pid_alive(pid):
-        uptime = _format_uptime(started_at) if started_at else 'unknown'
-        print(f'Orchestrator daemon: RUNNING')
-        print(f'  PID            : {pid}')
-        print(f'  Uptime         : {uptime}')
-        print(f'  Project        : {project_slug}')
-        print(f'  Workspace root : {workspace_root}')
+        uptime = _format_uptime(started_at) if started_at else "unknown"
+        print(f"Orchestrator daemon: RUNNING")
+        print(f"  PID            : {pid}")
+        print(f"  Uptime         : {uptime}")
+        print(f"  Project        : {project_slug}")
+        print(f"  Workspace root : {workspace_root}")
         if workflow_path:
-            print(f'  Workflow       : {workflow_path}')
-        print(f'  Metadata       : {meta_path}')
+            print(f"  Workflow       : {workflow_path}")
+        print(f"  Metadata       : {meta_path}")
     else:
-        stale_age = _format_uptime(started_at) if started_at else 'unknown'
-        print(f'Orchestrator daemon: STOPPED (stale metadata from {stale_age} ago)')
-        print(f'  Project        : {project_slug}')
-        print(f'  Workspace root : {workspace_root}')
+        stale_age = _format_uptime(started_at) if started_at else "unknown"
+        print(f"Orchestrator daemon: STOPPED (stale metadata from {stale_age} ago)")
+        print(f"  Project        : {project_slug}")
+        print(f"  Workspace root : {workspace_root}")
         print(f"  Metadata       : {meta_path} (stale — clean up with 'server stop')")
         # Auto-clean stale metadata
         if meta_path and meta_path.exists():
             meta_path.unlink()
-            print(f'  -> Stale metadata cleaned up.')
+            print(f"  -> Stale metadata cleaned up.")
 
     return 0
 
@@ -471,64 +471,64 @@ def _run_stop_all(args: argparse.Namespace) -> int:
     - Live PIDs → send signal (SIGTERM / SIGKILL) and wait for graceful exit.
     - Dead PIDs → clean up stale metadata immediately.
     """
-    orchestrator_dir = Path.home() / '.clawcodex' / 'orchestrator'
+    orchestrator_dir = Path.home() / ".clawcodex" / "orchestrator"
     if not orchestrator_dir.exists():
-        print('No orchestrator metadata directory found — nothing to stop.')
+        print("No orchestrator metadata directory found — nothing to stop.")
         return 0
 
     metadata_files: list[tuple[Path, dict]] = []
     for md_dir in orchestrator_dir.iterdir():
         if not md_dir.is_dir():
             continue
-        mf = md_dir / 'metadata.json'
+        mf = md_dir / "metadata.json"
         if not mf.exists():
             continue
         try:
-            data = json.loads(mf.read_text(encoding='utf-8'))
+            data = json.loads(mf.read_text(encoding="utf-8"))
             metadata_files.append((mf, data))
         except Exception:
             continue
 
     if not metadata_files:
-        print('No orchestrator metadata found — nothing to stop.')
+        print("No orchestrator metadata found — nothing to stop.")
         return 0
 
     sig = signal.SIGKILL if args.force else signal.SIGTERM
-    sig_name = 'SIGKILL' if args.force else 'SIGTERM'
+    sig_name = "SIGKILL" if args.force else "SIGTERM"
     timeout = args.timeout
 
     stopped = 0
     cleaned = 0
     errors = 0
 
-    print(f'Stopping all orchestrator daemons ({len(metadata_files)} metadata files found)...')
+    print(f"Stopping all orchestrator daemons ({len(metadata_files)} metadata files found)...")
     print()
 
     for meta_path, meta in metadata_files:
-        pid = meta.get('pid')
-        slug = meta.get('project_slug', meta_path.parent.name)
-        ws = meta.get('workspace_root', '?')
+        pid = meta.get("pid")
+        slug = meta.get("project_slug", meta_path.parent.name)
+        ws = meta.get("workspace_root", "?")
 
         if pid is None or not _is_pid_alive(pid):
-            pid_str = pid or 'N/A'
-            print(f'  [{slug}] already stopped (PID {pid_str}) — cleaning up stale metadata')
+            pid_str = pid or "N/A"
+            print(f"  [{slug}] already stopped (PID {pid_str}) — cleaning up stale metadata")
             try:
                 meta_path.unlink(missing_ok=True)
                 cleaned += 1
             except OSError as exc:
-                print(f'    ⚠ failed to clean metadata: {exc}')
+                print(f"    ⚠ failed to clean metadata: {exc}")
                 errors += 1
             continue
 
         # Send signal
-        print(f'  [{slug}] stopping daemon (PID {pid}, workspace: {ws})...')
-        print(f'    Sending {sig_name}...')
+        print(f"  [{slug}] stopping daemon (PID {pid}, workspace: {ws})...")
+        print(f"    Sending {sig_name}...")
         try:
             os.kill(pid, sig)
         except ProcessLookupError:
-            print(f'    Process {pid} already exited.')
+            print(f"    Process {pid} already exited.")
         except PermissionError:
-            print(f'    ⚠ Permission denied — cannot signal PID {pid}.', file=sys.stderr)
+            print(f"    ⚠ Permission denied — cannot signal PID {pid}.", file=sys.stderr)
             errors += 1
             continue
 
@@ -541,7 +541,7 @@ def _run_stop_all(args: argparse.Namespace) -> int:
                 time.sleep(0.2)
             else:
                 print(
-                    f'    ⚠ Process did not exit within {timeout}s timeout. Remove --force or kill manually: kill -9 {pid}'
+                    f"    ⚠ Process did not exit within {timeout}s timeout. Remove --force or kill manually: kill -9 {pid}"
                 )
                 errors += 1
                 # Still clean up metadata
@@ -553,52 +553,52 @@ def _run_stop_all(args: argparse.Namespace) -> int:
             meta_path.unlink(missing_ok=True)
             stopped += 1
         except OSError as exc:
-            print(f'    ⚠ failed to clean metadata: {exc}')
+            print(f"    ⚠ failed to clean metadata: {exc}")
             errors += 1
 
     print()
-    print(f'Done: {stopped} stopped, {cleaned} stale cleaned, {errors} error(s).')
+    print(f"Done: {stopped} stopped, {cleaned} stale cleaned, {errors} error(s).")
     return 1 if errors else 0
 
 
 def _run_stop(args: argparse.Namespace) -> int:
     """Stop the orchestrator daemon. Idempotent — already-stopped → exit 0."""
-    if getattr(args, 'all', False):
+    if getattr(args, "all", False):
         return _run_stop_all(args)
 
     meta_path, meta = _find_metadata(args)
 
     if meta is None:
-        print('Orchestrator daemon: already stopped (no metadata found)')
+        print("Orchestrator daemon: already stopped (no metadata found)")
         return 0  # idempotent
 
-    pid = meta.get('pid')
-    started_at = meta.get('started_at', 0)
-    project_slug = meta.get('project_slug', 'unknown')
-    workspace_root = meta.get('workspace_root', 'unknown')
+    pid = meta.get("pid")
+    started_at = meta.get("started_at", 0)
+    project_slug = meta.get("project_slug", "unknown")
+    workspace_root = meta.get("workspace_root", "unknown")
 
     if pid is None or not _is_pid_alive(pid):
-        print(f'Orchestrator daemon: already stopped (PID {pid or "N/A"} not running)')
+        print(f"Orchestrator daemon: already stopped (PID {pid or 'N/A'} not running)")
         # Clean up stale metadata
         if meta_path and meta_path.exists():
             meta_path.unlink()
-            print(f'  Stale metadata cleaned up.')
+            print(f"  Stale metadata cleaned up.")
         return 0  # idempotent
 
     # Send stop signal
     sig = signal.SIGKILL if args.force else signal.SIGTERM
-    sig_name = 'SIGKILL' if args.force else 'SIGTERM'
-    print(f'Stopping orchestrator daemon (PID {pid}, project: {project_slug})...')
-    print(f'  Sending {sig_name}...')
+    sig_name = "SIGKILL" if args.force else "SIGTERM"
+    print(f"Stopping orchestrator daemon (PID {pid}, project: {project_slug})...")
+    print(f"  Sending {sig_name}...")
 
     try:
         os.kill(pid, sig)
     except ProcessLookupError:
-        print(f'  Process {pid} already exited.')
+        print(f"  Process {pid} already exited.")
     except PermissionError:
-        print(f'  Permission denied: cannot signal PID {pid}.', file=sys.stderr)
+        print(f"  Permission denied: cannot signal PID {pid}.", file=sys.stderr)
         print(
-            f'  Try running with elevated privileges or kill manually: kill {pid}', file=sys.stderr
+            f"  Try running with elevated privileges or kill manually: kill {pid}", file=sys.stderr
         )
         return 1
 
@@ -612,16 +612,16 @@ def _run_stop(args: argparse.Namespace) -> int:
             time.sleep(0.2)
         else:
             # Timed out — process still alive
-            print(f'  Process did not exit within {timeout}s timeout. Use --force for SIGKILL.')
-            print(f'  You may also kill manually: kill -9 {pid}')
+            print(f"  Process did not exit within {timeout}s timeout. Use --force for SIGKILL.")
+            print(f"  You may also kill manually: kill -9 {pid}")
             return 1
 
     # Clean up metadata
     if meta_path and meta_path.exists():
         meta_path.unlink()
-        print(f'  Metadata cleaned up: {meta_path}')
+        print(f"  Metadata cleaned up: {meta_path}")
 
-    print(f'Orchestrator daemon stopped.')
+    print(f"Orchestrator daemon stopped.")
     return 0
 
 
@@ -635,95 +635,95 @@ def _run_connect_gateway(args: argparse.Namespace) -> int:
     origin = _resolve_gateway_origin(args)
 
     meta_path, meta = _find_metadata(args)
-    pid = meta.get('pid') if meta else None
+    pid = meta.get("pid") if meta else None
     try:
         alive = bool(pid and _is_pid_alive(int(pid)))
     except (TypeError, ValueError):
         alive = False
     if not alive:
-        print('连接失败，orchestrator未启动', file=sys.stderr)
+        print("连接失败，orchestrator未启动", file=sys.stderr)
         return 1
 
     sock = _resolve_gateway_sock(args)
     if not _gateway_socket_available(sock):
-        print('IM gateway daemon is not running', file=sys.stderr)
-        print(f'  Requested socket: {sock}', file=sys.stderr)
+        print("IM gateway daemon is not running", file=sys.stderr)
+        print(f"  Requested socket: {sock}", file=sys.stderr)
         return 1
 
-    workspace = Path(meta.get('workspace_root', os.getcwd())) if meta else Path.cwd()
-    response_path = _gateway_control_response_path(workspace, 'gateway_connect')
+    workspace = Path(meta.get("workspace_root", os.getcwd())) if meta else Path.cwd()
+    response_path = _gateway_control_response_path(workspace, "gateway_connect")
     control_path = _write_gateway_control(
         workspace,
-        'gateway_connect',
+        "gateway_connect",
         {
-            'origin': origin,
-            'sock': sock,
-            'response_path': str(response_path),
+            "origin": origin,
+            "sock": sock,
+            "response_path": str(response_path),
         },
     )
     result = _wait_gateway_control_result(response_path)
     if result is not None:
-        if result.get('ok'):
-            print(f'gateway connected: origin={origin} sock={sock}')
+        if result.get("ok"):
+            print(f"gateway connected: origin={origin} sock={sock}")
             return 0
         print(
-            f'gateway connect failed: {result.get("message") or "unknown error"}', file=sys.stderr
+            f"gateway connect failed: {result.get('message') or 'unknown error'}", file=sys.stderr
         )
         return 1
 
-    print('gateway connect request submitted; waiting for orchestrator next poll')
-    print(f'  Control: {control_path}')
-    print(f'  Running daemon PID: {pid}')
+    print("gateway connect request submitted; waiting for orchestrator next poll")
+    print(f"  Control: {control_path}")
+    print(f"  Running daemon PID: {pid}")
     if meta_path:
-        print(f'  Metadata: {meta_path}')
+        print(f"  Metadata: {meta_path}")
     return 0
 
 
 def _run_disconnect_gateway(args: argparse.Namespace) -> int:
     """Submit an IM gateway disconnect request to the running orchestrator daemon."""
     meta_path, meta = _find_metadata(args)
-    pid = meta.get('pid') if meta else None
+    pid = meta.get("pid") if meta else None
     try:
         alive = bool(pid and _is_pid_alive(int(pid)))
     except (TypeError, ValueError):
         alive = False
     if not alive:
-        print('连接失败，orchestrator未启动', file=sys.stderr)
+        print("连接失败，orchestrator未启动", file=sys.stderr)
         return 1
 
-    workspace = Path(meta.get('workspace_root', os.getcwd())) if meta else Path.cwd()
-    response_path = _gateway_control_response_path(workspace, 'gateway_disconnect')
+    workspace = Path(meta.get("workspace_root", os.getcwd())) if meta else Path.cwd()
+    response_path = _gateway_control_response_path(workspace, "gateway_disconnect")
     control_path = _write_gateway_control(
         workspace,
-        'gateway_disconnect',
+        "gateway_disconnect",
         {
-            'response_path': str(response_path),
+            "response_path": str(response_path),
         },
     )
     result = _wait_gateway_control_result(response_path)
     if result is not None:
-        if result.get('ok'):
-            print('gateway disconnected')
+        if result.get("ok"):
+            print("gateway disconnected")
             return 0
         print(
-            f'gateway disconnect failed: {result.get("message") or "unknown error"}',
+            f"gateway disconnect failed: {result.get('message') or 'unknown error'}",
             file=sys.stderr,
         )
         return 1
 
-    print('gateway disconnect request submitted; waiting for orchestrator next poll')
-    print(f'  Control: {control_path}')
-    print(f'  Running daemon PID: {pid}')
+    print("gateway disconnect request submitted; waiting for orchestrator next poll")
+    print(f"  Control: {control_path}")
+    print(f"  Running daemon PID: {pid}")
     if meta_path:
-        print(f'  Metadata: {meta_path}')
+        print(f"  Metadata: {meta_path}")
     return 0
 
 
 def _resolve_gateway_origin(args: argparse.Namespace) -> str:
-    explicit = getattr(args, 'gateway', None)
+    explicit = getattr(args, "gateway", None)
     if isinstance(explicit, str) and explicit.strip():
         return explicit.strip()
-    origin = os.environ.get('CLAWCODEX_GATEWAY_ORIGIN') or os.environ.get('CLAWCODEX_IM_ORIGIN')
+    origin = os.environ.get("CLAWCODEX_GATEWAY_ORIGIN") or os.environ.get("CLAWCODEX_IM_ORIGIN")
     if origin:
         return origin
     from clawcodex_ext.services.im_gateway.models import IM_DIRECT_ALL_ORIGIN
@@ -733,11 +733,11 @@ def _resolve_gateway_origin(args: argparse.Namespace) -> str:
 
 def _resolve_gateway_sock(args: argparse.Namespace) -> str:
     sock = (
-        getattr(args, 'gateway_sock', None)
-        or os.environ.get('CLAWCODEX_GATEWAY_SOCK')
-        or os.environ.get('CLAWCODEX_IM_GATEWAY_SOCK')
+        getattr(args, "gateway_sock", None)
+        or os.environ.get("CLAWCODEX_GATEWAY_SOCK")
+        or os.environ.get("CLAWCODEX_IM_GATEWAY_SOCK")
     )
-    return str(sock or os.path.expanduser('~/.clawcodex/gateway/gateway.sock'))
+    return str(sock or os.path.expanduser("~/.clawcodex/gateway/gateway.sock"))
 
 
 def _gateway_socket_available(sock: str) -> bool:
@@ -753,7 +753,7 @@ def _gateway_socket_available(sock: str) -> bool:
 async def _probe_gateway_socket(sock: str) -> None:
     from clawcodex_ext.services.im_gateway.ipc_client import GatewayIpcClient
 
-    client = GatewayIpcClient(sock, instance_id='orchestrator-control-probe')
+    client = GatewayIpcClient(sock, instance_id="orchestrator-control-probe")
     try:
         await client.connect()
     finally:
@@ -761,18 +761,18 @@ async def _probe_gateway_socket(sock: str) -> None:
 
 
 def _gateway_control_response_path(workspace: Path, command: str) -> Path:
-    control_dir = workspace / '.orchestrator_control'
+    control_dir = workspace / ".orchestrator_control"
     control_dir.mkdir(parents=True, exist_ok=True)
-    return control_dir / f'{command}_{uuid.uuid4().hex}.result.json'
+    return control_dir / f"{command}_{uuid.uuid4().hex}.result.json"
 
 
 def _write_gateway_control(workspace: Path, command: str, payload: dict) -> Path:
-    control_dir = workspace / '.orchestrator_control'
+    control_dir = workspace / ".orchestrator_control"
     control_dir.mkdir(parents=True, exist_ok=True)
     request_id = uuid.uuid4().hex
-    control_path = control_dir / f'{command}_{request_id}.control'
-    body = f'{command}\n\n{json.dumps(payload, ensure_ascii=False, separators=(",", ":"))}\n'
-    control_path.write_text(body, encoding='utf-8')
+    control_path = control_dir / f"{command}_{request_id}.control"
+    body = f"{command}\n\n{json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n"
+    control_path.write_text(body, encoding="utf-8")
     return control_path
 
 
@@ -781,9 +781,9 @@ def _wait_gateway_control_result(response_path: Path, timeout_seconds: float = 0
     while time.time() < deadline:
         if response_path.exists():
             try:
-                return json.loads(response_path.read_text(encoding='utf-8'))
+                return json.loads(response_path.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
-                return {'ok': False, 'message': 'invalid gateway control result'}
+                return {"ok": False, "message": "invalid gateway control result"}
         time.sleep(0.02)
     return None
 
@@ -793,25 +793,25 @@ def _run_start(args: argparse.Namespace) -> int:
     # Check if already running
     meta_path, meta = _find_metadata(args)
     if meta:
-        pid = meta.get('pid')
+        pid = meta.get("pid")
         if pid and _is_pid_alive(pid):
-            print(f'Orchestrator daemon is already running (PID {pid}).')
-            print('Showing current status:')
+            print(f"Orchestrator daemon is already running (PID {pid}).")
+            print("Showing current status:")
             return _run_status(args)
         # Clean up stale metadata from dead PID before starting fresh
         if meta_path and meta_path.exists():
             meta_path.unlink(missing_ok=True)
-            print(f'  Cleaned stale metadata from dead PID {pid or "N/A"}')
+            print(f"  Cleaned stale metadata from dead PID {pid or 'N/A'}")
 
     # Launch the orchestrator directly
     return _run_orchestrator(
         workflow_path=args.workflow,
-        dashboard=getattr(args, 'dashboard', False),
-        port=getattr(args, 'port', None),
-        workflow_yaml_path=getattr(args, 'workflow_yaml', None),
-        gateway=getattr(args, 'gateway', False),
-        gateway_origin=getattr(args, 'gateway_origin', None),
-        gateway_sock=getattr(args, 'gateway_sock', None),
+        dashboard=getattr(args, "dashboard", False),
+        port=getattr(args, "port", None),
+        workflow_yaml_path=getattr(args, "workflow_yaml", None),
+        gateway=getattr(args, "gateway", False),
+        gateway_origin=getattr(args, "gateway_origin", None),
+        gateway_sock=getattr(args, "gateway_sock", None),
     )
 
 
@@ -844,8 +844,8 @@ def _mount_gateway_opt_in(
 
     origin = (
         origin
-        or os.environ.get('CLAWCODEX_GATEWAY_ORIGIN')
-        or os.environ.get('CLAWCODEX_IM_ORIGIN')
+        or os.environ.get("CLAWCODEX_GATEWAY_ORIGIN")
+        or os.environ.get("CLAWCODEX_IM_ORIGIN")
     )
     if not origin and enabled:
         from clawcodex_ext.services.im_gateway.models import IM_DIRECT_ALL_ORIGIN
@@ -855,11 +855,11 @@ def _mount_gateway_opt_in(
         return None
     sock = (
         sock
-        or os.environ.get('CLAWCODEX_GATEWAY_SOCK')
-        or os.environ.get('CLAWCODEX_IM_GATEWAY_SOCK')
+        or os.environ.get("CLAWCODEX_GATEWAY_SOCK")
+        or os.environ.get("CLAWCODEX_IM_GATEWAY_SOCK")
     )
     if not sock:
-        sock = os.path.expanduser('~/.clawcodex/gateway/gateway.sock')
+        sock = os.path.expanduser("~/.clawcodex/gateway/gateway.sock")
 
     from extensions.orchestrator.im_gateway_client import (
         OrchestratorGatewayClient,
@@ -868,36 +868,36 @@ def _mount_gateway_opt_in(
 
     def _orch():
         # subsystem._orchestrator is built during run(); resolve lazily.
-        return getattr(subsystem, '_orchestrator', None)
+        return getattr(subsystem, "_orchestrator", None)
 
     def _control_verb(verb, issue_id):
         o = _orch()
-        if o is not None and hasattr(o, '_apply_control_command'):
+        if o is not None and hasattr(o, "_apply_control_command"):
             try:
-                o._apply_control_command(verb, issue_id or '', '')
-                logger.info('IM control_verb: %s issue=%s', verb, issue_id)
+                o._apply_control_command(verb, issue_id or "", "")
+                logger.info("IM control_verb: %s issue=%s", verb, issue_id)
                 return
             except Exception:  # noqa: BLE001
-                logger.exception('IM control_verb failed')
-        logger.warning('IM control_verb: orchestrator not ready (%s %s)', verb, issue_id)
+                logger.exception("IM control_verb failed")
+        logger.warning("IM control_verb: orchestrator not ready (%s %s)", verb, issue_id)
 
     def _issue_inject(issue_id, hint):
         # Write to the workspace's .operator_hints.md via the orchestrator.
         o = _orch()
-        ws_root = getattr(getattr(config, 'workspace', None), 'root', '')
+        ws_root = getattr(getattr(config, "workspace", None), "root", "")
         if ws_root:
             try:
                 from pathlib import Path
 
-                hints_file = Path(ws_root) / '.operator_hints.md'
+                hints_file = Path(ws_root) / ".operator_hints.md"
                 hints_file.parent.mkdir(parents=True, exist_ok=True)
-                with hints_file.open('a', encoding='utf-8') as f:
-                    f.write(f'\n{hint}\n')
-                logger.info('IM issue_inject: issue=%s hint_len=%d', issue_id, len(hint))
+                with hints_file.open("a", encoding="utf-8") as f:
+                    f.write(f"\n{hint}\n")
+                logger.info("IM issue_inject: issue=%s hint_len=%d", issue_id, len(hint))
                 return
             except Exception:  # noqa: BLE001
-                logger.exception('IM issue_inject failed')
-        logger.warning('IM issue_inject: no workspace root')
+                logger.exception("IM issue_inject failed")
+        logger.warning("IM issue_inject: no workspace root")
 
     def _operator_hints(issue_id, text):
         _issue_inject(issue_id, text)
@@ -905,16 +905,16 @@ def _mount_gateway_opt_in(
     def _queue_pending(issue_id, text):
         # Pending-message queue lives on RuntimeTaskRegistry; without an
         # active task for this issue we record the intent for the next run.
-        logger.info('IM followup queued: issue=%s text_len=%d', issue_id, len(text))
+        logger.info("IM followup queued: issue=%s text_len=%d", issue_id, len(text))
 
     def _agent_intent(verb, issue_id):
         _control_verb(verb, issue_id)
 
     def _issue_cli(verb, issue_id, payload):
-        logger.info('IM issue_cli: %s issue=%s', verb, issue_id)
+        logger.info("IM issue_cli: %s issue=%s", verb, issue_id)
 
     def _bridge_interrupt(issue_id, payload):
-        _control_verb('stop', issue_id)
+        _control_verb("stop", issue_id)
 
     handlers = OrchestratorHandlers(
         queue_pending_message=_queue_pending,
@@ -928,7 +928,7 @@ def _mount_gateway_opt_in(
 
     from clawcodex_ext.services.im_gateway.ipc_client import GatewayIpcClient
 
-    session_id = f'orchestrator-{os.getpid()}'
+    session_id = f"orchestrator-{os.getpid()}"
     ipc = GatewayIpcClient(sock, instance_id=session_id)
     wrapper = OrchestratorGatewayClient(
         handlers, ipc_client=ipc, origin=origin, command_router=None, control_bridge=None
@@ -946,18 +946,18 @@ def _mount_gateway_opt_in(
             response = await ipc.reconnect_until_registered(
                 session_id=session_id,
                 origin=origin,
-                capabilities=['outbound_text'],
+                capabilities=["outbound_text"],
             )
         except Exception:  # noqa: BLE001
-            logger.debug('orchestrator IM reconnect raised (gateway unavailable)')
+            logger.debug("orchestrator IM reconnect raised (gateway unavailable)")
             return False
-        if response is None or response.ack_layer != 'accepted':
-            logger.warning('orchestrator IM gateway unavailable; will retry on next heartbeat')
+        if response is None or response.ack_layer != "accepted":
+            logger.warning("orchestrator IM gateway unavailable; will retry on next heartbeat")
             return False
-        flush_pending = getattr(wrapper, '_flush_pending_outbound', None)
+        flush_pending = getattr(wrapper, "_flush_pending_outbound", None)
         if callable(flush_pending):
             await flush_pending()
-        logger.info('orchestrator IM opt-in connected: origin=%s sock=%s', origin[:32], sock)
+        logger.info("orchestrator IM opt-in connected: origin=%s sock=%s", origin[:32], sock)
         return True
 
     async def _heartbeat_loop():
@@ -968,15 +968,15 @@ def _mount_gateway_opt_in(
         while True:
             try:
                 response = await ipc.heartbeat()
-                if response is None or response.ack_layer != 'accepted':
-                    logger.warning('orchestrator IM heartbeat was not accepted; reconnecting')
+                if response is None or response.ack_layer != "accepted":
+                    logger.warning("orchestrator IM heartbeat was not accepted; reconnecting")
                     await _connect_and_register()
                 else:
-                    maybe_flush = getattr(wrapper, '_flush_pending_outbound', None)
+                    maybe_flush = getattr(wrapper, "_flush_pending_outbound", None)
                     if callable(maybe_flush):
                         await maybe_flush()
             except Exception:  # noqa: BLE001
-                logger.warning('orchestrator IM heartbeat failed; reconnecting')
+                logger.warning("orchestrator IM heartbeat failed; reconnecting")
                 await _connect_and_register()
             await asyncio.sleep(30.0)
 
@@ -991,7 +991,7 @@ def _mount_gateway_opt_in(
             loop = asyncio.get_event_loop()
             loop.create_task(wrapper.send_outbound(text))
         except RuntimeError:
-            logger.warning('orchestrator IM: no loop; dropping event')
+            logger.warning("orchestrator IM: no loop; dropping event")
 
     _orig_run = subsystem.run
 
@@ -1006,17 +1006,17 @@ def _mount_gateway_opt_in(
         async def _orch_run_patched(self, *a, **kw):
             self._im_gateway_wrapper = wrapper
             self._im_gateway_session_id = session_id
-            self._im_gateway_heartbeat_task = getattr(wrapper, '_heartbeat_task', None)
+            self._im_gateway_heartbeat_task = getattr(wrapper, "_heartbeat_task", None)
             self.im_event_deliver = _sync_deliver
-            self.im_event_channel = 'wechat'
-            if hasattr(self, '_emit_im_event'):
+            self.im_event_channel = "wechat"
+            if hasattr(self, "_emit_im_event"):
                 from extensions.orchestrator.events import EventLevel
 
                 self._emit_im_event(
-                    '',
-                    'orchestrator.started',
+                    "",
+                    "orchestrator.started",
                     EventLevel.INFO,
-                    'IM notifications enabled',
+                    "IM notifications enabled",
                 )
             return await _orig_orch_run(self, *a, **kw)
 
@@ -1052,16 +1052,16 @@ def _run_orchestrator(
     from extensions.orchestrator.workflow import WorkflowLoader, WorkflowParseError
 
     if not workflow_path:
-        print('error: --workflow is required', file=sys.stderr)
+        print("error: --workflow is required", file=sys.stderr)
         return 2
 
     try:
         config, prompt = WorkflowLoader.load(workflow_path)
     except WorkflowParseError as exc:
-        print(f'error: failed to parse workflow: {exc}', file=sys.stderr)
+        print(f"error: failed to parse workflow: {exc}", file=sys.stderr)
         return 2
     except FileNotFoundError:
-        print(f'error: workflow file not found: {workflow_path}', file=sys.stderr)
+        print(f"error: workflow file not found: {workflow_path}", file=sys.stderr)
         return 2
 
     # Load prompt into WorkflowStore so PromptBuilder can use it
@@ -1072,7 +1072,7 @@ def _run_orchestrator(
     try:
         validate_tracker_config(config.tracker)
     except TrackerConfigError as exc:
-        print(f'error: {exc}', file=sys.stderr)
+        print(f"error: {exc}", file=sys.stderr)
         return 2
 
     # The orchestrator daemon is a long-running process whose INFO logs
@@ -1080,8 +1080,8 @@ def _run_orchestrator(
     # surface. Use the centralized logging setup for consistent format,
     # timezone-aware timestamps, MDC context injection, and optional
     # JSON output for log aggregators.
-    _ws_root = getattr(config.workspace, 'root', '') or ''
-    _json_log = str(Path(_ws_root) / '.reports' / 'orchestrator.ndjson') if _ws_root else None
+    _ws_root = getattr(config.workspace, "root", "") or ""
+    _json_log = str(Path(_ws_root) / ".reports" / "orchestrator.ndjson") if _ws_root else None
     from ..logging_setup import configure_orchestrator_logging
 
     configure_orchestrator_logging(
@@ -1090,23 +1090,23 @@ def _run_orchestrator(
     )
 
     # Build repo slug for the startup banner
-    _tracker_kind = getattr(config.tracker, 'kind', '?')
-    _owner = getattr(config.tracker, 'owner', None) or ''
-    _repo = getattr(config.tracker, 'repo', None) or ''
-    _repo_slug = f'{_owner}/{_repo}' if _owner and _repo else ''
+    _tracker_kind = getattr(config.tracker, "kind", "?")
+    _owner = getattr(config.tracker, "owner", None) or ""
+    _repo = getattr(config.tracker, "repo", None) or ""
+    _repo_slug = f"{_owner}/{_repo}" if _owner and _repo else ""
     _pid = os.getpid()
-    _agent = getattr(config, 'agent', None)
+    _agent = getattr(config, "agent", None)
 
-    print(f'\u2713 orchestrator daemon started \u00b7 pid {_pid}', end='')
-    if _tracker_kind and _tracker_kind != '?':
-        print(f' \u00b7 tracker={_tracker_kind}', end='')
+    print(f"\u2713 orchestrator daemon started \u00b7 pid {_pid}", end="")
+    if _tracker_kind and _tracker_kind != "?":
+        print(f" \u00b7 tracker={_tracker_kind}", end="")
         if _repo_slug:
-            print(f' \u00b7 repo={_repo_slug}', end='')
+            print(f" \u00b7 repo={_repo_slug}", end="")
     print()
     if _agent is not None:
         print(
-            f'\u2713 max_concurrent_agents={getattr(_agent, "max_concurrent_agents", "?")}'
-            f' \u00b7 permission_mode={getattr(_agent, "permission_mode", "?")}'
+            f"\u2713 max_concurrent_agents={getattr(_agent, 'max_concurrent_agents', '?')}"
+            f" \u00b7 permission_mode={getattr(_agent, 'permission_mode', '?')}"
         )
 
     from extensions.api.orchestration import OrchestrationSubsystem
@@ -1125,11 +1125,11 @@ def _run_orchestrator(
     try:
         import atexit
 
-        _ws_root = Path(getattr(config.workspace, 'root', '') or '')
+        _ws_root = Path(getattr(config.workspace, "root", "") or "")
         if str(_ws_root):
-            _pidfile = _ws_root / 'daemon.pid'
+            _pidfile = _ws_root / "daemon.pid"
             _pidfile.parent.mkdir(parents=True, exist_ok=True)
-            _pidfile.write_text(f'{os.getpid()}\n', encoding='utf-8')
+            _pidfile.write_text(f"{os.getpid()}\n", encoding="utf-8")
 
             def _cleanup_pidfile() -> None:
                 try:
@@ -1142,7 +1142,7 @@ def _run_orchestrator(
         # Never block daemon start on pidfile failures (read-only
         # workspace, missing dir, etc.) — just warn and continue.
         print(
-            f'warning: failed to write pidfile: {exc}',
+            f"warning: failed to write pidfile: {exc}",
             file=sys.stderr,
         )
 
@@ -1166,7 +1166,7 @@ def _run_orchestrator(
 
     def _schedule_shutdown(sig_name: str) -> None:
         """Callback registered via loop.add_signal_handler."""
-        logger.info('Received %s — scheduling graceful shutdown...', sig_name)
+        logger.info("Received %s — scheduling graceful shutdown...", sig_name)
         # Schedule the async shutdown as a task; add_signal_handler
         # only accepts synchronous callables.
         asyncio.create_task(subsystem.shutdown())
@@ -1205,7 +1205,7 @@ def _run_orchestrator(
         finally:
             if im_task is not None and not im_task.done():
                 im_task.cancel()
-                with __import__('contextlib').suppress(asyncio.CancelledError):
+                with __import__("contextlib").suppress(asyncio.CancelledError):
                     await im_task
 
     if dashboard:
@@ -1233,11 +1233,11 @@ async def _dashboard_loop(dashboard, port: int | None) -> None:
         await asyncio.sleep(5)
         try:
             state = dashboard.state()
-            running_ids = list(state.get('running', {}).keys())
+            running_ids = list(state.get("running", {}).keys())
             print(
-                f'[dashboard] running={len(running_ids)} '
-                f'completed={state.get("completed_count", 0)} '
-                f'failed={state.get("failed_count", 0)}',
+                f"[dashboard] running={len(running_ids)} "
+                f"completed={state.get('completed_count', 0)} "
+                f"failed={state.get('failed_count', 0)}",
                 file=sys.stderr,
             )
         except Exception:

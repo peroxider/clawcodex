@@ -26,7 +26,6 @@ def _resolve_bundle_context(context: ToolContext) -> Any | None:
         return None
 
 
-
 def _allowlist_search_stub(name: str) -> Tool:
     """Minimal deferred tool used only for ToolSearch indexing."""
     hint = name.replace("-", " ").replace("_", " ")
@@ -123,9 +122,7 @@ def _tool_search_output_payload(
     registry: ToolRegistry,
     searchable_tools: list[Tool] | None = None,
 ) -> dict[str, Any]:
-    deferred_count = sum(
-        1 for t in registry.list_tools() if getattr(t, "should_defer", False)
-    )
+    deferred_count = sum(1 for t in registry.list_tools() if getattr(t, "should_defer", False))
     pool = searchable_tools or []
     match_details: list[dict[str, Any]] = []
     for name in matches:

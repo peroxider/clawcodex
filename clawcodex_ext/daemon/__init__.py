@@ -65,8 +65,7 @@ def install_daemon_gate() -> None:
         return run_daemon(args)
 
     logger.info(
-        "install_daemon_gate: registered 'daemon' subcommand "
-        "(DAEMON + BRIDGE_MODE both enabled)"
+        "install_daemon_gate: registered 'daemon' subcommand (DAEMON + BRIDGE_MODE both enabled)"
     )
 
 

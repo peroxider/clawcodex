@@ -161,9 +161,7 @@ class TestGoalToolsPermission(unittest.TestCase):
     def test_user_deny_rule_still_overrides_goal_tool_auto_allow(self) -> None:
         ctx = ToolPermissionContext(always_deny_rules={"session": [UPDATE_GOAL_TOOL_NAME]})
         update_goal = next(
-            tool
-            for tool in make_goal_model_tools()
-            if tool.name == UPDATE_GOAL_TOOL_NAME
+            tool for tool in make_goal_model_tools() if tool.name == UPDATE_GOAL_TOOL_NAME
         )
 
         result = has_permissions_to_use_tool(update_goal, {"status": "complete"}, ctx)

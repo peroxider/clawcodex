@@ -101,7 +101,7 @@ class TestWrapperParamOrder(unittest.TestCase):
     def test_full_wrapper_script_runs(self) -> None:
         ParamSpec = self.ParamSpec
         SourceOperation = self.SourceOperation
-        source = '''
+        source = """
 class SharedMemoryManager:
     def __init__(self, team_memory_dir: str, sys_operation=None) -> None:
         self.team_memory_dir = team_memory_dir
@@ -110,7 +110,7 @@ class SharedMemoryManager:
         import os
         os.makedirs(self.team_memory_dir, exist_ok=True)
         return self.team_memory_dir
-'''
+"""
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             pkg = tmp / "demo_pkg"
@@ -145,7 +145,6 @@ class SharedMemoryManager:
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertTrue((tmp / "team-memory").is_dir())
-
 
     def test_module_fn_required_kwonly_after_optional_parses(self) -> None:
         """Regression: a module-level function whose source uses ``*`` to mark
@@ -191,7 +190,9 @@ class SharedMemoryManager:
         SyntaxError file which is skipped regardless)."""
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
-            (tmp / "real.py").write_text('def api(x: int) -> str:\n    """Doc."""\n    return str(x)\n')
+            (tmp / "real.py").write_text(
+                'def api(x: int) -> str:\n    """Doc."""\n    return str(x)\n'
+            )
             bundle = tmp / ".clawcodex" / "proj" / "agent-tools" / "scripts"
             bundle.mkdir(parents=True)
             # A valid generated wrapper (mimics real _http_fn_*.py output).

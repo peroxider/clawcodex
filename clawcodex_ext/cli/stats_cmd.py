@@ -60,16 +60,18 @@ def run_stats_command(args: list[str]) -> int:
             if not rows:
                 print("(no records)")
                 return 0
-            print(f"{'#':>4}  {'Type':<6}  {'Name':<24}  {'Dur(ms)':>8}  {'OK':<4}  {'Error':<20}  {'Agent':<16}")
+            print(
+                f"{'#':>4}  {'Type':<6}  {'Name':<24}  {'Dur(ms)':>8}  {'OK':<4}  {'Error':<20}  {'Agent':<16}"
+            )
             print("-" * 90)
             for i, r in enumerate(rows, 1):
                 name = r.get("tool") or r.get("skill") or "?"
                 err = (r.get("error") or "")[:20]
                 print(
-                    f"{i:>4}  {r.get('kind','?'):<6}  {name:<24}  "
-                    f"{r.get('dur_ms',0):>8.1f}  "
+                    f"{i:>4}  {r.get('kind', '?'):<6}  {name:<24}  "
+                    f"{r.get('dur_ms', 0):>8.1f}  "
                     f"{'✅' if r.get('ok') else '❌':<4}  {err:<20}  "
-                    f"{r.get('agent_id','?'):<16}"
+                    f"{r.get('agent_id', '?'):<16}"
                 )
     else:
         # 摘要模式

@@ -350,9 +350,7 @@ class TestToolSearchBundleAllowlist(unittest.TestCase):
         assert tool_search is not None
         result = tool_search.call(
             {
-                "query": (
-                    "select:openjiuwen-agent-teams-memory-sharedmemorymanager-ensure-dir"
-                ),
+                "query": ("select:openjiuwen-agent-teams-memory-sharedmemorymanager-ensure-dir"),
             },
             ctx,
         )
@@ -502,7 +500,11 @@ class TestToolSearchIntegration(unittest.TestCase):
         )
         details = result.output.get("match_details") or []
         hit = next(
-            (item for item in details if item.get("name") == "openjiuwen-agent-teams-cli-run-team-cli"),
+            (
+                item
+                for item in details
+                if item.get("name") == "openjiuwen-agent-teams-cli-run-team-cli"
+            ),
             None,
         )
         self.assertIsNotNone(hit)
@@ -547,7 +549,11 @@ class TestToolSearchIntegration(unittest.TestCase):
         )
         details = result.output.get("match_details") or []
         hit = next(
-            (item for item in details if item.get("name") == "openjiuwen-agent-teams-cli-run-team-cli"),
+            (
+                item
+                for item in details
+                if item.get("name") == "openjiuwen-agent-teams-cli-run-team-cli"
+            ),
             None,
         )
         self.assertIsNotNone(hit)

@@ -63,6 +63,7 @@ def emit_composite_workflow_yaml(*args, **kwargs):
 
     return _emit(*args, **kwargs)
 
+
 __all__ = [
     "SdkParser",
     "SdkMethod",

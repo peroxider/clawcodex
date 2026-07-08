@@ -53,8 +53,12 @@ def _record(
 def test_render_markdown_includes_table() -> None:
     record = _record()
     score = FeatureScore(
-        record_id=record.id, overall=72.0, popularity=80.0,
-        maturity=70.0, adaptation_cost=65.0, strategic_value=75.0,
+        record_id=record.id,
+        overall=72.0,
+        popularity=80.0,
+        maturity=70.0,
+        adaptation_cost=65.0,
+        strategic_value=75.0,
         architecture_fit=70.0,
     )
     digest = CommunityDigest(
@@ -77,8 +81,12 @@ def test_render_markdown_includes_table() -> None:
 def test_reporter_write_produces_md_and_json(tmp_path: Path) -> None:
     record = _record(title="Write me", description="writes")
     score = FeatureScore(
-        record_id=record.id, overall=72.0, popularity=80.0,
-        maturity=70.0, adaptation_cost=65.0, strategic_value=75.0,
+        record_id=record.id,
+        overall=72.0,
+        popularity=80.0,
+        maturity=70.0,
+        adaptation_cost=65.0,
+        strategic_value=75.0,
         architecture_fit=70.0,
     )
     reporter = CommunityReporter(RadarConfig(max_features_per_report=5))
@@ -126,14 +134,20 @@ def test_breaking_changes_surface_in_digest(tmp_path: Path) -> None:
         generated_at=utc_now_iso(),
         summary="breaking",
         new_features=[breaking],
-        trending=[ScoredFeature(
-            record=breaking,
-            score=FeatureScore(
-                record_id=breaking.id, overall=50.0, popularity=50.0,
-                maturity=30.0, adaptation_cost=40.0, strategic_value=50.0,
-                architecture_fit=50.0,
-            ),
-        )],
+        trending=[
+            ScoredFeature(
+                record=breaking,
+                score=FeatureScore(
+                    record_id=breaking.id,
+                    overall=50.0,
+                    popularity=50.0,
+                    maturity=30.0,
+                    adaptation_cost=40.0,
+                    strategic_value=50.0,
+                    architecture_fit=50.0,
+                ),
+            )
+        ],
         breaking_changes=[breaking],
         stats=DigestStats(total_versions=1, total_features=1),
         sources_used=["langgraph"],
@@ -194,8 +208,12 @@ def test_find_previous_digest_path_skips_current_stem(tmp_path: Path) -> None:
 def test_load_digest_from_json_round_trips(tmp_path: Path) -> None:
     record = _record(title="Test", source="aider")
     score = FeatureScore(
-        record_id=record.id, overall=72.0, popularity=80.0,
-        maturity=70.0, adaptation_cost=65.0, strategic_value=75.0,
+        record_id=record.id,
+        overall=72.0,
+        popularity=80.0,
+        maturity=70.0,
+        adaptation_cost=65.0,
+        strategic_value=75.0,
         architecture_fit=70.0,
     )
     digest = CommunityDigest(
@@ -230,10 +248,12 @@ def test_load_digest_from_json_returns_none_for_missing_file(tmp_path: Path) -> 
 
 def test_compare_digests_detects_new_features() -> None:
     prev = _make_digest(features=[_record(title="old feature", source="aider")])
-    curr = _make_digest(features=[
-        _record(title="old feature", source="aider"),
-        _record(title="new feature", source="claude-code"),
-    ])
+    curr = _make_digest(
+        features=[
+            _record(title="old feature", source="aider"),
+            _record(title="new feature", source="claude-code"),
+        ]
+    )
     comparison = compare_digests(prev, curr)
     assert comparison.new_count == 1
     assert comparison.disappeared_count == 0
@@ -242,13 +262,17 @@ def test_compare_digests_detects_new_features() -> None:
 
 
 def test_compare_digests_detects_disappeared_features() -> None:
-    prev = _make_digest(features=[
-        _record(title="old feature", source="aider"),
-        _record(title="gone feature", source="langgraph"),
-    ])
-    curr = _make_digest(features=[
-        _record(title="old feature", source="aider"),
-    ])
+    prev = _make_digest(
+        features=[
+            _record(title="old feature", source="aider"),
+            _record(title="gone feature", source="langgraph"),
+        ]
+    )
+    curr = _make_digest(
+        features=[
+            _record(title="old feature", source="aider"),
+        ]
+    )
     comparison = compare_digests(prev, curr)
     assert comparison.new_count == 0
     assert comparison.disappeared_count == 1
@@ -259,26 +283,38 @@ def test_compare_digests_detects_disappeared_features() -> None:
 def test_compare_digests_detects_score_changes() -> None:
     record1 = _record(title="same feature", source="aider")
     record2 = _record(title="same feature", source="aider")
-    prev = _make_digest(scored=[
-        ScoredFeature(
-            record=record1,
-            score=FeatureScore(
-                record_id=record1.id, overall=50.0, popularity=50.0,
-                maturity=50.0, adaptation_cost=50.0, strategic_value=50.0,
-                architecture_fit=50.0,
+    prev = _make_digest(
+        scored=[
+            ScoredFeature(
+                record=record1,
+                score=FeatureScore(
+                    record_id=record1.id,
+                    overall=50.0,
+                    popularity=50.0,
+                    maturity=50.0,
+                    adaptation_cost=50.0,
+                    strategic_value=50.0,
+                    architecture_fit=50.0,
+                ),
             ),
-        ),
-    ])
-    curr = _make_digest(scored=[
-        ScoredFeature(
-            record=record2,
-            score=FeatureScore(
-                record_id=record2.id, overall=72.0, popularity=80.0,
-                maturity=70.0, adaptation_cost=65.0, strategic_value=75.0,
-                architecture_fit=70.0,
+        ]
+    )
+    curr = _make_digest(
+        scored=[
+            ScoredFeature(
+                record=record2,
+                score=FeatureScore(
+                    record_id=record2.id,
+                    overall=72.0,
+                    popularity=80.0,
+                    maturity=70.0,
+                    adaptation_cost=65.0,
+                    strategic_value=75.0,
+                    architecture_fit=70.0,
+                ),
             ),
-        ),
-    ])
+        ]
+    )
     comparison = compare_digests(prev, curr)
     assert len(comparison.score_changed) == 1
     assert comparison.score_changed[0]["old_score"] == 50.0
@@ -289,26 +325,38 @@ def test_compare_digests_detects_score_changes() -> None:
 def test_compare_digests_ignores_small_score_deltas() -> None:
     record1 = _record(title="same feature", source="aider")
     record2 = _record(title="same feature", source="aider")
-    prev = _make_digest(scored=[
-        ScoredFeature(
-            record=record1,
-            score=FeatureScore(
-                record_id=record1.id, overall=50.0, popularity=50.0,
-                maturity=50.0, adaptation_cost=50.0, strategic_value=50.0,
-                architecture_fit=50.0,
+    prev = _make_digest(
+        scored=[
+            ScoredFeature(
+                record=record1,
+                score=FeatureScore(
+                    record_id=record1.id,
+                    overall=50.0,
+                    popularity=50.0,
+                    maturity=50.0,
+                    adaptation_cost=50.0,
+                    strategic_value=50.0,
+                    architecture_fit=50.0,
+                ),
             ),
-        ),
-    ])
-    curr = _make_digest(scored=[
-        ScoredFeature(
-            record=record2,
-            score=FeatureScore(
-                record_id=record2.id, overall=52.0, popularity=50.0,
-                maturity=50.0, adaptation_cost=50.0, strategic_value=50.0,
-                architecture_fit=55.0,
+        ]
+    )
+    curr = _make_digest(
+        scored=[
+            ScoredFeature(
+                record=record2,
+                score=FeatureScore(
+                    record_id=record2.id,
+                    overall=52.0,
+                    popularity=50.0,
+                    maturity=50.0,
+                    adaptation_cost=50.0,
+                    strategic_value=50.0,
+                    architecture_fit=55.0,
+                ),
             ),
-        ),
-    ])
+        ]
+    )
     comparison = compare_digests(prev, curr, score_delta_threshold=5.0)
     assert len(comparison.score_changed) == 0
 
@@ -341,7 +389,13 @@ def test_render_comparison_section_includes_score_changes() -> None:
         new_count=0,
         disappeared_count=0,
         score_changed=[
-            {"id": "abc", "title": "Evolving Feature", "old_score": 60.0, "new_score": 75.0, "delta": 15.0},
+            {
+                "id": "abc",
+                "title": "Evolving Feature",
+                "old_score": 60.0,
+                "new_score": 75.0,
+                "delta": 15.0,
+            },
         ],
     )
     md = _render_comparison_section(comparison)
@@ -355,8 +409,12 @@ def test_render_comparison_section_includes_score_changes() -> None:
 def test_render_inline_markdown_includes_comparison() -> None:
     record = _record(title="Current Feature", source="aider")
     score = FeatureScore(
-        record_id=record.id, overall=72.0, popularity=80.0,
-        maturity=70.0, adaptation_cost=65.0, strategic_value=75.0,
+        record_id=record.id,
+        overall=72.0,
+        popularity=80.0,
+        maturity=70.0,
+        adaptation_cost=65.0,
+        strategic_value=75.0,
         architecture_fit=70.0,
     )
     digest = CommunityDigest(
@@ -387,8 +445,12 @@ def test_reporter_write_with_compare(tmp_path: Path) -> None:
     # Write a previous digest
     prev_record = _record(title="Prev Feature", source="aider")
     prev_score = FeatureScore(
-        record_id=prev_record.id, overall=65.0, popularity=70.0,
-        maturity=60.0, adaptation_cost=60.0, strategic_value=65.0,
+        record_id=prev_record.id,
+        overall=65.0,
+        popularity=70.0,
+        maturity=60.0,
+        adaptation_cost=60.0,
+        strategic_value=65.0,
         architecture_fit=65.0,
     )
     prev_reporter = CommunityReporter(RadarConfig(max_features_per_report=5))
@@ -405,8 +467,12 @@ def test_reporter_write_with_compare(tmp_path: Path) -> None:
     # Now write a new digest with compare=True
     curr_record = _record(title="Current Feature", source="aider")
     curr_score = FeatureScore(
-        record_id=curr_record.id, overall=72.0, popularity=80.0,
-        maturity=70.0, adaptation_cost=65.0, strategic_value=75.0,
+        record_id=curr_record.id,
+        overall=72.0,
+        popularity=80.0,
+        maturity=70.0,
+        adaptation_cost=65.0,
+        strategic_value=75.0,
         architecture_fit=70.0,
     )
     reporter = CommunityReporter(RadarConfig(max_features_per_report=5))
@@ -427,8 +493,12 @@ def test_reporter_write_with_compare_no_previous(tmp_path: Path) -> None:
     """When there is no previous digest, compare=True should not crash."""
     record = _record(title="Only Feature", source="aider")
     score = FeatureScore(
-        record_id=record.id, overall=72.0, popularity=80.0,
-        maturity=70.0, adaptation_cost=65.0, strategic_value=75.0,
+        record_id=record.id,
+        overall=72.0,
+        popularity=80.0,
+        maturity=70.0,
+        adaptation_cost=65.0,
+        strategic_value=75.0,
         architecture_fit=70.0,
     )
     reporter = CommunityReporter(RadarConfig(max_features_per_report=5))

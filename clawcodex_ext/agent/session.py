@@ -43,6 +43,7 @@ def _get_sessions_dir() -> Path:
 @dataclass
 class Session:
     """Session manager with persistence."""
+
     session_id: str
     provider: str
     model: str
@@ -86,6 +87,7 @@ class Session:
         # concerns.
         try:
             from extensions.agent.session_persist import save_to_session_storage
+
             save_to_session_storage(self)
         except ImportError:
             pass
@@ -111,9 +113,7 @@ class Session:
         to the prior snapshot or return False (no cost recovered).
         """
         try:
-            transcript_path = (
-                _get_sessions_dir() / self.session_id / "transcript.jsonl"
-            )
+            transcript_path = _get_sessions_dir() / self.session_id / "transcript.jsonl"
             payload: dict = {
                 "type": "session_snapshot",
                 "cost": cost_block,
@@ -129,9 +129,7 @@ class Session:
             from clawcodex_ext.services.session_storage import _locked_append
 
             with _locked_append(transcript_path) as f:
-                f.write(
-                    json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
-                )
+                f.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
         except OSError:
             # Best-effort: the in-memory session state is still valid
             # even if the snapshot cannot be written to disk.
@@ -151,12 +149,13 @@ class Session:
         """
         try:
             from extensions.agent.session_persist import save_to_session_storage
+
             save_to_session_storage(self)
         except ImportError:
             pass
 
     @classmethod
-    def load(cls, session_id: str) -> Optional['Session']:
+    def load(cls, session_id: str) -> Optional["Session"]:
         """Load session from disk.
 
         F-49 P5-B: primary source is the **enhanced transcript JSONL**
@@ -188,16 +187,14 @@ class Session:
         # file is either legacy (no marker by design) or empty, and
         # we fall back to session.json.
         if transcript_path.exists():
-            new_format = _load_from_enhanced_transcript(
-                session_id, transcript_path
-            )
+            new_format = _load_from_enhanced_transcript(session_id, transcript_path)
             if new_format is not None:
                 return new_format
 
         # Legacy fallback: pre-P5 ``session.json`` snapshot.
         if session_file.exists():
             try:
-                with open(session_file, 'r') as f:
+                with open(session_file, "r") as f:
                     data = json.load(f)
             except (OSError, json.JSONDecodeError):
                 return None
@@ -245,10 +242,7 @@ class Session:
         entries = storage.read_transcript()
         messages = []
         for entry in entries:
-            if (
-                entry.get("role") == "system"
-                and entry.get("content") == "__background_complete__"
-            ):
+            if entry.get("role") == "system" and entry.get("content") == "__background_complete__":
                 continue
             try:
                 from clawcodex_ext.types.messages import message_from_dict
@@ -267,7 +261,7 @@ class Session:
         )
 
     @classmethod
-    def create(cls, provider: str, model: str) -> 'Session':
+    def create(cls, provider: str, model: str) -> "Session":
         """Create a new session using the bootstrap singleton's session ID.
 
         Previously this generated its own strftime-based ID, producing
@@ -284,7 +278,7 @@ class Session:
         )
 
     @classmethod
-    def resume(cls, session_id: str) -> Optional['Session']:
+    def resume(cls, session_id: str) -> Optional["Session"]:
         """Resume a session: update bootstrap identity, restore cost,
         reconstruct the per-conversation record from disk.
 
@@ -328,8 +322,6 @@ class Session:
         return loaded
 
 
-
-
 def _snapshot_cost_block() -> dict:
     """Build the cost block written by ``Session.save``.
 
@@ -340,8 +332,7 @@ def _snapshot_cost_block() -> dict:
     return {
         "total_cost_usd": get_total_cost_usd(),
         "total_api_duration": get_total_api_duration(),
-        "total_api_duration_without_retries":
-            get_total_api_duration_without_retries(),
+        "total_api_duration_without_retries": get_total_api_duration_without_retries(),
         "total_tool_duration": get_total_tool_duration(),
         "total_lines_added": get_total_lines_added(),
         "total_lines_removed": get_total_lines_removed(),
@@ -476,10 +467,7 @@ def _load_from_enhanced_transcript(
                 # session_init: defensive — a second init line
                 # should not happen but we tolerate it.
                 continue
-            if (
-                entry.get("role") == "system"
-                and entry.get("content") == "__background_complete__"
-            ):
+            if entry.get("role") == "system" and entry.get("content") == "__background_complete__":
                 continue
 
             try:

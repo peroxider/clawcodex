@@ -36,7 +36,10 @@ def test_session_retrieval_prefers_changed_file_overlap_over_recency() -> None:
 
 def test_session_retrieval_user_strategy_prefers_recent_text() -> None:
     rows = [
-        {"session_id": "workspace", "summary": {"files_touched": ["clawcodex_ext/intent_forecast/service.py"]}},
+        {
+            "session_id": "workspace",
+            "summary": {"files_touched": ["clawcodex_ext/intent_forecast/service.py"]},
+        },
         {"session_id": "user", "title": "Write docs from user request"},
     ]
 
@@ -54,7 +57,10 @@ def test_session_retrieval_user_strategy_prefers_recent_text() -> None:
 
 def test_session_retrieval_workspace_strategy_prefers_changed_files() -> None:
     rows = [
-        {"session_id": "workspace", "summary": {"files_touched": ["clawcodex_ext/intent_forecast/service.py"]}},
+        {
+            "session_id": "workspace",
+            "summary": {"files_touched": ["clawcodex_ext/intent_forecast/service.py"]},
+        },
         {"session_id": "user", "title": "Write docs from user request"},
     ]
 

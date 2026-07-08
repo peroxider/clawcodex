@@ -35,7 +35,7 @@ WakeFn = Callable[[], None]
 ControlHandlerFn = Callable[[str, str | None], bool]
 PermissionProbeFn = Callable[[str], bool]
 
-_REPL_CONTROL_COMMANDS = frozenset({'/stop'})
+_REPL_CONTROL_COMMANDS = frozenset({"/stop"})
 
 
 class ReplGatewayClient:
@@ -100,10 +100,10 @@ class ReplGatewayClient:
 
     async def _on_pushed_deliver(self, frame) -> None:
         """Server-pushed DELIVER callback: enqueue into the REPL prompt queue."""
-        delivery_id = frame.delivery_id or frame.message_id or ''
-        text = frame.text or ''
+        delivery_id = frame.delivery_id or frame.message_id or ""
+        text = frame.text or ""
         logger.info(
-            'repl_gateway: inbound push delivery_id=%s len=%d → enqueue',
+            "repl_gateway: inbound push delivery_id=%s len=%d → enqueue",
             delivery_id[:16],
             len(text),
         )
@@ -116,27 +116,27 @@ class ReplGatewayClient:
                 context_token=frame.context_token,
             )
         except QueueFull:
-            logger.warning('repl_gateway: queue full, rejected delivery_id=%s', delivery_id[:16])
+            logger.warning("repl_gateway: queue full, rejected delivery_id=%s", delivery_id[:16])
         except Exception:  # noqa: BLE001
-            logger.exception('repl_gateway: deliver failed delivery_id=%s', delivery_id[:16])
+            logger.exception("repl_gateway: deliver failed delivery_id=%s", delivery_id[:16])
 
     async def connect(self) -> GatewayFrame | None:
         await self._client.connect()
         response = await self._client.register(
-            session_id=self._session_id, origin=self._origin, capabilities=['outbound_text']
+            session_id=self._session_id, origin=self._origin, capabilities=["outbound_text"]
         )
-        if response is None or response.ack_layer != 'accepted':
+        if response is None or response.ack_layer != "accepted":
             await self._client.close()
-            raise ConnectionError('gateway registration failed')
+            raise ConnectionError("gateway registration failed")
         return response
 
     async def close(self) -> None:
         if self._heartbeat_task is not None:
             self._heartbeat_task.cancel()
-            with __import__('contextlib').suppress(asyncio.CancelledError):
+            with __import__("contextlib").suppress(asyncio.CancelledError):
                 await self._heartbeat_task
             self._heartbeat_task = None
-        with __import__('contextlib').suppress(RuntimeError, ConnectionError, OSError):
+        with __import__("contextlib").suppress(RuntimeError, ConnectionError, OSError):
             await self._client.unregister(self._session_id)
         await self._client.close()
 
@@ -148,7 +148,7 @@ class ReplGatewayClient:
             try:
                 await self._client.heartbeat()
             except Exception:  # noqa: BLE001
-                logger.debug('heartbeat failed', exc_info=True)
+                logger.debug("heartbeat failed", exc_info=True)
             await asyncio.sleep(interval)
 
     def can_enqueue(self) -> bool:
@@ -180,19 +180,19 @@ class ReplGatewayClient:
         if self._permission_probe is not None and self._permission_probe(text):
             self._seen.add(delivery_id)
             return await self._client.ack(
-                delivery_id=delivery_id, layer='processed', message='permission reply'
+                delivery_id=delivery_id, layer="processed", message="permission reply"
             )
         if self._is_priority_control(text, semantic):
             self._seen.add(delivery_id)
             handled = False
             if self._control_handler is not None:
                 handled = bool(self._control_handler(text, origin))
-            message = 'control dispatched' if handled else 'control ignored'
+            message = "control dispatched" if handled else "control ignored"
             return await self._client.ack(
-                delivery_id=delivery_id, layer='processed', message=message
+                delivery_id=delivery_id, layer="processed", message=message
             )
         if not self.can_enqueue():
-            raise QueueFull(f'REPL prompt queue at capacity ({self._capacity})')
+            raise QueueFull(f"REPL prompt queue at capacity ({self._capacity})")
         self._seen.add(delivery_id)
         if origin:
             self._reply_origins.append(origin)
@@ -204,16 +204,16 @@ class ReplGatewayClient:
             try:
                 self._wake()
             except Exception:  # noqa: BLE001
-                logger.debug('repl_gateway: wake callback failed', exc_info=True)
+                logger.debug("repl_gateway: wake callback failed", exc_info=True)
         # acknowledge enqueued back to the gateway
-        return await self._client.ack(delivery_id=delivery_id, layer='enqueued', message='enqueued')
+        return await self._client.ack(delivery_id=delivery_id, layer="enqueued", message="enqueued")
 
     @staticmethod
     def _is_priority_control(text: str, semantic: str | None) -> bool:
-        normalized = (text or '').strip().split(maxsplit=1)[0].lower()
+        normalized = (text or "").strip().split(maxsplit=1)[0].lower()
         if normalized in _REPL_CONTROL_COMMANDS:
             return True
-        return (semantic or '').strip().lower() == 'interrupt'
+        return (semantic or "").strip().lower() == "interrupt"
 
     def next_reply_origin(self, fallback: str) -> str:
         """Return the origin that should receive the next assistant reply."""
@@ -259,10 +259,10 @@ class QueueFull(Exception):
 
 
 __all__ = [
-    'EnqueueFn',
-    'PermissionProbeFn',
-    'QueueFull',
-    'QueueSizeFn',
-    'ReplGatewayClient',
-    'WakeFn',
+    "EnqueueFn",
+    "PermissionProbeFn",
+    "QueueFull",
+    "QueueSizeFn",
+    "ReplGatewayClient",
+    "WakeFn",
 ]

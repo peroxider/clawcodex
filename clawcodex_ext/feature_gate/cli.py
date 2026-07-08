@@ -25,12 +25,14 @@ from clawcodex_ext.cli.subcommand_registry import register
 def _get_registry():
     """Lazy import of the singleton to avoid circular imports."""
     from clawcodex_ext.feature_gate import get_registry as _gr
+
     return _gr()
 
 
 # ------------------------------------------------------------------
 # Parser builders
 # ------------------------------------------------------------------
+
 
 def _build_list_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="clawcodex feature list")
@@ -59,6 +61,7 @@ def _build_get_parser() -> argparse.ArgumentParser:
 # ------------------------------------------------------------------
 # Handlers
 # ------------------------------------------------------------------
+
 
 @register("feature")
 def run_feature_command(args: Sequence[str]) -> int:
@@ -106,6 +109,7 @@ def run_feature_command(args: Sequence[str]) -> int:
 # Sub-handlers
 # ------------------------------------------------------------------
 
+
 def _handle_list(args: Sequence[str]) -> int:
     parser = _build_list_parser()
     parsed = parser.parse_args(args)
@@ -150,7 +154,9 @@ def _handle_list(args: Sequence[str]) -> int:
     if parsed.enabled or parsed.disabled:
         print(f"Filtered features: {total_count} shown")
     else:
-        print(f"Registered features: {total_count} ({enabled_count} enabled, {total_count - enabled_count} disabled)")
+        print(
+            f"Registered features: {total_count} ({enabled_count} enabled, {total_count - enabled_count} disabled)"
+        )
     print()
 
     for name in features:
@@ -181,10 +187,16 @@ def _handle_get(args: Sequence[str]) -> int:
         print(f"  default: {flag.default}")
         if flag.deps:
             missing = reg.check_deps(parsed.name)
-            print(f"  deps: {', '.join(flag.deps)}" + (f" (missing: {', '.join(missing)})" if missing else ""))
+            print(
+                f"  deps: {', '.join(flag.deps)}"
+                + (f" (missing: {', '.join(missing)})" if missing else "")
+            )
         if flag.mutex_with:
             conflicts = reg.check_mutex(parsed.name)
-            print(f"  mutex: {', '.join(flag.mutex_with)}" + (f" (conflicts: {', '.join(conflicts)})" if conflicts else ""))
+            print(
+                f"  mutex: {', '.join(flag.mutex_with)}"
+                + (f" (conflicts: {', '.join(conflicts)})" if conflicts else "")
+            )
     return 0
 
 

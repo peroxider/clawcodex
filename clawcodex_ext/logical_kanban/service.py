@@ -77,35 +77,35 @@ if TYPE_CHECKING:
 
 
 _LAYER1_RULESET = {
-    'name': 'lkb-layer1-mvp',
-    'version': '1.0.0',
-    'engine': 'layer1-python',
-    'rules': [
-        {'id': 'R-001', 'description': 'Blocked(T) when active prerequisites remain'},
-        {'id': 'R-002', 'description': 'Blocked task cannot enter in_progress'},
-        {'id': 'R-003', 'description': 'Ready(T) when pending and not blocked'},
-        {'id': 'R-004', 'description': 'CanMoveTo(T, in_progress) when Ready(T)'},
-        {'id': 'R-005', 'description': 'Done requires acceptance proof in strict mode'},
-        {'id': 'R-006', 'description': 'Cyclic dependency invalidates readiness'},
+    "name": "lkb-layer1-mvp",
+    "version": "1.0.0",
+    "engine": "layer1-python",
+    "rules": [
+        {"id": "R-001", "description": "Blocked(T) when active prerequisites remain"},
+        {"id": "R-002", "description": "Blocked task cannot enter in_progress"},
+        {"id": "R-003", "description": "Ready(T) when pending and not blocked"},
+        {"id": "R-004", "description": "CanMoveTo(T, in_progress) when Ready(T)"},
+        {"id": "R-005", "description": "Done requires acceptance proof in strict mode"},
+        {"id": "R-006", "description": "Cyclic dependency invalidates readiness"},
     ],
 }
 _RULESET_HASH = canonical_hash(_LAYER1_RULESET)
 
 
 def _new_id(prefix: str) -> str:
-    return f'{prefix}{uuid.uuid4().hex[:12]}'
+    return f"{prefix}{uuid.uuid4().hex[:12]}"
 
 
-def _session_id(context: 'ToolContext') -> str | None:
-    return getattr(context, 'session_id', None) or None
+def _session_id(context: "ToolContext") -> str | None:
+    return getattr(context, "session_id", None) or None
 
 
-def _audit_log(context: 'ToolContext') -> AuditLog:
+def _audit_log(context: "ToolContext") -> AuditLog:
     return get_audit_log(context)
 
 
 def _severity_rank(severity: Severity) -> int:
-    return {'negligible': 0, 'minor': 1, 'major': 2, 'critical': 3}[severity]
+    return {"negligible": 0, "minor": 1, "major": 2, "critical": 3}[severity]
 
 
 def _select_ambiguity_entry(report: AmbiguityReport) -> Ambiguity | None:
@@ -119,10 +119,10 @@ def _legacy_todo_ambiguity_dict(todo_id: str, report: AmbiguityReport) -> dict[s
     """Build the F-144 ambiguity payload for a single todo."""
     entry = _select_ambiguity_entry(report)
     return {
-        'todoId': todo_id,
-        'ambiguityCode': entry.pattern_id if entry else '',
-        'severity': report.severity,
-        'clarificationPrompt': entry.clarification_prompt if entry else '',
+        "todoId": todo_id,
+        "ambiguityCode": entry.pattern_id if entry else "",
+        "severity": report.severity,
+        "clarificationPrompt": entry.clarification_prompt if entry else "",
     }
 
 
@@ -133,9 +133,9 @@ def _legacy_todo_denial_message(
     """Build a human-readable denial message for ambiguous legacy todos."""
     if commit_decision is not None and not commit_decision.commit:
         return commit_decision.human_message.get(
-            'en', 'Legacy TodoWrite contains ambiguous content that must be clarified.'
+            "en", "Legacy TodoWrite contains ambiguous content that must be clarified."
         )
-    return 'Legacy TodoWrite contains ambiguous content that must be clarified.'
+    return "Legacy TodoWrite contains ambiguous content that must be clarified."
 
 
 def _string_list(value: Any) -> tuple[str, ...]:
@@ -148,19 +148,19 @@ def _string_list(value: Any) -> tuple[str, ...]:
 def _task_id_from_payload(payload: Any) -> str | None:
     if not isinstance(payload, dict):
         return None
-    task_id = payload.get('taskId')
+    task_id = payload.get("taskId")
     return task_id if isinstance(task_id, str) else None
 
 
 class LogicalKanbanService:
     """Internal propose/validate/commit service for task-state changes."""
 
-    solver_version = 'lkb-foundation-sync-v1'
+    solver_version = "lkb-foundation-sync-v1"
 
     def __init__(
         self,
         llm_provider: Any = None,
-        pattern_library: 'FuzzyPatternLibrary | None' = None,
+        pattern_library: "FuzzyPatternLibrary | None" = None,
     ) -> None:
         from .fuzzy_patterns import BUILT_IN_PATTERN_LIBRARY
 
@@ -175,10 +175,10 @@ class LogicalKanbanService:
         # ``library.add(...)`` chains are the supported wiring.
         self._pattern_library = pattern_library or BUILT_IN_PATTERN_LIBRARY
 
-    def snapshot(self, context: 'ToolContext') -> FactsSnapshot:
+    def snapshot(self, context: "ToolContext") -> FactsSnapshot:
         return build_facts_snapshot(context)
 
-    def _augmented_snapshot(self, context: 'ToolContext') -> FactsSnapshot:
+    def _augmented_snapshot(self, context: "ToolContext") -> FactsSnapshot:
         """Return a snapshot possibly enriched with LLM-derived facts (F-143 L1).
 
         When the feature flag is off or no provider is configured, this is a
@@ -199,17 +199,17 @@ class LogicalKanbanService:
             return replace(snapshot, facts=(*snapshot.facts, *extracted))
         return snapshot
 
-    def propose(self, change: ProposedChange, context: 'ToolContext') -> Proposal:
+    def propose(self, change: ProposedChange, context: "ToolContext") -> Proposal:
         snapshot = self.snapshot(context)
         proposal = Proposal(
-            proposal_id=_new_id('P-'),
+            proposal_id=_new_id("P-"),
             change=change,
             snapshot_hash=snapshot.hash,
         )
         _audit_log(context).append(event_for_proposal(proposal, session_id=_session_id(context)))
         return proposal
 
-    def validate(self, proposal: Proposal, context: 'ToolContext') -> ValidationRun:
+    def validate(self, proposal: Proposal, context: "ToolContext") -> ValidationRun:
         start = time.perf_counter()
         run = self._do_validate(proposal, context)
         duration_ms = int((time.perf_counter() - start) * 1000)
@@ -217,7 +217,7 @@ class LogicalKanbanService:
         _audit_log(context).append(
             event_for_validation_run(proposal, run, session_id=_session_id(context))
         )
-        task_count = len(getattr(context, 'tasks', {}) or {})
+        task_count = len(getattr(context, "tasks", {}) or {})
         metrics.record_validation_run(
             result=run.result,
             engine=run.engine,
@@ -234,7 +234,7 @@ class LogicalKanbanService:
     async def validate_async(
         self,
         proposal: Proposal,
-        context: 'ToolContext',
+        context: "ToolContext",
         *,
         adapters: tuple[SolverAdapter, ...] | list[SolverAdapter] | None = None,
         timeout_seconds: float = 60.0,
@@ -253,26 +253,26 @@ class LogicalKanbanService:
             )
         except Exception as exc:  # noqa: BLE001 - async enrichment must not leak
             return ValidationRun(
-                validation_run_id=_new_id('V-'),
+                validation_run_id=_new_id("V-"),
                 proposal_id=proposal.proposal_id,
                 task_id=_task_id_from_payload(proposal.change.payload),
                 input_facts_hash=proposal.snapshot_hash,
                 ruleset_hash=_RULESET_HASH,
                 snapshot_hash=proposal.snapshot_hash,
-                engine='external-atp-async',
-                engine_version='',
-                result='error',
+                engine="external-atp-async",
+                engine_version="",
+                result="error",
                 duration_ms=0,
                 created_at=datetime.now(timezone.utc).isoformat(),
-                requested_by=proposal.change.actor or 'system',
+                requested_by=proposal.change.actor or "system",
                 solver_results=(
                     {
-                        'adapter': 'external-atp-async',
-                        'result': 'error',
-                        'errorInfo': {
-                            'reason': 'exception',
-                            'exception': type(exc).__name__,
-                            'detail': str(exc),
+                        "adapter": "external-atp-async",
+                        "result": "error",
+                        "errorInfo": {
+                            "reason": "exception",
+                            "exception": type(exc).__name__,
+                            "detail": str(exc),
                         },
                     },
                 ),
@@ -281,16 +281,16 @@ class LogicalKanbanService:
     def _validate_async_blocking(
         self,
         proposal: Proposal,
-        context: 'ToolContext',
+        context: "ToolContext",
         adapters: tuple[SolverAdapter, ...] | None,
         timeout_seconds: float,
     ) -> ValidationRun:
-        if proposal.change.kind != 'transition_status':
+        if proposal.change.kind != "transition_status":
             return self.validate(proposal, context)
 
         payload = proposal.change.payload
-        task_id = payload.get('taskId')
-        target_status = payload.get('status')
+        task_id = payload.get("taskId")
+        target_status = payload.get("status")
         snapshot = self.snapshot(context)
         task = snapshot.normalized_tasks.get(task_id) if isinstance(task_id, str) else None
         if not isinstance(task_id, str) or not isinstance(target_status, str) or task is None:
@@ -312,13 +312,11 @@ class LogicalKanbanService:
             target_status=target_status,
             strict_acceptance=(
                 self._strict_acceptance_enabled(context, task, payload)
-                if target_status == 'completed'
+                if target_status == "completed"
                 else False
             ),
             acceptance_proof_present=(
-                self._has_acceptance_proof(task, payload)
-                if target_status == 'completed'
-                else None
+                self._has_acceptance_proof(task, payload) if target_status == "completed" else None
             ),
         )
 
@@ -330,7 +328,7 @@ class LogicalKanbanService:
             ruleset_hash=_RULESET_HASH,
             snapshot_hash=proposal.snapshot_hash,
             timeout_seconds=timeout_seconds,
-            requested_by=proposal.change.actor or 'system',
+            requested_by=proposal.change.actor or "system",
         )
         self._append_proof_enrichments(run, context)
         return run
@@ -338,17 +336,17 @@ class LogicalKanbanService:
     def _append_proof_enrichments(
         self,
         validation: ValidationRun,
-        context: 'ToolContext',
+        context: "ToolContext",
     ) -> None:
         audit = _audit_log(context)
         for result in validation.solver_results:
-            adapter = result.get('adapter')
-            if not isinstance(adapter, str) or not adapter.startswith('atp-'):
+            adapter = result.get("adapter")
+            if not isinstance(adapter, str) or not adapter.startswith("atp-"):
                 continue
             proof_trace = tuple(
-                step for step in result.get('proofTrace', ()) if isinstance(step, dict)
+                step for step in result.get("proofTrace", ()) if isinstance(step, dict)
             )
-            counterexample = result.get('counterexample')
+            counterexample = result.get("counterexample")
             if not proof_trace and not isinstance(counterexample, dict):
                 continue
             append_proof_enrichment_once(
@@ -363,7 +361,7 @@ class LogicalKanbanService:
                 ),
             )
 
-    def _emit_snapshot_metrics(self, context: 'ToolContext') -> None:
+    def _emit_snapshot_metrics(self, context: "ToolContext") -> None:
         """Emit counts derived from the current facts snapshot."""
         try:
             snapshot = self.snapshot(context)
@@ -377,37 +375,37 @@ class LogicalKanbanService:
             stale_count = 0
         metrics.record_stale_assumptions(stale_count)
 
-    def _do_validate(self, proposal: Proposal, context: 'ToolContext') -> ValidationRun:
-        if proposal.change.kind == 'create_task':
-            task_id = proposal.change.payload.get('taskId')
+    def _do_validate(self, proposal: Proposal, context: "ToolContext") -> ValidationRun:
+        if proposal.change.kind == "create_task":
+            task_id = proposal.change.payload.get("taskId")
             return self._accepted(
                 proposal,
                 task_id=task_id if isinstance(task_id, str) else None,
                 derived_facts=(
-                    f'Task({task_id})',
-                    f'Pending({task_id})',
-                    f'Status({task_id}, pending)',
+                    f"Task({task_id})",
+                    f"Pending({task_id})",
+                    f"Status({task_id}, pending)",
                 ),
                 proof_trace=(
                     {
-                        'rule': 'LKB-CREATE-001',
-                        'premises': ['CreateTaskProposal'],
-                        'conclusion': 'Create structural task facts.',
-                        'solverVersion': self.solver_version,
+                        "rule": "LKB-CREATE-001",
+                        "premises": ["CreateTaskProposal"],
+                        "conclusion": "Create structural task facts.",
+                        "solverVersion": self.solver_version,
                     },
                 ),
             )
-        if proposal.change.kind == 'propose_assertion':
+        if proposal.change.kind == "propose_assertion":
             return self._validate_propose_assertion(proposal, context)
-        if proposal.change.kind == 'legacy_todo_replace_all':
+        if proposal.change.kind == "legacy_todo_replace_all":
             return self._validate_legacy_todo_replace_all(proposal, context)
-        if proposal.change.kind == 'transition_status':
+        if proposal.change.kind == "transition_status":
             return self._validate_status_transition(proposal, context)
         if proposal.change.kind in {
-            'update_task_fields',
-            'delete_task',
-            'add_dependency',
-            'remove_dependency',
+            "update_task_fields",
+            "delete_task",
+            "add_dependency",
+            "remove_dependency",
         }:
             return self._validate_structural_task_change(proposal, context)
         return self._accepted(proposal)
@@ -416,10 +414,10 @@ class LogicalKanbanService:
         self,
         proposal: Proposal,
         validation: ValidationRun,
-        context: 'ToolContext',
+        context: "ToolContext",
     ) -> CommitResult:
         accepted = validation.accepted
-        if accepted and proposal.change.kind == 'transition_status':
+        if accepted and proposal.change.kind == "transition_status":
             accepted = self._validation_is_fresh(validation, context)
         if accepted:
             commit = CommitResult(
@@ -429,25 +427,29 @@ class LogicalKanbanService:
                 derived_facts=validation.derived_facts,
             )
         else:
-            reason_code = validation.issues[0].code if validation.issues else 'validation_denied'
-            if proposal.change.kind == 'transition_status' and not self._validation_is_fresh(validation, context):
-                reason_code = 'validation_stale'
+            reason_code = validation.issues[0].code if validation.issues else "validation_denied"
+            if proposal.change.kind == "transition_status" and not self._validation_is_fresh(
+                validation, context
+            ):
+                reason_code = "validation_stale"
             commit = CommitResult(
                 committed=False,
                 proposal_id=proposal.proposal_id,
                 validation_run_id=validation.validation_run_id,
                 reason={
-                    'code': reason_code,
-                    'validation': {
-                        'validationRunId': validation.validation_run_id,
-                        'taskId': validation.task_id,
-                        'result': validation.result,
-                        'status': validation.status,
-                        'humanMessage': (
-                            validation.issues[0].message if validation.issues else 'Validation denied.'
+                    "code": reason_code,
+                    "validation": {
+                        "validationRunId": validation.validation_run_id,
+                        "taskId": validation.task_id,
+                        "result": validation.result,
+                        "status": validation.status,
+                        "humanMessage": (
+                            validation.issues[0].message
+                            if validation.issues
+                            else "Validation denied."
                         ),
-                        'counterexample': validation.counterexample,
-                        'repairSuggestions': [
+                        "counterexample": validation.counterexample,
+                        "repairSuggestions": [
                             suggestion.to_dict()
                             for issue in validation.issues
                             for suggestion in issue.repair_suggestions
@@ -479,7 +481,7 @@ class LogicalKanbanService:
     def _validation_is_fresh(
         self,
         validation: ValidationRun,
-        context: 'ToolContext',
+        context: "ToolContext",
     ) -> bool:
         """Return True when the validation run matches the current snapshot.
 
@@ -500,32 +502,32 @@ class LogicalKanbanService:
         self,
         proposal: Proposal,
         validation: ValidationRun,
-        context: 'ToolContext',
+        context: "ToolContext",
     ) -> None:
         """Store validation-run metadata in the affected task's metadata.lkb."""
         task_id = validation.task_id
         if task_id is None:
             payload = proposal.change.payload
             if isinstance(payload, dict):
-                task_id = payload.get('taskId') if isinstance(payload.get('taskId'), str) else None
+                task_id = payload.get("taskId") if isinstance(payload.get("taskId"), str) else None
         if task_id is None:
             return
-        tasks = getattr(context, 'tasks', None)
+        tasks = getattr(context, "tasks", None)
         if not isinstance(tasks, dict):
             return
         task = tasks.get(task_id)
         if not isinstance(task, dict):
             return
-        metadata = dict(task.get('metadata') or {})
-        lkb = dict(metadata.get('lkb') or {})
-        lkb['validation_run_id'] = validation.validation_run_id
-        lkb['proposal_id'] = proposal.proposal_id
-        lkb['last_decision'] = 'committed'
-        lkb['last_result'] = validation.result
-        lkb['validated_at'] = validation.created_at
-        lkb['proof_trace'] = list(validation.proof_trace)
-        metadata['lkb'] = lkb
-        task['metadata'] = metadata
+        metadata = dict(task.get("metadata") or {})
+        lkb = dict(metadata.get("lkb") or {})
+        lkb["validation_run_id"] = validation.validation_run_id
+        lkb["proposal_id"] = proposal.proposal_id
+        lkb["last_decision"] = "committed"
+        lkb["last_result"] = validation.result
+        lkb["validated_at"] = validation.created_at
+        lkb["proof_trace"] = list(validation.proof_trace)
+        metadata["lkb"] = lkb
+        task["metadata"] = metadata
 
     # ------------------------------------------------------------------
     # F-141 Causal Verification Layer
@@ -538,7 +540,7 @@ class LogicalKanbanService:
         validation: ValidationRun,
         *,
         edges: tuple[tuple[str, str], ...] = (),
-        context: 'ToolContext',
+        context: "ToolContext",
     ) -> ValidationRun:
         """Run the F-141 causal gate after the symbolic gate has passed.
 
@@ -560,7 +562,7 @@ class LogicalKanbanService:
         """
         if not is_causal_verification_enabled() or not edges:
             return validation
-        if validation.result != 'pass':
+        if validation.result != "pass":
             # Defensive: a non-pass validation should not reach this gate.
             return validation
         graph = build_causal_graph(snapshot)
@@ -571,7 +573,7 @@ class LogicalKanbanService:
             effect = self.causal_engine.intervene_do(
                 graph,
                 treatment_node=treatment,
-                treatment_value='completed',
+                treatment_value="completed",
                 outcome_node=outcome,
             )
             evaluated.append(effect)
@@ -580,77 +582,74 @@ class LogicalKanbanService:
         worst = min(
             evaluated,
             key=lambda effect: (
-                0 if effect.tag == 'significant' else 1 if effect.tag == 'moderate' else 2,
+                0 if effect.tag == "significant" else 1 if effect.tag == "moderate" else 2,
             ),
         )
 
         causal_record: dict[str, Any] = {
-            'engine': 'lkb-f141-causal',
-            'engineVersion': 'f141-v1',
-            'gate': 'advisory' if not is_strict_causal_enabled() else 'strict',
-            'graphSnapshotHash': graph.snapshot_hash,
-            'edges': [
-                {'source': s, 'target': t}
-                for s, t in edges
-            ],
-            'evaluations': [effect.to_dict() for effect in evaluated],
-            'worst': {
-                'tag': worst.tag,
-                'weight': worst.weight,
-                'mechanism': worst.mechanism,
-                'isSignificant': worst.is_significant,
-                'edge': {'source': worst.source, 'target': worst.target},
+            "engine": "lkb-f141-causal",
+            "engineVersion": "f141-v1",
+            "gate": "advisory" if not is_strict_causal_enabled() else "strict",
+            "graphSnapshotHash": graph.snapshot_hash,
+            "edges": [{"source": s, "target": t} for s, t in edges],
+            "evaluations": [effect.to_dict() for effect in evaluated],
+            "worst": {
+                "tag": worst.tag,
+                "weight": worst.weight,
+                "mechanism": worst.mechanism,
+                "isSignificant": worst.is_significant,
+                "edge": {"source": worst.source, "target": worst.target},
             },
         }
 
         existing_counterexample = validation.counterexample or {}
         if not existing_counterexample:
-            new_counterexample: dict[str, Any] = {'causal': causal_record}
+            new_counterexample: dict[str, Any] = {"causal": causal_record}
         else:
-            new_counterexample = {**existing_counterexample, 'causal': causal_record}
+            new_counterexample = {**existing_counterexample, "causal": causal_record}
         annotated = replace(validation, counterexample=new_counterexample)
 
-        if worst.tag == 'weak' and is_strict_causal_enabled():
+        if worst.tag == "weak" and is_strict_causal_enabled():
             issue = ValidationIssue(
-                code='causal_weight_weak',
+                code="causal_weight_weak",
                 message=(
-                    f'Causal effect on edge {worst.source}->{worst.target} '
-                    f'is weak (weight={worst.weight}); strict mode denies the change.'
+                    f"Causal effect on edge {worst.source}->{worst.target} "
+                    f"is weak (weight={worst.weight}); strict mode denies the change."
                 ),
-                rule='LKB-CAUSAL-001',
+                rule="LKB-CAUSAL-001",
                 task_id=validation.task_id,
                 repair_suggestions=(
                     RepairSuggestion(
-                        action='clarify_ambiguity',
+                        action="clarify_ambiguity",
                         target=worst.source,
                         message=(
-                            'Provide a manual cause declaration via '
-                            'metadata.lkb.causes with weight >= 0.7, or '
-                            'invoke override_causal with a justification.'
+                            "Provide a manual cause declaration via "
+                            "metadata.lkb.causes with weight >= 0.7, or "
+                            "invoke override_causal with a justification."
                         ),
                     ),
                 ),
             )
             metrics.record_denial(
-                rule='LKB-CAUSAL-001',
-                code='causal_weight_weak',
+                rule="LKB-CAUSAL-001",
+                code="causal_weight_weak",
                 change_kind=proposal.change.kind,
                 task_id=validation.task_id,
                 validation_run_id=validation.validation_run_id,
             )
             return replace(
                 annotated,
-                result='fail',
+                result="fail",
                 issues=(issue,),
                 proof_trace=(
                     *annotated.proof_trace,
                     {
-                        'rule': 'LKB-CAUSAL-001',
-                        'premises': [worst.source, worst.target],
-                        'conclusion': (
-                            f'CausalWeight({worst.source}->{worst.target})={worst.weight}'
+                        "rule": "LKB-CAUSAL-001",
+                        "premises": [worst.source, worst.target],
+                        "conclusion": (
+                            f"CausalWeight({worst.source}->{worst.target})={worst.weight}"
                         ),
-                        'solverVersion': 'f141-v1',
+                        "solverVersion": "f141-v1",
                     },
                 ),
             )
@@ -665,7 +664,7 @@ class LogicalKanbanService:
         approver: str,
         validation_run_id: str | None = None,
         proposal_id: str | None = None,
-        context: 'ToolContext',
+        context: "ToolContext",
     ) -> AuditEvent:
         """Record a human override of a ``weak`` causal outcome.
 
@@ -677,15 +676,23 @@ class LogicalKanbanService:
         """
         source, target = edge
         sanitised_weight = round(
-            max(0.0, min(1.0, float(weight) if isinstance(weight, (int, float)) and not isinstance(weight, bool) else 0.0)),
+            max(
+                0.0,
+                min(
+                    1.0,
+                    float(weight)
+                    if isinstance(weight, (int, float)) and not isinstance(weight, bool)
+                    else 0.0,
+                ),
+            ),
             3,
         )
         previous = event_for_human_override(
-            assumption_id=f'causal:{source}->{target}',
-            assertion_id=validation_run_id or f'edge:{source}->{target}',
+            assumption_id=f"causal:{source}->{target}",
+            assertion_id=validation_run_id or f"edge:{source}->{target}",
             actor=approver,
             reason=reason,
-            previous_result='weak',
+            previous_result="weak",
             task_ids=(source, target),
             validation_run_id=validation_run_id,
             session_id=_session_id(context),
@@ -703,15 +710,15 @@ class LogicalKanbanService:
             task_id=source,
             decision=previous.decision,
             payload={
-                'overrideType': 'causal',
-                'proposal_id': proposal_id,
-                'edge': {'source': source, 'target': target},
-                'justification': reason,
-                'approver': approver,
-                'weight': sanitised_weight,
-                'previousResult': 'weak',
-                'assumptionId': previous.payload.get('assumptionId'),
-                'assertionId': previous.payload.get('assertionId'),
+                "overrideType": "causal",
+                "proposal_id": proposal_id,
+                "edge": {"source": source, "target": target},
+                "justification": reason,
+                "approver": approver,
+                "weight": sanitised_weight,
+                "previousResult": "weak",
+                "assumptionId": previous.payload.get("assumptionId"),
+                "assertionId": previous.payload.get("assertionId"),
             },
         )
         _audit_log(context).append(event)
@@ -727,7 +734,7 @@ class LogicalKanbanService:
 
     def _attach_causal_override_metadata(
         self,
-        context: 'ToolContext',
+        context: "ToolContext",
         *,
         source: str,
         target: str,
@@ -736,24 +743,24 @@ class LogicalKanbanService:
         weight: float,
     ) -> None:
         """Write ``metadata.lkb.causal_override`` on the source task."""
-        tasks = getattr(context, 'tasks', None)
+        tasks = getattr(context, "tasks", None)
         if not isinstance(tasks, dict):
             return
         task = tasks.get(source)
         if not isinstance(task, dict):
             return
-        metadata = dict(task.get('metadata') or {})
-        lkb = dict(metadata.get('lkb') or {})
-        lkb['causal_override'] = {
-            'source': source,
-            'target': target,
-            'approver': approver,
-            'reason': reason,
-            'weight': weight,
-            'overriddenAt': datetime.now(timezone.utc).isoformat(),
+        metadata = dict(task.get("metadata") or {})
+        lkb = dict(metadata.get("lkb") or {})
+        lkb["causal_override"] = {
+            "source": source,
+            "target": target,
+            "approver": approver,
+            "reason": reason,
+            "weight": weight,
+            "overriddenAt": datetime.now(timezone.utc).isoformat(),
         }
-        metadata['lkb'] = lkb
-        task['metadata'] = metadata
+        metadata["lkb"] = lkb
+        task["metadata"] = metadata
 
     def _apply_causal_gate_for_transition(
         self,
@@ -761,7 +768,7 @@ class LogicalKanbanService:
         snapshot: FactsSnapshot,
         task_id: str,
         validation: ValidationRun,
-        context: 'ToolContext',
+        context: "ToolContext",
     ) -> ValidationRun:
         """Run the F-141 causal gate for a status transition.
 
@@ -792,7 +799,7 @@ class LogicalKanbanService:
         payload: dict[str, Any],
         task_id: str | None,
         validation: ValidationRun,
-        context: 'ToolContext',
+        context: "ToolContext",
     ) -> ValidationRun:
         """Run the F-141 causal gate for an ``add_dependency`` change.
 
@@ -807,11 +814,11 @@ class LogicalKanbanService:
         if not isinstance(task_id, str):
             return validation
         edges: list[tuple[str, str]] = []
-        for blocker in _string_list(payload.get('addBlockedBy')):
+        for blocker in _string_list(payload.get("addBlockedBy")):
             if blocker == task_id:
                 continue
             edges.append((blocker, task_id))
-        for dependent in _string_list(payload.get('addBlocks')):
+        for dependent in _string_list(payload.get("addBlocks")):
             if dependent == task_id:
                 continue
             edges.append((task_id, dependent))
@@ -828,7 +835,7 @@ class LogicalKanbanService:
     def run(
         self,
         change: ProposedChange,
-        context: 'ToolContext',
+        context: "ToolContext",
     ) -> tuple[Proposal, ValidationRun, CommitResult]:
         proposal = self.propose(change, context)
         validation = self.validate(proposal, context)
@@ -838,11 +845,11 @@ class LogicalKanbanService:
     def evaluate_assertion(
         self,
         text: str,
-        base_assertion: 'CanonicalAssertion',
+        base_assertion: "CanonicalAssertion",
         *,
         assertion_id: str | None = None,
         context_facts: tuple[str, ...] = (),
-        context: 'ToolContext | None' = None,
+        context: "ToolContext | None" = None,
     ) -> MultiWorldResult:
         """Detect ambiguities in ``text`` and generate possible worlds.
 
@@ -852,12 +859,13 @@ class LogicalKanbanService:
         """
         from .ir import CanonicalAssertion
 
-        assertion_id = assertion_id or _new_id('A-')
+        assertion_id = assertion_id or _new_id("A-")
         if not isinstance(base_assertion, CanonicalAssertion):
-            raise TypeError('base_assertion must be a CanonicalAssertion')
+            raise TypeError("base_assertion must be a CanonicalAssertion")
         audit_log = _audit_log(context) if context is not None else None
         detector = AmbiguityDetector(
-            library=self._pattern_library, audit_log=audit_log,
+            library=self._pattern_library,
+            audit_log=audit_log,
         )
         report = detector.detect(
             text,
@@ -874,7 +882,7 @@ class LogicalKanbanService:
     def validate_assertion_proposal(
         self,
         multi_world_result: MultiWorldResult,
-        context: 'ToolContext',
+        context: "ToolContext",
         *,
         target_task_id: str | None = None,
         target_status: str | None = None,
@@ -904,38 +912,38 @@ class LogicalKanbanService:
     def _validate_propose_assertion(
         self,
         proposal: Proposal,
-        context: 'ToolContext',
+        context: "ToolContext",
     ) -> ValidationRun:
         """Validate a natural-language assertion proposal through the fuzzy layer."""
         from .ir import CanonicalAssertion
 
         payload = proposal.change.payload
-        text = payload.get('text') if isinstance(payload, dict) else ''
-        base_assertion = payload.get('baseAssertion')
-        target_task_id = payload.get('targetTaskId')
-        target_status = payload.get('targetStatus')
+        text = payload.get("text") if isinstance(payload, dict) else ""
+        base_assertion = payload.get("baseAssertion")
+        target_task_id = payload.get("targetTaskId")
+        target_status = payload.get("targetStatus")
 
         if not isinstance(text, str) or not text:
             issue = ValidationIssue(
-                code='missing_assertion_text',
-                message='Assertion proposal must include a non-empty text field.',
-                rule='LKB-ASSERTION-001',
+                code="missing_assertion_text",
+                message="Assertion proposal must include a non-empty text field.",
+                rule="LKB-ASSERTION-001",
             )
             return self._denied(proposal, issues=(issue,))
 
         if not isinstance(base_assertion, CanonicalAssertion):
             issue = ValidationIssue(
-                code='missing_base_assertion',
-                message='Assertion proposal must include a base CanonicalAssertion.',
-                rule='LKB-ASSERTION-002',
+                code="missing_base_assertion",
+                message="Assertion proposal must include a base CanonicalAssertion.",
+                rule="LKB-ASSERTION-002",
             )
             return self._denied(proposal, issues=(issue,))
 
         multi_world = self.evaluate_assertion(
             text,
             base_assertion,
-            assertion_id=payload.get('assertionId'),
-            context_facts=tuple(payload.get('contextFacts', [])),
+            assertion_id=payload.get("assertionId"),
+            context_facts=tuple(payload.get("contextFacts", [])),
             context=context,
         )
         aggregation, commit_decision = self.validate_assertion_proposal(
@@ -943,20 +951,20 @@ class LogicalKanbanService:
             context,
             target_task_id=target_task_id if isinstance(target_task_id, str) else None,
             target_status=target_status if isinstance(target_status, str) else None,
-            is_irreversible=bool(payload.get('isIrreversible', True)),
+            is_irreversible=bool(payload.get("isIrreversible", True)),
         )
 
         if not commit_decision.commit:
             issue = ValidationIssue(
                 code=commit_decision.reason,
                 message=commit_decision.human_message.get(
-                    'en', 'Fuzzy commit gate denied the assertion.'
+                    "en", "Fuzzy commit gate denied the assertion."
                 ),
-                rule='LKB-FUZZY-COMMIT-001',
+                rule="LKB-FUZZY-COMMIT-001",
                 task_id=target_task_id if isinstance(target_task_id, str) else None,
                 repair_suggestions=tuple(
                     RepairSuggestion(
-                        action='clarify_ambiguity',
+                        action="clarify_ambiguity",
                         target=a.assumption_id,
                         message=a.clarification_prompt,
                     )
@@ -966,7 +974,7 @@ class LogicalKanbanService:
                 ),
             )
             derived_facts = tuple(
-                f'Assumes({a.assertion_id}, {a.assumption_id}, {a.assumed_value})'
+                f"Assumes({a.assertion_id}, {a.assumption_id}, {a.assumed_value})"
                 for w in multi_world.worlds
                 for a in w.assumptions
             )
@@ -977,18 +985,18 @@ class LogicalKanbanService:
                 derived_facts=derived_facts,
                 proof_trace=(
                     {
-                        'rule': 'LKB-FUZZY-COMMIT-001',
-                        'premises': [
+                        "rule": "LKB-FUZZY-COMMIT-001",
+                        "premises": [
                             a.assumption_id for w in multi_world.worlds for a in w.assumptions
                         ],
-                        'conclusion': f'FuzzyCommitDecision({commit_decision.reason})',
-                        'solverVersion': self.solver_version,
+                        "conclusion": f"FuzzyCommitDecision({commit_decision.reason})",
+                        "solverVersion": self.solver_version,
                     },
                 ),
             )
 
         derived_facts = tuple(
-            f'Assumes({a.assertion_id}, {a.assumption_id}, {a.assumed_value})'
+            f"Assumes({a.assertion_id}, {a.assumption_id}, {a.assumed_value})"
             for w in multi_world.worlds
             for a in w.assumptions
         )
@@ -1006,10 +1014,10 @@ class LogicalKanbanService:
             derived_facts=derived_facts,
             proof_trace=(
                 {
-                    'rule': 'LKB-FUZZY-COMMIT-ALLOW',
-                    'premises': [w.world_id for w in multi_world.worlds],
-                    'conclusion': f'Aggregation({aggregation.strategy})',
-                    'solverVersion': self.solver_version,
+                    "rule": "LKB-FUZZY-COMMIT-ALLOW",
+                    "premises": [w.world_id for w in multi_world.worlds],
+                    "conclusion": f"Aggregation({aggregation.strategy})",
+                    "solverVersion": self.solver_version,
                 },
             ),
         )
@@ -1017,96 +1025,96 @@ class LogicalKanbanService:
     def _validate_legacy_todo_replace_all(
         self,
         proposal: Proposal,
-        context: 'ToolContext',
+        context: "ToolContext",
     ) -> ValidationRun:
-        todos = proposal.change.payload.get('todos')
+        todos = proposal.change.payload.get("todos")
         if not isinstance(todos, list):
             issue = ValidationIssue(
-                code='malformed_legacy_todo_write',
-                message='TodoWrite payload must contain a todos array.',
-                rule='LKB-TODOWRITE-COMPAT-001',
+                code="malformed_legacy_todo_write",
+                message="TodoWrite payload must contain a todos array.",
+                rule="LKB-TODOWRITE-COMPAT-001",
             )
             return self._denied(
                 proposal,
                 issues=(issue,),
                 proof_trace=(
                     {
-                        'rule': 'LKB-TODOWRITE-COMPAT-001',
-                        'premises': ['Not(Array(todos))'],
-                        'conclusion': 'DenyCommit',
-                        'solverVersion': self.solver_version,
+                        "rule": "LKB-TODOWRITE-COMPAT-001",
+                        "premises": ["Not(Array(todos))"],
+                        "conclusion": "DenyCommit",
+                        "solverVersion": self.solver_version,
                     },
                 ),
             )
 
-        status_counts = {'pending': 0, 'in_progress': 0, 'completed': 0}
+        status_counts = {"pending": 0, "in_progress": 0, "completed": 0}
         malformed_indexes: list[int] = []
         in_progress_ids: list[str] = []
         derived_facts: list[str] = []
         for index, todo in enumerate(todos):
-            todo_id = f'todo:{index}'
-            if not isinstance(todo, dict) or todo.get('status') not in status_counts:
+            todo_id = f"todo:{index}"
+            if not isinstance(todo, dict) or todo.get("status") not in status_counts:
                 malformed_indexes.append(index)
                 continue
-            status = str(todo['status'])
+            status = str(todo["status"])
             status_counts[status] += 1
-            if status == 'in_progress':
+            if status == "in_progress":
                 in_progress_ids.append(todo_id)
-            derived_facts.extend((f'Task({todo_id})', f'Status({todo_id}, {status})'))
+            derived_facts.extend((f"Task({todo_id})", f"Status({todo_id}, {status})"))
 
         if malformed_indexes:
             issue = ValidationIssue(
-                code='malformed_legacy_todo_write',
+                code="malformed_legacy_todo_write",
                 message=(
-                    'TodoWrite contains malformed todos at indexes: '
-                    f'{", ".join(str(i) for i in malformed_indexes)}.'
+                    "TodoWrite contains malformed todos at indexes: "
+                    f"{', '.join(str(i) for i in malformed_indexes)}."
                 ),
-                rule='LKB-TODOWRITE-COMPAT-001',
-                blockers=tuple(f'todo:{i}' for i in malformed_indexes),
+                rule="LKB-TODOWRITE-COMPAT-001",
+                blockers=tuple(f"todo:{i}" for i in malformed_indexes),
             )
             return self._denied(
                 proposal,
                 issues=(issue,),
                 proof_trace=(
                     {
-                        'rule': 'LKB-TODOWRITE-COMPAT-001',
-                        'premises': [f'Malformed(todo:{i})' for i in malformed_indexes],
-                        'conclusion': 'DenyCommit',
-                        'solverVersion': self.solver_version,
+                        "rule": "LKB-TODOWRITE-COMPAT-001",
+                        "premises": [f"Malformed(todo:{i})" for i in malformed_indexes],
+                        "conclusion": "DenyCommit",
+                        "solverVersion": self.solver_version,
                     },
                 ),
             )
 
         total = len(todos)
         derived_facts.append(
-            'TodoProgress('
-            f'total={total}, '
-            f'pending={status_counts["pending"]}, '
-            f'in_progress={status_counts["in_progress"]}, '
-            f'completed={status_counts["completed"]}'
-            ')'
+            "TodoProgress("
+            f"total={total}, "
+            f"pending={status_counts['pending']}, "
+            f"in_progress={status_counts['in_progress']}, "
+            f"completed={status_counts['completed']}"
+            ")"
         )
-        if total > 0 and status_counts['completed'] == total:
-            derived_facts.append('AllLegacyTodosCompleted')
+        if total > 0 and status_counts["completed"] == total:
+            derived_facts.append("AllLegacyTodosCompleted")
 
-        runtime = getattr(context, 'logical_kanban', None)
+        runtime = getattr(context, "logical_kanban", None)
         if (
-            bool(getattr(runtime, 'strict_logical_todo_enabled', False))
+            bool(getattr(runtime, "strict_logical_todo_enabled", False))
             and len(in_progress_ids) > 1
         ):
             issue = ValidationIssue(
-                code='multiple_in_progress_legacy_todo_write',
+                code="multiple_in_progress_legacy_todo_write",
                 message=(
-                    'TodoWrite cannot set multiple in_progress todos while strict '
-                    f'logical todo mode is enabled: {", ".join(in_progress_ids)}.'
+                    "TodoWrite cannot set multiple in_progress todos while strict "
+                    f"logical todo mode is enabled: {', '.join(in_progress_ids)}."
                 ),
-                rule='LKB-TODOWRITE-COMPAT-002',
+                rule="LKB-TODOWRITE-COMPAT-002",
                 blockers=tuple(in_progress_ids),
                 repair_suggestions=(
                     RepairSuggestion(
-                        action='keep_single_in_progress',
+                        action="keep_single_in_progress",
                         target=in_progress_ids[0],
-                        message='Leave only one todo in_progress and keep the others pending.',
+                        message="Leave only one todo in_progress and keep the others pending.",
                     ),
                 ),
             )
@@ -1116,10 +1124,10 @@ class LogicalKanbanService:
                 derived_facts=tuple(derived_facts),
                 proof_trace=(
                     {
-                        'rule': 'LKB-TODOWRITE-COMPAT-002',
-                        'premises': [f'Doing({todo_id})' for todo_id in in_progress_ids],
-                        'conclusion': 'DenyCommit',
-                        'solverVersion': self.solver_version,
+                        "rule": "LKB-TODOWRITE-COMPAT-002",
+                        "premises": [f"Doing({todo_id})" for todo_id in in_progress_ids],
+                        "conclusion": "DenyCommit",
+                        "solverVersion": self.solver_version,
                     },
                 ),
             )
@@ -1128,13 +1136,14 @@ class LogicalKanbanService:
         if is_logical_kanban_enabled():
             audit_log = _audit_log(context)
             detector = AmbiguityDetector(
-                library=self._pattern_library, audit_log=audit_log,
+                library=self._pattern_library,
+                audit_log=audit_log,
             )
             ambiguous_todos: list[tuple[str, AmbiguityReport]] = []
             ambiguity_derived_facts: list[str] = []
             for index, todo in enumerate(todos):
-                todo_id = f'todo:{index}'
-                content = todo.get('content') if isinstance(todo, dict) else None
+                todo_id = f"todo:{index}"
+                content = todo.get("content") if isinstance(todo, dict) else None
                 if isinstance(content, str) and content.strip():
                     report = detector.detect(
                         content,
@@ -1142,10 +1151,10 @@ class LogicalKanbanService:
                         context_facts=tuple(derived_facts),
                     )
                     ambiguity_derived_facts.append(
-                        f'AmbiguityDetected({todo_id}, {report.severity}, '
-                        f'{len(report.detected_ambiguities)})'
+                        f"AmbiguityDetected({todo_id}, {report.severity}, "
+                        f"{len(report.detected_ambiguities)})"
                     )
-                    if report.severity in {'critical', 'major'} and report.needs_clarification:
+                    if report.severity in {"critical", "major"} and report.needs_clarification:
                         ambiguous_todos.append((todo_id, report))
 
             if ambiguous_todos:
@@ -1167,15 +1176,13 @@ class LogicalKanbanService:
                 from .ir import make_canonical, pred
 
                 base_assertion = make_canonical(
-                    role='assumption',
-                    kind='consistency',
-                    body=pred('LegacyTodoBatch', proposal.proposal_id),
+                    role="assumption",
+                    kind="consistency",
+                    body=pred("LegacyTodoBatch", proposal.proposal_id),
                 )
                 worlds = WorldGenerator().generate(combined_report, base_assertion)
                 validator = MultiWorldValidator(self.engine)
-                world_results = validator.validate(
-                    worlds, self._augmented_snapshot(context)
-                )
+                world_results = validator.validate(worlds, self._augmented_snapshot(context))
                 commit_decision = commit_gate_fuzzy_check(
                     worlds,
                     world_results,
@@ -1184,27 +1191,27 @@ class LogicalKanbanService:
                 )
 
                 # Any critical/major ambiguity is enough to deny the batch.
-                if not commit_decision.commit or combined_report.severity in {'critical', 'major'}:
+                if not commit_decision.commit or combined_report.severity in {"critical", "major"}:
                     legacy_ambiguities = tuple(
                         _legacy_todo_ambiguity_dict(todo_id, report)
                         for todo_id, report in ambiguous_todos
                     )
                     repair_suggestions = tuple(
                         RepairSuggestion(
-                            action='clarify_ambiguity',
-                            target=entry['todoId'],
-                            message=entry['clarificationPrompt'],
+                            action="clarify_ambiguity",
+                            target=entry["todoId"],
+                            message=entry["clarificationPrompt"],
                         )
                         for entry in legacy_ambiguities
                     )
                     issue = ValidationIssue(
-                        code='LKB-TODOWRITE-AMBIG-001',
+                        code="LKB-TODOWRITE-AMBIG-001",
                         message=_legacy_todo_denial_message(legacy_ambiguities, commit_decision),
-                        rule='LKB-TODOWRITE-AMBIG-001',
+                        rule="LKB-TODOWRITE-AMBIG-001",
                         repair_suggestions=repair_suggestions,
                     )
                     ambiguity_derived_facts.extend(
-                        f'Assumes({a.assertion_id}, {a.assumption_id}, {a.assumed_value})'
+                        f"Assumes({a.assertion_id}, {a.assumption_id}, {a.assumed_value})"
                         for w in worlds
                         for a in w.assumptions
                     )
@@ -1214,13 +1221,13 @@ class LogicalKanbanService:
                         derived_facts=tuple(derived_facts) + tuple(ambiguity_derived_facts),
                         proof_trace=(
                             {
-                                'rule': 'LKB-TODOWRITE-AMBIG-001',
-                                'premises': [
-                                    f'Ambiguity({entry["todoId"]}, {entry["severity"]}, {entry["ambiguityCode"]})'
+                                "rule": "LKB-TODOWRITE-AMBIG-001",
+                                "premises": [
+                                    f"Ambiguity({entry['todoId']}, {entry['severity']}, {entry['ambiguityCode']})"
                                     for entry in legacy_ambiguities
                                 ],
-                                'conclusion': 'DenyCommit',
-                                'solverVersion': self.solver_version,
+                                "conclusion": "DenyCommit",
+                                "solverVersion": self.solver_version,
                             },
                         ),
                         legacy_todo_ambiguities=legacy_ambiguities,
@@ -1229,10 +1236,10 @@ class LogicalKanbanService:
                     for entry in legacy_ambiguities:
                         audit_log.append(
                             event_for_legacy_todo_ambiguity(
-                                entry['todoId'],
-                                entry['ambiguityCode'],
-                                entry['severity'],
-                                entry['clarificationPrompt'],
+                                entry["todoId"],
+                                entry["ambiguityCode"],
+                                entry["severity"],
+                                entry["clarificationPrompt"],
                                 validation_run_id=validation.validation_run_id,
                                 session_id=session_id,
                             )
@@ -1244,13 +1251,13 @@ class LogicalKanbanService:
             derived_facts=tuple(derived_facts),
             proof_trace=(
                 {
-                    'rule': 'LKB-TODOWRITE-COMPAT-ALLOW',
-                    'premises': [
-                        'LegacyTodoWriteCompatibilityMode',
-                        f'InProgressCount({status_counts["in_progress"]})',
+                    "rule": "LKB-TODOWRITE-COMPAT-ALLOW",
+                    "premises": [
+                        "LegacyTodoWriteCompatibilityMode",
+                        f"InProgressCount({status_counts['in_progress']})",
                     ],
-                    'conclusion': 'Allow legacy TodoWrite replacement.',
-                    'solverVersion': self.solver_version,
+                    "conclusion": "Allow legacy TodoWrite replacement.",
+                    "solverVersion": self.solver_version,
                 },
             ),
         )
@@ -1258,15 +1265,15 @@ class LogicalKanbanService:
     def _validate_status_transition(
         self,
         proposal: Proposal,
-        context: 'ToolContext',
+        context: "ToolContext",
     ) -> ValidationRun:
         payload = proposal.change.payload
-        task_id = payload.get('taskId')
-        target_status = payload.get('status')
+        task_id = payload.get("taskId")
+        target_status = payload.get("status")
         if not isinstance(task_id, str) or target_status not in {
-            'pending',
-            'in_progress',
-            'completed',
+            "pending",
+            "in_progress",
+            "completed",
         }:
             return self._accepted(proposal)
 
@@ -1276,12 +1283,12 @@ class LogicalKanbanService:
         if stale_check is not None:
             return stale_check
 
-        task = (getattr(context, 'tasks', {}) or {}).get(task_id)
+        task = (getattr(context, "tasks", {}) or {}).get(task_id)
         if not isinstance(task, dict):
             issue = ValidationIssue(
-                code='task_not_found',
-                message=f'Task {task_id} does not exist.',
-                rule='LKB-TRANSITION-001',
+                code="task_not_found",
+                message=f"Task {task_id} does not exist.",
+                rule="LKB-TRANSITION-001",
                 task_id=task_id,
             )
             return self._denied(
@@ -1290,51 +1297,51 @@ class LogicalKanbanService:
                 issues=(issue,),
                 proof_trace=(
                     {
-                        'rule': 'LKB-TRANSITION-001',
-                        'premises': [f'Not(Task({task_id}))'],
-                        'conclusion': f'Not(CanMoveTo({task_id}, {target_status}))',
-                        'solverVersion': self.solver_version,
+                        "rule": "LKB-TRANSITION-001",
+                        "premises": [f"Not(Task({task_id}))"],
+                        "conclusion": f"Not(CanMoveTo({task_id}, {target_status}))",
+                        "solverVersion": self.solver_version,
                     },
                 ),
             )
 
-        current_status = task.get('status')
+        current_status = task.get("status")
         snapshot = self._augmented_snapshot(context)
         if current_status == target_status:
             return self._accepted(
                 proposal,
                 task_id=task_id,
-                derived_facts=(f'NoStatusChange({task_id})',),
+                derived_facts=(f"NoStatusChange({task_id})",),
                 proof_trace=(
                     {
-                        'rule': 'LKB-NOOP-001',
-                        'premises': [f'Status({task_id}, {target_status})'],
-                        'conclusion': f'NoStatusChange({task_id})',
-                        'solverVersion': self.solver_version,
+                        "rule": "LKB-NOOP-001",
+                        "premises": [f"Status({task_id}, {target_status})"],
+                        "conclusion": f"NoStatusChange({task_id})",
+                        "solverVersion": self.solver_version,
                     },
                 ),
             )
 
-        if target_status == 'pending' and current_status == 'completed':
+        if target_status == "pending" and current_status == "completed":
             return self._accepted(
                 proposal,
                 task_id=task_id,
-                derived_facts=(f'Reopened({task_id})',),
+                derived_facts=(f"Reopened({task_id})",),
                 proof_trace=(
                     {
-                        'rule': 'LKB-REOPEN-001',
-                        'premises': [f'Status({task_id}, completed)', 'ExplicitReopen'],
-                        'conclusion': f'CanMoveTo({task_id}, pending)',
-                        'solverVersion': self.solver_version,
+                        "rule": "LKB-REOPEN-001",
+                        "premises": [f"Status({task_id}, completed)", "ExplicitReopen"],
+                        "conclusion": f"CanMoveTo({task_id}, pending)",
+                        "solverVersion": self.solver_version,
                     },
                 ),
             )
 
-        if target_status == 'completed':
+        if target_status == "completed":
             pipeline_result = self._run_transition_pipeline(
                 proposal, snapshot, task_id, target_status, context, task, payload
             )
-            if pipeline_result.result != 'pass':
+            if pipeline_result.result != "pass":
                 issues = self._transition_issues_from_pipeline_result(
                     pipeline_result, task_id, snapshot
                 )
@@ -1363,11 +1370,11 @@ class LogicalKanbanService:
                 proposal, snapshot, task_id, accepted, context
             )
 
-        if target_status == 'in_progress':
+        if target_status == "in_progress":
             pipeline_result = self._run_transition_pipeline(
                 proposal, snapshot, task_id, target_status, context, task, payload
             )
-            if pipeline_result.result != 'pass':
+            if pipeline_result.result != "pass":
                 issues = self._transition_issues_from_pipeline_result(
                     pipeline_result, task_id, snapshot
                 )
@@ -1399,7 +1406,7 @@ class LogicalKanbanService:
         return self._accepted(
             proposal,
             task_id=task_id,
-            derived_facts=(f'CanMoveTo({task_id}, {target_status})',),
+            derived_facts=(f"CanMoveTo({task_id}, {target_status})",),
         )
 
     def _run_transition_pipeline(
@@ -1408,7 +1415,7 @@ class LogicalKanbanService:
         snapshot: FactsSnapshot,
         task_id: str,
         target_status: str,
-        context: 'ToolContext',
+        context: "ToolContext",
         task: dict[str, Any],
         payload: dict[str, Any],
     ) -> ValidationRun:
@@ -1419,13 +1426,11 @@ class LogicalKanbanService:
             target_status=target_status,
             strict_acceptance=(
                 self._strict_acceptance_enabled(context, task, payload)
-                if target_status == 'completed'
+                if target_status == "completed"
                 else False
             ),
             acceptance_proof_present=(
-                self._has_acceptance_proof(task, payload)
-                if target_status == 'completed'
-                else None
+                self._has_acceptance_proof(task, payload) if target_status == "completed" else None
             ),
         )
         return self.pipeline.validate(
@@ -1435,7 +1440,7 @@ class LogicalKanbanService:
             input_facts_hash=snapshot.hash,
             ruleset_hash=_RULESET_HASH,
             snapshot_hash=proposal.snapshot_hash,
-            requested_by=proposal.change.actor or 'system',
+            requested_by=proposal.change.actor or "system",
         )
 
     def _transition_issues_from_pipeline_result(
@@ -1445,21 +1450,21 @@ class LogicalKanbanService:
         snapshot: FactsSnapshot,
     ) -> tuple[ValidationIssue, ...]:
         """Build human-readable issues from the pipeline's aggregate result."""
-        if pipeline_result.result in ('unknown', 'timeout', 'error'):
+        if pipeline_result.result in ("unknown", "timeout", "error"):
             return (
                 ValidationIssue(
-                    code=f'solver_{pipeline_result.result}',
+                    code=f"solver_{pipeline_result.result}",
                     message=(
-                        f'Solver pipeline returned {pipeline_result.result} for task '
-                        f'{task_id}; the transition cannot be committed safely.'
+                        f"Solver pipeline returned {pipeline_result.result} for task "
+                        f"{task_id}; the transition cannot be committed safely."
                     ),
-                    rule='LKB-SOLVER-AGG-001',
+                    rule="LKB-SOLVER-AGG-001",
                     task_id=task_id,
                     repair_suggestions=(
                         RepairSuggestion(
-                            action='revalidate_task',
+                            action="revalidate_task",
                             target=task_id,
-                            message='Retry the transition once the solver is available.',
+                            message="Retry the transition once the solver is available.",
                             priority=1,
                         ),
                     ),
@@ -1467,72 +1472,68 @@ class LogicalKanbanService:
             )
 
         layer1 = next(
-            (
-                r
-                for r in pipeline_result.solver_results
-                if r.get('adapter') == 'layer1-python'
-            ),
+            (r for r in pipeline_result.solver_results if r.get("adapter") == "layer1-python"),
             None,
         )
         if layer1 is None:
             return (
                 ValidationIssue(
-                    code='solver_fail_no_layer1',
-                    message='Solver pipeline failed but no Layer-1 response is available.',
-                    rule='LKB-SOLVER-AGG-002',
+                    code="solver_fail_no_layer1",
+                    message="Solver pipeline failed but no Layer-1 response is available.",
+                    rule="LKB-SOLVER-AGG-002",
                     task_id=task_id,
                 ),
             )
 
-        violated_rule = layer1.get('violatedRule')
-        message = layer1.get('message', '')
-        cycle_tasks = tuple(layer1.get('cycleTasks', []))
+        violated_rule = layer1.get("violatedRule")
+        message = layer1.get("message", "")
+        cycle_tasks = tuple(layer1.get("cycleTasks", []))
 
-        if violated_rule == 'R-006':
+        if violated_rule == "R-006":
             issue = ValidationIssue(
-                code='cyclic_dependency_blocks_readiness',
+                code="cyclic_dependency_blocks_readiness",
                 message=message,
                 rule=violated_rule,
                 task_id=task_id,
                 blockers=cycle_tasks,
                 repair_suggestions=(
                     RepairSuggestion(
-                        action='fix_cycle',
+                        action="fix_cycle",
                         target=task_id,
-                        message='Remove or rewrite one dependency edge in the cycle.',
+                        message="Remove or rewrite one dependency edge in the cycle.",
                         priority=1,
                     ),
                     RepairSuggestion(
-                        action='remove_dependency',
+                        action="remove_dependency",
                         target=task_id,
-                        message='Remove one reciprocal or transitive dependency edge.',
+                        message="Remove one reciprocal or transitive dependency edge.",
                         priority=2,
                     ),
                     RepairSuggestion(
-                        action='split_task',
+                        action="split_task",
                         target=task_id,
-                        message='Consider splitting the task to break the cycle.',
+                        message="Consider splitting the task to break the cycle.",
                         priority=3,
                     ),
                 ),
             )
-        elif violated_rule == 'R-005':
+        elif violated_rule == "R-005":
             issue = ValidationIssue(
-                code='completed_requires_acceptance_proof',
+                code="completed_requires_acceptance_proof",
                 message=message,
-                rule=violated_rule or 'R-005',
+                rule=violated_rule or "R-005",
                 task_id=task_id,
                 repair_suggestions=(
                     RepairSuggestion(
-                        action='add_acceptance_proof',
+                        action="add_acceptance_proof",
                         target=task_id,
-                        message='Attach metadata.lkb.acceptance_proof before completing the task.',
+                        message="Attach metadata.lkb.acceptance_proof before completing the task.",
                         priority=1,
                     ),
                     RepairSuggestion(
-                        action='revalidate_task',
+                        action="revalidate_task",
                         target=task_id,
-                        message='Keep the task in_progress until acceptance proof is available.',
+                        message="Keep the task in_progress until acceptance proof is available.",
                         priority=2,
                     ),
                 ),
@@ -1541,34 +1542,34 @@ class LogicalKanbanService:
             blockers = list(active_blockers(snapshot, task_id))
             suggestions: list[RepairSuggestion] = [
                 RepairSuggestion(
-                    action='complete_prerequisite',
+                    action="complete_prerequisite",
                     target=blocker,
-                    message=f'Complete blocker {blocker} before starting {task_id}.',
+                    message=f"Complete blocker {blocker} before starting {task_id}.",
                     priority=1,
                 )
                 for blocker in blockers
             ]
             suggestions.append(
                 RepairSuggestion(
-                    action='remove_dependency',
+                    action="remove_dependency",
                     target=task_id,
-                    message='Remove the dependency if it is no longer required.',
+                    message="Remove the dependency if it is no longer required.",
                     priority=2,
                 ),
             )
             if len(blockers) > 1:
                 suggestions.append(
                     RepairSuggestion(
-                        action='split_task',
+                        action="split_task",
                         target=task_id,
-                        message='Consider splitting the task into smaller pieces.',
+                        message="Consider splitting the task into smaller pieces.",
                         priority=3,
                     ),
                 )
             issue = ValidationIssue(
-                code='blocked_task_cannot_enter_in_progress',
+                code="blocked_task_cannot_enter_in_progress",
                 message=message,
-                rule=violated_rule or 'R-002',
+                rule=violated_rule or "R-002",
                 task_id=task_id,
                 blockers=tuple(blockers),
                 repair_suggestions=tuple(suggestions),
@@ -1578,15 +1579,15 @@ class LogicalKanbanService:
     def _validate_structural_task_change(
         self,
         proposal: Proposal,
-        context: 'ToolContext',
+        context: "ToolContext",
     ) -> ValidationRun:
         payload = proposal.change.payload
-        task_id = payload.get('taskId')
-        if isinstance(task_id, str) and task_id not in (getattr(context, 'tasks', {}) or {}):
+        task_id = payload.get("taskId")
+        if isinstance(task_id, str) and task_id not in (getattr(context, "tasks", {}) or {}):
             issue = ValidationIssue(
-                code='task_not_found',
-                message=f'Task {task_id} does not exist.',
-                rule='LKB-STRUCTURE-001',
+                code="task_not_found",
+                message=f"Task {task_id} does not exist.",
+                rule="LKB-STRUCTURE-001",
                 task_id=task_id,
             )
             return self._denied(
@@ -1595,42 +1596,42 @@ class LogicalKanbanService:
                 issues=(issue,),
                 proof_trace=(
                     {
-                        'rule': 'LKB-STRUCTURE-001',
-                        'premises': [f'Not(Task({task_id}))'],
-                        'conclusion': 'DenyCommit',
-                        'solverVersion': self.solver_version,
+                        "rule": "LKB-STRUCTURE-001",
+                        "premises": [f"Not(Task({task_id}))"],
+                        "conclusion": "DenyCommit",
+                        "solverVersion": self.solver_version,
                     },
                 ),
             )
-        if proposal.change.kind == 'delete_task':
+        if proposal.change.kind == "delete_task":
             return self._accepted(
                 proposal,
                 task_id=task_id,
-                derived_facts=(f'CanDelete({task_id})', 'CascadeDependencyCleanupAfterValidation'),
+                derived_facts=(f"CanDelete({task_id})", "CascadeDependencyCleanupAfterValidation"),
                 proof_trace=(
                     {
-                        'rule': 'LKB-DELETE-001',
-                        'premises': [f'Task({task_id})'],
-                        'conclusion': f'CanDelete({task_id})',
-                        'solverVersion': self.solver_version,
+                        "rule": "LKB-DELETE-001",
+                        "premises": [f"Task({task_id})"],
+                        "conclusion": f"CanDelete({task_id})",
+                        "solverVersion": self.solver_version,
                     },
                 ),
             )
-        if proposal.change.kind == 'update_task_fields':
+        if proposal.change.kind == "update_task_fields":
             return self._accepted(
                 proposal,
                 task_id=task_id,
-                derived_facts=(f'CanUpdateTaskFields({task_id})',),
+                derived_facts=(f"CanUpdateTaskFields({task_id})",),
                 proof_trace=(
                     {
-                        'rule': 'LKB-FIELDS-001',
-                        'premises': [f'Task({task_id})'],
-                        'conclusion': f'CanUpdateTaskFields({task_id})',
-                        'solverVersion': self.solver_version,
+                        "rule": "LKB-FIELDS-001",
+                        "premises": [f"Task({task_id})"],
+                        "conclusion": f"CanUpdateTaskFields({task_id})",
+                        "solverVersion": self.solver_version,
                     },
                 ),
             )
-        if proposal.change.kind == 'add_dependency':
+        if proposal.change.kind == "add_dependency":
             preview = self._preview_dependency_context(context, payload)
             snapshot = self._augmented_snapshot(preview)  # type: ignore[arg-type]
             task_cycle = (
@@ -1642,31 +1643,31 @@ class LogicalKanbanService:
             )
             if task_cycle:
                 issue = ValidationIssue(
-                    code='dependency_cycle_denied',
+                    code="dependency_cycle_denied",
                     message=(
-                        'Dependency update would create a cycle involving: '
-                        f'{", ".join(task_cycle)}.'
+                        "Dependency update would create a cycle involving: "
+                        f"{', '.join(task_cycle)}."
                     ),
-                    rule='LKB-DEPENDENCY-002',
+                    rule="LKB-DEPENDENCY-002",
                     task_id=task_id if isinstance(task_id, str) else None,
                     blockers=tuple(task_cycle),
                     repair_suggestions=(
                         RepairSuggestion(
-                            action='fix_cycle',
+                            action="fix_cycle",
                             target=task_id if isinstance(task_id, str) else None,
-                            message='Remove one reciprocal or transitive dependency edge.',
+                            message="Remove one reciprocal or transitive dependency edge.",
                             priority=1,
                         ),
                         RepairSuggestion(
-                            action='remove_dependency',
+                            action="remove_dependency",
                             target=task_id if isinstance(task_id, str) else None,
-                            message='Remove one dependency edge to break the cycle.',
+                            message="Remove one dependency edge to break the cycle.",
                             priority=2,
                         ),
                         RepairSuggestion(
-                            action='split_task',
+                            action="split_task",
                             target=task_id if isinstance(task_id, str) else None,
-                            message='Consider splitting the task to break the cycle.',
+                            message="Consider splitting the task to break the cycle.",
                             priority=3,
                         ),
                     ),
@@ -1676,26 +1677,26 @@ class LogicalKanbanService:
                     task_id=task_id if isinstance(task_id, str) else None,
                     issues=(issue, *snapshot.warnings),
                     snapshot=snapshot,
-                    derived_facts=tuple(f'Cycle({cycle_task_id})' for cycle_task_id in task_cycle),
+                    derived_facts=tuple(f"Cycle({cycle_task_id})" for cycle_task_id in task_cycle),
                     proof_trace=(
                         {
-                            'rule': 'LKB-DEPENDENCY-002',
-                            'premises': [f'Cycle({cycle_task_id})' for cycle_task_id in task_cycle],
-                            'conclusion': 'DenyCommit',
-                            'solverVersion': self.solver_version,
+                            "rule": "LKB-DEPENDENCY-002",
+                            "premises": [f"Cycle({cycle_task_id})" for cycle_task_id in task_cycle],
+                            "conclusion": "DenyCommit",
+                            "solverVersion": self.solver_version,
                         },
                     ),
                 )
             accepted = self._accepted(
                 proposal,
                 task_id=task_id,
-                derived_facts=(f'CanMutateDependencies({task_id})',),
+                derived_facts=(f"CanMutateDependencies({task_id})",),
                 proof_trace=(
                     {
-                        'rule': 'LKB-DEPENDENCY-001',
-                        'premises': [f'Task({task_id})', 'NoDependencyCycleAfterMutation'],
-                        'conclusion': f'CanMutateDependencies({task_id})',
-                        'solverVersion': self.solver_version,
+                        "rule": "LKB-DEPENDENCY-001",
+                        "premises": [f"Task({task_id})", "NoDependencyCycleAfterMutation"],
+                        "conclusion": f"CanMutateDependencies({task_id})",
+                        "solverVersion": self.solver_version,
                     },
                 ),
             )
@@ -1705,36 +1706,36 @@ class LogicalKanbanService:
         return self._accepted(
             proposal,
             task_id=task_id,
-            derived_facts=(f'CanMutateDependencies({task_id})',),
+            derived_facts=(f"CanMutateDependencies({task_id})",),
             proof_trace=(
                 {
-                    'rule': 'LKB-DEPENDENCY-001',
-                    'premises': [f'Task({task_id})'],
-                    'conclusion': f'CanMutateDependencies({task_id})',
-                    'solverVersion': self.solver_version,
+                    "rule": "LKB-DEPENDENCY-001",
+                    "premises": [f"Task({task_id})"],
+                    "conclusion": f"CanMutateDependencies({task_id})",
+                    "solverVersion": self.solver_version,
                 },
             ),
         )
 
     def _preview_dependency_context(
         self,
-        context: 'ToolContext',
+        context: "ToolContext",
         payload: dict[str, Any],
     ) -> Any:
-        task_id = payload.get('taskId')
+        task_id = payload.get("taskId")
         tasks = {
             key: {
                 **dict(value),
-                'blocks': list((value or {}).get('blocks') or []),
-                'blockedBy': list((value or {}).get('blockedBy') or []),
-                'metadata': dict((value or {}).get('metadata') or {}),
+                "blocks": list((value or {}).get("blocks") or []),
+                "blockedBy": list((value or {}).get("blockedBy") or []),
+                "metadata": dict((value or {}).get("metadata") or {}),
             }
-            for key, value in (getattr(context, 'tasks', {}) or {}).items()
+            for key, value in (getattr(context, "tasks", {}) or {}).items()
             if isinstance(value, dict)
         }
         task = tasks.get(task_id) if isinstance(task_id, str) else None
         if task is not None:
-            for rel_field, input_key in (('blocks', 'addBlocks'), ('blockedBy', 'addBlockedBy')):
+            for rel_field, input_key in (("blocks", "addBlocks"), ("blockedBy", "addBlockedBy")):
                 ids = payload.get(input_key)
                 if isinstance(ids, list):
                     cur = list(task.get(rel_field) or [])
@@ -1742,7 +1743,7 @@ class LogicalKanbanService:
                         if isinstance(item, str) and item not in cur:
                             cur.append(item)
                     task[rel_field] = cur
-        return SimpleNamespace(tasks=tasks, todos=getattr(context, 'todos', ()))
+        return SimpleNamespace(tasks=tasks, todos=getattr(context, "todos", ()))
 
     def _make_validation_run(
         self,
@@ -1770,29 +1771,29 @@ class LogicalKanbanService:
                     suggestions.extend(build_repair_suggestions(issue))
             repair_suggestions = tuple(suggestions)
         return ValidationRun(
-            validation_run_id=_new_id('V-'),
+            validation_run_id=_new_id("V-"),
             proposal_id=proposal.proposal_id,
             task_id=task_id,
             input_facts_hash=input_facts_hash or proposal.snapshot_hash,
             ruleset_hash=_RULESET_HASH,
             snapshot_hash=proposal.snapshot_hash,
-            engine=engine or 'layer1-python',
+            engine=engine or "layer1-python",
             engine_version=engine_version if engine_version is not None else self.solver_version,
             result=result,
             derived_facts=derived_facts,
             proof_trace=proof_trace
             or (
                 {
-                    'rule': 'LKB-FOUNDATION-ALLOW',
-                    'conclusion': 'No foundation rule denied this change.',
-                    'solverVersion': self.solver_version,
+                    "rule": "LKB-FOUNDATION-ALLOW",
+                    "conclusion": "No foundation rule denied this change.",
+                    "solverVersion": self.solver_version,
                 },
             ),
             counterexample=counterexample,
             repair_suggestions=repair_suggestions,
             issues=issues,
             created_at=datetime.now(timezone.utc).isoformat(),
-            requested_by=proposal.change.actor or 'system',
+            requested_by=proposal.change.actor or "system",
             solver_results=solver_results or (),
             legacy_todo_ambiguities=legacy_todo_ambiguities,
         )
@@ -1804,23 +1805,23 @@ class LogicalKanbanService:
         task_id: str | None,
     ) -> dict[str, Any]:
         out: dict[str, Any] = {
-            'violatedRule': issue.rule,
-            'violatedPredicate': issue.code,
+            "violatedRule": issue.rule,
+            "violatedPredicate": issue.code,
         }
         if task_id:
-            out['taskId'] = task_id
+            out["taskId"] = task_id
         if issue.blockers:
-            out['activeBlockers'] = list(issue.blockers)
+            out["activeBlockers"] = list(issue.blockers)
         if task_id and task_id in snapshot.normalized_tasks:
             task = snapshot.normalized_tasks[task_id]
-            out['model'] = {
-                f'Status({task_id})': task['status'],
+            out["model"] = {
+                f"Status({task_id})": task["status"],
             }
             if issue.blockers:
-                out['model'].update(
+                out["model"].update(
                     {
-                        f'Status({blocker})': snapshot.normalized_tasks.get(blocker, {}).get(
-                            'status'
+                        f"Status({blocker})": snapshot.normalized_tasks.get(blocker, {}).get(
+                            "status"
                         )
                         for blocker in issue.blockers
                         if blocker in snapshot.normalized_tasks
@@ -1839,7 +1840,7 @@ class LogicalKanbanService:
         proof_trace: tuple[dict[str, Any], ...] | None = None,
         counterexample: dict[str, Any] | None = None,
         repair_suggestions: tuple[RepairSuggestion, ...] | None = None,
-        result: ValidationResult = 'fail',
+        result: ValidationResult = "fail",
         engine: str | None = None,
         engine_version: str | None = None,
         solver_results: tuple[dict[str, Any], ...] | None = None,
@@ -1880,7 +1881,7 @@ class LogicalKanbanService:
     ) -> ValidationRun:
         return self._make_validation_run(
             proposal,
-            result='pass',
+            result="pass",
             task_id=task_id,
             derived_facts=derived_facts,
             proof_trace=proof_trace,
@@ -1892,35 +1893,35 @@ class LogicalKanbanService:
 
     def _strict_acceptance_enabled(
         self,
-        context: 'ToolContext',
+        context: "ToolContext",
         task: dict[str, Any],
         payload: dict[str, Any],
     ) -> bool:
-        runtime = getattr(context, 'logical_kanban', None)
-        if bool(getattr(runtime, 'strict_acceptance_enabled', False)):
+        runtime = getattr(context, "logical_kanban", None)
+        if bool(getattr(runtime, "strict_acceptance_enabled", False)):
             return True
-        metadata = task.get('metadata') if isinstance(task.get('metadata'), dict) else {}
-        lkb = metadata.get('lkb') if isinstance(metadata, dict) else {}
-        if isinstance(lkb, dict) and bool(lkb.get('strict_acceptance')):
+        metadata = task.get("metadata") if isinstance(task.get("metadata"), dict) else {}
+        lkb = metadata.get("lkb") if isinstance(metadata, dict) else {}
+        if isinstance(lkb, dict) and bool(lkb.get("strict_acceptance")):
             return True
-        incoming = payload.get('metadata')
-        incoming_lkb = incoming.get('lkb') if isinstance(incoming, dict) else {}
-        return isinstance(incoming_lkb, dict) and bool(incoming_lkb.get('strict_acceptance'))
+        incoming = payload.get("metadata")
+        incoming_lkb = incoming.get("lkb") if isinstance(incoming, dict) else {}
+        return isinstance(incoming_lkb, dict) and bool(incoming_lkb.get("strict_acceptance"))
 
     def _has_acceptance_proof(
         self,
         task: dict[str, Any],
         payload: dict[str, Any],
     ) -> bool:
-        metadata = task.get('metadata') if isinstance(task.get('metadata'), dict) else {}
-        lkb = metadata.get('lkb') if isinstance(metadata, dict) else {}
-        if isinstance(lkb, dict) and bool(lkb.get('acceptance_proof')):
+        metadata = task.get("metadata") if isinstance(task.get("metadata"), dict) else {}
+        lkb = metadata.get("lkb") if isinstance(metadata, dict) else {}
+        if isinstance(lkb, dict) and bool(lkb.get("acceptance_proof")):
             return True
-        incoming = payload.get('metadata')
-        incoming_lkb = incoming.get('lkb') if isinstance(incoming, dict) else {}
-        return isinstance(incoming_lkb, dict) and bool(incoming_lkb.get('acceptance_proof'))
+        incoming = payload.get("metadata")
+        incoming_lkb = incoming.get("lkb") if isinstance(incoming, dict) else {}
+        return isinstance(incoming_lkb, dict) and bool(incoming_lkb.get("acceptance_proof"))
 
-    def _tms(self, context: 'ToolContext') -> TruthMaintenanceSystem:
+    def _tms(self, context: "ToolContext") -> TruthMaintenanceSystem:
         tms = get_logical_kanban(context).tms
         if tms.on_invalidate is None:
             session_id = _session_id(context)
@@ -1944,7 +1945,7 @@ class LogicalKanbanService:
 
     def _check_stale_assumption_for_task(
         self,
-        context: 'ToolContext',
+        context: "ToolContext",
         task_id: str,
     ) -> ValidationRun | None:
         """Return a stale ValidationRun if task_id depends on a stale assertion."""
@@ -1954,63 +1955,63 @@ class LogicalKanbanService:
         stale_assertions = [
             assertion.assertion_id
             for assertion in tms.get_assertions_for_task(task_id)
-            if assertion.status == 'stale'
+            if assertion.status == "stale"
         ]
         issue = ValidationIssue(
-            code='stale_assumption_blocks_transition',
+            code="stale_assumption_blocks_transition",
             message=(
-                f'Task {task_id} cannot change status because one or more '
-                'assumptions it depends on have been invalidated.'
+                f"Task {task_id} cannot change status because one or more "
+                "assumptions it depends on have been invalidated."
             ),
-            rule='LKB-TMS-001',
+            rule="LKB-TMS-001",
             task_id=task_id,
             repair_suggestions=(
                 RepairSuggestion(
-                    action='revalidate_task',
+                    action="revalidate_task",
                     target=task_id,
-                    message='Clarify or override the invalidated assumptions before transitioning.',
+                    message="Clarify or override the invalidated assumptions before transitioning.",
                     priority=1,
                 ),
                 RepairSuggestion(
-                    action='clarify_ambiguity',
+                    action="clarify_ambiguity",
                     target=task_id,
-                    message='Provide clarification for the invalidated assumptions.',
+                    message="Provide clarification for the invalidated assumptions.",
                     priority=2,
                 ),
             ),
         )
         # Build a minimal proposal-like object for _denied.
         proposal = Proposal(
-            proposal_id='TMS-STALE',
+            proposal_id="TMS-STALE",
             change=ProposedChange(
-                kind='transition_status',
-                payload={'taskId': task_id},
+                kind="transition_status",
+                payload={"taskId": task_id},
             ),
-            snapshot_hash='',
+            snapshot_hash="",
         )
         return self._denied(
             proposal,
             task_id=task_id,
             issues=(issue,),
-            result='stale',
-            derived_facts=tuple(f'Stale({aid})' for aid in stale_assertions),
+            result="stale",
+            derived_facts=tuple(f"Stale({aid})" for aid in stale_assertions),
             proof_trace=(
                 {
-                    'rule': 'LKB-TMS-001',
-                    'premises': [f'Task({task_id})']
-                    + [f'Stale({aid})' for aid in stale_assertions],
-                    'conclusion': f'Not(CanMoveTo({task_id}, _))',
-                    'solverVersion': self.solver_version,
+                    "rule": "LKB-TMS-001",
+                    "premises": [f"Task({task_id})"]
+                    + [f"Stale({aid})" for aid in stale_assertions],
+                    "conclusion": f"Not(CanMoveTo({task_id}, _))",
+                    "solverVersion": self.solver_version,
                 },
             ),
         )
 
     def _register_assertion_in_tms(
         self,
-        context: 'ToolContext',
+        context: "ToolContext",
         *,
         assertion_id: str,
-        worlds: tuple['World', ...],
+        worlds: tuple["World", ...],
         target_task_id: str | None,
     ) -> None:
         """Register all assumptions from accepted worlds in the TMS."""
@@ -2028,10 +2029,10 @@ class LogicalKanbanService:
 
     def clarify_assumption(
         self,
-        context: 'ToolContext',
+        context: "ToolContext",
         assumption_id: str,
-        clarification: 'Clarification',
-    ) -> tuple['AssumptionRecord', 'AssumptionRecord' | None, ValidationRun | None]:
+        clarification: "Clarification",
+    ) -> tuple["AssumptionRecord", "AssumptionRecord" | None, ValidationRun | None]:
         """Apply a user clarification and revalidate affected tasks.
 
         Returns the new/old assumption records and, if a single task was
@@ -2041,7 +2042,7 @@ class LogicalKanbanService:
         from .fuzzy_types import Clarification
 
         if not isinstance(clarification, Clarification):
-            raise TypeError('clarification must be a Clarification instance')
+            raise TypeError("clarification must be a Clarification instance")
         tms = self._tms(context)
         new_record, old_record = tms.clarify_assumption(assumption_id, clarification)
         validation_run: ValidationRun | None = None
@@ -2055,8 +2056,8 @@ class LogicalKanbanService:
                 event_for_human_override(
                     assumption_id=old_record.assumption_id,
                     assertion_id=old_record.assertion_id,
-                    actor=getattr(clarification, 'actor', None) or 'system',
-                    reason=getattr(clarification, 'reason', '') or 'user override',
+                    actor=getattr(clarification, "actor", None) or "system",
+                    reason=getattr(clarification, "reason", "") or "user override",
                     previous_result=old_record.status,
                     task_ids=task_ids,
                     session_id=_session_id(context),
@@ -2072,20 +2073,20 @@ class LogicalKanbanService:
             task_ids = assertion.task_ids if assertion else set()
             if len(task_ids) == 1:
                 task_id = next(iter(task_ids))
-                task = (getattr(context, 'tasks', {}) or {}).get(task_id)
-                if isinstance(task, dict) and task.get('status') == 'pending':
+                task = (getattr(context, "tasks", {}) or {}).get(task_id)
+                if isinstance(task, dict) and task.get("status") == "pending":
                     _audit_log(context).append(
                         event_for_revalidation_requested(
                             task_id,
-                            triggered_by=f'assumption_clarified:{assumption_id}',
+                            triggered_by=f"assumption_clarified:{assumption_id}",
                             previous_validation_run_id=None,
                             session_id=_session_id(context),
-                            actor=getattr(clarification, 'actor', None) or 'system',
+                            actor=getattr(clarification, "actor", None) or "system",
                         )
                     )
                     change = ProposedChange(
-                        kind='transition_status',
-                        payload={'taskId': task_id, 'status': 'in_progress'},
+                        kind="transition_status",
+                        payload={"taskId": task_id, "status": "in_progress"},
                     )
                     validation_run = self.run(change, context)[1]
         return new_record, old_record, validation_run

@@ -181,27 +181,27 @@ class PromptBuilder:
         try:
             template = _jinja_env.from_string(template_str)
         except TemplateError as exc:
-            logger.error('Template parse error: %s', exc)
+            logger.error("Template parse error: %s", exc)
             template = _jinja_env.from_string(_DEFAULT_PROMPT)
 
-        issue_dict = issue.to_dict() if hasattr(issue, 'to_dict') else issue
+        issue_dict = issue.to_dict() if hasattr(issue, "to_dict") else issue
         context = {
-            'attempt': attempt,
-            'issue': _to_jinja_value(issue_dict),
-            'clarification': clarification_context,
-            'pending_question': pending_question,
-            'options': options,
+            "attempt": attempt,
+            "issue": _to_jinja_value(issue_dict),
+            "clarification": clarification_context,
+            "pending_question": pending_question,
+            "options": options,
         }
 
         try:
             rendered = template.render(context).strip()
         except TemplateError as exc:
-            logger.error('Template render error: %s', exc)
+            logger.error("Template render error: %s", exc)
             # Fallback to default prompt
             fallback = _jinja_env.from_string(_DEFAULT_PROMPT)
             rendered = fallback.render(context).strip()
-        if session is not None and getattr(session, 'workspace_strategy', None) == 'sequential':
-            rendered = f'{rendered}\n\n{_build_sequential_workspace_context(session)}'
+        if session is not None and getattr(session, "workspace_strategy", None) == "sequential":
+            rendered = f"{rendered}\n\n{_build_sequential_workspace_context(session)}"
 
         ws_path = _resolve_workspace_path(session)
 
@@ -210,7 +210,7 @@ class PromptBuilder:
         # first thing the agent sees on every turn.
         operator_hints = _get_operator_hints(ws_path) if ws_path else None
         if operator_hints:
-            rendered = f'---\n## Operator Hints\n\n{operator_hints}\n---\n\n{rendered}'
+            rendered = f"---\n## Operator Hints\n\n{operator_hints}\n---\n\n{rendered}"
 
         # F-40 root-cause fix: inject workspace diff context so the
         # agent sees exactly which files are already modified and can
@@ -219,105 +219,100 @@ class PromptBuilder:
         ws_diff = _get_workspace_diff(ws_path) if ws_path else None
         if ws_diff:
             rendered = (
-                '---\n'
-                '## Current Workspace Changes\n'
-                '\n'
-                'The following files have already been modified or created in the\n'
-                'workspace but are not yet committed. If these changes match the\n'
+                "---\n"
+                "## Current Workspace Changes\n"
+                "\n"
+                "The following files have already been modified or created in the\n"
+                "workspace but are not yet committed. If these changes match the\n"
                 "current issue's requirements, **do not re-implement them**.\n"
-                'Skip directly to `git add` + `git commit`.\n'
-                '\n'
-                f'{ws_diff}\n'
-                '---\n'
-                '\n'
-                f'{rendered}'
+                "Skip directly to `git add` + `git commit`.\n"
+                "\n"
+                f"{ws_diff}\n"
+                "---\n"
+                "\n"
+                f"{rendered}"
             )
 
         if previous_run_ids:
-            sessions_home = Path.home() / '.clawcodex' / 'sessions'
-            prev_lines = '\n'.join(
+            sessions_home = Path.home() / ".clawcodex" / "sessions"
+            prev_lines = "\n".join(
                 f'- `{rid}` — `Read(path="{sessions_home / rid / "transcript.jsonl"}")`'
                 for rid in previous_run_ids
             )
             rendered = (
-                '---\n'
-                '## Previous Attempts\n'
-                '\n'
-                'This issue has been attempted before and failed.  You can inspect\n'
-                'the full conversation transcript of each previous run to understand\n'
-                'what was tried, what went wrong, and what to avoid this time.\n'
-                '\n'
-                f'{prev_lines}\n'
-                '---\n'
-                '\n'
-                f'{rendered}'
+                "---\n"
+                "## Previous Attempts\n"
+                "\n"
+                "This issue has been attempted before and failed.  You can inspect\n"
+                "the full conversation transcript of each previous run to understand\n"
+                "what was tried, what went wrong, and what to avoid this time.\n"
+                "\n"
+                f"{prev_lines}\n"
+                "---\n"
+                "\n"
+                f"{rendered}"
             )
 
         if python_executable:
             rendered = (
-                f'⛔ **约束提醒**：始终用 `{python_executable}` 绝对路径运行 Python，'
-                f'不要调试环境差异。\n\n{rendered}'
+                f"⛔ **约束提醒**：始终用 `{python_executable}` 绝对路径运行 Python，"
+                f"不要调试环境差异。\n\n{rendered}"
             )
 
         # F-120: inject the list of files git left in conflict state so the
         # agent can read each file's conflict markers and resolve them in
         # place. Only emitted when conflict_files is non-empty.
         if conflict_files:
-            file_lines = '\n'.join(f'- `{name}`' for name in conflict_files)
+            file_lines = "\n".join(f"- `{name}`" for name in conflict_files)
             rendered = (
-                '---\n'
-                '## Conflicting Files (F-120 rebase reentry)\n'
-                '\n'
+                "---\n"
+                "## Conflicting Files (F-120 rebase reentry)\n"
+                "\n"
                 "The orchestrator's automated rebase left the following files in a\n"
-                'conflict state (REBASE_HEAD is set in the workspace). Read each\n'
-                'file, resolve the conflict markers (`<<<<<<<`, `=======`,\n'
-                '`>>>>>>>`), then continue the rebase and push:\n'
-                '\n'
-                f'{file_lines}\n'
-                '\n'
-                'Suggested commands (run from the workspace root):\n'
-                '\n'
-                '```bash\n'
-                'git status              # confirm REBASE_HEAD state\n'
-                '# Edit each file above to remove conflict markers.\n'
-                'git add <resolved files>\n'
-                'git rebase --continue\n'
-                'git push --force-with-lease=origin/<branch>:<remote_sha> \\\n'
-                '    origin <branch>\n'
-                '```\n'
-                '---'
-                '\n\n'
-                f'{rendered}'
+                "conflict state (REBASE_HEAD is set in the workspace). Read each\n"
+                "file, resolve the conflict markers (`<<<<<<<`, `=======`,\n"
+                "`>>>>>>>`), then continue the rebase and push:\n"
+                "\n"
+                f"{file_lines}\n"
+                "\n"
+                "Suggested commands (run from the workspace root):\n"
+                "\n"
+                "```bash\n"
+                "git status              # confirm REBASE_HEAD state\n"
+                "# Edit each file above to remove conflict markers.\n"
+                "git add <resolved files>\n"
+                "git rebase --continue\n"
+                "git push --force-with-lease=origin/<branch>:<remote_sha> \\\n"
+                "    origin <branch>\n"
+                "```\n"
+                "---"
+                "\n\n"
+                f"{rendered}"
             )
 
         # F-121: rules file reference injection
         if current:
             config = current[0]
-            workflow_path = getattr(config, 'source_path', None) or getattr(
-                config, '_source_path', None
+            workflow_path = getattr(config, "source_path", None) or getattr(
+                config, "_source_path", None
             )
             rules_path = RuleEngine.get_rules_path(config, workflow_path)
             if rules_path:
                 rendered = (
-                    f'{rendered}\n\n'
-                    f'---\n'
-                    f'\U0001f4d0 **Review conventions**: `{rules_path}`\n'
-                    f'The file contains illustrative conventions extracted from '
-                    f'previous PR reviews. Read it with `Read()` when relevant \u2014 '
-                    f'the rules are **reference examples**, not mandatory requirements.\n'
-                    f'---'
+                    f"{rendered}\n\n"
+                    f"---\n"
+                    f"\U0001f4d0 **Review conventions**: `{rules_path}`\n"
+                    f"The file contains illustrative conventions extracted from "
+                    f"previous PR reviews. Read it with `Read()` when relevant \u2014 "
+                    f"the rules are **reference examples**, not mandatory requirements.\n"
+                    f"---"
                 )
 
         # F-140: inject Task V2 / Logical Kanban guidance so orchestrator-launched
         # agents use the same task-loop discipline as interactive sessions.
         lkb_guidance = task_v2_guidelines()
         if lkb_guidance:
-            rendered = (
-                f'{rendered}\n\n'
-                f'---\n'
-                f'{lkb_guidance}\n'
-                f'---'
-            )
+            rendered = f"{rendered}\n\n---\n{lkb_guidance}\n---"
 
         return rendered
 
@@ -326,7 +321,7 @@ class PromptBuilder:
     # (user message candidate) in workflow.md. Lives in workflow.md
     # between the system section and the issue section. The marker is
     # an HTML comment so it is invisible in Markdown rendering.
-    USER_MESSAGE_MARKER = '<!-- === USER MESSAGE === -->'
+    USER_MESSAGE_MARKER = "<!-- === USER MESSAGE === -->"
 
     @staticmethod
     def render_parts(
@@ -377,10 +372,8 @@ class PromptBuilder:
                 system_part.strip(), user_part.strip(), session=session
             )
             return system_part, user_part
-        user_part = _expand_agent_mentions_in_prompt(
-            '', full.strip(), session=session
-        )[1]
-        return '', user_part
+        user_part = _expand_agent_mentions_in_prompt("", full.strip(), session=session)[1]
+        return "", user_part
 
     @staticmethod
     def render_rebase(
@@ -399,74 +392,74 @@ class PromptBuilder:
         is told exactly which files git marked as conflicting and the
         suggested git commands to finish the rebase + push.
         """
-        issue_dict = issue.to_dict() if hasattr(issue, 'to_dict') else issue
+        issue_dict = issue.to_dict() if hasattr(issue, "to_dict") else issue
         title = (
-            issue_dict.get('title') if isinstance(issue_dict, dict) else getattr(issue, 'title', '')
-        ) or ''
+            issue_dict.get("title") if isinstance(issue_dict, dict) else getattr(issue, "title", "")
+        ) or ""
         identifier = (
-            issue_dict.get('identifier')
+            issue_dict.get("identifier")
             if isinstance(issue_dict, dict)
-            else getattr(issue, 'identifier', '')
-        ) or ''
+            else getattr(issue, "identifier", "")
+        ) or ""
 
         files_block = (
-            '\n'.join(f'- `{name}`' for name in conflict_files)
+            "\n".join(f"- `{name}`" for name in conflict_files)
             if conflict_files
-            else '- (no specific files reported — run `git diff --name-only --diff-filter=U` to list them)'
+            else "- (no specific files reported — run `git diff --name-only --diff-filter=U` to list them)"
         )
 
-        reason_block = f'\n## Reason\n\n{reason}\n' if reason else ''
+        reason_block = f"\n## Reason\n\n{reason}\n" if reason else ""
 
         template = (
-            '---\n'
-            f'# F-120 PR Conflict Resolution — {identifier}\n'
-            f'\n**Title:** {title}\n'
-            f'**Branch:** `{branch_name}` (base `{base_branch}`)\n'
-            f'{reason_block}'
-            '\n'
-            '## Task\n'
-            '\n'
+            "---\n"
+            f"# F-120 PR Conflict Resolution — {identifier}\n"
+            f"\n**Title:** {title}\n"
+            f"**Branch:** `{branch_name}` (base `{base_branch}`)\n"
+            f"{reason_block}"
+            "\n"
+            "## Task\n"
+            "\n"
             "The orchestrator's automated `git rebase origin/<base>` left this\n"
-            'branch with content conflicts. Your job is to resolve each conflict,\n'
-            'continue the rebase, and push the rebased branch with\n'
-            '`--force-with-lease` (the default) so the PR becomes mergeable\n'
-            'again. **Do NOT close the PR or open a new one.**\n'
-            '\n'
-            '## Conflicting Files\n'
-            '\n'
-            f'{files_block}\n'
-            '\n'
-            '## Procedure\n'
-            '\n'
-            '1. `git status` — confirm REBASE_HEAD is set.\n'
-            '2. For each file above: read the file, remove the\n'
-            '   `<<<<<<<`/`=======`/`>>>>>>>` markers, write the merged\n'
-            '   content you want kept.\n'
-            '3. `git add <file>` for each resolved file.\n'
-            '4. `git rebase --continue` (or `--skip` if the upstream commit is\n'
-            '   the one to drop — but only when clearly safe).\n'
-            '5. `git log --oneline -5` to verify the rebased history.\n'
-            '6. Capture the new `HEAD` SHA, then push:\n'
-            '\n'
-            '   ```bash\n'
-            '   REMOTE_SHA=$(git rev-parse origin/<branch>)\n'
-            '   git push --force-with-lease=<branch>:$REMOTE_SHA origin <branch>\n'
-            '   ```\n'
-            '\n'
-            '7. Print the final head SHA in your response so the orchestrator\n'
-            '   can record it.\n'
-            '\n'
-            '## Constraints\n'
-            '\n'
-            '- **Do not** run `git rebase --abort` unless explicitly asked; we\n'
-            '  want the rebased history, not the pre-rebase one.\n'
-            '- **Do not** use plain `git push --force`; the orchestrator\n'
-            '  defaults to `--force-with-lease` to avoid clobbering concurrent\n'
-            '  pushes. Only use `--force` if the operator explicitly passed\n'
-            '  `--force` to the rebase CLI.\n'
-            '- **Do not** open a new PR; the existing PR will pick up the\n'
-            '  rebased head automatically once the push lands.\n'
-            '---'
+            "branch with content conflicts. Your job is to resolve each conflict,\n"
+            "continue the rebase, and push the rebased branch with\n"
+            "`--force-with-lease` (the default) so the PR becomes mergeable\n"
+            "again. **Do NOT close the PR or open a new one.**\n"
+            "\n"
+            "## Conflicting Files\n"
+            "\n"
+            f"{files_block}\n"
+            "\n"
+            "## Procedure\n"
+            "\n"
+            "1. `git status` — confirm REBASE_HEAD is set.\n"
+            "2. For each file above: read the file, remove the\n"
+            "   `<<<<<<<`/`=======`/`>>>>>>>` markers, write the merged\n"
+            "   content you want kept.\n"
+            "3. `git add <file>` for each resolved file.\n"
+            "4. `git rebase --continue` (or `--skip` if the upstream commit is\n"
+            "   the one to drop — but only when clearly safe).\n"
+            "5. `git log --oneline -5` to verify the rebased history.\n"
+            "6. Capture the new `HEAD` SHA, then push:\n"
+            "\n"
+            "   ```bash\n"
+            "   REMOTE_SHA=$(git rev-parse origin/<branch>)\n"
+            "   git push --force-with-lease=<branch>:$REMOTE_SHA origin <branch>\n"
+            "   ```\n"
+            "\n"
+            "7. Print the final head SHA in your response so the orchestrator\n"
+            "   can record it.\n"
+            "\n"
+            "## Constraints\n"
+            "\n"
+            "- **Do not** run `git rebase --abort` unless explicitly asked; we\n"
+            "  want the rebased history, not the pre-rebase one.\n"
+            "- **Do not** use plain `git push --force`; the orchestrator\n"
+            "  defaults to `--force-with-lease` to avoid clobbering concurrent\n"
+            "  pushes. Only use `--force` if the operator explicitly passed\n"
+            "  `--force` to the rebase CLI.\n"
+            "- **Do not** open a new PR; the existing PR will pick up the\n"
+            "  rebased head automatically once the push lands.\n"
+            "---"
         )
         return template
 
@@ -478,17 +471,17 @@ class PromptBuilder:
         branch_name: str,
         feedback: list[PullRequestFeedback],
     ) -> str:
-        issue_dict = issue.to_dict() if hasattr(issue, 'to_dict') else issue
+        issue_dict = issue.to_dict() if hasattr(issue, "to_dict") else issue
         context = {
-            'issue': _to_jinja_value(issue_dict),
-            'pull_request': pull_request,
-            'branch_name': branch_name,
-            'feedback': feedback,
+            "issue": _to_jinja_value(issue_dict),
+            "pull_request": pull_request,
+            "branch_name": branch_name,
+            "feedback": feedback,
         }
         try:
             return _jinja_env.from_string(_REVIEW_FEEDBACK_TEMPLATE).render(context).strip()
         except TemplateError as exc:
-            logger.error('Review feedback template render error: %s', exc)
+            logger.error("Review feedback template render error: %s", exc)
             return _DEFAULT_PROMPT
 
     @staticmethod
@@ -507,37 +500,37 @@ class PromptBuilder:
                 and ``reason`` (str) for items needing human attention.
         """
         lines = [
-            '## ClawCodex PR Review Follow-up Summary',
-            '',
-            f'**Follow-up attempt**: #{attempt}',
-            f'**Processed**: {len(processed)} item(s)',
+            "## ClawCodex PR Review Follow-up Summary",
+            "",
+            f"**Follow-up attempt**: #{attempt}",
+            f"**Processed**: {len(processed)} item(s)",
         ]
         if processed:
-            lines += ['', '### Auto-handled']
+            lines += ["", "### Auto-handled"]
             for item in processed:
-                loc = ''
+                loc = ""
                 if item.file_path:
-                    loc = f' (`{item.file_path}'
+                    loc = f" (`{item.file_path}"
                     if item.line:
-                        loc += f':{item.line}'
-                    loc += '`)'
-                body_preview = (item.body or '')[:80]
-                if len(item.body or '') > 80:
-                    body_preview += '...'
-                lines.append(f'- [{item.source}] {item.id}{loc}: {body_preview}')
+                        loc += f":{item.line}"
+                    loc += "`)"
+                body_preview = (item.body or "")[:80]
+                if len(item.body or "") > 80:
+                    body_preview += "..."
+                lines.append(f"- [{item.source}] {item.id}{loc}: {body_preview}")
         if skipped:
-            lines += ['', '### Needs human attention']
+            lines += ["", "### Needs human attention"]
             for entry in skipped:
-                fb = entry['feedback']
-                reason = entry['reason']
-                loc = ''
+                fb = entry["feedback"]
+                reason = entry["reason"]
+                loc = ""
                 if fb.file_path:
-                    loc = f' (`{fb.file_path}'
+                    loc = f" (`{fb.file_path}"
                     if fb.line:
-                        loc += f':{fb.line}'
-                    loc += '`)'
-                lines.append(f'- [{fb.source}] {fb.id}{loc}: {reason}')
-        return '\n'.join(lines)
+                        loc += f":{fb.line}"
+                    loc += "`)"
+                lines.append(f"- [{fb.source}] {fb.id}{loc}: {reason}")
+        return "\n".join(lines)
 
     @staticmethod
     def build_continuation_prompt(
@@ -553,13 +546,13 @@ class PromptBuilder:
         so the LLM can see what has already been done in previous
         turns and avoid re-exploring from scratch.
         """
-        context_block = f'\n\nCurrent issue context:\n{issue_context}\n' if issue_context else ''
+        context_block = f"\n\nCurrent issue context:\n{issue_context}\n" if issue_context else ""
         urgency = (
-            f'\n- ⚠️  You have only {max_turns - turn_number + 1} turn(s) remaining. '
-            f'Prioritize code implementation over reading more files. '
-            f'Use Write/Edit to make concrete changes NOW.'
+            f"\n- ⚠️  You have only {max_turns - turn_number + 1} turn(s) remaining. "
+            f"Prioritize code implementation over reading more files. "
+            f"Use Write/Edit to make concrete changes NOW."
             if turn_number >= max_turns // 2
-            else ''
+            else ""
         )
 
         # F-54 root-cause fix: inject recent git log so the LLM knows
@@ -570,27 +563,27 @@ class PromptBuilder:
         ws_path = _resolve_workspace_path(session)
         operator_hints = _get_operator_hints(ws_path) if ws_path else None
         hints_block = (
-            f'---\n## Operator Hints\n\n{operator_hints}\n---\n\n' if operator_hints else ''
+            f"---\n## Operator Hints\n\n{operator_hints}\n---\n\n" if operator_hints else ""
         )
 
         python_constraint = (
-            f'⛔ **约束提醒**：始终用 `{python_executable}` 绝对路径，不要调试环境差异。\n'
+            f"⛔ **约束提醒**：始终用 `{python_executable}` 绝对路径，不要调试环境差异。\n"
             if python_executable
-            else ''
+            else ""
         )
 
         return (
-            f'{hints_block}'
-            f'Continuation guidance:\n\n'
-            f'{python_constraint}'
-            f'⛔ `pytest` 禁止使用管道 `| tail -40`/`| head -50`，用 `--tb=short -q` 替代。\n'
-            f'⛔ 建议终端命令时用 `clawcodex-dev` CLI，不要用 `python3 -c` 或 `PYTHONPATH=`。\n'
-            f'- This is continuation turn #{turn_number} of {max_turns}.{context_block}{urgency}\n'
-            f'- Resume from the current workspace state and continue implementing.\n'
-            f'- Use available tools (Bash, Write, Edit, Grep, Glob, etc.) to make changes.\n'
-            f'- Focus on completing the issue requirements. Do NOT re-read files you have already explored.\n'
-            f'- Your FIRST action should be a Write or Edit to implement the feature.\n'
-            f'{git_log_summary}'
+            f"{hints_block}"
+            f"Continuation guidance:\n\n"
+            f"{python_constraint}"
+            f"⛔ `pytest` 禁止使用管道 `| tail -40`/`| head -50`，用 `--tb=short -q` 替代。\n"
+            f"⛔ 建议终端命令时用 `clawcodex-dev` CLI，不要用 `python3 -c` 或 `PYTHONPATH=`。\n"
+            f"- This is continuation turn #{turn_number} of {max_turns}.{context_block}{urgency}\n"
+            f"- Resume from the current workspace state and continue implementing.\n"
+            f"- Use available tools (Bash, Write, Edit, Grep, Glob, etc.) to make changes.\n"
+            f"- Focus on completing the issue requirements. Do NOT re-read files you have already explored.\n"
+            f"- Your FIRST action should be a Write or Edit to implement the feature.\n"
+            f"{git_log_summary}"
         )
 
     @staticmethod
@@ -613,43 +606,43 @@ class PromptBuilder:
             clarification is not active
         """
         if not pending_question:
-            return ''
+            return ""
 
         template_str = _CLARIFICATION_TEMPLATE.strip()
         try:
             template = _jinja_env.from_string(template_str)
         except TemplateError as exc:
-            logger.error('Clarification template parse error: %s', exc)
-            return ''
+            logger.error("Clarification template parse error: %s", exc)
+            return ""
 
         context = {
-            'pending_question': pending_question,
-            'options': options or [],
+            "pending_question": pending_question,
+            "options": options or [],
         }
         try:
             return template.render(context).strip()
         except TemplateError as exc:
-            logger.error('Clarification template render error: %s', exc)
-            return ''
+            logger.error("Clarification template render error: %s", exc)
+            return ""
 
 
 def _build_sequential_workspace_context(session: Any) -> str:
-    return '\n'.join(
+    return "\n".join(
         [
-            '---',
-            '## Sequential Workspace Context',
-            '',
-            'This issue is running in a sequential shared workspace.',
-            f'- Workspace strategy: `{getattr(session, "workspace_strategy", "sequential")}`',
-            f'- Integration branch: `{getattr(session, "integration_branch", None) or "current branch"}`',
-            f'- Start commit: `{getattr(session, "start_commit_sha", None) or "unknown"}`',
-            f'- Base commit: `{getattr(session, "base_commit_sha", None) or "unknown"}`',
-            f'- Previous issue: `{getattr(session, "previous_issue_id", None) or "none"}`',
-            f'- Sequence index: `{getattr(session, "sequence_index", None) or "unknown"}`',
-            '',
-            'Build on the existing commit chain in this workspace. Do not redo earlier issues.',
-            'If the expected prior commit chain appears to be missing, stop and report it.',
-            '---',
+            "---",
+            "## Sequential Workspace Context",
+            "",
+            "This issue is running in a sequential shared workspace.",
+            f"- Workspace strategy: `{getattr(session, 'workspace_strategy', 'sequential')}`",
+            f"- Integration branch: `{getattr(session, 'integration_branch', None) or 'current branch'}`",
+            f"- Start commit: `{getattr(session, 'start_commit_sha', None) or 'unknown'}`",
+            f"- Base commit: `{getattr(session, 'base_commit_sha', None) or 'unknown'}`",
+            f"- Previous issue: `{getattr(session, 'previous_issue_id', None) or 'none'}`",
+            f"- Sequence index: `{getattr(session, 'sequence_index', None) or 'unknown'}`",
+            "",
+            "Build on the existing commit chain in this workspace. Do not redo earlier issues.",
+            "If the expected prior commit chain appears to be missing, stop and report it.",
+            "---",
         ]
     )
 
@@ -686,14 +679,10 @@ def _expand_agent_mentions_in_prompt(
         from clawcodex_ext.agent.load_agents_dir import get_agents_for_mentions
 
         workspace_path = _resolve_agent_expansion_workspace(session)
-        agents = (
-            get_agents_for_mentions(str(workspace_path))
-            if workspace_path
-            else []
-        )
+        agents = get_agents_for_mentions(str(workspace_path)) if workspace_path else []
     except Exception as exc:  # noqa: BLE001 — best-effort only
         logger.warning(
-            'F-89: failed to load agents for @agent-name expansion: %s',
+            "F-89: failed to load agents for @agent-name expansion: %s",
             exc,
         )
         return system_part, user_part
@@ -704,14 +693,13 @@ def _expand_agent_mentions_in_prompt(
     # Concatenate for a single sweep so an @agent- mention that splits
     # across the marker line is still detected. We then re-split using
     # known markers after stripping/injecting.
-    combined = f'{system_part}\n\n{user_part}'
+    combined = f"{system_part}\n\n{user_part}"
 
     unknown = find_unknown_agent_mentions(combined, agents)
     if unknown:
         logger.warning(
-            'F-89: stripping unknown agent mention(s) from orchestrator '
-            'prompt: %s',
-            ', '.join(unknown),
+            "F-89: stripping unknown agent mention(s) from orchestrator prompt: %s",
+            ", ".join(unknown),
         )
         combined = strip_agent_mentions(combined)
 
@@ -719,7 +707,7 @@ def _expand_agent_mentions_in_prompt(
     if attachments:
         extra = format_at_mention_attachments(attachments)
         if extra:
-            combined = f'{extra}\n\n{combined}'
+            combined = f"{extra}\n\n{combined}"
 
     # If the original render split cleanly, keep the split; otherwise
     # everything collapses back into user_part (the marker line is gone
@@ -729,17 +717,17 @@ def _expand_agent_mentions_in_prompt(
     if marker in combined:
         new_system, new_user = combined.split(marker, 1)
         return new_system.strip(), new_user.strip()
-    return '', combined.strip()
+    return "", combined.strip()
 
 
 def _resolve_agent_expansion_workspace(session: Any | None) -> Path | None:
     """Extract a workspace root path suitable for agent discovery."""
     if session is None:
         return None
-    ws = getattr(session, 'workspace', None)
+    ws = getattr(session, "workspace", None)
     if ws is None:
         return None
-    path = getattr(ws, 'path', None)
+    path = getattr(ws, "path", None)
     if path is None:
         return None
     return Path(path)
@@ -762,10 +750,10 @@ def _resolve_workspace_path(session: Any) -> Path | None:
     """
     if session is None:
         return None
-    ws = getattr(session, 'workspace', None)
+    ws = getattr(session, "workspace", None)
     if ws is None:
         return None
-    path = getattr(ws, 'path', None)
+    path = getattr(ws, "path", None)
     if path is None:
         return None
     return Path(path)
@@ -780,7 +768,7 @@ def _get_workspace_diff(ws_path: Path) -> str | None:
     """
     try:
         proc = subprocess.run(
-            ['git', 'diff', '--stat', 'HEAD'],
+            ["git", "diff", "--stat", "HEAD"],
             cwd=str(ws_path),
             capture_output=True,
             text=True,
@@ -788,7 +776,7 @@ def _get_workspace_diff(ws_path: Path) -> str | None:
         )
         diff_stat = proc.stdout.strip()
         proc2 = subprocess.run(
-            ['git', 'status', '--short'],
+            ["git", "status", "--short"],
             cwd=str(ws_path),
             capture_output=True,
             text=True,
@@ -802,10 +790,10 @@ def _get_workspace_diff(ws_path: Path) -> str | None:
         return None  # clean workspace — nothing to inject
     parts = []
     if diff_stat:
-        parts.append(f'```\n{diff_stat}\n```')
+        parts.append(f"```\n{diff_stat}\n```")
     if status_short:
-        parts.append(f'Uncommitted files:\n```\n{status_short}\n```')
-    return '\n'.join(parts)
+        parts.append(f"Uncommitted files:\n```\n{status_short}\n```")
+    return "\n".join(parts)
 
 
 def _get_operator_hints(ws_path: Path) -> str | None:
@@ -814,15 +802,15 @@ def _get_operator_hints(ws_path: Path) -> str | None:
     Returns ``None`` when the file is missing or empty so callers can
     skip injecting the operator-hints block entirely.
     """
-    hints_file = ws_path / '.operator_hints.md'
+    hints_file = ws_path / ".operator_hints.md"
     if not hints_file.exists():
         return None
     try:
-        content = hints_file.read_text(encoding='utf-8').strip()
+        content = hints_file.read_text(encoding="utf-8").strip()
         if content:
             return content
     except (OSError, UnicodeDecodeError) as exc:
-        logger.warning('Failed to read operator hints from %s: %s', hints_file, exc)
+        logger.warning("Failed to read operator hints from %s: %s", hints_file, exc)
     return None
 
 
@@ -836,16 +824,16 @@ def _get_git_log_summary(session: Any) -> str:
     and avoid re-exploring from scratch.
     """
     if session is None:
-        return ''
-    ws = getattr(session, 'workspace', None)
+        return ""
+    ws = getattr(session, "workspace", None)
     if ws is None:
-        return ''
-    ws_path = getattr(ws, 'path', None)
+        return ""
+    ws_path = getattr(ws, "path", None)
     if ws_path is None:
-        return ''
+        return ""
     try:
         proc = subprocess.run(
-            ['git', 'log', '--oneline', '-3'],
+            ["git", "log", "--oneline", "-3"],
             cwd=str(ws_path),
             capture_output=True,
             text=True,
@@ -853,10 +841,10 @@ def _get_git_log_summary(session: Any) -> str:
         )
         log_out = proc.stdout.strip()
         if not log_out:
-            return ''
-        return f'\nRecent commits in workspace:\n```\n{log_out}\n```\n'
+            return ""
+        return f"\nRecent commits in workspace:\n```\n{log_out}\n```\n"
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        return ''
+        return ""
 
 
 # ─── Python interpreter detection + cascade resolver ────────────────
@@ -873,17 +861,17 @@ def _parse_pyvenv_home(cfg_path: Path) -> str:
     not block prompt rendering.
     """
     try:
-        text = cfg_path.read_text(encoding='utf-8', errors='replace')
+        text = cfg_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return ''
+        return ""
     for line in text.splitlines():
         stripped = line.strip()
-        if not stripped or stripped.startswith('#'):
+        if not stripped or stripped.startswith("#"):
             continue
-        if stripped.lower().startswith('home'):
-            _, _, value = stripped.partition('=')
+        if stripped.lower().startswith("home"):
+            _, _, value = stripped.partition("=")
             return value.strip().strip('"').strip("'")
-    return ''
+    return ""
 
 
 def _parse_conda_env_name(yml_path: Path) -> str:
@@ -892,29 +880,29 @@ def _parse_conda_env_name(yml_path: Path) -> str:
     Returns the env name or ``""`` if no ``name:`` key is set.
     """
     try:
-        text = yml_path.read_text(encoding='utf-8', errors='replace')
+        text = yml_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return ''
+        return ""
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith('#'):
+        if stripped.startswith("#"):
             continue
-        if stripped.lower().startswith('name'):
-            _, _, value = stripped.partition(':')
+        if stripped.lower().startswith("name"):
+            _, _, value = stripped.partition(":")
             return value.strip().strip('"').strip("'")
-    return ''
+    return ""
 
 
 # Ordered conda root locations probed when an ``environment.yml`` is
 # present. ``CONDA_PREFIX`` is consulted first when set (covers any
 # non-standard install location), then the common defaults.
 _CONDA_ROOT_CANDIDATES: tuple[str, ...] = (
-    '/opt/conda',
-    '/root/anaconda3',
-    '/root/miniconda3',
-    '/usr/local/anaconda3',
-    '/usr/local/miniconda3',
-    '/opt/anaconda3',
+    "/opt/conda",
+    "/root/anaconda3",
+    "/root/miniconda3",
+    "/usr/local/anaconda3",
+    "/usr/local/miniconda3",
+    "/opt/anaconda3",
 )
 
 
@@ -945,46 +933,46 @@ def _detect_python_in_workspace(
       disable them via ``python_detect_files`` if desired.
     """
     if workspace_path is None:
-        return ''
+        return ""
     workspace_path = Path(workspace_path)
     if not workspace_path.exists():
-        return ''
+        return ""
 
     for rel in candidates:
         f = workspace_path / rel
         if not f.exists() or not f.is_file():
             continue
         try:
-            if rel == '.python-version':
-                version = f.read_text(encoding='utf-8', errors='replace').strip()
+            if rel == ".python-version":
+                version = f.read_text(encoding="utf-8", errors="replace").strip()
                 if version:
-                    pyenv_root = Path(os.environ.get('PYENV_ROOT', str(Path.home() / '.pyenv')))
-                    py = pyenv_root / 'versions' / version / 'bin' / 'python3'
+                    pyenv_root = Path(os.environ.get("PYENV_ROOT", str(Path.home() / ".pyenv")))
+                    py = pyenv_root / "versions" / version / "bin" / "python3"
                     if py.exists():
                         return str(py)
-            elif rel.endswith('pyvenv.cfg'):
+            elif rel.endswith("pyvenv.cfg"):
                 home = _parse_pyvenv_home(f)
                 if home:
-                    py = Path(home) / 'bin' / 'python3'
+                    py = Path(home) / "bin" / "python3"
                     if py.exists():
                         return str(py)
-            elif rel == 'environment.yml':
+            elif rel == "environment.yml":
                 env_name = _parse_conda_env_name(f)
                 if env_name:
-                    conda_prefix = os.environ.get('CONDA_PREFIX', '').strip()
+                    conda_prefix = os.environ.get("CONDA_PREFIX", "").strip()
                     roots: list[str] = [conda_prefix] if conda_prefix else []
                     roots += list(_CONDA_ROOT_CANDIDATES)
                     for root in roots:
                         if not root:
                             continue
-                        py = Path(root) / 'envs' / env_name / 'bin' / 'python3'
+                        py = Path(root) / "envs" / env_name / "bin" / "python3"
                         if py.exists():
                             return str(py)
-            elif rel in ('Pipfile', 'pyproject.toml'):
+            elif rel in ("Pipfile", "pyproject.toml"):
                 continue
         except OSError:
             continue
-    return ''
+    return ""
 
 
 def resolve_python_executable(
@@ -992,7 +980,7 @@ def resolve_python_executable(
     workspace_path: Path | None,
     agent_cfg: Any,
     workspace_cfg: Any,
-    issue_executable: str = '',
+    issue_executable: str = "",
 ) -> str:
     """Cascade resolver: pick the most specific Python interpreter
     path available.
@@ -1032,32 +1020,32 @@ def resolve_python_executable(
     Returns:
         Absolute path string, or ``""`` when no constraint applies.
     """
-    issue_override = (issue_executable or '').strip()
+    issue_override = (issue_executable or "").strip()
     if issue_override:
         return issue_override
 
-    ws_explicit = getattr(workspace_cfg, 'python_executable', '') or ''
+    ws_explicit = getattr(workspace_cfg, "python_executable", "") or ""
     if ws_explicit:
         return ws_explicit
 
-    auto_detect = getattr(workspace_cfg, 'python_auto_detect', True)
+    auto_detect = getattr(workspace_cfg, "python_auto_detect", True)
     if auto_detect:
         detect_files = list(
-            getattr(workspace_cfg, 'python_detect_files', None)
+            getattr(workspace_cfg, "python_detect_files", None)
             or [
-                '.python-version',
-                'pyvenv.cfg',
-                '.venv/pyvenv.cfg',
-                'Pipfile',
-                'environment.yml',
+                ".python-version",
+                "pyvenv.cfg",
+                ".venv/pyvenv.cfg",
+                "Pipfile",
+                "environment.yml",
             ]
         )
         detected = _detect_python_in_workspace(workspace_path, detect_files)
         if detected:
             return detected
 
-    agent_default = getattr(agent_cfg, 'python_executable', '') or ''
+    agent_default = getattr(agent_cfg, "python_executable", "") or ""
     if agent_default:
         return agent_default
 
-    return ''
+    return ""

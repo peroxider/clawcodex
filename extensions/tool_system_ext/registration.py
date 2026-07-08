@@ -49,5 +49,5 @@ except Exception:  # noqa: BLE001 — defensive, never break tool registration
     pass
 
 __all__ = [
-    'EXTENSION_TOOLS',
+    "EXTENSION_TOOLS",
 ]

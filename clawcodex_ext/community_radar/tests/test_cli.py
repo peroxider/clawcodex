@@ -63,13 +63,21 @@ def test_source_list_seeds_defaults(monkeypatch, tmp_path: Path, capsys) -> None
 
 def test_source_add_then_remove(monkeypatch, tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
     _patch_registry(monkeypatch, tmp_path)
-    code = run([
-        "source", "add", "demo",
-        "--repo", "foo/bar",
-        "--notes", "test",
-        "--roadmap-keyword", "demo",
-        "--roadmap-keyword", "test",
-    ])
+    code = run(
+        [
+            "source",
+            "add",
+            "demo",
+            "--repo",
+            "foo/bar",
+            "--notes",
+            "test",
+            "--roadmap-keyword",
+            "demo",
+            "--roadmap-keyword",
+            "test",
+        ]
+    )
     assert code == 0
     capsys.readouterr()  # discard "Added source ..." output
 
@@ -141,10 +149,15 @@ def test_scan_invokes_pipeline(monkeypatch, tmp_path: Path, capsys) -> None:  # 
         patched_init,
     )
 
-    code = run([
-        "scan", "--period", "weekly",
-        "--output", str(tmp_path / "out"),
-    ])
+    code = run(
+        [
+            "scan",
+            "--period",
+            "weekly",
+            "--output",
+            str(tmp_path / "out"),
+        ]
+    )
     assert code == 0
     out = capsys.readouterr().out
     assert "Scan complete" in out

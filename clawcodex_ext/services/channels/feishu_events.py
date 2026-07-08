@@ -25,55 +25,55 @@ def translate_inbound(inbound: Any, settings: FeishuAppSettings) -> Any | None:
     empty text, missing ids). ``inbound`` is duck-typed so tests can pass a
     lightweight stand-in.
     """
-    chat_type = str(_get(_get(inbound, 'conversation'), 'chat_type') or '').lower()
-    if chat_type not in {'p2p', 'private'}:
-        logger.debug('feishu event dropped: not p2p (chat_type=%s)', chat_type)
+    chat_type = str(_get(_get(inbound, "conversation"), "chat_type") or "").lower()
+    if chat_type not in {"p2p", "private"}:
+        logger.debug("feishu event dropped: not p2p (chat_type=%s)", chat_type)
         return None
-    open_id = str(_get(_get(inbound, 'sender'), 'open_id') or '')
+    open_id = str(_get(_get(inbound, "sender"), "open_id") or "")
     if not open_id:
-        logger.debug('feishu event dropped: no sender open_id')
+        logger.debug("feishu event dropped: no sender open_id")
         return None
     # SDK ``drop_self_sent`` already filters bot echo, but keep a defensive
     # check in case bot_open_id was resolved late / overridden in config.
     if settings.bot_open_id and open_id == settings.bot_open_id:
         return None
     if settings.allowed_user_open_id and open_id != settings.allowed_user_open_id:
-        logger.debug('feishu event dropped: sender not in allowlist: %s', open_id[:16])
+        logger.debug("feishu event dropped: sender not in allowlist: %s", open_id[:16])
         return None
-    text = str(_get(inbound, 'content_text') or '').strip()
+    text = str(_get(inbound, "content_text") or "").strip()
     if not text:
         logger.debug(
-            'feishu event dropped: empty text (message_id=%s)',
-            str(_get(inbound, 'id') or '')[:16],
+            "feishu event dropped: empty text (message_id=%s)",
+            str(_get(inbound, "id") or "")[:16],
         )
         return None
-    message_id = str(_get(inbound, 'id') or '')
-    chat_id = str(_get(_get(inbound, 'conversation'), 'chat_id') or '')
+    message_id = str(_get(inbound, "id") or "")
+    chat_id = str(_get(_get(inbound, "conversation"), "chat_id") or "")
     if not message_id or not chat_id:
-        logger.debug('feishu event dropped: missing message_id/chat_id')
+        logger.debug("feishu event dropped: missing message_id/chat_id")
         return None
     from clawcodex_ext.services.im_gateway.models import InboundMessage  # noqa: PLC0415
 
     logger.info(
-        'feishu inbound normalized: from=%s msg_id=%s chat=%s len=%d',
+        "feishu inbound normalized: from=%s msg_id=%s chat=%s len=%d",
         open_id[:16],
         message_id[:16],
         chat_id[:16],
         len(text),
     )
     return InboundMessage(
-        origin=f'feishu:dm:{settings.app_id}:{open_id}',
+        origin=f"feishu:dm:{settings.app_id}:{open_id}",
         text=text,
         message_id=message_id,
         channel=settings.channel_id,
         context_token=chat_id,
         from_user_id=open_id,
         raw={
-            'message_id': message_id,
-            'chat_id': chat_id,
-            'open_id': open_id,
-            'create_time': _get(inbound, 'create_time'),
-            'raw_content_type': _get(inbound, 'raw_content_type'),
+            "message_id": message_id,
+            "chat_id": chat_id,
+            "open_id": open_id,
+            "create_time": _get(inbound, "create_time"),
+            "raw_content_type": _get(inbound, "raw_content_type"),
         },
     )
 
@@ -87,4 +87,4 @@ def _get(obj: Any, key: str, default: Any = None) -> Any:
     return getattr(obj, key, default)
 
 
-__all__ = ['translate_inbound']
+__all__ = ["translate_inbound"]

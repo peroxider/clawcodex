@@ -177,14 +177,20 @@ class TestRegistryDispatch(unittest.TestCase):
         self.assertIn("denied", result.output["error"])
 
     def test_dispatch_adapts_legacy_permission_handler_to_ask_request(self) -> None:
-        from src.permissions.types import PermissionAskDecision, PermissionAskReply, PermissionAskRequest
+        from src.permissions.types import (
+            PermissionAskDecision,
+            PermissionAskReply,
+            PermissionAskRequest,
+        )
 
         def _ask(inp: dict, ctx: ToolContext):
             return PermissionAskDecision(message="confirm?")
 
         captured: dict[str, str] = {}
 
-        def legacy_handler(tool_name: str, message: str, suggestion: str | None) -> tuple[bool, bool]:
+        def legacy_handler(
+            tool_name: str, message: str, suggestion: str | None
+        ) -> tuple[bool, bool]:
             captured["tool_name"] = tool_name
             captured["message"] = message
             return True, False
@@ -199,7 +205,11 @@ class TestRegistryDispatch(unittest.TestCase):
         self.assertEqual(captured["message"], "confirm?")
 
     def test_dispatch_accepts_new_style_permission_handler(self) -> None:
-        from src.permissions.types import PermissionAskDecision, PermissionAskReply, PermissionAskRequest
+        from src.permissions.types import (
+            PermissionAskDecision,
+            PermissionAskReply,
+            PermissionAskRequest,
+        )
 
         def _ask(inp: dict, ctx: ToolContext):
             return PermissionAskDecision(message="confirm?")

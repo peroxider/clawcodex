@@ -104,6 +104,7 @@ class TestFacadeArgsIntegration:
 
     def test_add_args_creates_mutually_exclusive_group(self):
         import argparse
+
         parser = argparse.ArgumentParser()
         add_feature_gate_args(parser)
         # Should not raise
@@ -112,6 +113,7 @@ class TestFacadeArgsIntegration:
 
     def test_apply_enable(self):
         import argparse
+
         parser = argparse.ArgumentParser()
         add_feature_gate_args(parser)
         parsed = parser.parse_args(["--enable", "TEST_FEAT"])
@@ -123,6 +125,7 @@ class TestFacadeArgsIntegration:
 
     def test_apply_disable(self):
         import argparse
+
         parser = argparse.ArgumentParser()
         add_feature_gate_args(parser)
         parsed = parser.parse_args(["--disable", "TEST_FEAT2"])

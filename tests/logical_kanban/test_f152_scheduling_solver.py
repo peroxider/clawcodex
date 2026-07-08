@@ -407,9 +407,7 @@ class TestSchedulingSolverConstraints:
         solver = SchedulingSolver()
         t1 = SchedulingTask(task_id="a", duration=4)
         t2 = SchedulingTask(task_id="b", duration=4)
-        result = solver.schedule(
-            [t1, t2], [Resource(resource_id="r1", capacity=1)], horizon=20
-        )
+        result = solver.schedule([t1, t2], [Resource(resource_id="r1", capacity=1)], horizon=20)
         a, b = (result.assignments[t] for t in ("a", "b"))
         assert a[1] <= b[0] or b[1] <= a[0]
         assert result.makespan == 8
@@ -551,9 +549,7 @@ class TestSchedulingSolverEdgeCases:
             SchedulingTask(task_id="a", duration=3),
             SchedulingTask(task_id="b", duration=3),
         )
-        result = solver.schedule(
-            tasks, [Resource(resource_id="r1", capacity=1)], horizon=5
-        )
+        result = solver.schedule(tasks, [Resource(resource_id="r1", capacity=1)], horizon=5)
         assert result.status == "infeasible"
 
     def test_timeout_returns_status(self) -> None:
@@ -636,7 +632,9 @@ class TestValidateSchedule:
     def _build_schedule(self) -> tuple[Schedule, list[SchedulingTask], list[Resource]]:
         tasks = (
             SchedulingTask(task_id="a", duration=3, earliest_start=0, latest_finish=10),
-            SchedulingTask(task_id="b", duration=2, earliest_start=3, latest_finish=10, predecessors=("a",)),
+            SchedulingTask(
+                task_id="b", duration=2, earliest_start=3, latest_finish=10, predecessors=("a",)
+            ),
         )
         resources = (Resource(resource_id="alice", skills=frozenset({"python"})),)
         schedule = Schedule(
@@ -649,9 +647,7 @@ class TestValidateSchedule:
 
     def test_valid_schedule_passes(self) -> None:
         schedule, tasks, resources = self._build_schedule()
-        issues = validate_schedule(
-            schedule, tasks, resources, dependencies=[("a", "b")]
-        )
+        issues = validate_schedule(schedule, tasks, resources, dependencies=[("a", "b")])
         assert issues == []
 
     def test_violated_predecessor_detected(self) -> None:
@@ -663,9 +659,7 @@ class TestValidateSchedule:
             objective_value=5,
             status="optimal",
         )
-        issues = validate_schedule(
-            schedule, tasks, resources, dependencies=[("a", "b")]
-        )
+        issues = validate_schedule(schedule, tasks, resources, dependencies=[("a", "b")])
         assert any("Dependency violated" in i for i in issues)
 
     def test_wrong_length_detected(self) -> None:
@@ -676,9 +670,7 @@ class TestValidateSchedule:
             objective_value=7,
             status="optimal",
         )
-        issues = validate_schedule(
-            schedule, tasks, resources, dependencies=[("a", "b")]
-        )
+        issues = validate_schedule(schedule, tasks, resources, dependencies=[("a", "b")])
         assert any("declared duration" in i for i in issues)
 
     def test_unknown_resource_detected(self) -> None:
@@ -689,9 +681,7 @@ class TestValidateSchedule:
             objective_value=5,
             status="optimal",
         )
-        issues = validate_schedule(
-            schedule, tasks, resources, dependencies=[("a", "b")]
-        )
+        issues = validate_schedule(schedule, tasks, resources, dependencies=[("a", "b")])
         assert any("unknown resource" in i for i in issues)
 
     def test_skill_mismatch_detected(self) -> None:
@@ -699,7 +689,9 @@ class TestValidateSchedule:
         # Make tasks require 'go' but resource only has 'python'
         bad_tasks = (
             SchedulingTask(task_id="a", duration=3, required_skills=frozenset({"go"})),
-            SchedulingTask(task_id="b", duration=2, predecessors=("a",), required_skills=frozenset({"go"})),
+            SchedulingTask(
+                task_id="b", duration=2, predecessors=("a",), required_skills=frozenset({"go"})
+            ),
         )
         schedule = Schedule(
             assignments={"a": (0, 3, "alice"), "b": (3, 5, "alice")},
@@ -707,9 +699,7 @@ class TestValidateSchedule:
             objective_value=5,
             status="optimal",
         )
-        issues = validate_schedule(
-            schedule, bad_tasks, resources, dependencies=[("a", "b")]
-        )
+        issues = validate_schedule(schedule, bad_tasks, resources, dependencies=[("a", "b")])
         assert any("needs" in i and "go" in i for i in issues)
 
 
@@ -773,7 +763,9 @@ class TestTaskDecomposerIntegration:
         decomposer = TaskDecomposer(llm_provider=_provider(_default_plan()))
         with pytest.raises(ValueError):
             decomposer.decompose(
-                goal="g", max_steps=5, scheduling_constraints="bad"  # type: ignore[arg-type]
+                goal="g",
+                max_steps=5,
+                scheduling_constraints="bad",  # type: ignore[arg-type]
             )
 
     def test_decompose_with_empty_resources_does_not_schedule(self) -> None:
@@ -927,17 +919,12 @@ class TestGoldenSet:
 
     def test_golden_3_three_fixes_one_engineer(self) -> None:
         solver = SchedulingSolver()
-        tasks = tuple(
-            SchedulingTask(task_id=f"fix-{i}", duration=2) for i in range(3)
-        )
-        result = solver.schedule(
-            tasks, [Resource(resource_id="eng-1")], horizon=20
-        )
+        tasks = tuple(SchedulingTask(task_id=f"fix-{i}", duration=2) for i in range(3))
+        result = solver.schedule(tasks, [Resource(resource_id="eng-1")], horizon=20)
         assert result.makespan == 6
         # Verify the three intervals are non-overlapping on the same resource.
         intervals = sorted(
-            (result.assignments[f"fix-{i}"][0], result.assignments[f"fix-{i}"][1])
-            for i in range(3)
+            (result.assignments[f"fix-{i}"][0], result.assignments[f"fix-{i}"][1]) for i in range(3)
         )
         assert intervals[0][1] == intervals[1][0]
         assert intervals[1][1] == intervals[2][0]
@@ -965,12 +952,8 @@ class TestGoldenSet:
     def test_golden_5_mixed_skills(self) -> None:
         solver = SchedulingSolver()
         tasks = (
-            SchedulingTask(
-                task_id="py-job", duration=4, required_skills=frozenset({"python"})
-            ),
-            SchedulingTask(
-                task_id="go-job", duration=3, required_skills=frozenset({"go"})
-            ),
+            SchedulingTask(task_id="py-job", duration=4, required_skills=frozenset({"python"})),
+            SchedulingTask(task_id="go-job", duration=3, required_skills=frozenset({"go"})),
             SchedulingTask(
                 task_id="full-stack",
                 duration=5,

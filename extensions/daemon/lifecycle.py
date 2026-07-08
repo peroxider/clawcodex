@@ -209,13 +209,9 @@ async def spawn_worker(
             stderr=asyncio.subprocess.PIPE,
         )
     except FileNotFoundError as exc:
-        raise WorkerSpawnError(
-            f"interpreter not found: {argv[0]!r} ({exc})"
-        ) from exc
+        raise WorkerSpawnError(f"interpreter not found: {argv[0]!r} ({exc})") from exc
     except PermissionError as exc:
-        raise WorkerSpawnError(
-            f"interpreter not executable: {argv[0]!r} ({exc})"
-        ) from exc
+        raise WorkerSpawnError(f"interpreter not executable: {argv[0]!r} ({exc})") from exc
     except OSError as exc:
         raise WorkerSpawnError(f"failed to spawn {runtime.kind}: {exc}") from exc
 

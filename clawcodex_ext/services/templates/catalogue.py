@@ -65,7 +65,9 @@ class TemplateCatalogue:
         scored: list[tuple[int, str, Template]] = []
         for template in self.registry.list_templates():
             haystack = _haystack(template)
-            score = sum(3 if term in template.id.lower() else 1 for term in terms if term in haystack)
+            score = sum(
+                3 if term in template.id.lower() else 1 for term in terms if term in haystack
+            )
             if score:
                 scored.append((score, template.id, template))
         scored.sort(key=lambda item: (-item[0], item[1]))

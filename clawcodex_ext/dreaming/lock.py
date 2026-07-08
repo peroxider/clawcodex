@@ -339,8 +339,7 @@ def force_release_if_stale(now_ms: int | None = None) -> bool:
             return False
         path.unlink(missing_ok=True)
         _log.info(
-            "force_release_if_stale: unlinked stale consolidation lock "
-            "(age %ds, TTL %ds)",
+            "force_release_if_stale: unlinked stale consolidation lock (age %ds, TTL %ds)",
             get_lock_age_seconds(now_ms=now_ms),
             HOLDER_STALE_MS // 1000,
         )

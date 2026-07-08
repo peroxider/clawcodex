@@ -27,6 +27,7 @@ Design decisions (see f-64-voice-mode.md §5.7)
 * **Single-use** — one synthesis per agent reply, like STT connections
   are one per push-to-talk press.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

@@ -110,22 +110,13 @@ class TestOmitLargeSkillToolCatalog(unittest.TestCase):
         self.assertIn("ToolSearch", out)
 
     def test_preserves_section_after_included_tools(self) -> None:
-        body = (
-            "## Included Tools\n"
-            "- `tool-a`\n"
-            "## Usage\n"
-            "Do the thing.\n"
-        )
+        body = "## Included Tools\n- `tool-a`\n## Usage\nDo the thing.\n"
         out = omit_large_skill_tool_catalog(body, allowed_tool_count=50)
         self.assertIn("## Usage", out)
         self.assertIn("Do the thing.", out)
 
     def test_render_skill_prompt_applies_omission(self) -> None:
-        body = (
-            "# Skill\n\n"
-            "## Included Tools\n"
-            "- `tool-a`\n"
-        )
+        body = "# Skill\n\n## Included Tools\n- `tool-a`\n"
         out = render_skill_prompt(
             body=body,
             args="",

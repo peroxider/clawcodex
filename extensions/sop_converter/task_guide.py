@@ -321,7 +321,7 @@ def generate_task_guide_markdown(
     lines = [
         "## 任务指南",
         "",
-        f"调用表中任何 SDK 工具之前，**必须先** ``Skill(skill=\"{skill_name}\")``，"
+        f'调用表中任何 SDK 工具之前，**必须先** ``Skill(skill="{skill_name}")``，'
         "再按「搜索建议」调用 ``ToolSearch``，最后调用工具本身。",
         "",
         "用户用自然语言描述任务时，**先读下表**，再用表中「搜索建议」作为 "
@@ -339,9 +339,7 @@ def generate_task_guide_markdown(
         intents = "；".join(_intent_examples_from_doc(op.description, op.name))
         search = format_search_suggestions(op, comp_name=comp.name)
         summary = _build_row_summary(comp, op, peer_ops)
-        lines.append(
-            f"| {intents} | `{tool_ref}` | {search} | {summary} |"
-        )
+        lines.append(f"| {intents} | `{tool_ref}` | {search} | {summary} |")
 
     lines.append("")
     lines.append(

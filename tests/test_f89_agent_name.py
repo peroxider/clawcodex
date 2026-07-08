@@ -126,9 +126,7 @@ def _write_fake_agent_marker(workspace_root: Path, name: str) -> None:
     )
 
 
-def test_headless_unknown_agent_emits_error_result(
-    tmp_path, monkeypatch
-):
+def test_headless_unknown_agent_emits_error_result(tmp_path, monkeypatch):
     """When the prompt contains ``@agent-bogus``, run_headless should
     NOT call the LLM via ``chat()`` — it must emit a
     ``ResultEvent(is_error=True)`` with the friendly error text, and
@@ -215,8 +213,7 @@ def test_headless_unknown_agent_emits_error_result(
         clear_agent_definitions_cache()
 
     assert chat_calls["count"] == 0, (
-        "LLM must not be called for unknown @agent-name "
-        f"(was called {chat_calls['count']} times)"
+        f"LLM must not be called for unknown @agent-name (was called {chat_calls['count']} times)"
     )
     # EX_CONFIG (78) is the conventional exit code for config-level
     # mistakes (typo in agent name).
@@ -375,9 +372,7 @@ def test_render_parts_expands_known_mention(workspace_with_critic):
     assert 'subagent_type="critic"' in combined
 
 
-def test_render_parts_strips_unknown_mention_with_warning(
-    workspace_with_critic, caplog
-):
+def test_render_parts_strips_unknown_mention_with_warning(workspace_with_critic, caplog):
     """When the issue body mentions an unknown agent, the orchestrator
     strips it (so the model isn't misled by a non-existent reminder)
     and logs a warning. The renderer must NOT crash and must NOT block
@@ -407,8 +402,7 @@ def test_render_parts_strips_unknown_mention_with_warning(
 
     assert "@agent-bogus" not in user_part
     assert any(
-        "F-89" in record.message and "bogus" in record.message
-        for record in caplog.records
+        "F-89" in record.message and "bogus" in record.message for record in caplog.records
     ), "renderer must log a warning for the stripped unknown agent"
 
 

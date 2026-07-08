@@ -73,7 +73,9 @@ class PipeRegistry:
 
         if not isinstance(data, list):
             raise ValueError("PipeRegistry peers.json must contain a list")
-        self._peers = {peer.instance_id: peer for peer in (PipePeer.from_dict(item) for item in data)}
+        self._peers = {
+            peer.instance_id: peer for peer in (PipePeer.from_dict(item) for item in data)
+        }
 
     def _persist(self) -> None:
         path = self._registry_path()
@@ -88,7 +90,9 @@ class PipeRegistry:
         tmp_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
         try:
             tmp_path.write_text(
-                json.dumps([peer.to_dict() for peer in self._peers.values()], ensure_ascii=False, indent=2),
+                json.dumps(
+                    [peer.to_dict() for peer in self._peers.values()], ensure_ascii=False, indent=2
+                ),
                 encoding="utf-8",
             )
             os.replace(tmp_path, path)

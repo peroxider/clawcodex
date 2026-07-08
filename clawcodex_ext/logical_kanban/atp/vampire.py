@@ -6,5 +6,5 @@ from .base import ExternalAtpSolverAdapter
 
 
 class VampireSolverAdapter(ExternalAtpSolverAdapter):
-    engine_name = 'atp-vampire'
-    binary_name = 'vampire'
+    engine_name = "atp-vampire"
+    binary_name = "vampire"

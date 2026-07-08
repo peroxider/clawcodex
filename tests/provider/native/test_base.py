@@ -47,9 +47,7 @@ def test_check_capabilities_unsupported() -> None:
     """Asking for a capability the provider doesn't have returns False."""
     assert _NativeAdapter.check_capabilities({CAP_STREAMING_TOOLS}) is False
     assert _NativeAdapter.check_capabilities({CAP_REASONING}) is False
-    assert (
-        _NativeAdapter.check_capabilities({CAP_STRUCTURED_OUTPUT, CAP_REASONING}) is False
-    )
+    assert _NativeAdapter.check_capabilities({CAP_STRUCTURED_OUTPUT, CAP_REASONING}) is False
 
 
 def test_has_capability_single() -> None:
@@ -60,6 +58,7 @@ def test_has_capability_single() -> None:
 def test_default_capabilities_is_empty_set() -> None:
     """A subclass that forgets to override ``capabilities`` exposes
     an empty set, not a parent's value."""
+
     class _Forgot(NativeProvider):
         def get_provider_name(self) -> str:
             return "forgot"
@@ -79,6 +78,7 @@ def test_default_capabilities_is_empty_set() -> None:
 def test_get_provider_name_is_abstract() -> None:
     """Subclasses must implement ``get_provider_name``; instantiating
     a class that doesn't should fail at construction time."""
+
     class _NoName(NativeProvider):
         def chat(self, messages, tools=None, **kwargs):  # pragma: no cover
             raise NotImplementedError
@@ -96,6 +96,7 @@ def test_get_provider_name_is_abstract() -> None:
 def test_get_sdk_client_falls_back_to_attribute() -> None:
     """``get_sdk_client`` returns the held client if one exists."""
     sentinel = object()
+
     class _WithClient(_NativeAdapter):
         def __init__(self):
             self.client = sentinel
@@ -107,6 +108,7 @@ def test_get_sdk_client_falls_back_to_attribute() -> None:
 def test_get_sdk_client_returns_none_when_no_client() -> None:
     """Providers that don't hold a client (composition wrappers)
     get a clean ``None`` rather than ``AttributeError``."""
+
     class _NoClient(_NativeAdapter):
         def __init__(self) -> None:
             # Skip ``BaseProvider.__init__``'s required ``api_key``

@@ -496,9 +496,7 @@ def _resolve(path: str) -> Path:
         return Path(_abs_path(path))
 
 
-def _path_within_roots(
-    file_path: str, allowed_roots: tuple[str, ...] | None
-) -> bool:
+def _path_within_roots(file_path: str, allowed_roots: tuple[str, ...] | None) -> bool:
     """Whether ``file_path`` lives under one of ``allowed_roots``.
 
     ``allowed_roots is None`` means "unknown" — assume inside so we do not
@@ -566,9 +564,7 @@ def default_session_suggestions(
     if tool_name in FILE_EDIT_TOOL_NAMES:
         updates: list[PermissionUpdate] = []
         if mode in ("default", "plan"):
-            updates.append(
-                PermissionUpdateSetMode(destination="session", mode="acceptEdits")
-            )
+            updates.append(PermissionUpdateSetMode(destination="session", mode="acceptEdits"))
         path = _tool_input_path(tool_input)
         if path and not _path_within_roots(path, allowed_roots):
             grant = _grant_directory(tool_name, path)
@@ -637,16 +633,11 @@ def session_option_label(
         return None
 
     dir_update = next(
-        (
-            u
-            for u in suggestions
-            if isinstance(u, PermissionUpdateAddDirectories) and u.directories
-        ),
+        (u for u in suggestions if isinstance(u, PermissionUpdateAddDirectories) and u.directories),
         None,
     )
     has_accept_edits = any(
-        isinstance(u, PermissionUpdateSetMode) and u.mode == "acceptEdits"
-        for u in suggestions
+        isinstance(u, PermissionUpdateSetMode) and u.mode == "acceptEdits" for u in suggestions
     )
 
     # File edits — "allow all edits [in <dir>/] during this session".

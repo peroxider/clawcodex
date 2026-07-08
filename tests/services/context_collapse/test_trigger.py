@@ -41,9 +41,7 @@ def test_threshold_trigger_rejects_bad_fraction() -> None:
 
 def test_threshold_trigger_rejects_negative_keep_recent() -> None:
     with pytest.raises(ValueError):
-        TokenThresholdTrigger(
-            counter=HeuristicTokenCounter(), keep_recent=-1
-        )
+        TokenThresholdTrigger(counter=HeuristicTokenCounter(), keep_recent=-1)
 
 
 def test_threshold_trigger_returns_noop_for_no_messages() -> None:
@@ -65,9 +63,7 @@ def test_threshold_trigger_returns_noop_under_budget() -> None:
 
 def test_threshold_trigger_returns_full_over_budget() -> None:
     counter = HeuristicTokenCounter()
-    trig = TokenThresholdTrigger(
-        counter=counter, threshold_fraction=0.05, keep_recent=3
-    )
+    trig = TokenThresholdTrigger(counter=counter, threshold_fraction=0.05, keep_recent=3)
     # 200 words -> ~260 tokens; budget = 1000 * 0.05 = 50; should trigger.
     decision = trig.decide(_msgs(200), _ctx(fraction=0.05))
     assert decision.kind is CollapseKind.FULL
@@ -76,9 +72,7 @@ def test_threshold_trigger_returns_full_over_budget() -> None:
 
 def test_threshold_trigger_returns_partial_when_count_set() -> None:
     counter = HeuristicTokenCounter()
-    trig = TokenThresholdTrigger(
-        counter=counter, threshold_fraction=0.05, partial_archive_count=10
-    )
+    trig = TokenThresholdTrigger(counter=counter, threshold_fraction=0.05, partial_archive_count=10)
     decision = trig.decide(_msgs(200), _ctx(fraction=0.05))
     assert decision.kind is CollapseKind.PARTIAL
     assert decision.count == 10

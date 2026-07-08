@@ -231,10 +231,7 @@ def test_extract_text_dict_with_string_content() -> None:
 
 
 def test_extract_text_dict_with_list_content() -> None:
-    assert (
-        extract_text({"content": [{"text": "alpha"}, {"text": "beta"}]})
-        == "alpha\nbeta"
-    )
+    assert extract_text({"content": [{"text": "alpha"}, {"text": "beta"}]}) == "alpha\nbeta"
 
 
 def test_extract_text_object_with_attribute() -> None:

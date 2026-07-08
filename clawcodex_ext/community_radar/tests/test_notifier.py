@@ -58,8 +58,12 @@ def _digest(
         ScoredFeature(
             record=r,
             score=FeatureScore(
-                record_id=r.id, overall=75.0, popularity=80.0,
-                maturity=70.0, adaptation_cost=65.0, strategic_value=80.0,
+                record_id=r.id,
+                overall=75.0,
+                popularity=80.0,
+                maturity=70.0,
+                adaptation_cost=65.0,
+                strategic_value=80.0,
                 architecture_fit=70.0,
             ),
         )
@@ -120,10 +124,7 @@ def test_load_notify_config_json(tmp_path: Path) -> None:
 def test_load_notify_config_filters_invalid_entries(tmp_path: Path) -> None:
     cfg_path = tmp_path / "notify.yaml"
     cfg_path.write_text(
-        "channels:\n"
-        "  - not-a-dict\n"
-        "  - name: ok\n"
-        "    type: discord\n",
+        "channels:\n  - not-a-dict\n  - name: ok\n    type: discord\n",
         encoding="utf-8",
     )
     cfg = _load_notify_config(cfg_path)

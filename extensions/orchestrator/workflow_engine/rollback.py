@@ -100,7 +100,10 @@ class RollbackManager:
                         shutil.rmtree(dest, ignore_errors=True)
                     try:
                         shutil.copytree(
-                            item, dest, symlinks=True, dirs_exist_ok=True,
+                            item,
+                            dest,
+                            symlinks=True,
+                            dirs_exist_ok=True,
                             ignore=_snapshot_ignore,
                         )
                     except shutil.Error as copy_err:
@@ -133,8 +136,12 @@ class RollbackManager:
 
         self._snapshots[stage.id] = snapshot
         self._prune_old_snapshots()
-        logger.info("Snapshot saved for stage %s (%s files, %s bytes)",
-                     stage.id, len(files_copied), total_size)
+        logger.info(
+            "Snapshot saved for stage %s (%s files, %s bytes)",
+            stage.id,
+            len(files_copied),
+            total_size,
+        )
 
         return snapshot
 

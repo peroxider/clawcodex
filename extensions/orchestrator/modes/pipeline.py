@@ -140,9 +140,7 @@ class PipelineModeRunner:
       next Reads its inbox first — same protocol as Coordinator).
     """
 
-    _ALLOWED_NESTED_KINDS: frozenset[str] = frozenset(
-        {"agent", "debate", "coordinator"}
-    )
+    _ALLOWED_NESTED_KINDS: frozenset[str] = frozenset({"agent", "debate", "coordinator"})
 
     def __init__(
         self,
@@ -160,9 +158,7 @@ class PipelineModeRunner:
         if max_retries_per_stage < 0:
             raise ValueError("max_retries_per_stage must be >= 0")
         if handoff not in {"prompt", "mailbox"}:
-            raise ValueError(
-                f"handoff must be 'prompt' or 'mailbox', got {handoff!r}"
-            )
+            raise ValueError(f"handoff must be 'prompt' or 'mailbox', got {handoff!r}")
         self._agent_runner = agent_runner
         self._stages: tuple[str, ...] = tuple(stages)
         self._max_retries_per_stage = max_retries_per_stage
@@ -171,9 +167,7 @@ class PipelineModeRunner:
         # The schema parser already filters these, but direct constructor
         # calls (tests, shell scripts) can bypass the parser.
         self._stage_models: dict[str, str] = {
-            k: v
-            for k, v in (stage_models or {}).items()
-            if v and v.strip()
+            k: v for k, v in (stage_models or {}).items() if v and v.strip()
         }
         # Warn about keys that don't correspond to any stage — silent
         # no-op is the classic "why isn't my config working" trap.
@@ -187,9 +181,7 @@ class PipelineModeRunner:
             )
         # Same shape as stage_models for per-stage max_turns overrides.
         self._stage_max_turns: dict[str, int] = {
-            k: v
-            for k, v in (stage_max_turns or {}).items()
-            if isinstance(v, int) and v > 0
+            k: v for k, v in (stage_max_turns or {}).items() if isinstance(v, int) and v > 0
         }
         unknown_mt = set(self._stage_max_turns) - set(self._stages)
         if unknown_mt:
@@ -240,9 +232,9 @@ class PipelineModeRunner:
         self._nested_runner_cache: dict[str, Any] = {}
         for stage_name, spec in self._stage_specs.items():
             if stage_name not in self._stages:
-                continue          # already warned above
+                continue  # already warned above
             if spec["kind"] == "agent":
-                continue          # nothing to instantiate
+                continue  # nothing to instantiate
             try:
                 self._nested_runner_cache[stage_name] = self._build_nested_runner(spec)
             except Exception as exc:
@@ -294,9 +286,7 @@ class PipelineModeRunner:
 
         prior: list[_StageResult] = []
         for stage in self._stages:
-            result = await self._run_stage_with_retry(
-                stage, prior, session, workflow, **hooks
-            )
+            result = await self._run_stage_with_retry(stage, prior, session, workflow, **hooks)
             prior.append(result)
 
             # A stage that exhausted its retries with a terminal failure
@@ -347,9 +337,7 @@ class PipelineModeRunner:
                 stage, prior, session, retry_note=last_attempt_note
             )
             session.run_kind = (
-                f"pipeline:{stage}"
-                if attempt == 0
-                else f"pipeline:{stage}:retry{attempt}"
+                f"pipeline:{stage}" if attempt == 0 else f"pipeline:{stage}:retry{attempt}"
             )
             stage_model = self._stage_models.get(stage)
             nested_spec = self._stage_specs.get(stage)
@@ -358,8 +346,7 @@ class PipelineModeRunner:
             # sub-runners manage their own handoff (or none at all).
             # Log accordingly so operators aren't misled.
             handoff_label = (
-                self._handoff if stage_kind == "agent"
-                else f"(delegated to {stage_kind})"
+                self._handoff if stage_kind == "agent" else f"(delegated to {stage_kind})"
             )
             logger.info(
                 "Pipeline issue=%s stage=%s starting "
@@ -383,7 +370,8 @@ class PipelineModeRunner:
                     # directly and any workspace-path swap it does is
                     # restored in its own finally).
                     sub_runner = self._make_nested_runner(
-                        stage, nested_spec  # type: ignore[arg-type]
+                        stage,
+                        nested_spec,  # type: ignore[arg-type]
                     )
                     await sub_runner.run(session, workflow, **hooks)
 
@@ -398,9 +386,7 @@ class PipelineModeRunner:
             )
 
             if self._stage_succeeded(session.status):
-                return _StageResult(
-                    stage=stage, status=session.status, output=tail
-                )
+                return _StageResult(stage=stage, status=session.status, output=tail)
 
             # Terminal failure — record reason for the next retry prompt.
             last_attempt_note = (
@@ -411,8 +397,7 @@ class PipelineModeRunner:
             )
             if attempt < self._max_retries_per_stage:
                 logger.warning(
-                    "Pipeline issue=%s stage=%s attempt=%d failed (status=%s) "
-                    "— retrying",
+                    "Pipeline issue=%s stage=%s attempt=%d failed (status=%s) — retrying",
                     session.issue.id,
                     stage,
                     attempt + 1,
@@ -512,9 +497,7 @@ class PipelineModeRunner:
             # is active so prompt-only pipelines don't leak env and
             # concurrent-issue daemons don't get cross-issue pollution.
             if self._set_agent_name:
-                self._original_agent_name = os.environ.get(
-                    "CLAUDE_CODE_AGENT_NAME"
-                )
+                self._original_agent_name = os.environ.get("CLAUDE_CODE_AGENT_NAME")
                 os.environ["CLAUDE_CODE_AGENT_NAME"] = self._stage_name
                 self._touched_agent_name = True
             # Model swap — only when configured AND actually different.
@@ -546,8 +529,7 @@ class PipelineModeRunner:
                     self._agent_runner.max_turns = self._stage_max_turns
                     self._touched_max_turns = True
                     logger.info(
-                        "Pipeline stage=%s: temporarily overriding "
-                        "agent_runner.max_turns %s → %s",
+                        "Pipeline stage=%s: temporarily overriding agent_runner.max_turns %s → %s",
                         self._stage_name,
                         self._original_max_turns,
                         self._stage_max_turns,
@@ -658,16 +640,13 @@ class PipelineModeRunner:
         team_data = {
             "team_name": _PIPELINE_TEAM_NAME,
             "lead_agent_id": self._stages[0],
-            "members": [
-                {"agent_id": s, "name": s, "role": s} for s in self._stages
-            ],
+            "members": [{"agent_id": s, "name": s, "role": s} for s in self._stages],
         }
         try:
             team_path.parent.mkdir(parents=True, exist_ok=True)
             team_path.write_text(json.dumps(team_data, indent=2), encoding="utf-8")
             logger.info(
-                "Pipeline issue=%s wrote %s for mailbox handoff "
-                "(%d members: %s)",
+                "Pipeline issue=%s wrote %s for mailbox handoff (%d members: %s)",
                 session.issue.id,
                 _PIPELINE_TEAM_FILE,
                 len(self._stages),
@@ -750,9 +729,7 @@ class PipelineModeRunner:
         is_last = idx == len(self._stages) - 1
         next_stage = self._stages[idx + 1] if not is_last else None
         prev_stage = self._stages[idx - 1] if not is_first else None
-        inbox_path = (
-            f"{_PIPELINE_MAILBOXES_DIR}/{_PIPELINE_TEAM_NAME}/{stage}.jsonl"
-        )
+        inbox_path = f"{_PIPELINE_MAILBOXES_DIR}/{_PIPELINE_TEAM_NAME}/{stage}.jsonl"
 
         lines = [f"## Mailbox handoff (you are agent **{stage}**)"]
         if not is_first:
@@ -765,8 +742,8 @@ class PipelineModeRunner:
             lines.append("- You are the first stage; your inbox is empty.")
         if not is_last:
             lines.append(
-                f"- When done, call `SendMessage(to=\"{next_stage}\", "
-                f"message=\"<your handoff summary>\")` so the next stage "
+                f'- When done, call `SendMessage(to="{next_stage}", '
+                f'message="<your handoff summary>")` so the next stage '
                 "knows you're done and can read your context."
             )
         else:
@@ -779,9 +756,7 @@ class PipelineModeRunner:
             return "(no prior stages — you are first)"
         chunks: list[str] = []
         for s in prior:
-            chunks.append(
-                f"### Stage: {s.stage} (final status: {s.status})\n{s.output}".strip()
-            )
+            chunks.append(f"### Stage: {s.stage} (final status: {s.status})\n{s.output}".strip())
         return "\n\n".join(chunks)
 
     @staticmethod

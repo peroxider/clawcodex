@@ -21,6 +21,7 @@ pcm``) or an mp3 chunk. We decode hex → bytes at the boundary so the
 see the P64-D Realtime path; this module sticks to the simpler HTTP
 path for the P1 TTS scope.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -66,10 +67,14 @@ _MINIMAX_TTS_DEFAULT_VOICE = "Chinese (Mandarin)_Warm_Girl"
 # speech-2.6-hd, speech-2.6-turbo (legacy, lower latency)
 # speech-02-hd, speech-02-turbo, speech-01-hd, speech-01-turbo (legacy)
 MINIMAX_SUPPORTED_MODELS: tuple[str, ...] = (
-    "speech-2.8-hd", "speech-2.8-turbo",
-    "speech-2.6-hd", "speech-2.6-turbo",
-    "speech-02-hd", "speech-02-turbo",
-    "speech-01-hd", "speech-01-turbo",
+    "speech-2.8-hd",
+    "speech-2.8-turbo",
+    "speech-2.6-hd",
+    "speech-2.6-turbo",
+    "speech-02-hd",
+    "speech-02-turbo",
+    "speech-01-hd",
+    "speech-01-turbo",
 )
 
 # MiniMax official system voice IDs (selected subset for common use cases).
@@ -186,7 +191,9 @@ class MiniMaxTTSProvider(TTSProvider):
     def _resolve(self) -> tuple[str, str, str]:
         """Return (api_key, group_id, endpoint). Raises if no api_key."""
         file_data = self._load_credentials_file()
-        api_key = self._explicit_api_key or os.environ.get("MINIMAX_API_KEY") or file_data.get("api_key")
+        api_key = (
+            self._explicit_api_key or os.environ.get("MINIMAX_API_KEY") or file_data.get("api_key")
+        )
         group_id = (
             self._explicit_group_id
             or os.environ.get("MINIMAX_GROUP_ID")
@@ -195,17 +202,16 @@ class MiniMaxTTSProvider(TTSProvider):
         )
         if not api_key:
             raise MiniMaxTTSCredentialsError(
-                "MINIMAX_API_KEY not set. Configure the env var or "
-                f"{self._credentials_path}."
+                f"MINIMAX_API_KEY not set. Configure the env var or {self._credentials_path}."
             )
         if self._explicit_endpoint:
             endpoint = self._explicit_endpoint
         else:
             region = (
-                os.environ.get("MINIMAX_REGION")
-                or file_data.get("endpoint_region")
-                or "global"
-            ).strip().lower()
+                (os.environ.get("MINIMAX_REGION") or file_data.get("endpoint_region") or "global")
+                .strip()
+                .lower()
+            )
             endpoint = MINIMAX_T2A_ENDPOINTS.get(region) or MINIMAX_T2A_ENDPOINTS["global"]
         return api_key, group_id, endpoint
 
@@ -232,7 +238,9 @@ class MiniMaxTTSProvider(TTSProvider):
         asyncio.ensure_future(self._run(syn, api_key, group_id, endpoint))
         return syn
 
-    async def _run(self, syn: _MiniMaxSynthesis, api_key: str, group_id: str, endpoint: str) -> None:
+    async def _run(
+        self, syn: _MiniMaxSynthesis, api_key: str, group_id: str, endpoint: str
+    ) -> None:
         while True:
             if syn.is_cancelled:
                 return
@@ -276,24 +284,26 @@ class MiniMaxTTSProvider(TTSProvider):
         """
         import urllib.request
 
-        body = json.dumps({
-            "model": cfg.model,
-            "text": text,
-            "stream": True,
-            "voice_setting": {
-                "voice_id": cfg.voice,
-                "speed": cfg.speed,
-                "vol": 1.0,
-                "pitch": 0,
-            },
-            "audio_setting": {
-                "sample_rate": cfg.sample_rate,
-                "format": "pcm",
-                "channel": 1,
-            },
-            "pron_dict": {"tone": ["calm"]},
-            "timber_weights": [],
-        }).encode("utf-8")
+        body = json.dumps(
+            {
+                "model": cfg.model,
+                "text": text,
+                "stream": True,
+                "voice_setting": {
+                    "voice_id": cfg.voice,
+                    "speed": cfg.speed,
+                    "vol": 1.0,
+                    "pitch": 0,
+                },
+                "audio_setting": {
+                    "sample_rate": cfg.sample_rate,
+                    "format": "pcm",
+                    "channel": 1,
+                },
+                "pron_dict": {"tone": ["calm"]},
+                "timber_weights": [],
+            }
+        ).encode("utf-8")
         url = endpoint
         if group_id:
             sep = "&" if "?" in url else "?"

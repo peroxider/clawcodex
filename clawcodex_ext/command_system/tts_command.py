@@ -35,6 +35,7 @@ Design decisions (mirrors /voice)
   ``/voice``, ``/cost``, …): a plain ``LocalCommand`` bound to a free
   ``tts_command_call`` function via :meth:`set_call`.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -228,7 +229,7 @@ def tts_command_call(args: str, context: CommandContext) -> LocalCommandResult:
         set_tts_enabled(True)
         return LocalCommandResult(
             type="text",
-            value=f"TTS playback enabled with {a} backend. Run /tts say \"hello\" to preview.",
+            value=f'TTS playback enabled with {a} backend. Run /tts say "hello" to preview.',
         )
 
     # 7. no args — toggle on/off (keep current provider).
@@ -248,7 +249,9 @@ def tts_command_call(args: str, context: CommandContext) -> LocalCommandResult:
         type="text",
         value=(
             f"Unknown argument: {raw}. Valid options: "
-            + ", ".join(list(TTS_PROVIDERS) + ["off", "voice <name>", "say <text>", "status", "help"])
+            + ", ".join(
+                list(TTS_PROVIDERS) + ["off", "voice <name>", "say <text>", "status", "help"]
+            )
         ),
     )
 

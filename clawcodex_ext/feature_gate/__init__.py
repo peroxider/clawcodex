@@ -127,13 +127,13 @@ _DEFAULT_FLAGS: list[FeatureFlag] = [
     FeatureFlag(
         name="BUDGET_MODE",
         default=False,
-        description='Enable cost-aware budget-limited agent runs (F-69)',
+        description="Enable cost-aware budget-limited agent runs (F-69)",
     ),
     # --- Goal mode ---
     FeatureFlag(
-        name='goals',
+        name="goals",
         default=True,
-        description='Enable upstream-compatible /goal mode',
+        description="Enable upstream-compatible /goal mode",
     ),
     # --- ACP protocol ---
     FeatureFlag(

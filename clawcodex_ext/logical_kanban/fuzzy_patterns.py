@@ -66,9 +66,7 @@ class FuzzyPatternLibrary:
             constraints=self.constraints,
         )
 
-    def replace(
-        self, pattern_id: str, pattern: FuzzyPattern
-    ) -> "FuzzyPatternLibrary":
+    def replace(self, pattern_id: str, pattern: FuzzyPattern) -> "FuzzyPatternLibrary":
         """Return a new library with ``pattern_id`` swapped for ``pattern``.
 
         F-148: the default ``P-DIST-001`` ships as a matcher-only shell,

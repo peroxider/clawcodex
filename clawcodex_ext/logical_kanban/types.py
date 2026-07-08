@@ -6,25 +6,25 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 ChangeKind = Literal[
-    'create_task',
-    'update_task_fields',
-    'transition_status',
-    'delete_task',
-    'add_dependency',
-    'remove_dependency',
-    'legacy_todo_replace_all',
-    'propose_assertion',
+    "create_task",
+    "update_task_fields",
+    "transition_status",
+    "delete_task",
+    "add_dependency",
+    "remove_dependency",
+    "legacy_todo_replace_all",
+    "propose_assertion",
 ]
 
 RepairAction = Literal[
-    'complete_prerequisite',
-    'remove_dependency',
-    'fix_cycle',
-    'add_acceptance_proof',
-    'clarify_ambiguity',
-    'revalidate_task',
-    'split_task',
-    'keep_single_in_progress',  # legacy TodoWrite compatibility
+    "complete_prerequisite",
+    "remove_dependency",
+    "fix_cycle",
+    "add_acceptance_proof",
+    "clarify_ambiguity",
+    "revalidate_task",
+    "split_task",
+    "keep_single_in_progress",  # legacy TodoWrite compatibility
 ]
 
 
@@ -40,8 +40,8 @@ class FactsSnapshot:
     ready_ids: frozenset[str] = field(default_factory=frozenset)
     blocked_ids: frozenset[str] = field(default_factory=frozenset)
     cycle_task_ids: frozenset[str] = field(default_factory=frozenset)
-    warnings: tuple['ValidationIssue', ...] = ()
-    hash: str = ''
+    warnings: tuple["ValidationIssue", ...] = ()
+    hash: str = ""
 
 
 @dataclass(frozen=True)
@@ -64,19 +64,19 @@ class RepairSuggestion:
     action: RepairAction
     target: str | None = None
     assertion_id: str | None = None
-    message: str = ''
+    message: str = ""
     priority: int = 1
 
     def to_dict(self) -> dict[str, Any]:
-        out: dict[str, Any] = {'action': self.action}
+        out: dict[str, Any] = {"action": self.action}
         if self.target is not None:
-            out['target'] = self.target
+            out["target"] = self.target
         if self.assertion_id is not None:
-            out['assertionId'] = self.assertion_id
+            out["assertionId"] = self.assertion_id
         if self.message:
-            out['message'] = self.message
+            out["message"] = self.message
         if self.priority != 1:
-            out['priority'] = self.priority
+            out["priority"] = self.priority
         return out
 
 
@@ -85,30 +85,30 @@ class ValidationIssue:
     code: str
     message: str
     rule: str
-    severity: Literal['warning', 'error'] = 'error'
+    severity: Literal["warning", "error"] = "error"
     task_id: str | None = None
     blockers: tuple[str, ...] = ()
     repair_suggestions: tuple[RepairSuggestion, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            'code': self.code,
-            'message': self.message,
-            'rule': self.rule,
-            'severity': self.severity,
-            **({'taskId': self.task_id} if self.task_id else {}),
-            **({'blockers': list(self.blockers)} if self.blockers else {}),
-            'repairSuggestions': [s.to_dict() for s in self.repair_suggestions],
+            "code": self.code,
+            "message": self.message,
+            "rule": self.rule,
+            "severity": self.severity,
+            **({"taskId": self.task_id} if self.task_id else {}),
+            **({"blockers": list(self.blockers)} if self.blockers else {}),
+            "repairSuggestions": [s.to_dict() for s in self.repair_suggestions],
         }
 
 
 ValidationResult = Literal[
-    'pass',
-    'fail',
-    'unknown',
-    'timeout',
-    'error',
-    'stale',
+    "pass",
+    "fail",
+    "unknown",
+    "timeout",
+    "error",
+    "stale",
 ]
 
 
@@ -127,16 +127,16 @@ class ValidationRun:
     task_id: str | None = None
 
     # Reproducibility hashes
-    input_facts_hash: str = ''
-    ruleset_hash: str = ''
-    snapshot_hash: str = ''  # legacy alias kept for internal consumers
+    input_facts_hash: str = ""
+    ruleset_hash: str = ""
+    snapshot_hash: str = ""  # legacy alias kept for internal consumers
 
     # Engine metadata
-    engine: str = 'layer1-python'
-    engine_version: str = ''
+    engine: str = "layer1-python"
+    engine_version: str = ""
 
     # Result
-    result: ValidationResult = 'pass'
+    result: ValidationResult = "pass"
     duration_ms: int = 0
 
     # Evidence
@@ -150,8 +150,8 @@ class ValidationRun:
     issues: tuple[ValidationIssue, ...] = ()
 
     # Audit
-    created_at: str = ''  # ISO-8601 UTC
-    requested_by: str = 'system'
+    created_at: str = ""  # ISO-8601 UTC
+    requested_by: str = "system"
 
     # F-138: per-adapter solver results for traceability when multiple engines run.
     solver_results: tuple[dict[str, Any], ...] = ()
@@ -165,40 +165,40 @@ class ValidationRun:
         return self.validation_run_id
 
     @property
-    def status(self) -> Literal['accepted', 'denied']:
+    def status(self) -> Literal["accepted", "denied"]:
         """Backwards-compatible status derived from :attr:`result`."""
-        return 'accepted' if self.result == 'pass' else 'denied'
+        return "accepted" if self.result == "pass" else "denied"
 
     @property
     def accepted(self) -> bool:
-        return self.result == 'pass'
+        return self.result == "pass"
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
-            'validationRunId': self.validation_run_id,
-            'proposalId': self.proposal_id,
-            'taskId': self.task_id,
-            'inputFactsHash': self.input_facts_hash,
-            'rulesetHash': self.ruleset_hash,
-            'snapshotHash': self.snapshot_hash,
-            'engine': self.engine,
-            'engineVersion': self.engine_version,
-            'result': self.result,
-            'status': self.status,
-            'durationMs': self.duration_ms,
-            'derivedFacts': list(self.derived_facts),
-            'proofTrace': list(self.proof_trace),
-            'counterexample': self.counterexample,
-            'proofEnrichment': self.proof_enrichment,
-            'repairSuggestions': [s.to_dict() for s in self.repair_suggestions],
-            'createdAt': self.created_at,
-            'requestedBy': self.requested_by,
-            'solverResults': list(self.solver_results),
+            "validationRunId": self.validation_run_id,
+            "proposalId": self.proposal_id,
+            "taskId": self.task_id,
+            "inputFactsHash": self.input_facts_hash,
+            "rulesetHash": self.ruleset_hash,
+            "snapshotHash": self.snapshot_hash,
+            "engine": self.engine,
+            "engineVersion": self.engine_version,
+            "result": self.result,
+            "status": self.status,
+            "durationMs": self.duration_ms,
+            "derivedFacts": list(self.derived_facts),
+            "proofTrace": list(self.proof_trace),
+            "counterexample": self.counterexample,
+            "proofEnrichment": self.proof_enrichment,
+            "repairSuggestions": [s.to_dict() for s in self.repair_suggestions],
+            "createdAt": self.created_at,
+            "requestedBy": self.requested_by,
+            "solverResults": list(self.solver_results),
         }
         if self.issues:
-            out['issues'] = [issue.to_dict() for issue in self.issues]
+            out["issues"] = [issue.to_dict() for issue in self.issues]
         if self.legacy_todo_ambiguities:
-            out['legacyTodoAmbiguities'] = list(self.legacy_todo_ambiguities)
+            out["legacyTodoAmbiguities"] = list(self.legacy_todo_ambiguities)
         return out
 
 
@@ -212,17 +212,17 @@ class CommitResult:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            'committed': self.committed,
-            'proposalId': self.proposal_id,
-            'validationRunId': self.validation_run_id,
-            'reason': self.reason,
-            'derivedFacts': list(self.derived_facts),
+            "committed": self.committed,
+            "proposalId": self.proposal_id,
+            "validationRunId": self.validation_run_id,
+            "reason": self.reason,
+            "derivedFacts": list(self.derived_facts),
         }
 
 
 # ── UI-oriented derived status (consumed by TaskListWidget & /lkb) ──
 
-DerivedStatus = Literal['ready', 'blocked', 'needs_recheck', 'needs_review']
+DerivedStatus = Literal["ready", "blocked", "needs_recheck", "needs_review"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,7 +235,7 @@ class LkbStatus:
     and the ``/lkb`` slash command.
     """
 
-    derived_status: DerivedStatus = 'ready'
+    derived_status: DerivedStatus = "ready"
     validation_result: ValidationResult | None = None
     blocked_by: tuple[str, ...] = ()
     stale_assumptions: tuple[str, ...] = ()
@@ -243,14 +243,11 @@ class LkbStatus:
 
     @property
     def is_blocked(self) -> bool:
-        return self.derived_status == 'blocked'
+        return self.derived_status == "blocked"
 
     @property
     def has_issues(self) -> bool:
-        return (
-            self.derived_status in ('blocked', 'needs_recheck')
-            or bool(self.stale_assumptions)
-        )
+        return self.derived_status in ("blocked", "needs_recheck") or bool(self.stale_assumptions)
 
     @property
     def validation_id(self) -> str:
@@ -259,9 +256,9 @@ class LkbStatus:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            'committed': self.committed,
-            'proposalId': self.proposal_id,
-            'validationRunId': self.validation_run_id,
-            'derivedFacts': list(self.derived_facts),
-            **({'reason': self.reason} if self.reason is not None else {}),
+            "committed": self.committed,
+            "proposalId": self.proposal_id,
+            "validationRunId": self.validation_run_id,
+            "derivedFacts": list(self.derived_facts),
+            **({"reason": self.reason} if self.reason is not None else {}),
         }

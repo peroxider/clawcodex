@@ -194,7 +194,10 @@ def load_acceptance_template_data(data: Any, *, source: str = "") -> tuple[Accep
 
 
 def _looks_like_template(data: dict[str, Any]) -> bool:
-    return any(key in data for key in ("templateId", "template_id", "assertionTemplate", "assertion_template"))
+    return any(
+        key in data
+        for key in ("templateId", "template_id", "assertionTemplate", "assertion_template")
+    )
 
 
 def _deserialize_acceptance_template(

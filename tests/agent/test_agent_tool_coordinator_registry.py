@@ -77,9 +77,7 @@ class TestAgentToolCoordinatorRegistry(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             context = ToolContext(workspace_root=Path(tmp))
             with patch.dict(os.environ, {"CLAUDE_CODE_COORDINATOR_MODE": "1"}):
-                with patch(
-                    "src.tool_system.tools.agent.run_agent", _fake_run_agent
-                ):
+                with patch("src.tool_system.tools.agent.run_agent", _fake_run_agent):
                     result = parent_registry.dispatch(
                         ToolCall(
                             name="Agent",

@@ -50,6 +50,7 @@ class GenericPipelineExtractor(WorkflowExtractorBase):
     def _ensure_scan(self, source_dir: Path):
         if self._scan is None:
             from ...scan_context import SourceScanContext
+
             self._scan = SourceScanContext.build(source_dir)
 
     def extract_stages(self, source_dir: Path) -> list[ExtractedStage]:
@@ -154,7 +155,9 @@ class GenericPipelineExtractor(WorkflowExtractorBase):
         for tree in ctx.trees.values():
             for var_name, value in find_frozenset_assigns(tree):
                 stage_ids = parse_frozenset_members(
-                    value, ctx.enum_class_names, ctx.member_to_value,
+                    value,
+                    ctx.enum_class_names,
+                    ctx.member_to_value,
                 )
                 for sid in stage_ids:
                     gates[sid] = GateSpec(
@@ -176,7 +179,9 @@ class GenericPipelineExtractor(WorkflowExtractorBase):
             for var_name, dict_expr in find_dict_mapping_assignments(tree):
                 if isinstance(dict_expr, ast.Dict) and "DECISION_ROLLBACK" in var_name.upper():
                     rollback = parse_string_to_stage_dict(
-                        dict_expr, ctx.enum_class_names, ctx.member_to_value,
+                        dict_expr,
+                        ctx.enum_class_names,
+                        ctx.member_to_value,
                     )
                     decision_stage = ctx.member_to_value.get("RESEARCH_DECISION")
                     if decision_stage is None:
@@ -247,7 +252,9 @@ class GenericPipelineExtractor(WorkflowExtractorBase):
                 if "CONTRACT" not in var_name.upper():
                     continue
                 parsed = parse_contracts_dict(
-                    dict_expr, ctx.enum_class_names, ctx.member_to_value,
+                    dict_expr,
+                    ctx.enum_class_names,
+                    ctx.member_to_value,
                 )
                 for stage_id, (inp, out, call_name, dod) in parsed.items():
                     contracts[stage_id] = StageContract(
@@ -324,7 +331,9 @@ def _parse_decision_func(
     for node in ast.walk(func):
         if isinstance(node, ast.Return) and node.value is not None:
             outcome_name, next_stage = _parse_return_outcome(
-                node.value, member_to_value, enum_class_names,
+                node.value,
+                member_to_value,
+                enum_class_names,
             )
             if outcome_name:
                 outcomes[outcome_name] = OutcomeSpec(

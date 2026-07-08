@@ -93,9 +93,7 @@ class TestWheelMetadata:
 class TestWheelConsoleScripts:
     """Console-script entry points must be bundled inside the wheel."""
 
-    def test_wheel_contains_clawcodex_dev_entry_point(
-        self, wheel_path: Path
-    ) -> None:
+    def test_wheel_contains_clawcodex_dev_entry_point(self, wheel_path: Path) -> None:
         """``clawcodex-dev`` console script exists in the wheel RECORD.
 
         The console script is registered via pyproject
@@ -118,9 +116,7 @@ class TestWheelConsoleScripts:
                 f"found: {content[:500]!r}"
             )
 
-    def test_wheel_record_includes_console_script_directory(
-        self, wheel_path: Path
-    ) -> None:
+    def test_wheel_record_includes_console_script_directory(self, wheel_path: Path) -> None:
         """The RECORD file lists all bundled files (catch empty wheels).
 
         A wheel that bundles only metadata but no actual code would
@@ -133,9 +129,7 @@ class TestWheelConsoleScripts:
             record_files = [n for n in zf.namelist() if n.endswith(".dist-info/RECORD")]
             assert record_files, f"No RECORD in {wheel_path}"
             record_content = zf.read(record_files[0]).decode("utf-8")
-            entry_count = len(
-                [line for line in record_content.splitlines() if line.strip()]
-            )
+            entry_count = len([line for line in record_content.splitlines() if line.strip()])
             assert entry_count >= 10, (
                 f"Wheel RECORD has only {entry_count} entries; "
                 f"expected at least 10 (a real clawcodex wheel has hundreds)"
@@ -186,11 +180,7 @@ class TestReleaseTagFreeze:
                 ],
                 # Strip RELEASE_TAG defensively in case the test runner
                 # exports it for some other reason.
-                env={
-                    k: v
-                    for k, v in os.environ.items()
-                    if k != "RELEASE_TAG"
-                },
+                env={k: v for k, v in os.environ.items() if k != "RELEASE_TAG"},
                 text=True,
             ).strip()
             assert re.fullmatch(r"\d+\.\d+\.\d+", out), (

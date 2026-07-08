@@ -178,7 +178,9 @@ class RadarConfig:
             ),
             output_dir=str(data.get("output_dir") or data.get("outputDir") or DEFAULT_OUTPUT_DIR),
             notify=bool(data.get("notify", True)),
-            cache_dir=str(data.get("cache_dir") or data.get("cacheDir") or ".cache/community-radar"),
+            cache_dir=str(
+                data.get("cache_dir") or data.get("cacheDir") or ".cache/community-radar"
+            ),
             weights=weights,
             roadmap_keywords=keywords,
             use_llm=bool(data.get("use_llm") or data.get("useLlm") or False),
@@ -207,6 +209,7 @@ def apply_env_overrides(config: RadarConfig) -> RadarConfig:
     Unknown keys are silently ignored so a stale env file does not
     crash the radar.
     """
+
     def _bool(name: str) -> bool | None:
         raw = os.environ.get(name)
         if raw is None or raw == "":

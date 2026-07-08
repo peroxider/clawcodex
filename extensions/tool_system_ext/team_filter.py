@@ -23,13 +23,13 @@ from typing import Iterable, TypeVar
 # is a bootstrap tool and must remain visible before a team exists.
 TEAM_ONLY_TOOL_NAMES: frozenset[str] = frozenset(
     {
-        'SendMessage',
-        'TeamDelete',
+        "SendMessage",
+        "TeamDelete",
     }
 )
 
 
-_T = TypeVar('_T')
+_T = TypeVar("_T")
 
 
 def has_team_context(team: object) -> bool:
@@ -47,7 +47,7 @@ def filter_team_only_tools(
     tools: Iterable[_T],
     has_team: bool,
     *,
-    name_attr: str = 'name',
+    name_attr: str = "name",
 ) -> list[_T]:
     """Return ``tools`` minus any team-only entries when no team is active.
 
@@ -71,7 +71,7 @@ def filter_team_only_tools(
 
 
 __all__ = [
-    'TEAM_ONLY_TOOL_NAMES',
-    'has_team_context',
-    'filter_team_only_tools',
+    "TEAM_ONLY_TOOL_NAMES",
+    "has_team_context",
+    "filter_team_only_tools",
 ]

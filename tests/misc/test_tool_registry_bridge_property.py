@@ -64,8 +64,8 @@ class TestPropertyStubGeneration:
             module_name="openjiuwen.harness.task_loop.loop_coordinator",
         )
         assert "def current_iteration() -> int:" in stub
-        assert '.current_iteration' in stub
-        assert '.current_iteration(' not in stub
+        assert ".current_iteration" in stub
+        assert ".current_iteration(" not in stub
 
     def test_class_method_stub_still_calls(self) -> None:
         op = SourceOperation(

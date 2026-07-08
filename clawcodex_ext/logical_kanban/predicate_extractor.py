@@ -20,13 +20,13 @@ class PredicateExtraction:
 
     predicates: frozenset[str] = field(default_factory=frozenset)
     unknown: frozenset[str] = field(default_factory=frozenset)
-    status: Literal['valid', 'needs_glossary_review'] = 'valid'
+    status: Literal["valid", "needs_glossary_review"] = "valid"
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            'predicates': sorted(self.predicates),
-            'unknown': sorted(self.unknown),
-            'status': self.status,
+            "predicates": sorted(self.predicates),
+            "unknown": sorted(self.unknown),
+            "status": self.status,
         }
 
 
@@ -39,7 +39,7 @@ def extract_predicates(node: IRNode) -> frozenset[str]:
         for child in node.args:
             found.update(extract_predicates(child))
         return frozenset(found)
-    raise TypeError(f'Unsupported IR node type: {type(node).__name__}')
+    raise TypeError(f"Unsupported IR node type: {type(node).__name__}")
 
 
 def validate_assertion(
@@ -53,8 +53,8 @@ def validate_assertion(
     """
     predicates = extract_predicates(assertion.body)
     unknown = predicates - glossary.predicate_names()
-    status: Literal['valid', 'needs_glossary_review'] = (
-        'needs_glossary_review' if unknown else 'valid'
+    status: Literal["valid", "needs_glossary_review"] = (
+        "needs_glossary_review" if unknown else "valid"
     )
     return PredicateExtraction(
         predicates=predicates,
@@ -64,7 +64,7 @@ def validate_assertion(
 
 
 __all__ = [
-    'PredicateExtraction',
-    'extract_predicates',
-    'validate_assertion',
+    "PredicateExtraction",
+    "extract_predicates",
+    "validate_assertion",
 ]

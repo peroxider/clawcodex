@@ -90,7 +90,7 @@ def _is_debug_mode() -> bool:
     argv flag which is REPL-runtime-only). The argv check is not
     relevant for RemoteIO; we mirror only the env-var portion.
     """
-    return is_env_truthy(os.environ.get('DEBUG')) or is_env_truthy(os.environ.get('DEBUG_SDK'))
+    return is_env_truthy(os.environ.get("DEBUG")) or is_env_truthy(os.environ.get("DEBUG_SDK"))
 
 
 # Sentinel object signaling end-of-stream on the input queue.
@@ -124,7 +124,7 @@ class RemoteIO:
         self._initial_prompt_task: asyncio.Task[None] | None = None
         self._connect_task: asyncio.Task[None] | None = None
 
-        self._is_bridge = os.environ.get('CLAUDE_CODE_ENVIRONMENT_KIND') == 'bridge'
+        self._is_bridge = os.environ.get("CLAUDE_CODE_ENVIRONMENT_KIND") == "bridge"
         self._is_debug = _is_debug_mode()
 
         # Header building uses the canonical helpers. These handle BOTH
@@ -133,13 +133,13 @@ class RemoteIO:
         # would silently break session-key tokens.
         def build_headers() -> dict[str, str]:
             h = dict(get_session_ingress_auth_headers())
-            er_version = os.environ.get('CLAUDE_CODE_ENVIRONMENT_RUNNER_VERSION')
+            er_version = os.environ.get("CLAUDE_CODE_ENVIRONMENT_RUNNER_VERSION")
             if er_version:
-                h['x-environment-runner-version'] = er_version
+                h["x-environment-runner-version"] = er_version
             return h
 
         if get_session_ingress_auth_token() is None:
-            logger.error('[remote-io] No session ingress token available')
+            logger.error("[remote-io] No session ingress token available")
 
         # TODO(parity): wire session_id from bootstrap once the
         # equivalent of TS getSessionId() is ported. Currently None.
@@ -160,14 +160,14 @@ class RemoteIO:
         # transport that happens to lack `write` would also be rejected,
         # which is fine — all real transports either have it or are
         # known to be SSE.)
-        if not hasattr(self._transport, 'write'):
+        if not hasattr(self._transport, "write"):
             raise NotImplementedError(
-                'RemoteIO does not support CCR v2 (SSETransport write path) '
-                'in this PR. The TS code routes CCR v2 writes through '
-                'CCRClient.writeEvent (remoteIO.ts:232-236); the Python '
-                'CCRClient has a different constructor that needs an epoch '
-                'from somewhere — wiring belongs in the ccr_client.py '
-                'deep-port audit. See cli-gap-analysis.md §3.3 / §4.7.'
+                "RemoteIO does not support CCR v2 (SSETransport write path) "
+                "in this PR. The TS code routes CCR v2 writes through "
+                "CCRClient.writeEvent (remoteIO.ts:232-236); the Python "
+                "CCRClient has a different constructor that needs an epoch "
+                "from somewhere — wiring belongs in the ccr_client.py "
+                "deep-port audit. See cli-gap-analysis.md §3.3 / §4.7."
             )
 
         # on_data → input queue
@@ -198,7 +198,7 @@ class RemoteIO:
     def _on_data(self, data: str) -> None:
         # Bridge + debug: echo to stdout.
         if self._is_bridge and self._is_debug:
-            sys.stdout.write(data if data.endswith('\n') else data + '\n')
+            sys.stdout.write(data if data.endswith("\n") else data + "\n")
             sys.stdout.flush()
         self._input_queue.put_nowait(data)
 
@@ -232,7 +232,7 @@ class RemoteIO:
             # strings or the sentinel — narrow explicitly.
             if not isinstance(item, str):
                 raise TypeError(
-                    f'RemoteIO input queue produced non-str non-sentinel: {type(item).__name__}'
+                    f"RemoteIO input queue produced non-str non-sentinel: {type(item).__name__}"
                 )
             yield item
 
@@ -244,7 +244,7 @@ class RemoteIO:
             # changing the semantics for chunks like "abc\n\n" (TS
             # preserves the second \n as a paragraph break).
             s = str(chunk)
-            line = (s[:-1] if s.endswith('\n') else s) + '\n'
+            line = (s[:-1] if s.endswith("\n") else s) + "\n"
             self._input_queue.put_nowait(line)
 
     # -- Output side ---------------------------------------------------------
@@ -260,8 +260,8 @@ class RemoteIO:
         # construction time (the NotImplementedError gate above).
         await self._transport.write(message)  # type: ignore[attr-defined]
         if self._is_bridge:
-            if message.get('type') == 'control_request' or self._is_debug:
-                sys.stdout.write(ndjson_safe_dumps(message) + '\n')
+            if message.get("type") == "control_request" or self._is_debug:
+                sys.stdout.write(ndjson_safe_dumps(message) + "\n")
                 sys.stdout.flush()
 
     # -- Keep-alive ----------------------------------------------------------
@@ -273,9 +273,9 @@ class RemoteIO:
                 if self._closed:
                     return
                 try:
-                    await self.write({'type': 'keep_alive'})
+                    await self.write({"type": "keep_alive"})
                 except Exception as exc:  # noqa: BLE001
-                    logger.debug('RemoteIO keep_alive write failed: %s', exc)
+                    logger.debug("RemoteIO keep_alive write failed: %s", exc)
         except asyncio.CancelledError:
             pass
 
@@ -316,4 +316,4 @@ class RemoteIO:
         self._input_queue.put_nowait(_END_OF_STREAM)
 
 
-__all__ = ['RemoteIO']
+__all__ = ["RemoteIO"]

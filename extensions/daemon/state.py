@@ -84,9 +84,7 @@ class DaemonState:
         try:
             kwargs["last_status"] = DaemonStatus(status_str)
         except ValueError:
-            logger.warning(
-                "DaemonState: unknown status %r; defaulting to RUNNING", status_str
-            )
+            logger.warning("DaemonState: unknown status %r; defaulting to RUNNING", status_str)
             kwargs["last_status"] = DaemonStatus.RUNNING
         kwargs.setdefault("extra", {})
         return cls(**kwargs)
@@ -165,9 +163,7 @@ def read_daemon_state(
     try:
         return DaemonState.from_dict(data)
     except (TypeError, KeyError):
-        logger.warning(
-            "DaemonState: missing fields in %s; ignoring", path, exc_info=True
-        )
+        logger.warning("DaemonState: missing fields in %s; ignoring", path, exc_info=True)
         return None
 
 

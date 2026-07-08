@@ -235,7 +235,9 @@ def _handle_convert(args: list[str]) -> int:
 
     # If --out is specified, write the output files to the target directory
     if opts.output_dir:
-        _write_output_files(opts.output_dir, result, opts.sdk_spec, opts.requirements, opts.agent_name)
+        _write_output_files(
+            opts.output_dir, result, opts.sdk_spec, opts.requirements, opts.agent_name
+        )
 
     return 0
 
@@ -281,7 +283,10 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 f"quality={workflow_graph.extraction_quality}"
             )
         elif disc.mode in ("fwa", "hybrid"):
-            print("   Warning: workflow mode selected but graph extraction returned empty", file=sys.stderr)
+            print(
+                "   Warning: workflow mode selected but graph extraction returned empty",
+                file=sys.stderr,
+            )
 
     if opts.json_output:
         payload = disc.to_dict()
@@ -351,7 +356,10 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
 
         if resolve_arc_pipeline_dir(sdk_path) is not None:
             grouped_skills = ensure_arc_stage_skills(
-                workflow_graph, components, grouped_skills, sdk_path,
+                workflow_graph,
+                components,
+                grouped_skills,
+                sdk_path,
             )
             skill_agent_map = {s.name: f"{s.name}-agent" for s in grouped_skills}
 
@@ -363,11 +371,12 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
 
         gen = AgentDefinitionGenerator()
         workflow_stages = gen.enrich_workflow_stages(
-            workflow_graph, agent_map, skill_agent_map=skill_agent_map,
+            workflow_graph,
+            agent_map,
+            skill_agent_map=skill_agent_map,
         )
     elif workflow_graph:
         workflow_stages = build_workflow_stages(workflow_graph, skill_agent_map=skill_agent_map)
-
 
     if opts.register_tools and not opts.preview and not opts.validate_only:
         try:
@@ -468,7 +477,9 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
             print("[Preview] Workflow extraction:")
             print(format_workflow_preview(workflow_graph, disc))
         else:
-            print(f"[Preview] Workflow mode: {disc.mode} (score={disc.total_score:.2f}), no graph extracted")
+            print(
+                f"[Preview] Workflow mode: {disc.mode} (score={disc.total_score:.2f}), no graph extracted"
+            )
         strategy_labels = {
             "IO_RELATION": "IO_RELATION",
             "KEYWORD_MATCH": "KEYWORD_MATCH",
@@ -572,12 +583,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 )
 
     # Finalize stage agent names before workflow.yaml / overview reference them.
-    if (
-        workflow_graph
-        and agent_map
-        and emit_workflow_bundle
-        and emit_stage_agents
-    ):
+    if workflow_graph and agent_map and emit_workflow_bundle and emit_stage_agents:
         from extensions.sop_converter.workflow_mode.generator import (
             AgentDefinitionGenerator,
             stage_agent_existing_names,
@@ -600,13 +606,23 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
             existing_agent_names=existing_stage_names,
         )
         workflow_stages = sync_workflow_stages_agents(
-            workflow_stages, workflow_graph, agent_map,
+            workflow_stages,
+            workflow_graph,
+            agent_map,
         )
         overview_info = sync_overview_component_agents(
-            overview_info, workflow_graph, agent_map,
+            overview_info,
+            workflow_graph,
+            agent_map,
         )
 
-    if workflow_graph and agent_map and out_path and emit_workflow_bundle and opts.emit_workflow_yaml:
+    if (
+        workflow_graph
+        and agent_map
+        and out_path
+        and emit_workflow_bundle
+        and opts.emit_workflow_yaml
+    ):
         from extensions.sop_converter.workflow_mode.schema import emit_engine_workflow_yaml
 
         yaml_path = emit_engine_workflow_yaml(

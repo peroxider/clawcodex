@@ -25,16 +25,12 @@ from src.command_system.input_processing import strip_agent_mentions
 class TestSopRouting(unittest.TestCase):
     def test_looks_like_direct_sdk_execution(self) -> None:
         self.assertTrue(
-            looks_like_direct_sdk_execution(
-                "Skill(openjiuwen_merged-skill) then team-memory-dir"
-            )
+            looks_like_direct_sdk_execution("Skill(openjiuwen_merged-skill) then team-memory-dir")
         )
         self.assertFalse(looks_like_direct_sdk_execution("summarize the conversation"))
 
     def test_requested_agent_types_in_prompt(self) -> None:
-        prompt = (
-            "@agent-AutoResearchClaw-topic-init-agent explain output contract"
-        )
+        prompt = "@agent-AutoResearchClaw-topic-init-agent explain output contract"
         self.assertEqual(
             requested_agent_types_in_prompt(prompt),
             ["AutoResearchClaw-topic-init-agent"],
@@ -148,10 +144,7 @@ class TestSopRouting(unittest.TestCase):
         )
 
     def test_strip_agent_mentions(self) -> None:
-        text = (
-            "@agent-AutoResearchClaw-topic-init-agent "
-            "只根据 agent 定义说明输出契约"
-        )
+        text = "@agent-AutoResearchClaw-topic-init-agent 只根据 agent 定义说明输出契约"
         self.assertNotIn("@agent-", strip_agent_mentions(text))
         self.assertIn("输出契约", strip_agent_mentions(text))
 
@@ -171,13 +164,9 @@ class TestSopRouting(unittest.TestCase):
 
     def test_is_prefixed_stage_agent(self) -> None:
         self.assertTrue(
-            is_prefixed_stage_agent(
-                "AutoResearchClaw-topic-init-agent", "AutoResearchClaw"
-            )
+            is_prefixed_stage_agent("AutoResearchClaw-topic-init-agent", "AutoResearchClaw")
         )
-        self.assertFalse(
-            is_prefixed_stage_agent("core_pipeline-agent", "AutoResearchClaw")
-        )
+        self.assertFalse(is_prefixed_stage_agent("core_pipeline-agent", "AutoResearchClaw"))
 
     def test_read_workflow_first_stage_skill_name(self) -> None:
         import tempfile

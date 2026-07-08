@@ -59,19 +59,27 @@ def _emit(exc: BaseException) -> None:
             # Notify user on stderr (runs before traceback is printed)
             try:
                 from .storage import LocalJsonlStorage, utc_date, utc_now
-                storage = LocalJsonlStorage(recorder.config.storage_dir, recorder.config.retention_days)
+
+                storage = LocalJsonlStorage(
+                    recorder.config.storage_dir, recorder.config.retention_days
+                )
                 cursor = storage.read_reporter_cursor("issue")
                 issue_id = cursor.get("issue_id", "")
                 if issue_id:
                     platform = cursor.get("platform", "")
                     owner = cursor.get("owner", "")
                     repo = cursor.get("repo", "")
-                    url = {"gitcode": f"https://gitcode.com/{owner}/{repo}/issues/{issue_id}",
-                           "github": f"https://github.com/{owner}/{repo}/issues/{issue_id}",
-                           "gitee": f"https://gitee.com/{owner}/{repo}/issues/{issue_id}"}.get(platform, "")
+                    url = {
+                        "gitcode": f"https://gitcode.com/{owner}/{repo}/issues/{issue_id}",
+                        "github": f"https://github.com/{owner}/{repo}/issues/{issue_id}",
+                        "gitee": f"https://gitee.com/{owner}/{repo}/issues/{issue_id}",
+                    }.get(platform, "")
                     if url:
                         import sys
-                        sys.stderr.write("\n\033[1;33m⚠ Telemetry: error report pushed to %s\033[0m\n" % url)
+
+                        sys.stderr.write(
+                            "\n\033[1;33m⚠ Telemetry: error report pushed to %s\033[0m\n" % url
+                        )
             except Exception:
                 pass
         except Exception as flush_exc:  # noqa: BLE001

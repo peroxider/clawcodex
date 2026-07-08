@@ -238,12 +238,17 @@ def build_default_registry(
 def default_target_ids() -> tuple[str, ...]:
     """Sorted tuple of every built-in target_id (handy for tests/docs)."""
     return tuple(
-        sorted({t.target_id for t in (
-            *_editor_targets(),
-            *_remote_targets(),
-            *_tracker_targets(),
-            *_function_targets(),
-        )})
+        sorted(
+            {
+                t.target_id
+                for t in (
+                    *_editor_targets(),
+                    *_remote_targets(),
+                    *_tracker_targets(),
+                    *_function_targets(),
+                )
+            }
+        )
     )
 
 

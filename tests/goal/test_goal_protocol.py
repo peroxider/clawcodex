@@ -73,9 +73,7 @@ def test_thread_goal_clear_returns_response_then_cleared_notification(
     tmp_path: Path,
 ) -> None:
     protocol, events = make_protocol(tmp_path)
-    protocol.thread_goal_set(
-        ThreadGoalSetParams(thread_id="thread-1", objective="delete me")
-    )
+    protocol.thread_goal_set(ThreadGoalSetParams(thread_id="thread-1", objective="delete me"))
     events.clear()
 
     response = protocol.thread_goal_clear(ThreadGoalClearParams(thread_id="thread-1"))
@@ -119,8 +117,6 @@ def test_disabled_protocol_rejects_request_and_emits_no_messages(tmp_path: Path)
     get_registry().set_override("goals", False)
 
     with pytest.raises(GoalServiceError, match="goals feature is disabled"):
-        protocol.thread_goal_set(
-            ThreadGoalSetParams(thread_id="thread-1", objective="nope")
-        )
+        protocol.thread_goal_set(ThreadGoalSetParams(thread_id="thread-1", objective="nope"))
 
     assert events.messages == []

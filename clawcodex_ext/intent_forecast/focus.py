@@ -74,7 +74,10 @@ def focus_definitions() -> dict[str, dict[str, Any]]:
         },
         "session_intelligence": {
             "label": "Session Intelligence",
-            "strong_path_aliases": ("clawcodex_ext/session_intelligence/", "tests/session_intelligence/"),
+            "strong_path_aliases": (
+                "clawcodex_ext/session_intelligence/",
+                "tests/session_intelligence/",
+            ),
             "module_aliases": ("session_intelligence", "session summary", "summary.json"),
             "weak_text_aliases": ("summary",),
         },

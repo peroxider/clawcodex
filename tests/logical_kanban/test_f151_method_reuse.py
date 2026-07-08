@@ -249,6 +249,7 @@ class TestSummarizeMethods:
         def gen() -> Any:
             yield _make_method("M-a")
             yield _make_method("M-b")
+
         result = summarize_methods(gen(), header="")
         assert result.included_method_ids == ("M-a", "M-b")
 
@@ -467,9 +468,7 @@ class TestMethodReferencesField:
         assert plan.method_references == ()
 
     def test_plan_to_dict_includes_method_references(self) -> None:
-        provider = _CapturingProvider(
-            _plan_with_method_refs_json(("M-add-middleware-001",))
-        )
+        provider = _CapturingProvider(_plan_with_method_refs_json(("M-add-middleware-001",)))
         decomposer = TaskDecomposer(llm_provider=provider)
 
         plan = decomposer.decompose("anything", max_steps=8)
@@ -498,9 +497,7 @@ class TestExtractPlanAcceptsMethodRef:
         # errors.  The plan should still validate and surface the
         # unrecognised ref in ``method_references`` so the audit trail
         # can see what the LLM tried to use.
-        provider = _CapturingProvider(
-            _plan_with_method_refs_json(("M-does-not-exist-001",))
-        )
+        provider = _CapturingProvider(_plan_with_method_refs_json(("M-does-not-exist-001",)))
         decomposer = TaskDecomposer(llm_provider=provider)
 
         plan = decomposer.decompose("anything", max_steps=8)
@@ -571,9 +568,7 @@ class TestMethodReferencedAuditEvent:
     def test_event_for_decomposition_proposed_remains_present(self) -> None:
         # F-149: the decomposition_proposed event must still fire even
         # when F-151 events are added alongside.
-        provider = _CapturingProvider(
-            _plan_with_method_refs_json(("M-add-middleware-001",))
-        )
+        provider = _CapturingProvider(_plan_with_method_refs_json(("M-add-middleware-001",)))
         decomposer = TaskDecomposer(llm_provider=provider)
         plan = decomposer.decompose("anything", max_steps=8)
 
@@ -589,9 +584,7 @@ class TestMethodReferencedAuditEvent:
         # method_referenced events there.
         from clawcodex_ext.tool_system.tools.task_decompose import _task_decompose_call
 
-        provider = _CapturingProvider(
-            _plan_with_method_refs_json(("M-add-middleware-001",))
-        )
+        provider = _CapturingProvider(_plan_with_method_refs_json(("M-add-middleware-001",)))
         # We bypass the tool's is_enabled check by calling the inner
         # function with a fake provider and a real ToolContext.
         from clawcodex_ext.tool_system.context import ToolContext
@@ -608,7 +601,8 @@ class TestMethodReferencedAuditEvent:
 
         log = get_audit_log(ctx)
         method_events = [
-            e for e in log.query(event_type="lkb_method_referenced")
+            e
+            for e in log.query(event_type="lkb_method_referenced")
             if e.event_type == "lkb_method_referenced"
         ]
         assert method_events, "session log should receive the method event"

@@ -17,6 +17,7 @@ C = TypeVar("C", bound="type[Any]")
 def _get_registry():
     """Lazy import of the singleton to avoid circular imports."""
     from clawcodex_ext.feature_gate import get_registry as _gr
+
     return _gr()
 
 
@@ -43,15 +44,18 @@ def feature_gated(
     you need runtime re-evaluation, use ``registry.is_enabled()``
     directly inside the function body.
     """
+
     def decorator(obj: T) -> T:
         reg = _get_registry()
         if not reg.is_enabled(feature_name):
             if fallback is not None:
                 return fallback  # type: ignore[return-value]
+
             # Default: return a no-op stub so calls don't crash.
             @functools.wraps(obj)  # type: ignore[arg-type]
             def _noop(*_args: Any, **_kwargs: Any) -> None:
                 pass
+
             return _noop  # type: ignore[return-value]
         return obj
 
@@ -87,14 +91,10 @@ def feature_gated_class(
             # Validate constraints when enabling
             missing = reg.check_deps(name)
             if missing:
-                raise RuntimeError(
-                    f"Feature '{name}' requires but is missing: {missing}"
-                )
+                raise RuntimeError(f"Feature '{name}' requires but is missing: {missing}")
             conflicts = reg.check_mutex(name)
             if conflicts:
-                raise RuntimeError(
-                    f"Feature '{name}' conflicts with: {conflicts}"
-                )
+                raise RuntimeError(f"Feature '{name}' conflicts with: {conflicts}")
             return cls
         # Feature disabled -- use fallback or return the class unchanged.
         if fallback_cls is not None:
@@ -104,9 +104,7 @@ def feature_gated_class(
     return wrapper
 
 
-def guarded_call(
-    feature_name: str, func: T, *args: Any, **kwargs: Any
-) -> T | None:
+def guarded_call(feature_name: str, func: T, *args: Any, **kwargs: Any) -> T | None:
     """Call *func* only if *feature_name* is enabled.
 
     This is a convenience helper for inline guards inside function

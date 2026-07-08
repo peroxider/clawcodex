@@ -219,9 +219,7 @@ class TestStage3bRichMarkupEscape:
         raw = "[/bold]"
         escaped = escape(raw)
         # Rich 只转义 [（标记起始），] 独立时无歧义无需转义
-        assert escaped == r"\[/bold]", (
-            f"escape() should escape `[`, got: {escaped!r}"
-        )
+        assert escaped == r"\[/bold]", f"escape() should escape `[`, got: {escaped!r}"
 
     def test_escape_idempotent_on_clean_text(self):
         """escape() 对不含标记的纯文本保持恒等。"""
@@ -286,8 +284,7 @@ class TestStage3bRichMarkupEscape:
                 contains_untrusted = "{e" in stripped or "{err_text" in stripped
                 if contains_untrusted:
                     assert "escape(" in stripped, (
-                        f"chat() line {i} embeds untrusted content without escape(): "
-                        f"{stripped!r}"
+                        f"chat() line {i} embeds untrusted content without escape(): {stripped!r}"
                     )
 
             # 检查 call_args 构造（summary 来自工具输入，用户可控制）

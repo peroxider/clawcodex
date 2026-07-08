@@ -125,9 +125,7 @@ class TestIssueRegistryPersistence(unittest.TestCase):
 
     def test_round_trip_persists(self) -> None:
         self.registry.register("i1", "owner/repo#1", branch_name="feat/x")
-        reloaded = IssueRegistry(
-            storage_path=Path(self.tmp.name) / "registry.json"
-        )
+        reloaded = IssueRegistry(storage_path=Path(self.tmp.name) / "registry.json")
         record = reloaded.get("i1")
         self.assertIsNotNone(record)
         self.assertEqual(record.issue_identifier, "owner/repo#1")
@@ -136,9 +134,7 @@ class TestIssueRegistryPersistence(unittest.TestCase):
     def test_malformed_json_loads_empty(self) -> None:
         path = Path(self.tmp.name) / "registry.json"
         path.write_text("not-valid-json", encoding="utf-8")
-        with self.assertLogs(
-            "extensions.orchestrator.issue_registry", level="WARNING"
-        ):
+        with self.assertLogs("extensions.orchestrator.issue_registry", level="WARNING"):
             registry = IssueRegistry(storage_path=path)
         self.assertEqual(list(registry._records.values()), [])
 
@@ -229,9 +225,7 @@ class TestRegister(unittest.TestCase):
             pr_url="https://x/y/pull/42",
         )
         # Re-register with the SAME issue (simulating a re-dispatch).
-        re_registered = self.registry.register(
-            "i1", "owner/repo#1", branch_name="main"
-        )
+        re_registered = self.registry.register("i1", "owner/repo#1", branch_name="main")
         # Sync-state must be preserved.
         self.assertEqual(re_registered.commit_sha, "abc123")
         self.assertEqual(re_registered.pr_number, 42)
@@ -569,16 +563,12 @@ class TestFeedbackMutations(unittest.TestCase):
         self.assertEqual(result.pending_feedback_ids, ["fb-2"])
 
     def test_mark_feedback_pending_updates_cursor(self) -> None:
-        result = self.registry.mark_feedback_pending(
-            "i1", ["fb-1"], cursor="fb-cursor"
-        )
+        result = self.registry.mark_feedback_pending("i1", ["fb-1"], cursor="fb-cursor")
         self.assertEqual(result.feedback_cursor, "fb-cursor")
 
     def test_mark_feedback_processed_moves_ids(self) -> None:
         self.registry.mark_feedback_pending("i1", ["fb-1", "fb-2"])
-        result = self.registry.mark_feedback_processed(
-            "i1", ["fb-1"], commit_sha="c1"
-        )
+        result = self.registry.mark_feedback_processed("i1", ["fb-1"], commit_sha="c1")
         self.assertIn("fb-1", result.processed_feedback_ids)
         self.assertNotIn("fb-1", result.pending_feedback_ids)
         self.assertEqual(result.last_followup_commit_sha, "c1")
@@ -659,8 +649,11 @@ class TestIntentAndRetry(unittest.TestCase):
 
     def test_reset_for_retry_clears_pr_state(self) -> None:
         self.registry.mark_synced(
-            "i1", branch_name="feat/x", commit_sha="abc",
-            pr_number=10, pr_url="https://x/y/pull/10",
+            "i1",
+            branch_name="feat/x",
+            commit_sha="abc",
+            pr_number=10,
+            pr_url="https://x/y/pull/10",
         )
         self.registry.update_report("i1", report_path="/tmp/r.md")
         result = self.registry.reset_for_retry("i1")
@@ -722,13 +715,17 @@ class TestQueries(unittest.TestCase):
         # i3 has no PR.
         self.registry.mark_completed("i2")
         self.registry.register(
-            "i-seq-1", "owner/repo#seq1",
-            branch_name="feat/seq1", workspace_strategy="sequential",
+            "i-seq-1",
+            "owner/repo#seq1",
+            branch_name="feat/seq1",
+            workspace_strategy="sequential",
             sequence_index=1,
         )
         self.registry.register(
-            "i-seq-2", "owner/repo#seq2",
-            branch_name="feat/seq2", workspace_strategy="sequential",
+            "i-seq-2",
+            "owner/repo#seq2",
+            branch_name="feat/seq2",
+            workspace_strategy="sequential",
             sequence_index=2,
         )
         self.registry.register("i-run", "owner/repo#run", branch_name="feat/run")
@@ -739,22 +736,16 @@ class TestQueries(unittest.TestCase):
         self.assertIsNone(self.registry.get("missing"))
 
     def test_get_by_identifier(self) -> None:
-        self.assertEqual(
-            self.registry.get_by_identifier("owner/repo#2").issue_id, "i2"
-        )
+        self.assertEqual(self.registry.get_by_identifier("owner/repo#2").issue_id, "i2")
         self.assertIsNone(self.registry.get_by_identifier("nope"))
 
     def test_get_by_issue_ref_accepts_both(self) -> None:
         self.assertEqual(self.registry.get_by_issue_ref("i1").issue_id, "i1")
-        self.assertEqual(
-            self.registry.get_by_issue_ref("owner/repo#1").issue_id, "i1"
-        )
+        self.assertEqual(self.registry.get_by_issue_ref("owner/repo#1").issue_id, "i1")
         self.assertIsNone(self.registry.get_by_issue_ref("nope"))
 
     def test_get_by_branch(self) -> None:
-        self.assertEqual(
-            self.registry.get_by_branch("feat/2").issue_id, "i2"
-        )
+        self.assertEqual(self.registry.get_by_branch("feat/2").issue_id, "i2")
         self.assertIsNone(self.registry.get_by_branch("nope"))
 
     def test_has_pr(self) -> None:
@@ -788,9 +779,7 @@ class TestQueries(unittest.TestCase):
     def test_latest_sequential_record_no_records(self) -> None:
         # Use a fresh storage path so the fixture records from setUp
         # don't bleed in.
-        empty_registry = IssueRegistry(
-            storage_path=Path(self.tmp.name) / "empty-registry.json"
-        )
+        empty_registry = IssueRegistry(storage_path=Path(self.tmp.name) / "empty-registry.json")
         self.assertIsNone(empty_registry.latest_sequential_record())
 
     def test_running_records(self) -> None:
@@ -851,14 +840,10 @@ class TestClarificationMutations(unittest.TestCase):
     def test_add_stale_answer(self) -> None:
         self.registry.add_stale_answer("i1", "stale1")
         self.registry.add_stale_answer("i1", "stale2")
-        self.assertEqual(
-            self.registry.get("i1").stale_answers, ["stale1", "stale2"]
-        )
+        self.assertEqual(self.registry.get("i1").stale_answers, ["stale1", "stale2"])
 
     def test_update_clarification_missing(self) -> None:
-        self.assertIsNone(
-            self.registry.update_clarification("missing", clarification_status="x")
-        )
+        self.assertIsNone(self.registry.update_clarification("missing", clarification_status="x"))
 
 
 if __name__ == "__main__":

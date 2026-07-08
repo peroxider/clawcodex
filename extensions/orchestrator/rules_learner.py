@@ -46,8 +46,7 @@ class JudgeResult:
 class RuleJudge(Protocol):
     """批量判定 candidates 与 existing 的关系。"""
 
-    async def judge(self, candidates: list[dict], existing: list[dict]) -> list[JudgeResult]:
-        ...
+    async def judge(self, candidates: list[dict], existing: list[dict]) -> list[JudgeResult]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +87,7 @@ class BatchedLLMJudge:
         lines: list[str] = ["Existing rules:"]
         for i, e in enumerate(existing, start=1):
             lines.append(f"{i}. [{e.get('category', '?')}] {e.get('summary', '')}")
-            body = (e.get('body') or '').strip()
+            body = (e.get("body") or "").strip()
             if body:
                 truncated = body[:120] + "..." if len(body) > 120 else body
                 lines.append(f"   Body: {truncated}")
@@ -98,7 +97,7 @@ class BatchedLLMJudge:
         for ci, c in enumerate(candidates):
             label = chr(65 + ci)
             lines.append(f"{label}. [{c.get('category', '?')}] {c.get('summary', '')}")
-            body = (c.get('body') or '').strip()
+            body = (c.get("body") or "").strip()
             if body:
                 truncated = body[:120] + "..." if len(body) > 120 else body
                 lines.append(f"   Body: {truncated}")
@@ -123,7 +122,7 @@ class BatchedLLMJudge:
         for ci in range(num_candidates):
             label = chr(65 + ci)
             pattern = re.compile(
-                rf'{label}\s*:\s*(duplicate|merge|conflict|new)\s*(\d+)?',
+                rf"{label}\s*:\s*(duplicate|merge|conflict|new)\s*(\d+)?",
                 re.IGNORECASE,
             )
             match = pattern.search(reply_lower)
@@ -134,7 +133,7 @@ class BatchedLLMJudge:
                 results.append(JudgeResult(action=action, target_idx=target_idx))  # type: ignore[arg-type]
             else:
                 logger.warning(
-                    'Failed to parse judge result for candidate %s, defaulting to new', label
+                    "Failed to parse judge result for candidate %s, defaulting to new", label
                 )
                 results.append(JudgeResult(action="new"))
 
@@ -143,7 +142,7 @@ class BatchedLLMJudge:
 
 # Regex to find the ## Extracted Rules section in an agent reply.
 _RULES_SECTION_RE = re.compile(
-    r'^##\s+Extracted\s+Rules\s*\n(.*?)(?=\n##\s|\Z)',
+    r"^##\s+Extracted\s+Rules\s*\n(.*?)(?=\n##\s|\Z)",
     re.DOTALL | re.MULTILINE,
 )
 
@@ -160,8 +159,8 @@ _RULES_SECTION_RE = re.compile(
 # `* `) since LLMs frequently write `  - Body: ...` instead of `  Body:`
 # (F-121 fix).
 _RULE_ITEM_RE = re.compile(
-    r'^\s*[-*]\s+\[([^\]]+)\]\s+(.+?)(?:\n\s*[-*]?\s*Body:\s*(.+?))?'
-    r'(?=\n\s*[-*]\s+(?:\[|\*\*|\w)|\n\s*$|\Z)',
+    r"^\s*[-*]\s+\[([^\]]+)\]\s+(.+?)(?:\n\s*[-*]?\s*Body:\s*(.+?))?"
+    r"(?=\n\s*[-*]\s+(?:\[|\*\*|\w)|\n\s*$|\Z)",
     re.DOTALL | re.MULTILINE,
 )
 
@@ -175,58 +174,58 @@ _RULE_ITEM_RE = re.compile(
 # canonical category (or falls back to `other`).
 # Group layout: (1)=category-or-empty (2)=summary (3)=body-or-None
 _RULE_ITEM_LOOSE_RE = re.compile(
-    r'^\s*[-*]\s+(?:\[([^\]]*)\]\s+|\*\*([^*]*)\*\*\s*[-\u2014]\s+)?(.+?)'
-    r'(?:\n\s*[-*]?\s*Body:\s*(.+?))?'
-    r'(?=\n\s*[-*]\s+(?:\[|\*\*|\w)|\n\s*$|\Z)',
+    r"^\s*[-*]\s+(?:\[([^\]]*)\]\s+|\*\*([^*]*)\*\*\s*[-\u2014]\s+)?(.+?)"
+    r"(?:\n\s*[-*]?\s*Body:\s*(.+?))?"
+    r"(?=\n\s*[-*]\s+(?:\[|\*\*|\w)|\n\s*$|\Z)",
     re.DOTALL | re.MULTILINE,
 )
 
 # F-121 §2.2 canonical category enum. Used by `_infer_category()` to map
 # free-form summary/body text to a category when the agent omits `[cat]`.
 _RULE_CATEGORIES = (
-    'naming',
-    'error_handling',
-    'testing',
-    'import_style',
-    'code_style',
-    'type_annotation',
-    'architecture',
-    'boilerplate',
-    'security',
-    'performance',
-    'other',
+    "naming",
+    "error_handling",
+    "testing",
+    "import_style",
+    "code_style",
+    "type_annotation",
+    "architecture",
+    "boilerplate",
+    "security",
+    "performance",
+    "other",
 )
 
 # Keyword → category inference map (checked in order; first hit wins).
 # Keys are lowercased substrings; a rule whose summary or body contains
 # any keyword is assigned the corresponding category.
 _CATEGORY_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
-    ('error_handling', ('except', 'exception', 'error', 'raise', 'try', 'catch', '异常')),
-    ('testing', ('test', 'pytest', 'assert', 'fixture', 'mock', '测试')),
-    ('import_style', ('import', '导入', '排序')),
-    ('type_annotation', ('type', 'annotation', 'typing', 'mypy', '类型')),
-    ('naming', ('name', 'naming', 'variable', 'function', 'class', '命名')),
-    ('architecture', ('layer', 'module', 'depend', '分层', '依赖', '架构')),
-    ('boilerplate', ('license', 'header', 'docstring', 'doc', '注释', '版权')),
-    ('security', ('security', 'auth', 'token', 'secret', '安全', '密钥')),
-    ('performance', ('perf', 'performance', 'speed', 'cache', '性能', '缓存')),
+    ("error_handling", ("except", "exception", "error", "raise", "try", "catch", "异常")),
+    ("testing", ("test", "pytest", "assert", "fixture", "mock", "测试")),
+    ("import_style", ("import", "导入", "排序")),
+    ("type_annotation", ("type", "annotation", "typing", "mypy", "类型")),
+    ("naming", ("name", "naming", "variable", "function", "class", "命名")),
+    ("architecture", ("layer", "module", "depend", "分层", "依赖", "架构")),
+    ("boilerplate", ("license", "header", "docstring", "doc", "注释", "版权")),
+    ("security", ("security", "auth", "token", "secret", "安全", "密钥")),
+    ("performance", ("perf", "performance", "speed", "cache", "性能", "缓存")),
     (
-        'code_style',
+        "code_style",
         (
-            'quote',
-            '引号',
-            '双引号',
-            '单引号',
-            'indent',
-            '缩进',
-            'space',
-            '空格',
-            'format',
-            '格式',
-            'style',
-            '风格',
-            'bracket',
-            '括号',
+            "quote",
+            "引号",
+            "双引号",
+            "单引号",
+            "indent",
+            "缩进",
+            "space",
+            "空格",
+            "format",
+            "格式",
+            "style",
+            "风格",
+            "bracket",
+            "括号",
         ),
     ),
 ]
@@ -243,13 +242,13 @@ def _infer_category(text: str) -> str:
     for category, keywords in _CATEGORY_KEYWORDS:
         if any(kw.lower() in lowered for kw in keywords):
             return category
-    return 'other'
+    return "other"
 
 
 _AUTO_MANAGED_COMMENT = (
-    '# workflow.rules.yaml \u2014 \u7531 clawcodex orchestrator \u81ea\u52a8\u7ba1\u7406\n'
-    '# \u89c4\u5219\u662f\u4ece PR review feedback \u4e2d\u5f52\u7eb3\u51fa\u7684\u53c2\u8003\u7ea6\u5b9a\uff0c\u975e\u5f3a\u5236\u7ea6\u675f\u3002\n'
-    '# Agent \u5728\u9002\u5f53\u65f6\u673a\u4ee5 Read() \u67e5\u9605\u3002'
+    "# workflow.rules.yaml \u2014 \u7531 clawcodex orchestrator \u81ea\u52a8\u7ba1\u7406\n"
+    "# \u89c4\u5219\u662f\u4ece PR review feedback \u4e2d\u5f52\u7eb3\u51fa\u7684\u53c2\u8003\u7ea6\u5b9a\uff0c\u975e\u5f3a\u5236\u7ea6\u675f\u3002\n"
+    "# Agent \u5728\u9002\u5f53\u65f6\u673a\u4ee5 Read() \u67e5\u9605\u3002"
 )
 
 # Default quality-score weights.
@@ -267,7 +266,7 @@ _W_CRITICALITY = 0.20
 
 def _tokenize(text: str) -> list[str]:
     """Lowercase word tokens (strips punctuation)."""
-    return re.findall(r'\w+', text.lower())
+    return re.findall(r"\w+", text.lower())
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +277,7 @@ def _tokenize(text: str) -> list[str]:
 class RuleStore:
     """Read/write ``workflow.rules.yaml`` with atomic write safety."""
 
-    DEFAULT_FILENAME = 'workflow.rules.yaml'
+    DEFAULT_FILENAME = "workflow.rules.yaml"
 
     @staticmethod
     def resolve_path(workflow_path: str, rules_path: str) -> str:
@@ -293,35 +292,35 @@ class RuleStore:
     def load(path: str) -> dict:
         p = Path(path)
         if not p.exists():
-            return {'version': 1, 'rules': []}
+            return {"version": 1, "rules": []}
         try:
-            raw = p.read_text(encoding='utf-8')
+            raw = p.read_text(encoding="utf-8")
             data = yaml.safe_load(raw)
             if not isinstance(data, dict):
-                return {'version': 1, 'rules': []}
-            data.setdefault('version', 1)
-            data.setdefault('rules', [])
+                return {"version": 1, "rules": []}
+            data.setdefault("version", 1)
+            data.setdefault("rules", [])
             return data
         except (yaml.YAMLError, OSError) as exc:
-            logger.warning('Failed to load rules file %s: %s', path, exc)
-            return {'version': 1, 'rules': []}
+            logger.warning("Failed to load rules file %s: %s", path, exc)
+            return {"version": 1, "rules": []}
 
     @staticmethod
     def save(path: str, rules: list[dict], version: int = 1) -> None:
         p = Path(path)
         content = yaml.dump(
-            {'version': version, 'rules': rules},
+            {"version": version, "rules": rules},
             default_flow_style=False,
             allow_unicode=True,
             sort_keys=False,
         )
-        full_content = f'{_AUTO_MANAGED_COMMENT}\n{content}'
-        tmp = p.with_suffix('.yaml.tmp')
+        full_content = f"{_AUTO_MANAGED_COMMENT}\n{content}"
+        tmp = p.with_suffix(".yaml.tmp")
         try:
-            tmp.write_text(full_content, encoding='utf-8')
+            tmp.write_text(full_content, encoding="utf-8")
             tmp.replace(p)
         except OSError as exc:
-            logger.error('Failed to save rules file %s: %s', path, exc)
+            logger.error("Failed to save rules file %s: %s", path, exc)
             raise
 
     @staticmethod
@@ -330,7 +329,7 @@ class RuleStore:
         if not p.exists():
             return False
         try:
-            first = p.read_text(encoding='utf-8').splitlines()[0] if p.stat().st_size > 0 else ''
+            first = p.read_text(encoding="utf-8").splitlines()[0] if p.stat().st_size > 0 else ""
             # 只检测首行（兼容多行 header 的扩展）
             marker = _AUTO_MANAGED_COMMENT.splitlines()[0]
             return marker not in first
@@ -449,7 +448,7 @@ class RuleEngine:
             return []
         section = match.group(1).strip()
         rules: list[dict] = []
-        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         # Track char spans already consumed by the strict regex so the
         # loose fallback does not double-count the same rule. Spans are
@@ -459,23 +458,23 @@ class RuleEngine:
         for m in _RULE_ITEM_RE.finditer(section):
             category = m.group(1).strip()
             summary = m.group(2).strip()
-            body = m.group(3).strip() if m.group(3) else ''
-            if not body and ':' in summary:
-                parts = summary.split(':', 1)
+            body = m.group(3).strip() if m.group(3) else ""
+            if not body and ":" in summary:
+                parts = summary.split(":", 1)
                 summary = parts[0].strip()
                 body = parts[1].strip()
             rules.append(
                 {
-                    'category': category,
-                    'summary': summary,
-                    'body': body,
-                    'source': '',
-                    'support_count': 1,
-                    'confidence': 'medium',
-                    'created_at': now,
-                    'updated_at': now,
-                    'conflict_with': [],
-                    'last_applied': now,
+                    "category": category,
+                    "summary": summary,
+                    "body": body,
+                    "source": "",
+                    "support_count": 1,
+                    "confidence": "medium",
+                    "created_at": now,
+                    "updated_at": now,
+                    "conflict_with": [],
+                    "last_applied": now,
                 }
             )
             strict_spans.append((m.start(), m.end()))
@@ -497,34 +496,34 @@ class RuleEngine:
                 continue
             # Loose group layout: (1)=category-or-None (2)=bold-title-or-None
             # (3)=summary (4)=body-or-None. Exactly one of (1)/(2) is set.
-            category = (m.group(1) or '').strip()
-            bold_title = (m.group(2) or '').strip()
-            summary = (m.group(3) or '').strip()
-            body = (m.group(4).strip() if m.group(4) else '').strip()
+            category = (m.group(1) or "").strip()
+            bold_title = (m.group(2) or "").strip()
+            summary = (m.group(3) or "").strip()
+            body = (m.group(4).strip() if m.group(4) else "").strip()
             if not summary:
                 continue
             # If the agent used a bold title instead of [category], fold
             # the title into the summary (it is usually the rule name).
             if bold_title and not category:
-                summary = f'{bold_title} — {summary}' if summary else bold_title
-            if not body and ':' in summary:
-                parts = summary.split(':', 1)
+                summary = f"{bold_title} — {summary}" if summary else bold_title
+            if not body and ":" in summary:
+                parts = summary.split(":", 1)
                 summary = parts[0].strip()
                 body = parts[1].strip()
             if not category or category not in _RULE_CATEGORIES:
-                category = _infer_category(f'{summary} {body}')
+                category = _infer_category(f"{summary} {body}")
             rules.append(
                 {
-                    'category': category,
-                    'summary': summary,
-                    'body': body,
-                    'source': '',
-                    'support_count': 1,
-                    'confidence': 'medium',
-                    'created_at': now,
-                    'updated_at': now,
-                    'conflict_with': [],
-                    'last_applied': now,
+                    "category": category,
+                    "summary": summary,
+                    "body": body,
+                    "source": "",
+                    "support_count": 1,
+                    "confidence": "medium",
+                    "created_at": now,
+                    "updated_at": now,
+                    "conflict_with": [],
+                    "last_applied": now,
                 }
             )
         return rules
@@ -536,10 +535,10 @@ class RuleEngine:
     @staticmethod
     def _rule_text(r: dict) -> str:
         """Join summary + body for similarity comparison."""
-        parts = [r.get('summary', '')]
-        if r.get('body'):
-            parts.append(r['body'])
-        return ' '.join(parts)
+        parts = [r.get("summary", "")]
+        if r.get("body"):
+            parts.append(r["body"])
+        return " ".join(parts)
 
     @staticmethod
     def _deduplicate_and_merge(
@@ -564,18 +563,18 @@ class RuleEngine:
         merged = list(existing)
         existing_map: dict[str, dict] = {}
         for r in merged:
-            key = r.get('summary', '').strip().lower()
+            key = r.get("summary", "").strip().lower()
             if key:
                 existing_map[key] = r
 
         remaining: list[tuple[int, dict]] = []
-        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         for oi, c in enumerate(candidates):
-            key = c.get('summary', '').strip().lower()
+            key = c.get("summary", "").strip().lower()
             if key and key in existing_map:
-                existing_map[key]['support_count'] = existing_map[key].get('support_count', 1) + 1
-                existing_map[key]['updated_at'] = now
+                existing_map[key]["support_count"] = existing_map[key].get("support_count", 1) + 1
+                existing_map[key]["updated_at"] = now
             else:
                 remaining.append((oi, c))
 
@@ -610,16 +609,16 @@ class RuleEngine:
 
             if best_ei >= 0 and (oi, best_ei) in conflict_pairs:
                 # Confirmed conflict -> keep separate, mark with index refs
-                c['_conflict_with_idx'] = best_ei
-                merged[best_ei].setdefault('_conflict_with_idx', []).append(len(merged))
-                c['updated_at'] = now
+                c["_conflict_with_idx"] = best_ei
+                merged[best_ei].setdefault("_conflict_with_idx", []).append(len(merged))
+                c["updated_at"] = now
                 merged.append(c)
                 existing_vecs.append(c_vec)
             elif best_sim >= similarity_threshold:
                 # Duplicate — increment support_count on the closest existing rule
                 target = merged[best_ei]
-                target['support_count'] = target.get('support_count', 1) + 1
-                target['updated_at'] = now
+                target["support_count"] = target.get("support_count", 1) + 1
+                target["updated_at"] = now
             elif best_sim >= enhancement_threshold:
                 # Merge — combine candidate into the closest existing rule
                 target = merged[best_ei]
@@ -630,9 +629,9 @@ class RuleEngine:
                 existing_vecs[best_ei] = mvecs[0]
             else:
                 # New rule — append
-                c['id'] = next_id
+                c["id"] = next_id
                 next_id += 1
-                c['updated_at'] = now
+                c["updated_at"] = now
                 merged.append(c)
                 existing_vecs.append(candidate_vecs[ci])
 
@@ -658,15 +657,15 @@ class RuleEngine:
         now = datetime.now(timezone.utc)
 
         # 1. Support count (capped at 5)
-        support = rule.get('support_count', 1)
+        support = rule.get("support_count", 1)
         support_norm = min(support, 5) / 5.0
 
         # 2. Specificity: body text → 1.0, only summary → 0.3
-        body = rule.get('body', '') or ''
+        body = rule.get("body", "") or ""
         specificity = 1.0 if len(body.strip()) > 20 else 0.3
 
         # 3. Recency: linear decay over 90 days
-        created_str = rule.get('created_at', '')
+        created_str = rule.get("created_at", "")
         days = 999.0
         if created_str:
             try:
@@ -677,12 +676,12 @@ class RuleEngine:
         recency = max(0.0, 1.0 - days / 90.0)
 
         # 4. Authority derived from confidence field
-        conf_levels = {'high': 0.9, 'medium': 0.7, 'low': 0.5}
-        authority = conf_levels.get(rule.get('confidence', 'medium'), 0.7)
+        conf_levels = {"high": 0.9, "medium": 0.7, "low": 0.5}
+        authority = conf_levels.get(rule.get("confidence", "medium"), 0.7)
 
         # 5. Criticality derived from confidence field
-        crit_levels = {'high': 0.9, 'medium': 0.7, 'low': 0.5}
-        criticality = crit_levels.get(rule.get('confidence', 'medium'), 0.7)
+        crit_levels = {"high": 0.9, "medium": 0.7, "low": 0.5}
+        criticality = crit_levels.get(rule.get("confidence", "medium"), 0.7)
 
         return (
             _W_SUPPORT * support_norm
@@ -708,7 +707,7 @@ class RuleEngine:
 
         dropped = len(rules) - len(kept)
         if dropped > 0:
-            logger.info('Pruned %d low-quality rule(s), kept %d', dropped, len(kept))
+            logger.info("Pruned %d low-quality rule(s), kept %d", dropped, len(kept))
 
         return kept
 
@@ -742,18 +741,18 @@ class RuleEngine:
         # Fill source provenance
         if source:
             for c in candidates:
-                c['source'] = source
+                c["source"] = source
 
         if RuleStore.is_user_managed(workflow_rules_path):
             logger.warning(
-                'Rules file %s is user-managed (no auto-managed header); skipping write-back',
+                "Rules file %s is user-managed (no auto-managed header); skipping write-back",
                 workflow_rules_path,
             )
             return 0
 
         RuleStore.ensure_file(workflow_rules_path)
         existing_data = RuleStore.load(workflow_rules_path)
-        existing = existing_data.get('rules', [])
+        existing = existing_data.get("rules", [])
 
         # Phase 2.5: LLM batch judge (dedup + merge + conflict in one call)
         judge_results: list[JudgeResult] | None = None
@@ -761,7 +760,7 @@ class RuleEngine:
             try:
                 judge_results = await self._rule_judge.judge(candidates, existing)
             except Exception as exc:
-                logger.warning('LLM judge failed, falling back to TF-IDF: %s', exc)
+                logger.warning("LLM judge failed, falling back to TF-IDF: %s", exc)
                 judge_results = None
 
         merged = self._deduplicate_and_merge(
@@ -774,30 +773,30 @@ class RuleEngine:
 
         # Assign/refresh sequential ids after dedup+merge
         for i, r in enumerate(merged, start=1):
-            r['id'] = i
+            r["id"] = i
 
         # Backfill conflict references from index-based to ID-based
         for r in merged:
-            conflict_idx = r.pop('_conflict_with_idx', None)
+            conflict_idx = r.pop("_conflict_with_idx", None)
             if conflict_idx is not None:
                 if isinstance(conflict_idx, list):
-                    r['conflict_with'] = [merged[idx]['id'] for idx in conflict_idx]
+                    r["conflict_with"] = [merged[idx]["id"] for idx in conflict_idx]
                 else:
-                    r['conflict_with'] = [merged[conflict_idx]['id']]
+                    r["conflict_with"] = [merged[conflict_idx]["id"]]
 
         merged = self.prune(merged, max_rules=max_rules)
 
         # Filter by min_confidence
         if min_confidence:
-            conf_levels = {'low': 0, 'medium': 1, 'high': 2}
+            conf_levels = {"low": 0, "medium": 1, "high": 2}
             min_level = conf_levels.get(min_confidence, 0)
             before = len(merged)
             merged = [
-                r for r in merged if conf_levels.get(r.get('confidence', 'low'), 0) >= min_level
+                r for r in merged if conf_levels.get(r.get("confidence", "low"), 0) >= min_level
             ]
             if len(merged) < before:
                 logger.info(
-                    'Filtered %d rule(s) below min_confidence=%s',
+                    "Filtered %d rule(s) below min_confidence=%s",
                     before - len(merged),
                     min_confidence,
                 )
@@ -805,22 +804,21 @@ class RuleEngine:
         RuleStore.save(
             workflow_rules_path,
             merged,
-            version=existing_data.get('version', 1),
+            version=existing_data.get("version", 1),
         )
         logger.info(
-            'Extracted %d rule(s), merged to %d total in %s',
+            "Extracted %d rule(s), merged to %d total in %s",
             len(candidates),
             len(merged),
             workflow_rules_path,
         )
         return len(candidates)
 
-
     def get_rules_path(config: Any, workflow_path: str | None) -> str | None:
-        rules_config = getattr(config, 'rules', None)
-        if not rules_config or not getattr(rules_config, 'enabled', False):
+        rules_config = getattr(config, "rules", None)
+        if not rules_config or not getattr(rules_config, "enabled", False):
             return None
-        rules_path = getattr(rules_config, 'path', '') or ''
+        rules_path = getattr(rules_config, "path", "") or ""
         if not workflow_path:
             return None
         return RuleStore.resolve_path(workflow_path, rules_path)
@@ -848,23 +846,21 @@ def _apply_judge_results(
         jr = judge_results[oi] if oi < len(judge_results) else None
         if jr is None or jr.action == "new":
             # New rule — append
-            c['id'] = next_id
+            c["id"] = next_id
             next_id += 1
-            c['updated_at'] = now
+            c["updated_at"] = now
             merged.append(c)
         elif jr.action == "duplicate" and jr.target_idx is not None:
             # Duplicate — increment support_count on the target
             target_idx = jr.target_idx
             if target_idx < len(merged):
-                merged[target_idx]['support_count'] = (
-                    merged[target_idx].get('support_count', 1) + 1
-                )
-                merged[target_idx]['updated_at'] = now
+                merged[target_idx]["support_count"] = merged[target_idx].get("support_count", 1) + 1
+                merged[target_idx]["updated_at"] = now
             else:
                 # Fallback: target out of range, treat as new
-                c['id'] = next_id
+                c["id"] = next_id
                 next_id += 1
-                c['updated_at'] = now
+                c["updated_at"] = now
                 merged.append(c)
         elif jr.action == "merge" and jr.target_idx is not None:
             # Merge — combine candidate into the target existing rule
@@ -872,27 +868,27 @@ def _apply_judge_results(
             if target_idx < len(merged):
                 merged[target_idx] = _merge_two_rules(merged[target_idx], c)
             else:
-                c['id'] = next_id
+                c["id"] = next_id
                 next_id += 1
-                c['updated_at'] = now
+                c["updated_at"] = now
                 merged.append(c)
         elif jr.action == "conflict" and jr.target_idx is not None:
             # Conflict — keep separate, mark with index refs
             target_idx = jr.target_idx
             if target_idx < len(merged):
-                c['_conflict_with_idx'] = target_idx
-                merged[target_idx].setdefault('_conflict_with_idx', []).append(len(merged))
-                c['updated_at'] = now
+                c["_conflict_with_idx"] = target_idx
+                merged[target_idx].setdefault("_conflict_with_idx", []).append(len(merged))
+                c["updated_at"] = now
                 merged.append(c)
             else:
-                c['id'] = next_id
+                c["id"] = next_id
                 next_id += 1
-                c['updated_at'] = now
+                c["updated_at"] = now
                 merged.append(c)
         else:
-            c['id'] = next_id
+            c["id"] = next_id
             next_id += 1
-            c['updated_at'] = now
+            c["updated_at"] = now
             merged.append(c)
     return merged
 
@@ -909,59 +905,59 @@ def _merge_two_rules(a: dict, b: dict) -> dict:
     candidate.  The merge picks the best of each field.
     """
     # Summary: pick the longer / more specific one
-    summary_a = (a.get('summary') or '').strip()
-    summary_b = (b.get('summary') or '').strip()
+    summary_a = (a.get("summary") or "").strip()
+    summary_b = (b.get("summary") or "").strip()
     merged_summary = summary_a if len(summary_a) >= len(summary_b) else summary_b
 
     # Body: pick the longer one, or concatenate if both present
-    body_a = (a.get('body') or '').strip()
-    body_b = (b.get('body') or '').strip()
+    body_a = (a.get("body") or "").strip()
+    body_b = (b.get("body") or "").strip()
     if body_a and body_b:
         merged_body = body_a if len(body_a) >= len(body_b) else body_b
     else:
         merged_body = body_a or body_b
 
     # Category: prefer the more specific one (longer string), or 'multi' if incompatible
-    cat_a = (a.get('category') or '').strip()
-    cat_b = (b.get('category') or '').strip()
+    cat_a = (a.get("category") or "").strip()
+    cat_b = (b.get("category") or "").strip()
     if cat_a and cat_b and cat_a != cat_b:
-        merged_category = 'multi'
+        merged_category = "multi"
     else:
-        merged_category = cat_a or cat_b or 'other'
+        merged_category = cat_a or cat_b or "other"
 
     # Support count: sum
-    support = (a.get('support_count') or 1) + (b.get('support_count') or 1)
+    support = (a.get("support_count") or 1) + (b.get("support_count") or 1)
 
     # Source: append if different
-    source_a = (a.get('source') or '').strip()
-    source_b = (b.get('source') or '').strip()
+    source_a = (a.get("source") or "").strip()
+    source_b = (b.get("source") or "").strip()
     merged_source = source_a
     if source_b and source_b not in merged_source:
-        merged_source = f'{merged_source}; {source_b}' if merged_source else source_b
+        merged_source = f"{merged_source}; {source_b}" if merged_source else source_b
 
     # Confidence: take the higher one
-    conf_order = {'low': 0, 'medium': 1, 'high': 2}
-    conf_a = conf_order.get(a.get('confidence', 'medium'), 1)
-    conf_b = conf_order.get(b.get('confidence', 'medium'), 1)
+    conf_order = {"low": 0, "medium": 1, "high": 2}
+    conf_a = conf_order.get(a.get("confidence", "medium"), 1)
+    conf_b = conf_order.get(b.get("confidence", "medium"), 1)
     merged_confidence = (
-        'high' if max(conf_a, conf_b) >= 2 else 'medium' if max(conf_a, conf_b) >= 1 else 'low'
+        "high" if max(conf_a, conf_b) >= 2 else "medium" if max(conf_a, conf_b) >= 1 else "low"
     )
 
     # Timestamps
-    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-    created_a = a.get('created_at', '') or now
-    created_b = b.get('created_at', '') or now
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    created_a = a.get("created_at", "") or now
+    created_b = b.get("created_at", "") or now
     merged_created = min(created_a, created_b)
 
     return {
-        'summary': merged_summary,
-        'body': merged_body,
-        'category': merged_category,
-        'support_count': support,
-        'source': merged_source,
-        'confidence': merged_confidence,
-        'conflict_with': list(set(a.get('conflict_with', []) + b.get('conflict_with', []))),
-        'created_at': merged_created,
-        'updated_at': now,
-        'last_applied': now,
+        "summary": merged_summary,
+        "body": merged_body,
+        "category": merged_category,
+        "support_count": support,
+        "source": merged_source,
+        "confidence": merged_confidence,
+        "conflict_with": list(set(a.get("conflict_with", []) + b.get("conflict_with", []))),
+        "created_at": merged_created,
+        "updated_at": now,
+        "last_applied": now,
     }

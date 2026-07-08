@@ -167,11 +167,7 @@ class GoalRuntime:
         handler_executed: bool,
     ) -> list[UserMessage]:
         del call_id
-        if (
-            not self.is_enabled()
-            or not handler_executed
-            or tool_name == UPDATE_GOAL_TOOL_NAME
-        ):
+        if not self.is_enabled() or not handler_executed or tool_name == UPDATE_GOAL_TOOL_NAME:
             return []
         progress = self.account_active_goal_progress(
             turn_id,
@@ -327,7 +323,9 @@ class GoalRuntime:
                 record_continuation_skipped(
                     self.observer,
                     thread_id=self.thread_id,
-                    reason="paused" if goal.status is ThreadGoalStatus.PAUSED else goal.status.value,
+                    reason="paused"
+                    if goal.status is ThreadGoalStatus.PAUSED
+                    else goal.status.value,
                     goal=goal,
                 )
                 self.accounting_state.clear_active_goal()

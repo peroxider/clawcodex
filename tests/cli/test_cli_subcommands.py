@@ -23,13 +23,26 @@ from clawcodex_ext.cli.subcommand_registry import (
 # ---------------------------------------------------------------------------
 
 _ALL_SIEVE_SUBCOMMANDS = {
-    "login", "config", "mcp", "daemon", "doctor", "orchestrator",
-    "autonomy", "schedule",
+    "login",
+    "config",
+    "mcp",
+    "daemon",
+    "doctor",
+    "orchestrator",
+    "autonomy",
+    "schedule",
 }
 
 _ALL_REGISTERED_SUBCOMMANDS = {
-    "auth", "model", "sop", "provider", "session", "stats", "telemetry",
-    "api", "viz",
+    "auth",
+    "model",
+    "sop",
+    "provider",
+    "session",
+    "stats",
+    "telemetry",
+    "api",
+    "viz",
 }
 
 
@@ -45,9 +58,7 @@ def test_all_registered_subcommands_loaded():
     load_builtin_subcommands()
     registered = set(_SUBCOMMANDS.keys())
     missing = _ALL_REGISTERED_SUBCOMMANDS - registered
-    assert not missing, (
-        f"Subcommands missing from registry: {missing}"
-    )
+    assert not missing, f"Subcommands missing from registry: {missing}"
 
 
 def test_get_subcommand_returns_handler():
@@ -55,17 +66,14 @@ def test_get_subcommand_returns_handler():
     load_builtin_subcommands()
     for name in _ALL_REGISTERED_SUBCOMMANDS:
         handler = get_subcommand(name)
-        assert handler is not None, (
-            f"get_subcommand({name!r}) returned None"
-        )
-        assert callable(handler), (
-            f"get_subcommand({name!r}) returned non-callable: {handler}"
-        )
+        assert handler is not None, f"get_subcommand({name!r}) returned None"
+        assert callable(handler), f"get_subcommand({name!r}) returned non-callable: {handler}"
 
 
 # ---------------------------------------------------------------------------
 # Sieve fast-path subcommand routing
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_argv() -> list[str]:
@@ -75,6 +83,7 @@ def mock_argv() -> list[str]:
 def _run_cli_with_token(token: str, rest_args: list[str] | None = None):
     """Simulate the dispatch sieve logic from ``run_cli``."""
     from clawcodex_ext.cli.dispatch import run_cli
+
     argv = ["clawcodex-dev", token, *(rest_args or [])]
     return run_cli(argv)
 
@@ -93,6 +102,7 @@ def test_sieve_subcommand_routes_without_crash(subcommand: str):
         argv.extend(["list"])
 
     import sys as _sys
+
     with patch.object(_sys, "argv", argv):
         # Some sieve subcommands (login, config, daemon, etc.) require
         # real config/API keys and will fail with SystemExit or similar.
@@ -107,6 +117,7 @@ def test_sieve_subcommand_routes_without_crash(subcommand: str):
 # ---------------------------------------------------------------------------
 # @register subcommand handler dispatch (lightweight)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("subcommand", sorted(_ALL_REGISTERED_SUBCOMMANDS))
 def test_registered_subcommand_handler_is_callable(subcommand: str):
@@ -126,14 +137,13 @@ def test_registered_subcommand_handler_is_callable(subcommand: str):
     except (SystemExit, TypeError):
         pass
     except Exception as exc:
-        raise AssertionError(
-            f"{subcommand} handler raised unexpected exception: {exc}"
-        ) from exc
+        raise AssertionError(f"{subcommand} handler raised unexpected exception: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
 # Provider/model fast-path subcommand (CLI-level, not slash command)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("subcommand", ["provider", "model"])
 def test_provider_model_subcommand_prints_output(
@@ -143,9 +153,7 @@ def test_provider_model_subcommand_prints_output(
 ):
     """``clawcodex-dev provider`` and ``clawcodex-dev model`` must print
     the current setting without crashing."""
-    monkeypatch.setattr(
-        "sys.argv", ["clawcodex-dev", subcommand]
-    )
+    monkeypatch.setattr("sys.argv", ["clawcodex-dev", subcommand])
     # Mock ModelStore to avoid real file I/O
     mock_store = MagicMock()
     mock_store.default_provider = "anthropic"
@@ -164,6 +172,7 @@ def test_provider_model_subcommand_prints_output(
     )
 
     from clawcodex_ext.cli.dispatch import run_cli
+
     rc = run_cli(["clawcodex-dev", subcommand])
     assert rc == 0
 
@@ -171,6 +180,7 @@ def test_provider_model_subcommand_prints_output(
 # ---------------------------------------------------------------------------
 # Argcomplete integration
 # ---------------------------------------------------------------------------
+
 
 def test_argcomplete_top_level_includes_all_subcommands():
     """``_maybe_argcomplete_top_level`` must include all registered subcommands."""
@@ -184,6 +194,4 @@ def test_argcomplete_top_level_includes_all_subcommands():
 
     registered = set(_SUBCOMMANDS.keys())
     for name in _ALL_REGISTERED_SUBCOMMANDS:
-        assert name in registered, (
-            f"Registered subcommand {name!r} not in _SUBCOMMANDS"
-        )
+        assert name in registered, f"Registered subcommand {name!r} not in _SUBCOMMANDS"

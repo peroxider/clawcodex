@@ -8,7 +8,9 @@ from typing import Any
 class WorkflowEngineError(Exception):
     """工作流引擎基础异常。"""
 
-    def __init__(self, message: str, stage_id: int | None = None, details: dict[str, Any] | None = None):
+    def __init__(
+        self, message: str, stage_id: int | None = None, details: dict[str, Any] | None = None
+    ):
         super().__init__(message)
         self.stage_id = stage_id
         self.details = details or {}

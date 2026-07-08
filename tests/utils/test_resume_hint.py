@@ -97,9 +97,7 @@ class TestPrintResumeHint:
     def test_prints_hint_when_tty(self) -> None:
         stream = _FakeTTYStream()
         print_resume_hint("abc123", stream=stream)  # type: ignore[arg-type]
-        assert stream.buffer == [
-            "\nResume this session with: clawcodex --resume abc123\n"
-        ]
+        assert stream.buffer == ["\nResume this session with: clawcodex --resume abc123\n"]
 
     def test_skips_when_not_tty(self) -> None:
         stream = _FakeNonTTYStream()
@@ -116,9 +114,7 @@ class TestPrintResumeHint:
         fake = _FakeTTYStream()
         with patch.object(sys, "stdout", fake):
             print_resume_hint("session-xyz")
-        assert fake.buffer == [
-            "\nResume this session with: clawcodex --resume session-xyz\n"
-        ]
+        assert fake.buffer == ["\nResume this session with: clawcodex --resume session-xyz\n"]
 
     def test_handles_stream_without_isatty(self) -> None:
         """Defensive: a stream that lacks ``isatty`` should not raise."""
@@ -138,9 +134,7 @@ class TestPrintResumeHint:
         stream = _FlushRaisingStream()
         # Should not raise even though flush() raises OSError.
         print_resume_hint("abc", stream=stream)  # type: ignore[arg-type]
-        assert stream.buffer == [
-            "\nResume this session with: clawcodex --resume abc\n"
-        ]
+        assert stream.buffer == ["\nResume this session with: clawcodex --resume abc\n"]
 
     def test_format_matches_ccb(self) -> None:
         """Lock the output format to the CCB ``printResumeHint()`` contract."""
@@ -161,9 +155,7 @@ class TestPrintResumeHint:
         """``'  abc  '`` should be treated as ``'abc'`` and printed cleanly."""
         stream = _FakeTTYStream()
         print_resume_hint("  abc  ", stream=stream)  # type: ignore[arg-type]
-        assert stream.buffer == [
-            "\nResume this session with: clawcodex --resume abc\n"
-        ]
+        assert stream.buffer == ["\nResume this session with: clawcodex --resume abc\n"]
 
     def test_integration_with_stringio_via_isatty_patch(self) -> None:
         """A plain ``io.StringIO`` is not a TTY, so the helper must skip."""
@@ -189,17 +181,13 @@ class TestIdempotencyLatch:
         print_resume_hint("first-sid", stream=stream)  # type: ignore[arg-type]
         print_resume_hint("second-sid", stream=stream)  # type: ignore[arg-type]
         # Only the first call should have written.
-        assert stream.buffer == [
-            "\nResume this session with: clawcodex --resume first-sid\n"
-        ]
+        assert stream.buffer == ["\nResume this session with: clawcodex --resume first-sid\n"]
 
     def test_third_and_fourth_calls_still_noop(self) -> None:
         stream = _FakeTTYStream()
         for sid in ("alpha", "beta", "gamma", "delta"):
             print_resume_hint(sid, stream=stream)  # type: ignore[arg-type]
-        assert stream.buffer == [
-            "\nResume this session with: clawcodex --resume alpha\n"
-        ]
+        assert stream.buffer == ["\nResume this session with: clawcodex --resume alpha\n"]
 
     def test_latch_survives_across_streams(self) -> None:
         """The latch is process-wide, not per-stream.
@@ -211,23 +199,17 @@ class TestIdempotencyLatch:
         b = _FakeTTYStream()
         print_resume_hint("a-sid", stream=a)  # type: ignore[arg-type]
         print_resume_hint("b-sid", stream=b)  # type: ignore[arg-type]
-        assert a.buffer == [
-            "\nResume this session with: clawcodex --resume a-sid\n"
-        ]
+        assert a.buffer == ["\nResume this session with: clawcodex --resume a-sid\n"]
         assert b.buffer == []
 
     def test_reset_clears_latch(self) -> None:
         stream1 = _FakeTTYStream()
         stream2 = _FakeTTYStream()
         print_resume_hint("before", stream=stream1)  # type: ignore[arg-type]
-        assert stream1.buffer == [
-            "\nResume this session with: clawcodex --resume before\n"
-        ]
+        assert stream1.buffer == ["\nResume this session with: clawcodex --resume before\n"]
         reset_resume_hint_for_test_only()
         print_resume_hint("after", stream=stream2)  # type: ignore[arg-type]
-        assert stream2.buffer == [
-            "\nResume this session with: clawcodex --resume after\n"
-        ]
+        assert stream2.buffer == ["\nResume this session with: clawcodex --resume after\n"]
 
     def test_latch_does_not_leak_when_first_call_skips(self) -> None:
         """If the first call is gated (non-TTY or empty sid), the latch
@@ -242,6 +224,4 @@ class TestIdempotencyLatch:
         # Latch should still be False; the next valid call should print.
         stream = _FakeTTYStream()
         print_resume_hint("real-sid", stream=stream)  # type: ignore[arg-type]
-        assert stream.buffer == [
-            "\nResume this session with: clawcodex --resume real-sid\n"
-        ]
+        assert stream.buffer == ["\nResume this session with: clawcodex --resume real-sid\n"]

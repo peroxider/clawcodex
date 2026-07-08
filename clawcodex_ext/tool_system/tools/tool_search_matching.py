@@ -260,7 +260,9 @@ def score_tool_match(
         return intent_key
 
     wants_ensure = bool(set(tokens) & {"ensure", "create", "mkdir"})
-    wants_path_only = bool(set(tokens) & {"path", "return", "get", "directory"}) and not wants_ensure
+    wants_path_only = (
+        bool(set(tokens) & {"path", "return", "get", "directory"}) and not wants_ensure
+    )
 
     # Tier 0 — strong tool-name match (segment-aware; no ``team`` ⊂ ``teams``)
     if lowered_query == name_lower:
@@ -359,9 +361,7 @@ def resolve_select_tool_names(select: str, tools: list[Tool]) -> list[str]:
         return suffix_hits
 
     if "-" in ref:
-        partial = [
-            tool.name for tool in tools if _kebab_suffix_in_tool_name(ref, tool.name)
-        ]
+        partial = [tool.name for tool in tools if _kebab_suffix_in_tool_name(ref, tool.name)]
         if len(partial) == 1:
             return partial
 

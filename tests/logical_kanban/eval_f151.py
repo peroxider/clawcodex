@@ -175,9 +175,7 @@ class _PseudoLLMProvider(BaseProvider):
         # A small role-aware skeleton so duplicate-detection is
         # meaningful — without it, the validation pass rate is
         # trivially 100 %.
-        role_sequence = (
-            "design", "impl", "test", "docs", "review", "deploy"
-        )
+        role_sequence = ("design", "impl", "test", "docs", "review", "deploy")
         for index, role in enumerate(role_sequence[:4]):
             task: dict[str, Any] = {
                 "proposedTaskId": f"tmp-{index}",
@@ -233,9 +231,7 @@ class GoalMetrics:
     duplicate_task_rate: float
 
 
-def _is_duplicate_sequence(
-    a: ProposedTask, b: ProposedTask
-) -> bool:
+def _is_duplicate_sequence(a: ProposedTask, b: ProposedTask) -> bool:
     """Two tasks are duplicates if subject + activeForm + role-hint match."""
     sa = (a.subject, a.active_form)
     sb = (b.subject, b.active_form)
@@ -351,20 +347,18 @@ def run_evaluation() -> dict[str, Any]:
         m_without = _evaluate_goal(entry, inject_summary=False)
         with_metrics.append(m_with)
         without_metrics.append(m_without)
-        per_goal.append({
-            "goal": entry["goal"],
-            "expected": entry["expected"],
-            "with_summary": _metrics_to_dict(m_with),
-            "without_summary": _metrics_to_dict(m_without),
-        })
+        per_goal.append(
+            {
+                "goal": entry["goal"],
+                "expected": entry["expected"],
+                "with_summary": _metrics_to_dict(m_with),
+                "without_summary": _metrics_to_dict(m_without),
+            }
+        )
 
     agg_with = _aggregate(tuple(with_metrics))
     agg_without = _aggregate(tuple(without_metrics))
-    uplift = {
-        key: agg_with[key] - agg_without[key]
-        for key in agg_with
-        if key != "goals"
-    }
+    uplift = {key: agg_with[key] - agg_without[key] for key in agg_with if key != "goals"}
 
     return {
         "with_summary": agg_with,
@@ -394,32 +388,17 @@ def _format_report(results: dict[str, Any]) -> str:
     lines.append("=" * 78)
     lines.append("F-151 Golden-Set Evaluation (offline / pseudo-LLM)")
     lines.append("=" * 78)
-    for label, key in (("with summary", "with_summary"),
-                       ("without summary", "without_summary")):
+    for label, key in (("with summary", "with_summary"), ("without summary", "without_summary")):
         agg = results[key]
         lines.append("")
         lines.append(f"--- {label} ---")
-        lines.append(
-            f"  goals                      = {int(agg['goals'])}"
-        )
-        lines.append(
-            f"  method_reuse_rate          = {agg['method_reuse_rate']:.2%}"
-        )
-        lines.append(
-            f"  top1_match_rate            = {agg['top1_match_rate']:.2%}"
-        )
-        lines.append(
-            f"  validation_pass_rate       = {agg['validation_pass_rate']:.2%}"
-        )
-        lines.append(
-            f"  avg_summary_tokens         = {agg['avg_summary_tokens']:.0f}"
-        )
-        lines.append(
-            f"  avg_duplicate_task_rate    = {agg['avg_duplicate_task_rate']:.2%}"
-        )
-        lines.append(
-            f"  avg_plan_method_refs       = {agg['avg_plan_method_refs']:.2f}"
-        )
+        lines.append(f"  goals                      = {int(agg['goals'])}")
+        lines.append(f"  method_reuse_rate          = {agg['method_reuse_rate']:.2%}")
+        lines.append(f"  top1_match_rate            = {agg['top1_match_rate']:.2%}")
+        lines.append(f"  validation_pass_rate       = {agg['validation_pass_rate']:.2%}")
+        lines.append(f"  avg_summary_tokens         = {agg['avg_summary_tokens']:.0f}")
+        lines.append(f"  avg_duplicate_task_rate    = {agg['avg_duplicate_task_rate']:.2%}")
+        lines.append(f"  avg_plan_method_refs       = {agg['avg_plan_method_refs']:.2f}")
     lines.append("")
     lines.append("--- uplift (with - without) ---")
     for key, value in results["uplift"].items():

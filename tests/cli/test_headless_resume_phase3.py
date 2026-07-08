@@ -56,8 +56,10 @@ def test_warn_provider_model_mismatch_fires_on_provider_diff():
 
     err = _stderr()
     warn_provider_model_mismatch(
-        "anthropic", "claude-3",
-        "openai", "gpt-4",
+        "anthropic",
+        "claude-3",
+        "openai",
+        "gpt-4",
         err,
     )
     out = err.getvalue()
@@ -72,8 +74,10 @@ def test_warn_provider_model_mismatch_fires_on_model_diff_only():
 
     err = _stderr()
     warn_provider_model_mismatch(
-        "anthropic", "claude-3-opus",
-        "anthropic", "claude-3-sonnet",
+        "anthropic",
+        "claude-3-opus",
+        "anthropic",
+        "claude-3-sonnet",
         err,
     )
     out = err.getvalue()
@@ -89,8 +93,10 @@ def test_warn_provider_model_mismatch_silent_when_match():
 
     err = _stderr()
     warn_provider_model_mismatch(
-        "anthropic", "claude-3",
-        "anthropic", "claude-3",
+        "anthropic",
+        "claude-3",
+        "anthropic",
+        "claude-3",
         err,
     )
     assert err.getvalue() == ""
@@ -102,8 +108,10 @@ def test_warn_provider_model_mismatch_silent_when_original_unknown():
 
     err = _stderr()
     warn_provider_model_mismatch(
-        "", "",
-        "anthropic", "claude-3",
+        "",
+        "",
+        "anthropic",
+        "claude-3",
         err,
     )
     assert err.getvalue() == ""
@@ -114,8 +122,10 @@ def test_warn_provider_model_mismatch_case_insensitive():
 
     err = _stderr()
     warn_provider_model_mismatch(
-        "Anthropic", "Claude-3",
-        "anthropic", "claude-3",
+        "Anthropic",
+        "Claude-3",
+        "anthropic",
+        "claude-3",
         err,
     )
     assert err.getvalue() == ""
@@ -169,9 +179,7 @@ def test_restore_metadata_from_session_copies_title_and_tags(tmp_path, monkeypat
     from src.services.session_storage import SessionStorage
 
     # Point SESSIONS_DIR at tmp_path so writes don't hit the real home.
-    monkeypatch.setattr(
-        "clawcodex_ext.services.session_storage.SESSIONS_DIR", tmp_path
-    )
+    monkeypatch.setattr("clawcodex_ext.services.session_storage.SESSIONS_DIR", tmp_path)
 
     # Create source session metadata with title + tags.
     source = SessionStorage(session_id="source-meta-001", sessions_dir=tmp_path)
@@ -193,9 +201,7 @@ def test_restore_metadata_from_session_copies_title_and_tags(tmp_path, monkeypat
 def test_restore_metadata_returns_false_when_source_missing(tmp_path, monkeypatch):
     from clawcodex_ext.agent.resume_checks import restore_metadata_from_session
 
-    monkeypatch.setattr(
-        "clawcodex_ext.services.session_storage.SESSIONS_DIR", tmp_path
-    )
+    monkeypatch.setattr("clawcodex_ext.services.session_storage.SESSIONS_DIR", tmp_path)
     ok = restore_metadata_from_session(
         target_session_id="tgt",
         source_session_id="nonexistent-source",
@@ -335,19 +341,16 @@ def fake_wiring(monkeypatch):
 
     monkeypatch.setattr(headless_mod, "get_provider_class", _fake_provider_class)
     monkeypatch.setattr(
-        headless_mod, "get_provider_config",
+        headless_mod,
+        "get_provider_config",
         lambda name: {"default_model": "fake-model"},
     )
     monkeypatch.setattr(headless_mod, "get_default_provider", lambda: "anthropic")
     monkeypatch.setattr(
         headless_mod, "build_default_registry", lambda provider=None: _FakeRegistry()
     )
-    monkeypatch.setattr(
-        headless_mod, "resolve_api_key", lambda *a, **k: "fake-key"
-    )
-    monkeypatch.setattr(
-        headless_mod, "provider_requires_api_key", lambda *a, **k: False
-    )
+    monkeypatch.setattr(headless_mod, "resolve_api_key", lambda *a, **k: "fake-key")
+    monkeypatch.setattr(headless_mod, "provider_requires_api_key", lambda *a, **k: False)
     return scripted
 
 
@@ -362,9 +365,7 @@ def test_headless_warns_on_provider_mismatch_on_resume(fake_wiring, monkeypatch,
         model="gpt-4",
         messages=[_user_message("hi"), _assistant_message("hello")],
     )
-    monkeypatch.setattr(
-        headless_mod.Session, "resume", classmethod(lambda cls, sid: source)
-    )
+    monkeypatch.setattr(headless_mod.Session, "resume", classmethod(lambda cls, sid: source))
 
     stderr = io.StringIO()
     code = run_headless(
@@ -393,9 +394,7 @@ def test_headless_warns_on_model_mismatch_on_resume(fake_wiring, monkeypatch, tm
         model="claude-3-opus",
         messages=[_user_message("hi"), _assistant_message("hello")],
     )
-    monkeypatch.setattr(
-        headless_mod.Session, "resume", classmethod(lambda cls, sid: source)
-    )
+    monkeypatch.setattr(headless_mod.Session, "resume", classmethod(lambda cls, sid: source))
 
     stderr = io.StringIO()
     code = run_headless(
@@ -425,9 +424,7 @@ def test_headless_no_warning_when_provider_model_match(fake_wiring, monkeypatch,
         model="fake-model",
         messages=[_user_message("hi"), _assistant_message("hello")],
     )
-    monkeypatch.setattr(
-        headless_mod.Session, "resume", classmethod(lambda cls, sid: source)
-    )
+    monkeypatch.setattr(headless_mod.Session, "resume", classmethod(lambda cls, sid: source))
 
     stderr = io.StringIO()
     code = run_headless(
@@ -498,6 +495,7 @@ def test_continue_resolves_to_most_recent_session(tmp_path, monkeypatch):
         print = True
         prompt = None
         version = False
+
         # other attributes dispatch may touch
         def __getattr__(self, name):
             return None
@@ -507,7 +505,7 @@ def test_continue_resolves_to_most_recent_session(tmp_path, monkeypatch):
 
     # The resolution block in dispatch reads getattr(args, 'continue').
     # Replicate the exact logic to assert it sets args.resume.
-    if getattr(args, 'continue', None) and not getattr(args, 'resume', None):
+    if getattr(args, "continue", None) and not getattr(args, "resume", None):
         metas = SessionStorage.list_sessions(limit=1)
         if metas:
             args.resume = metas[0].session_id
@@ -526,18 +524,19 @@ def test_continue_no_sessions_prints_message(tmp_path, monkeypatch, capsys):
 
     class _Args:
         resume = None
+
         def __getattr__(self, name):
             return None
 
     args = _Args()
     setattr(args, "continue", True)
 
-    if getattr(args, 'continue', None) and not getattr(args, 'resume', None):
+    if getattr(args, "continue", None) and not getattr(args, "resume", None):
         metas = SessionStorage.list_sessions(limit=1)
         if metas:
             args.resume = metas[0].session_id
         else:
-            print('No previous sessions found to continue.', file=sys.stderr)
+            print("No previous sessions found to continue.", file=sys.stderr)
 
     captured = capsys.readouterr()
     assert "No previous sessions found" in captured.err

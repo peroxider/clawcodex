@@ -63,6 +63,7 @@ GOAL_COMMAND = GoalCommand(
     is_enabled=goal_enabled,
 )
 
+
 def _goal_api_from_context(context: Any) -> ThreadGoalProtocol:
     api = getattr(context, "goal_api", None)
     tool_context = getattr(context, "tool_context", None)

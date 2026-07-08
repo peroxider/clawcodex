@@ -272,9 +272,7 @@ class TestTaskGuide(unittest.TestCase):
             comp, op = resolved
             if not is_entry_point(comp, op):
                 continue
-            ranked.append(
-                (_task_guide_rank_key(comp, op, tool_ref), tool_ref, comp, op)
-            )
+            ranked.append((_task_guide_rank_key(comp, op, tool_ref), tool_ref, comp, op))
         ranked.sort(key=lambda item: item[0], reverse=True)
         selected = _select_task_guide_entries(ranked, max_entries=12)
         tool_names = [ref for ref, _comp, op in selected]
@@ -296,6 +294,7 @@ class TestSopOverviewRouting(unittest.TestCase):
         self.assertIn("交互式终端 / TUI / REPL", SOP_OVERVIEW_ROUTING)
         self.assertIn("tests/", SOP_OVERVIEW_ROUTING)
         self.assertIn("fixtures", SOP_OVERVIEW_ROUTING)
+
 
 class TestToolSearchDocstringQuery(unittest.TestCase):
     def test_docstring_query_ranks_entry_tool(self) -> None:

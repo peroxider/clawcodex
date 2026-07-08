@@ -83,8 +83,7 @@ class PlanAdjuster:
             dependents = self._find_dependents(step_id)
             if dependents:
                 raise StepHasDependentsError(
-                    f"step {step_id!r} cannot be removed; depended on by "
-                    f"{sorted(dependents)!r}"
+                    f"step {step_id!r} cannot be removed; depended on by {sorted(dependents)!r}"
                 )
             sub_plan.steps = [s for s in sub_plan.steps if s.id != step_id]
             return step
@@ -94,9 +93,7 @@ class PlanAdjuster:
             sub_plan = self._get_sub_plan(sub_plan_id)
             by_id = {s.id: s for s in sub_plan.steps}
             if set(new_order) != set(by_id.keys()):
-                raise ValueError(
-                    "new_order must contain exactly the same step ids as the sub-plan"
-                )
+                raise ValueError("new_order must contain exactly the same step ids as the sub-plan")
             sub_plan.steps = [by_id[sid] for sid in new_order]
 
     def set_step_status(self, step_id: str, status: StepStatus, *, note: str | None = None) -> Step:
@@ -126,9 +123,7 @@ class PlanAdjuster:
             if position is None or position >= len(self._plan.sub_plans):
                 self._plan.sub_plans.append(sub_plan)
             elif position < 0:
-                self._plan.sub_plans.insert(
-                    max(0, len(self._plan.sub_plans) + position), sub_plan
-                )
+                self._plan.sub_plans.insert(max(0, len(self._plan.sub_plans) + position), sub_plan)
             else:
                 self._plan.sub_plans.insert(position, sub_plan)
             return sub_plan
@@ -175,9 +170,7 @@ class PlanAdjuster:
     def _get_sub_plan(self, sub_plan_id: str) -> SubPlan:
         sp = self._plan.find_sub_plan(sub_plan_id)
         if sp is None:
-            raise SubPlanNotFoundError(
-                f"no sub_plan {sub_plan_id!r} in plan {self._plan.id!r}"
-            )
+            raise SubPlanNotFoundError(f"no sub_plan {sub_plan_id!r} in plan {self._plan.id!r}")
         return sp
 
     def _get_step(self, step_id: str) -> tuple[SubPlan, Step]:
@@ -203,8 +196,7 @@ class PlanAdjuster:
         for dep in step.depends_on:
             if dep not in sp_step_ids:
                 raise ValueError(
-                    f"step {step.id!r} depends on unknown step {dep!r} "
-                    f"in sub_plan {sub_plan.id!r}"
+                    f"step {step.id!r} depends on unknown step {dep!r} in sub_plan {sub_plan.id!r}"
                 )
 
     def _find_dependents(self, step_id: str) -> set[str]:

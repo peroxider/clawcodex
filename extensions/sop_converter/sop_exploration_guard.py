@@ -11,6 +11,7 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
+
 _EXPLORATION_TOOLS = frozenset({"Grep", "Glob", "Read", "Bash"})
 
 # Kebab tool ids / ToolSearch hints — searching for these means skipping ToolSearch.
@@ -92,11 +93,7 @@ def _is_overview_agent(agent_type: str | None) -> bool:
 
 
 def _is_domain_agent(agent_type: str | None) -> bool:
-    return bool(
-        agent_type
-        and agent_type.endswith("-agent")
-        and not _is_overview_agent(agent_type)
-    )
+    return bool(agent_type and agent_type.endswith("-agent") and not _is_overview_agent(agent_type))
 
 
 def _block_name(block: Any) -> str | None:
@@ -230,7 +227,9 @@ def _sdk_root_match_prefixes(sdk_root: Path) -> tuple[str, ...]:
     """Normalized lowercase path prefixes that identify the authorized SDK root."""
     prefixes: set[str] = set()
     for candidate in (sdk_root, _normalize_sdk_source_dir(sdk_root)):
-        norm = _fix_windows_mnt_resolution(_normalized_path_text(str(candidate))).lower().rstrip("/")
+        norm = (
+            _fix_windows_mnt_resolution(_normalized_path_text(str(candidate))).lower().rstrip("/")
+        )
         if norm:
             prefixes.add(norm)
         wsl = _wsl_to_windows_path(norm)

@@ -49,9 +49,7 @@ def _tool_workspace_root(context: ToolContext) -> Path | None:
 def _safe_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     action = tool_input.get("action")
     if not isinstance(action, str) or action not in _ALLOWED_ACTIONS:
-        raise ToolInputError(
-            f"action must be one of {sorted(_ALLOWED_ACTIONS)}"
-        )
+        raise ToolInputError(f"action must be one of {sorted(_ALLOWED_ACTIONS)}")
     text = tool_input.get("text") or ""
     target_override = tool_input.get("target") or None
     sink = tool_input.get("sink") or None
@@ -156,7 +154,9 @@ def _safe_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
             save_config(new_cfg)
         except OSError as exc:
             log.warning("failed to persist lodestone config: %s", exc)
-        return ToolResult(name="LodestoneTool", output={"config": json.loads(json.dumps(_dump(new_cfg)))})
+        return ToolResult(
+            name="LodestoneTool", output={"config": json.loads(json.dumps(_dump(new_cfg)))}
+        )
 
     raise ToolInputError(f"unknown action: {action}")
 
@@ -164,6 +164,7 @@ def _safe_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
 def _dump(cfg) -> dict[str, Any]:
     """Serialise a ``LodestoneConfig`` to a JSON-friendly dict."""
     from dataclasses import asdict
+
     return asdict(cfg)
 
 

@@ -14,12 +14,12 @@ from pathlib import Path
 from typing import Any, Iterable, Literal
 
 AnchorKind = Literal[
-    "file_path",        # path:line[:col][-end_line[:end_col]]
-    "function_ref",     # module.func or module::func
-    "git_blob",         # @<git_sha>:path  (e.g. ``@abc1234:src/foo.py``)
-    "git_commit",       # 7-40 hex sha
-    "tracker_issue",    # #123, ORG-456, [ORG-789]
-    "url",              # already a url
+    "file_path",  # path:line[:col][-end_line[:end_col]]
+    "function_ref",  # module.func or module::func
+    "git_blob",  # @<git_sha>:path  (e.g. ``@abc1234:src/foo.py``)
+    "git_commit",  # 7-40 hex sha
+    "tracker_issue",  # #123, ORG-456, [ORG-789]
+    "url",  # already a url
 ]
 
 Sink = Literal["text", "markdown", "osc8", "auto"]
@@ -29,9 +29,20 @@ Sink = Literal["text", "markdown", "osc8", "auto"]
 # register-time (see ``AnchorTargetRegistry.register``).
 _ALLOWED_PLACEHOLDERS = frozenset(
     {
-        "abs", "rel", "line", "col", "end_line", "end_col",
-        "remote", "branch", "ref", "owner", "repo", "key",
-        "host", "workspace",
+        "abs",
+        "rel",
+        "line",
+        "col",
+        "end_line",
+        "end_col",
+        "remote",
+        "branch",
+        "ref",
+        "owner",
+        "repo",
+        "key",
+        "host",
+        "workspace",
     }
 )
 
@@ -110,6 +121,7 @@ class AnchorContext:
         if self.env is not None:
             return self.env.get(key, default)
         import os
+
         return os.environ.get(key, default)
 
 
@@ -271,7 +283,9 @@ class AnchorTargetRegistry:
 
     # -- resolution helpers ---------------------------------------------------
 
-    def candidates(self, kind: AnchorKind, *, ctx: AnchorContext | None = None) -> list[AnchorTarget]:
+    def candidates(
+        self, kind: AnchorKind, *, ctx: AnchorContext | None = None
+    ) -> list[AnchorTarget]:
         ctx = ctx or AnchorContext(
             workspace_root=None,
             session_id=None,
@@ -292,7 +306,7 @@ class AnchorTargetRegistry:
             return None
         # Prefer the user-configured ``default_editor`` for file targets,
         # otherwise fall back to is_remote=False targets first.
-        cfg = (ctx.config if ctx is not None else self._config)
+        cfg = ctx.config if ctx is not None else self._config
         preferred = _pick_preferred(candidates, cfg)
         return preferred or candidates[0]
 
@@ -305,9 +319,7 @@ def _target_is_available(target: AnchorTarget, ctx: AnchorContext) -> bool:
     return True
 
 
-def _pick_preferred(
-    candidates: list[AnchorTarget], cfg: LodestoneConfig
-) -> AnchorTarget | None:
+def _pick_preferred(candidates: list[AnchorTarget], cfg: LodestoneConfig) -> AnchorTarget | None:
     """Apply user-configured preference over the candidate list.
 
     Order:

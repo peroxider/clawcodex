@@ -222,9 +222,7 @@ class FallbackTokenCounter:
                 except Exception as exc:  # noqa: BLE001
                     last_exc = exc
                     continue
-        raise TokenCountUnavailableError(
-            f"no usable token counter in chain: {last_exc!r}"
-        )
+        raise TokenCountUnavailableError(f"no usable token counter in chain: {last_exc!r}")
 
 
 def _message_to_text(msg: Any) -> str:

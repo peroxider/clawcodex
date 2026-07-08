@@ -62,9 +62,7 @@ class TestRegistration:
 
     def test_register_many(self, registry, sample_flags):
         registry.register_many(sample_flags)
-        assert set(registry.list_features()) == {
-            "feature_a", "feature_b", "feature_c", "feature_d"
-        }
+        assert set(registry.list_features()) == {"feature_a", "feature_b", "feature_c", "feature_d"}
 
     def test_unregister(self, registry):
         registry.register(FeatureFlag(name="temp", default=True))
@@ -99,7 +97,7 @@ class TestResolution:
 
     def test_default_value(self, registry, sample_flags):
         registry.register_many(sample_flags)
-        assert registry.is_enabled("feature_a") is True   # default=True
+        assert registry.is_enabled("feature_a") is True  # default=True
         assert registry.is_enabled("feature_b") is False  # default=False
 
     def test_override_wins(self, registry):
@@ -165,6 +163,7 @@ class TestResolution:
     def test_config_file_persistence(self, registry, sample_flags):
         """Test that config file values are respected."""
         import json
+
         registry.register_many(sample_flags)
 
         # Write a config that enables feature_b

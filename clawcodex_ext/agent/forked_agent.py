@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 # Default deny-all tool handler
 # ---------------------------------------------------------------------------
 
+
 async def _default_deny_tool_handler(_tool_use: ToolUseBlock) -> "PermissionDecision":
     """Deny every tool use — used for side questions that must not execute tools."""
     return PermissionDecision(behavior="deny")
@@ -47,6 +48,7 @@ class PermissionDecision:
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class CacheSafeParams:
@@ -114,6 +116,7 @@ def get_last_cache_safe_params() -> CacheSafeParams | None:
 # ---------------------------------------------------------------------------
 # Core primitive: run_forked_agent
 # ---------------------------------------------------------------------------
+
 
 async def run_forked_agent(
     params: ForkedAgentParams,
@@ -203,6 +206,7 @@ async def run_forked_agent(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _merge_usage(acc: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
     """Merge two usage dicts by summing numeric values."""

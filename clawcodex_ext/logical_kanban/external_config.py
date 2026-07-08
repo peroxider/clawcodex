@@ -243,7 +243,9 @@ class ExternalConfigImporter:
                 item_count=len(templates),
                 lint_issues=issues,
                 source=str(path),
-                version=str(data.get("schemaVersion") or data.get("schema_version") or "") if isinstance(data, dict) else "",
+                version=str(data.get("schemaVersion") or data.get("schema_version") or "")
+                if isinstance(data, dict)
+                else "",
                 imported=not self.lint_only,
             )
         operations = load_operation_schema_data(data, source=str(path))
@@ -302,7 +304,14 @@ class ExternalConfigImporter:
             if not self.lint_only:
                 for method in value:
                     register_method(method, force=self.force)
-            return ImportResult(not any(i.severity == "error" for i in issues), "method_library", len(value), issues, source, imported=not self.lint_only)
+            return ImportResult(
+                not any(i.severity == "error" for i in issues),
+                "method_library",
+                len(value),
+                issues,
+                source,
+                imported=not self.lint_only,
+            )
         if isinstance(value, AcceptanceTemplate):
             value = (value,)
         if isinstance(value, tuple) and all(isinstance(v, AcceptanceTemplate) for v in value):
@@ -311,20 +320,43 @@ class ExternalConfigImporter:
                 for template in value:
                     register_acceptance_template(template, force=self.force)
                     self._emit_template_registered(template, source)
-            return ImportResult(not any(i.severity == "error" for i in issues), "acceptance_template", len(value), issues, source, imported=not self.lint_only)
+            return ImportResult(
+                not any(i.severity == "error" for i in issues),
+                "acceptance_template",
+                len(value),
+                issues,
+                source,
+                imported=not self.lint_only,
+            )
         if isinstance(value, OperationSchema):
             value = (value,)
         if isinstance(value, tuple) and all(isinstance(v, OperationSchema) for v in value):
             issues = tuple(lint_operation_schema(value))
             if not self.lint_only:
                 register_operation_schemas(value, force=self.force)
-            return ImportResult(not any(i.severity == "error" for i in issues), "operation_schema", len(value), issues, source, imported=not self.lint_only)
+            return ImportResult(
+                not any(i.severity == "error" for i in issues),
+                "operation_schema",
+                len(value),
+                issues,
+                source,
+                imported=not self.lint_only,
+            )
         if isinstance(value, OntologyGraph):
             issues = tuple(lint_ontology(value))
             if not self.lint_only:
                 register_ontology_graph(value, force=self.force)
-            return ImportResult(not any(i.severity == "error" for i in issues), "ontology", value.item_count, issues, source, imported=not self.lint_only)
-        raise ValueError("entry point must return methods, acceptance templates, OperationSchema(s), or OntologyGraph")
+            return ImportResult(
+                not any(i.severity == "error" for i in issues),
+                "ontology",
+                value.item_count,
+                issues,
+                source,
+                imported=not self.lint_only,
+            )
+        raise ValueError(
+            "entry point must return methods, acceptance templates, OperationSchema(s), or OntologyGraph"
+        )
 
     def _validate_path(self, path: Path) -> None:
         suffix = path.suffix.lower()
@@ -372,7 +404,9 @@ def _detect_json_kind(data: Any, path: Path) -> ConfigKind:
         or isinstance(data.get("acceptance_templates"), list)
     ):
         return "acceptance_template"
-    if isinstance(data, dict) and ("operations" in data or "operation_id" in data or "operationId" in data):
+    if isinstance(data, dict) and (
+        "operations" in data or "operation_id" in data or "operationId" in data
+    ):
         return "operation_schema"
     if isinstance(data, list):
         return "operation_schema"
@@ -386,7 +420,9 @@ def _detect_yaml_kind(data: Any, path: Path) -> ConfigKind:
         or isinstance(data.get("acceptance_templates"), list)
     ):
         return "acceptance_template"
-    if isinstance(data, dict) and ("operations" in data or "operation_id" in data or "operationId" in data):
+    if isinstance(data, dict) and (
+        "operations" in data or "operation_id" in data or "operationId" in data
+    ):
         return "operation_schema"
     if isinstance(data, list):
         return "operation_schema"

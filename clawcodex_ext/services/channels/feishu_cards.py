@@ -29,36 +29,36 @@ def build_permission_card(
     nonce: str,
 ) -> dict[str, Any]:
     elements: list[dict[str, Any]] = [
-        {'tag': 'div', 'text': {'tag': 'plain_text', 'content': message}},
+        {"tag": "div", "text": {"tag": "plain_text", "content": message}},
     ]
     if suggestion:
         elements.append(
-            {'tag': 'div', 'text': {'tag': 'plain_text', 'content': f'建议：{suggestion}'}}
+            {"tag": "div", "text": {"tag": "plain_text", "content": f"建议：{suggestion}"}}
         )
     actions = []
     for option in options:
-        value = str(option.get('value') or '')
-        label = str(option.get('label') or value)
+        value = str(option.get("value") or "")
+        label = str(option.get("label") or value)
         actions.append(
             {
-                'tag': 'button',
-                'text': {'tag': 'plain_text', 'content': label},
-                'type': 'primary' if value.lower() in {'y', 'yes', '1'} else 'default',
-                'value': {
-                    'clawcodex_action': 'permission_approval',
-                    'approval_id': approval_id,
-                    'nonce': nonce,
-                    'choice': value,
+                "tag": "button",
+                "text": {"tag": "plain_text", "content": label},
+                "type": "primary" if value.lower() in {"y", "yes", "1"} else "default",
+                "value": {
+                    "clawcodex_action": "permission_approval",
+                    "approval_id": approval_id,
+                    "nonce": nonce,
+                    "choice": value,
                 },
             }
         )
-    elements.append({'tag': 'action', 'actions': actions})
+    elements.append({"tag": "action", "actions": actions})
     return {
-        'msg_type': 'interactive',
-        'content': {
-            'config': {'wide_screen_mode': True},
-            'header': {'title': {'tag': 'plain_text', 'content': '权限审批'}},
-            'elements': elements,
+        "msg_type": "interactive",
+        "content": {
+            "config": {"wide_screen_mode": True},
+            "header": {"title": {"tag": "plain_text", "content": "权限审批"}},
+            "elements": elements,
         },
     }
 
@@ -66,24 +66,24 @@ def build_permission_card(
 def build_resolved_permission_card(
     *,
     choice: str,
-    operator_open_id: str = '',
+    operator_open_id: str = "",
 ) -> dict[str, Any]:
-    allowed = str(choice).lower() in {'y', 'yes', '1', 'allow', 'allowed'}
-    status = '已允许' if allowed else '已拒绝'
-    template = 'green' if allowed else 'red'
-    actor = f'\n处理人: {operator_open_id}' if operator_open_id else ''
+    allowed = str(choice).lower() in {"y", "yes", "1", "allow", "allowed"}
+    status = "已允许" if allowed else "已拒绝"
+    template = "green" if allowed else "red"
+    actor = f"\n处理人: {operator_open_id}" if operator_open_id else ""
     return {
-        'config': {'wide_screen_mode': True},
-        'header': {
-            'template': template,
-            'title': {'tag': 'plain_text', 'content': f'权限审批{status}'},
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "template": template,
+            "title": {"tag": "plain_text", "content": f"权限审批{status}"},
         },
-        'elements': [
+        "elements": [
             {
-                'tag': 'div',
-                'text': {
-                    'tag': 'plain_text',
-                    'content': f'{status}{actor}',
+                "tag": "div",
+                "text": {
+                    "tag": "plain_text",
+                    "content": f"{status}{actor}",
                 },
             }
         ],
@@ -128,14 +128,14 @@ class ApprovalCardManager:
         return state
 
     def resolve_action(self, payload: Any) -> Any | None:
-        event = _get(payload, 'event') or payload
-        action = _get(event, 'action')
-        value = _mapping(_get(action, 'value'))
-        if value.get('clawcodex_action') != 'permission_approval':
+        event = _get(payload, "event") or payload
+        action = _get(event, "action")
+        value = _mapping(_get(action, "value"))
+        if value.get("clawcodex_action") != "permission_approval":
             return None
-        approval_id = str(value.get('approval_id') or '')
-        choice = str(value.get('choice') or '')
-        nonce = str(value.get('nonce') or '')
+        approval_id = str(value.get("approval_id") or "")
+        choice = str(value.get("choice") or "")
+        nonce = str(value.get("nonce") or "")
         state = self.pending.get(approval_id)
         if state is None or self._clock() > state.expires_at:
             self.pending.pop(approval_id, None)
@@ -148,7 +148,7 @@ class ApprovalCardManager:
         chat_id = _chat_id(event)
         if chat_id != state.chat_id:
             return None
-        action_token = f'{approval_id}:{nonce}:{operator_open_id}:{choice}'
+        action_token = f"{approval_id}:{nonce}:{operator_open_id}:{choice}"
         self._purge_tokens()
         if action_token in self._seen_tokens:
             return None
@@ -159,17 +159,17 @@ class ApprovalCardManager:
         return InboundMessage(
             origin=state.origin,
             text=choice,
-            message_id=f'feishu-card:{approval_id}:{action_token}',
-            channel='feishu',
+            message_id=f"feishu-card:{approval_id}:{action_token}",
+            channel="feishu",
             context_token=state.chat_id,
             from_user_id=operator_open_id,
             semantic=MessageSemantics.APPROVAL,
-            semantic_tags=['approval'],
+            semantic_tags=["approval"],
             raw={
-                'deliverAs': 'approval',
-                'source': 'feishu_card_action',
-                'approval_id': approval_id,
-                'choice': choice,
+                "deliverAs": "approval",
+                "source": "feishu_card_action",
+                "approval_id": approval_id,
+                "choice": choice,
             },
         )
 
@@ -185,19 +185,19 @@ class ApprovalCardManager:
 
 
 def _operator_open_id(event: Any) -> str:
-    operator = _get(event, 'operator') or _get(event, 'user')
-    operator_id = _get(operator, 'operator_id') or _get(operator, 'user_id')
-    return str(_get(operator, 'open_id') or _get(operator_id, 'open_id') or '')
+    operator = _get(event, "operator") or _get(event, "user")
+    operator_id = _get(operator, "operator_id") or _get(operator, "user_id")
+    return str(_get(operator, "open_id") or _get(operator_id, "open_id") or "")
 
 
 def _chat_id(event: Any) -> str:
-    context = _get(event, 'context')
+    context = _get(event, "context")
     return str(
-        _get(context, 'open_chat_id')
-        or _get(context, 'chat_id')
-        or _get(event, 'open_chat_id')
-        or _get(event, 'chat_id')
-        or ''
+        _get(context, "open_chat_id")
+        or _get(context, "chat_id")
+        or _get(event, "open_chat_id")
+        or _get(event, "chat_id")
+        or ""
     )
 
 
@@ -214,8 +214,8 @@ def _mapping(value: Any) -> dict[str, Any]:
 
 
 __all__ = [
-    'ApprovalCardManager',
-    'ApprovalPending',
-    'build_permission_card',
-    'build_resolved_permission_card',
+    "ApprovalCardManager",
+    "ApprovalPending",
+    "build_permission_card",
+    "build_resolved_permission_card",
 ]

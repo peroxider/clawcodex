@@ -68,9 +68,7 @@ class TestStateJournalWriterBasic(unittest.TestCase):
         self.assertRegex(events[0]["timestamp"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
     def test_write_event_preserves_explicit_timestamp(self) -> None:
-        self.writer.write_event(
-            {"type": "x", "timestamp": "2026-01-01T00:00:00Z"}
-        )
+        self.writer.write_event({"type": "x", "timestamp": "2026-01-01T00:00:00Z"})
         events = _read_ndjson(self.writer.path)
         self.assertEqual(events[0]["timestamp"], "2026-01-01T00:00:00Z")
 
@@ -95,9 +93,7 @@ class TestStateJournalWriterBasic(unittest.TestCase):
     def test_write_failure_does_not_propagate(self) -> None:
         # Force the open() call inside write_event to fail.
         with patch("builtins.open", side_effect=OSError("disk full")):
-            with self.assertLogs(
-                "extensions.orchestrator.state_journal", level="DEBUG"
-            ):
+            with self.assertLogs("extensions.orchestrator.state_journal", level="DEBUG"):
                 # Must not raise.
                 self.writer.write_event({"type": "x"})
 
@@ -116,9 +112,7 @@ class TestStateJournalWriterHelpers(unittest.TestCase):
         self.writer = StateJournalWriter(self.run_dir, run_id="r1")
 
     def test_write_phase_with_progress(self) -> None:
-        self.writer.write_phase(
-            phase="agent_run", progress=0.5, message="running", issue_id="i1"
-        )
+        self.writer.write_phase(phase="agent_run", progress=0.5, message="running", issue_id="i1")
         events = _read_ndjson(self.writer.path)
         self.assertEqual(events[0]["type"], "phase")
         self.assertEqual(events[0]["phase"], "agent_run")
@@ -150,9 +144,7 @@ class TestStateJournalWriterHelpers(unittest.TestCase):
         self.assertEqual(events[0]["message"], "ok")
 
     def test_write_verification(self) -> None:
-        self.writer.write_verification(
-            issue_id="i1", verification_status="passed", result="ok"
-        )
+        self.writer.write_verification(issue_id="i1", verification_status="passed", result="ok")
         events = _read_ndjson(self.writer.path)
         self.assertEqual(events[0]["type"], "verification")
         self.assertEqual(events[0]["issue_id"], "i1")
@@ -177,9 +169,7 @@ class TestStateJournalWriterHelpers(unittest.TestCase):
         self.assertNotIn("pr_number", events[0])
 
     def test_write_session_ref(self) -> None:
-        self.writer.write_session_ref(
-            issue_id="i1", session_id="s1", session_path="/tmp/s1"
-        )
+        self.writer.write_session_ref(issue_id="i1", session_id="s1", session_path="/tmp/s1")
         events = _read_ndjson(self.writer.path)
         self.assertEqual(events[0]["type"], "session_ref")
         self.assertEqual(events[0]["issue_id"], "i1")
@@ -194,9 +184,7 @@ class TestStateJournalWriterHelpers(unittest.TestCase):
         self.assertEqual(events[0]["error"], "boom")
 
     def test_write_complete(self) -> None:
-        self.writer.write_complete(
-            issue_id="i1", overall_status="success", message="all done"
-        )
+        self.writer.write_complete(issue_id="i1", overall_status="success", message="all done")
         events = _read_ndjson(self.writer.path)
         self.assertEqual(events[0]["type"], "complete")
         self.assertEqual(events[0]["issue_id"], "i1")
@@ -214,9 +202,7 @@ class TestStateJournalWriterFailure(unittest.TestCase):
         blocker.write_text("x", encoding="utf-8")
         # The run_dir would be blocker/sub — but blocker is a file.
         run_dir = blocker / "sub"
-        with self.assertLogs(
-            "extensions.orchestrator.state_journal", level="WARNING"
-        ):
+        with self.assertLogs("extensions.orchestrator.state_journal", level="WARNING"):
             # Should not raise.
             writer = StateJournalWriter(run_dir, run_id="r1")
         # Even without the dir, the writer object is constructed.

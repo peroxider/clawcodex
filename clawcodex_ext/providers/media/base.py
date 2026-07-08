@@ -255,9 +255,7 @@ class VideoProvider(MediaProvider):
             if status.status == "completed":
                 return self.get_video_result(task_id)
             if status.status == "failed":
-                raise RuntimeError(
-                    f"Video generation failed for task {task_id}: {status.error}"
-                )
+                raise RuntimeError(f"Video generation failed for task {task_id}: {status.error}")
             if time.monotonic() >= deadline:
                 raise TimeoutError(
                     f"Video generation timed out after {max_wait}s for task {task_id}"

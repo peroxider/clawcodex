@@ -117,27 +117,34 @@ def test_anchor_link_text_for_files():
 
 def test_anchor_link_text_with_range():
     a = LodestoneAnchor(
-        kind="file_path", raw="", file_path="src/foo.py", line=1, end_line=5, end_column=9,
+        kind="file_path",
+        raw="",
+        file_path="src/foo.py",
+        line=1,
+        end_line=5,
+        end_column=9,
     )
     assert a.link_text() == "src/foo.py:1-5:9"
 
 
 def test_anchor_link_text_for_tracker_gitcode():
     a = LodestoneAnchor(
-        kind="tracker_issue", raw="", tracker_key=("gitcode", "42"),
+        kind="tracker_issue",
+        raw="",
+        tracker_key=("gitcode", "42"),
     )
     assert a.link_text() == "#42"
 
 
 def test_anchor_link_text_for_tracker_linear():
     a = LodestoneAnchor(
-        kind="tracker_issue", raw="", tracker_key=("linear", "LIN-42"),
+        kind="tracker_issue",
+        raw="",
+        tracker_key=("linear", "LIN-42"),
     )
     assert a.link_text() == "linear-LIN-42"
 
 
 def test_anchor_link_text_for_commit_sha():
-    a = LodestoneAnchor(
-        kind="git_commit", raw="abcdef0123456789", git_sha="abcdef0123456789"
-    )
+    a = LodestoneAnchor(kind="git_commit", raw="abcdef0123456789", git_sha="abcdef0123456789")
     assert a.link_text() == "abcdef0"

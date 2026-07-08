@@ -28,6 +28,7 @@ Design
   the whole clip to the device; no queueing. Simpler and good enough
   for a few seconds of audio.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -107,7 +108,7 @@ def _play_pyaudio(pcm: bytes, sample_rate: int, channels: int = 1) -> None:
             # giant buffer on the device side.
             frame_bytes = channels * 2 * 1024
             for i in range(0, len(pcm), frame_bytes):
-                stream.write(pcm[i:i + frame_bytes])
+                stream.write(pcm[i : i + frame_bytes])
         finally:
             stream.stop_stream()
             stream.close()
@@ -119,12 +120,18 @@ def _play_sox(pcm: bytes, sample_rate: int, channels: int = 1) -> None:
     """Pipe PCM16 to SoX ``play`` via stdin (no temp file)."""
     cmd = [
         "play",
-        "-t", "raw",
-        "-r", str(sample_rate),
-        "-c", str(channels),
-        "-b", "16",
-        "-e", "signed",
-        "--endian", "little",
+        "-t",
+        "raw",
+        "-r",
+        str(sample_rate),
+        "-c",
+        str(channels),
+        "-b",
+        "16",
+        "-e",
+        "signed",
+        "--endian",
+        "little",
         "-",
     ]
     proc = subprocess.Popen(  # noqa: S603 — fixed arg list, no shell
@@ -149,7 +156,8 @@ def _play_ffplay(pcm: bytes, sample_rate: int, channels: int = 1) -> None:
             "ffplay",
             "-nodisp",
             "-autoexit",
-            "-loglevel", "quiet",
+            "-loglevel",
+            "quiet",
             str(tmp_path),
         ]
         subprocess.run(  # noqa: S603 — fixed arg list, no shell

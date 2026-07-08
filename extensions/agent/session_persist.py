@@ -84,9 +84,7 @@ def save_to_session_storage(session: Any) -> None:
         # ``message_to_dict`` (which may not match the shape stored
         # in ``Conversation.to_dict``).
         conv_dict = session.conversation.to_dict()
-        messages_list = (
-            conv_dict.get("messages", []) if isinstance(conv_dict, dict) else []
-        )
+        messages_list = conv_dict.get("messages", []) if isinstance(conv_dict, dict) else []
 
         # F-103 P103-E: compute ``parentUuid`` for each message and
         # stamp it onto the dict before writing. ``parentUuid``

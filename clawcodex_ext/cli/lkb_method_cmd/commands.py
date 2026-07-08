@@ -297,8 +297,10 @@ def _cmd_propose(args: list[str]) -> int:
 
 def _cmd_approve(args: list[str]) -> int:
     if not args or args[0].startswith("--"):
-        print("Usage: clawcodex-dev lkb method approve <proposal_id> [--reviewer=...]",
-              file=sys.stderr)
+        print(
+            "Usage: clawcodex-dev lkb method approve <proposal_id> [--reviewer=...]",
+            file=sys.stderr,
+        )
         return 1
 
     proposal_id = args[0]
@@ -311,8 +313,7 @@ def _cmd_approve(args: list[str]) -> int:
 
 def _cmd_reject(args: list[str]) -> int:
     if not args or args[0].startswith("--"):
-        print("Usage: clawcodex-dev lkb method reject <proposal_id> --reason=...",
-              file=sys.stderr)
+        print("Usage: clawcodex-dev lkb method reject <proposal_id> --reason=...", file=sys.stderr)
         return 1
 
     proposal_id = args[0]
@@ -329,8 +330,10 @@ def _cmd_reject(args: list[str]) -> int:
 
 def _cmd_deprecate(args: list[str]) -> int:
     if not args or args[0].startswith("--"):
-        print("Usage: clawcodex-dev lkb method deprecate <method_id> [--replacement=...]",
-              file=sys.stderr)
+        print(
+            "Usage: clawcodex-dev lkb method deprecate <method_id> [--replacement=...]",
+            file=sys.stderr,
+        )
         return 1
 
     method_id = args[0]
@@ -355,9 +358,7 @@ def _cmd_coverage(args: list[str]) -> int:
         golden_set = json.loads(Path(golden_set_path).read_text(encoding="utf-8"))
     else:
         # Try default golden set path
-        default_path = (
-            Path("clawcodex_ext") / "logical_kanban" / "golden_set.json"
-        )
+        default_path = Path("clawcodex_ext") / "logical_kanban" / "golden_set.json"
         if default_path.is_file():
             golden_set = json.loads(default_path.read_text(encoding="utf-8"))
         else:
@@ -427,7 +428,10 @@ def _cmd_template_propose(args: list[str]) -> int:
 
 def _cmd_template_approve(args: list[str]) -> int:
     if not args or args[0].startswith("--"):
-        print("Usage: clawcodex-dev lkb template approve <proposal_id> [--reviewer=...]", file=sys.stderr)
+        print(
+            "Usage: clawcodex-dev lkb template approve <proposal_id> [--reviewer=...]",
+            file=sys.stderr,
+        )
         return 1
     approve_acceptance_template(args[0], reviewer=_parse_flag(args, "--reviewer", ""))
     print(f"Acceptance template proposal {args[0]} approved.")
@@ -436,7 +440,9 @@ def _cmd_template_approve(args: list[str]) -> int:
 
 def _cmd_template_reject(args: list[str]) -> int:
     if not args or args[0].startswith("--"):
-        print("Usage: clawcodex-dev lkb template reject <proposal_id> --reason=...", file=sys.stderr)
+        print(
+            "Usage: clawcodex-dev lkb template reject <proposal_id> --reason=...", file=sys.stderr
+        )
         return 1
     reason = _parse_flag(args, "--reason", None)
     if not reason:
@@ -453,7 +459,10 @@ def _cmd_template_reject(args: list[str]) -> int:
 
 def _cmd_template_deprecate(args: list[str]) -> int:
     if not args or args[0].startswith("--"):
-        print("Usage: clawcodex-dev lkb template deprecate <template_id> [--replacement=...]", file=sys.stderr)
+        print(
+            "Usage: clawcodex-dev lkb template deprecate <template_id> [--replacement=...]",
+            file=sys.stderr,
+        )
         return 1
     replacement = _parse_flag(args, "--replacement", None)
     deprecate_acceptance_template(
@@ -545,9 +554,7 @@ def _cmd_export(args: list[str]) -> int:
     payload = {
         "schemaVersion": "1.0.0",
         "methods": [method.to_dict() for method in get_all_methods()],
-        "acceptanceTemplates": [
-            template.to_dict() for template in get_all_acceptance_templates()
-        ],
+        "acceptanceTemplates": [template.to_dict() for template in get_all_acceptance_templates()],
         "operations": [op.to_dict() for op in get_all_operation_schemas()],
     }
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -589,7 +596,7 @@ def _parse_flag(args: list[str], name: str, default: Any = None) -> Any:
         if arg == name and i + 1 < len(args):
             return args[i + 1]
         if arg.startswith(prefix):
-            return arg[len(prefix):]
+            return arg[len(prefix) :]
     return default
 
 
@@ -605,7 +612,9 @@ def _format_method_detail(method: EngineeringMethod) -> str:
         f"  Subtasks:      {len(method.subtask_templates)}",
     ]
     if method.acceptance_template:
-        lines.append(f"  Acceptance:    assertion_template='{method.acceptance_template.assertion_template}'")
+        lines.append(
+            f"  Acceptance:    assertion_template='{method.acceptance_template.assertion_template}'"
+        )
     if method.tags:
         lines.append(f"  Tags:        {', '.join(method.tags)}")
     lines.append("")
@@ -638,6 +647,7 @@ def _find_decomposition_plan(run_id: str) -> Any:
     # First try the in-memory cache from F-149
     try:
         from clawcodex_ext.logical_kanban.decomposer import _DECOMPOSITION_CACHE
+
         return _DECOMPOSITION_CACHE.get(run_id)
     except (ImportError, AttributeError):
         pass
@@ -679,9 +689,7 @@ def _plan_from_dict(data: dict[str, Any], run_id: str) -> Any:
         decomposition_run_id=run_id,
         goal=data.get("goal", ""),
         tasks=tasks,
-        dependencies=tuple(
-            tuple(d) for d in data.get("dependencies", [])
-        ),
+        dependencies=tuple(tuple(d) for d in data.get("dependencies", [])),
         assumptions=tuple(data.get("assumptions", [])),
         ambiguity_report=None,
         validation_run=None,
@@ -693,8 +701,16 @@ def _infer_pattern_from_plan(plan: Any) -> str:
     """Infer a method pattern from the plan's goal text."""
     goal_lower = (plan.goal or "").lower()
     for prefix in (
-        "add", "fix", "refactor", "remove", "update", "migrate",
-        "implement", "create", "configure", "optimize",
+        "add",
+        "fix",
+        "refactor",
+        "remove",
+        "update",
+        "migrate",
+        "implement",
+        "create",
+        "configure",
+        "optimize",
     ):
         if goal_lower.startswith(prefix):
             return f"{prefix}_{goal_lower.split()[0] if len(goal_lower.split()) > 1 else 'task'}"

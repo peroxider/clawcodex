@@ -77,8 +77,7 @@ class ModeRunner(Protocol):
         session: "AgentSession",
         workflow: "WorkflowConfig",
         **hooks: Any,
-    ) -> Any:
-        ...
+    ) -> Any: ...
 
 
 # Re-exports used by callers that import from .base directly.

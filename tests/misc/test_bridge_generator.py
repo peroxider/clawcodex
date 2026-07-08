@@ -17,7 +17,9 @@ from extensions.sop_converter.workflow_mode.capability.models import (
     StageAgentMap,
     StageCapabilityProfile,
 )
-from extensions.sop_converter.workflow_mode.extractors.adapters.generic import GenericPipelineExtractor
+from extensions.sop_converter.workflow_mode.extractors.adapters.generic import (
+    GenericPipelineExtractor,
+)
 from extensions.sop_converter.workflow_mode.extractors.models import ExtractedStage, WorkflowGraph
 from extensions.sop_converter.workflow_mode.scan_context import SourceScanContext
 
@@ -43,7 +45,11 @@ class TestBridgeGenerator:
         agent_map = StageCapabilityMapper().map(graph, components, skills, scan=scan)
 
         script = BridgeGenerator().generate(
-            graph, agent_map, path, tmp_path, project_name="fwa-test",
+            graph,
+            agent_map,
+            path,
+            tmp_path,
+            project_name="fwa-test",
         )
         assert script is None
 

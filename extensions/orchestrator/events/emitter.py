@@ -29,14 +29,14 @@ EventSink = Callable[[OrchestratorEvent], None]
 # operator would be double-notified for one failure.
 _STATUS_BRANCH_TERMINAL_REASONS = frozenset(
     {
-        'stagnation',
-        'loop_detected',
-        'budget_exhausted',
-        'max_turns_exceeded',
+        "stagnation",
+        "loop_detected",
+        "budget_exhausted",
+        "max_turns_exceeded",
     }
 )
 
-_SUCCESS_TERMINAL_REASONS = frozenset({'success', 'task_complete', 'already_completed'})
+_SUCCESS_TERMINAL_REASONS = frozenset({"success", "task_complete", "already_completed"})
 
 
 class OrchestratorEventEmitter:
@@ -71,20 +71,20 @@ class OrchestratorEventEmitter:
             try:
                 sink(event)
             except Exception as exc:  # noqa: BLE001
-                logger.exception('IM event sink failed for %r: %s', sink, exc)
+                logger.exception("IM event sink failed for %r: %s", sink, exc)
 
     # -- ProgressSink ----------------------------------------------------
-    def on_phase_complete(self, event: 'PhaseComplete', session: Any) -> None:
+    def on_phase_complete(self, event: "PhaseComplete", session: Any) -> None:
         # Phase events are audit/LiveView only; not pushed to IM.
         return None
 
-    def on_turn_complete(self, event: 'TurnComplete', session: Any) -> None:
+    def on_turn_complete(self, event: "TurnComplete", session: Any) -> None:
         # Turn events are audit/LiveView only; not pushed to IM.
         return None
 
-    def on_session_complete(self, event: 'SessionComplete', session: Any) -> None:
-        reason = getattr(event, 'reason', '') or ''
-        issue_id = self.task_id or getattr(getattr(session, 'issue', None), 'id', '') or ''
+    def on_session_complete(self, event: "SessionComplete", session: Any) -> None:
+        reason = getattr(event, "reason", "") or ""
+        issue_id = self.task_id or getattr(getattr(session, "issue", None), "id", "") or ""
         if reason in _STATUS_BRANCH_TERMINAL_REASONS:
             # The orchestrator's status dispatch emits the specific
             # ``agent.*`` terminal event; emitting a generic
@@ -93,37 +93,37 @@ class OrchestratorEventEmitter:
             return
         level = TERMINAL_REASON_LEVEL.get(reason, EventLevel.WARN)
         if reason in _SUCCESS_TERMINAL_REASONS:
-            event_type = 'issue.completed'
-            message = '任务完成'
-        elif reason == 'rate_limit_circuit_open':
-            event_type = 'agent.rate_limit_circuit_open'
-            message = '限流熔断，会话终止'
-        elif reason == 'noop_completed':
-            event_type = 'issue.completed'
-            message = '无操作完成'
+            event_type = "issue.completed"
+            message = "任务完成"
+        elif reason == "rate_limit_circuit_open":
+            event_type = "agent.rate_limit_circuit_open"
+            message = "限流熔断，会话终止"
+        elif reason == "noop_completed":
+            event_type = "issue.completed"
+            message = "无操作完成"
             level = EventLevel.INFO
         else:
-            event_type = 'issue.failed'
-            message = f'会话结束: {reason}'
+            event_type = "issue.failed"
+            message = f"会话结束: {reason}"
         # Build a rich payload from the session context.
         payload: dict[str, Any] = {}
-        issue = getattr(session, 'issue', None)
+        issue = getattr(session, "issue", None)
         if issue is not None:
-            pr = getattr(issue, 'pr_url', None)
+            pr = getattr(issue, "pr_url", None)
             if pr:
-                payload['pr'] = pr
-            title = getattr(issue, 'title', None)
+                payload["pr"] = pr
+            title = getattr(issue, "title", None)
             if title:
-                payload['title'] = title
-            branch = getattr(issue, 'branch_name', None)
+                payload["title"] = title
+            branch = getattr(issue, "branch_name", None)
             if branch:
-                payload['branch'] = branch
-        ver = getattr(session, 'verification_status', None)
+                payload["branch"] = branch
+        ver = getattr(session, "verification_status", None)
         if ver:
-            payload['verification'] = ver
-        turns = getattr(session, 'turn_count', None)
+            payload["verification"] = ver
+        turns = getattr(session, "turn_count", None)
         if turns:
-            payload['turns'] = turns
+            payload["turns"] = turns
         self.emit(
             OrchestratorEvent(
                 event_type=event_type,
@@ -135,4 +135,4 @@ class OrchestratorEventEmitter:
         )
 
 
-__all__ = ['EventSink', 'OrchestratorEventEmitter']
+__all__ = ["EventSink", "OrchestratorEventEmitter"]

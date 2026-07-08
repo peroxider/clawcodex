@@ -333,12 +333,14 @@ async def resolve_hook_permission_decision(
                 if isinstance(decision, dict):
                     return decision
                 if hasattr(decision, "behavior"):
-                    return {"behavior": decision.behavior, "message": getattr(decision, "message", None)}
+                    return {
+                        "behavior": decision.behavior,
+                        "message": getattr(decision, "message", None),
+                    }
                 return {
                     "behavior": "deny",
                     "message": (
-                        "Permission handler returned an unrecognized "
-                        f"decision for {tool.name}"
+                        f"Permission handler returned an unrecognized decision for {tool.name}"
                     ),
                 }
             except Exception as e:
@@ -354,9 +356,7 @@ async def resolve_hook_permission_decision(
         # future caller forgets to wire can_use_tool.
         return {
             "behavior": "deny",
-            "message": (
-                f"Permission required but no handler available for {tool.name}"
-            ),
+            "message": (f"Permission required but no handler available for {tool.name}"),
         }
 
     # hook_permission_result is NOT None

@@ -31,6 +31,7 @@ def _pil_numpy_available() -> bool:
     try:
         import PIL  # noqa: F401
         import numpy  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -56,6 +57,7 @@ class ImageProcessorModule:
         try:
             import PIL
             import numpy
+
             return f"PIL={PIL.__version__},numpy={numpy.__version__}"
         except ImportError:
             return "unavailable"
@@ -73,9 +75,8 @@ class ImageProcessorModule:
         """
         if not self._available:
             from clawcodex_ext.native import NativeModuleError
-            raise NativeModuleError(
-                "image backend unavailable (install Pillow and numpy)"
-            )
+
+            raise NativeModuleError("image backend unavailable (install Pillow and numpy)")
         from PIL import Image
         import numpy as np
 
@@ -89,7 +90,7 @@ class ImageProcessorModule:
             im2 = im2.crop((0, 0, w, h))
         arr1 = np.asarray(im1, dtype=np.float32)
         arr2 = np.asarray(im2, dtype=np.float32)
-        return float(np.mean((arr1 - arr2) ** 2) / (255.0 ** 2))
+        return float(np.mean((arr1 - arr2) ** 2) / (255.0**2))
 
     def images_equal(self, img1_path: str, img2_path: str, threshold: float = 0.01) -> bool:
         """便捷包装：差异 < ``threshold`` 视为相等."""
@@ -119,9 +120,8 @@ class ImageProcessorModule:
         """
         if not self._available:
             from clawcodex_ext.native import NativeModuleError
-            raise NativeModuleError(
-                "image backend unavailable (install Pillow and numpy)"
-            )
+
+            raise NativeModuleError("image backend unavailable (install Pillow and numpy)")
         from PIL import Image
 
         im = Image.open(image_path)
@@ -144,9 +144,8 @@ class ImageProcessorModule:
         """重编码图像为指定格式."""
         if not self._available:
             from clawcodex_ext.native import NativeModuleError
-            raise NativeModuleError(
-                "image backend unavailable (install Pillow and numpy)"
-            )
+
+            raise NativeModuleError("image backend unavailable (install Pillow and numpy)")
         from PIL import Image
 
         im = Image.open(image_path).convert("RGB")

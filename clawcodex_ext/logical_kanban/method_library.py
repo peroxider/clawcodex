@@ -73,9 +73,7 @@ class SubtaskTemplate:
                 f"{sorted(_ALLOWED_SUBTASK_ROLES)}; got {self.role!r}"
             )
         if not isinstance(self.subject_template, str) or not self.subject_template.strip():
-            raise ValueError(
-                "SubtaskTemplate.subject_template must be a non-empty string"
-            )
+            raise ValueError("SubtaskTemplate.subject_template must be a non-empty string")
         if not isinstance(self.description_template, str):
             raise ValueError("SubtaskTemplate.description_template must be a string")
         if not isinstance(self.acceptance_template, str):
@@ -120,9 +118,7 @@ class AcceptanceTemplate:
 
     def __post_init__(self) -> None:
         if not isinstance(self.assertion_template, str) or not self.assertion_template.strip():
-            raise ValueError(
-                "AcceptanceTemplate.assertion_template must be a non-empty string"
-            )
+            raise ValueError("AcceptanceTemplate.assertion_template must be a non-empty string")
         if not isinstance(self.proof_template, str):
             raise ValueError("AcceptanceTemplate.proof_template must be a string")
         if not isinstance(self.strict_acceptance, bool):
@@ -172,9 +168,7 @@ class EngineeringMethod:
         if not isinstance(self.subtask_templates, tuple):
             raise ValueError("EngineeringMethod.subtask_templates must be a tuple")
         if not self.subtask_templates:
-            raise ValueError(
-                "EngineeringMethod.subtask_templates must contain at least one entry"
-            )
+            raise ValueError("EngineeringMethod.subtask_templates must contain at least one entry")
         if not isinstance(self.preconditions, tuple):
             raise ValueError("EngineeringMethod.preconditions must be a tuple of strings")
         if not isinstance(self.assumptions, tuple):
@@ -272,8 +266,11 @@ def _validate_method_internals(method: EngineeringMethod) -> None:
     # identifier.  This is a soft check; downstream rendering is what
     # actually substitutes the slot.
     for template in method.subtask_templates:
-        for text in (template.subject_template, template.description_template,
-                     template.acceptance_template):
+        for text in (
+            template.subject_template,
+            template.description_template,
+            template.acceptance_template,
+        ):
             for match in _SLOT_PATTERN.finditer(text):
                 pass  # Identifier check is implicit in the regex itself.
     if method.acceptance_template is not None:
@@ -300,14 +297,11 @@ def register_method(method: EngineeringMethod, *, force: bool = False) -> None:
     if method.method_id in existing_ids:
         if force:
             _METHOD_REGISTRY[:] = [
-                existing for existing in _METHOD_REGISTRY
-                if existing.method_id != method.method_id
+                existing for existing in _METHOD_REGISTRY if existing.method_id != method.method_id
             ]
             _METHOD_REGISTRY.append(method)
             return
-        raise ValueError(
-            f"method_id {method.method_id!r} already registered; pick a unique id"
-        )
+        raise ValueError(f"method_id {method.method_id!r} already registered; pick a unique id")
     _METHOD_REGISTRY.append(method)
 
 
@@ -562,9 +556,7 @@ def _deserialize_method(raw: dict[str, Any]) -> EngineeringMethod:
 
     raw_templates = raw.get("subtaskTemplates") or raw.get("subtask_templates")
     if not isinstance(raw_templates, list) or not raw_templates:
-        raise ValueError(
-            f"method {method_id!r}: subtaskTemplates must be a non-empty list"
-        )
+        raise ValueError(f"method {method_id!r}: subtaskTemplates must be a non-empty list")
 
     templates: list[SubtaskTemplate] = []
     for t_index, t_raw in enumerate(raw_templates):
@@ -581,17 +573,14 @@ def _deserialize_method(raw: dict[str, Any]) -> EngineeringMethod:
     status = raw.get("status", "approved")
     if status not in _ALLOWED_METHOD_STATUSES:
         raise ValueError(
-            f"method {method_id!r}: status {status!r} not in "
-            f"{sorted(_ALLOWED_METHOD_STATUSES)}"
+            f"method {method_id!r}: status {status!r} not in {sorted(_ALLOWED_METHOD_STATUSES)}"
         )
 
     raw_acceptance = raw.get("acceptanceTemplate") or raw.get("acceptance_template")
     acceptance: AcceptanceTemplate | None = None
     if raw_acceptance is not None:
         if not isinstance(raw_acceptance, dict):
-            raise ValueError(
-                f"method {method_id!r}: acceptanceTemplate must be a dict or null"
-            )
+            raise ValueError(f"method {method_id!r}: acceptanceTemplate must be a dict or null")
         acceptance = _deserialize_acceptance_template(method_id, raw_acceptance)
 
     return EngineeringMethod(
@@ -637,9 +626,7 @@ def _deserialize_subtask_template(
         raise ValueError(
             f"method {method_id!r}: subtaskTemplates[{index}].acceptanceTemplate must be a string"
         )
-    default_blocked_by_raw = (
-        raw.get("defaultBlockedBy") or raw.get("default_blocked_by") or []
-    )
+    default_blocked_by_raw = raw.get("defaultBlockedBy") or raw.get("default_blocked_by") or []
     if not isinstance(default_blocked_by_raw, list):
         raise ValueError(
             f"method {method_id!r}: subtaskTemplates[{index}].defaultBlockedBy must be a list"
@@ -657,9 +644,7 @@ def _deserialize_subtask_template(
     )
 
 
-def _deserialize_acceptance_template(
-    method_id: str, raw: dict[str, Any]
-) -> AcceptanceTemplate:
+def _deserialize_acceptance_template(method_id: str, raw: dict[str, Any]) -> AcceptanceTemplate:
     assertion_template = raw.get("assertionTemplate") or raw.get("assertion_template")
     if not isinstance(assertion_template, str) or not assertion_template:
         raise ValueError(
@@ -667,9 +652,7 @@ def _deserialize_acceptance_template(
         )
     proof_template = raw.get("proofTemplate") or raw.get("proof_template") or ""
     if not isinstance(proof_template, str):
-        raise ValueError(
-            f"method {method_id!r}: acceptanceTemplate.proofTemplate must be a string"
-        )
+        raise ValueError(f"method {method_id!r}: acceptanceTemplate.proofTemplate must be a string")
     strict_acceptance = raw.get("strictAcceptance", raw.get("strict_acceptance", False))
     if not isinstance(strict_acceptance, bool):
         raise ValueError(
@@ -697,8 +680,7 @@ def _parse_semver(version: str) -> tuple[int, int, int]:
     m = _SEMVER_RE.match(version)
     if not m:
         raise ValueError(
-            f"Invalid SemVer string: {version!r}. Expected format: "
-            f"MAJOR.MINOR.PATCH (e.g. '1.2.3')"
+            f"Invalid SemVer string: {version!r}. Expected format: MAJOR.MINOR.PATCH (e.g. '1.2.3')"
         )
     return int(m.group(1)), int(m.group(2)), int(m.group(3))
 
@@ -775,13 +757,9 @@ def _tuple_of_strings(
     out: list[str] = []
     for item in value:
         if not isinstance(item, str):
-            raise ValueError(
-                f"method {method_id!r}: {field_name} entries must be strings"
-            )
+            raise ValueError(f"method {method_id!r}: {field_name} entries must be strings")
         if not item and not allow_empty:
-            raise ValueError(
-                f"method {method_id!r}: {field_name} entries must be non-empty"
-            )
+            raise ValueError(f"method {method_id!r}: {field_name} entries must be non-empty")
         if item:
             out.append(item)
     return tuple(out)

@@ -115,4 +115,3 @@ class QueryState:
     # 在 turn 开始/结束时注入自定义逻辑，无需修改 query() 函数体。
     on_turn_start_callbacks: list[Callable[["QueryState"], None]] = field(default_factory=list)
     on_turn_end_callbacks: list[Callable[["QueryState"], None]] = field(default_factory=list)
-

@@ -82,11 +82,11 @@ def _mdc_record_factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
 # ---------------------------------------------------------------------------
 
 _LEVEL_COLOUR: dict[int, str] = {
-    logging.CRITICAL: "\033[1;41m",   # white-on-red
-    logging.ERROR: "\033[1;31m",      # bold red
-    logging.WARNING: "\033[0;33m",    # yellow
-    logging.INFO: "\033[0;32m",       # green
-    logging.DEBUG: "\033[0;36m",      # cyan
+    logging.CRITICAL: "\033[1;41m",  # white-on-red
+    logging.ERROR: "\033[1;31m",  # bold red
+    logging.WARNING: "\033[0;33m",  # yellow
+    logging.INFO: "\033[0;32m",  # green
+    logging.DEBUG: "\033[0;36m",  # cyan
 }
 _RESET = "\033[0m"
 

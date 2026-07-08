@@ -194,18 +194,14 @@ class TestMethodProposer:
     def test_propose_from_empty_plan_raises(self) -> None:
         plan = _make_plan(tasks=())
         with pytest.raises(ValueError, match="zero tasks"):
-            propose_method_from_plan(
-                plan, method_id="M-102", pattern="test", description=""
-            )
+            propose_method_from_plan(plan, method_id="M-102", pattern="test", description="")
 
     def test_validate_proposed_method_requires_3_subtasks(self) -> None:
         method = EngineeringMethod(
             method_id="M-103",
             pattern="foo",
             description="Too few subtasks",
-            subtask_templates=(
-                _subtask("ST-1", "impl", "Do work"),
-            ),
+            subtask_templates=(_subtask("ST-1", "impl", "Do work"),),
             preconditions=("Pre",),
             assumptions=("Assumption",),
             acceptance_template=_make_accepted(),
@@ -407,6 +403,7 @@ class TestGovernance:
 class TestVersionManagement:
     def test_parse_valid_semver(self) -> None:
         from clawcodex_ext.logical_kanban.method_library import _parse_semver
+
         assert _parse_semver("0.1.0") == (0, 1, 0)
         assert _parse_semver("1.0.0") == (1, 0, 0)
         assert _parse_semver("2.3.4") == (2, 3, 4)
@@ -521,12 +518,8 @@ class TestLayeredLoading:
             user_dir.mkdir(parents=True)
             project_methods_dir.mkdir(parents=True)
 
-            user_method = _make_draft_method(
-                "M-702", "user_pattern", status="approved"
-            )
-            project_method = _make_draft_method(
-                "M-702", "project_pattern", status="approved"
-            )
+            user_method = _make_draft_method("M-702", "user_pattern", status="approved")
+            project_method = _make_draft_method("M-702", "project_pattern", status="approved")
             save_method_library([user_method], user_dir / "user.json")
             save_method_library([project_method], project_methods_dir / "project.json")
 
@@ -542,9 +535,7 @@ class TestLayeredLoading:
             cache_root = Path(tmp) / "lkb"
             user_dir = cache_root / "methods"
             user_dir.mkdir(parents=True)
-            user_method = _make_draft_method(
-                "M-703", "cache_root_pattern", status="approved"
-            )
+            user_method = _make_draft_method("M-703", "cache_root_pattern", status="approved")
             save_method_library([user_method], user_dir / "methods.json")
 
             result = load_method_library_layered(user_cache_dir=cache_root)
@@ -611,9 +602,7 @@ class TestLayeredLoading:
                 "createdAt": "2026-01-01T00:00:00+00:00",
                 "updatedAt": "2026-01-01T00:00:00+00:00",
             }
-            (proposal_dir / "P-ABC12345.json").write_text(
-                json.dumps(payload), encoding="utf-8"
-            )
+            (proposal_dir / "P-ABC12345.json").write_text(json.dumps(payload), encoding="utf-8")
 
             load_proposals(proposal_dir)
             proposal = get_proposal("P-ABC12345")
@@ -629,11 +618,13 @@ class TestLayeredLoading:
 class TestCliCommands:
     def test_list_no_args(self) -> None:
         from clawcodex_ext.cli.lkb_method_cmd.commands import _cmd_list
+
         code = _cmd_list([])
         assert code == 0
 
     def test_show_existing(self) -> None:
         from clawcodex_ext.cli.lkb_method_cmd.commands import _cmd_show
+
         # Register a method first
         method = _make_draft_method("M-show-001", "test_pattern", status="approved")
         register_method(method)
@@ -642,16 +633,19 @@ class TestCliCommands:
 
     def test_show_missing(self) -> None:
         from clawcodex_ext.cli.lkb_method_cmd.commands import _cmd_show
+
         code = _cmd_show(["NONEXISTENT"])
         assert code == 1
 
     def test_propose_requires_from_plan(self) -> None:
         from clawcodex_ext.cli.lkb_method_cmd.commands import _cmd_propose
+
         code = _cmd_propose([])
         assert code == 1
 
     def test_approve_requires_proposal_id(self) -> None:
         from clawcodex_ext.cli.lkb_method_cmd.commands import _cmd_approve
+
         code = _cmd_approve([])
         assert code == 1
 
@@ -659,6 +653,7 @@ class TestCliCommands:
         method = _make_draft_method("M-801", "add_middleware")
         pid = submit_method(method)
         from clawcodex_ext.cli.lkb_method_cmd.commands import _cmd_approve
+
         code = _cmd_approve([pid, "--reviewer=test"])
         assert code == 0
         proposal = get_proposal(pid)
@@ -669,6 +664,7 @@ class TestCliCommands:
         method = _make_draft_method("M-802", "add_middleware")
         pid = submit_method(method)
         from clawcodex_ext.cli.lkb_method_cmd.commands import _cmd_reject
+
         code = _cmd_reject([pid, "--reason=Duplicate", "--reviewer=test"])
         assert code == 0
         proposal = get_proposal(pid)
@@ -679,6 +675,7 @@ class TestCliCommands:
         method = _make_draft_method("M-803", "add_middleware")
         pid = submit_method(method)
         from clawcodex_ext.cli.lkb_method_cmd.commands import _cmd_reject
+
         code = _cmd_reject([pid])
         assert code == 1
 
@@ -687,6 +684,7 @@ class TestCliCommands:
         pid = submit_method(method)
         approve_method(pid, reviewer="test")
         from clawcodex_ext.cli.lkb_method_cmd.commands import _cmd_deprecate
+
         code = _cmd_deprecate(["M-804", "--replacement=M-new"])
         assert code == 0
         m = get_method("M-804")

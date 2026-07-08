@@ -31,10 +31,7 @@ def _invalid_focus_result(focus: str) -> LocalCommandResult | None:
         return None
     return LocalCommandResult(
         type="text",
-        value=(
-            f"Invalid proactive focus {focus!r}. "
-            f"Expected one of: {', '.join(FOCUS_LEVELS)}."
-        ),
+        value=(f"Invalid proactive focus {focus!r}. Expected one of: {', '.join(FOCUS_LEVELS)}."),
     )
 
 
@@ -120,11 +117,7 @@ def proactive_command_call(args: str, context: CommandContext) -> LocalCommandRe
         state = ctrl.state
         return LocalCommandResult(
             type="text",
-            value=(
-                f"Proactive: {state.phase}"
-                f" focus={state.focus}"
-                f" ticks={state.tick_count}"
-            ),
+            value=(f"Proactive: {state.phase} focus={state.focus} ticks={state.tick_count}"),
         )
     return LocalCommandResult(
         type="text",

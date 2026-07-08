@@ -10,9 +10,9 @@ from .models import PipeMessage
 class PipeJsonCodec:
     @staticmethod
     def encode_message(message: PipeMessage) -> bytes:
-        return (json.dumps(message.to_dict(), ensure_ascii=False, separators=(",", ":")) + "\n").encode(
-            "utf-8"
-        )
+        return (
+            json.dumps(message.to_dict(), ensure_ascii=False, separators=(",", ":")) + "\n"
+        ).encode("utf-8")
 
     @staticmethod
     def decode_message(raw: bytes | str) -> PipeMessage:

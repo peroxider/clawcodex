@@ -77,7 +77,8 @@ def fake_wiring(monkeypatch):
 
     monkeypatch.setattr(headless_mod, "get_provider_class", _fake_provider_class)
     monkeypatch.setattr(
-        headless_mod, "get_provider_config",
+        headless_mod,
+        "get_provider_config",
         lambda name: {"default_model": "fake-model"},
     )
     monkeypatch.setattr(headless_mod, "get_default_provider", lambda: "anthropic")
@@ -86,12 +87,8 @@ def fake_wiring(monkeypatch):
     )
     # Skip API-key resolution for the fake provider — runtime would
     # normally refuse to start without one.
-    monkeypatch.setattr(
-        headless_mod, "resolve_api_key", lambda *args, **kwargs: "fake-key"
-    )
-    monkeypatch.setattr(
-        headless_mod, "provider_requires_api_key", lambda *args, **kwargs: False
-    )
+    monkeypatch.setattr(headless_mod, "resolve_api_key", lambda *args, **kwargs: "fake-key")
+    monkeypatch.setattr(headless_mod, "provider_requires_api_key", lambda *args, **kwargs: False)
     return scripted
 
 
@@ -231,9 +228,7 @@ def test_headless_direct_resume_session_id_creates_loads_and_keeps_id(
     assert payload["session_id"] == "resume-source-002"
 
 
-def test_headless_resume_unknown_session_id_exits_2(
-    fake_wiring, monkeypatch, tmp_path
-):
+def test_headless_resume_unknown_session_id_exits_2(fake_wiring, monkeypatch, tmp_path):
     """If Session.resume returns None (no such session), headless must
     exit with code 2 and a clean error message — not a traceback."""
     monkeypatch.setattr(headless_mod.Session, "resume", classmethod(lambda cls, sid: None))
@@ -253,9 +248,7 @@ def test_headless_resume_unknown_session_id_exits_2(
     assert excinfo.value.code == 2
 
 
-def test_headless_fork_session_copies_history_and_uses_new_id(
-    fake_wiring, monkeypatch, tmp_path
-):
+def test_headless_fork_session_copies_history_and_uses_new_id(fake_wiring, monkeypatch, tmp_path):
     """fork_session_id path: load source history, create a brand-new
     session_id for the new branch."""
     fake_wiring.append(_text_response("after fork"))
@@ -355,9 +348,7 @@ def test_headless_resume_session_at_truncates(fake_wiring, monkeypatch, tmp_path
     assert source.conversation.messages[-1].role == "assistant"
 
 
-def test_headless_resume_session_at_out_of_range_exits_2(
-    fake_wiring, monkeypatch, tmp_path
-):
+def test_headless_resume_session_at_out_of_range_exits_2(fake_wiring, monkeypatch, tmp_path):
     """An out-of-range index must error rather than silently no-op."""
     source = _make_session(
         "trunc-source-005",
@@ -494,9 +485,7 @@ def test_read_file_seed_skips_missing_files(fake_wiring, tmp_path):
         mp.undo()
 
     assert captured
-    assert not captured[0].read_file_fingerprints, (
-        "missing file should not have been seeded"
-    )
+    assert not captured[0].read_file_fingerprints, "missing file should not have been seeded"
 
 
 def test_read_file_seed_marks_partial_reads(fake_wiring, tmp_path):
@@ -607,9 +596,7 @@ def test_allowed_tools_conflict_warns_when_history_tool_filtered_out(
     assert "resumed history" in err_text or "history" in err_text
 
 
-def test_allowed_tools_no_warning_when_history_tool_present(
-    fake_wiring, monkeypatch, tmp_path
-):
+def test_allowed_tools_no_warning_when_history_tool_present(fake_wiring, monkeypatch, tmp_path):
     """No warning when the resumed history's tools are all still in the
     (filtered) registry."""
     from src.tool_system.defaults import build_default_registry as _real_build
@@ -647,9 +634,7 @@ def test_allowed_tools_no_warning_when_history_tool_present(
     )
     assert code == 0
     err = stderr.getvalue().lower()
-    assert "removed tool" not in err, (
-        f"no conflict warning expected; got: {stderr.getvalue()!r}"
-    )
+    assert "removed tool" not in err, f"no conflict warning expected; got: {stderr.getvalue()!r}"
 
 
 def test_allowed_tools_no_warning_on_fresh_session(fake_wiring, monkeypatch, tmp_path):
@@ -786,7 +771,9 @@ def _assistant_message(text: str):
     return AssistantMessage(content=[{"type": "text", "text": text}])
 
 
-def _assistant_with_tool_use(text: str, tool_name: str, tool_input: dict, tool_use_id: str = "tu_1"):
+def _assistant_with_tool_use(
+    text: str, tool_name: str, tool_input: dict, tool_use_id: str = "tu_1"
+):
     """Build an AssistantMessage carrying a text block + a tool_use block.
 
     Used by C5 (allowed-tools conflict) and C9 (read-file-state seed)

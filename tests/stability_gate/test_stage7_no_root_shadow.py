@@ -189,14 +189,12 @@ class TestNoRootLevelShadow:
         # The canonical implementation must exist in clawcodex_ext.
         canonical = ROOT / "clawcodex_ext" / "providers" / "_litellm_adapter.py"
         assert canonical.exists(), (
-            f"Expected canonical implementation at {canonical} "
-            "after Phase K migration"
+            f"Expected canonical implementation at {canonical} after Phase K migration"
         )
         # The deprecated extensions/ shim must still exist for backward compat.
         deprecated_shim = ROOT / "extensions" / "providers_ext" / "__init__.py"
         assert deprecated_shim.exists(), (
-            f"Expected deprecated extensions shim at {deprecated_shim} "
-            "for backward compatibility"
+            f"Expected deprecated extensions shim at {deprecated_shim} for backward compatibility"
         )
 
     def test_known_legit_root_py_unchanged(self) -> None:

@@ -44,6 +44,7 @@ DEFAULT_HOOK_SHELL: ShellType = "bash"
 # PowerShell argument builders (extracted from shell_invocation.py)
 # ---------------------------------------------------------------------------
 
+
 def build_powershell_args(cmd: str) -> list[str]:
     """Return the argv for spawning ``pwsh`` with *cmd*.
 
@@ -76,6 +77,7 @@ def find_powershell_path() -> str | None:
 # Auto-detection
 # ---------------------------------------------------------------------------
 
+
 def _auto_detect_shell() -> ShellType:
     """Return ``"powershell"`` on Windows when pwsh is available, else ``"bash"``."""
     if _sys.platform == "win32" and find_powershell_path() is not None:
@@ -100,7 +102,7 @@ def _powershell_argv(cmd: str) -> list[str]:
         raise RuntimeError(
             "PowerShell requested but 'pwsh'/'powershell' not found on PATH. "
             "Install PowerShell 7+ (https://github.com/PowerShell/PowerShell) "
-            "or use shell=\"bash\"."
+            'or use shell="bash".'
         )
     return [pwsh, *build_powershell_args(cmd)]
 
@@ -114,6 +116,7 @@ _SHELL_ARGV_FACTORIES: dict[str, ShellArgvFactory] = {
 # ---------------------------------------------------------------------------
 # Unified entry point
 # ---------------------------------------------------------------------------
+
 
 def resolve_shell(
     shell_param: str | None,
@@ -137,9 +140,14 @@ def resolve_shell(
         A normalised shell type and its argv-building callable.
     """
     if shell_param is None or shell_param == "auto":
-        resolved = _auto_detect_shell() if platform is None else (
-            "powershell" if platform == "win32" and find_powershell_path() is not None
-            else "bash"
+        resolved = (
+            _auto_detect_shell()
+            if platform is None
+            else (
+                "powershell"
+                if platform == "win32" and find_powershell_path() is not None
+                else "bash"
+            )
         )
     elif shell_param in _SHELL_ARGV_FACTORIES:
         resolved = shell_param
@@ -147,9 +155,9 @@ def resolve_shell(
         # fall back to bash with a warning rather than crashing.
         if resolved == "powershell" and find_powershell_path() is None:
             import logging as _logging
+
             _logging.getLogger(__name__).warning(
-                "shell=\'powershell\' requested but pwsh not found on PATH. "
-                "Falling back to bash."
+                "shell='powershell' requested but pwsh not found on PATH. Falling back to bash."
             )
             resolved = "bash"
     else:
@@ -161,6 +169,7 @@ def resolve_shell(
 # ---------------------------------------------------------------------------
 # Convenience: build the full subprocess argv list
 # ---------------------------------------------------------------------------
+
 
 def build_shell_argv(
     shell: str,
@@ -177,12 +186,12 @@ def build_shell_argv(
 # CWD-tracking wrapper builders (one per shell type)
 # ---------------------------------------------------------------------------
 
+
 def build_cwd_wrapper_bash(command: str, cwd_path: str) -> str:
     """Wrap *command* so the shell's final PWD is captured into *cwd_path*."""
     import shlex
-    return (
-        f"{{ {command}\n}}; __rc=$?; pwd > {shlex.quote(cwd_path)} 2>/dev/null; exit $__rc"
-    )
+
+    return f"{{ {command}\n}}; __rc=$?; pwd > {shlex.quote(cwd_path)} 2>/dev/null; exit $__rc"
 
 
 def build_cwd_wrapper_powershell(command: str, cwd_path: str) -> str:
@@ -217,9 +226,7 @@ def build_bg_wrapper(shell: str, command: str) -> str:
             f'Write-Error "__CLAWCODEX_EXIT__=$__rc"; '
             f"exit $__rc"
         )
-    return (
-        f"{{ {command}\n}}; __rc=$?; echo \"__CLAWCODEX_EXIT__=$__rc\" >&2; exit $__rc"
-    )
+    return f'{{ {command}\n}}; __rc=$?; echo "__CLAWCODEX_EXIT__=$__rc" >&2; exit $__rc'
 
 
 __all__ = [

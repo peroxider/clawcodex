@@ -39,6 +39,7 @@ of the project does). The file shape is::
     {"deviceId": "...", "installId": "...", "cdid": "...",
      "openudid": "...", "clientudid": "...", "token": "..."}
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -210,9 +211,7 @@ class DoubaoStreamConnection:
         if kind_str in ("INTERIM_RESULT", "interim_result"):
             self._on_transcript(text, False)
         elif kind_str in ("FINAL_RESULT", "final_result"):
-            self._final_text = (
-                (self._final_text + " " + text).strip() if self._final_text else text
-            )
+            self._final_text = (self._final_text + " " + text).strip() if self._final_text else text
             self._on_transcript(text, True)
         elif kind_str in ("ERROR", "error"):
             msg = getattr(event, "message", "") or text or "doubao ASR error"
@@ -294,9 +293,7 @@ class DoubaoSTTProvider(STTProvider):
             error.append(msg)
             done.set()
 
-        conn = self.connect_stream(
-            on_transcript=_on_transcript, on_error=_on_error, config=config
-        )
+        conn = self.connect_stream(on_transcript=_on_transcript, on_error=_on_error, config=config)
         conn.feed_audio(audio_data)
         finalize_task = asyncio.create_task(conn.finalize())
         done_task = asyncio.create_task(done.wait())

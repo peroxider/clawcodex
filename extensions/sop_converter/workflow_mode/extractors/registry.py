@@ -14,7 +14,7 @@ from .base import WorkflowExtractorBase
 logger = logging.getLogger(__name__)
 
 _PROJECT_ADAPTERS: dict[str, type[WorkflowExtractorBase]] = {
-    'arc': ArcExtractor,
+    "arc": ArcExtractor,
 }
 
 
@@ -25,7 +25,7 @@ class ExtractorRegistry:
         *,
         name: str | None = None,
         scan: SourceScanContext | None = None,
-        mode: str = 'fwa',
+        mode: str = "fwa",
         allow_coarse: bool = False,
     ) -> WorkflowExtractorBase:
         resolved = name or _detect_adapter_name(source_dir)

@@ -112,9 +112,7 @@ class GoalService:
         token_budget: int | None | object = KEEP_TOKEN_BUDGET,
     ) -> ThreadGoal:
         self._ensure_enabled()
-        normalized_objective = (
-            self._prepare_objective(objective) if objective is not None else None
-        )
+        normalized_objective = self._prepare_objective(objective) if objective is not None else None
         normalized_status = None if status is None else _coerce_status(status)
         normalized_budget = (
             None
@@ -137,9 +135,7 @@ class GoalService:
 
         if existing is None:
             if normalized_objective is None:
-                raise GoalServiceError(
-                    f"cannot update goal for thread {thread_id}: no goal exists"
-                )
+                raise GoalServiceError(f"cannot update goal for thread {thread_id}: no goal exists")
             goal = self.store.insert_thread_goal(
                 thread_id,
                 normalized_objective,
@@ -348,9 +344,7 @@ class GoalService:
         existing = self.store.get_thread_goal(thread_id)
         if existing is None:
             if normalized_objective is None:
-                raise GoalServiceError(
-                    f"cannot update goal for thread {thread_id}: no goal exists"
-                )
+                raise GoalServiceError(f"cannot update goal for thread {thread_id}: no goal exists")
             runtime.prepare_external_goal_mutation()
             goal = self.store.insert_thread_goal(
                 thread_id,

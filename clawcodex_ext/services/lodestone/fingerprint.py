@@ -54,7 +54,7 @@ _CACHE_TTL_SECONDS = 24 * 3600
 
 _REMOTE_RE = re.compile(
     r"^(?P<proto>https?://|ssh://|git://|git\+ssh://)?"
-    r"(?:[^@/]+@)?"                                # optional user@
+    r"(?:[^@/]+@)?"  # optional user@
     r"(?P<host>[A-Za-z0-9._\-]+)"
     r"[:/](?P<owner>[^/\s]+)/(?P<repo>[^/\s]+?)(?:\.git)?/?$"
 )
@@ -77,6 +77,7 @@ def parse_remote_url(raw: str) -> tuple[str, str, str] | None:
         return None
     try:
         from urllib.parse import urlparse
+
         if "://" in raw:
             u = urlparse(raw)
             host = (u.hostname or "").lower()
@@ -113,6 +114,7 @@ def is_known_tracking_host(host: str) -> bool:
 def _safe_run_git(args: list[str], cwd: Path) -> tuple[str, int]:
     """Run a git command; return ``(stdout, rc)`` without raising."""
     import subprocess
+
     try:
         completed = subprocess.run(
             ["git", *args],
@@ -221,16 +223,12 @@ def _detect_primary_remote(repo_root: Path) -> tuple[Optional[str], Optional[str
 
 def _detect_default_branch(repo_root: Path) -> Optional[str]:
     """Best-effort: symbolic ref → main / master fallback → origin/HEAD."""
-    stdout, rc = _safe_run_git(
-        ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], repo_root
-    )
+    stdout, rc = _safe_run_git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], repo_root)
     if rc == 0 and stdout:
         # e.g. ``origin/main`` → ``main``
         return stdout.split("/", 1)[-1]
     for candidate in ("main", "master"):
-        check, crc = _safe_run_git(
-            ["show-ref", "--verify", f"refs/heads/{candidate}"], repo_root
-        )
+        check, crc = _safe_run_git(["show-ref", "--verify", f"refs/heads/{candidate}"], repo_root)
         if crc == 0 and check:
             return candidate
     return None

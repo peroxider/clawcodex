@@ -596,9 +596,7 @@ class LiveStatus:
                 for task in pending:
                     task.cancel()
                 if pending:
-                    loop.run_until_complete(
-                        asyncio.gather(*pending, return_exceptions=True)
-                    )
+                    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
             except Exception:
                 pass
             try:
@@ -665,7 +663,6 @@ class LiveStatus:
         if pos < len(text):
             parts.append((base_style, text[pos:]))
         return parts
-
 
     def _render_toolbar_text(self) -> "FormattedText":
         """Render the bottom status bar by calling the REPL's toolbar callback.

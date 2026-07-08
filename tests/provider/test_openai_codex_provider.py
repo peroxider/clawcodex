@@ -60,7 +60,8 @@ def test_client_is_recreated_when_access_token_changes(monkeypatch) -> None:
 
     monkeypatch.setattr("clawcodex_ext.providers.openai_codex_provider.OpenAI", FakeOpenAI)
     monkeypatch.setattr(
-        "clawcodex_ext.providers.openai_codex_provider.resolve_codex_runtime_credentials", fake_resolve
+        "clawcodex_ext.providers.openai_codex_provider.resolve_codex_runtime_credentials",
+        fake_resolve,
     )
 
     provider = OpenAICodexProvider()
@@ -353,7 +354,8 @@ def test_get_available_models_falls_back_when_not_authenticated(monkeypatch) -> 
         raise RuntimeError("not authenticated")
 
     monkeypatch.setattr(
-        "clawcodex_ext.providers.openai_codex_provider.resolve_codex_runtime_credentials", fake_resolve
+        "clawcodex_ext.providers.openai_codex_provider.resolve_codex_runtime_credentials",
+        fake_resolve,
     )
 
     assert OpenAICodexProvider().get_available_models() == CODEX_FALLBACK_MODELS

@@ -58,9 +58,7 @@ def propose_method_from_plan(
         If ``plan.tasks`` is empty or validation fails.
     """
     if not plan.tasks:
-        raise ValueError(
-            "Cannot propose a method from a plan with zero tasks"
-        )
+        raise ValueError("Cannot propose a method from a plan with zero tasks")
 
     subtask_templates: list[SubtaskTemplate] = []
     # Map plan task_id -> new template_id for blocked_by resolution
@@ -156,17 +154,16 @@ def _validate_proposed_method(method: EngineeringMethod) -> None:
             f"subtask templates; got {len(method.subtask_templates)}"
         )
 
-    if method.acceptance_template is None or not method.acceptance_template.assertion_template.strip():
+    if (
+        method.acceptance_template is None
+        or not method.acceptance_template.assertion_template.strip()
+    ):
         raise ValueError(
-            f"Proposed method {method.method_id!r} must have at least one "
-            f"acceptance criterion"
+            f"Proposed method {method.method_id!r} must have at least one acceptance criterion"
         )
 
     if not method.preconditions:
-        raise ValueError(
-            f"Proposed method {method.method_id!r} must have non-empty "
-            f"preconditions"
-        )
+        raise ValueError(f"Proposed method {method.method_id!r} must have non-empty preconditions")
 
     # Delegate to the existing internal validator (template refs, slots)
     _validate_method_internals(method)

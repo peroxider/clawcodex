@@ -38,7 +38,9 @@ def _team_mem_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _make_team(workspace: Path, *, lead: str = "lead-1", members: tuple[str, ...] = ("lead-1",)) -> None:
+def _make_team(
+    workspace: Path, *, lead: str = "lead-1", members: tuple[str, ...] = ("lead-1",)
+) -> None:
     team = TeamFile(
         team_name="t-int",
         lead_agent_id=lead,
@@ -56,6 +58,7 @@ def test_initialize_creates_memory_md(_team_mem_env: Path) -> None:
     assert initialize_team_memory(_team_mem_env) is True
     # Find the team MEMORY.md under the auto-mem dir.
     from clawcodex_ext.memdir.team_mem_paths import get_team_mem_entrypoint
+
     entry = Path(get_team_mem_entrypoint())
     assert entry.exists()
     assert "Team Memory" in entry.read_text(encoding="utf-8")
@@ -71,6 +74,7 @@ def test_archive_on_team_delete(_team_mem_env: Path) -> None:
     initialize_team_memory(_team_mem_env)
     # Write an entry via the service so there's something to archive.
     from extensions.agents.team_memory import TeamMemoryConfig, TeamMemoryService
+
     svc = TeamMemoryService(workspace_root=_team_mem_env, config=TeamMemoryConfig(enabled=True))
     svc.remember("team fact", author_agent_id="lead-1", tags=("fact",))
     dst = archive_team_memory(_team_mem_env, reason="TeamDelete")
@@ -97,10 +101,17 @@ def test_sink_summary_noop_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.setenv("CLAUDE_CODE_TEAM_MEMORY", "0")
     monkeypatch.setenv("CLAUDE_CODE_DISABLE_AUTO_MEMORY", "0")
     _make_team(tmp_path)
-    assert sink_send_message_summary(
-        tmp_path, sender="x", sender_agent_id="x",
-        recipients=["y"], summary="s", message="m",
-    ) is None
+    assert (
+        sink_send_message_summary(
+            tmp_path,
+            sender="x",
+            sender_agent_id="x",
+            recipients=["y"],
+            summary="s",
+            message="m",
+        )
+        is None
+    )
 
 
 def test_prompt_section_empty_when_no_recall(_team_mem_env: Path) -> None:
@@ -117,6 +128,7 @@ def test_prompt_section_contains_entries_and_stale_caveat(_team_mem_env: Path) -
     _make_team(_team_mem_env)
     initialize_team_memory(_team_mem_env)
     from extensions.agents.team_memory import TeamMemoryConfig, TeamMemoryService
+
     svc = TeamMemoryService(workspace_root=_team_mem_env, config=TeamMemoryConfig(enabled=True))
     svc.remember(
         "Run stability gate before commit",
@@ -133,13 +145,13 @@ def test_prompt_section_contains_entries_and_stale_caveat(_team_mem_env: Path) -
     assert "trust the files" in section  # stale caveat
 
 
-def test_prompt_section_disabled_returns_empty(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_prompt_section_disabled_returns_empty(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("CLAUDE_CODE_TEAM_MEMORY", "0")
     monkeypatch.setenv("CLAUDE_CODE_DISABLE_AUTO_MEMORY", "0")
     _make_team(tmp_path)
-    assert build_team_memory_prompt_section(
-        tmp_path, requester_agent_id="lead-1", task="x"
-    ) == ""
+    assert build_team_memory_prompt_section(tmp_path, requester_agent_id="lead-1", task="x") == ""
 
 
 def test_team_member_can_recall_other_member_entry(_team_mem_env: Path) -> None:
@@ -147,14 +159,19 @@ def test_team_member_can_recall_other_member_entry(_team_mem_env: Path) -> None:
     _make_team(_team_mem_env, members=("lead-1", "agent-2"))
     initialize_team_memory(_team_mem_env)
     from extensions.agents.team_memory import (
-        TeamMemoryConfig, TeamMemoryQuery, TeamMemoryService,
+        TeamMemoryConfig,
+        TeamMemoryQuery,
+        TeamMemoryService,
     )
+
     svc = TeamMemoryService(workspace_root=_team_mem_env, config=TeamMemoryConfig(enabled=True))
     svc.remember("shared fact", author_agent_id="lead-1", tags=("fact",))
     results = svc.recall(
         TeamMemoryQuery(
-            team_id=svc.team_id, query="shared fact",
-            requester_agent_id="agent-2", top_k=5,
+            team_id=svc.team_id,
+            query="shared fact",
+            requester_agent_id="agent-2",
+            top_k=5,
         )
     )
     assert len(results) == 1

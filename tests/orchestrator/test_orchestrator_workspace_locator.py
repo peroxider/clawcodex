@@ -126,7 +126,8 @@ class TestGetWorkspaceRoot(unittest.TestCase):
         explicit = self.home / "from-arg"
         explicit.mkdir()
         with patch.dict(
-            os.environ, {"CLAWCODEX_WORKSPACE_ROOT": "/from/env"},
+            os.environ,
+            {"CLAWCODEX_WORKSPACE_ROOT": "/from/env"},
         ):
             result = get_workspace_root(workspace_arg=str(explicit))
         # workspace_arg wins over env.
@@ -216,9 +217,7 @@ class TestGetWorkspaceRoot(unittest.TestCase):
         default_path = wsl.CLAWCODEX_BASE / "workspace"
         default_path.mkdir()
 
-        with patch.dict(
-            os.environ, {"CLAWCODEX_WORKSPACE_ROOT": str(env_path)}
-        ):
+        with patch.dict(os.environ, {"CLAWCODEX_WORKSPACE_ROOT": str(env_path)}):
             with patch("os.getcwd", return_value=str(cwd_path)):
                 result = get_workspace_root(
                     workspace_arg=str(arg_path),
@@ -271,7 +270,8 @@ class TestResolveForCli(unittest.TestCase):
         root, registry = resolve_for_cli(str(explicit), None)
         self.assertEqual(root, explicit)
         self.assertEqual(
-            registry, explicit / ".clawcodex_issue_registry.json",
+            registry,
+            explicit / ".clawcodex_issue_registry.json",
         )
 
 
@@ -307,7 +307,7 @@ class TestParseWorkspaceFromWorkflow(unittest.TestCase):
 
     def test_tilde_expanded(self) -> None:
         self.path.write_text(
-            "---\nworkspace:\n  root: \"~/my-ws\"\n---\nprompt",
+            '---\nworkspace:\n  root: "~/my-ws"\n---\nprompt',
             encoding="utf-8",
         )
         result = _parse_workspace_from_workflow(self.path)
@@ -331,7 +331,7 @@ class TestParseWorkspaceFromWorkflow(unittest.TestCase):
 
     def test_workspace_root_empty_returns_none(self) -> None:
         self.path.write_text(
-            "---\nworkspace:\n  root: \"\"\n---\nprompt",
+            '---\nworkspace:\n  root: ""\n---\nprompt',
             encoding="utf-8",
         )
         # Empty string is falsy → returns None.
@@ -387,7 +387,8 @@ class TestOrchestratorMetadata(unittest.TestCase):
             encoding="utf-8",
         )
         path = write_orchestrator_metadata(
-            str(self.home / "ws"), workflow_path=str(wf_path),
+            str(self.home / "ws"),
+            workflow_path=str(wf_path),
         )
         data = json.loads(path.read_text())
         self.assertEqual(data["project_slug"], "octo-hello")
@@ -397,7 +398,8 @@ class TestOrchestratorMetadata(unittest.TestCase):
         wf_path = self.home / "WORKFLOW.md"
         wf_path.write_text(": invalid [", encoding="utf-8")
         path = write_orchestrator_metadata(
-            str(self.home / "ws"), workflow_path=str(wf_path),
+            str(self.home / "ws"),
+            workflow_path=str(wf_path),
         )
         # No exception, and project_slug is non-empty.
         data = json.loads(path.read_text())
@@ -458,12 +460,15 @@ class TestFindLatestMetadata(unittest.TestCase):
 
     def test_returns_most_recently_modified(self) -> None:
         import time
+
         path_old = write_orchestrator_metadata(
-            str(self.home / "ws-old"), started_at=1.0,
+            str(self.home / "ws-old"),
+            started_at=1.0,
         )
         time.sleep(0.05)
         path_new = write_orchestrator_metadata(
-            str(self.home / "ws-new"), started_at=2.0,
+            str(self.home / "ws-new"),
+            started_at=2.0,
         )
         result = _find_latest_metadata()
         # The most recently modified is `path_new`.
@@ -592,7 +597,8 @@ class TestPrintWorkspaceInfo(unittest.TestCase):
 
     def test_with_workflow(self) -> None:
         result = print_workspace_info(
-            Path("/tmp/ws"), workflow_path="/path/to/WORKFLOW.md",
+            Path("/tmp/ws"),
+            workflow_path="/path/to/WORKFLOW.md",
         )
         self.assertIn("workspace: /tmp/ws", result)
         self.assertIn("workflow: /path/to/WORKFLOW.md", result)

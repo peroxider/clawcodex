@@ -52,9 +52,7 @@ class BriefSummaryBuilder:
         class name (``BriefSummaryBuilder.build``).
         """
         if not isinstance(snapshot, BriefSummarySnapshot):
-            raise BriefGenerationError(
-                "build() expects a BriefSummarySnapshot"
-            )
+            raise BriefGenerationError("build() expects a BriefSummarySnapshot")
         lines: list[str] = []
         # Headline: agent + session + tick number.
         headline = (

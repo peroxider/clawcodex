@@ -29,42 +29,42 @@ class _FakeGateway:
 
     async def receive(self, message):
         self.received.append(message)
-        return AckReceipt(message.message_id or 'd1', AckLayer.ENQUEUED, 'enqueued')
+        return AckReceipt(message.message_id or "d1", AckLayer.ENQUEUED, "enqueued")
 
     def reload_channel(self, name):
         self.reloaded.append(name)
-        return name != 'missing'
+        return name != "missing"
 
     async def health(self):
-        return {'running': True, 'channels': ['wechat'], 'peers': 0}
+        return {"running": True, "channels": ["wechat"], "peers": 0}
 
     async def send(self, message):
         """OutboundDispatcher stand-in: records OUTBOUND-driven sends."""
         self.sent.append(message)
         from clawcodex_ext.services.channels.results import ChannelSendResult
 
-        return ChannelSendResult.success(getattr(message, 'channel', 'wechat'))
+        return ChannelSendResult.success(getattr(message, "channel", "wechat"))
 
 
 @pytest.mark.asyncio
 async def test_ipc_register_and_heartbeat_ack(tmp_path) -> None:
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     try:
-        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='repl_main') as client:
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="repl_main") as client:
             resp = await client.register(
-                session_id='repl_main', origin='o1', capabilities=['outbound_text']
+                session_id="repl_main", origin="o1", capabilities=["outbound_text"]
             )
-            assert resp is not None and resp.ack_layer == 'accepted'
-            bound = gw.binding.get('o1')
+            assert resp is not None and resp.ack_layer == "accepted"
+            bound = gw.binding.get("o1")
             assert bound is not None
-            assert bound.target.session_id == 'repl_main'
+            assert bound.target.session_id == "repl_main"
             hb = await client.heartbeat()
-            assert hb is not None and hb.ack_layer == 'accepted'
+            assert hb is not None and hb.ack_layer == "accepted"
         await asyncio.sleep(0.05)  # let server process EOF
         assert server.connected_count == 0  # client closed → peer removed
-        assert gw.binding.get('o1').connection_state == 'offline'
+        assert gw.binding.get("o1").connection_state == "offline"
     finally:
         await server.close()
 
@@ -73,35 +73,35 @@ async def test_ipc_register_and_heartbeat_ack(tmp_path) -> None:
 async def test_ipc_heartbeat_after_unregister_does_not_crash_handler(tmp_path) -> None:
     """A stale in-connection session must not crash after the peer entry is removed."""
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     reader = None
     writer = None
     try:
-        reader, writer = await asyncio.open_unix_connection(str(tmp_path / 'gw.sock'))
+        reader, writer = await asyncio.open_unix_connection(str(tmp_path / "gw.sock"))
 
-        writer.write(GatewayFrame.register(session_id='orchestrator-1130', origin='o1').encode())
+        writer.write(GatewayFrame.register(session_id="orchestrator-1130", origin="o1").encode())
         await writer.drain()
         registered = GatewayFrame.decode(await reader.readline())
-        assert registered.ack_layer == 'accepted'
+        assert registered.ack_layer == "accepted"
 
         writer.write(
-            GatewayFrame(type=FrameType.UNREGISTER, session_id='orchestrator-1130').encode()
+            GatewayFrame(type=FrameType.UNREGISTER, session_id="orchestrator-1130").encode()
         )
         await writer.drain()
         unregistered = GatewayFrame.decode(await reader.readline())
-        assert unregistered.ack_layer == 'accepted'
+        assert unregistered.ack_layer == "accepted"
 
-        writer.write(GatewayFrame.heartbeat(session_id='orchestrator-1130').encode())
+        writer.write(GatewayFrame.heartbeat(session_id="orchestrator-1130").encode())
         await writer.drain()
         raw = await asyncio.wait_for(reader.readline(), timeout=1.0)
-        assert raw, 'server closed the connection instead of handling the stale session'
+        assert raw, "server closed the connection instead of handling the stale session"
         heartbeat = GatewayFrame.decode(raw)
-        assert heartbeat.ack_layer == 'accepted'
+        assert heartbeat.ack_layer == "accepted"
     finally:
         if writer is not None:
             writer.close()
-            with __import__('contextlib').suppress(ConnectionError, RuntimeError):
+            with __import__("contextlib").suppress(ConnectionError, RuntimeError):
                 await writer.wait_closed()
         await server.close()
 
@@ -110,46 +110,46 @@ async def test_ipc_heartbeat_after_unregister_does_not_crash_handler(tmp_path) -
 async def test_ipc_same_session_reconnect_keeps_replacement_online(tmp_path) -> None:
     """Closing an older connection must not remove a newer peer with the same session id."""
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     old_writer = None
     new_writer = None
     try:
-        old_reader, old_writer = await asyncio.open_unix_connection(str(tmp_path / 'gw.sock'))
+        old_reader, old_writer = await asyncio.open_unix_connection(str(tmp_path / "gw.sock"))
         old_writer.write(
-            GatewayFrame.register(session_id='orchestrator-1130', origin='o1').encode()
+            GatewayFrame.register(session_id="orchestrator-1130", origin="o1").encode()
         )
         await old_writer.drain()
         old_registered = GatewayFrame.decode(await old_reader.readline())
-        assert old_registered.ack_layer == 'accepted'
+        assert old_registered.ack_layer == "accepted"
 
-        new_reader, new_writer = await asyncio.open_unix_connection(str(tmp_path / 'gw.sock'))
+        new_reader, new_writer = await asyncio.open_unix_connection(str(tmp_path / "gw.sock"))
         new_writer.write(
-            GatewayFrame.register(session_id='orchestrator-1130', origin='o1').encode()
+            GatewayFrame.register(session_id="orchestrator-1130", origin="o1").encode()
         )
         await new_writer.drain()
         new_registered = GatewayFrame.decode(await new_reader.readline())
-        assert new_registered.ack_layer == 'accepted'
+        assert new_registered.ack_layer == "accepted"
 
         old_writer.close()
-        with __import__('contextlib').suppress(ConnectionError, RuntimeError):
+        with __import__("contextlib").suppress(ConnectionError, RuntimeError):
             await old_writer.wait_closed()
         await asyncio.sleep(0.05)
 
-        assert server.is_online('orchestrator-1130') is True
-        assert gw.binding.get('o1').connection_state == 'active'
+        assert server.is_online("orchestrator-1130") is True
+        assert gw.binding.get("o1").connection_state == "active"
 
-        new_writer.write(GatewayFrame.heartbeat(session_id='orchestrator-1130').encode())
+        new_writer.write(GatewayFrame.heartbeat(session_id="orchestrator-1130").encode())
         await new_writer.drain()
         raw = await asyncio.wait_for(new_reader.readline(), timeout=1.0)
-        assert raw, 'replacement connection was closed by stale session cleanup'
+        assert raw, "replacement connection was closed by stale session cleanup"
         heartbeat = GatewayFrame.decode(raw)
-        assert heartbeat.ack_layer == 'accepted'
+        assert heartbeat.ack_layer == "accepted"
     finally:
         for writer in (old_writer, new_writer):
             if writer is not None:
                 writer.close()
-                with __import__('contextlib').suppress(ConnectionError, RuntimeError):
+                with __import__("contextlib").suppress(ConnectionError, RuntimeError):
                     await writer.wait_closed()
         await server.close()
 
@@ -160,40 +160,40 @@ async def test_ipc_wechat_channel_binding_is_single_runtime_and_disconnects_prev
 ) -> None:
     """A WeChat channel can be bound to REPL or orchestrator, never both."""
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
-    repl = GatewayIpcClient(tmp_path / 'gw.sock', instance_id='repl-main')
-    orchestrator = GatewayIpcClient(tmp_path / 'gw.sock', instance_id='orchestrator-main')
+    repl = GatewayIpcClient(tmp_path / "gw.sock", instance_id="repl-main")
+    orchestrator = GatewayIpcClient(tmp_path / "gw.sock", instance_id="orchestrator-main")
     try:
         await repl.connect()
         await repl.register(
-            session_id='repl-main',
+            session_id="repl-main",
             origin=WECHAT_DIRECT_ALL_ORIGIN,
-            capabilities=['outbound_text'],
+            capabilities=["outbound_text"],
         )
-        assert gw.binding.get('wechat:direct:acct:user').target.session_id == 'repl-main'
+        assert gw.binding.get("wechat:direct:acct:user").target.session_id == "repl-main"
 
         await orchestrator.connect()
         await orchestrator.register(
-            session_id='orchestrator-main',
+            session_id="orchestrator-main",
             origin=WECHAT_DIRECT_ALL_ORIGIN,
-            capabilities=['outbound_text', 'orchestrator'],
+            capabilities=["outbound_text", "orchestrator"],
         )
         await asyncio.sleep(0.1)
 
-        entry = gw.binding.get('wechat:direct:acct:user')
+        entry = gw.binding.get("wechat:direct:acct:user")
         assert entry is not None
-        assert entry.target.session_id == 'orchestrator-main'
-        assert entry.target.host_type == 'orchestrator'
-        assert entry.connection_state == 'active'
-        assert server.is_online('repl-main') is False
-        assert server.is_online('orchestrator-main') is True
+        assert entry.target.session_id == "orchestrator-main"
+        assert entry.target.host_type == "orchestrator"
+        assert entry.connection_state == "active"
+        assert server.is_online("repl-main") is False
+        assert server.is_online("orchestrator-main") is True
 
         # The previous REPL closing later must not mark the new orchestrator
         # binding offline.
         await repl.close()
         await asyncio.sleep(0.05)
-        assert gw.binding.get('wechat:direct:acct:user').connection_state == 'active'
+        assert gw.binding.get("wechat:direct:acct:user").connection_state == "active"
     finally:
         await repl.close()
         await orchestrator.close()
@@ -216,11 +216,11 @@ async def test_ipc_resolve_wildcard_origin_uses_adapter_context_token(tmp_path) 
 
     class _Adapter:
         _config = _Cfg()
-        channel_id = 'wechat'
-        _account_id = 'acct@im.bot'
+        channel_id = "wechat"
+        _account_id = "acct@im.bot"
 
         def last_known_sender(self):
-            return 'user@im.wechat'
+            return "user@im.wechat"
 
     class _Registry:
         def all_adapters(self):
@@ -230,8 +230,8 @@ async def test_ipc_resolve_wildcard_origin_uses_adapter_context_token(tmp_path) 
         registry = _Registry()
 
     channel, target = _resolve_origin(WECHAT_DIRECT_ALL_ORIGIN, _Gateway())
-    assert channel == 'wechat'
-    assert target == 'user@im.wechat'
+    assert channel == "wechat"
+    assert target == "user@im.wechat"
 
 
 @pytest.mark.asyncio
@@ -244,10 +244,10 @@ async def test_ipc_resolve_feishu_wildcard_origin_uses_adapter_last_sender(tmp_p
 
     class _Adapter:
         _config = _Cfg()
-        channel_id = 'feishu'
+        channel_id = "feishu"
 
         def last_known_sender(self):
-            return 'oc_chat'
+            return "oc_chat"
 
     class _Registry:
         def all_adapters(self):
@@ -257,8 +257,8 @@ async def test_ipc_resolve_feishu_wildcard_origin_uses_adapter_last_sender(tmp_p
         registry = _Registry()
 
     channel, target = _resolve_origin(FEISHU_DM_ALL_ORIGIN, _Gateway())
-    assert channel == 'feishu'
-    assert target == 'oc_chat'
+    assert channel == "feishu"
+    assert target == "oc_chat"
 
 
 @pytest.mark.asyncio
@@ -271,10 +271,10 @@ async def test_ipc_resolve_generic_origin_prefers_known_im_adapter_sender(tmp_pa
 
     class _Adapter:
         _config = _Cfg()
-        channel_id = 'feishu'
+        channel_id = "feishu"
 
         def last_known_sender(self):
-            return 'oc_chat'
+            return "oc_chat"
 
     class _Registry:
         def all_adapters(self):
@@ -284,8 +284,8 @@ async def test_ipc_resolve_generic_origin_prefers_known_im_adapter_sender(tmp_pa
         registry = _Registry()
 
     channel, target = _resolve_origin(IM_DIRECT_ALL_ORIGIN, _Gateway())
-    assert channel == 'feishu'
-    assert target == 'oc_chat'
+    assert channel == "feishu"
+    assert target == "oc_chat"
 
 
 @pytest.mark.asyncio
@@ -333,38 +333,38 @@ async def test_ipc_wildcard_outbound_delivers_via_real_adapter_context_token(tmp
             import urllib.parse as _up
 
             path = _up.urlparse(url).path
-            payload = _json.loads(body.decode('utf-8')) if body else {}
-            if path in {'/sendmessage', '/ilink/bot/sendmessage'}:
-                msg = payload.get('msg') if isinstance(payload.get('msg'), dict) else payload
+            payload = _json.loads(body.decode("utf-8")) if body else {}
+            if path in {"/sendmessage", "/ilink/bot/sendmessage"}:
+                msg = payload.get("msg") if isinstance(payload.get("msg"), dict) else payload
                 self.sent.append(msg)
-                return TransportResponse(200, _json.dumps({'message_id': 'srv_1'}).encode(), {})
-            return TransportResponse(200, b'{}', {})
+                return TransportResponse(200, _json.dumps({"message_id": "srv_1"}).encode(), {})
+            return TransportResponse(200, b"{}", {})
 
-    state_dir = tmp_path / 'state'
+    state_dir = tmp_path / "state"
     store = ReliabilityStore(state_dir, ReliabilityConfig())
-    store.set_context_token('default', 'operator@im.wechat', 'ctx_tok')
+    store.set_context_token("default", "operator@im.wechat", "ctx_tok")
 
     cfg = ChannelConfig(
         type=ChannelType.WECHAT,
-        webhook_url='https://ilinkai.weixin.qq.com/dummy',
-        name='wechat',
+        webhook_url="https://ilinkai.weixin.qq.com/dummy",
+        name="wechat",
         enabled=True,
-        extra={'base_url': 'https://ilinkai.weixin.qq.com', 'account_id': 'default'},
+        extra={"base_url": "https://ilinkai.weixin.qq.com", "account_id": "default"},
     )
     transport = _FakeTransport()
     adapter = WeChatIlinkChannelAdapter(
         cfg,
-        auth_store=WeChatIlinkAuthStore(state_dir / 'auth.json'),
+        auth_store=WeChatIlinkAuthStore(state_dir / "auth.json"),
         store=store,
         transport=transport,
         max_consecutive_failures=10,
     )
     adapter._auth_store.save(
         WeChatAuthRecord(
-            bot_token='bot_tok',
-            account_id='default',
-            base_url='https://ilinkai.weixin.qq.com',
-            user_id='bot_user',
+            bot_token="bot_tok",
+            account_id="default",
+            base_url="https://ilinkai.weixin.qq.com",
+            user_id="bot_user",
         )
     )
     adapter.load_credentials()
@@ -375,32 +375,32 @@ async def test_ipc_wildcard_outbound_delivers_via_real_adapter_context_token(tmp
     # No inbound in this gateway lifetime → in-memory map empty. The
     # wildcard must still resolve via the persisted context token.
     channel, target = _resolve_origin(WECHAT_DIRECT_ALL_ORIGIN, gw)
-    assert channel == 'wechat'
-    assert target == 'operator@im.wechat'
+    assert channel == "wechat"
+    assert target == "operator@im.wechat"
 
     # And a real OUTBOUND dispatch delivers to that target.
     from clawcodex_ext.services.im_gateway.models import OutboundMessage
 
-    await gw.send(OutboundMessage(text='hi', channel='wechat', target=target, markdown=False))
-    assert transport.sent, 'WeChat sendmessage was not called'
-    assert transport.sent[0]['to_user_id'] == 'operator@im.wechat'
+    await gw.send(OutboundMessage(text="hi", channel="wechat", target=target, markdown=False))
+    assert transport.sent, "WeChat sendmessage was not called"
+    assert transport.sent[0]["to_user_id"] == "operator@im.wechat"
 
 
 @pytest.mark.asyncio
 async def test_ipc_deliver_returns_enqueued_ack(tmp_path) -> None:
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     try:
-        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='repl_main') as client:
-            await client.register(session_id='repl_main', origin='o1')
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="repl_main") as client:
+            await client.register(session_id="repl_main", origin="o1")
             resp = await client.deliver(
-                delivery_id='d1', session_id='repl_main', origin='o1', text='hello'
+                delivery_id="d1", session_id="repl_main", origin="o1", text="hello"
             )
             assert resp is not None
-            assert resp.ack_layer == 'enqueued'
+            assert resp.ack_layer == "enqueued"
         assert len(gw.received) == 1
-        assert gw.received[0].text == 'hello'
+        assert gw.received[0].text == "hello"
     finally:
         await server.close()
 
@@ -408,14 +408,14 @@ async def test_ipc_deliver_returns_enqueued_ack(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_ipc_deliver_dedupes_by_delivery_id(tmp_path) -> None:
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     try:
-        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='repl_main') as client:
-            await client.register(session_id='repl_main', origin='o')
-            r1 = await client.deliver(delivery_id='d1', session_id='s', origin='o', text='a')
-            r2 = await client.deliver(delivery_id='d1', session_id='s', origin='o', text='a')
-            assert r1 is not None and r1.ack_layer == 'enqueued'
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="repl_main") as client:
+            await client.register(session_id="repl_main", origin="o")
+            r1 = await client.deliver(delivery_id="d1", session_id="s", origin="o", text="a")
+            r2 = await client.deliver(delivery_id="d1", session_id="s", origin="o", text="a")
+            assert r1 is not None and r1.ack_layer == "enqueued"
             assert r2 is None  # deduped client-side
         assert len(gw.received) == 1
     finally:
@@ -425,14 +425,14 @@ async def test_ipc_deliver_dedupes_by_delivery_id(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_ipc_deliver_requires_register(tmp_path) -> None:
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     try:
-        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='repl_main') as client:
-            resp = await client.deliver(delivery_id='d1', session_id='s', origin='o', text='a')
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="repl_main") as client:
+            resp = await client.deliver(delivery_id="d1", session_id="s", origin="o", text="a")
             assert resp is not None
-            assert resp.type.value == 'nack'
-            assert 'not registered' in (resp.reason or '')
+            assert resp.type.value == "nack"
+            assert "not registered" in (resp.reason or "")
         assert gw.received == []
     finally:
         await server.close()
@@ -440,31 +440,31 @@ async def test_ipc_deliver_requires_register(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_ipc_client_allows_retry_when_no_ack(monkeypatch, tmp_path) -> None:
-    client = GatewayIpcClient(tmp_path / 'gw.sock', instance_id='repl_main')
+    client = GatewayIpcClient(tmp_path / "gw.sock", instance_id="repl_main")
     sent: list[GatewayFrame] = []
 
     async def _no_ack(frame: GatewayFrame) -> GatewayFrame | None:
         sent.append(frame)
         return None
 
-    monkeypatch.setattr(client, '_send', _no_ack)
-    assert await client.deliver(delivery_id='d1', session_id='s', origin='o', text='a') is None
-    assert await client.deliver(delivery_id='d1', session_id='s', origin='o', text='a') is None
+    monkeypatch.setattr(client, "_send", _no_ack)
+    assert await client.deliver(delivery_id="d1", session_id="s", origin="o", text="a") is None
+    assert await client.deliver(delivery_id="d1", session_id="s", origin="o", text="a") is None
     assert len(sent) == 2
 
 
 @pytest.mark.asyncio
 async def test_ipc_control_reload_live(tmp_path) -> None:
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     try:
-        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='ctrl') as client:
-            resp = await client.reload_channel('wechat')
-            assert resp is not None and resp.ack_layer == 'accepted'
-            missing = await client.reload_channel('missing')
-            assert missing is not None and missing.ack_layer == 'nack'
-        assert gw.reloaded == ['wechat', 'missing']
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="ctrl") as client:
+            resp = await client.reload_channel("wechat")
+            assert resp is not None and resp.ack_layer == "accepted"
+            missing = await client.reload_channel("missing")
+            assert missing is not None and missing.ack_layer == "nack"
+        assert gw.reloaded == ["wechat", "missing"]
     finally:
         await server.close()
 
@@ -472,13 +472,13 @@ async def test_ipc_control_reload_live(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_ipc_control_status(tmp_path) -> None:
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     try:
-        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='ctrl') as client:
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="ctrl") as client:
             health = await client.status()
             assert health is not None
-            assert health['channels'] == ['wechat']
+            assert health["channels"] == ["wechat"]
     finally:
         await server.close()
 
@@ -488,41 +488,41 @@ async def test_ipc_status_and_unbind_report_and_remove_wechat_conversation(
     tmp_path,
 ) -> None:
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
-    repl = GatewayIpcClient(tmp_path / 'gw.sock', instance_id='repl-main')
+    repl = GatewayIpcClient(tmp_path / "gw.sock", instance_id="repl-main")
     try:
         await repl.connect()
         await repl.register(
-            session_id='repl-main',
+            session_id="repl-main",
             origin=WECHAT_DIRECT_ALL_ORIGIN,
-            capabilities=['outbound_text'],
+            capabilities=["outbound_text"],
         )
-        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='ctrl') as ctrl:
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="ctrl") as ctrl:
             health = await ctrl.status()
             assert health is not None
-            assert health['bindings'] == [
+            assert health["bindings"] == [
                 {
-                    'origin': WECHAT_DIRECT_ALL_ORIGIN,
-                    'session_id': 'repl-main',
-                    'host_type': 'repl',
-                    'connection_state': 'active',
+                    "origin": WECHAT_DIRECT_ALL_ORIGIN,
+                    "session_id": "repl-main",
+                    "host_type": "repl",
+                    "connection_state": "active",
                 }
             ]
-            assert health['peers'] == [
+            assert health["peers"] == [
                 {
-                    'session_id': 'repl-main',
-                    'origin': WECHAT_DIRECT_ALL_ORIGIN,
-                    'host_type': 'repl',
-                    'online': True,
+                    "session_id": "repl-main",
+                    "origin": WECHAT_DIRECT_ALL_ORIGIN,
+                    "host_type": "repl",
+                    "online": True,
                 }
             ]
 
             resp = await ctrl.unbind_origin(WECHAT_DIRECT_ALL_ORIGIN)
-            assert resp is not None and resp.ack_layer == 'accepted'
+            assert resp is not None and resp.ack_layer == "accepted"
         await asyncio.sleep(0.1)
-        assert gw.binding.get('wechat:direct:acct:user') is None
-        assert server.is_online('repl-main') is False
+        assert gw.binding.get("wechat:direct:acct:user") is None
+        assert server.is_online("repl-main") is False
     finally:
         await repl.close()
         await server.close()
@@ -532,14 +532,14 @@ async def test_ipc_status_and_unbind_report_and_remove_wechat_conversation(
 async def test_ipc_peer_online_after_register_then_offline(tmp_path) -> None:
     clock = [1000.0]
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw, clock=lambda: clock[0])
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw, clock=lambda: clock[0])
     await server.start()
     try:
-        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='repl_main') as client:
-            await client.register(session_id='repl_main', origin='o1')
-            assert server.is_online('repl_main') is True
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="repl_main") as client:
+            await client.register(session_id="repl_main", origin="o1")
+            assert server.is_online("repl_main") is True
             clock[0] = 1000.0 + 120  # beyond heartbeat timeout
-            assert server.is_online('repl_main') is False
+            assert server.is_online("repl_main") is False
     finally:
         await server.close()
 
@@ -548,34 +548,34 @@ async def test_ipc_peer_online_after_register_then_offline(tmp_path) -> None:
 async def test_ipc_server_pushes_deliver_to_registered_client(tmp_path) -> None:
     """server.push_deliver writes a DELIVER frame the client receives via on_deliver."""
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     delivered: list[GatewayFrame] = []
     try:
         async with GatewayIpcClient(
-            tmp_path / 'gw.sock',
-            instance_id='repl_main',
+            tmp_path / "gw.sock",
+            instance_id="repl_main",
             on_deliver=lambda f: asyncio.ensure_future(_append(f)),
         ) as client:
 
             async def _append(f):
                 delivered.append(f)
 
-            await client.register(session_id='repl_main', origin='wechat:direct:acct:user_zhao')
+            await client.register(session_id="repl_main", origin="wechat:direct:acct:user_zhao")
             # server pushes an inbound message to that origin
             await server.push_deliver(
-                origin='wechat:direct:acct:user_zhao',
-                delivery_id='d1',
-                text='hello from wechat',
-                semantic='newPrompt',
-                context_token='ctx_abc',
+                origin="wechat:direct:acct:user_zhao",
+                delivery_id="d1",
+                text="hello from wechat",
+                semantic="newPrompt",
+                context_token="ctx_abc",
             )
             await asyncio.sleep(0.1)  # let the read loop dispatch
         assert len(delivered) == 1
-        assert delivered[0].type.value == 'deliver'
-        assert delivered[0].text == 'hello from wechat'
-        assert delivered[0].origin == 'wechat:direct:acct:user_zhao'
-        assert delivered[0].context_token == 'ctx_abc'
+        assert delivered[0].type.value == "deliver"
+        assert delivered[0].text == "hello from wechat"
+        assert delivered[0].origin == "wechat:direct:acct:user_zhao"
+        assert delivered[0].context_token == "ctx_abc"
     finally:
         await server.close()
 
@@ -583,11 +583,11 @@ async def test_ipc_server_pushes_deliver_to_registered_client(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_ipc_push_deliver_noop_when_origin_not_registered(tmp_path) -> None:
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     try:
         # no client registered for this origin — push must not raise
-        await server.push_deliver(origin='wechat:direct:acct:nobody', delivery_id='d1', text='x')
+        await server.push_deliver(origin="wechat:direct:acct:nobody", delivery_id="d1", text="x")
     finally:
         await server.close()
 
@@ -596,18 +596,18 @@ async def test_ipc_push_deliver_noop_when_origin_not_registered(tmp_path) -> Non
 async def test_ipc_client_send_outbound_calls_gateway_send(tmp_path) -> None:
     """OUTBOUND frame (client→server) routes to gateway.send → WeChat."""
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     try:
-        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='repl_main') as client:
-            await client.register(session_id='repl_main', origin='wechat:direct:acct:user_zhao')
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="repl_main") as client:
+            await client.register(session_id="repl_main", origin="wechat:direct:acct:user_zhao")
             await client.send_outbound(
-                origin='wechat:direct:acct:user_zhao', text='reply from agent'
+                origin="wechat:direct:acct:user_zhao", text="reply from agent"
             )
         await asyncio.sleep(0.05)
         assert len(gw.sent) == 1
-        assert gw.sent[0].text == 'reply from agent'
-        assert gw.sent[0].channel == 'wechat'
+        assert gw.sent[0].text == "reply from agent"
+        assert gw.sent[0].channel == "wechat"
     finally:
         await server.close()
 
@@ -615,21 +615,21 @@ async def test_ipc_client_send_outbound_calls_gateway_send(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_ipc_client_send_outbound_accepts_metadata(tmp_path) -> None:
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     try:
-        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='repl_main') as client:
-            await client.register(session_id='repl_main', origin='wechat:direct:acct:user_zhao')
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="repl_main") as client:
+            await client.register(session_id="repl_main", origin="wechat:direct:acct:user_zhao")
             await client.send_outbound(
-                origin='wechat:direct:acct:user_zhao',
-                text='permission prompt',
-                metadata={'intent': 'permission_approval'},
-                semantic_tags=['approval'],
+                origin="wechat:direct:acct:user_zhao",
+                text="permission prompt",
+                metadata={"intent": "permission_approval"},
+                semantic_tags=["approval"],
             )
         await asyncio.sleep(0.05)
         assert len(gw.sent) == 1
-        assert gw.sent[0].metadata == {'intent': 'permission_approval'}
-        assert gw.sent[0].semantic_tags == ['approval']
+        assert gw.sent[0].metadata == {"intent": "permission_approval"}
+        assert gw.sent[0].semantic_tags == ["approval"]
     finally:
         await server.close()
 
@@ -637,21 +637,21 @@ async def test_ipc_client_send_outbound_accepts_metadata(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_ipc_client_send_outbound_preserves_context_token(tmp_path) -> None:
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     try:
-        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='repl_main') as client:
-            await client.register(session_id='repl_main', origin='feishu:dm:cli_app:ou_user')
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="repl_main") as client:
+            await client.register(session_id="repl_main", origin="feishu:dm:cli_app:ou_user")
             await client.send_outbound(
-                origin='feishu:dm:cli_app:ou_user',
-                text='reply from agent',
-                context_token='oc_chat',
+                origin="feishu:dm:cli_app:ou_user",
+                text="reply from agent",
+                context_token="oc_chat",
             )
         await asyncio.sleep(0.05)
         assert len(gw.sent) == 1
-        assert gw.sent[0].channel == 'feishu'
-        assert gw.sent[0].target == 'ou_user'
-        assert gw.sent[0].context_token == 'oc_chat'
+        assert gw.sent[0].channel == "feishu"
+        assert gw.sent[0].target == "ou_user"
+        assert gw.sent[0].context_token == "oc_chat"
     finally:
         await server.close()
 
@@ -668,25 +668,25 @@ async def test_ipc_client_send_outbound_returns_nack_for_wechat_rate_limit(
     async def _rate_limited_send(message):
         gw.sent.append(message)
         return ChannelSendResult.retryable_error(
-            'wechat',
-            message='rate limited',
+            "wechat",
+            message="rate limited",
             category=ErrorCategory.RATE_LIMIT,
-            raw={'retry_after_seconds': 600},
+            raw={"retry_after_seconds": 600},
         )
 
     gw.send = _rate_limited_send
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     try:
-        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='repl_main') as client:
-            await client.register(session_id='repl_main', origin='wechat:direct:acct:user_zhao')
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="repl_main") as client:
+            await client.register(session_id="repl_main", origin="wechat:direct:acct:user_zhao")
             response = await client.send_outbound(
-                origin='wechat:direct:acct:user_zhao', text='reply from agent'
+                origin="wechat:direct:acct:user_zhao", text="reply from agent"
             )
 
         assert response is not None
         assert response.type is FrameType.NACK
-        assert 'rate limited' in (response.reason or '')
+        assert "rate limited" in (response.reason or "")
         assert len(gw.sent) == 1
     finally:
         await server.close()
@@ -696,15 +696,15 @@ async def test_ipc_client_send_outbound_returns_nack_for_wechat_rate_limit(
 async def test_ipc_client_send_outbound_returns_nack_for_unresolvable_origin(tmp_path) -> None:
     """OUTBOUND NACKs are observable by the client."""
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     try:
-        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='orch') as client:
-            response = await client.send_outbound(origin='slack:dm:T123:U456', text='reply')
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="orch") as client:
+            response = await client.send_outbound(origin="slack:dm:T123:U456", text="reply")
 
         assert response is not None
         assert response.type is FrameType.NACK
-        assert 'unresolvable origin' in (response.reason or '')
+        assert "unresolvable origin" in (response.reason or "")
         assert gw.sent == []
     finally:
         await server.close()
@@ -720,11 +720,11 @@ async def test_ipc_client_send_returns_none_on_broken_pipe(tmp_path) -> None:
     reconnect gracefully without a traceback.
     """
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     await server.start()
     try:
-        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='orch') as client:
-            await client.register(session_id='orch', origin='wechat:direct:*:*')
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="orch") as client:
+            await client.register(session_id="orch", origin="wechat:direct:*:*")
             # Simulate gateway gone: close the server socket so the client's
             # writer.drain() raises BrokenPipeError on the next send.
             await server.close()
@@ -753,28 +753,28 @@ async def test_handle_outbound_logs_warning_when_send_exceeds_client_ack_timeout
         gw.sent.append(message)
         from clawcodex_ext.services.channels.results import ChannelSendResult
 
-        return ChannelSendResult.success(getattr(message, 'channel', 'wechat'))
+        return ChannelSendResult.success(getattr(message, "channel", "wechat"))
 
     gw.send = _slow_send
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
     # Drive send_elapsed past the client ACK timeout via a fake monotonic clock:
     # first call (send_started) returns 100.0, second (elapsed) returns
     # 100.0 + timeout + 1. The actual gateway.send is instantaneous.
-    ticks = {'n': 0}
+    ticks = {"n": 0}
 
     def _fake_monotonic() -> float:
-        ticks['n'] += 1
-        if ticks['n'] == 1:
+        ticks["n"] += 1
+        if ticks["n"] == 1:
             return 100.0
         return 100.0 + IPC_CLIENT_ACK_TIMEOUT_SECONDS + 1.0
 
-    monkeypatch.setattr(ipc_server_mod.time, 'monotonic', _fake_monotonic)
-    frame = GatewayFrame.outbound(origin='wechat:direct:acct:user_zhao', text='slow reply')
-    with caplog.at_level(logging.WARNING, logger='clawcodex_ext.services.im_gateway.ipc_server'):
+    monkeypatch.setattr(ipc_server_mod.time, "monotonic", _fake_monotonic)
+    frame = GatewayFrame.outbound(origin="wechat:direct:acct:user_zhao", text="slow reply")
+    with caplog.at_level(logging.WARNING, logger="clawcodex_ext.services.im_gateway.ipc_server"):
         await server._handle_outbound(frame)
     assert len(gw.sent) == 1
     assert any(
-        'OUTBOUND send slow' in rec.message and 'client ACK timeout' in rec.message
+        "OUTBOUND send slow" in rec.message and "client ACK timeout" in rec.message
         for rec in caplog.records
     )
 
@@ -785,10 +785,10 @@ async def test_handle_outbound_logs_info_when_send_within_client_ack_timeout(
 ) -> None:
     """A fast gateway.send logs at INFO (the normal path), not WARNING."""
     gw = _FakeGateway()
-    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
-    frame = GatewayFrame.outbound(origin='wechat:direct:acct:user_zhao', text='fast reply')
-    with caplog.at_level(logging.INFO, logger='clawcodex_ext.services.im_gateway.ipc_server'):
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
+    frame = GatewayFrame.outbound(origin="wechat:direct:acct:user_zhao", text="fast reply")
+    with caplog.at_level(logging.INFO, logger="clawcodex_ext.services.im_gateway.ipc_server"):
         await server._handle_outbound(frame)
     assert len(gw.sent) == 1
-    assert any('OUTBOUND → send' in rec.message for rec in caplog.records)
-    assert not any('OUTBOUND send slow' in rec.message for rec in caplog.records)
+    assert any("OUTBOUND → send" in rec.message for rec in caplog.records)
+    assert not any("OUTBOUND send slow" in rec.message for rec in caplog.records)

@@ -66,7 +66,9 @@ def evaluate_cases(cases: list[EvalCase]) -> dict[str, Any]:
         texts = [_suggestion_text(item) for item in suggestions]
         top1_match = bool(suggestions and _matches(texts[0], case.expected_terms))
         top3_match = any(_matches(text, case.expected_terms) for text in texts[:3])
-        no_suggestion_ok = (not case.should_suggest and not result.generated) or (case.should_suggest and result.generated)
+        no_suggestion_ok = (not case.should_suggest and not result.generated) or (
+            case.should_suggest and result.generated
+        )
         rows.append(
             {
                 "case_id": case.case_id,
@@ -101,7 +103,9 @@ def _rate(rows: list[dict[str, Any]], key: str, total: int) -> float:
 
 
 def _suggestion_text(suggestion: Any) -> str:
-    return " ".join([suggestion.title, suggestion.prompt, suggestion.reason, " ".join(suggestion.refs())]).lower()
+    return " ".join(
+        [suggestion.title, suggestion.prompt, suggestion.reason, " ".join(suggestion.refs())]
+    ).lower()
 
 
 def _matches(text: str, terms: list[str]) -> bool:

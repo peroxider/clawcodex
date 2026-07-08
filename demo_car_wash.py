@@ -15,6 +15,7 @@ import tempfile
 
 # ── 启用逻辑看板 ──
 from clawcodex_ext.feature_gate import get_registry
+
 get_registry()._overrides["logical_kanban"] = True
 
 from src.tool_system.context import ToolContext
@@ -30,15 +31,15 @@ def print_list(ctx: ToolContext, label: str) -> None:
     tasks = TaskListTool.call({}, ctx).output.get("tasks", [])
     print(f"  【{label}】")
     print(f"  {'ID':<20} {'Status':<14} {'derived':<14} {'Subject':<24} {'Notes'}")
-    print(f"  {'-'*20} {'-'*14} {'-'*14} {'-'*24} {'-'*30}")
+    print(f"  {'-' * 20} {'-' * 14} {'-' * 14} {'-' * 24} {'-' * 30}")
     for t in sorted(tasks, key=lambda x: x.get("id", "")):
         lkb = t.get("lkb") or {}
         den = lkb.get("latestDenialReason") or {}
         msg = den.get("humanMessage", "")[:28] if den else ""
         print(
-            f"  {t['id']:<20} {t.get('status','?'):<14}"
-            f" {lkb.get('derivedStatus','?'):<14}"
-            f" {t.get('subject',''):<24} {msg}"
+            f"  {t['id']:<20} {t.get('status', '?'):<14}"
+            f" {lkb.get('derivedStatus', '?'):<14}"
+            f" {t.get('subject', ''):<24} {msg}"
         )
     print()
 
@@ -47,24 +48,21 @@ def print_action(ctx: ToolContext, label: str, result) -> None:
     print(f"  ▶ {label}")
     if result.is_error:
         lkb = result.output.get("lkb") or {}
-        msg = (
-            lkb.get("humanMessage")
-            or result.output.get("reason", {}).get("message", "")
-        )
+        msg = lkb.get("humanMessage") or result.output.get("reason", {}).get("message", "")
         repairs = lkb.get("repairSuggestions") or []
         print(f"    ❌ 拒绝 → {msg}")
         for r in repairs:
             desc = r.get("description", "")
-            print(f"       修复: [{r.get('action','?')}] {desc}")
+            print(f"       修复: [{r.get('action', '?')}] {desc}")
     else:
         print(f"    ✅ 通过")
     print()
 
 
 def create(subject: str, ctx: ToolContext) -> str:
-    return TaskCreateTool.call(
-        {"subject": subject, "description": subject}, ctx
-    ).output["task"]["id"]
+    return TaskCreateTool.call({"subject": subject, "description": subject}, ctx).output["task"][
+        "id"
+    ]
 
 
 # ======================================================================

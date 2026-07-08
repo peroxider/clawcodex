@@ -160,9 +160,7 @@ class BgSessionManager:
             self._registry.scan()
             sess = self._registry.get(bg_session_id)
         if sess is None:
-            raise BgSessionNotFoundError(
-                f"BG session {bg_session_id!r} not found"
-            )
+            raise BgSessionNotFoundError(f"BG session {bg_session_id!r} not found")
         # 实时健康校正
         h = assess(sess, stale_after_seconds=self._config.stale_after_seconds)
         if h.status != sess.status:
@@ -194,9 +192,7 @@ class BgSessionManager:
                 if allow_cross_workspace is not None
                 else self._config.allow_cross_workspace
             )
-            if not allow and not _path_same_workspace(
-                sess.workspace_root, current_workspace
-            ):
+            if not allow and not _path_same_workspace(sess.workspace_root, current_workspace):
                 raise BgSessionPermissionError(
                     f"BG session {bg_session_id!r} belongs to workspace "
                     f"{sess.workspace_root}; attach from {current_workspace} "
@@ -234,9 +230,7 @@ class BgSessionManager:
         # 1. runtime_tasks 协作取消（若有 task_id）
         if sess.task_id is not None and self._runtime_tasks is not None:
             try:
-                stopped_ok = _try_task_stop(
-                    self._runtime_tasks, sess.task_id
-                )
+                stopped_ok = _try_task_stop(self._runtime_tasks, sess.task_id)
             except Exception as exc:
                 logger.debug("TaskStop for %s failed: %s", bg_session_id, exc)
                 error = f"TaskStop: {exc}"
@@ -273,9 +267,7 @@ class BgSessionManager:
     # cleanup
     # ------------------------------------------------------------------
 
-    def cleanup(
-        self, *, include_failed: bool = False
-    ) -> list[BgSession]:
+    def cleanup(self, *, include_failed: bool = False) -> list[BgSession]:
         """清理终态会话记录。
 
         * ``completed`` 按 ``cleanup_completed_after_seconds`` 年龄清理；
@@ -289,7 +281,11 @@ class BgSessionManager:
         removed: list[BgSession] = []
         for sess in self._registry.list():
             age = _age_seconds(sess.completed_at)
-            if sess.status == "completed" and age is not None and age > self._config.cleanup_completed_after_seconds:
+            if (
+                sess.status == "completed"
+                and age is not None
+                and age > self._config.cleanup_completed_after_seconds
+            ):
                 if self._registry.remove(sess.id):
                     removed.append(sess)
             elif sess.status == "orphaned":
@@ -343,9 +339,7 @@ def _read_tail(path: Path | None, *, max_lines: int = 100) -> str:
             lines = lines[-max_lines:]
         return "".join(lines)
     except OSError as exc:
-        raise BgSessionAttachError(
-            f"Cannot read transcript {path}: {exc}"
-        ) from exc
+        raise BgSessionAttachError(f"Cannot read transcript {path}: {exc}") from exc
 
 
 def _resume_hint(session_id: str) -> str:

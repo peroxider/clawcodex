@@ -45,7 +45,9 @@ class TestFacadeImports:
         assert reg1 is not reg2  # reset creates a new instance
 
     def test_feature_flag_creation(self):
-        flag = FeatureFlag(name="test", default=True, deps=["a"], mutex_with=["b"], description="desc")
+        flag = FeatureFlag(
+            name="test", default=True, deps=["a"], mutex_with=["b"], description="desc"
+        )
         assert flag.name == "test"
         assert flag.default is True
         assert flag.deps == ["a"]
@@ -140,11 +142,13 @@ class TestFacadeFunctionality:
 
         # Verify via a fresh ConfigStore that the file was written
         from src.services.feature_gate import ConfigStore
+
         store = ConfigStore(config_dir=reg._config_store.config_dir)
         assert store.get("persist") is True
 
     def test_cli_add_args(self):
         import argparse
+
         parser = argparse.ArgumentParser()
         add_feature_gate_args(parser)
         args = parser.parse_args(["--enable", "a", "b"])
@@ -152,6 +156,7 @@ class TestFacadeFunctionality:
 
     def test_cli_apply_args(self):
         import argparse
+
         reg = get_registry()
         reg.register(FeatureFlag(name="cli_feat", default=False))
         parser = argparse.ArgumentParser()

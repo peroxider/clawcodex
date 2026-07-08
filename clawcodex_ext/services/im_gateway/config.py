@@ -29,11 +29,11 @@ from clawcodex_ext.services.channels.models import ChannelConfig, ChannelType
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_STATE_DIR = '~/.clawcodex/gateway'
-DEFAULT_CHANNELS_YAML = '~/.clawcodex/gateway/channels.yaml'
+DEFAULT_STATE_DIR = "~/.clawcodex/gateway"
+DEFAULT_CHANNELS_YAML = "~/.clawcodex/gateway/channels.yaml"
 # Pre-rename state dir (<= 2026-06). Kept so :func:`migrate_legacy_state_dir`
 # can move an existing install forward the first time the new path is used.
-LEGACY_STATE_DIR = '~/.clawcodex/im-gateway'
+LEGACY_STATE_DIR = "~/.clawcodex/im-gateway"
 
 
 def migrate_legacy_state_dir(target: str | Path | None = None) -> Path:
@@ -62,7 +62,7 @@ def migrate_legacy_state_dir(target: str | Path | None = None) -> Path:
         # Cross-device link or permission quirk — fall back to a copy.
         shutil.copytree(legacy, new)
         shutil.rmtree(legacy, ignore_errors=True)
-    logger.info('migrated gateway state dir %s -> %s', legacy, new)
+    logger.info("migrated gateway state dir %s -> %s", legacy, new)
     return new
 
 
@@ -73,7 +73,7 @@ class ReliabilityConfig:
     retry_max_seconds: float = 60.0
     inbound_dedupe_ttl_seconds: int = 600
     storm_window_seconds: int = 60
-    secret_encryption_env: str = 'CLAWCODEX_IM_SECRET'
+    secret_encryption_env: str = "CLAWCODEX_IM_SECRET"
     markdown_fallback: bool = True
     long_message_threshold_chunks: int = 4
     deferred_outbox_limit: int = 500
@@ -94,27 +94,27 @@ class ReliabilityConfig:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            'outbox_max_attempts': self.outbox_max_attempts,
-            'retry_base_seconds': self.retry_base_seconds,
-            'retry_max_seconds': self.retry_max_seconds,
-            'inbound_dedupe_ttl_seconds': self.inbound_dedupe_ttl_seconds,
-            'storm_window_seconds': self.storm_window_seconds,
-            'secret_encryption_env': self.secret_encryption_env,
-            'markdown_fallback': self.markdown_fallback,
-            'long_message_threshold_chunks': self.long_message_threshold_chunks,
-            'deferred_outbox_limit': self.deferred_outbox_limit,
-            'retention_enabled': self.retention_enabled,
-            'retention_cron_interval_seconds': self.retention_cron_interval_seconds,
-            'retention_processed_inbound_ttl_seconds': self.retention_processed_inbound_ttl_seconds,
-            'retention_processed_inbound_max_entries': self.retention_processed_inbound_max_entries,
-            'retention_outbox_ttl_seconds': self.retention_outbox_ttl_seconds,
-            'retention_outbox_max_entries': self.retention_outbox_max_entries,
-            'retention_unsupported_inbound_ttl_seconds': self.retention_unsupported_inbound_ttl_seconds,
-            'retention_unsupported_inbound_max_entries': self.retention_unsupported_inbound_max_entries,
-            'dead_letter_max_bytes': self.dead_letter_max_bytes,
-            'dead_letter_backup_count': self.dead_letter_backup_count,
-            'audit_max_bytes': self.audit_max_bytes,
-            'audit_backup_count': self.audit_backup_count,
+            "outbox_max_attempts": self.outbox_max_attempts,
+            "retry_base_seconds": self.retry_base_seconds,
+            "retry_max_seconds": self.retry_max_seconds,
+            "inbound_dedupe_ttl_seconds": self.inbound_dedupe_ttl_seconds,
+            "storm_window_seconds": self.storm_window_seconds,
+            "secret_encryption_env": self.secret_encryption_env,
+            "markdown_fallback": self.markdown_fallback,
+            "long_message_threshold_chunks": self.long_message_threshold_chunks,
+            "deferred_outbox_limit": self.deferred_outbox_limit,
+            "retention_enabled": self.retention_enabled,
+            "retention_cron_interval_seconds": self.retention_cron_interval_seconds,
+            "retention_processed_inbound_ttl_seconds": self.retention_processed_inbound_ttl_seconds,
+            "retention_processed_inbound_max_entries": self.retention_processed_inbound_max_entries,
+            "retention_outbox_ttl_seconds": self.retention_outbox_ttl_seconds,
+            "retention_outbox_max_entries": self.retention_outbox_max_entries,
+            "retention_unsupported_inbound_ttl_seconds": self.retention_unsupported_inbound_ttl_seconds,
+            "retention_unsupported_inbound_max_entries": self.retention_unsupported_inbound_max_entries,
+            "dead_letter_max_bytes": self.dead_letter_max_bytes,
+            "dead_letter_backup_count": self.dead_letter_backup_count,
+            "audit_max_bytes": self.audit_max_bytes,
+            "audit_backup_count": self.audit_backup_count,
         }
 
     @classmethod
@@ -126,27 +126,27 @@ class ReliabilityConfig:
             for k, v in data.items()
             if k
             in {
-                'outbox_max_attempts',
-                'retry_base_seconds',
-                'retry_max_seconds',
-                'inbound_dedupe_ttl_seconds',
-                'storm_window_seconds',
-                'secret_encryption_env',
-                'markdown_fallback',
-                'long_message_threshold_chunks',
-                'deferred_outbox_limit',
-                'retention_enabled',
-                'retention_cron_interval_seconds',
-                'retention_processed_inbound_ttl_seconds',
-                'retention_processed_inbound_max_entries',
-                'retention_outbox_ttl_seconds',
-                'retention_outbox_max_entries',
-                'retention_unsupported_inbound_ttl_seconds',
-                'retention_unsupported_inbound_max_entries',
-                'dead_letter_max_bytes',
-                'dead_letter_backup_count',
-                'audit_max_bytes',
-                'audit_backup_count',
+                "outbox_max_attempts",
+                "retry_base_seconds",
+                "retry_max_seconds",
+                "inbound_dedupe_ttl_seconds",
+                "storm_window_seconds",
+                "secret_encryption_env",
+                "markdown_fallback",
+                "long_message_threshold_chunks",
+                "deferred_outbox_limit",
+                "retention_enabled",
+                "retention_cron_interval_seconds",
+                "retention_processed_inbound_ttl_seconds",
+                "retention_processed_inbound_max_entries",
+                "retention_outbox_ttl_seconds",
+                "retention_outbox_max_entries",
+                "retention_unsupported_inbound_ttl_seconds",
+                "retention_unsupported_inbound_max_entries",
+                "dead_letter_max_bytes",
+                "dead_letter_backup_count",
+                "audit_max_bytes",
+                "audit_backup_count",
             }
         }
         return cls(**known)
@@ -157,18 +157,18 @@ class GatewayConfig:
     enabled: bool = True
     default_targets: list[str] = field(default_factory=list)
     state_dir: str = DEFAULT_STATE_DIR
-    storage_backend: str = 'files'
+    storage_backend: str = "files"
     reliability: ReliabilityConfig = field(default_factory=ReliabilityConfig)
     channels: list[ChannelConfig] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            'enabled': self.enabled,
-            'default_targets': _normalize_default_targets(self.default_targets),
-            'state_dir': self.state_dir,
-            'storage_backend': self.storage_backend,
-            'reliability': self.reliability.to_dict(),
-            'channels': [c.to_dict() for c in _unique_channels_by_type(self.channels)],
+            "enabled": self.enabled,
+            "default_targets": _normalize_default_targets(self.default_targets),
+            "state_dir": self.state_dir,
+            "storage_backend": self.storage_backend,
+            "reliability": self.reliability.to_dict(),
+            "channels": [c.to_dict() for c in _unique_channels_by_type(self.channels)],
         }
 
     @classmethod
@@ -176,13 +176,13 @@ class GatewayConfig:
         if not data:
             return cls()
         cfg = cls(
-            enabled=bool(data.get('enabled', True)),
-            default_targets=list(data.get('default_targets') or []),
-            state_dir=str(data.get('state_dir', DEFAULT_STATE_DIR)),
-            storage_backend=str(data.get('storage_backend', 'files')),
-            reliability=ReliabilityConfig.from_dict(data.get('reliability')),
+            enabled=bool(data.get("enabled", True)),
+            default_targets=list(data.get("default_targets") or []),
+            state_dir=str(data.get("state_dir", DEFAULT_STATE_DIR)),
+            storage_backend=str(data.get("storage_backend", "files")),
+            reliability=ReliabilityConfig.from_dict(data.get("reliability")),
         )
-        channels_raw = data.get('channels') or []
+        channels_raw = data.get("channels") or []
         for entry in channels_raw:
             if not isinstance(entry, dict):
                 continue
@@ -245,13 +245,13 @@ def _unique_channels_by_type(channels: list[ChannelConfig]) -> list[ChannelConfi
 
 
 def _normalize_channel(channel: ChannelConfig) -> ChannelConfig:
-    if channel.type is ChannelType.WECHAT and channel.name != 'wechat':
-        return replace(channel, name='wechat')
+    if channel.type is ChannelType.WECHAT and channel.name != "wechat":
+        return replace(channel, name="wechat")
     return channel
 
 
 def _normalize_default_targets(default_targets: list[str]) -> list[str]:
-    return ['wechat' if target == 'wechat-main' else target for target in default_targets]
+    return ["wechat" if target == "wechat-main" else target for target in default_targets]
 
 
 _LOCK = threading.Lock()
@@ -279,15 +279,15 @@ def load_config(path: str | Path | None = None) -> GatewayConfig:
         migrate_legacy_state_dir()
     p = Path(path or DEFAULT_CHANNELS_YAML).expanduser()
     if not p.exists():
-        logger.warning('gateway config not found at %s; using defaults', p)
+        logger.warning("gateway config not found at %s; using defaults", p)
         return GatewayConfig()
     with _file_lock(_lock_path(p)):
-        data = yaml.safe_load(p.read_text(encoding='utf-8')) or {}
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
-        logger.error('%s: top-level YAML is not a mapping', p)
-        raise ValueError(f'{p}: expected a YAML mapping at the top level')
+        logger.error("%s: top-level YAML is not a mapping", p)
+        raise ValueError(f"{p}: expected a YAML mapping at the top level")
     cfg = GatewayConfig.from_dict(data)
-    logger.info('gateway config loaded: %s (%d channel(s))', p, len(cfg.channels))
+    logger.info("gateway config loaded: %s (%d channel(s))", p, len(cfg.channels))
     return cfg
 
 
@@ -299,24 +299,24 @@ def save_config(config: GatewayConfig, path: str | Path | None = None) -> Path:
     p.parent.mkdir(parents=True, exist_ok=True)
     payload = yaml.safe_dump(config.to_dict(), allow_unicode=True, sort_keys=False)
     with _file_lock(_lock_path(p)):
-        tmp = p.with_suffix(p.suffix + '.tmp')
-        tmp.write_text(payload, encoding='utf-8')
+        tmp = p.with_suffix(p.suffix + ".tmp")
+        tmp.write_text(payload, encoding="utf-8")
         os.replace(tmp, p)
-    logger.info('gateway config saved: %s', p)
+    logger.info("gateway config saved: %s", p)
     return p
 
 
 def _lock_path(yaml_path: Path) -> Path:
-    return yaml_path.with_suffix(yaml_path.suffix + '.lock')
+    return yaml_path.with_suffix(yaml_path.suffix + ".lock")
 
 
 __all__ = [
-    'DEFAULT_CHANNELS_YAML',
-    'DEFAULT_STATE_DIR',
-    'LEGACY_STATE_DIR',
-    'GatewayConfig',
-    'ReliabilityConfig',
-    'load_config',
-    'migrate_legacy_state_dir',
-    'save_config',
+    "DEFAULT_CHANNELS_YAML",
+    "DEFAULT_STATE_DIR",
+    "LEGACY_STATE_DIR",
+    "GatewayConfig",
+    "ReliabilityConfig",
+    "load_config",
+    "migrate_legacy_state_dir",
+    "save_config",
 ]

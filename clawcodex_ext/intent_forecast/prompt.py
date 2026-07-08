@@ -58,4 +58,8 @@ def _truncate(text: str, *, max_input_tokens: int) -> str:
         return text
     head = max(1000, budget // 4)
     tail = max(1000, budget - head - 120)
-    return text[:head].rstrip() + "\n\n[... omitted for forecast budget ...]\n\n" + text[-tail:].lstrip()
+    return (
+        text[:head].rstrip()
+        + "\n\n[... omitted for forecast budget ...]\n\n"
+        + text[-tail:].lstrip()
+    )

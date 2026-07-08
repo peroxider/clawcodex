@@ -29,6 +29,7 @@ from src.tool_system.context import ToolContext
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def tool_registry() -> ToolRegistry:
     return ToolRegistry()
@@ -53,21 +54,65 @@ def mock_session() -> MagicMock:
 
 _KNOWN_HANDLED_COMMANDS: set[str] = {
     # Handled by dispatch_local_command
-    "/help", "/exit", "/quit", "/q", "/repl", "/clear",
-    "/tools", "/stream",
-    "/model", "/models",
-    "/effort", "/history", "/cost", "/idle", "/theme",
-    "/diff", "/mcp", "/tasks", "/rewind", "/resume", "/permission",
+    "/help",
+    "/exit",
+    "/quit",
+    "/q",
+    "/repl",
+    "/clear",
+    "/tools",
+    "/stream",
+    "/model",
+    "/models",
+    "/effort",
+    "/history",
+    "/cost",
+    "/idle",
+    "/theme",
+    "/diff",
+    "/mcp",
+    "/tasks",
+    "/rewind",
+    "/resume",
+    "/permission",
     "/forecast",
     # Handled by dispatch_registry_command (NOT by dispatch_local_command)
-    "/init", "/provider", "/lkb", "/recap", "/btw",
-    "/advisor", "/buddy", "/compact", "/context", "/cron-list",
-    "/cron-delete", "/cron-run", "/cron-runs", "/cron-status",
-    "/goal", "/export", "/output-style", "/security-review",
-    "/statusline", "/telemetry", "/copy", "/doctor", "/logo",
-    "/memory", "/permissions", "/release-notes", "/rename",
-    "/stickers", "/vim", "/voice", "/workflows", "/deep-research",
-    "/render-last", "/skills", "/tts", "/ultraplan",
+    "/init",
+    "/provider",
+    "/lkb",
+    "/recap",
+    "/btw",
+    "/advisor",
+    "/buddy",
+    "/compact",
+    "/context",
+    "/cron-list",
+    "/cron-delete",
+    "/cron-run",
+    "/cron-runs",
+    "/cron-status",
+    "/goal",
+    "/export",
+    "/output-style",
+    "/security-review",
+    "/statusline",
+    "/telemetry",
+    "/copy",
+    "/doctor",
+    "/logo",
+    "/memory",
+    "/permissions",
+    "/release-notes",
+    "/rename",
+    "/stickers",
+    "/vim",
+    "/voice",
+    "/workflows",
+    "/deep-research",
+    "/render-last",
+    "/skills",
+    "/tts",
+    "/ultraplan",
 }
 
 
@@ -96,6 +141,7 @@ def test_all_suggestion_commands_have_handlers(tmp_path: Path):
 # ---------------------------------------------------------------------------
 # dispatch_local_command — each LOCAL_BUILTINS command
 # ---------------------------------------------------------------------------
+
 
 def test_dispatch_help(mock_session, tmp_path, tool_registry):
     result = dispatch_local_command(
@@ -184,8 +230,6 @@ def test_dispatch_stream_no_arg_shows_status(mock_session, tmp_path, tool_regist
     )
     assert result.handled is True
     assert result.system_text == "__stream_status__"
-
-
 
 
 def test_dispatch_model(mock_session, tmp_path, tool_registry):
@@ -310,7 +354,10 @@ def test_dispatch_forecast_run_dialog(mock_session, tmp_path, tool_registry):
 
 def test_dispatch_forecast_status_falls_through(mock_session, tmp_path, tool_registry):
     result = dispatch_local_command(
-        "/forecast status", session=mock_session, workspace_root=tmp_path, tool_registry=tool_registry
+        "/forecast status",
+        session=mock_session,
+        workspace_root=tmp_path,
+        tool_registry=tool_registry,
     )
     assert result.handled is False
 
@@ -319,10 +366,14 @@ def test_dispatch_forecast_status_falls_through(mock_session, tmp_path, tool_reg
 # Unknown command falls through
 # ---------------------------------------------------------------------------
 
+
 def test_dispatch_unknown_returns_not_handled(mock_session, tmp_path, tool_registry):
     """An unknown slash command must return ``handled=False``."""
     result = dispatch_local_command(
-        "/bogus-command-xyz", session=mock_session, workspace_root=tmp_path, tool_registry=tool_registry
+        "/bogus-command-xyz",
+        session=mock_session,
+        workspace_root=tmp_path,
+        tool_registry=tool_registry,
     )
     assert result.handled is False
 
@@ -330,6 +381,7 @@ def test_dispatch_unknown_returns_not_handled(mock_session, tmp_path, tool_regis
 # ---------------------------------------------------------------------------
 # build_command_words consistency
 # ---------------------------------------------------------------------------
+
 
 def test_build_command_words_includes_local_builtins(tmp_path: Path):
     """Every item in ``LOCAL_BUILTINS`` must appear in ``build_command_words``."""

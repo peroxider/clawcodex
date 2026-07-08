@@ -68,10 +68,13 @@ class TestREPL(unittest.TestCase):
             with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
                 mock_session.return_value = Mock()
 
-                with patch("src.providers.get_provider_class") as mock_provider_class, patch(
-                    "clawcodex_ext.repl.core.get_provider_class",
-                    mock_provider_class,
-                    create=True,
+                with (
+                    patch("src.providers.get_provider_class") as mock_provider_class,
+                    patch(
+                        "clawcodex_ext.repl.core.get_provider_class",
+                        mock_provider_class,
+                        create=True,
+                    ),
                 ):
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
@@ -88,10 +91,13 @@ class TestREPL(unittest.TestCase):
             with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
                 mock_session.return_value = Mock()
 
-                with patch("src.providers.get_provider_class") as mock_provider_class, patch(
-                    "clawcodex_ext.repl.core.get_provider_class",
-                    mock_provider_class,
-                    create=True,
+                with (
+                    patch("src.providers.get_provider_class") as mock_provider_class,
+                    patch(
+                        "clawcodex_ext.repl.core.get_provider_class",
+                        mock_provider_class,
+                        create=True,
+                    ),
                 ):
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
@@ -528,10 +534,13 @@ class TestREPL(unittest.TestCase):
                     mock_session.save_transcript = Mock()
                     mock_session_factory.return_value = mock_session
 
-                    with patch("src.providers.get_provider_class") as mock_provider_class, patch(
-                        "clawcodex_ext.repl.core.get_provider_class",
-                        mock_provider_class,
-                        create=True,
+                    with (
+                        patch("src.providers.get_provider_class") as mock_provider_class,
+                        patch(
+                            "clawcodex_ext.repl.core.get_provider_class",
+                            mock_provider_class,
+                            create=True,
+                        ),
                     ):
                         mock_provider = Mock()
                         mock_provider.model = "glm-4.5"
@@ -590,10 +599,13 @@ class TestREPL(unittest.TestCase):
                     mock_session.save_transcript = Mock()
                     mock_session_factory.return_value = mock_session
 
-                    with patch("src.providers.get_provider_class") as mock_provider_class, patch(
-                        "clawcodex_ext.repl.core.get_provider_class",
-                        mock_provider_class,
-                        create=True,
+                    with (
+                        patch("src.providers.get_provider_class") as mock_provider_class,
+                        patch(
+                            "clawcodex_ext.repl.core.get_provider_class",
+                            mock_provider_class,
+                            create=True,
+                        ),
                     ):
                         mock_provider = Mock()
                         mock_provider.model = "glm-4.5"
@@ -726,10 +738,13 @@ class TestREPL(unittest.TestCase):
                 mock_session.conversation = Conversation()
                 mock_session_factory.return_value = mock_session
 
-                with patch("src.providers.get_provider_class") as mock_provider_class, patch(
-                    "clawcodex_ext.repl.core.get_provider_class",
-                    mock_provider_class,
-                    create=True,
+                with (
+                    patch("src.providers.get_provider_class") as mock_provider_class,
+                    patch(
+                        "clawcodex_ext.repl.core.get_provider_class",
+                        mock_provider_class,
+                        create=True,
+                    ),
                 ):
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
@@ -788,10 +803,13 @@ class TestREPL(unittest.TestCase):
                 mock_session.save_transcript = Mock()
                 mock_session_factory.return_value = mock_session
 
-                with patch("src.providers.get_provider_class") as mock_provider_class, patch(
-                    "clawcodex_ext.repl.core.get_provider_class",
-                    mock_provider_class,
-                    create=True,
+                with (
+                    patch("src.providers.get_provider_class") as mock_provider_class,
+                    patch(
+                        "clawcodex_ext.repl.core.get_provider_class",
+                        mock_provider_class,
+                        create=True,
+                    ),
                 ):
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
@@ -834,10 +852,13 @@ class TestREPL(unittest.TestCase):
                 mock_session.conversation = Conversation()
                 mock_session_factory.return_value = mock_session
 
-                with patch("src.providers.get_provider_class") as mock_provider_class, patch(
-                    "clawcodex_ext.repl.core.get_provider_class",
-                    mock_provider_class,
-                    create=True,
+                with (
+                    patch("src.providers.get_provider_class") as mock_provider_class,
+                    patch(
+                        "clawcodex_ext.repl.core.get_provider_class",
+                        mock_provider_class,
+                        create=True,
+                    ),
                 ):
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
@@ -1878,9 +1899,7 @@ class TestREPLResumeReplay(unittest.TestCase):
         # Two assistant messages: text-bearing and tool-only.
         # The tool-only one should NOT produce an "Assistant" print.
         user_msg = UserMessage(content="do something")
-        text_assistant = AssistantMessage(
-            content=[TextBlock(text="I will help")]
-        )
+        text_assistant = AssistantMessage(content=[TextBlock(text="I will help")])
         tool_assistant = AssistantMessage(
             content=[
                 ToolUseBlock(id="call-1", name="Bash", input={"command": "echo hello"}),

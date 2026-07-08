@@ -30,5 +30,7 @@ def test_workspace_signals_read_last_command_failures_and_test_mapping(tmp_path)
 
     assert context.workspace["last_command"] == "pytest tests/intent_forecast"
     assert context.workspace["last_command_exit"] == 1
-    assert context.workspace["last_test_failures"] == ["FAILED tests/intent_forecast/test_service.py::test_x"]
+    assert context.workspace["last_test_failures"] == [
+        "FAILED tests/intent_forecast/test_service.py::test_x"
+    ]
     assert context.intent_stage == "debug"

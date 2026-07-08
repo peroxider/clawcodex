@@ -878,9 +878,7 @@ class TestStage4CrossModePersistence:
         forecast_result = ForecastResult(
             generated=True,
             suggestions=[
-                ForecastSuggestion(
-                    id="s1", title="Upgrade deps", prompt="upgrade deps"
-                ),
+                ForecastSuggestion(id="s1", title="Upgrade deps", prompt="upgrade deps"),
             ],
             fingerprint="fp-rt-001",
         )
@@ -915,15 +913,11 @@ class TestStage4CrossModePersistence:
         assert len(loaded_msgs) == 3, f"Expected 3 messages, got {len(loaded_msgs)}"
 
         # 验证 forecast 消息保留
-        forecast_found = any(
-            getattr(m, "subtype", None) == "intent_forecast" for m in loaded_msgs
-        )
+        forecast_found = any(getattr(m, "subtype", None) == "intent_forecast" for m in loaded_msgs)
         assert forecast_found, "Forecast system message lost after session round-trip"
 
         # 验证 away_summary 消息保留
-        recap_found = any(
-            getattr(m, "subtype", None) == "away_summary" for m in loaded_msgs
-        )
+        recap_found = any(getattr(m, "subtype", None) == "away_summary" for m in loaded_msgs)
         assert recap_found, "Recap system message lost after session round-trip"
 
         # 验证内容完整
@@ -971,8 +965,8 @@ class TestStage4CrossModePersistence:
         conv.add_user_message("final")
 
         # get_messages() 会过滤非 local_command 的 system 消息，直接用 messages 列表
-        roles = [m.role if hasattr(m, 'role') else '' for m in conv.messages]
-        subtypes = [getattr(m, 'subtype', '') for m in conv.messages]
+        roles = [m.role if hasattr(m, "role") else "" for m in conv.messages]
+        subtypes = [getattr(m, "subtype", "") for m in conv.messages]
 
         # 顺序：user / assistant / system(forecast) / user / system(recap) / user
         assert roles == ["user", "assistant", "system", "user", "system", "user"]

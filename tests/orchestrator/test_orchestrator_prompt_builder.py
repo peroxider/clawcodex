@@ -86,7 +86,7 @@ Your task:
 # Hardcoded path that lived in prompt_builder.py:284 prior to the fix.
 # Tests assert that this string does NOT appear in rendered output
 # when ``python_executable`` is not supplied.
-_LEGACY_HARDCODED_PATH = '/root/Conda/bin/python3'
+_LEGACY_HARDCODED_PATH = "/root/Conda/bin/python3"
 
 
 @dataclass
@@ -98,25 +98,25 @@ class _FakeIssue:
     template receives a plain dict.
     """
 
-    identifier: str = 'TEST-1'
-    title: str = 'Test issue'
-    description: str = 'Test description'
+    identifier: str = "TEST-1"
+    title: str = "Test issue"
+    description: str = "Test description"
     priority: int | None = None
-    state: str = 'open'
+    state: str = "open"
     labels: list[str] | None = None
-    branch_name: str = 'test/branch'
-    base_branch: str | None = 'main'
+    branch_name: str = "test/branch"
+    base_branch: str | None = "main"
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            'identifier': self.identifier,
-            'title': self.title,
-            'description': self.description,
-            'priority': self.priority,
-            'state': self.state,
-            'labels': self.labels or [],
-            'branch_name': self.branch_name,
-            'base_branch': self.base_branch,
+            "identifier": self.identifier,
+            "title": self.title,
+            "description": self.description,
+            "priority": self.priority,
+            "state": self.state,
+            "labels": self.labels or [],
+            "branch_name": self.branch_name,
+            "base_branch": self.base_branch,
         }
 
 
@@ -125,11 +125,11 @@ class TestAgentConfigPythonExecutable(unittest.TestCase):
 
     def test_default_is_empty_string(self) -> None:
         cfg = AgentConfig()
-        self.assertEqual(cfg.python_executable, '')
+        self.assertEqual(cfg.python_executable, "")
 
     def test_explicit_override_persists(self) -> None:
-        cfg = AgentConfig(python_executable='/opt/project/.venv/bin/python')
-        self.assertEqual(cfg.python_executable, '/opt/project/.venv/bin/python')
+        cfg = AgentConfig(python_executable="/opt/project/.venv/bin/python")
+        self.assertEqual(cfg.python_executable, "/opt/project/.venv/bin/python")
 
 
 class TestRenderPythonExecutable(unittest.TestCase):
@@ -144,26 +144,26 @@ class TestRenderPythonExecutable(unittest.TestCase):
             session=None,
             python_executable=None,
         )
-        self.assertNotIn('约束提醒', rendered)
+        self.assertNotIn("约束提醒", rendered)
         self.assertNotIn(_LEGACY_HARDCODED_PATH, rendered)
 
     def test_empty_string_does_not_inject_constraint(self) -> None:
         rendered = PromptBuilder.render(
             self.issue,
             session=None,
-            python_executable='',
+            python_executable="",
         )
-        self.assertNotIn('约束提醒', rendered)
+        self.assertNotIn("约束提醒", rendered)
         self.assertNotIn(_LEGACY_HARDCODED_PATH, rendered)
 
     def test_non_empty_path_is_injected(self) -> None:
-        path = '/opt/projectX/.venv/bin/python'
+        path = "/opt/projectX/.venv/bin/python"
         rendered = PromptBuilder.render(
             self.issue,
             session=None,
             python_executable=path,
         )
-        self.assertIn('约束提醒', rendered)
+        self.assertIn("约束提醒", rendered)
         self.assertIn(path, rendered)
         # Regression: legacy hardcoded path must NOT leak through.
         self.assertNotIn(_LEGACY_HARDCODED_PATH, rendered)
@@ -173,13 +173,14 @@ class TestRenderParts(unittest.TestCase):
     """F-?? prompt split: ``render_parts()`` returns (system, user) tuples
     when the workflow template contains the USER_MESSAGE_MARKER."""
 
+
 def setUp(self) -> None:
     from extensions.orchestrator.prompt_builder import PromptBuilder
 
     self._tmpdir = tempfile.TemporaryDirectory()
     self.addCleanup(self._tmpdir.cleanup)
-    wf_path = Path(self._tmpdir.name) / 'WORKFLOW.md'
-    wf_path.write_text(_RENDER_PARTS_WORKFLOW, encoding='utf-8')
+    wf_path = Path(self._tmpdir.name) / "WORKFLOW.md"
+    wf_path.write_text(_RENDER_PARTS_WORKFLOW, encoding="utf-8")
 
     store = get_workflow_store()
     store.load(str(wf_path))
@@ -190,14 +191,14 @@ def setUp(self) -> None:
 
     def test_marker_present_splits_into_two_nonempty_parts(self) -> None:
         issue = _FakeIssue(
-            identifier='SPLIT-1',
-            title='Split test',
-            description='Body for split test.',
-            labels=['bug'],
+            identifier="SPLIT-1",
+            title="Split test",
+            description="Body for split test.",
+            labels=["bug"],
         )
         system, user = self._prompt_builder.render_parts(issue)
-        self.assertTrue(system.strip(), 'system part must be non-empty')
-        self.assertTrue(user.strip(), 'user part must be non-empty')
+        self.assertTrue(system.strip(), "system part must be non-empty")
+        self.assertTrue(user.strip(), "user part must be non-empty")
         # Marker itself must be stripped from both halves.
         marker = self._prompt_builder.USER_MESSAGE_MARKER
         self.assertNotIn(marker, system)
@@ -207,36 +208,36 @@ def setUp(self) -> None:
         """The system half must include project background / constraints,
         NOT the per-issue data."""
         issue = _FakeIssue(
-            identifier='SPLIT-2',
-            title='Background check',
-            description='Body.',
+            identifier="SPLIT-2",
+            title="Background check",
+            description="Body.",
             labels=[],
         )
         system, _user = self._prompt_builder.render_parts(issue)
         # Workflow.md system content includes "Decoupling principles" and
         # "Your task:" — both must be in the system half.
-        self.assertIn('Decoupling principles', system)
-        self.assertIn('Your task:', system)
+        self.assertIn("Decoupling principles", system)
+        self.assertIn("Your task:", system)
         # Per-issue identifier must NOT be in the system half.
-        self.assertNotIn('SPLIT-2', system)
+        self.assertNotIn("SPLIT-2", system)
 
     def test_user_part_carries_issue_data_only(self) -> None:
         """The user half must contain the issue identifier / description /
         labels and the closing instruction; NOT the workflow background."""
         issue = _FakeIssue(
-            identifier='SPLIT-3',
-            title='User check',
-            description='Body for user check.',
-            labels=['bug', 'priority:high'],
+            identifier="SPLIT-3",
+            title="User check",
+            description="Body for user check.",
+            labels=["bug", "priority:high"],
         )
         _system, user = self._prompt_builder.render_parts(issue)
-        self.assertIn('SPLIT-3', user)
-        self.assertIn('User check', user)
-        self.assertIn('Body for user check.', user)
-        self.assertIn('bug', user)
+        self.assertIn("SPLIT-3", user)
+        self.assertIn("User check", user)
+        self.assertIn("Body for user check.", user)
+        self.assertIn("bug", user)
         # Workflow background must NOT leak into user half.
-        self.assertNotIn('Decoupling principles', user)
-        self.assertNotIn('Your task:', user)
+        self.assertNotIn("Decoupling principles", user)
+        self.assertNotIn("Your task:", user)
 
     def test_fallback_when_marker_missing(self) -> None:
         """If workflow.md lacks the marker, render_parts returns an
@@ -245,16 +246,16 @@ def setUp(self) -> None:
         from unittest.mock import patch
 
         issue = _FakeIssue(
-            identifier='FALLBACK-1',
-            title='Fallback',
-            description='Body.',
+            identifier="FALLBACK-1",
+            title="Fallback",
+            description="Body.",
             labels=[],
         )
         # Force render() to return a string WITHOUT the marker.
-        sentinel = 'MARKERLESS_PROMPT_42'
-        with patch.object(self._prompt_builder, 'render', return_value=sentinel):
+        sentinel = "MARKERLESS_PROMPT_42"
+        with patch.object(self._prompt_builder, "render", return_value=sentinel):
             system, user = self._prompt_builder.render_parts(issue)
-        self.assertEqual(system, '')
+        self.assertEqual(system, "")
         self.assertEqual(user, sentinel)
 
 
@@ -282,7 +283,7 @@ class TestBuildContinuationPromptPythonExecutable(unittest.TestCase):
             session=None,
             python_executable=None,
         )
-        self.assertNotIn('约束提醒', rendered)
+        self.assertNotIn("约束提醒", rendered)
         self.assertNotIn(_LEGACY_HARDCODED_PATH, rendered)
 
     def test_empty_string_does_not_inject_constraint(self) -> None:
@@ -291,13 +292,13 @@ class TestBuildContinuationPromptPythonExecutable(unittest.TestCase):
             max_turns=20,
             issue_context=None,
             session=None,
-            python_executable='',
+            python_executable="",
         )
-        self.assertNotIn('约束提醒', rendered)
+        self.assertNotIn("约束提醒", rendered)
         self.assertNotIn(_LEGACY_HARDCODED_PATH, rendered)
 
     def test_non_empty_path_is_injected(self) -> None:
-        path = '/usr/bin/python3'
+        path = "/usr/bin/python3"
         rendered = PromptBuilder.build_continuation_prompt(
             turn_number=2,
             max_turns=20,
@@ -305,7 +306,7 @@ class TestBuildContinuationPromptPythonExecutable(unittest.TestCase):
             session=None,
             python_executable=path,
         )
-        self.assertIn('约束提醒', rendered)
+        self.assertIn("约束提醒", rendered)
         self.assertIn(path, rendered)
         # Regression: legacy hardcoded path must NOT leak through.
         self.assertNotIn(_LEGACY_HARDCODED_PATH, rendered)
@@ -320,8 +321,8 @@ class TestBuildContinuationPromptPythonExecutable(unittest.TestCase):
             issue_context=None,
             session=None,
         )
-        self.assertIn('pytest', rendered)
-        self.assertIn('clawcodex-dev', rendered)
+        self.assertIn("pytest", rendered)
+        self.assertIn("clawcodex-dev", rendered)
 
 
 class TestWorkspaceConfigPythonFields(unittest.TestCase):
@@ -329,59 +330,59 @@ class TestWorkspaceConfigPythonFields(unittest.TestCase):
 
     def test_defaults(self) -> None:
         cfg = WorkspaceConfig()
-        self.assertEqual(cfg.python_executable, '')
+        self.assertEqual(cfg.python_executable, "")
         self.assertTrue(cfg.python_auto_detect)
-        self.assertIn('.python-version', cfg.python_detect_files)
-        self.assertIn('pyvenv.cfg', cfg.python_detect_files)
-        self.assertIn('environment.yml', cfg.python_detect_files)
+        self.assertIn(".python-version", cfg.python_detect_files)
+        self.assertIn("pyvenv.cfg", cfg.python_detect_files)
+        self.assertIn("environment.yml", cfg.python_detect_files)
 
     def test_explicit_override(self) -> None:
         cfg = WorkspaceConfig(
-            python_executable='/opt/x/.venv/bin/python',
+            python_executable="/opt/x/.venv/bin/python",
             python_auto_detect=False,
-            python_detect_files=['only-this-one'],
+            python_detect_files=["only-this-one"],
         )
-        self.assertEqual(cfg.python_executable, '/opt/x/.venv/bin/python')
+        self.assertEqual(cfg.python_executable, "/opt/x/.venv/bin/python")
         self.assertFalse(cfg.python_auto_detect)
-        self.assertEqual(cfg.python_detect_files, ['only-this-one'])
+        self.assertEqual(cfg.python_detect_files, ["only-this-one"])
 
 
 class TestParsePyvenvHome(unittest.TestCase):
     def test_parses_home_line(self) -> None:
         with tempfile.TemporaryDirectory() as d:
-            p = Path(d) / 'pyvenv.cfg'
+            p = Path(d) / "pyvenv.cfg"
             p.write_text(
-                'home = /usr/local/bin\ninclude-system-site-packages = false\nversion = 3.11.7\n',
-                encoding='utf-8',
+                "home = /usr/local/bin\ninclude-system-site-packages = false\nversion = 3.11.7\n",
+                encoding="utf-8",
             )
-            self.assertEqual(_parse_pyvenv_home(p), '/usr/local/bin')
+            self.assertEqual(_parse_pyvenv_home(p), "/usr/local/bin")
 
     def test_handles_quoted_value(self) -> None:
         with tempfile.TemporaryDirectory() as d:
-            p = Path(d) / 'pyvenv.cfg'
-            p.write_text('home = "/opt/venv with spaces/bin"\n', encoding='utf-8')
-            self.assertEqual(_parse_pyvenv_home(p), '/opt/venv with spaces/bin')
+            p = Path(d) / "pyvenv.cfg"
+            p.write_text('home = "/opt/venv with spaces/bin"\n', encoding="utf-8")
+            self.assertEqual(_parse_pyvenv_home(p), "/opt/venv with spaces/bin")
 
     def test_missing_file_returns_empty(self) -> None:
         with tempfile.TemporaryDirectory() as d:
-            self.assertEqual(_parse_pyvenv_home(Path(d) / 'nope.cfg'), '')
+            self.assertEqual(_parse_pyvenv_home(Path(d) / "nope.cfg"), "")
 
 
 class TestParseCondaEnvName(unittest.TestCase):
     def test_parses_name_field(self) -> None:
         with tempfile.TemporaryDirectory() as d:
-            p = Path(d) / 'environment.yml'
+            p = Path(d) / "environment.yml"
             p.write_text(
-                'name: myenv\nchannels:\n  - defaults\ndependencies:\n  - python=3.11\n',
-                encoding='utf-8',
+                "name: myenv\nchannels:\n  - defaults\ndependencies:\n  - python=3.11\n",
+                encoding="utf-8",
             )
-            self.assertEqual(_parse_conda_env_name(p), 'myenv')
+            self.assertEqual(_parse_conda_env_name(p), "myenv")
 
     def test_missing_name_returns_empty(self) -> None:
         with tempfile.TemporaryDirectory() as d:
-            p = Path(d) / 'environment.yml'
-            p.write_text('channels:\n  - defaults\n', encoding='utf-8')
-            self.assertEqual(_parse_conda_env_name(p), '')
+            p = Path(d) / "environment.yml"
+            p.write_text("channels:\n  - defaults\n", encoding="utf-8")
+            self.assertEqual(_parse_conda_env_name(p), "")
 
 
 class TestDetectPythonInWorkspace(unittest.TestCase):
@@ -389,11 +390,11 @@ class TestDetectPythonInWorkspace(unittest.TestCase):
 
     def test_nonexistent_workspace_returns_empty(self) -> None:
         self.assertEqual(
-            _detect_python_in_workspace(Path('/no/such/path'), ['.python-version']), ''
+            _detect_python_in_workspace(Path("/no/such/path"), [".python-version"]), ""
         )
 
     def test_none_workspace_returns_empty(self) -> None:
-        self.assertEqual(_detect_python_in_workspace(None, ['.python-version']), '')
+        self.assertEqual(_detect_python_in_workspace(None, [".python-version"]), "")
 
     def test_pyvenv_cfg_wins_over_python_version(self) -> None:
         """Both signals present: pyvenv.cfg has higher effective priority
@@ -401,88 +402,88 @@ class TestDetectPythonInWorkspace(unittest.TestCase):
         a direct interpreter path."""
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            venv_home = ws / 'venv'
-            (venv_home / 'bin').mkdir(parents=True)
-            py = venv_home / 'bin' / 'python3'
-            py.write_text('#!/bin/sh\n', encoding='utf-8')
-            (ws / 'pyvenv.cfg').write_text(f'home = {venv_home}\n', encoding='utf-8')
-            (ws / '.python-version').write_text('3.11.7\n', encoding='utf-8')
-            result = _detect_python_in_workspace(ws, ['.python-version', 'pyvenv.cfg'])
+            venv_home = ws / "venv"
+            (venv_home / "bin").mkdir(parents=True)
+            py = venv_home / "bin" / "python3"
+            py.write_text("#!/bin/sh\n", encoding="utf-8")
+            (ws / "pyvenv.cfg").write_text(f"home = {venv_home}\n", encoding="utf-8")
+            (ws / ".python-version").write_text("3.11.7\n", encoding="utf-8")
+            result = _detect_python_in_workspace(ws, [".python-version", "pyvenv.cfg"])
             self.assertEqual(result, str(py))
 
     def test_pyenv_python_version_resolves(self) -> None:
         """``.python-version`` resolves under a fake ``PYENV_ROOT``."""
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            fake_pyenv = ws / 'fake_pyenv'
-            version_dir = fake_pyenv / 'versions' / '3.11.7' / 'bin'
+            fake_pyenv = ws / "fake_pyenv"
+            version_dir = fake_pyenv / "versions" / "3.11.7" / "bin"
             version_dir.mkdir(parents=True)
-            py = version_dir / 'python3'
-            py.write_text('#!/bin/sh\n', encoding='utf-8')
-            (ws / '.python-version').write_text('3.11.7\n', encoding='utf-8')
-            old = os.environ.get('PYENV_ROOT')
-            os.environ['PYENV_ROOT'] = str(fake_pyenv)
+            py = version_dir / "python3"
+            py.write_text("#!/bin/sh\n", encoding="utf-8")
+            (ws / ".python-version").write_text("3.11.7\n", encoding="utf-8")
+            old = os.environ.get("PYENV_ROOT")
+            os.environ["PYENV_ROOT"] = str(fake_pyenv)
             try:
-                result = _detect_python_in_workspace(ws, ['.python-version'])
+                result = _detect_python_in_workspace(ws, [".python-version"])
                 self.assertEqual(result, str(py))
             finally:
                 if old is None:
-                    os.environ.pop('PYENV_ROOT', None)
+                    os.environ.pop("PYENV_ROOT", None)
                 else:
-                    os.environ['PYENV_ROOT'] = old
+                    os.environ["PYENV_ROOT"] = old
 
     def test_pyenv_version_missing_falls_through(self) -> None:
         """``.python-version`` points at a version that isn't installed."""
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            (ws / '.python-version').write_text('99.99.99\n', encoding='utf-8')
-            old = os.environ.get('PYENV_ROOT')
-            os.environ['PYENV_ROOT'] = str(ws / 'fake_pyenv')
+            (ws / ".python-version").write_text("99.99.99\n", encoding="utf-8")
+            old = os.environ.get("PYENV_ROOT")
+            os.environ["PYENV_ROOT"] = str(ws / "fake_pyenv")
             try:
-                result = _detect_python_in_workspace(ws, ['.python-version'])
-                self.assertEqual(result, '')
+                result = _detect_python_in_workspace(ws, [".python-version"])
+                self.assertEqual(result, "")
             finally:
                 if old is None:
-                    os.environ.pop('PYENV_ROOT', None)
+                    os.environ.pop("PYENV_ROOT", None)
                 else:
-                    os.environ['PYENV_ROOT'] = old
+                    os.environ["PYENV_ROOT"] = old
 
     def test_environment_yml_uses_conda_prefix_env(self) -> None:
         """``environment.yml`` with ``CONDA_PREFIX`` env var resolves."""
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            (ws / 'environment.yml').write_text('name: projX\n', encoding='utf-8')
-            conda_root = ws / 'conda'
-            py = conda_root / 'envs' / 'projX' / 'bin' / 'python3'
+            (ws / "environment.yml").write_text("name: projX\n", encoding="utf-8")
+            conda_root = ws / "conda"
+            py = conda_root / "envs" / "projX" / "bin" / "python3"
             py.parent.mkdir(parents=True)
-            py.write_text('#!/bin/sh\n', encoding='utf-8')
-            old = os.environ.get('CONDA_PREFIX')
-            os.environ['CONDA_PREFIX'] = str(conda_root)
+            py.write_text("#!/bin/sh\n", encoding="utf-8")
+            old = os.environ.get("CONDA_PREFIX")
+            os.environ["CONDA_PREFIX"] = str(conda_root)
             try:
-                result = _detect_python_in_workspace(ws, ['environment.yml'])
+                result = _detect_python_in_workspace(ws, ["environment.yml"])
                 self.assertEqual(result, str(py))
             finally:
                 if old is None:
-                    os.environ.pop('CONDA_PREFIX', None)
+                    os.environ.pop("CONDA_PREFIX", None)
                 else:
-                    os.environ['CONDA_PREFIX'] = old
+                    os.environ["CONDA_PREFIX"] = old
 
     def test_pipfile_is_recognised_but_skipped(self) -> None:
         """Pipfile is in the default candidate list but produces no
         interpreter path (it has no direct ``bin/python3`` link)."""
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            (ws / 'Pipfile').write_text('[packages]\nrequests = "*"\n', encoding='utf-8')
-            self.assertEqual(_detect_python_in_workspace(ws, ['Pipfile']), '')
+            (ws / "Pipfile").write_text('[packages]\nrequests = "*"\n', encoding="utf-8")
+            self.assertEqual(_detect_python_in_workspace(ws, ["Pipfile"]), "")
 
     def test_no_signals_returns_empty(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            self.assertEqual(_detect_python_in_workspace(ws, ['.python-version', 'pyvenv.cfg']), '')
+            self.assertEqual(_detect_python_in_workspace(ws, [".python-version", "pyvenv.cfg"]), "")
 
     def test_workspace_with_no_candidates_returns_empty(self) -> None:
         with tempfile.TemporaryDirectory() as d:
-            self.assertEqual(_detect_python_in_workspace(Path(d), []), '')
+            self.assertEqual(_detect_python_in_workspace(Path(d), []), "")
 
 
 class TestResolvePythonExecutable(unittest.TestCase):
@@ -491,31 +492,31 @@ class TestResolvePythonExecutable(unittest.TestCase):
     def test_workspace_explicit_wins_over_detect_and_agent(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            venv = ws / 'venv'
-            (venv / 'bin').mkdir(parents=True)
-            (venv / 'bin' / 'python3').write_text('#!/bin/sh\n', encoding='utf-8')
-            (ws / 'pyvenv.cfg').write_text(f'home = {venv}\n', encoding='utf-8')
-            ws_cfg = WorkspaceConfig(python_executable='/explicit/override')
-            agent_cfg = AgentConfig(python_executable='/agent/default')
+            venv = ws / "venv"
+            (venv / "bin").mkdir(parents=True)
+            (venv / "bin" / "python3").write_text("#!/bin/sh\n", encoding="utf-8")
+            (ws / "pyvenv.cfg").write_text(f"home = {venv}\n", encoding="utf-8")
+            ws_cfg = WorkspaceConfig(python_executable="/explicit/override")
+            agent_cfg = AgentConfig(python_executable="/agent/default")
             self.assertEqual(
                 resolve_python_executable(
                     workspace_path=ws,
                     agent_cfg=agent_cfg,
                     workspace_cfg=ws_cfg,
                 ),
-                '/explicit/override',
+                "/explicit/override",
             )
 
     def test_detected_wins_over_agent_default(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            venv = ws / 'venv'
-            (venv / 'bin').mkdir(parents=True)
-            detected_py = venv / 'bin' / 'python3'
-            detected_py.write_text('#!/bin/sh\n', encoding='utf-8')
-            (ws / 'pyvenv.cfg').write_text(f'home = {venv}\n', encoding='utf-8')
+            venv = ws / "venv"
+            (venv / "bin").mkdir(parents=True)
+            detected_py = venv / "bin" / "python3"
+            detected_py.write_text("#!/bin/sh\n", encoding="utf-8")
+            (ws / "pyvenv.cfg").write_text(f"home = {venv}\n", encoding="utf-8")
             ws_cfg = WorkspaceConfig()  # no explicit override
-            agent_cfg = AgentConfig(python_executable='/agent/default')
+            agent_cfg = AgentConfig(python_executable="/agent/default")
             self.assertEqual(
                 resolve_python_executable(
                     workspace_path=ws,
@@ -528,14 +529,14 @@ class TestResolvePythonExecutable(unittest.TestCase):
     def test_agent_default_used_when_no_workspace_signal(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             ws_cfg = WorkspaceConfig()
-            agent_cfg = AgentConfig(python_executable='/agent/default')
+            agent_cfg = AgentConfig(python_executable="/agent/default")
             self.assertEqual(
                 resolve_python_executable(
                     workspace_path=Path(d),
                     agent_cfg=agent_cfg,
                     workspace_cfg=ws_cfg,
                 ),
-                '/agent/default',
+                "/agent/default",
             )
 
     def test_empty_when_nothing_configured(self) -> None:
@@ -546,18 +547,18 @@ class TestResolvePythonExecutable(unittest.TestCase):
                     agent_cfg=AgentConfig(),
                     workspace_cfg=WorkspaceConfig(),
                 ),
-                '',
+                "",
             )
 
     def test_auto_detect_false_skips_probing(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            venv = ws / 'venv'
-            (venv / 'bin').mkdir(parents=True)
-            (venv / 'bin' / 'python3').write_text('#!/bin/sh\n', encoding='utf-8')
-            (ws / 'pyvenv.cfg').write_text(f'home = {venv}\n', encoding='utf-8')
+            venv = ws / "venv"
+            (venv / "bin").mkdir(parents=True)
+            (venv / "bin" / "python3").write_text("#!/bin/sh\n", encoding="utf-8")
+            (ws / "pyvenv.cfg").write_text(f"home = {venv}\n", encoding="utf-8")
             ws_cfg = WorkspaceConfig(python_auto_detect=False)
-            agent_cfg = AgentConfig(python_executable='/agent/default')
+            agent_cfg = AgentConfig(python_executable="/agent/default")
             # detect disabled, so detection is skipped entirely; agent
             # default still applies.
             self.assertEqual(
@@ -566,26 +567,26 @@ class TestResolvePythonExecutable(unittest.TestCase):
                     agent_cfg=agent_cfg,
                     workspace_cfg=ws_cfg,
                 ),
-                '/agent/default',
+                "/agent/default",
             )
 
     def test_workspace_path_none_falls_through(self) -> None:
         """When no workspace path is available (e.g. unit tests), the
         resolver must skip detection and fall back to agent default."""
-        agent_cfg = AgentConfig(python_executable='/agent/default')
+        agent_cfg = AgentConfig(python_executable="/agent/default")
         self.assertEqual(
             resolve_python_executable(
                 workspace_path=None,
                 agent_cfg=agent_cfg,
                 workspace_cfg=WorkspaceConfig(),
             ),
-            '/agent/default',
+            "/agent/default",
         )
 
     def test_empty_workspace_cfg_falls_through_to_agent(self) -> None:
         """A workspace_cfg with ``python_auto_detect=False`` and
         ``python_executable=""`` must not block the agent default."""
-        agent_cfg = AgentConfig(python_executable='/agent/default')
+        agent_cfg = AgentConfig(python_executable="/agent/default")
         self.assertEqual(
             resolve_python_executable(
                 workspace_path=None,
@@ -595,7 +596,7 @@ class TestResolvePythonExecutable(unittest.TestCase):
                     python_detect_files=[],
                 ),
             ),
-            '/agent/default',
+            "/agent/default",
         )
 
 
@@ -606,10 +607,10 @@ class TestPromptBuilderIntegrationWithResolver(unittest.TestCase):
         issue = _FakeIssue()
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            venv = ws / 'venv'
-            (venv / 'bin').mkdir(parents=True)
-            (venv / 'bin' / 'python3').write_text('#!/bin/sh\n', encoding='utf-8')
-            (ws / 'pyvenv.cfg').write_text(f'home = {venv}\n', encoding='utf-8')
+            venv = ws / "venv"
+            (venv / "bin").mkdir(parents=True)
+            (venv / "bin" / "python3").write_text("#!/bin/sh\n", encoding="utf-8")
+            (ws / "pyvenv.cfg").write_text(f"home = {venv}\n", encoding="utf-8")
             ws_cfg = WorkspaceConfig()
             agent_cfg = AgentConfig()
             resolved = resolve_python_executable(
@@ -617,23 +618,23 @@ class TestPromptBuilderIntegrationWithResolver(unittest.TestCase):
                 agent_cfg=agent_cfg,
                 workspace_cfg=ws_cfg,
             )
-            self.assertNotEqual(resolved, '')  # sanity
+            self.assertNotEqual(resolved, "")  # sanity
             rendered = PromptBuilder.render(
                 issue,
                 session=None,
                 python_executable=resolved,
             )
             self.assertIn(resolved, rendered)
-            self.assertIn('约束提醒', rendered)
-            self.assertNotIn('/root/Conda/bin/python3', rendered)
+            self.assertIn("约束提醒", rendered)
+            self.assertNotIn("/root/Conda/bin/python3", rendered)
 
     def test_continuation_uses_resolved_path(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            venv = ws / 'venv'
-            (venv / 'bin').mkdir(parents=True)
-            (venv / 'bin' / 'python3').write_text('#!/bin/sh\n', encoding='utf-8')
-            (ws / 'pyvenv.cfg').write_text(f'home = {venv}\n', encoding='utf-8')
+            venv = ws / "venv"
+            (venv / "bin").mkdir(parents=True)
+            (venv / "bin" / "python3").write_text("#!/bin/sh\n", encoding="utf-8")
+            (ws / "pyvenv.cfg").write_text(f"home = {venv}\n", encoding="utf-8")
             ws_cfg = WorkspaceConfig()
             agent_cfg = AgentConfig()
             resolved = resolve_python_executable(
@@ -649,8 +650,8 @@ class TestPromptBuilderIntegrationWithResolver(unittest.TestCase):
                 python_executable=resolved,
             )
             self.assertIn(resolved, rendered)
-            self.assertIn('约束提醒', rendered)
-            self.assertNotIn('/root/Conda/bin/python3', rendered)
+            self.assertIn("约束提醒", rendered)
+            self.assertNotIn("/root/Conda/bin/python3", rendered)
 
 
 class TestIssuePythonExecutable(unittest.TestCase):
@@ -658,11 +659,11 @@ class TestIssuePythonExecutable(unittest.TestCase):
 
     def test_default_is_empty_string(self) -> None:
         issue = Issue()
-        self.assertEqual(issue.python_executable, '')
+        self.assertEqual(issue.python_executable, "")
 
     def test_explicit_override_persists(self) -> None:
-        issue = Issue(python_executable='/opt/proj/.venv/bin/python')
-        self.assertEqual(issue.python_executable, '/opt/proj/.venv/bin/python')
+        issue = Issue(python_executable="/opt/proj/.venv/bin/python")
+        self.assertEqual(issue.python_executable, "/opt/proj/.venv/bin/python")
 
 
 class TestLocalTrackerFrontmatterParse(unittest.TestCase):
@@ -670,48 +671,48 @@ class TestLocalTrackerFrontmatterParse(unittest.TestCase):
 
     def test_frontmatter_python_executable_extracted(self) -> None:
         with tempfile.TemporaryDirectory() as d:
-            p = Path(d) / 'issue-42.md'
+            p = Path(d) / "issue-42.md"
             p.write_text(
-                '---\n'
-                'id: 42\n'
-                'identifier: PROJ-42\n'
-                'title: Fix pyenv issue\n'
-                'state: open\n'
-                'python_executable: /opt/projX/.venv/bin/python\n'
-                '---\n'
-                'Body of the issue.\n',
-                encoding='utf-8',
+                "---\n"
+                "id: 42\n"
+                "identifier: PROJ-42\n"
+                "title: Fix pyenv issue\n"
+                "state: open\n"
+                "python_executable: /opt/projX/.venv/bin/python\n"
+                "---\n"
+                "Body of the issue.\n",
+                encoding="utf-8",
             )
             doc = parse_markdown_issue(p)
-            self.assertEqual(doc.issue.python_executable, '/opt/projX/.venv/bin/python')
+            self.assertEqual(doc.issue.python_executable, "/opt/projX/.venv/bin/python")
 
     def test_missing_frontmatter_field_yields_empty_string(self) -> None:
         """Backward compat: issues without the new field keep working."""
         with tempfile.TemporaryDirectory() as d:
-            p = Path(d) / 'issue-7.md'
+            p = Path(d) / "issue-7.md"
             p.write_text(
-                '---\nid: 7\nidentifier: PROJ-7\ntitle: Plain issue\nstate: open\n---\nBody.\n',
-                encoding='utf-8',
+                "---\nid: 7\nidentifier: PROJ-7\ntitle: Plain issue\nstate: open\n---\nBody.\n",
+                encoding="utf-8",
             )
             doc = parse_markdown_issue(p)
-            self.assertEqual(doc.issue.python_executable, '')
+            self.assertEqual(doc.issue.python_executable, "")
 
     def test_empty_string_frontmatter_yields_empty_string(self) -> None:
         """``python_executable: ""`` is treated the same as missing."""
         with tempfile.TemporaryDirectory() as d:
-            p = Path(d) / 'issue-9.md'
+            p = Path(d) / "issue-9.md"
             p.write_text(
-                '---\n'
-                'id: 9\n'
-                'identifier: PROJ-9\n'
-                'title: Empty override\n'
+                "---\n"
+                "id: 9\n"
+                "identifier: PROJ-9\n"
+                "title: Empty override\n"
                 'python_executable: ""\n'
-                '---\n'
-                'Body.\n',
-                encoding='utf-8',
+                "---\n"
+                "Body.\n",
+                encoding="utf-8",
             )
             doc = parse_markdown_issue(p)
-            self.assertEqual(doc.issue.python_executable, '')
+            self.assertEqual(doc.issue.python_executable, "")
 
 
 class TestResolveCascadeWithIssueOverride(unittest.TestCase):
@@ -720,25 +721,25 @@ class TestResolveCascadeWithIssueOverride(unittest.TestCase):
     def test_issue_wins_over_workspace_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            ws_cfg = WorkspaceConfig(python_executable='/workspace/override')
-            agent_cfg = AgentConfig(python_executable='/agent/default')
+            ws_cfg = WorkspaceConfig(python_executable="/workspace/override")
+            agent_cfg = AgentConfig(python_executable="/agent/default")
             self.assertEqual(
                 resolve_python_executable(
                     workspace_path=ws,
                     agent_cfg=agent_cfg,
                     workspace_cfg=ws_cfg,
-                    issue_executable='/issue/override',
+                    issue_executable="/issue/override",
                 ),
-                '/issue/override',
+                "/issue/override",
             )
 
     def test_issue_wins_over_detect(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            venv = ws / 'venv'
-            (venv / 'bin').mkdir(parents=True)
-            (venv / 'bin' / 'python3').write_text('#!/bin/sh\n', encoding='utf-8')
-            (ws / 'pyvenv.cfg').write_text(f'home = {venv}\n', encoding='utf-8')
+            venv = ws / "venv"
+            (venv / "bin").mkdir(parents=True)
+            (venv / "bin" / "python3").write_text("#!/bin/sh\n", encoding="utf-8")
+            (ws / "pyvenv.cfg").write_text(f"home = {venv}\n", encoding="utf-8")
             ws_cfg = WorkspaceConfig()  # auto_detect=True, no explicit
             agent_cfg = AgentConfig()
             self.assertEqual(
@@ -746,21 +747,21 @@ class TestResolveCascadeWithIssueOverride(unittest.TestCase):
                     workspace_path=ws,
                     agent_cfg=agent_cfg,
                     workspace_cfg=ws_cfg,
-                    issue_executable='/issue/override',
+                    issue_executable="/issue/override",
                 ),
-                '/issue/override',
+                "/issue/override",
             )
 
     def test_issue_wins_over_agent_default(self) -> None:
-        agent_cfg = AgentConfig(python_executable='/agent/default')
+        agent_cfg = AgentConfig(python_executable="/agent/default")
         self.assertEqual(
             resolve_python_executable(
                 workspace_path=None,
                 agent_cfg=agent_cfg,
                 workspace_cfg=WorkspaceConfig(),
-                issue_executable='/issue/override',
+                issue_executable="/issue/override",
             ),
-            '/issue/override',
+            "/issue/override",
         )
 
     def test_issue_strips_whitespace(self) -> None:
@@ -770,11 +771,11 @@ class TestResolveCascadeWithIssueOverride(unittest.TestCase):
         self.assertEqual(
             resolve_python_executable(
                 workspace_path=None,
-                agent_cfg=AgentConfig(python_executable='/agent/default'),
-                workspace_cfg=WorkspaceConfig(python_executable='/ws/override'),
-                issue_executable='   /issue/override   ',
+                agent_cfg=AgentConfig(python_executable="/agent/default"),
+                workspace_cfg=WorkspaceConfig(python_executable="/ws/override"),
+                issue_executable="   /issue/override   ",
             ),
-            '/issue/override',
+            "/issue/override",
         )
 
     def test_issue_empty_string_falls_through(self) -> None:
@@ -783,15 +784,15 @@ class TestResolveCascadeWithIssueOverride(unittest.TestCase):
         explicit > detect > agent default > empty."""
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            ws_cfg = WorkspaceConfig(python_executable='/workspace/override')
+            ws_cfg = WorkspaceConfig(python_executable="/workspace/override")
             self.assertEqual(
                 resolve_python_executable(
                     workspace_path=ws,
                     agent_cfg=AgentConfig(),
                     workspace_cfg=ws_cfg,
-                    issue_executable='',
+                    issue_executable="",
                 ),
-                '/workspace/override',
+                "/workspace/override",
             )
 
     def test_issue_whitespace_only_falls_through(self) -> None:
@@ -800,11 +801,11 @@ class TestResolveCascadeWithIssueOverride(unittest.TestCase):
         self.assertEqual(
             resolve_python_executable(
                 workspace_path=None,
-                agent_cfg=AgentConfig(python_executable='/agent/default'),
+                agent_cfg=AgentConfig(python_executable="/agent/default"),
                 workspace_cfg=WorkspaceConfig(),
-                issue_executable='   ',
+                issue_executable="   ",
             ),
-            '/agent/default',
+            "/agent/default",
         )
 
     def test_cascade_order_issue_ws_detect_agent_empty(self) -> None:
@@ -819,13 +820,13 @@ class TestResolveCascadeWithIssueOverride(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            venv = ws / 'venv'
-            (venv / 'bin').mkdir(parents=True)
-            detected_py = venv / 'bin' / 'python3'
-            detected_py.write_text('#!/bin/sh\n', encoding='utf-8')
-            (ws / 'pyvenv.cfg').write_text(f'home = {venv}\n', encoding='utf-8')
-            ws_cfg = WorkspaceConfig(python_executable='/ws/override')
-            agent_cfg = AgentConfig(python_executable='/agent/default')
+            venv = ws / "venv"
+            (venv / "bin").mkdir(parents=True)
+            detected_py = venv / "bin" / "python3"
+            detected_py.write_text("#!/bin/sh\n", encoding="utf-8")
+            (ws / "pyvenv.cfg").write_text(f"home = {venv}\n", encoding="utf-8")
+            ws_cfg = WorkspaceConfig(python_executable="/ws/override")
+            agent_cfg = AgentConfig(python_executable="/agent/default")
 
             # All four set: issue wins
             self.assertEqual(
@@ -833,9 +834,9 @@ class TestResolveCascadeWithIssueOverride(unittest.TestCase):
                     workspace_path=ws,
                     agent_cfg=agent_cfg,
                     workspace_cfg=ws_cfg,
-                    issue_executable='/issue/override',
+                    issue_executable="/issue/override",
                 ),
-                '/issue/override',
+                "/issue/override",
             )
 
             # Issue removed: workspace explicit wins
@@ -844,9 +845,9 @@ class TestResolveCascadeWithIssueOverride(unittest.TestCase):
                     workspace_path=ws,
                     agent_cfg=agent_cfg,
                     workspace_cfg=ws_cfg,
-                    issue_executable='',
+                    issue_executable="",
                 ),
-                '/ws/override',
+                "/ws/override",
             )
 
             # Workspace explicit removed: detect wins
@@ -855,7 +856,7 @@ class TestResolveCascadeWithIssueOverride(unittest.TestCase):
                     workspace_path=ws,
                     agent_cfg=agent_cfg,
                     workspace_cfg=WorkspaceConfig(),
-                    issue_executable='',
+                    issue_executable="",
                 ),
                 str(detected_py),
             )
@@ -866,9 +867,9 @@ class TestResolveCascadeWithIssueOverride(unittest.TestCase):
                     workspace_path=ws,
                     agent_cfg=agent_cfg,
                     workspace_cfg=WorkspaceConfig(python_auto_detect=False),
-                    issue_executable='',
+                    issue_executable="",
                 ),
-                '/agent/default',
+                "/agent/default",
             )
 
             # Everything empty: empty string
@@ -877,9 +878,9 @@ class TestResolveCascadeWithIssueOverride(unittest.TestCase):
                     workspace_path=ws,
                     agent_cfg=AgentConfig(),
                     workspace_cfg=WorkspaceConfig(python_auto_detect=False),
-                    issue_executable='',
+                    issue_executable="",
                 ),
-                '',
+                "",
             )
 
 
@@ -894,15 +895,15 @@ class TestPromptBuilderIntegrationWithIssueOverride(unittest.TestCase):
                 workspace_path=ws,
                 agent_cfg=AgentConfig(),
                 workspace_cfg=WorkspaceConfig(),
-                issue_executable='/opt/projX/.venv/bin/python',
+                issue_executable="/opt/projX/.venv/bin/python",
             )
             rendered = PromptBuilder.render(
                 issue,
                 session=None,
                 python_executable=resolved,
             )
-            self.assertIn('/opt/projX/.venv/bin/python', rendered)
-            self.assertIn('约束提醒', rendered)
+            self.assertIn("/opt/projX/.venv/bin/python", rendered)
+            self.assertIn("约束提醒", rendered)
 
     def test_continuation_uses_issue_override(self) -> None:
         with tempfile.TemporaryDirectory() as d:
@@ -911,7 +912,7 @@ class TestPromptBuilderIntegrationWithIssueOverride(unittest.TestCase):
                 workspace_path=ws,
                 agent_cfg=AgentConfig(),
                 workspace_cfg=WorkspaceConfig(),
-                issue_executable='/opt/projY/conda/bin/python',
+                issue_executable="/opt/projY/conda/bin/python",
             )
             rendered = PromptBuilder.build_continuation_prompt(
                 turn_number=3,
@@ -920,8 +921,8 @@ class TestPromptBuilderIntegrationWithIssueOverride(unittest.TestCase):
                 session=None,
                 python_executable=resolved,
             )
-            self.assertIn('/opt/projY/conda/bin/python', rendered)
-            self.assertIn('约束提醒', rendered)
+            self.assertIn("/opt/projY/conda/bin/python", rendered)
+            self.assertIn("约束提醒", rendered)
 
 
 @dataclass
@@ -945,13 +946,13 @@ class TestOperatorHintsInjection(unittest.TestCase):
         issue = _FakeIssue()
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            hints = 'Focus on implementation only.'
-            (ws / '.operator_hints.md').write_text(hints, encoding='utf-8')
+            hints = "Focus on implementation only."
+            (ws / ".operator_hints.md").write_text(hints, encoding="utf-8")
             rendered = PromptBuilder.render(
                 issue,
                 session=_FakeSession(workspace=_FakeWorkspace(path=ws)),
             )
-            self.assertIn('## Operator Hints', rendered)
+            self.assertIn("## Operator Hints", rendered)
             self.assertIn(hints, rendered)
 
     def test_render_skips_hints_when_file_missing(self) -> None:
@@ -962,25 +963,25 @@ class TestOperatorHintsInjection(unittest.TestCase):
                 issue,
                 session=_FakeSession(workspace=_FakeWorkspace(path=ws)),
             )
-            self.assertNotIn('## Operator Hints', rendered)
+            self.assertNotIn("## Operator Hints", rendered)
 
     def test_render_skips_hints_when_session_has_no_workspace(self) -> None:
         issue = _FakeIssue()
         rendered = PromptBuilder.render(issue, session=_FakeSession(workspace=None))
-        self.assertNotIn('## Operator Hints', rendered)
+        self.assertNotIn("## Operator Hints", rendered)
 
     def test_continuation_injects_hints_when_file_present(self) -> None:
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            hints = 'Do not re-read files.'
-            (ws / '.operator_hints.md').write_text(hints, encoding='utf-8')
+            hints = "Do not re-read files."
+            (ws / ".operator_hints.md").write_text(hints, encoding="utf-8")
             rendered = PromptBuilder.build_continuation_prompt(
                 turn_number=2,
                 max_turns=10,
                 issue_context=None,
                 session=_FakeSession(workspace=_FakeWorkspace(path=ws)),
             )
-            self.assertIn('## Operator Hints', rendered)
+            self.assertIn("## Operator Hints", rendered)
             self.assertIn(hints, rendered)
 
     def test_continuation_skips_hints_when_file_missing(self) -> None:
@@ -992,7 +993,7 @@ class TestOperatorHintsInjection(unittest.TestCase):
                 issue_context=None,
                 session=_FakeSession(workspace=_FakeWorkspace(path=ws)),
             )
-            self.assertNotIn('## Operator Hints', rendered)
+            self.assertNotIn("## Operator Hints", rendered)
 
 
 class TestRulesReferenceInjection(unittest.TestCase):
@@ -1006,21 +1007,21 @@ class TestRulesReferenceInjection(unittest.TestCase):
 
     def _write_workflow(self, root: Path, rules_enabled: bool = True) -> str:
         rules_block = (
-            (f'rules:\n  enabled: {str(rules_enabled).lower()}\n  path: workflow.rules.yaml\n')
+            (f"rules:\n  enabled: {str(rules_enabled).lower()}\n  path: workflow.rules.yaml\n")
             if rules_enabled
-            else ''
+            else ""
         )
         content = (
-            '---\n'
-            f'{rules_block}'
-            'agent:\n'
-            '  model: test-model\n'
-            '  provider: test\n'
-            '---\n'
-            'Fix the issue: {{ issue.description }}'
+            "---\n"
+            f"{rules_block}"
+            "agent:\n"
+            "  model: test-model\n"
+            "  provider: test\n"
+            "---\n"
+            "Fix the issue: {{ issue.description }}"
         )
-        p = root / 'WORKFLOW.md'
-        p.write_text(content, encoding='utf-8')
+        p = root / "WORKFLOW.md"
+        p.write_text(content, encoding="utf-8")
         return str(p)
 
     def test_prompt_injection_reference_line_present(self) -> None:
@@ -1031,9 +1032,9 @@ class TestRulesReferenceInjection(unittest.TestCase):
             store = get_workflow_store()
             store.load(wf_path)
             rendered = PromptBuilder.render(issue)
-            self.assertIn('📐', rendered)
-            self.assertIn('Review conventions', rendered)
-            self.assertIn('workflow.rules.yaml', rendered)
+            self.assertIn("📐", rendered)
+            self.assertIn("Review conventions", rendered)
+            self.assertIn("workflow.rules.yaml", rendered)
 
     def test_prompt_injection_skipped_when_rules_disabled(self) -> None:
         issue = _FakeIssue()
@@ -1043,16 +1044,16 @@ class TestRulesReferenceInjection(unittest.TestCase):
             store = get_workflow_store()
             store.load(wf_path)
             rendered = PromptBuilder.render(issue)
-            self.assertNotIn('📐', rendered)
-            self.assertNotIn('Review conventions', rendered)
+            self.assertNotIn("📐", rendered)
+            self.assertNotIn("Review conventions", rendered)
 
     def test_prompt_injection_skipped_when_no_workflow(self) -> None:
         issue = _FakeIssue()
         WorkflowStore.reset()
         rendered = PromptBuilder.render(issue)
-        self.assertNotIn('📐', rendered)
-        self.assertNotIn('Review conventions', rendered)
+        self.assertNotIn("📐", rendered)
+        self.assertNotIn("Review conventions", rendered)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

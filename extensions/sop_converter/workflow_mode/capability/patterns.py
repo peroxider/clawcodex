@@ -27,10 +27,26 @@ IMPORT_PATTERNS: list[tuple[re.Pattern[str], CapabilityKind, float]] = [
 ]
 
 CALL_PATTERNS: list[tuple[re.Pattern[str], CapabilityKind, float]] = [
-    (re.compile(r"\.invoke\(|\.chat\(|ChatCompletion|messages\.create", re.I), CapabilityKind.LLM_CALL, 0.9),
-    (re.compile(r"open\(|Path\([^)]*\)\.read|\.write_text|\.read_text", re.I), CapabilityKind.FILE_IO, 0.8),
-    (re.compile(r"subprocess\.(run|call|Popen)|os\.system", re.I), CapabilityKind.EXTERNAL_CLI, 1.0),
-    (re.compile(r"requests\.(get|post|put|delete)|httpx\.(get|post)", re.I), CapabilityKind.HTTP_API, 0.9),
+    (
+        re.compile(r"\.invoke\(|\.chat\(|ChatCompletion|messages\.create", re.I),
+        CapabilityKind.LLM_CALL,
+        0.9,
+    ),
+    (
+        re.compile(r"open\(|Path\([^)]*\)\.read|\.write_text|\.read_text", re.I),
+        CapabilityKind.FILE_IO,
+        0.8,
+    ),
+    (
+        re.compile(r"subprocess\.(run|call|Popen)|os\.system", re.I),
+        CapabilityKind.EXTERNAL_CLI,
+        1.0,
+    ),
+    (
+        re.compile(r"requests\.(get|post|put|delete)|httpx\.(get|post)", re.I),
+        CapabilityKind.HTTP_API,
+        0.9,
+    ),
 ]
 
 FRAGILITY_PATTERNS: list[tuple[re.Pattern[str], float]] = [

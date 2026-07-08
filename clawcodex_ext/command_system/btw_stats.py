@@ -147,16 +147,14 @@ def _load_existing_stats(path: Path) -> dict[str, Any]:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning(
-            "F-122-I: failed to read existing btw stats at %s (%s); "
-            "starting from zero",
+            "F-122-I: failed to read existing btw stats at %s (%s); starting from zero",
             path,
             exc,
         )
         return dict(_DEFAULT_STATS)
     if not isinstance(data, dict):
         logger.warning(
-            "F-122-I: existing btw stats at %s is not a JSON object; "
-            "starting from zero",
+            "F-122-I: existing btw stats at %s is not a JSON object; starting from zero",
             path,
         )
         return dict(_DEFAULT_STATS)
@@ -237,8 +235,7 @@ def increment_btw_use_count(*, question: str | None = None) -> dict[str, Any] | 
         return stats
     except Exception:
         logger.warning(
-            "F-122-I: failed to record /btw usage stat "
-            "(question=%r)",
+            "F-122-I: failed to record /btw usage stat (question=%r)",
             (question or "")[:60],
             exc_info=True,
         )

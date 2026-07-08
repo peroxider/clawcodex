@@ -58,8 +58,12 @@ def _digest(
         ScoredFeature(
             record=r,
             score=FeatureScore(
-                record_id=r.id, overall=70.0, popularity=80.0,
-                maturity=70.0, adaptation_cost=65.0, strategic_value=75.0,
+                record_id=r.id,
+                overall=70.0,
+                popularity=80.0,
+                maturity=70.0,
+                adaptation_cost=65.0,
+                strategic_value=75.0,
                 architecture_fit=70.0,
             ),
         )
@@ -206,8 +210,7 @@ def test_reporter_write_includes_llm_marker(tmp_path: Path) -> None:
     template_dir = tmp_path / "templates"
     template_dir.mkdir()
     template_dir.joinpath("weekly_digest.md.j2").write_text(
-        "[regular]\n"
-        "{% if llm_assisted %}-- LLM 标记 --\n{% endif %}",
+        "[regular]\n{% if llm_assisted %}-- LLM 标记 --\n{% endif %}",
         encoding="utf-8",
     )
     reporter = CommunityReporter(

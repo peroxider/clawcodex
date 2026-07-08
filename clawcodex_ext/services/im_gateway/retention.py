@@ -31,11 +31,11 @@ def run_retention_sweep(
         store = ReliabilityStore(state_dir, reliability=reliability)
         removed = store.purge_all(reliability)
         if any(removed.values()):
-            logger.info('im_gateway retention sweep: %s', removed)
+            logger.info("im_gateway retention sweep: %s", removed)
         return removed
     except Exception:  # noqa: BLE001
-        logger.exception('im_gateway retention sweep failed')
+        logger.exception("im_gateway retention sweep failed")
         return {}
 
 
-__all__ = ['run_retention_sweep']
+__all__ = ["run_retention_sweep"]

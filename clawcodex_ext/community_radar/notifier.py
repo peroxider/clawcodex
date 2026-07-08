@@ -70,6 +70,7 @@ def _load_channels_module() -> Any:
     try:
         from src.services.channels import base as _base  # type: ignore
         from src.services.channels import models as _models  # type: ignore
+
         return {"base": _base, "models": _models}
     except Exception as exc:  # noqa: BLE001
         _log.debug("F-63 Channels unavailable: %s", exc)
@@ -93,9 +94,7 @@ def _load_notify_config(path: Path | None = None) -> NotifyConfig:
     candidates: list[Path] = []
     if path is not None:
         candidates.append(path)
-    base = os.environ.get("CLAWCODEX_HOME") or os.environ.get(
-        "CLAWCODEX_NOTIFY_CONFIG"
-    )
+    base = os.environ.get("CLAWCODEX_HOME") or os.environ.get("CLAWCODEX_NOTIFY_CONFIG")
     if base:
         candidates.append(Path(base))
     candidates.append(
@@ -262,8 +261,14 @@ class DigestNotifier:
             import importlib
 
             submodule = importlib.import_module(f"src.services.channels.{submodule_name}")
-            for attr in ("FeishuChannel", "SlackChannel", "DiscordChannel",
-                         "WeChatChannel", "McpPushChannel", "BaseChannel"):
+            for attr in (
+                "FeishuChannel",
+                "SlackChannel",
+                "DiscordChannel",
+                "WeChatChannel",
+                "McpPushChannel",
+                "BaseChannel",
+            ):
                 channel_cls = getattr(submodule, attr, None)
                 if channel_cls is not None:
                     try:
@@ -302,9 +307,11 @@ def build_digest_message(
     lines: list[str] = []
     lines.append(f"**{digest.summary.strip()}**")
     lines.append("")
-    lines.append(f"覆盖 {len(digest.sources_used)} 个项目 · "
-                 f"{digest.stats.total_versions} 个版本 · "
-                 f"{digest.stats.total_features} 条候选特性")
+    lines.append(
+        f"覆盖 {len(digest.sources_used)} 个项目 · "
+        f"{digest.stats.total_versions} 个版本 · "
+        f"{digest.stats.total_features} 条候选特性"
+    )
     if digest.trending:
         lines.append("")
         lines.append(f"**Top-{min(top_n, len(digest.trending))} 高分候选：**")
@@ -324,11 +331,7 @@ def build_digest_message(
     if len(text) > 8_000:  # leave headroom under the 30 000-char hard cap
         text = text[:7997] + "…"
 
-    level = (
-        models.MessageLevel.SUCCESS
-        if digest.trending
-        else models.MessageLevel.INFO
-    )
+    level = models.MessageLevel.SUCCESS if digest.trending else models.MessageLevel.INFO
 
     metadata: dict[str, Any] = {
         "period": digest.period,

@@ -27,6 +27,7 @@ Dependencies
 absent, :meth:`start_streaming` raises ``ImportError`` with a clear
 "pip install websockets" hint rather than crashing at module import.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -159,9 +160,7 @@ class VoiceStreamConnection:
         try:
             import websockets  # type: ignore[import-untyped]
         except ImportError as exc:
-            self._on_error(
-                "Anthropic STT needs the 'websockets' package: pip install websockets"
-            )
+            self._on_error("Anthropic STT needs the 'websockets' package: pip install websockets")
             raise RuntimeError("websockets not installed") from exc
 
         try:
@@ -269,13 +268,11 @@ class AnthropicSTTProvider(STTProvider):
             token = get_oauth_access_token()
         except Exception as exc:
             raise VoiceAuthError(
-                "Anthropic STT needs an OAuth token (claude.ai login). "
-                "Run /login first."
+                "Anthropic STT needs an OAuth token (claude.ai login). Run /login first."
             ) from exc
         if not token:
             raise VoiceAuthError(
-                "Anthropic STT needs an OAuth token (claude.ai login). "
-                "Run /login first."
+                "Anthropic STT needs an OAuth token (claude.ai login). Run /login first."
             )
         self._bearer = token
         return token
@@ -330,9 +327,7 @@ class AnthropicSTTProvider(STTProvider):
             error.append(msg)
             done.set()
 
-        conn = self.connect_stream(
-            on_transcript=_on_transcript, on_error=_on_error, config=config
-        )
+        conn = self.connect_stream(on_transcript=_on_transcript, on_error=_on_error, config=config)
         # Feed the whole clip then close the producer side.
         conn.feed_audio(audio_data)
         # Wait for finalize in a task so we can race against error/timeout.

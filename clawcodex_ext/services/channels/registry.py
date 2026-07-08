@@ -99,9 +99,9 @@ class WebhookChannelAdapter(ChannelAdapter):
         try:
             validate_webhook_url(self._config.webhook_url)
         except Exception as exc:  # noqa: BLE001
-            errors.append(f'webhook_url: {exc}')
+            errors.append(f"webhook_url: {exc}")
         if not self._config.name:
-            errors.append('name must be non-empty')
+            errors.append("name must be non-empty")
         if errors:
             return ValidationResult.fail(errors)
         return ValidationResult.ok_result()
@@ -110,8 +110,8 @@ class WebhookChannelAdapter(ChannelAdapter):
         return ChannelHealth(
             healthy=bool(self._config.enabled),
             channel_id=self.channel_id,
-            circuit_state='closed',
-            account_status='webhook',
+            circuit_state="closed",
+            account_status="webhook",
         )
 
     async def send(
@@ -137,7 +137,7 @@ class WebhookChannelAdapter(ChannelAdapter):
         except Exception as exc:  # noqa: BLE001
             return ChannelSendResult.nonretryable_error(
                 self.channel_id,
-                message=f'send raised: {exc}',
+                message=f"send raised: {exc}",
                 category=ErrorCategory.UNKNOWN,
             )
         if ok:
@@ -147,7 +147,7 @@ class WebhookChannelAdapter(ChannelAdapter):
         # to avoid hammering a rejecting endpoint; the operator can resend.
         return ChannelSendResult.nonretryable_error(
             self.channel_id,
-            message='webhook returned non-success',
+            message="webhook returned non-success",
             category=ErrorCategory.UNKNOWN,
         )
 
@@ -177,7 +177,7 @@ class ChannelAdapterRegistry:
         with self._lock:
             factory = self._types.get(key)
         if factory is None:
-            raise KeyError(f'no factory registered for channel type {key!r}')
+            raise KeyError(f"no factory registered for channel type {key!r}")
         adapter = factory(config)
         self.register(adapter)
         return adapter
@@ -193,7 +193,7 @@ class ChannelAdapterRegistry:
     def require(self, name: str) -> ChannelAdapter:
         adapter = self.get(name)
         if adapter is None:
-            raise KeyError(f'no channel registered as {name!r}')
+            raise KeyError(f"no channel registered as {name!r}")
         return adapter
 
     def names(self) -> list[str]:
@@ -221,7 +221,7 @@ class ChannelAdapterRegistry:
             adapter = self.require(adapter)
         if not adapter.capabilities.has(capability):
             raise CapabilityNotDeclaredError(
-                f'channel {adapter.channel_id!r} does not declare {capability.value!r}'
+                f"channel {adapter.channel_id!r} does not declare {capability.value!r}"
             )
         return adapter
 
@@ -235,14 +235,14 @@ def _webhook_factory(channel_cls: type[BaseChannel]) -> ChannelAdapterFactory:
 
 
 def _feishu_factory(config: ChannelConfig) -> ChannelAdapter:
-    mode = str((config.extra or {}).get('connection_mode') or '').strip().lower()
+    mode = str((config.extra or {}).get("connection_mode") or "").strip().lower()
     if not mode and config.webhook_url:
-        mode = 'webhook'
-    if mode == 'webhook':
+        mode = "webhook"
+    if mode == "webhook":
         return WebhookChannelAdapter(config, FeishuChannel(config))
-    if mode == 'websocket':
+    if mode == "websocket":
         return FeishuAppChannelAdapter(config)
-    raise ValueError('feishu connection_mode must be websocket or webhook')
+    raise ValueError("feishu connection_mode must be websocket or webhook")
 
 
 def build_default_registry() -> ChannelAdapterRegistry:
@@ -255,8 +255,8 @@ def build_default_registry() -> ChannelAdapterRegistry:
 
 
 __all__ = [
-    'ChannelAdapterRegistry',
-    'ChannelAdapterFactory',
-    'WebhookChannelAdapter',
-    'build_default_registry',
+    "ChannelAdapterRegistry",
+    "ChannelAdapterFactory",
+    "WebhookChannelAdapter",
+    "build_default_registry",
 ]

@@ -61,21 +61,27 @@ class TestClarificationItem(unittest.TestCase):
 
     def test_is_expired_before_deadline(self) -> None:
         item = ClarificationItem(
-            issue_id="i1", issue_identifier="x", question="?",
+            issue_id="i1",
+            issue_identifier="x",
+            question="?",
             expires_at=time.time() + 100,
         )
         self.assertFalse(item.is_expired())
 
     def test_is_expired_after_deadline(self) -> None:
         item = ClarificationItem(
-            issue_id="i1", issue_identifier="x", question="?",
+            issue_id="i1",
+            issue_identifier="x",
+            question="?",
             expires_at=time.time() - 5,
         )
         self.assertTrue(item.is_expired())
 
     def test_is_expired_with_explicit_now(self) -> None:
         item = ClarificationItem(
-            issue_id="i1", issue_identifier="x", question="?",
+            issue_id="i1",
+            issue_identifier="x",
+            question="?",
             expires_at=100.0,
         )
         self.assertTrue(item.is_expired(now=200.0))
@@ -162,8 +168,11 @@ class TestClarificationQueueLifecycle(unittest.TestCase):
 
     def test_enqueue_creates_pending_item(self) -> None:
         item = self.queue.enqueue(
-            issue_id="i1", issue_identifier="x", question="?",
-            options=["a", "b"], timeout_seconds=60,
+            issue_id="i1",
+            issue_identifier="x",
+            question="?",
+            options=["a", "b"],
+            timeout_seconds=60,
         )
         self.assertEqual(item.status, ClarificationStatus.PENDING)
         self.assertIsNotNone(item.expires_at)
@@ -208,17 +217,13 @@ class TestClarificationQueueLifecycle(unittest.TestCase):
         self.queue.enqueue(issue_id="i1", issue_identifier="x", question="?")
         self.queue.mark_awaiting_local("i1")
         self.queue.resolve("i1", "answer from author", "author")
-        self.assertEqual(
-            self.queue.get("i1").status, ClarificationStatus.RESOLVED_AUTHOR
-        )
+        self.assertEqual(self.queue.get("i1").status, ClarificationStatus.RESOLVED_AUTHOR)
 
     def test_resolve_from_author_channel(self) -> None:
         self.queue.enqueue(issue_id="i1", issue_identifier="x", question="?")
         self.queue.mark_awaiting_author("i1")
         self.queue.resolve("i1", "answer", "author")
-        self.assertEqual(
-            self.queue.get("i1").status, ClarificationStatus.RESOLVED_AUTHOR
-        )
+        self.assertEqual(self.queue.get("i1").status, ClarificationStatus.RESOLVED_AUTHOR)
 
     def test_resolve_missing_returns_none(self) -> None:
         self.assertIsNone(self.queue.resolve("missing", "x", "dashboard"))
@@ -245,7 +250,9 @@ class TestClarificationQueueLifecycle(unittest.TestCase):
 
     def test_poll_pending_excludes_expired(self) -> None:
         self.queue.enqueue(
-            issue_id="i1", issue_identifier="x", question="?",
+            issue_id="i1",
+            issue_identifier="x",
+            question="?",
             timeout_seconds=0,
         )
         # Force expiration: the expires_at was set to time.time() + 0 → effectively now.
@@ -394,9 +401,7 @@ class TestSaveFailure(unittest.TestCase):
         queue.enqueue(issue_id="i1", issue_identifier="x", question="?")
         # Force _save to fail by patching the Path.write_text to raise.
         with patch.object(Path, "write_text", side_effect=OSError("disk full")):
-            with self.assertLogs(
-                "extensions.orchestrator.clarification_queue", level="WARNING"
-            ):
+            with self.assertLogs("extensions.orchestrator.clarification_queue", level="WARNING"):
                 # Should not raise — write errors are logged.
                 queue.enqueue(issue_id="i2", issue_identifier="x", question="?")
         # In-memory state still updated.

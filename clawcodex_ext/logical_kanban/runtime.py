@@ -28,11 +28,13 @@ class LogicalKanbanRuntime:
 
 def _make_service() -> "LogicalKanbanService":
     from .service import LogicalKanbanService
+
     return LogicalKanbanService()
 
 
 def _make_tms() -> "TruthMaintenanceSystem":
     from .truth_maintenance import TruthMaintenanceSystem
+
     return TruthMaintenanceSystem()
 
 

@@ -101,7 +101,7 @@ def _cmd_recall(service, args: list[str]) -> str:
     from extensions.agents.team_memory import TeamMemoryQuery
 
     if not args:
-        return "Usage: /team memory recall \"<query>\""
+        return 'Usage: /team memory recall "<query>"'
     query = " ".join(args).strip()
     # Strip surrounding quotes if present.
     if query.startswith('"') and query.endswith('"') and len(query) >= 2:
@@ -165,7 +165,7 @@ def _cmd_remember(service, args: list[str]) -> str:
     if not positional:
         return (
             "Usage: /team memory remember [--tag X]... [--scope team|lead_only|agent_pair] "
-            "[--source manual|task_result|review|send_message|system] [--summary S] \"<content>\""
+            '[--source manual|task_result|review|send_message|system] [--summary S] "<content>"'
         )
     if scope not in _VALID_SCOPES:
         return f"Invalid --scope {scope!r}; expected one of {sorted(_VALID_SCOPES)}"
@@ -214,7 +214,7 @@ def _cmd_list(service, args: list[str]) -> str:
             try:
                 limit = int(args[i + 1])
             except ValueError:
-                return f"Invalid --limit {args[i+1]!r}"
+                return f"Invalid --limit {args[i + 1]!r}"
             i += 2
             continue
         positional.append(a)
@@ -294,10 +294,7 @@ def _team_memory_run(args: str, context: CommandContext) -> LocalCommandResult:
     if handler is None:
         return LocalCommandResult(
             type="text",
-            value=(
-                f"Unknown /team memory subcommand {sub!r}. "
-                f"Valid: {sorted(_SUBCOMMANDS)}"
-            ),
+            value=(f"Unknown /team memory subcommand {sub!r}. Valid: {sorted(_SUBCOMMANDS)}"),
         )
     service, err = _build_service(context)
     if service is None:

@@ -14,8 +14,8 @@ from .formatter import format_event
 from .types import EventLevel, OrchestratorEvent
 
 __all__ = [
-    'EventLevel',
-    'OrchestratorEvent',
-    'OrchestratorEventEmitter',
-    'format_event',
+    "EventLevel",
+    "OrchestratorEvent",
+    "OrchestratorEventEmitter",
+    "format_event",
 ]

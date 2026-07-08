@@ -48,22 +48,16 @@ _TRANSITIONS: dict[tuple[str, str], str] = {
 
 # Forbidden transitions that deserve an explicit error message
 _FORBIDDEN: dict[tuple[str, str], str] = {
-    ("approved", "reject"): (
-        "An approved method cannot be rejected. Use 'deprecate' instead."
-    ),
+    ("approved", "reject"): ("An approved method cannot be rejected. Use 'deprecate' instead."),
     ("approved", "draft"): (
         "An approved method cannot be downgraded to draft. "
         "Deprecate it first, then create a new version."
     ),
-    ("rejected",): (
-        "A rejected method is a terminal state. Create a new method_id to restart."
-    ),
+    ("rejected",): ("A rejected method is a terminal state. Create a new method_id to restart."),
     ("deprecated",): (
         "A deprecated method is a terminal state. Create a new method_id to restart."
     ),
-    ("draft", "deprecate"): (
-        "A draft method should be 'reject'ed, not deprecated."
-    ),
+    ("draft", "deprecate"): ("A draft method should be 'reject'ed, not deprecated."),
 }
 
 # ---------------------------------------------------------------------------
@@ -132,15 +126,11 @@ def submit_method(method: EngineeringMethod) -> str:
         already exists in the registry.
     """
     if method.status != "draft":
-        raise ValueError(
-            f"Only draft methods can be submitted; got {method.status!r}"
-        )
+        raise ValueError(f"Only draft methods can be submitted; got {method.status!r}")
 
     existing = get_method(method.method_id)
     if existing is not None:
-        raise ValueError(
-            f"method_id {method.method_id!r} already exists in the registry"
-        )
+        raise ValueError(f"method_id {method.method_id!r} already exists in the registry")
 
     proposal_id = _new_proposal_id()
     proposal = MethodProposal(
@@ -353,7 +343,7 @@ def _transition(proposal: MethodProposal, action: str) -> None:
 def _format_allowed(status: str) -> str:
     """Return a human-readable list of allowed actions for *status*."""
     allowed: list[str] = []
-    for (s, a) in _TRANSITIONS:
+    for s, a in _TRANSITIONS:
         if s == status:
             allowed.append(a)
     return ", ".join(allowed) if allowed else "(none)"
@@ -400,9 +390,7 @@ def _persist_proposal(proposal: MethodProposal) -> None:
         "createdAt": proposal.created_at,
         "updatedAt": proposal.updated_at,
     }
-    path.write_text(
-        json.dumps(data, ensure_ascii=True, indent=2), encoding="utf-8"
-    )
+    path.write_text(json.dumps(data, ensure_ascii=True, indent=2), encoding="utf-8")
 
 
 def load_proposals(proposal_dir: Path | None = None) -> None:

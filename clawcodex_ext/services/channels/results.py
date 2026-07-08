@@ -16,37 +16,37 @@ from typing import Any
 class SendStatus(str, Enum):
     """Outcome of a single send attempt (or the terminal attempt)."""
 
-    SUCCESS = 'success'
-    FAILED = 'failed'  # terminal, non-retryable
-    RETRYABLE_ERROR = 'retryable_error'
-    NONRETRYABLE_ERROR = 'nonretryable_error'
-    UNSUPPORTED = 'unsupported'  # capability not declared (fail-closed)
-    RATE_LIMITED = 'rate_limited'
-    ENQUEUED = 'enqueued'
+    SUCCESS = "success"
+    FAILED = "failed"  # terminal, non-retryable
+    RETRYABLE_ERROR = "retryable_error"
+    NONRETRYABLE_ERROR = "nonretryable_error"
+    UNSUPPORTED = "unsupported"  # capability not declared (fail-closed)
+    RATE_LIMITED = "rate_limited"
+    ENQUEUED = "enqueued"
 
 
 class ErrorCategory(str, Enum):
     """Coarse error classification driving retry decisions."""
 
-    NONE = 'none'
-    NETWORK = 'network'
-    TIMEOUT = 'timeout'
-    RATE_LIMIT = 'rate_limit'  # 429
-    SERVER_ERROR = 'server_error'  # 5xx
-    CLIENT_ERROR = 'client_error'  # 4xx other than below
-    AUTH = 'auth'  # 401 / 403 / session expired
-    NOT_FOUND = 'not_found'  # 404
-    FORMAT = 'format'  # malformed payload / response
-    UNSUPPORTED_MEDIA = 'unsupported_media'
-    CIRCUIT_OPEN = 'circuit_open'  # adapter fuse blown
-    UNKNOWN = 'unknown'
+    NONE = "none"
+    NETWORK = "network"
+    TIMEOUT = "timeout"
+    RATE_LIMIT = "rate_limit"  # 429
+    SERVER_ERROR = "server_error"  # 5xx
+    CLIENT_ERROR = "client_error"  # 4xx other than below
+    AUTH = "auth"  # 401 / 403 / session expired
+    NOT_FOUND = "not_found"  # 404
+    FORMAT = "format"  # malformed payload / response
+    UNSUPPORTED_MEDIA = "unsupported_media"
+    CIRCUIT_OPEN = "circuit_open"  # adapter fuse blown
+    UNKNOWN = "unknown"
 
 
 class CircuitState(str, Enum):
     """Adapter connection-fuse state (used by :class:`ChannelHealth`)."""
 
-    CLOSED = 'closed'
-    OPEN = 'circuit_open'
+    CLOSED = "closed"
+    OPEN = "circuit_open"
 
 
 # Categories that may be retried under the default policy.
@@ -87,11 +87,11 @@ class ChannelSendResult:
 
     def __post_init__(self) -> None:
         if not isinstance(self.status, SendStatus):
-            raise TypeError('ChannelSendResult.status must be a SendStatus')
+            raise TypeError("ChannelSendResult.status must be a SendStatus")
         if not isinstance(self.error_category, ErrorCategory):
-            raise TypeError('ChannelSendResult.error_category must be an ErrorCategory')
+            raise TypeError("ChannelSendResult.error_category must be an ErrorCategory")
         if self.attempts < 1:
-            raise ValueError('ChannelSendResult.attempts must be >= 1')
+            raise ValueError("ChannelSendResult.attempts must be >= 1")
 
     @property
     def retryable(self) -> bool:
@@ -149,7 +149,7 @@ class ChannelSendResult:
         raw: dict[str, Any] | None = None,
     ) -> ChannelSendResult:
         if category not in RETRYABLE_CATEGORIES:
-            raise ValueError(f'{category!r} is not a retryable category; use nonretryable_error')
+            raise ValueError(f"{category!r} is not a retryable category; use nonretryable_error")
         return cls(
             ok=False,
             status=SendStatus.RETRYABLE_ERROR,
@@ -219,14 +219,14 @@ class ChannelSendResult:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            'ok': self.ok,
-            'status': self.status.value,
-            'channel_id': self.channel_id,
-            'error_category': self.error_category.value,
-            'provider_receipt': self.provider_receipt,
-            'message': self.message,
-            'attempts': self.attempts,
-            'raw': dict(self.raw) if self.raw is not None else None,
+            "ok": self.ok,
+            "status": self.status.value,
+            "channel_id": self.channel_id,
+            "error_category": self.error_category.value,
+            "provider_receipt": self.provider_receipt,
+            "message": self.message,
+            "attempts": self.attempts,
+            "raw": dict(self.raw) if self.raw is not None else None,
         }
 
 
@@ -236,7 +236,7 @@ class ChannelHealth:
 
     healthy: bool
     channel_id: str
-    circuit_state: str = 'closed'  # closed | circuit_open
+    circuit_state: str = "closed"  # closed | circuit_open
     last_error: str | None = None
     last_poll_at: float | None = None
     last_inbound_at: float | None = None
@@ -248,17 +248,17 @@ class ChannelHealth:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            'healthy': self.healthy,
-            'channel_id': self.channel_id,
-            'circuit_state': self.circuit_state,
-            'last_error': self.last_error,
-            'last_poll_at': self.last_poll_at,
-            'last_inbound_at': self.last_inbound_at,
-            'last_outbound_at': self.last_outbound_at,
-            'consecutive_failures': self.consecutive_failures,
-            'account_status': self.account_status,
-            'queue_depth': self.queue_depth,
-            'extra': dict(self.extra) if self.extra else {},
+            "healthy": self.healthy,
+            "channel_id": self.channel_id,
+            "circuit_state": self.circuit_state,
+            "last_error": self.last_error,
+            "last_poll_at": self.last_poll_at,
+            "last_inbound_at": self.last_inbound_at,
+            "last_outbound_at": self.last_outbound_at,
+            "consecutive_failures": self.consecutive_failures,
+            "account_status": self.account_status,
+            "queue_depth": self.queue_depth,
+            "extra": dict(self.extra) if self.extra else {},
         }
 
 
@@ -281,12 +281,12 @@ class ValidationResult:
 
 
 __all__ = [
-    'ChannelHealth',
-    'ChannelSendResult',
-    'CircuitState',
-    'ErrorCategory',
-    'NONRETRYABLE_CATEGORIES',
-    'RETRYABLE_CATEGORIES',
-    'SendStatus',
-    'ValidationResult',
+    "ChannelHealth",
+    "ChannelSendResult",
+    "CircuitState",
+    "ErrorCategory",
+    "NONRETRYABLE_CATEGORIES",
+    "RETRYABLE_CATEGORIES",
+    "SendStatus",
+    "ValidationResult",
 ]

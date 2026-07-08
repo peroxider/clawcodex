@@ -41,9 +41,7 @@ logger = logging.getLogger(__name__)
 MODE_LABEL_PREFIX: str = "mode:"
 """Issue labels starting with this prefix request a specific mode."""
 
-KNOWN_MODES: frozenset[str] = frozenset(
-    {"single", "pipeline", "coordinator", "debate", "auto"}
-)
+KNOWN_MODES: frozenset[str] = frozenset({"single", "pipeline", "coordinator", "debate", "auto"})
 """All valid mode names the selector / CLI / dashboard accept.
 
 ``auto`` is a meta-mode meaning "let the router decide" and is treated
@@ -72,9 +70,7 @@ class ModeSelector:
                 f"default_mode={default_mode!r} not in KNOWN_MODES={sorted(KNOWN_MODES)}"
             )
         if not 0.0 <= min_confidence <= 1.0:
-            raise ValueError(
-                f"min_confidence={min_confidence!r} must be in [0.0, 1.0]"
-            )
+            raise ValueError(f"min_confidence={min_confidence!r} must be in [0.0, 1.0]")
         self._default_mode = default_mode
         self._router = router
         self._min_confidence = min_confidence
@@ -141,9 +137,7 @@ class ModeSelector:
             )
         return None
 
-    def _choose_via_router(
-        self, issue: "Issue", *, fallback_reason: str
-    ) -> ModeDecision:
+    def _choose_via_router(self, issue: "Issue", *, fallback_reason: str) -> ModeDecision:
         """Ask the router which mode to use, with full error containment.
 
         Failure modes (all → fallback decision with a useful ``reason``):
@@ -153,29 +147,22 @@ class ModeSelector:
         - Router's confidence below ``min_confidence``.
         """
         if self._router is None:
-            return self._default_decision(
-                f"{fallback_reason}; but no router available"
-            )
+            return self._default_decision(f"{fallback_reason}; but no router available")
 
         try:
             result = self._router.choose(issue)
         except Exception:
             logger.exception("ModeSelector: router.choose raised")
-            return self._default_decision(
-                f"{fallback_reason}; router raised — see logs"
-            )
+            return self._default_decision(f"{fallback_reason}; router raised — see logs")
 
         mode = result.mode
         if mode not in KNOWN_MODES or mode == "auto":
             logger.warning(
-                "ModeSelector: router returned mode=%r (not a runnable mode); "
-                "falling back to %s",
+                "ModeSelector: router returned mode=%r (not a runnable mode); falling back to %s",
                 mode,
                 self._default_mode,
             )
-            return self._default_decision(
-                f"router returned mode={mode!r}; falling back"
-            )
+            return self._default_decision(f"router returned mode={mode!r}; falling back")
 
         if result.confidence < self._min_confidence:
             return self._default_decision(

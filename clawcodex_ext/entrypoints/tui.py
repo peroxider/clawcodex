@@ -161,9 +161,7 @@ def _print_resume_hint_after_tui(app) -> None:
     from clawcodex_ext.utils.resume_hint import print_resume_hint
 
     session = getattr(app, "session", None)
-    print_resume_hint(
-        getattr(session, "session_id", None) if session is not None else None
-    )
+    print_resume_hint(getattr(session, "session_id", None) if session is not None else None)
 
 
 def _replay_transcript_to_host(app) -> None:

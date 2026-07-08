@@ -27,8 +27,8 @@ def test_status_not_running(tmp_path) -> None:
 def test_stale_socket_cleanup(tmp_path) -> None:
     paths = DaemonPaths.for_state_dir(tmp_path)
     # stale PID pointing at a dead process + a leftover socket
-    paths.pid_file.write_text('999999\n', encoding='utf-8')
-    paths.sock_file.write_text('', encoding='utf-8')
+    paths.pid_file.write_text("999999\n", encoding="utf-8")
+    paths.sock_file.write_text("", encoding="utf-8")
     assert cleanup_stale(paths) is True
     assert not paths.pid_file.exists()
     assert not paths.sock_file.exists()
@@ -36,8 +36,8 @@ def test_stale_socket_cleanup(tmp_path) -> None:
 
 def test_stale_socket_kept_when_pid_alive(tmp_path) -> None:
     paths = DaemonPaths.for_state_dir(tmp_path)
-    paths.pid_file.write_text(f'{__import__("os").getpid()}\n', encoding='utf-8')
-    paths.sock_file.write_text('', encoding='utf-8')
+    paths.pid_file.write_text(f"{__import__('os').getpid()}\n", encoding="utf-8")
+    paths.sock_file.write_text("", encoding="utf-8")
     # current process is alive → not stale
     assert cleanup_stale(paths) is False
     assert paths.pid_file.exists()
@@ -71,12 +71,12 @@ def test_daemon_start_status_stop_smoke(tmp_path) -> None:
     daemon = GatewayDaemon(DaemonPaths.for_state_dir(tmp_path))
     try:
         rc = daemon.start()
-        assert rc == 0, f'daemon failed to start; see {daemon.paths.log_file}'
+        assert rc == 0, f"daemon failed to start; see {daemon.paths.log_file}"
         pid = read_pid(daemon.paths)
         assert pid is not None and is_pid_alive(pid)
         assert daemon.paths.sock_file.exists()
         # health file written
-        health = daemon.paths.health_file.read_text(encoding='utf-8')
+        health = daemon.paths.health_file.read_text(encoding="utf-8")
         assert '"running": true' in health
     finally:
         daemon.stop()
@@ -92,39 +92,39 @@ def test_gateway_no_args_prints_usage(capsys) -> None:
     rc = run_gateway_command([])
     assert rc == 0
     out = capsys.readouterr().out
-    assert 'usage:' in out
+    assert "usage:" in out
 
 
 def test_gateway_help_prints_usage(capsys) -> None:
     """`gateway help` prints usage and returns 0."""
-    rc = run_gateway_command(['help'])
+    rc = run_gateway_command(["help"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert 'usage:' in out
+    assert "usage:" in out
 
 
 def test_gateway_unknown_subcommand_errors(capsys) -> None:
     """`gateway <unknown>` reports an error."""
-    rc = run_gateway_command(['bogus'])
+    rc = run_gateway_command(["bogus"])
     assert rc == 2
     err = capsys.readouterr().err
-    assert 'unknown gateway subcommand' in err
+    assert "unknown gateway subcommand" in err
 
 
 def test_gateway_server_start_errors(capsys) -> None:
     """`gateway server start` is no longer valid — 'server' is an unknown verb."""
-    rc = run_gateway_command(['server', 'start'])
+    rc = run_gateway_command(["server", "start"])
     assert rc == 2
     err = capsys.readouterr().err
-    assert 'unknown gateway subcommand' in err
+    assert "unknown gateway subcommand" in err
 
 
 def test_gateway_channels_status_errors(capsys) -> None:
     """`gateway channels status` is no longer valid — 'channels' is an unknown verb."""
-    rc = run_gateway_command(['channels', 'status'])
+    rc = run_gateway_command(["channels", "status"])
     assert rc == 2
     err = capsys.readouterr().err
-    assert 'unknown gateway subcommand' in err
+    assert "unknown gateway subcommand" in err
 
 
 def test_serve_writes_pid_before_gateway_start(tmp_path, monkeypatch) -> None:
@@ -149,25 +149,25 @@ def test_serve_writes_pid_before_gateway_start(tmp_path, monkeypatch) -> None:
         async def start(self) -> None:
             # If write_pid ran before us, the PID file already exists.
             seen_pid_at_start.append(read_pid(paths))
-            raise RuntimeError('adapter start crashed')
+            raise RuntimeError("adapter start crashed")
 
         async def stop(self) -> None:
             pass
 
-    monkeypatch.setattr(srv, 'MessageGateway', _CrashingGateway)
+    monkeypatch.setattr(srv, "MessageGateway", _CrashingGateway)
     # load_config needs a config file; write a minimal one.
     paths.state_dir.mkdir(parents=True, exist_ok=True)
-    (paths.state_dir / 'channels.yaml').write_text(
-        'enabled: true\nchannels: []\n', encoding='utf-8'
+    (paths.state_dir / "channels.yaml").write_text(
+        "enabled: true\nchannels: []\n", encoding="utf-8"
     )
 
     # gateway.start raises → serve propagates the RuntimeError.
-    with pytest.raises(RuntimeError, match='adapter start crashed'):
+    with pytest.raises(RuntimeError, match="adapter start crashed"):
         asyncio.run(srv.serve(paths, log_level=40))  # CRITICAL = quiet
 
     # The PID file was already written when gateway.start ran (proving
     # write_pid precedes adapter start), then cleaned up on the failure path.
-    assert seen_pid_at_start == [__import__('os').getpid()]
+    assert seen_pid_at_start == [__import__("os").getpid()]
     assert seen_pid_at_start[0] is not None
     assert not paths.pid_file.exists()
 
@@ -178,7 +178,7 @@ def test_gateway_start_reports_retrying_channel_as_degraded_success(
     from extensions.im_gateway import server as srv
 
     paths = DaemonPaths.for_state_dir(tmp_path)
-    paths.log_file.write_text('', encoding='utf-8')
+    paths.log_file.write_text("", encoding="utf-8")
 
     class _FakeProc:
         returncode = None
@@ -186,54 +186,54 @@ def test_gateway_start_reports_retrying_channel_as_degraded_success(
         def poll(self):
             return None
 
-    monkeypatch.setattr(srv.subprocess, 'Popen', lambda *a, **kw: _FakeProc())
+    monkeypatch.setattr(srv.subprocess, "Popen", lambda *a, **kw: _FakeProc())
     read_pid_values = iter([None, 12345])
-    monkeypatch.setattr(srv, 'read_pid', lambda _paths: next(read_pid_values, 12345))
-    monkeypatch.setattr(srv, 'is_pid_alive', lambda pid: pid == 12345)
+    monkeypatch.setattr(srv, "read_pid", lambda _paths: next(read_pid_values, 12345))
+    monkeypatch.setattr(srv, "is_pid_alive", lambda pid: pid == 12345)
     monkeypatch.setattr(
         srv,
-        'read_health',
+        "read_health",
         lambda _paths: {
-            'started_at': time.time(),
-            'channels': ['feishu'],
-            'channel_status': {'feishu': 'websocket:retrying'},
+            "started_at": time.time(),
+            "channels": ["feishu"],
+            "channel_status": {"feishu": "websocket:retrying"},
         },
     )
-    monkeypatch.setattr(srv, 'startup_health_wait_seconds', lambda _paths: 0.1)
+    monkeypatch.setattr(srv, "startup_health_wait_seconds", lambda _paths: 0.1)
 
     rc = GatewayDaemon(paths).start()
     captured = capsys.readouterr()
 
     assert rc == 0
-    assert 'Gateway daemon started' in captured.out
-    assert 'channel feishu: websocket:retrying' in captured.err
-    assert 'retrying in background' in captured.err
-    assert 'NOT connected' not in captured.err
-    assert 'messages may be dropped' not in captured.err
+    assert "Gateway daemon started" in captured.out
+    assert "channel feishu: websocket:retrying" in captured.err
+    assert "retrying in background" in captured.err
+    assert "NOT connected" not in captured.err
+    assert "messages may be dropped" not in captured.err
 
 
 def test_startup_health_wait_seconds_includes_feishu_sdk_import_buffer(tmp_path) -> None:
     from extensions.im_gateway import server as srv
 
     paths = DaemonPaths.for_state_dir(tmp_path)
-    (paths.state_dir / 'channels.yaml').write_text(
-        '\n'.join(
+    (paths.state_dir / "channels.yaml").write_text(
+        "\n".join(
             [
-                'enabled: true',
-                'channels:',
-                '  - type: feishu',
+                "enabled: true",
+                "channels:",
+                "  - type: feishu",
                 '    webhook_url: ""',
-                '    name: feishu',
-                '    enabled: true',
-                '    extra:',
-                '      connection_mode: websocket',
-                '      app_id: cli_app',
-                '      app_secret: secret',
-                '      websocket:',
-                '        startup_connect_timeout_seconds: 7.5',
+                "    name: feishu",
+                "    enabled: true",
+                "    extra:",
+                "      connection_mode: websocket",
+                "      app_id: cli_app",
+                "      app_secret: secret",
+                "      websocket:",
+                "        startup_connect_timeout_seconds: 7.5",
             ]
         ),
-        encoding='utf-8',
+        encoding="utf-8",
     )
 
     assert srv.startup_health_wait_seconds(paths) == pytest.approx(157.5)
@@ -241,18 +241,18 @@ def test_startup_health_wait_seconds_includes_feishu_sdk_import_buffer(tmp_path)
 
 def test_gateway_start_with_name_errors(capsys) -> None:
     """`gateway start <name>` is invalid — start takes no channel name."""
-    rc = run_gateway_command(['start', 'wechat'])
+    rc = run_gateway_command(["start", "wechat"])
     assert rc == 2
     err = capsys.readouterr().err
-    assert 'start takes no channel name' in err.lower()
+    assert "start takes no channel name" in err.lower()
 
 
 def test_gateway_stop_with_name_errors(capsys) -> None:
     """`gateway stop <name>` is invalid — stop takes no channel name."""
-    rc = run_gateway_command(['stop', 'wechat'])
+    rc = run_gateway_command(["stop", "wechat"])
     assert rc == 2
     err = capsys.readouterr().err
-    assert 'stop takes no channel name' in err.lower()
+    assert "stop takes no channel name" in err.lower()
 
 
 def test_gateway_setup_calls_wizard(monkeypatch) -> None:
@@ -265,8 +265,8 @@ def test_gateway_setup_calls_wizard(monkeypatch) -> None:
 
     from clawcodex_ext.cli.channels_cmd import commands as ch
 
-    monkeypatch.setattr(ch, 'run_wizard', _fake_wizard)
-    rc = run_gateway_command(['setup'])
+    monkeypatch.setattr(ch, "run_wizard", _fake_wizard)
+    rc = run_gateway_command(["setup"])
     assert rc == 0
     assert called == [None]
 
@@ -281,10 +281,10 @@ def test_gateway_restart_channel(monkeypatch) -> None:
 
     from clawcodex_ext.cli.channels_cmd import commands as ch
 
-    monkeypatch.setattr(ch, 'restart_channel', _fake_restart)
-    rc = run_gateway_command(['restart', 'wechat'])
+    monkeypatch.setattr(ch, "restart_channel", _fake_restart)
+    rc = run_gateway_command(["restart", "wechat"])
     assert rc == 0
-    assert calls == [('wechat', None)]
+    assert calls == [("wechat", None)]
 
 
 def test_gateway_restart_daemon(monkeypatch) -> None:
@@ -299,8 +299,8 @@ def test_gateway_restart_daemon(monkeypatch) -> None:
             calls.append(verbose)
             return 0
 
-    monkeypatch.setattr('extensions.im_gateway.server.GatewayDaemon', _FakeDaemon)
-    rc = run_gateway_command(['restart'])
+    monkeypatch.setattr("extensions.im_gateway.server.GatewayDaemon", _FakeDaemon)
+    rc = run_gateway_command(["restart"])
     assert rc == 0
     assert calls == [False]
 
@@ -311,16 +311,16 @@ def test_gateway_status_channel(monkeypatch, capsys) -> None:
 
     def _fake_format_status(path=None, name=None, *, state_dir=None) -> str:
         calls.append((path, name, state_dir))
-        return f'STATUS:{name}'
+        return f"STATUS:{name}"
 
     from clawcodex_ext.cli.channels_cmd import commands as ch
 
-    monkeypatch.setattr(ch, 'format_status', _fake_format_status)
-    rc = run_gateway_command(['status', 'wechat'])
+    monkeypatch.setattr(ch, "format_status", _fake_format_status)
+    rc = run_gateway_command(["status", "wechat"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert 'STATUS:wechat' in out
-    assert calls == [(None, 'wechat', None)]
+    assert "STATUS:wechat" in out
+    assert calls == [(None, "wechat", None)]
 
 
 def test_gateway_status_unified(monkeypatch, capsys) -> None:
@@ -334,23 +334,23 @@ def test_gateway_status_unified(monkeypatch, capsys) -> None:
 
         def status(self):
             daemon_status_calls.append(1)
-            print('DAEMON: running', end='')
+            print("DAEMON: running", end="")
             return 0
 
     def _fake_format_status(path=None, name=None, *, state_dir=None) -> str:
         format_status_calls.append((path, name, state_dir))
-        return 'CHANNELS: all'
+        return "CHANNELS: all"
 
-    monkeypatch.setattr('extensions.im_gateway.server.GatewayDaemon', _FakeDaemon)
+    monkeypatch.setattr("extensions.im_gateway.server.GatewayDaemon", _FakeDaemon)
     from clawcodex_ext.cli.channels_cmd import commands as ch
 
-    monkeypatch.setattr(ch, 'format_status', _fake_format_status)
+    monkeypatch.setattr(ch, "format_status", _fake_format_status)
 
-    rc = run_gateway_command(['status'])
+    rc = run_gateway_command(["status"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert 'DAEMON: running' in out
-    assert 'CHANNELS: all' in out
+    assert "DAEMON: running" in out
+    assert "CHANNELS: all" in out
     assert len(daemon_status_calls) == 1
     assert format_status_calls == [(None, None, None)]
 
@@ -365,10 +365,10 @@ def test_gateway_disconnect_channel(monkeypatch) -> None:
 
     from clawcodex_ext.cli.channels_cmd import commands as ch
 
-    monkeypatch.setattr(ch, '_disconnect_gateway_connection', _fake_disconnect)
-    rc = run_gateway_command(['disconnect', 'wechat'])
+    monkeypatch.setattr(ch, "_disconnect_gateway_connection", _fake_disconnect)
+    rc = run_gateway_command(["disconnect", "wechat"])
     assert rc == 0
-    assert calls == [('wechat', None)]
+    assert calls == [("wechat", None)]
 
 
 def test_gateway_login_channel(monkeypatch) -> None:
@@ -381,15 +381,15 @@ def test_gateway_login_channel(monkeypatch) -> None:
 
     from clawcodex_ext.cli.channels_cmd import commands as ch
 
-    monkeypatch.setattr(ch, 'wechat_login', _fake_login)
-    rc = run_gateway_command(['login', 'wechat'])
+    monkeypatch.setattr(ch, "wechat_login", _fake_login)
+    rc = run_gateway_command(["login", "wechat"])
     assert rc == 0
-    assert calls == [('wechat', None)]
+    assert calls == [("wechat", None)]
 
 
 def test_gateway_wizard_is_unknown(capsys) -> None:
     """`gateway wizard` is no longer valid — only `setup` runs the wizard."""
-    rc = run_gateway_command(['wizard'])
+    rc = run_gateway_command(["wizard"])
     assert rc == 2
     err = capsys.readouterr().err
-    assert 'unknown gateway subcommand' in err
+    assert "unknown gateway subcommand" in err

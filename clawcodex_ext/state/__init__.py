@@ -6,7 +6,11 @@ import json
 from pathlib import Path
 
 SNAPSHOT_PATH = (
-    Path(__file__).resolve().parent.parent.parent / "src" / "reference_data" / "subsystems" / "state.json"
+    Path(__file__).resolve().parent.parent.parent
+    / "src"
+    / "reference_data"
+    / "subsystems"
+    / "state.json"
 )
 _SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
 

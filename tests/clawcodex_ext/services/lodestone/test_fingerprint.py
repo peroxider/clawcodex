@@ -26,11 +26,17 @@ from clawcodex_ext.services.lodestone.fingerprint import (
 @pytest.mark.parametrize(
     "url,expected",
     [
-        ("https://github.com/anthropics/claude-code.git", ("github.com", "anthropics", "claude-code")),
+        (
+            "https://github.com/anthropics/claude-code.git",
+            ("github.com", "anthropics", "claude-code"),
+        ),
         ("https://gitcode.com/chadwweng/clawcodex.git", ("gitcode.com", "chadwweng", "clawcodex")),
         ("https://gitee.com/foo/bar.git", ("gitee.com", "foo", "bar")),
         ("git@github.com:anthropics/claude-code.git", ("github.com", "anthropics", "claude-code")),
-        ("ssh://git@github.com/anthropics/claude-code", ("github.com", "anthropics", "claude-code")),
+        (
+            "ssh://git@github.com/anthropics/claude-code",
+            ("github.com", "anthropics", "claude-code"),
+        ),
     ],
 )
 def test_parse_remote_url_common_flavours(url, expected):
@@ -55,14 +61,31 @@ def test_is_known_tracking_host():
 
 
 def _init_git_repo(root: Path, *, remote: str | None, default_branch: str = "main") -> None:
-    subprocess.run(["git", "init", "--initial-branch=" + default_branch], cwd=str(root), check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=str(root), check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.name", "Test"], cwd=str(root), check=True, capture_output=True)
+    subprocess.run(
+        ["git", "init", "--initial-branch=" + default_branch],
+        cwd=str(root),
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "t@example.com"],
+        cwd=str(root),
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"], cwd=str(root), check=True, capture_output=True
+    )
     (root / "README.md").write_text("hello", encoding="utf-8")
     subprocess.run(["git", "add", "README.md"], cwd=str(root), check=True, capture_output=True)
     subprocess.run(["git", "commit", "-m", "init"], cwd=str(root), check=True, capture_output=True)
     if remote is not None:
-        subprocess.run(["git", "remote", "add", "origin", remote], cwd=str(root), check=True, capture_output=True)
+        subprocess.run(
+            ["git", "remote", "add", "origin", remote],
+            cwd=str(root),
+            check=True,
+            capture_output=True,
+        )
 
 
 def test_detect_fingerprint_no_git(tmp_path: Path):
@@ -111,6 +134,7 @@ def test_build_anchor_context_with_workspace(tmp_path: Path):
 
 def test_build_anchor_context_without_workspace():
     from clawcodex_ext.services.lodestone.models import AnchorContext
+
     # ``build_anchor_context`` requires a Path-like; ``None`` is rejected.
     with pytest.raises(TypeError):
         build_anchor_context(None, default_config(), session_id="sess-2")  # type: ignore[arg-type]  # noqa: E501

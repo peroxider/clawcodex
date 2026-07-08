@@ -74,8 +74,7 @@ def format_bg_sessions_status(
     for s in sessions:
         marker = _status_marker(s.status)
         lines.append(
-            f"  {marker} {s.id}  pid={s.pid}  "
-            f"agent={s.agent_name or '-'}  ws={s.workspace_root}"
+            f"  {marker} {s.id}  pid={s.pid}  agent={s.agent_name or '-'}  ws={s.workspace_root}"
         )
     return "\n".join(lines)
 

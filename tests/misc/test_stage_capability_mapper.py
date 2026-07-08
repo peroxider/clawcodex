@@ -11,7 +11,9 @@ from extensions.sop_converter.workflow_mode.capability import (
     StageCapabilityMapper,
 )
 from extensions.sop_converter.workflow_mode.capability.analyzer import recommend_execution_mode
-from extensions.sop_converter.workflow_mode.extractors.adapters.generic import GenericPipelineExtractor
+from extensions.sop_converter.workflow_mode.extractors.adapters.generic import (
+    GenericPipelineExtractor,
+)
 from extensions.sop_converter.workflow_mode.scan_context import SourceScanContext
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"

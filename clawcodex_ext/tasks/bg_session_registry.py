@@ -150,9 +150,7 @@ class BgSessionRegistry:
     # 查询
     # ------------------------------------------------------------------
 
-    def list(
-        self, *, workspace_root: Path | None = None
-    ) -> list[BgSession]:
+    def list(self, *, workspace_root: Path | None = None) -> list[BgSession]:
         """列出会话；可选按 workspace 过滤。
 
         不触发 scan（用内存视图）；若从未 scan 则返回空。调用方负责在
@@ -162,10 +160,7 @@ class BgSessionRegistry:
             sessions = list(self._sessions.values())
         if workspace_root is not None:
             target = workspace_root.resolve()
-            sessions = [
-                s for s in sessions
-                if _safe_resolve(s.workspace_root) == target
-            ]
+            sessions = [s for s in sessions if _safe_resolve(s.workspace_root) == target]
         return sessions
 
     def get(self, bg_session_id: str) -> BgSession | None:
@@ -251,9 +246,7 @@ class BgSessionRegistry:
         try:
             data = json.loads(target.read_text(encoding="utf-8"))
         except Exception:
-            logger.warning(
-                "bg_sessions index %s corrupt; will be rebuilt by scan()", target
-            )
+            logger.warning("bg_sessions index %s corrupt; will be rebuilt by scan()", target)
             return []
         raw_sessions = data.get("sessions", []) if isinstance(data, dict) else []
         sessions = [BgSession.from_dict(d) for d in raw_sessions if isinstance(d, dict)]

@@ -115,9 +115,7 @@ def test_chat_splices_safety_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     wrapper._inner = inner
     wrapper.chat([{"role": "user", "content": "hi"}])
     kwargs = inner.chat.call_args.kwargs
-    assert kwargs.get("safety_settings") == [
-        {"category": "X", "threshold": "BLOCK_NONE"}
-    ]
+    assert kwargs.get("safety_settings") == [{"category": "X", "threshold": "BLOCK_NONE"}]
     # Grounding is opt-in via a separate factory method; this
     # wrapper did not enable it, so the kwarg must be absent.
     assert "grounding" not in kwargs

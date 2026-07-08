@@ -102,130 +102,182 @@ class WorkflowAuditWriter:
             f.write(line)
 
     def write_stage_start(
-        self, stage_id: int, stage_name: str, phase: str = "", **kwargs: Any,
+        self,
+        stage_id: int,
+        stage_name: str,
+        phase: str = "",
+        **kwargs: Any,
     ) -> None:
-        self.write_event(WorkflowAuditEvent(
-            event_type="stage_start",
-            workflow_name=self._workflow_name,
-            stage_id=stage_id,
-            stage_name=stage_name,
-            phase=phase,
-            metadata=kwargs,
-        ))
+        self.write_event(
+            WorkflowAuditEvent(
+                event_type="stage_start",
+                workflow_name=self._workflow_name,
+                stage_id=stage_id,
+                stage_name=stage_name,
+                phase=phase,
+                metadata=kwargs,
+            )
+        )
 
     def write_stage_complete(
-        self, stage_id: int, stage_name: str,
-        cost: float = 0.0, duration: float = 0.0, **kwargs: Any,
+        self,
+        stage_id: int,
+        stage_name: str,
+        cost: float = 0.0,
+        duration: float = 0.0,
+        **kwargs: Any,
     ) -> None:
-        self.write_event(WorkflowAuditEvent(
-            event_type="stage_complete",
-            workflow_name=self._workflow_name,
-            stage_id=stage_id,
-            stage_name=stage_name,
-            outcome="success",
-            cost_usd=cost,
-            duration_seconds=duration,
-            metadata=kwargs,
-        ))
+        self.write_event(
+            WorkflowAuditEvent(
+                event_type="stage_complete",
+                workflow_name=self._workflow_name,
+                stage_id=stage_id,
+                stage_name=stage_name,
+                outcome="success",
+                cost_usd=cost,
+                duration_seconds=duration,
+                metadata=kwargs,
+            )
+        )
 
     def write_stage_failed(
-        self, stage_id: int, stage_name: str,
-        error: str = "", cost: float = 0.0, duration: float = 0.0, **kwargs: Any,
+        self,
+        stage_id: int,
+        stage_name: str,
+        error: str = "",
+        cost: float = 0.0,
+        duration: float = 0.0,
+        **kwargs: Any,
     ) -> None:
-        self.write_event(WorkflowAuditEvent(
-            event_type="stage_failed",
-            workflow_name=self._workflow_name,
-            stage_id=stage_id,
-            stage_name=stage_name,
-            outcome="failed",
-            error=error,
-            cost_usd=cost,
-            duration_seconds=duration,
-            metadata=kwargs,
-        ))
+        self.write_event(
+            WorkflowAuditEvent(
+                event_type="stage_failed",
+                workflow_name=self._workflow_name,
+                stage_id=stage_id,
+                stage_name=stage_name,
+                outcome="failed",
+                error=error,
+                cost_usd=cost,
+                duration_seconds=duration,
+                metadata=kwargs,
+            )
+        )
 
     def write_gate_result(
-        self, stage_id: int, stage_name: str,
-        approved: bool, reason: str = "", **kwargs: Any,
+        self,
+        stage_id: int,
+        stage_name: str,
+        approved: bool,
+        reason: str = "",
+        **kwargs: Any,
     ) -> None:
-        self.write_event(WorkflowAuditEvent(
-            event_type="gate_result",
-            workflow_name=self._workflow_name,
-            stage_id=stage_id,
-            stage_name=stage_name,
-            outcome="approved" if approved else "rejected",
-            error=reason if not approved else None,
-            metadata=kwargs,
-        ))
+        self.write_event(
+            WorkflowAuditEvent(
+                event_type="gate_result",
+                workflow_name=self._workflow_name,
+                stage_id=stage_id,
+                stage_name=stage_name,
+                outcome="approved" if approved else "rejected",
+                error=reason if not approved else None,
+                metadata=kwargs,
+            )
+        )
 
     def write_decision(
-        self, stage_id: int, outcome: str,
-        next_stage: int | None = None, **kwargs: Any,
+        self,
+        stage_id: int,
+        outcome: str,
+        next_stage: int | None = None,
+        **kwargs: Any,
     ) -> None:
-        self.write_event(WorkflowAuditEvent(
-            event_type="decision",
-            workflow_name=self._workflow_name,
-            stage_id=stage_id,
-            outcome=outcome,
-            metadata={"next_stage": next_stage, **kwargs},
-        ))
+        self.write_event(
+            WorkflowAuditEvent(
+                event_type="decision",
+                workflow_name=self._workflow_name,
+                stage_id=stage_id,
+                outcome=outcome,
+                metadata={"next_stage": next_stage, **kwargs},
+            )
+        )
 
     def write_rollback(
-        self, stage_id: int, rollback_to: int, reason: str = "", **kwargs: Any,
+        self,
+        stage_id: int,
+        rollback_to: int,
+        reason: str = "",
+        **kwargs: Any,
     ) -> None:
-        self.write_event(WorkflowAuditEvent(
-            event_type="rollback",
-            workflow_name=self._workflow_name,
-            stage_id=stage_id,
-            outcome="rollback",
-            error=reason,
-            metadata={"rollback_to": rollback_to, **kwargs},
-        ))
+        self.write_event(
+            WorkflowAuditEvent(
+                event_type="rollback",
+                workflow_name=self._workflow_name,
+                stage_id=stage_id,
+                outcome="rollback",
+                error=reason,
+                metadata={"rollback_to": rollback_to, **kwargs},
+            )
+        )
 
     def write_workflow_complete(
-        self, total_cost: float, total_duration: float,
-        completed_stages: int, total_stages: int, **kwargs: Any,
+        self,
+        total_cost: float,
+        total_duration: float,
+        completed_stages: int,
+        total_stages: int,
+        **kwargs: Any,
     ) -> None:
-        self.write_event(WorkflowAuditEvent(
-            event_type="workflow_complete",
-            workflow_name=self._workflow_name,
-            outcome="success",
-            cost_usd=total_cost,
-            duration_seconds=total_duration,
-            metadata={
-                "completed_stages": completed_stages,
-                "total_stages": total_stages,
-                **kwargs,
-            },
-        ))
+        self.write_event(
+            WorkflowAuditEvent(
+                event_type="workflow_complete",
+                workflow_name=self._workflow_name,
+                outcome="success",
+                cost_usd=total_cost,
+                duration_seconds=total_duration,
+                metadata={
+                    "completed_stages": completed_stages,
+                    "total_stages": total_stages,
+                    **kwargs,
+                },
+            )
+        )
 
     def write_workflow_error(
-        self, error: str, stage_id: int | None = None, **kwargs: Any,
+        self,
+        error: str,
+        stage_id: int | None = None,
+        **kwargs: Any,
     ) -> None:
-        self.write_event(WorkflowAuditEvent(
-            event_type="workflow_error",
-            workflow_name=self._workflow_name,
-            stage_id=stage_id,
-            outcome="error",
-            error=error,
-            metadata=kwargs,
-        ))
+        self.write_event(
+            WorkflowAuditEvent(
+                event_type="workflow_error",
+                workflow_name=self._workflow_name,
+                stage_id=stage_id,
+                outcome="error",
+                error=error,
+                metadata=kwargs,
+            )
+        )
 
     def write_cost_event(
-        self, total_usd: float, stage_usd: float,
-        budget_max: float, **kwargs: Any,
+        self,
+        total_usd: float,
+        stage_usd: float,
+        budget_max: float,
+        **kwargs: Any,
     ) -> None:
-        self.write_event(WorkflowAuditEvent(
-            event_type="cost_update",
-            workflow_name=self._workflow_name,
-            cost_usd=total_usd,
-            metadata={
-                "stage_usd": stage_usd,
-                "budget_max": budget_max,
-                "usage_pct": round(total_usd / budget_max * 100, 1) if budget_max > 0 else 0,
-                **kwargs,
-            },
-        ))
+        self.write_event(
+            WorkflowAuditEvent(
+                event_type="cost_update",
+                workflow_name=self._workflow_name,
+                cost_usd=total_usd,
+                metadata={
+                    "stage_usd": stage_usd,
+                    "budget_max": budget_max,
+                    "usage_pct": round(total_usd / budget_max * 100, 1) if budget_max > 0 else 0,
+                    **kwargs,
+                },
+            )
+        )
 
     @property
     def events_path(self) -> Path:

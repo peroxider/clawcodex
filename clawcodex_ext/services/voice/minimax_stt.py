@@ -31,6 +31,7 @@ Dependencies
 ``websockets`` is an optional dep (lazy-imported on connect). If absent,
 :meth:`start_streaming` raises ``ImportError`` with a clear install hint.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -188,9 +189,7 @@ class MiniMaxStreamConnection:
         try:
             import websockets  # type: ignore[import-untyped]
         except ImportError:
-            self._on_error(
-                "MiniMax STT needs the 'websockets' package: pip install websockets"
-            )
+            self._on_error("MiniMax STT needs the 'websockets' package: pip install websockets")
             raise RuntimeError("websockets not installed")
 
         # MiniMax accepts the API key as a Bearer token; group_id may be
@@ -215,16 +214,20 @@ class MiniMaxStreamConnection:
         # Send session.create — modalities text-only (we want transcripts,
         # not audio playback; the latter is the TTS path, P64-E).
         try:
-            await self._ws.send(json.dumps({
-                "type": "session.create",
-                "session": {
-                    "model": self._model,
-                    "modalities": ["text"],
-                    "input_audio_format": "pcm16",
-                    "sample_rate": self._config.sample_rate,
-                    "turn_detection": None,  # server-side VAD off; we commit manually
-                },
-            }))
+            await self._ws.send(
+                json.dumps(
+                    {
+                        "type": "session.create",
+                        "session": {
+                            "model": self._model,
+                            "modalities": ["text"],
+                            "input_audio_format": "pcm16",
+                            "sample_rate": self._config.sample_rate,
+                            "turn_detection": None,  # server-side VAD off; we commit manually
+                        },
+                    }
+                )
+            )
         except Exception as exc:
             self._on_error(f"MiniMax session.create failed: {exc}")
             await self.close()
@@ -242,10 +245,14 @@ class MiniMaxStreamConnection:
         async for chunk in self._audio_queue:
             try:
                 encoded = base64.b64encode(chunk).decode("ascii")
-                await self._ws.send(json.dumps({
-                    "type": "input_audio_buffer.append",
-                    "audio": encoded,
-                }))
+                await self._ws.send(
+                    json.dumps(
+                        {
+                            "type": "input_audio_buffer.append",
+                            "audio": encoded,
+                        }
+                    )
+                )
             except Exception as exc:
                 self._on_error(f"MiniMax audio send failed: {exc}")
                 return
@@ -323,8 +330,7 @@ class MiniMaxStreamConnection:
             )
             if text:
                 self._final_text = (
-                    (self._final_text + " " + text).strip()
-                    if self._final_text else text
+                    (self._final_text + " " + text).strip() if self._final_text else text
                 )
                 self._on_transcript(text, True)
             return
@@ -334,13 +340,11 @@ class MiniMaxStreamConnection:
             if isinstance(text, list):
                 # OpenAI-style content array → extract text parts
                 text = " ".join(
-                    (p.get("text", "") if isinstance(p, dict) else str(p))
-                    for p in text
+                    (p.get("text", "") if isinstance(p, dict) else str(p)) for p in text
                 ).strip()
             if text:
                 self._final_text = (
-                    (self._final_text + " " + text).strip()
-                    if self._final_text else text
+                    (self._final_text + " " + text).strip() if self._final_text else text
                 )
                 self._on_transcript(text, True)
             return
@@ -355,8 +359,7 @@ class MiniMaxStreamConnection:
             text = payload.get("text") or payload.get("transcript") or ""
             if text:
                 self._final_text = (
-                    (self._final_text + " " + text).strip()
-                    if self._final_text else text
+                    (self._final_text + " " + text).strip() if self._final_text else text
                 )
                 self._on_transcript(text, True)
             return
@@ -415,9 +418,7 @@ class MiniMaxSTTProvider(STTProvider):
                 f"MiniMax credentials file {path} is unreadable: {exc}"
             ) from exc
         if not isinstance(data, dict):
-            raise MiniMaxCredentialsError(
-                f"MiniMax credentials file {path} must be a JSON object"
-            )
+            raise MiniMaxCredentialsError(f"MiniMax credentials file {path} must be a JSON object")
         return data
 
     def _resolve_credentials(self) -> tuple[str, str]:
@@ -430,16 +431,12 @@ class MiniMaxSTTProvider(STTProvider):
         """
         file_data = self._load_credentials_file()
         api_key = os.environ.get("MINIMAX_API_KEY") or file_data.get("api_key")
-        group_id = (
-            os.environ.get("MINIMAX_GROUP_ID")
-            or file_data.get("group_id")
-            or ""
-        )
+        group_id = os.environ.get("MINIMAX_GROUP_ID") or file_data.get("group_id") or ""
         if not api_key:
             raise MiniMaxCredentialsError(
                 "MINIMAX_API_KEY not set. Configure the env var or "
-                f"{self._credentials_path} ({{\"api_key\": \"...\", "
-                "\"group_id\": \"...\"}})."
+                f'{self._credentials_path} ({{"api_key": "...", '
+                '"group_id": "..."}}).'
             )
         if not group_id:
             logger.debug("MiniMax group_id unset — some accounts allow this")
@@ -455,10 +452,10 @@ class MiniMaxSTTProvider(STTProvider):
             return self._endpoint
         file_data = self._load_credentials_file()
         region = (
-            os.environ.get("MINIMAX_REGION")
-            or file_data.get("endpoint_region")
-            or "global"
-        ).strip().lower()
+            (os.environ.get("MINIMAX_REGION") or file_data.get("endpoint_region") or "global")
+            .strip()
+            .lower()
+        )
         return MINIMAX_REALTIME_ENDPOINTS.get(region) or MINIMAX_REALTIME_ENDPOINTS["global"]
 
     # ── streaming surface ───────────────────────────────────────────────
@@ -498,17 +495,13 @@ class MiniMaxSTTProvider(STTProvider):
         def _on_transcript(text: str, is_final: bool) -> None:
             nonlocal final_text
             if is_final:
-                final_text = (
-                    (final_text + " " + text).strip() if final_text else text
-                )
+                final_text = (final_text + " " + text).strip() if final_text else text
 
         def _on_error(msg: str) -> None:
             error.append(msg)
             done.set()
 
-        conn = self.connect_stream(
-            on_transcript=_on_transcript, on_error=_on_error, config=config
-        )
+        conn = self.connect_stream(on_transcript=_on_transcript, on_error=_on_error, config=config)
         conn.feed_audio(audio_data)
         finalize_task = asyncio.create_task(conn.finalize())
         done_task = asyncio.create_task(done.wait())

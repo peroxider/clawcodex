@@ -71,14 +71,10 @@ BgSessionStatus: TypeAlias = Literal[
 ]
 
 #: 终态集合 — 不再发生状态迁移。
-TERMINAL_BG_STATUSES: frozenset[BgSessionStatus] = frozenset(
-    {"completed", "failed", "stopped"}
-)
+TERMINAL_BG_STATUSES: frozenset[BgSessionStatus] = frozenset({"completed", "failed", "stopped"})
 
 #: 活跃态集合 — PID 应当存活。
-ACTIVE_BG_STATUSES: frozenset[BgSessionStatus] = frozenset(
-    {"starting", "running", "paused"}
-)
+ACTIVE_BG_STATUSES: frozenset[BgSessionStatus] = frozenset({"starting", "running", "paused"})
 
 BgSessionEventType: TypeAlias = Literal[
     "created",

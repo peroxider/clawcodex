@@ -29,7 +29,7 @@ from clawcodex_ext.services.im_gateway.models import (
 
 
 class _FakeAdapter(ChannelAdapter):
-    def __init__(self, name: str = 'fake') -> None:
+    def __init__(self, name: str = "fake") -> None:
         self._name = name
         self._caps = ChannelCapabilitySet.of(
             ChannelCapability.OUTBOUND_TEXT,
@@ -59,9 +59,9 @@ class _FakeAdapter(ChannelAdapter):
     async def send(self, message, *, target=None, context_token=None) -> ChannelSendResult:
         self.sends.append(message)
         self.send_calls.append(
-            {'message': message, 'target': target, 'context_token': context_token}
+            {"message": message, "target": target, "context_token": context_token}
         )
-        return ChannelSendResult.success(self._name, provider_receipt='r')
+        return ChannelSendResult.success(self._name, provider_receipt="r")
 
 
 def _gateway(tmp_path, *, adapter: _FakeAdapter | None = None) -> MessageGateway:
@@ -75,7 +75,7 @@ def _gateway(tmp_path, *, adapter: _FakeAdapter | None = None) -> MessageGateway
 class _FakeInboundAdapter(_FakeAdapter):
     """Inbound adapter whose account_status flips to connected after N polls."""
 
-    def __init__(self, name: str = 'fake-in', *, connect_after: int = 0) -> None:
+    def __init__(self, name: str = "fake-in", *, connect_after: int = 0) -> None:
         super().__init__(name)
         self._caps = ChannelCapabilitySet.of(
             ChannelCapability.OUTBOUND_TEXT,
@@ -96,7 +96,7 @@ class _FakeInboundAdapter(_FakeAdapter):
     async def health_check(self) -> ChannelHealth:
         self._polls += 1
         status = (
-            'websocket:connected' if self._polls > self._connect_after else 'websocket:reconnecting'
+            "websocket:connected" if self._polls > self._connect_after else "websocket:reconnecting"
         )
         return ChannelHealth(
             healthy=self._polls > self._connect_after,
@@ -107,58 +107,58 @@ class _FakeInboundAdapter(_FakeAdapter):
 
 @pytest.mark.asyncio
 async def test_gateway_wait_channels_ready_returns_when_connected(tmp_path) -> None:
-    adapter = _FakeInboundAdapter('feishu', connect_after=2)
+    adapter = _FakeInboundAdapter("feishu", connect_after=2)
     gw = _gateway(tmp_path, adapter=adapter)
     # Simulate gateway having attached it as inbound.
     gw._inbound_adapters.append(adapter)
 
     result = await gw.wait_channels_ready(timeout=5.0)
 
-    assert result == {'feishu': 'websocket:connected'}
+    assert result == {"feishu": "websocket:connected"}
 
 
 @pytest.mark.asyncio
 async def test_gateway_wait_channels_ready_times_out_degraded(tmp_path) -> None:
-    adapter = _FakeInboundAdapter('feishu', connect_after=1000)  # never connects
+    adapter = _FakeInboundAdapter("feishu", connect_after=1000)  # never connects
     gw = _gateway(tmp_path, adapter=adapter)
     gw._inbound_adapters.append(adapter)
 
     result = await gw.wait_channels_ready(timeout=1.5)
 
-    assert result['feishu'] == 'websocket:reconnecting'
+    assert result["feishu"] == "websocket:reconnecting"
 
 
 @pytest.mark.asyncio
 async def test_gateway_send_uses_outbound_dispatcher(tmp_path) -> None:
-    adapter = _FakeAdapter('wechat-main')
+    adapter = _FakeAdapter("wechat-main")
     gw = _gateway(tmp_path, adapter=adapter)
-    result = await gw.send(OutboundMessage(text='hello', channel='wechat-main'))
+    result = await gw.send(OutboundMessage(text="hello", channel="wechat-main"))
     assert result.ok is True
     assert len(adapter.sends) == 1
 
 
 @pytest.mark.asyncio
 async def test_gateway_broadcast(tmp_path) -> None:
-    a1 = _FakeAdapter('a')
-    a2 = _FakeAdapter('b')
+    a1 = _FakeAdapter("a")
+    a2 = _FakeAdapter("b")
     reg = ChannelAdapterRegistry()
     reg.register(a1)
     reg.register(a2)
     gw = MessageGateway(GatewayConfig(state_dir=str(tmp_path)), registry=reg)
-    results = await gw.broadcast(OutboundMessage(text='hi', channel='a'))
-    assert results['a'].ok and results['b'].ok
+    results = await gw.broadcast(OutboundMessage(text="hi", channel="a"))
+    assert results["a"].ok and results["b"].ok
 
 
 @pytest.mark.asyncio
 async def test_gateway_inbound_dedupe_and_classify(tmp_path) -> None:
     gw = _gateway(tmp_path)
     msg = InboundMessage(
-        origin='wechat:direct:default:u', text='hello', message_id='m1', channel='c'
+        origin="wechat:direct:default:u", text="hello", message_id="m1", channel="c"
     )
     r1 = await gw.receive(msg)
-    assert r1.message != 'duplicate; skipped'
+    assert r1.message != "duplicate; skipped"
     r2 = await gw.receive(msg)
-    assert r2.message == 'duplicate; skipped'
+    assert r2.message == "duplicate; skipped"
     assert msg.semantic is MessageSemantics.NEW_PROMPT
 
 
@@ -178,8 +178,8 @@ async def test_gateway_inbound_pushes_to_opt_in_bound_origin(tmp_path) -> None:
     gw.set_push_handler(_push)
     # bind the origin to a REPL opt-in target
     gw.binding.bind(
-        'wechat:direct:default:u',
-        SessionTarget(session_id='repl_main', host_type='repl'),
+        "wechat:direct:default:u",
+        SessionTarget(session_id="repl_main", host_type="repl"),
     )
     handler_calls: list[InboundMessage] = []
     gw.set_handler(lambda m: handler_calls.append(m) or _ack())
@@ -187,14 +187,14 @@ async def test_gateway_inbound_pushes_to_opt_in_bound_origin(tmp_path) -> None:
     async def _ack():
         from clawcodex_ext.services.im_gateway.models import AckLayer, AckReceipt
 
-        return AckReceipt('d', AckLayer.PROCESSED, 'stub')
+        return AckReceipt("d", AckLayer.PROCESSED, "stub")
 
     msg = InboundMessage(
-        origin='wechat:direct:default:u', text='hi', message_id='m1', channel='wechat-main'
+        origin="wechat:direct:default:u", text="hi", message_id="m1", channel="wechat-main"
     )
     ack = await gw.receive(msg)
     assert len(pushed) == 1  # pushed to the opt-in peer
-    assert pushed[0].text == 'hi'
+    assert pushed[0].text == "hi"
     assert handler_calls == []  # default handler NOT called (opt-in overrides)
 
 
@@ -211,27 +211,27 @@ async def test_gateway_inbound_pushes_feishu_to_generic_opt_in_binding(tmp_path)
     gw.set_push_handler(_push)
     gw.binding.bind(
         IM_DIRECT_ALL_ORIGIN,
-        SessionTarget(session_id='repl_main', host_type='repl'),
+        SessionTarget(session_id="repl_main", host_type="repl"),
     )
 
     msg = InboundMessage(
-        origin='feishu:dm:cli_app:ou_user',
-        text='hi',
-        message_id='m-feishu',
-        channel='feishu',
-        context_token='oc_chat',
+        origin="feishu:dm:cli_app:ou_user",
+        text="hi",
+        message_id="m-feishu",
+        channel="feishu",
+        context_token="oc_chat",
     )
     ack = await gw.receive(msg)
 
-    assert ack.message == 'pushed to opt-in peer'
+    assert ack.message == "pushed to opt-in peer"
     assert len(pushed) == 1
-    assert pushed[0].origin == 'feishu:dm:cli_app:ou_user'
-    assert pushed[0].context_token == 'oc_chat'
+    assert pushed[0].origin == "feishu:dm:cli_app:ou_user"
+    assert pushed[0].context_token == "oc_chat"
 
 
 @pytest.mark.asyncio
 async def test_gateway_notifies_feishu_sender_when_repl_command_is_blocked(tmp_path) -> None:
-    adapter = _FakeAdapter('feishu')
+    adapter = _FakeAdapter("feishu")
     gw = _gateway(tmp_path, adapter=adapter)
     pushed: list[InboundMessage] = []
 
@@ -242,33 +242,33 @@ async def test_gateway_notifies_feishu_sender_when_repl_command_is_blocked(tmp_p
     gw.set_push_handler(_push)
     gw.binding.bind(
         IM_DIRECT_ALL_ORIGIN,
-        SessionTarget(session_id='repl_main', host_type='repl'),
+        SessionTarget(session_id="repl_main", host_type="repl"),
     )
     msg = InboundMessage(
-        origin='feishu:dm:cli_app:ou_user',
-        text='/exit',
-        message_id='m-feishu-blocked',
-        channel='feishu',
-        context_token='oc_chat',
-        from_user_id='ou_user',
+        origin="feishu:dm:cli_app:ou_user",
+        text="/exit",
+        message_id="m-feishu-blocked",
+        channel="feishu",
+        context_token="oc_chat",
+        from_user_id="ou_user",
     )
 
     ack = await gw._on_inbound(msg)
 
     assert pushed == []
-    assert getattr(ack, 'notify_user', False) is True
+    assert getattr(ack, "notify_user", False) is True
     assert len(adapter.send_calls) == 1
     call = adapter.send_calls[0]
-    assert call['target'] == 'ou_user'
-    assert call['context_token'] == 'oc_chat'
-    assert '/exit' in call['message'].text
+    assert call["target"] == "ou_user"
+    assert call["context_token"] == "oc_chat"
+    assert "/exit" in call["message"].text
 
 
 @pytest.mark.asyncio
 async def test_gateway_notifies_feishu_sender_when_orchestrator_command_is_blocked(
     tmp_path,
 ) -> None:
-    adapter = _FakeAdapter('feishu')
+    adapter = _FakeAdapter("feishu")
     gw = _gateway(tmp_path, adapter=adapter)
     pushed: list[InboundMessage] = []
 
@@ -279,27 +279,27 @@ async def test_gateway_notifies_feishu_sender_when_orchestrator_command_is_block
     gw.set_push_handler(_push)
     gw.binding.bind(
         IM_DIRECT_ALL_ORIGIN,
-        SessionTarget(session_id='orch_main', host_type='orchestrator'),
+        SessionTarget(session_id="orch_main", host_type="orchestrator"),
     )
     msg = InboundMessage(
-        origin='feishu:dm:cli_app:ou_user',
-        text='/server stop',
-        message_id='m-feishu-orch-blocked',
-        channel='feishu',
-        context_token='oc_chat',
-        from_user_id='ou_user',
+        origin="feishu:dm:cli_app:ou_user",
+        text="/server stop",
+        message_id="m-feishu-orch-blocked",
+        channel="feishu",
+        context_token="oc_chat",
+        from_user_id="ou_user",
     )
 
     ack = await gw._on_inbound(msg)
 
     assert pushed == []
-    assert getattr(ack, 'notify_user', False) is True
-    assert ack.message == '不支持 /server stop 执行'
+    assert getattr(ack, "notify_user", False) is True
+    assert ack.message == "不支持 /server stop 执行"
     assert len(adapter.send_calls) == 1
     call = adapter.send_calls[0]
-    assert call['target'] == 'ou_user'
-    assert call['context_token'] == 'oc_chat'
-    assert call['message'].text == '不支持 /server stop 执行'
+    assert call["target"] == "ou_user"
+    assert call["context_token"] == "oc_chat"
+    assert call["message"].text == "不支持 /server stop 执行"
 
 
 @pytest.mark.asyncio
@@ -319,10 +319,10 @@ async def test_gateway_inbound_default_origin_still_uses_handler(tmp_path) -> No
     async def _ack():
         from clawcodex_ext.services.im_gateway.models import AckLayer, AckReceipt
 
-        return AckReceipt('d', AckLayer.PROCESSED, 'stub')
+        return AckReceipt("d", AckLayer.PROCESSED, "stub")
 
     msg = InboundMessage(
-        origin='wechat:direct:default:u', text='hi', message_id='m1', channel='wechat-main'
+        origin="wechat:direct:default:u", text="hi", message_id="m1", channel="wechat-main"
     )
     await gw.receive(msg)
     assert pushed == []  # no opt-in binding → no push
@@ -332,7 +332,7 @@ async def test_gateway_inbound_default_origin_still_uses_handler(tmp_path) -> No
 @pytest.mark.asyncio
 async def test_gateway_inbound_classifies_slash_as_command(tmp_path) -> None:
     gw = _gateway(tmp_path)
-    msg = InboundMessage(origin='o', text='/agent retry AGENTSDK-15', message_id='m1', channel='c')
+    msg = InboundMessage(origin="o", text="/agent retry AGENTSDK-15", message_id="m1", channel="c")
     await gw.receive(msg)
     assert msg.semantic is MessageSemantics.COMMAND
 
@@ -350,14 +350,14 @@ async def test_gateway_reload_channel_rebuilds(tmp_path) -> None:
     cfg.channels.append(
         ChannelConfig(
             type=ChannelType.SLACK,
-            webhook_url='https://hooks.example.com/x',
-            name='slack-ops',
+            webhook_url="https://hooks.example.com/x",
+            name="slack-ops",
         )
     )
     gw = MessageGateway(cfg, registry=reg)
-    assert gw.reload_channel('slack-ops') is True
-    assert gw.registry.get('slack-ops') is not None
-    assert gw.reload_channel('nope') is False
+    assert gw.reload_channel("slack-ops") is True
+    assert gw.registry.get("slack-ops") is not None
+    assert gw.reload_channel("nope") is False
 
 
 def test_gateway_normalizes_duplicate_channel_types_before_runtime_load(tmp_path) -> None:
@@ -371,50 +371,50 @@ def test_gateway_normalizes_duplicate_channel_types_before_runtime_load(tmp_path
     cfg.channels = [
         ChannelConfig(
             type=ChannelType.SLACK,
-            webhook_url='https://hooks.example.com/old',
-            name='slack-old',
+            webhook_url="https://hooks.example.com/old",
+            name="slack-old",
         ),
         ChannelConfig(
             type=ChannelType.SLACK,
-            webhook_url='https://hooks.example.com/new',
-            name='slack-new',
+            webhook_url="https://hooks.example.com/new",
+            name="slack-new",
         ),
     ]
 
     gw = MessageGateway(cfg, registry=reg)
 
-    assert gw.registry.names() == ['slack-new']
-    assert [c.name for c in gw.config.channels] == ['slack-new']
+    assert gw.registry.names() == ["slack-new"]
+    assert [c.name for c in gw.config.channels] == ["slack-new"]
 
 
 @pytest.mark.asyncio
 async def test_gateway_health(tmp_path) -> None:
-    gw = _gateway(tmp_path, adapter=_FakeAdapter('wechat-main'))
+    gw = _gateway(tmp_path, adapter=_FakeAdapter("wechat-main"))
     health = await gw.health()
-    assert health['running'] is False
-    assert 'wechat-main' in health['channels']
-    assert health['outbox_pending'] == 0
+    assert health["running"] is False
+    assert "wechat-main" in health["channels"]
+    assert health["outbox_pending"] == 0
 
 
 @pytest.mark.asyncio
 async def test_gateway_stop_logs_stopped_once_when_called_concurrently(tmp_path, caplog) -> None:
     class _SlowStopAdapter(_FakeInboundAdapter):
         async def stop(self) -> None:
-            await __import__('asyncio').sleep(0.05)
+            await __import__("asyncio").sleep(0.05)
 
-    adapter = _SlowStopAdapter('feishu')
+    adapter = _SlowStopAdapter("feishu")
     gw = _gateway(tmp_path, adapter=adapter)
     gw._inbound_adapters.append(adapter)
     await gw.start()
 
-    caplog.set_level('INFO', logger='clawcodex_ext.services.im_gateway.gateway')
-    await __import__('asyncio').gather(gw.stop(), gw.stop())
+    caplog.set_level("INFO", logger="clawcodex_ext.services.im_gateway.gateway")
+    await __import__("asyncio").gather(gw.stop(), gw.stop())
 
     stopped = [
         record
         for record in caplog.records
-        if record.name == 'clawcodex_ext.services.im_gateway.gateway'
-        and record.getMessage() == 'gateway stopped'
+        if record.name == "clawcodex_ext.services.im_gateway.gateway"
+        and record.getMessage() == "gateway stopped"
     ]
     assert len(stopped) == 1
 
@@ -427,58 +427,58 @@ def test_gateway_loads_wechat_channel_from_config(tmp_path) -> None:
     cfg.channels.append(
         ChannelConfig(
             type=ChannelType.WECHAT,
-            webhook_url='https://ilinkai.weixin.qq.com/dummy',
-            name='wechat',
+            webhook_url="https://ilinkai.weixin.qq.com/dummy",
+            name="wechat",
             enabled=True,
             extra={
-                'base_url': 'https://ilinkai.weixin.qq.com',
-                'account_id': 'default',
-                'allowed_users': [],
+                "base_url": "https://ilinkai.weixin.qq.com",
+                "account_id": "default",
+                "allowed_users": [],
             },
         )
     )
     gw = MessageGateway(cfg)
-    adapter = gw.registry.get('wechat')
+    adapter = gw.registry.get("wechat")
     assert adapter is not None
     assert adapter.capabilities.has(ChannelCapability.INBOUND_POLLING)
     # WeChat adapter is registered as an inbound adapter
-    assert any(a.channel_id == 'wechat' for a in gw._inbound_adapters)
+    assert any(a.channel_id == "wechat" for a in gw._inbound_adapters)
     # not logged in (no saved auth) but registered
-    assert adapter._account_status == 'unconfigured'
+    assert adapter._account_status == "unconfigured"
 
 
 def test_gateway_normalizes_legacy_wechat_name_and_reuses_legacy_auth(tmp_path) -> None:
     from clawcodex_ext.services.channels.models import ChannelType
     from clawcodex_ext.services.channels.wechat_ilink import WeChatAuthRecord, WeChatIlinkAuthStore
 
-    wechat_dir = tmp_path / 'wechat'
-    old_auth = wechat_dir / 'wechat-main_auth.json'
+    wechat_dir = tmp_path / "wechat"
+    old_auth = wechat_dir / "wechat-main_auth.json"
     WeChatIlinkAuthStore(old_auth).save(
         WeChatAuthRecord(
-            bot_token='bot_tok_123',
-            account_id='acct',
-            base_url='https://ilinkai.weixin.qq.com',
-            user_id='bot_user',
+            bot_token="bot_tok_123",
+            account_id="acct",
+            base_url="https://ilinkai.weixin.qq.com",
+            user_id="bot_user",
         )
     )
     cfg = GatewayConfig(state_dir=str(tmp_path))
     cfg.channels.append(
         ChannelConfig(
             type=ChannelType.WECHAT,
-            webhook_url='https://ilinkai.weixin.qq.com/dummy',
-            name='wechat-main',
+            webhook_url="https://ilinkai.weixin.qq.com/dummy",
+            name="wechat-main",
             enabled=True,
-            extra={'base_url': 'https://ilinkai.weixin.qq.com', 'account_id': 'default'},
+            extra={"base_url": "https://ilinkai.weixin.qq.com", "account_id": "default"},
         )
     )
 
     gw = MessageGateway(cfg)
 
-    assert gw.registry.get('wechat-main') is None
-    adapter = gw.registry.get('wechat')
+    assert gw.registry.get("wechat-main") is None
+    adapter = gw.registry.get("wechat")
     assert adapter is not None
-    assert adapter._account_status == 'logged_in'
-    assert adapter._account_id == 'acct'
+    assert adapter._account_status == "logged_in"
+    assert adapter._account_id == "acct"
 
 
 def test_gateway_skips_disabled_channels(tmp_path) -> None:
@@ -488,10 +488,10 @@ def test_gateway_skips_disabled_channels(tmp_path) -> None:
     cfg.channels.append(
         ChannelConfig(
             type=ChannelType.WECHAT,
-            webhook_url='https://ilinkai.weixin.qq.com/dummy',
-            name='wechat-off',
+            webhook_url="https://ilinkai.weixin.qq.com/dummy",
+            name="wechat-off",
             enabled=False,
         )
     )
     gw = MessageGateway(cfg)
-    assert gw.registry.get('wechat-off') is None
+    assert gw.registry.get("wechat-off") is None

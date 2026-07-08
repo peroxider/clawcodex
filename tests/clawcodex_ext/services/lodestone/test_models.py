@@ -88,12 +88,16 @@ def test_unregister_id_only_drops_all_kinds():
     reg = AnchorTargetRegistry()
     reg.register(
         AnchorTarget(
-            kind="file_path", target_id="abc", template="file://{abs}",
+            kind="file_path",
+            target_id="abc",
+            template="file://{abs}",
         )
     )
     reg.register(
         AnchorTarget(
-            kind="git_commit", target_id="abc", template="{remote}/commit/{ref}",
+            kind="git_commit",
+            target_id="abc",
+            template="{remote}/commit/{ref}",
         )
     )
     assert reg.unregister("abc")
@@ -105,17 +109,23 @@ def test_pick_prefers_default_editor_then_non_remote():
     reg = AnchorTargetRegistry()
     reg.register(
         AnchorTarget(
-            kind="file_path", target_id="cursor", template="cursor://file/{abs}:{line}:{col}",
+            kind="file_path",
+            target_id="cursor",
+            template="cursor://file/{abs}:{line}:{col}",
         )
     )
     reg.register(
         AnchorTarget(
-            kind="file_path", target_id="vscode", template="vscode://file/{abs}:{line}:{col}",
+            kind="file_path",
+            target_id="vscode",
+            template="vscode://file/{abs}:{line}:{col}",
         )
     )
     reg.register(
         AnchorTarget(
-            kind="file_path", target_id="gitcode", is_remote=True,
+            kind="file_path",
+            target_id="gitcode",
+            is_remote=True,
             template="{remote}/blob/{branch}/{rel}#L{line}",
         )
     )
@@ -128,13 +138,17 @@ def test_pick_falls_back_to_non_remote_then_remote():
     reg = AnchorTargetRegistry()
     reg.register(
         AnchorTarget(
-            kind="file_path", target_id="gitcode", is_remote=True,
+            kind="file_path",
+            target_id="gitcode",
+            is_remote=True,
             template="{remote}/blob/{branch}/{rel}#L{line}",
         )
     )
     reg.register(
         AnchorTarget(
-            kind="file_path", target_id="vscode", template="vscode://file/{abs}:{line}:{col}",
+            kind="file_path",
+            target_id="vscode",
+            template="vscode://file/{abs}:{line}:{col}",
         )
     )
     cfg = LodestoneConfig(default_editor="neovim")  # not registered
@@ -146,7 +160,9 @@ def test_pick_returns_none_when_no_kind_match():
     reg = AnchorTargetRegistry()
     reg.register(
         AnchorTarget(
-            kind="file_path", target_id="vscode", template="vscode://file/{abs}:{line}:{col}",
+            kind="file_path",
+            target_id="vscode",
+            template="vscode://file/{abs}:{line}:{col}",
         )
     )
     picked = reg.pick("tracker_issue", ctx=_ctx())
@@ -157,7 +173,9 @@ def test_pick_filters_by_required_env():
     reg = AnchorTargetRegistry()
     reg.register(
         AnchorTarget(
-            kind="file_path", target_id="restricted", template="vscode://file/{abs}",
+            kind="file_path",
+            target_id="restricted",
+            template="vscode://file/{abs}",
             requires=("WATERMARK_TOKEN",),
         )
     )
@@ -179,5 +197,18 @@ def test_extract_placeholders_unique_sorted():
 
 def test_allowed_placeholders_includes_documented_keys():
     keys = allowed_placeholders()
-    for k in ("abs", "rel", "line", "col", "remote", "branch", "ref", "owner", "repo", "key", "host", "workspace"):
+    for k in (
+        "abs",
+        "rel",
+        "line",
+        "col",
+        "remote",
+        "branch",
+        "ref",
+        "owner",
+        "repo",
+        "key",
+        "host",
+        "workspace",
+    ):
         assert k in keys

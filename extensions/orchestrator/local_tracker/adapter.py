@@ -256,9 +256,7 @@ class LocalTrackerAdapter(TrackerAdapter):
         try:
             document = self._document_for_issue(issue_id)
         except FileNotFoundError:
-            logger.warning(
-                "LocalTrackerAdapter.add_label: issue %s not found", issue_id
-            )
+            logger.warning("LocalTrackerAdapter.add_label: issue %s not found", issue_id)
             return False
         existing = list(document.issue.labels or [])
         if label in existing:
@@ -284,9 +282,7 @@ class LocalTrackerAdapter(TrackerAdapter):
         try:
             document = self._document_for_issue(issue_id)
         except FileNotFoundError:
-            logger.warning(
-                "LocalTrackerAdapter.remove_label: issue %s not found", issue_id
-            )
+            logger.warning("LocalTrackerAdapter.remove_label: issue %s not found", issue_id)
             return False
         existing = list(document.issue.labels or [])
         if label not in existing:

@@ -36,9 +36,7 @@ class WorkerRegistry:
     # ------------------------------------------------------------------
 
     @classmethod
-    def register(
-        cls, kind: str, factory: WorkerFactory | None = None
-    ) -> WorkerFactory:
+    def register(cls, kind: str, factory: WorkerFactory | None = None) -> WorkerFactory:
         """Register *factory* under *kind*.
 
         Two calling styles are supported::

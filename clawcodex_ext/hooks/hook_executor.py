@@ -331,7 +331,9 @@ async def _execute_command_hook(
         # silently; now it logs a WARNING and the decision payload is
         # dropped (exit code is still honored).
         if stdout:
-            from clawcodex_ext.hooks.output_schema import parse_hook_output  # local import: pydantic
+            from clawcodex_ext.hooks.output_schema import (
+                parse_hook_output,
+            )  # local import: pydantic
 
             parsed, err = parse_hook_output(stdout)
             if err is not None:

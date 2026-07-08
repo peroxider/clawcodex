@@ -169,10 +169,13 @@ def test_goal_objective_materializes_long_input(tmp_path: Path):
     goal = context.goal_service.get_goal("spec-1")  # type: ignore[attr-defined]
     assert "Goal active" in outcome.message
     assert goal.objective.startswith("Read the Codex goal objective file at ")
-    assert objective_text_for_edit(
-        goal.objective,
-        codex_home=tmp_path / "codex-home",
-    ) == objective
+    assert (
+        objective_text_for_edit(
+            goal.objective,
+            codex_home=tmp_path / "codex-home",
+        )
+        == objective
+    )
 
 
 def test_goal_objective_requires_confirmation_before_replacing_unfinished_goal(

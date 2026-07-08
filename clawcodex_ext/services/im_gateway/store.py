@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 
 def _atomic_write_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + '.tmp')
-    tmp.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     os.replace(tmp, path)
 
 
@@ -39,22 +39,22 @@ def _read_json(path: Path, default: Any) -> Any:
     if not path.exists():
         return default
     try:
-        return json.loads(path.read_text(encoding='utf-8'))
+        return json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return default
 
 
 def _append_ndjson(path: Path, entry: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open('a', encoding='utf-8') as fh:
-        fh.write(json.dumps(entry, ensure_ascii=False) + '\n')
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 def _read_ndjson(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     out: list[dict[str, Any]] = []
-    for line in path.read_text(encoding='utf-8').splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         try:
@@ -67,10 +67,10 @@ def _read_ndjson(path: Path) -> list[dict[str, Any]]:
 def _rewrite_ndjson(path: Path, entries: list[dict[str, Any]]) -> None:
     """原子重写 NDJSON:写 tmp + os.replace。调用方需持锁。"""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + '.tmp')
-    with tmp.open('w', encoding='utf-8') as fh:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
         for e in entries:
-            fh.write(json.dumps(e, ensure_ascii=False) + '\n')
+            fh.write(json.dumps(e, ensure_ascii=False) + "\n")
     os.replace(tmp, path)
 
 
@@ -84,15 +84,15 @@ def _rotate_ndjson(path: Path, max_bytes: int, backup_count: int) -> None:
     """
     if not path.exists() or path.stat().st_size < max_bytes:
         return
-    oldest = path.with_suffix(path.suffix + f'.{backup_count}')
+    oldest = path.with_suffix(path.suffix + f".{backup_count}")
     if oldest.exists():
         oldest.unlink()
     for i in range(backup_count - 1, 0, -1):
-        src = path.with_suffix(path.suffix + f'.{i}')
-        dst = path.with_suffix(path.suffix + f'.{i + 1}')
+        src = path.with_suffix(path.suffix + f".{i}")
+        dst = path.with_suffix(path.suffix + f".{i + 1}")
         if src.exists():
             src.rename(dst)
-    path.rename(path.with_suffix(path.suffix + '.1'))
+    path.rename(path.with_suffix(path.suffix + ".1"))
 
 
 class ReliabilityStore:
@@ -120,9 +120,9 @@ class ReliabilityStore:
     # -- inbound dedupe --------------------------------------------------
     def _load_dedupe(self) -> None:
         cutoff = time.time() - self._reliability.inbound_dedupe_ttl_seconds
-        for entry in _read_ndjson(self._p('processed_inbound.ndjson')):
-            key = entry.get('key')
-            ts = entry.get('seen_at', 0)
+        for entry in _read_ndjson(self._p("processed_inbound.ndjson")):
+            key = entry.get("key")
+            ts = entry.get("seen_at", 0)
             if key and ts >= cutoff:
                 self._dedupe[key] = ts
 
@@ -136,8 +136,8 @@ class ReliabilityStore:
             ts = time.time()
             self._dedupe[key] = ts
             _append_ndjson(
-                self._p('processed_inbound.ndjson'),
-                {'key': key, 'message_id': message_id, 'seen_at': ts},
+                self._p("processed_inbound.ndjson"),
+                {"key": key, "message_id": message_id, "seen_at": ts},
             )
 
     def check_and_record(self, key: str, *, message_id: str | None = None) -> bool:
@@ -145,7 +145,7 @@ class ReliabilityStore:
         with self._lock:
             self._purge_expired()
             if key in self._dedupe:
-                logger.debug('im_gateway dedupe hit: key=%s', key[:32])
+                logger.debug("im_gateway dedupe hit: key=%s", key[:32])
                 return False
             self.record_processed(key, message_id=message_id)
             return True
@@ -157,28 +157,28 @@ class ReliabilityStore:
     # -- outbox ----------------------------------------------------------
     def append_outbox(self, entry: dict[str, Any]) -> None:
         with self._lock:
-            _append_ndjson(self._p('outbox.ndjson'), entry)
+            _append_ndjson(self._p("outbox.ndjson"), entry)
 
     def outbox_entries(self) -> list[dict[str, Any]]:
         with self._lock:
-            return _read_ndjson(self._p('outbox.ndjson'))
+            return _read_ndjson(self._p("outbox.ndjson"))
 
     def outbox_pending(self) -> list[dict[str, Any]]:
         """Latest status per idempotency_key where status != delivered."""
         with self._lock:
             latest: dict[str, dict[str, Any]] = {}
-            for e in _read_ndjson(self._p('outbox.ndjson')):
-                key = e.get('idempotency_key')
+            for e in _read_ndjson(self._p("outbox.ndjson")):
+                key = e.get("idempotency_key")
                 if not key:
                     continue
                 latest[key] = e
-            terminal = {'delivered', 'dead', 'failed'}
-            return [e for e in latest.values() if e.get('status') not in terminal]
+            terminal = {"delivered", "dead", "failed"}
+            return [e for e in latest.values() if e.get("status") not in terminal]
 
     # -- dead letter -----------------------------------------------------
     def append_dead_letter(self, entry: dict[str, Any]) -> None:
         with self._lock:
-            path = self._p('dead_letter.ndjson')
+            path = self._p("dead_letter.ndjson")
             _rotate_ndjson(
                 path,
                 self._reliability.dead_letter_max_bytes,
@@ -186,30 +186,30 @@ class ReliabilityStore:
             )
             _append_ndjson(path, entry)
         logger.warning(
-            'im_gateway dead-letter appended: channel=%s idem=%s category=%s',
-            entry.get('channel'),
-            str(entry.get('idempotency_key'))[:16],
-            entry.get('error_category'),
+            "im_gateway dead-letter appended: channel=%s idem=%s category=%s",
+            entry.get("channel"),
+            str(entry.get("idempotency_key"))[:16],
+            entry.get("error_category"),
         )
 
     def dead_letter_entries(self) -> list[dict[str, Any]]:
         with self._lock:
-            return _read_ndjson(self._p('dead_letter.ndjson'))
+            return _read_ndjson(self._p("dead_letter.ndjson"))
 
     # -- context tokens --------------------------------------------------
     def get_context_token(self, account_id: str, user_id: str) -> str | None:
-        data = _read_json(self._p('wechat_context_tokens.json'), {})
-        return data.get(f'{account_id}:{user_id}')
+        data = _read_json(self._p("wechat_context_tokens.json"), {})
+        return data.get(f"{account_id}:{user_id}")
 
     def set_context_token(self, account_id: str, user_id: str, token: str | None) -> None:
         with self._lock:
-            data = _read_json(self._p('wechat_context_tokens.json'), {})
-            key = f'{account_id}:{user_id}'
+            data = _read_json(self._p("wechat_context_tokens.json"), {})
+            key = f"{account_id}:{user_id}"
             if token is None:
                 data.pop(key, None)
             else:
                 data[key] = token
-            _atomic_write_json(self._p('wechat_context_tokens.json'), data)
+            _atomic_write_json(self._p("wechat_context_tokens.json"), data)
 
     def wechat_context_users(self, account_id: str) -> list[str]:
         """Return user_ids that have a persisted context token for ``account_id``.
@@ -220,23 +220,23 @@ class ReliabilityStore:
         capability), so it doubles as the durable record of known senders
         without a separate persistence file.
         """
-        data = _read_json(self._p('wechat_context_tokens.json'), {})
-        prefix = f'{account_id}:'
+        data = _read_json(self._p("wechat_context_tokens.json"), {})
+        prefix = f"{account_id}:"
         return [k[len(prefix) :] for k in data if isinstance(k, str) and k.startswith(prefix)]
 
     def get_feishu_last_sender(self, channel_id: str) -> str | None:
-        data = _read_json(self._p('feishu_last_senders.json'), {})
+        data = _read_json(self._p("feishu_last_senders.json"), {})
         sender = data.get(channel_id)
         return str(sender) if sender else None
 
     def set_feishu_last_sender(self, channel_id: str, sender: str | None) -> None:
         with self._lock:
-            data = _read_json(self._p('feishu_last_senders.json'), {})
+            data = _read_json(self._p("feishu_last_senders.json"), {})
             if sender:
                 data[channel_id] = sender
             else:
                 data.pop(channel_id, None)
-            _atomic_write_json(self._p('feishu_last_senders.json'), data)
+            _atomic_write_json(self._p("feishu_last_senders.json"), data)
 
     def get_wechat_cursor(self, account_id: str) -> str:
         """Return the saved iLink ``get_updates_buf`` cursor, or ``""``.
@@ -246,40 +246,40 @@ class ReliabilityStore:
         never deliver messages even though the session is valid. The two
         reference clients (hermes-agent, AstrBot) both default to ``""``.
         """
-        data = _read_json(self._p('wechat_accounts.json'), {})
+        data = _read_json(self._p("wechat_accounts.json"), {})
         entry = data.get(account_id)
         if not isinstance(entry, dict):
-            return ''
-        cursor = entry.get('get_updates_buf')
-        return str(cursor) if cursor else ''
+            return ""
+        cursor = entry.get("get_updates_buf")
+        return str(cursor) if cursor else ""
 
     def set_wechat_cursor(self, account_id: str, get_updates_buf: str | None) -> None:
         with self._lock:
-            data = _read_json(self._p('wechat_accounts.json'), {})
+            data = _read_json(self._p("wechat_accounts.json"), {})
             entry = data.get(account_id)
             if not isinstance(entry, dict):
                 entry = {}
-            entry['get_updates_buf'] = get_updates_buf
-            entry['updated_at'] = time.time()
+            entry["get_updates_buf"] = get_updates_buf
+            entry["updated_at"] = time.time()
             data[account_id] = entry
-            _atomic_write_json(self._p('wechat_accounts.json'), data)
+            _atomic_write_json(self._p("wechat_accounts.json"), data)
 
     # -- unsupported inbound (P2) ----------------------------------------
     def record_unsupported_media(self, entry: dict[str, Any]) -> None:
         with self._lock:
-            _append_ndjson(self._p('unsupported_inbound.ndjson'), entry)
+            _append_ndjson(self._p("unsupported_inbound.ndjson"), entry)
 
     # -- audit -----------------------------------------------------------
     def audit(self, event_type: str, **fields: Any) -> None:
         from .audit import redact
 
         entry = {
-            'timestamp': time.time(),
-            'event_type': event_type,
+            "timestamp": time.time(),
+            "event_type": event_type,
             **redact(fields),
         }
         with self._lock:
-            path = self._p('audit.ndjson')
+            path = self._p("audit.ndjson")
             _rotate_ndjson(
                 path,
                 self._reliability.audit_max_bytes,
@@ -289,40 +289,40 @@ class ReliabilityStore:
 
     def audit_entries(self) -> list[dict[str, Any]]:
         with self._lock:
-            return _read_ndjson(self._p('audit.ndjson'))
+            return _read_ndjson(self._p("audit.ndjson"))
 
     # -- cron retention --------------------------------------------------
     def purge_processed_inbound(self, ttl_seconds: int, max_entries: int) -> int:
         """删过期 + 截断到 max_entries(保留最新)。返回清理条数。"""
         return self._purge_ndjson_ttl_cap(
-            'processed_inbound.ndjson', ttl_seconds, max_entries, ts_fields=('seen_at',)
+            "processed_inbound.ndjson", ttl_seconds, max_entries, ts_fields=("seen_at",)
         )
 
     def purge_outbox(self, ttl_seconds: int, max_entries: int) -> int:
         return self._purge_ndjson_ttl_cap(
-            'outbox.ndjson', ttl_seconds, max_entries, ts_fields=('at', 'timestamp')
+            "outbox.ndjson", ttl_seconds, max_entries, ts_fields=("at", "timestamp")
         )
 
     def purge_unsupported_inbound(self, ttl_seconds: int, max_entries: int) -> int:
         return self._purge_ndjson_ttl_cap(
-            'unsupported_inbound.ndjson',
+            "unsupported_inbound.ndjson",
             ttl_seconds,
             max_entries,
-            ts_fields=('received_at', 'at', 'timestamp'),
+            ts_fields=("received_at", "at", "timestamp"),
         )
 
     def purge_all(self, reliability: ReliabilityConfig) -> dict[str, int]:
         """Return cron cleanup counts for bounded append-style files only."""
         return {
-            'processed_inbound.ndjson': self.purge_processed_inbound(
+            "processed_inbound.ndjson": self.purge_processed_inbound(
                 reliability.retention_processed_inbound_ttl_seconds,
                 reliability.retention_processed_inbound_max_entries,
             ),
-            'outbox.ndjson': self.purge_outbox(
+            "outbox.ndjson": self.purge_outbox(
                 reliability.retention_outbox_ttl_seconds,
                 reliability.retention_outbox_max_entries,
             ),
-            'unsupported_inbound.ndjson': self.purge_unsupported_inbound(
+            "unsupported_inbound.ndjson": self.purge_unsupported_inbound(
                 reliability.retention_unsupported_inbound_ttl_seconds,
                 reliability.retention_unsupported_inbound_max_entries,
             ),
@@ -366,4 +366,4 @@ class ReliabilityStore:
         return None
 
 
-__all__ = ['ReliabilityStore']
+__all__ = ["ReliabilityStore"]

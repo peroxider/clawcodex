@@ -106,7 +106,11 @@ def _list(parts: list[str], context: CommandContext) -> str:
     templates = catalogue.list(kind=kind, source=source)
     if not templates:
         return "No templates found."
-    lines = ["Templates:", "", "id                           kind     source    tags                     title"]
+    lines = [
+        "Templates:",
+        "",
+        "id                           kind     source    tags                     title",
+    ]
     lines.extend(_format_template(t) for t in templates)
     return "\n".join(lines)
 

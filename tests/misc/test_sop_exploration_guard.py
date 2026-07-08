@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # without pulling in clawcodex_ext (and its aiohttp dependency).
 import types
 
+
 def _get_active_bundle_stub():
     return None
 
@@ -109,9 +110,7 @@ class TestSopExplorationGuard(unittest.TestCase):
         err = check_bundle_source_exploration(
             "Read",
             {
-                "file_path": (
-                    "/mnt/d/projects/JiuwenAgent/openjiuwen/agent_teams/cli/app.py"
-                ),
+                "file_path": ("/mnt/d/projects/JiuwenAgent/openjiuwen/agent_teams/cli/app.py"),
             },
             _ctx(agent_type="clawcodex-overview"),
         )
@@ -123,9 +122,7 @@ class TestSopExplorationGuard(unittest.TestCase):
         err = check_bundle_source_exploration(
             "Read",
             {
-                "file_path": (
-                    "D:/projects/JiuwenAgent/openjiuwen/agent_teams/cli/app.py"
-                ),
+                "file_path": ("D:/projects/JiuwenAgent/openjiuwen/agent_teams/cli/app.py"),
             },
             _ctx(agent_type="clawcodex-overview"),
         )
@@ -222,9 +219,7 @@ class TestSopExplorationGuard(unittest.TestCase):
         err = check_bundle_source_exploration(
             "Read",
             {
-                "file_path": (
-                    "D:/projects/JiuwenAgent/openjiuwen/agent_teams/cli/app.py"
-                ),
+                "file_path": ("D:/projects/JiuwenAgent/openjiuwen/agent_teams/cli/app.py"),
             },
             _ctx(agent_type="openjiuwen_merged-agent"),
         )
@@ -274,8 +269,7 @@ class TestSopExplorationGuard(unittest.TestCase):
             "Bash",
             {
                 "command": (
-                    "find /mnt/d/projects/JiuwenAgent -name '*.yaml' "
-                    "-path '*/tests/*' 2>/dev/null"
+                    "find /mnt/d/projects/JiuwenAgent -name '*.yaml' -path '*/tests/*' 2>/dev/null"
                 ),
             },
             _ctx(agent_type="openjiuwen_merged-agent"),
@@ -288,9 +282,7 @@ class TestSopExplorationGuard(unittest.TestCase):
         err = check_bundle_source_exploration(
             "Read",
             {
-                "file_path": (
-                    "/mnt/d/projects/JiuwenAgent/openjiuwen/agent_teams/cli/app.py"
-                ),
+                "file_path": ("/mnt/d/projects/JiuwenAgent/openjiuwen/agent_teams/cli/app.py"),
             },
             _ctx(agent_type="openjiuwen_merged-agent"),
         )

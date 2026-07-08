@@ -18,54 +18,54 @@ from extensions.orchestrator.rules_learner import RuleStore
 def _make_workflow(root: Path, rules_enabled: bool = True) -> Path:
     """Write a minimal WORKFLOW.md with optional rules config."""
     rules_block = (
-        (f'rules:\n  enabled: {str(rules_enabled).lower()}\n  path: workflow.rules.yaml\n')
+        (f"rules:\n  enabled: {str(rules_enabled).lower()}\n  path: workflow.rules.yaml\n")
         if rules_enabled
-        else ''
+        else ""
     )
     content = (
-        '---\n'
-        f'{rules_block}'
-        'agent:\n'
-        '  model: test-model\n'
-        '  provider: test\n'
-        '---\n'
-        'Fix the issue: {{ issue.description }}'
+        "---\n"
+        f"{rules_block}"
+        "agent:\n"
+        "  model: test-model\n"
+        "  provider: test\n"
+        "---\n"
+        "Fix the issue: {{ issue.description }}"
     )
-    p = root / 'WORKFLOW.md'
-    p.write_text(content, encoding='utf-8')
+    p = root / "WORKFLOW.md"
+    p.write_text(content, encoding="utf-8")
     return p
 
 
 def _make_rules(root: Path) -> list[dict]:
     """Write sample rules into the rules file and return them."""
-    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     rules = [
         {
-            'id': 1,
-            'category': 'naming',
-            'summary': 'Use explicit exception types',
-            'body': 'Always specify the exception type when catching.',
-            'confidence': 'high',
-            'support_count': 3,
-            'source': 'PR #1',
-            'created_at': now,
-            'updated_at': now,
-            'last_applied': now,
+            "id": 1,
+            "category": "naming",
+            "summary": "Use explicit exception types",
+            "body": "Always specify the exception type when catching.",
+            "confidence": "high",
+            "support_count": 3,
+            "source": "PR #1",
+            "created_at": now,
+            "updated_at": now,
+            "last_applied": now,
         },
         {
-            'id': 2,
-            'category': 'style',
-            'summary': 'Use double quotes for strings',
-            'body': '',
-            'confidence': 'medium',
-            'support_count': 1,
-            'source': 'PR #2',
-            'created_at': now,
-            'updated_at': now,
-            'last_applied': now,
+            "id": 2,
+            "category": "style",
+            "summary": "Use double quotes for strings",
+            "body": "",
+            "confidence": "medium",
+            "support_count": 1,
+            "source": "PR #2",
+            "created_at": now,
+            "updated_at": now,
+            "last_applied": now,
         },
     ]
-    rules_path = root / 'workflow.rules.yaml'
+    rules_path = root / "workflow.rules.yaml"
     RuleStore.save(str(rules_path), rules)
     return rules
 
@@ -79,8 +79,8 @@ class TestRulesCliList(unittest.TestCase):
             _make_workflow(root, rules_enabled=True)
             _make_rules(root)
             args = argparse.Namespace(
-                rules_subcommand='list',
-                workflow=str(root / 'WORKFLOW.md'),
+                rules_subcommand="list",
+                workflow=str(root / "WORKFLOW.md"),
             )
             rc = rules_run(args)
             self.assertEqual(rc, 0)
@@ -89,10 +89,10 @@ class TestRulesCliList(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             wf = _make_workflow(root, rules_enabled=True)
-            rules_path = root / 'workflow.rules.yaml'
+            rules_path = root / "workflow.rules.yaml"
             RuleStore.save(str(rules_path), [])
             args = argparse.Namespace(
-                rules_subcommand='list',
+                rules_subcommand="list",
                 workflow=str(wf),
             )
             rc = rules_run(args)
@@ -103,7 +103,7 @@ class TestRulesCliList(unittest.TestCase):
             root = Path(d)
             wf = _make_workflow(root, rules_enabled=False)
             args = argparse.Namespace(
-                rules_subcommand='list',
+                rules_subcommand="list",
                 workflow=str(wf),
             )
             rc = rules_run(args)
@@ -119,9 +119,9 @@ class TestRulesCliReview(unittest.TestCase):
             _make_workflow(root, rules_enabled=True)
             _make_rules(root)
             args = argparse.Namespace(
-                rules_subcommand='review',
+                rules_subcommand="review",
                 id=1,
-                workflow=str(root / 'WORKFLOW.md'),
+                workflow=str(root / "WORKFLOW.md"),
             )
             rc = rules_run(args)
             self.assertEqual(rc, 0)
@@ -132,9 +132,9 @@ class TestRulesCliReview(unittest.TestCase):
             _make_workflow(root, rules_enabled=True)
             _make_rules(root)
             args = argparse.Namespace(
-                rules_subcommand='review',
+                rules_subcommand="review",
                 id=999,
-                workflow=str(root / 'WORKFLOW.md'),
+                workflow=str(root / "WORKFLOW.md"),
             )
             rc = rules_run(args)
             self.assertEqual(rc, 1)
@@ -149,15 +149,15 @@ class TestRulesCliDelete(unittest.TestCase):
             _make_workflow(root, rules_enabled=True)
             _make_rules(root)
             args = argparse.Namespace(
-                rules_subcommand='delete',
+                rules_subcommand="delete",
                 id=1,
-                workflow=str(root / 'WORKFLOW.md'),
+                workflow=str(root / "WORKFLOW.md"),
             )
             rc = rules_run(args)
             self.assertEqual(rc, 0)
-            data = RuleStore.load(str(root / 'workflow.rules.yaml'))
-            self.assertEqual(len(data['rules']), 1)
-            self.assertEqual(data['rules'][0]['id'], 2)
+            data = RuleStore.load(str(root / "workflow.rules.yaml"))
+            self.assertEqual(len(data["rules"]), 1)
+            self.assertEqual(data["rules"][0]["id"], 2)
 
     def test_delete_nonexistent_rule_returns_error(self) -> None:
         with tempfile.TemporaryDirectory() as d:
@@ -165,9 +165,9 @@ class TestRulesCliDelete(unittest.TestCase):
             _make_workflow(root, rules_enabled=True)
             _make_rules(root)
             args = argparse.Namespace(
-                rules_subcommand='delete',
+                rules_subcommand="delete",
                 id=999,
-                workflow=str(root / 'WORKFLOW.md'),
+                workflow=str(root / "WORKFLOW.md"),
             )
             rc = rules_run(args)
             self.assertEqual(rc, 1)
@@ -182,8 +182,8 @@ class TestRulesCliStats(unittest.TestCase):
             _make_workflow(root, rules_enabled=True)
             _make_rules(root)
             args = argparse.Namespace(
-                rules_subcommand='stats',
-                workflow=str(root / 'WORKFLOW.md'),
+                rules_subcommand="stats",
+                workflow=str(root / "WORKFLOW.md"),
             )
             rc = rules_run(args)
             self.assertEqual(rc, 0)
@@ -192,10 +192,10 @@ class TestRulesCliStats(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             wf = _make_workflow(root, rules_enabled=True)
-            rules_path = root / 'workflow.rules.yaml'
+            rules_path = root / "workflow.rules.yaml"
             RuleStore.save(str(rules_path), [])
             args = argparse.Namespace(
-                rules_subcommand='stats',
+                rules_subcommand="stats",
                 workflow=str(wf),
             )
             rc = rules_run(args)
@@ -210,7 +210,7 @@ class TestRulesCliRefresh(unittest.TestCase):
             root = Path(d)
             wf = _make_workflow(root, rules_enabled=True)
             args = argparse.Namespace(
-                rules_subcommand='refresh',
+                rules_subcommand="refresh",
                 workflow=str(wf),
             )
             rc = rules_run(args)
@@ -222,12 +222,12 @@ class TestRulesCliWorkflowNotFound(unittest.TestCase):
 
     def test_missing_workflow_returns_error(self) -> None:
         args = argparse.Namespace(
-            rules_subcommand='list',
-            workflow='/nonexistent/WORKFLOW.md',
+            rules_subcommand="list",
+            workflow="/nonexistent/WORKFLOW.md",
         )
         rc = rules_run(args)
         self.assertEqual(rc, 1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

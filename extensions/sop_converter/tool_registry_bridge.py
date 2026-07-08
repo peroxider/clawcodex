@@ -189,16 +189,13 @@ def _adjust_pipeline_execute_stage_schema(
 
     for key in ("config", "adapters", "run_id"):
         if key in properties:
-            properties[key]["description"] = (
-                properties[key].get("description")
-                or (
-                    "Optional; loads from run_dir/config.yaml when omitted"
-                    if key == "config"
-                    else (
-                        "Optional; defaults to empty AdapterBundle"
-                        if key == "adapters"
-                        else "Optional; defaults to run_dir directory name"
-                    )
+            properties[key]["description"] = properties[key].get("description") or (
+                "Optional; loads from run_dir/config.yaml when omitted"
+                if key == "config"
+                else (
+                    "Optional; defaults to empty AdapterBundle"
+                    if key == "adapters"
+                    else "Optional; defaults to run_dir directory name"
                 )
             )
             if key in required:
@@ -398,7 +395,9 @@ def _generate_get_instance_helper(init_params: list[ParamSpec] | None) -> str:
                 '                _team = os.environ.get("OPENJIUWEN_TEAM_NAME", "team")'
             )
             resolver_lines.append("                try:")
-            resolver_lines.append(f'                    kwargs["{param.name}"] = _fn(team_name=_team)')
+            resolver_lines.append(
+                f'                    kwargs["{param.name}"] = _fn(team_name=_team)'
+            )
             resolver_lines.append("                except TypeError:")
             resolver_lines.append("                    pass")
 
@@ -770,37 +769,37 @@ def _generate_pipeline_execute_stage_stub(op: SourceOperation) -> str:
         f"def {op.name}(stage, run_dir, run_id=None, config=None, adapters=None, "
         f"auto_approve_gates=False){f' -> {op.return_type}' if op.return_type else ''}:\n"
         f'    """{docstring}"""\n'
-        '    from pathlib import Path\n'
+        "    from pathlib import Path\n"
         '    module = importlib.import_module("researchclaw.pipeline.executor")\n'
-        '    from researchclaw.config import load_config, RCConfig\n'
-        '    from researchclaw.adapters import AdapterBundle\n'
-        '    from researchclaw.pipeline.stages import Stage\n'
-        '    run_path = Path(run_dir)\n'
-        '    if not run_id:\n'
-        '        run_id = run_path.name\n'
-        '    if config is None:\n'
+        "    from researchclaw.config import load_config, RCConfig\n"
+        "    from researchclaw.adapters import AdapterBundle\n"
+        "    from researchclaw.pipeline.stages import Stage\n"
+        "    run_path = Path(run_dir)\n"
+        "    if not run_id:\n"
+        "        run_id = run_path.name\n"
+        "    if config is None:\n"
         '        config = load_config(run_path / "config.yaml", project_root=run_path)\n'
-        '    elif isinstance(config, str):\n'
-        '        config = load_config(Path(config), project_root=run_path)\n'
-        '    elif isinstance(config, dict):\n'
-        '        config = RCConfig.from_dict(config)\n'
-        '    if adapters is None:\n'
-        '        adapters = AdapterBundle()\n'
-        '    elif isinstance(adapters, dict):\n'
-        '        adapters = AdapterBundle()\n'
-        '    if isinstance(stage, str):\n'
+        "    elif isinstance(config, str):\n"
+        "        config = load_config(Path(config), project_root=run_path)\n"
+        "    elif isinstance(config, dict):\n"
+        "        config = RCConfig.from_dict(config)\n"
+        "    if adapters is None:\n"
+        "        adapters = AdapterBundle()\n"
+        "    elif isinstance(adapters, dict):\n"
+        "        adapters = AdapterBundle()\n"
+        "    if isinstance(stage, str):\n"
         '        stage_key = stage.upper().replace("-", "_")\n'
-        '        stage = Stage[stage_key]\n'
-        '    if not isinstance(run_dir, Path):\n'
-        '        run_dir = Path(run_dir)\n'
-        '    return module.execute_stage(\n'
-        '        stage=stage,\n'
-        '        run_dir=run_dir,\n'
-        '        run_id=run_id,\n'
-        '        config=config,\n'
-        '        adapters=adapters,\n'
-        '        auto_approve_gates=bool(auto_approve_gates),\n'
-        '    )'
+        "        stage = Stage[stage_key]\n"
+        "    if not isinstance(run_dir, Path):\n"
+        "        run_dir = Path(run_dir)\n"
+        "    return module.execute_stage(\n"
+        "        stage=stage,\n"
+        "        run_dir=run_dir,\n"
+        "        run_id=run_id,\n"
+        "        config=config,\n"
+        "        adapters=adapters,\n"
+        "        auto_approve_gates=bool(auto_approve_gates),\n"
+        "    )"
     )
 
 
@@ -844,7 +843,7 @@ def _generate_method_stub(
         get_instance_call += ")"
         inner_call = f"{get_instance_call}.{op.name}(\n{call_kwargs}    )"
     else:
-        inner_call = f'module.{op.name}(\n{call_kwargs}    )'
+        inner_call = f"module.{op.name}(\n{call_kwargs}    )"
 
     if op.is_async_generator:
         if is_class_method:
@@ -1166,7 +1165,7 @@ def operation_to_spec(
         tags=tags,
         aliases=aliases,
         source="sop-converter",
-        bundle_id=bundle_id
+        bundle_id=bundle_id,
     )
 
 
@@ -1275,16 +1274,10 @@ def register_component_tools(
             key = (op.class_name, module_path)
             script_path = script_paths[key]
 
-            init_params = (
-                comp.class_init_params.get(op.class_name, [])
-                if op.class_name
-                else None
-            )
+            init_params = comp.class_init_params.get(op.class_name, []) if op.class_name else None
             dispatch_map = cli_dispatch_by_module.get(module_path, {})
             cli_subcommand = (
-                dispatch_map.get(op.name)
-                if _is_cli_handler_op(op, dispatch_map)
-                else None
+                dispatch_map.get(op.name) if _is_cli_handler_op(op, dispatch_map) else None
             )
             spec = operation_to_spec(
                 op,

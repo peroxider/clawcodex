@@ -121,7 +121,9 @@ def clear_recovery_strategies() -> None:
 # ── 内置策略实现 ─────────────────────────────────────────────────────
 
 
-def _max_output_tokens_escalate(ctx: RecoveryContext) -> tuple[QueryState | None, list[Message]] | None:
+def _max_output_tokens_escalate(
+    ctx: RecoveryContext,
+) -> tuple[QueryState | None, list[Message]] | None:
     """首次 max_output_tokens 错误：提升到 ESCALATED_MAX_TOKENS 并重试。"""
     if ctx.error_type != "max_output_tokens":
         return None
@@ -149,7 +151,9 @@ def _max_output_tokens_escalate(ctx: RecoveryContext) -> tuple[QueryState | None
     return (new_state, [])
 
 
-def _max_output_tokens_recovery(ctx: RecoveryContext) -> tuple[QueryState | None, list[Message]] | None:
+def _max_output_tokens_recovery(
+    ctx: RecoveryContext,
+) -> tuple[QueryState | None, list[Message]] | None:
     """max_output_tokens 恢复：注入恢复提示并重试。"""
     if ctx.error_type != "max_output_tokens":
         return None
@@ -185,7 +189,9 @@ def _max_output_tokens_recovery(ctx: RecoveryContext) -> tuple[QueryState | None
     return (new_state, [])
 
 
-def _max_output_tokens_exhausted(ctx: RecoveryContext) -> tuple[QueryState | None, list[Message]] | None:
+def _max_output_tokens_exhausted(
+    ctx: RecoveryContext,
+) -> tuple[QueryState | None, list[Message]] | None:
     """max_output_tokens 恢复次数用尽：yield 错误消息并终止。"""
     if ctx.error_type != "max_output_tokens":
         return None
@@ -195,7 +201,9 @@ def _max_output_tokens_exhausted(ctx: RecoveryContext) -> tuple[QueryState | Non
     return (None, [ctx.last_message] if ctx.last_message is not None else [])
 
 
-def _collapse_engine_recovery(ctx: RecoveryContext) -> tuple[QueryState | None, list[Message]] | None:
+def _collapse_engine_recovery(
+    ctx: RecoveryContext,
+) -> tuple[QueryState | None, list[Message]] | None:
     """PTL 错误 + CollapseEngine 配置时，优先走引擎恢复路径。"""
     if ctx.error_type != "prompt_too_long":
         return None
@@ -252,7 +260,9 @@ def _collapse_engine_recovery(ctx: RecoveryContext) -> tuple[QueryState | None, 
     return (new_state, yield_msgs)
 
 
-async def _reactive_compact_recovery(ctx: RecoveryContext) -> tuple[QueryState | None, list[Message]] | None:
+async def _reactive_compact_recovery(
+    ctx: RecoveryContext,
+) -> tuple[QueryState | None, list[Message]] | None:
     """PTL/media_size 错误 + reactive_compact 启用时，走 LLM 驱动的压缩恢复。"""
     if ctx.error_type not in ("prompt_too_long", "media_size"):
         return None
@@ -319,7 +329,9 @@ def _media_size_fallback(ctx: RecoveryContext) -> tuple[QueryState | None, list[
     return (None, [ctx.last_message] if ctx.last_message is not None else [])
 
 
-def _prompt_too_long_fallback(ctx: RecoveryContext) -> tuple[QueryState | None, list[Message]] | None:
+def _prompt_too_long_fallback(
+    ctx: RecoveryContext,
+) -> tuple[QueryState | None, list[Message]] | None:
     """PTL 错误且所有恢复策略都已耗尽：终止并返回 prompt_too_long。"""
     if ctx.error_type != "prompt_too_long":
         return None
@@ -332,7 +344,9 @@ def _prompt_too_long_fallback(ctx: RecoveryContext) -> tuple[QueryState | None, 
 def _register_builtin_strategies() -> None:
     register_recovery_strategy(MAX_OUTPUT_TOKENS_ESCALATE, _max_output_tokens_escalate, priority=10)
     register_recovery_strategy(MAX_OUTPUT_TOKENS_RECOVERY, _max_output_tokens_recovery, priority=20)
-    register_recovery_strategy(MAX_OUTPUT_TOKENS_EXHAUSTED, _max_output_tokens_exhausted, priority=45)
+    register_recovery_strategy(
+        MAX_OUTPUT_TOKENS_EXHAUSTED, _max_output_tokens_exhausted, priority=45
+    )
     register_recovery_strategy(COLLAPSE_ENGINE_RECOVERY, _collapse_engine_recovery, priority=30)
     register_recovery_strategy(REACTIVE_COMPACT_RECOVERY, _reactive_compact_recovery, priority=40)
     register_recovery_strategy(MEDIA_SIZE_FALLBACK, _media_size_fallback, priority=100)

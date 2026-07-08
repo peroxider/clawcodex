@@ -106,9 +106,7 @@ def _cmd_attach(mgr: BgSessionManager, args: list[str], context: Any) -> str:
     all_ws = "--all-ws" in args or "--all" in args
     ws = _workspace(context)
     try:
-        result = mgr.attach(
-            sid, follow=True, current_workspace=ws, allow_cross_workspace=all_ws
-        )
+        result = mgr.attach(sid, follow=True, current_workspace=ws, allow_cross_workspace=all_ws)
     except BgSessionNotFoundError as exc:
         return f"Not found: {exc}"
     except BgSessionPermissionError as exc:
@@ -230,8 +228,7 @@ def _bg_run(args: str, context: Any) -> LocalCommandResult:
         return LocalCommandResult(
             type="text",
             value=(
-                f"Unknown /bg subcommand {sub!r}. "
-                f"Valid: list, inspect, attach, stop, cleanup, logs"
+                f"Unknown /bg subcommand {sub!r}. Valid: list, inspect, attach, stop, cleanup, logs"
             ),
         )
     mgr = _get_manager(context)

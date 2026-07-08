@@ -145,9 +145,7 @@ class AmbiguityDetector:
         try:
             from clawcodex_ext.providers.base import ChatMessage
 
-            response = self.llm_fallback_provider.chat(
-                [ChatMessage(role="user", content=prompt)]
-            )
+            response = self.llm_fallback_provider.chat([ChatMessage(role="user", content=prompt)])
             raw = response.content
             model_id = getattr(response, "model", "unknown") or "unknown"
         except Exception as exc:  # noqa: BLE001 - fallback must not break detection
@@ -222,8 +220,7 @@ class AmbiguityDetector:
         kind_to_codes: dict[str, frozenset[str]],
     ) -> str:
         code_listing = "\n".join(
-            f"  {kind}: {sorted(codes)}"
-            for kind, codes in sorted(kind_to_codes.items())
+            f"  {kind}: {sorted(codes)}" for kind, codes in sorted(kind_to_codes.items())
         )
         return (
             "You are an ambiguity classifier for a logical kanban system. "

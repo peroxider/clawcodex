@@ -150,9 +150,7 @@ def test_load_initializes_mtime(installed_patch, registry_path: Path) -> None:
     assert registry._mtime_ns > 0
 
 
-def test_save_refreshes_mtime(
-    installed_patch, registry_path: Path, monkeypatch
-) -> None:
+def test_save_refreshes_mtime(installed_patch, registry_path: Path, monkeypatch) -> None:
     from extensions.orchestrator.issue_registry import IssueRegistry
 
     registry = IssueRegistry(registry_path)
@@ -172,9 +170,7 @@ def test_save_refreshes_mtime(
 # ---------------------------------------------------------------------------
 
 
-def test_no_reload_when_unchanged(
-    installed_patch, registry_path: Path
-) -> None:
+def test_no_reload_when_unchanged(installed_patch, registry_path: Path) -> None:
     from extensions.orchestrator import issue_registry as ir_mod
     from extensions.orchestrator.issue_registry import IssueRegistry
 
@@ -265,6 +261,7 @@ def test_resolve_intent_wrapper_triggers_reload(installed_patch) -> None:
     # have to temporarily rebind that name and then restore it.
     wrapper = orch_mod.Orchestrator._resolve_intent
     saved_original = wrapper.__wrapped__
+
     # Reassign the wrapper's captured original by patching the closure.
     # Since we cannot poke the closure cell directly, swap the installed
     # wrapper itself: bind a new wrapper that calls our stub.
@@ -303,9 +300,10 @@ def test_install_is_idempotent(installed_patch) -> None:
 
     # _poll_and_dispatch should be the patched wrapper, not a
     # wrapper-of-a-wrapper.
-    assert hasattr(
-        orch_mod.Orchestrator._poll_and_dispatch, "__wrapped__"
-    ) or callable(orch_mod.Orchestrator._poll_and_dispatch)
+    assert hasattr(orch_mod.Orchestrator._poll_and_dispatch, "__wrapped__") or callable(
+        orch_mod.Orchestrator._poll_and_dispatch
+    )
+
     # Smoke-test: invoking the wrapper twice must not raise and must
     # delegate to the (already-wrapped) original exactly once per call.
     class _FakeRegistry:

@@ -93,7 +93,7 @@ def get_bash_prompt() -> str:
             '  - `"powershell"` -- Use PowerShell on Windows.',
             '  - `"auto"` (default) -- Auto-detect: PowerShell on Windows when available, bash otherwise.',
             "",
-            "# PowerShell Tips (when shell=\"powershell\")",
+            '# PowerShell Tips (when shell="powershell")',
             "- Use `$LASTEXITCODE` (not `$?`) to check the exit code of external programs.",
             "- Use `(Get-Location).Path` instead of `pwd` for the current directory.",
             "- Native cmdlets (e.g. `Get-ChildItem`, `Select-String`) set `$?` but NOT `$LASTEXITCODE`.",

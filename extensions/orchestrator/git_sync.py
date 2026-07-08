@@ -161,9 +161,7 @@ class GitSyncService:
         if is_sequential:
             branch_name = getattr(session, "integration_branch", None)
             if not branch_name:
-                branch_name = (
-                    await asyncio.to_thread(get_current_branch, repo_root) or base_branch
-                )
+                branch_name = await asyncio.to_thread(get_current_branch, repo_root) or base_branch
         else:
             branch_name = await asyncio.to_thread(
                 self._ensure_work_branch, repo_root, issue, base_branch
@@ -293,12 +291,7 @@ class GitSyncService:
         # 触发 read_only_loop / loop_detected / stagnation 终止场景），
         # 即便分支被 push 也不能创建 PR — 否则会留下 0 commit 的空 PR。
         has_reviewable_commit = committed or has_run_commit
-        if (
-            pr_ref is None
-            and branch_name != base_branch
-            and not no_push
-            and has_reviewable_commit
-        ):
+        if pr_ref is None and branch_name != base_branch and not no_push and has_reviewable_commit:
             pr_ref = await self.tracker.ensure_pull_request(
                 issue=issue,
                 head_branch=branch_name,
@@ -1233,9 +1226,7 @@ def rebase_for_pr(
     if current_branch != branch_name:
         co_stdout, co_stderr, co_rc = _run_git(["checkout", branch_name], repo_root)
         if co_rc != 0:
-            raise GitSyncError(
-                f"git checkout {branch_name} failed: {co_stderr or co_stdout}"
-            )
+            raise GitSyncError(f"git checkout {branch_name} failed: {co_stderr or co_stdout}")
     # Best-effort: clear any REBASE_HEAD that the checkout may have
     # resurrected (e.g. via git worktree or orphaned sequencer state).
     _git_rebase_abort(repo_root)
@@ -1283,9 +1274,7 @@ def rebase_for_pr(
             ["diff", "--name-only", "--diff-filter=U"],
             repo_root,
         )
-        conflict_files = tuple(
-            f.strip() for f in diff_stdout.strip().splitlines() if f.strip()
-        )
+        conflict_files = tuple(f.strip() for f in diff_stdout.strip().splitlines() if f.strip())
         if conflict_files:
             # Leave the rebase in progress — the follow-up agent
             # run will read the conflict markers and resolve

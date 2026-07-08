@@ -11,6 +11,7 @@ This lives in the patch layer (``clawcodex_ext``) so third-party
 extensions in ``extensions/`` could register additional STT/TTS backends
 via the same entry points without touching upstream.
 """
+
 from __future__ import annotations
 
 from typing import Protocol
@@ -78,14 +79,17 @@ def _register_builtins() -> None:
     # STT factories
     def _anthropic_factory() -> STTProvider:
         from .anthropic_stt import AnthropicSTTProvider
+
         return AnthropicSTTProvider()
 
     def _doubao_factory() -> STTProvider:
         from .doubao_stt import DoubaoSTTProvider
+
         return DoubaoSTTProvider()
 
     def _minimax_factory() -> STTProvider:
         from .minimax_stt import MiniMaxSTTProvider
+
         return MiniMaxSTTProvider()
 
     register_stt_provider("anthropic", _anthropic_factory)
@@ -95,14 +99,17 @@ def _register_builtins() -> None:
     # TTS factories (P64-E7)
     def _openai_tts_factory() -> TTSProvider:
         from .openai_tts import OpenAITTSProvider
+
         return OpenAITTSProvider()
 
     def _minimax_tts_factory() -> TTSProvider:
         from .minimax_tts import MiniMaxTTSProvider
+
         return MiniMaxTTSProvider()
 
     def _gemini_tts_factory() -> TTSProvider:
         from .gemini_tts import GeminiTTSProvider
+
         return GeminiTTSProvider()
 
     register_tts_provider("openai", _openai_tts_factory)

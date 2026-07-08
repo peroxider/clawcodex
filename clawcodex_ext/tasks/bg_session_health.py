@@ -136,8 +136,10 @@ def assess(
     """
     marker = _read_marker(session.marker_path)
     marker_status = marker.get("status") if marker else None
-    pid = session.pid if session.pid is not None else (
-        int(marker["pid"]) if marker and "pid" in marker else None
+    pid = (
+        session.pid
+        if session.pid is not None
+        else (int(marker["pid"]) if marker and "pid" in marker else None)
     )
     pid_ok = _pid_alive(pid)
     transcript_done = _transcript_has_completion(session.transcript_path)
@@ -158,10 +160,7 @@ def assess(
     if session.status == "running" or marker_status == "running":
         if pid_ok:
             # 优先级 4：PID 存活但 transcript 长期未动 → stale warning
-            is_stale = (
-                mtime_age is not None
-                and mtime_age > stale_after_seconds
-            )
+            is_stale = mtime_age is not None and mtime_age > stale_after_seconds
             return HealthAssessment(
                 status="running",
                 is_stale=is_stale,

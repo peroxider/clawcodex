@@ -67,9 +67,7 @@ def _make_remote(tmp: Path) -> Path:
 def _push_initial(tmp: Path, path: Path, remote: Path, branch: str, base: str) -> None:
     """Configure origin, push initial branch + base, create feature branch."""
     env = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null"}
-    subprocess.check_call(
-        ["git", "remote", "add", "origin", str(remote)], cwd=path, env=env
-    )
+    subprocess.check_call(["git", "remote", "add", "origin", str(remote)], cwd=path, env=env)
     subprocess.check_call(["git", "push", "-q", "origin", branch], cwd=path, env=env)
     if branch != base:
         subprocess.check_call(["git", "branch", base, branch], cwd=path, env=env)

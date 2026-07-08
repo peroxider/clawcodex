@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from extensions.sop_converter.workflow_mode.extractors.adapters.generic import GenericPipelineExtractor
+from extensions.sop_converter.workflow_mode.extractors.adapters.generic import (
+    GenericPipelineExtractor,
+)
 from extensions.sop_converter.workflow_mode.extractors.registry import ExtractorRegistry
 from extensions.sop_converter.workflow_mode.pipeline import discriminate_and_extract
 from extensions.sop_converter.workflow_mode.scan_context import SourceScanContext

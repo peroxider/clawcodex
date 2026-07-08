@@ -181,9 +181,7 @@ class TestRuntimeCommandsWithRuntimeContext:
         assert success is True, f"expected success, got error={error!r}"
         assert result_text is not None, "expected result text"
         # 当前状态行 (OKLCH-colored Rich markup) (OKLCH-colored Rich markup)
-        assert "[primary]provider[/primary]" in result_text, (
-            "output should show current provider"
-        )
+        assert "[primary]provider[/primary]" in result_text, "output should show current provider"
         assert "test-model" in result_text, "output should show current model"
         # 列表
         assert "Models:" in result_text, "output should contain 'Models:'"
@@ -199,9 +197,7 @@ class TestRuntimeCommandsWithRuntimeContext:
         assert success is True, f"expected success, got error={error!r}"
         assert result_text is not None, "expected result text"
         # 当前状态行 (OKLCH-colored Rich markup) (OKLCH-colored Rich markup)
-        assert "[primary]provider[/primary]" in result_text, (
-            "output should show current provider"
-        )
+        assert "[primary]provider[/primary]" in result_text, "output should show current provider"
         assert "test-model" in result_text, "output should show current model"
         # 列表
         assert "Providers:" in result_text, "output should contain 'Providers:'"
@@ -461,9 +457,7 @@ class TestRuntimeCommandCompletion:
 
         suggestions = build_command_suggestions(Path("/tmp"))
         names = [s.name for s in suggestions]
-        assert "model" in names, (
-            f"build_command_suggestions must include 'model'; got {names}"
-        )
+        assert "model" in names, f"build_command_suggestions must include 'model'; got {names}"
 
     def test_build_command_suggestions_includes_provider(self):
         """build_command_suggestions 返回值应包含 provider 条目。"""
@@ -482,9 +476,7 @@ class TestRuntimeCommandCompletion:
         suggestions = build_command_suggestions(Path("/tmp"))
         model_entry = next((s for s in suggestions if s.name == "model"), None)
         assert model_entry is not None, "model entry must exist"
-        assert model_entry.slash == "/model", (
-            f"expected slash='/model', got {model_entry.slash!r}"
-        )
+        assert model_entry.slash == "/model", f"expected slash='/model', got {model_entry.slash!r}"
 
     def test_build_command_suggestions_provider_entry_is_slash_completable(self):
         """provider 条目应有非空的 slash 属性（能被 _SlashOnlyCompleter 补全）。"""
@@ -511,12 +503,8 @@ class TestRuntimeCommandCompletion:
         register_runtime_commands(None)
 
         words = build_command_words(Path("/tmp"))
-        assert "/provider" in words, (
-            f"flat words must include '/provider'; got {words}"
-        )
-        assert "/model" in words, (
-            f"flat words must include '/model'; got {words}"
-        )
+        assert "/provider" in words, f"flat words must include '/provider'; got {words}"
+        assert "/model" in words, f"flat words must include '/model'; got {words}"
 
 
 class TestModelProviderFallback:
@@ -623,6 +611,7 @@ class TestRuntimeCommandsWithArgs:
         测试不应触及实际配置文件，因此 mock 掉 set_default_provider。
         """
         from unittest.mock import patch
+
         with patch("src.config.set_default_provider"):
             yield
 
@@ -651,12 +640,11 @@ class TestRuntimeCommandsWithArgs:
         from clawcodex_ext.command_system.builtins import execute_command_sync
 
         success, result_text, error = execute_command_sync(
-            "model", "truly-nonexistent-model-xyz-12345",
+            "model",
+            "truly-nonexistent-model-xyz-12345",
             _build_context(runtime_context=False),
         )
-        assert success is True, (
-            f"should not crash on unknown model; got error={error!r}"
-        )
+        assert success is True, f"should not crash on unknown model; got error={error!r}"
         assert result_text is not None
 
     # ── /provider <name> ─────────────────────────────────────────────
@@ -678,12 +666,11 @@ class TestRuntimeCommandsWithArgs:
         from clawcodex_ext.command_system.builtins import execute_command_sync
 
         success, result_text, error = execute_command_sync(
-            "provider", "nonexistent-provider-xyz",
+            "provider",
+            "nonexistent-provider-xyz",
             _build_context(runtime_context=False),
         )
-        assert success is True, (
-            f"should not crash on unknown provider; got error={error!r}"
-        )
+        assert success is True, f"should not crash on unknown provider; got error={error!r}"
         assert result_text is not None
         assert "provider" in result_text.lower(), (
             f"expected provider-related output, got {result_text!r}"

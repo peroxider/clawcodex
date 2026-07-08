@@ -360,9 +360,7 @@ def format_overview_stage_pipeline_block(bundle_path: Path | None) -> str:
             note = "—"
             agent_text = f"`{agent}`" if agent else "—"
         id_cell = str(stage_id) if stage_id is not None else "—"
-        table_lines.append(
-            f"| {id_cell} | {name} | {agent_text} | {output_text} | {note} |"
-        )
+        table_lines.append(f"| {id_cell} | {name} | {agent_text} | {output_text} | {note} |")
 
     table = "\n".join(table_lines)
     return f"""\

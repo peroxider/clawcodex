@@ -45,7 +45,6 @@ if TYPE_CHECKING:
 # Now plumbed via QueryConfig.timeout_s (agent_runner passes run_timeout_ms / 1000).
 
 
-
 @dataclass
 class QueryConfig:
     """Configuration for a single query run."""
@@ -333,9 +332,7 @@ class QueryRunner:
                         debug_log_path,
                         "query_runner.abort_signalled",
                         run_id=self.config.run_id,
-                        seconds_since_start=round(
-                            time.monotonic() - loop_started_at, 3
-                        ),
+                        seconds_since_start=round(time.monotonic() - loop_started_at, 3),
                     )
                 except Exception:
                     pass

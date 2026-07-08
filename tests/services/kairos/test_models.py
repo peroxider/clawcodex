@@ -156,7 +156,9 @@ class TestBriefSummarySnapshot:
 
     def test_pending_tasks_coerced_to_tuple(self) -> None:
         snap = BriefSummarySnapshot(
-            agent_id="a", session_id="s", pending_tasks=["t1", "t2"]  # type: ignore[arg-type]
+            agent_id="a",
+            session_id="s",
+            pending_tasks=["t1", "t2"],  # type: ignore[arg-type]
         )
         assert isinstance(snap.pending_tasks, tuple)
         assert snap.pending_tasks == ("t1", "t2")
@@ -164,13 +166,17 @@ class TestBriefSummarySnapshot:
     def test_last_action_must_be_string_when_set(self) -> None:
         with pytest.raises(ValueError, match="last_action"):
             BriefSummarySnapshot(
-                agent_id="a", session_id="s", last_action=123  # type: ignore[arg-type]
+                agent_id="a",
+                session_id="s",
+                last_action=123,  # type: ignore[arg-type]
             )
 
     def test_metadata_must_be_mapping(self) -> None:
         with pytest.raises(ValueError, match="metadata must be a mapping"):
             BriefSummarySnapshot(
-                agent_id="a", session_id="s", metadata=["not a dict"]  # type: ignore[arg-type]
+                agent_id="a",
+                session_id="s",
+                metadata=["not a dict"],  # type: ignore[arg-type]
             )
 
     def test_captured_at_defaults_to_now(self) -> None:
@@ -180,9 +186,7 @@ class TestBriefSummarySnapshot:
         assert before <= snap.captured_at <= after
 
     def test_captured_at_can_be_pinned(self) -> None:
-        snap = BriefSummarySnapshot(
-            agent_id="a", session_id="s", captured_at=1234567890.0
-        )
+        snap = BriefSummarySnapshot(agent_id="a", session_id="s", captured_at=1234567890.0)
         assert snap.captured_at == 1234567890.0
 
 
@@ -210,7 +214,9 @@ class TestDailyLogEntry:
 
     def test_tags_coerced_and_validated(self) -> None:
         entry = DailyLogEntry(
-            timestamp="t", body="x", tags=["a", "b"]  # type: ignore[arg-type]
+            timestamp="t",
+            body="x",
+            tags=["a", "b"],  # type: ignore[arg-type]
         )
         assert isinstance(entry.tags, tuple)
         assert entry.tags == ("a", "b")
@@ -248,6 +254,7 @@ class TestFormatLocalTimestamp:
         # ``timestamp()`` interprets as local time, which differs from
         # UTC ``time.time()`` by the local TZ offset.
         from datetime import datetime
+
         parsed = datetime.fromisoformat(out)
         assert before - 1 <= parsed.timestamp() <= after + 1
 
@@ -257,6 +264,7 @@ class TestFormatLocalTimestamp:
         # round-trips the seconds component rather than asserting a
         # specific year/month/day.
         from datetime import datetime, timezone
+
         target = datetime(2026, 6, 19, 0, 0, 0, tzinfo=timezone.utc).timestamp()
         out = format_local_timestamp(target)
         # Round-trip through parse + epoch conversion. Allow 1-second

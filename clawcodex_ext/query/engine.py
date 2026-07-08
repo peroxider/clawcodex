@@ -45,7 +45,7 @@ class QueryEngineConfig:
     append_system_prompt: str | None = None
     max_turns: int | None = None
     initial_messages: list[Message] | None = None
-    query_source: str = 'repl_main_thread'
+    query_source: str = "repl_main_thread"
     user_context: dict[str, str] | None = None
     system_context: dict[str, str] | None = None
     # WI-2.3 (critic M1): MCP servers loaded for this session. Threaded into
@@ -69,7 +69,7 @@ class QueryEngine:
         # tools (especially subagent dispatches) ignore the user's
         # interrupt until they finish naturally.
         self._config.tool_context.abort_controller = self._abort_controller
-        self._total_usage: dict[str, int] = {'input_tokens': 0, 'output_tokens': 0}
+        self._total_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
         self._session_id: str = uuid4().hex
         # Ch5/B.5 prereq — the autocompact circuit-breaker counter must
         # survive across submit_message calls so 3 consecutive failures
@@ -153,10 +153,10 @@ class QueryEngine:
                 # opt out of the section taxonomy. Return list-shape with one
                 # block so downstream typing is uniform.
                 blocks: list[dict[str, Any]] = [
-                    {'type': 'text', 'text': self._config.custom_system_prompt}
+                    {"type": "text", "text": self._config.custom_system_prompt}
                 ]
                 if self._config.append_system_prompt:
-                    blocks.append({'type': 'text', 'text': self._config.append_system_prompt})
+                    blocks.append({"type": "text", "text": self._config.append_system_prompt})
                 # Append git-status etc. as a final uncached block.
                 system_prompt = append_system_context_blocks(blocks, parts.system_context)
                 return system_prompt, parts.user_context, parts.system_context
@@ -215,7 +215,7 @@ class QueryEngine:
                     cwd=self._config.tool_context.cwd,
                 )
             except Exception:
-                context_prompt = ''
+                context_prompt = ""
             return context_prompt, {}, {}
 
     async def submit_message(
@@ -254,13 +254,13 @@ class QueryEngine:
         try:
             for path, fp in self._config.tool_context.read_file_fingerprints.items():
                 # fp is (mtime, size) or (mtime, size, partial)
-                read_file_state[str(path)] = {'timestamp': fp[0]}
+                read_file_state[str(path)] = {"timestamp": fp[0]}
         except Exception:
             pass
 
         pipeline_config = PipelineConfig(
             provider=self._config.provider,
-            model=getattr(self._config.provider, 'model', '') or '',
+            model=getattr(self._config.provider, "model", "") or "",
             read_file_state=read_file_state or None,
             # Ch5/B.5 — thread the session-scoped tracking instance so
             # the autocompact circuit-breaker can count consecutive
@@ -327,7 +327,7 @@ class QueryEngine:
             # here. Mirrored by repl/core.py for session.conversation.
             if (
                 isinstance(message, AssistantMessage)
-                and getattr(message, '_api_error', None) == 'image_unsupported'
+                and getattr(message, "_api_error", None) == "image_unsupported"
             ):
                 from clawcodex_ext.context_system.microcompact import (
                     strip_images_from_typed_messages,
@@ -338,7 +338,7 @@ class QueryEngine:
             yield message
 
     def interrupt(self) -> None:
-        self._abort_controller.abort('user_interrupt')
+        self._abort_controller.abort("user_interrupt")
 
     def get_messages(self) -> list[Message]:
         return list(self._mutable_messages)

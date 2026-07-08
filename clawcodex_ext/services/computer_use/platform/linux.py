@@ -96,9 +96,7 @@ def _validate_xy(x: int, y: int) -> None:
     if not isinstance(x, int) or not isinstance(y, int):
         raise TypeError("x and y must be integers")
     if x < 0 or y < 0 or x > MAX_COORD or y > MAX_COORD:
-        raise CoordinatesOutOfBoundsError(
-            f"coordinates ({x}, {y}) out of supported bounds"
-        )
+        raise CoordinatesOutOfBoundsError(f"coordinates ({x}, {y}) out of supported bounds")
 
 
 def _check_binary(runner: RunFn, binary: str, *, timeout: float) -> None:
@@ -139,7 +137,11 @@ class LinuxScreenshotProvider(ScreenshotProvider):
             self._recorder.record_screenshot("fullscreen", None)
             return b""
         self._backend.require_allowed()
-        _check_binary(self._backend.runner, self._backend.screenshot_binary, timeout=self._backend.timeout_seconds)
+        _check_binary(
+            self._backend.runner,
+            self._backend.screenshot_binary,
+            timeout=self._backend.timeout_seconds,
+        )
         result = self._backend.runner(
             [self._backend.screenshot_binary, "-o", "-"],
             capture_output=True,
@@ -153,7 +155,11 @@ class LinuxScreenshotProvider(ScreenshotProvider):
             self._recorder.record_screenshot("region", None, **region.to_dict())
             return b""
         self._backend.require_allowed()
-        _check_binary(self._backend.runner, self._backend.screenshot_binary, timeout=self._backend.timeout_seconds)
+        _check_binary(
+            self._backend.runner,
+            self._backend.screenshot_binary,
+            timeout=self._backend.timeout_seconds,
+        )
         geom = f"{region.x},{region.y},{region.width},{region.height}"
         result = self._backend.runner(
             [self._backend.screenshot_binary, "-o", "-a", geom, "-"],
@@ -168,8 +174,14 @@ class LinuxScreenshotProvider(ScreenshotProvider):
             self._recorder.record_screenshot("window", None, **window.to_dict())
             return None
         self._backend.require_allowed()
-        _check_binary(self._backend.runner, self._backend.xdotool_binary, timeout=self._backend.timeout_seconds)
-        _check_binary(self._backend.runner, self._backend.import_binary, timeout=self._backend.timeout_seconds)
+        _check_binary(
+            self._backend.runner,
+            self._backend.xdotool_binary,
+            timeout=self._backend.timeout_seconds,
+        )
+        _check_binary(
+            self._backend.runner, self._backend.import_binary, timeout=self._backend.timeout_seconds
+        )
         result = self._backend.runner(
             [self._backend.xdotool_binary, "search", "--name", window.title],
             capture_output=True,
@@ -223,7 +235,11 @@ class LinuxInputSimulator(InputSimulator):
             self._recorder.record_action("xdotool", args=list(args))
             return
         self._backend.require_allowed()
-        _check_binary(self._backend.runner, self._backend.xdotool_binary, timeout=self._backend.timeout_seconds)
+        _check_binary(
+            self._backend.runner,
+            self._backend.xdotool_binary,
+            timeout=self._backend.timeout_seconds,
+        )
         self._backend.runner(
             [self._backend.xdotool_binary, *args],
             capture_output=True,
@@ -309,7 +325,9 @@ class LinuxClipboardManager(ClipboardManager):
         if self.is_dry_run:
             return self._text
         self._backend.require_allowed()
-        _check_binary(self._backend.runner, self._backend.xclip_binary, timeout=self._backend.timeout_seconds)
+        _check_binary(
+            self._backend.runner, self._backend.xclip_binary, timeout=self._backend.timeout_seconds
+        )
         result = self._backend.runner(
             [self._backend.xclip_binary, "-selection", "clipboard", "-out"],
             capture_output=True,
@@ -326,7 +344,9 @@ class LinuxClipboardManager(ClipboardManager):
             self._recorder.record_action("clipboard_set", length=len(text))
             return
         self._backend.require_allowed()
-        _check_binary(self._backend.runner, self._backend.xclip_binary, timeout=self._backend.timeout_seconds)
+        _check_binary(
+            self._backend.runner, self._backend.xclip_binary, timeout=self._backend.timeout_seconds
+        )
         self._backend.runner(
             [self._backend.xclip_binary, "-selection", "clipboard"],
             input=text.encode("utf-8"),
@@ -357,7 +377,9 @@ class LinuxWindowManager(WindowManager):
         if self.is_dry_run:
             return []
         self._backend.require_allowed()
-        _check_binary(self._backend.runner, self._backend.wmctrl_binary, timeout=self._backend.timeout_seconds)
+        _check_binary(
+            self._backend.runner, self._backend.wmctrl_binary, timeout=self._backend.timeout_seconds
+        )
         result = self._backend.runner(
             [self._backend.wmctrl_binary, "-l"],
             capture_output=True,
@@ -381,7 +403,9 @@ class LinuxWindowManager(WindowManager):
             self._recorder.record_action("focus_window", **window.to_dict())
             return False
         self._backend.require_allowed()
-        _check_binary(self._backend.runner, self._backend.wmctrl_binary, timeout=self._backend.timeout_seconds)
+        _check_binary(
+            self._backend.runner, self._backend.wmctrl_binary, timeout=self._backend.timeout_seconds
+        )
         result = self._backend.runner(
             [self._backend.wmctrl_binary, "-a", window.title],
             capture_output=True,
@@ -395,7 +419,9 @@ class LinuxWindowManager(WindowManager):
             self._recorder.record_action("close_window", **window.to_dict())
             return False
         self._backend.require_allowed()
-        _check_binary(self._backend.runner, self._backend.wmctrl_binary, timeout=self._backend.timeout_seconds)
+        _check_binary(
+            self._backend.runner, self._backend.wmctrl_binary, timeout=self._backend.timeout_seconds
+        )
         result = self._backend.runner(
             [self._backend.wmctrl_binary, "-c", window.title],
             capture_output=True,

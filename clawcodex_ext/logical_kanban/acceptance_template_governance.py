@@ -92,7 +92,9 @@ def propose_acceptance_template_from_plan(
 
 def submit_acceptance_template(template: AcceptanceTemplate) -> str:
     if template.status != "draft":
-        raise ValueError(f"Only draft acceptance templates can be submitted; got {template.status!r}")
+        raise ValueError(
+            f"Only draft acceptance templates can be submitted; got {template.status!r}"
+        )
     if get_acceptance_template(template.template_id) is not None:
         raise ValueError(f"template_id {template.template_id!r} already exists in the registry")
     proposal_id = _new_proposal_id()

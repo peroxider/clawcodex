@@ -53,7 +53,7 @@ _ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 
 def _extract_title(html_text: str) -> str:
     m = _TITLE_RE.search(html_text)
-    return (m.group(1).strip() if m and m.group(1) else "")
+    return m.group(1).strip() if m and m.group(1) else ""
 
 
 def _html_to_text(html_text: str) -> str:
@@ -152,8 +152,7 @@ def _web_browser_call(tool_input: dict[str, Any], _context: ToolContext) -> Tool
 
     if action == "screenshot":
         content = (
-            "[Text snapshot — visual screenshots require a full browser "
-            "runtime]\n\n" + text_content
+            "[Text snapshot — visual screenshots require a full browser runtime]\n\n" + text_content
         )
     else:
         content = text_content
@@ -229,7 +228,6 @@ WebBrowserTool: Tool = build_tool(
     is_concurrency_safe=lambda _input: False,
     map_result_to_api=_map_result_to_api,
     to_auto_classifier_input=lambda input_data: (
-        f"WebBrowser {input_data.get('action', 'navigate')} "
-        f"{input_data.get('url', '')}"
+        f"WebBrowser {input_data.get('action', 'navigate')} {input_data.get('url', '')}"
     ),
 )

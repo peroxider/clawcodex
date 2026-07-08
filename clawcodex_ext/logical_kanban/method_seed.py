@@ -41,7 +41,14 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
     SubtaskTemplate = subtask_template_cls
     AcceptanceTemplate = acceptance_template_cls
 
-    def _t(template_id, role, subject_template, description_template="", acceptance_template="", default_blocked_by=()):
+    def _t(
+        template_id,
+        role,
+        subject_template,
+        description_template="",
+        acceptance_template="",
+        default_blocked_by=(),
+    ):
         return SubtaskTemplate(
             template_id=template_id,
             role=role,
@@ -58,11 +65,9 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
             strict_acceptance=strict_acceptance,
         )
 
-
     # ---------------------------------------------------------------------------
     # add_* — additive patterns (5)
     # ---------------------------------------------------------------------------
-
 
     _M_ADD_API_ENDPOINT = EngineeringMethod(
         method_id="M-add-api-endpoint-001",
@@ -119,7 +124,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     _M_ADD_MIDDLEWARE = EngineeringMethod(
         method_id="M-add-middleware-001",
         pattern="add_middleware",
@@ -154,8 +158,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "middleware-test",
                 "test",
                 "Add middleware tests",
-                "Cover the happy path, short-circuit, ordering, and error "
-                "propagation.",
+                "Cover the happy path, short-circuit, ordering, and error propagation.",
                 "Tests pass; ordering regression test exists.",
                 default_blocked_by=("middleware-impl",),
             ),
@@ -163,8 +166,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "middleware-docs",
                 "docs",
                 "Document middleware",
-                "Document the hook point, ordering, configuration knobs, and "
-                "failure modes.",
+                "Document the hook point, ordering, configuration knobs, and failure modes.",
                 "Docs published with at least one example.",
                 default_blocked_by=("middleware-test",),
             ),
@@ -174,7 +176,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
             strict_acceptance=True,
         ),
     )
-
 
     _M_ADD_CLI_COMMAND = EngineeringMethod(
         method_id="M-add-cli-command-001",
@@ -200,8 +201,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "cli-impl",
                 "impl",
                 "Implement command handler",
-                "Wire the subcommand, parse arguments, and return a documented "
-                "exit code.",
+                "Wire the subcommand, parse arguments, and return a documented exit code.",
                 "Command exits 0 on success and non-zero with stderr on error.",
                 default_blocked_by=("cli-design",),
             ),
@@ -217,8 +217,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "cli-docs",
                 "docs",
                 "Document command",
-                "Add usage examples and reference the new subcommand in the "
-                "command index.",
+                "Add usage examples and reference the new subcommand in the command index.",
                 "Reference page published with at least one example invocation.",
                 default_blocked_by=("cli-test",),
             ),
@@ -228,7 +227,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
             strict_acceptance=False,
         ),
     )
-
 
     _M_ADD_CONFIG_OPTION = EngineeringMethod(
         method_id="M-add-config-option-001",
@@ -245,8 +243,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "config-design",
                 "design",
                 "Design config option",
-                "Decide key, type, default, validation rule, and where the option "
-                "is read.",
+                "Decide key, type, default, validation rule, and where the option is read.",
                 "Schema entry exists with default + validator.",
                 default_blocked_by=(),
             ),
@@ -282,7 +279,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     _M_ADD_METRIC = EngineeringMethod(
         method_id="M-add-metric-001",
         pattern="add_metric",
@@ -298,8 +294,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "metric-design",
                 "design",
                 "Design metric",
-                "Pick type, name, label cardinality, units, and bucket layout (for "
-                "histograms).",
+                "Pick type, name, label cardinality, units, and bucket layout (for histograms).",
                 "Design doc lists name, type, labels, and rationale.",
                 default_blocked_by=(),
             ),
@@ -336,11 +331,9 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     # ---------------------------------------------------------------------------
     # fix_* — corrective patterns (4)
     # ---------------------------------------------------------------------------
-
 
     _M_FIX_BUG = EngineeringMethod(
         method_id="M-fix-bug-001",
@@ -357,8 +350,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "bug-reproduce",
                 "test",
                 "Reproduce the bug",
-                "Write a failing test or a step-by-step script that exhibits the "
-                "bug.",
+                "Write a failing test or a step-by-step script that exhibits the bug.",
                 "Reproduction exists and consistently fails on the buggy code.",
                 default_blocked_by=(),
             ),
@@ -366,8 +358,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "bug-rootcause",
                 "design",
                 "Identify root cause",
-                "Trace the bug to the responsible code path; document the "
-                "offending condition.",
+                "Trace the bug to the responsible code path; document the offending condition.",
                 "Root-cause note committed with code/line reference.",
                 default_blocked_by=("bug-reproduce",),
             ),
@@ -397,7 +388,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     _M_FIX_PERFORMANCE = EngineeringMethod(
         method_id="M-fix-performance-001",
         pattern="fix_performance",
@@ -422,8 +412,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "perf-profile",
                 "design",
                 "Profile and locate hotspot",
-                "Run a profiler under the same workload and locate the dominant "
-                "function or query.",
+                "Run a profiler under the same workload and locate the dominant function or query.",
                 "Profile report links the hotspot to a concrete code/query site.",
                 default_blocked_by=("perf-measure",),
             ),
@@ -439,8 +428,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "perf-verify",
                 "test",
                 "Verify performance gain",
-                "Re-measure the same workload and document the delta against the "
-                "baseline.",
+                "Re-measure the same workload and document the delta against the baseline.",
                 "Post-fix numbers recorded and meet the documented target.",
                 default_blocked_by=("perf-optimize",),
             ),
@@ -451,7 +439,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
             strict_acceptance=True,
         ),
     )
-
 
     _M_FIX_SECURITY_VULNERABILITY = EngineeringMethod(
         method_id="M-fix-security-vulnerability-001",
@@ -468,8 +455,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "sec-assess",
                 "design",
                 "Assess impact",
-                "Determine affected versions, exposure surface, and exploit "
-                "prerequisites.",
+                "Determine affected versions, exposure surface, and exploit prerequisites.",
                 "Impact note lists affected versions and exposure surface.",
                 default_blocked_by=(),
             ),
@@ -487,16 +473,14 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "test",
                 "Add security regression test",
                 "Cover the vulnerable input/path so it cannot regress silently.",
-                "Regression test passes against patched code and fails without "
-                "it.",
+                "Regression test passes against patched code and fails without it.",
                 default_blocked_by=("sec-fix",),
             ),
             _t(
                 "sec-disclose",
                 "docs",
                 "Document / disclose",
-                "Update the changelog, advisory, or security note with the fix "
-                "and credit.",
+                "Update the changelog, advisory, or security note with the fix and credit.",
                 "Advisory / changelog entry published.",
                 default_blocked_by=("sec-regression",),
             ),
@@ -507,7 +491,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
             strict_acceptance=True,
         ),
     )
-
 
     _M_FIX_RACE_CONDITION = EngineeringMethod(
         method_id="M-fix-race-condition-001",
@@ -562,11 +545,9 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     # ---------------------------------------------------------------------------
     # refactor_* — restructure patterns (3)
     # ---------------------------------------------------------------------------
-
 
     _M_REFACTOR_MODULE = EngineeringMethod(
         method_id="M-refactor-module-001",
@@ -583,10 +564,8 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "refactor-baseline",
                 "test",
                 "Lock down current behavior",
-                "Run existing tests; add characterization tests for any untested "
-                "branch.",
-                "Test suite green; characterization tests added for the targeted "
-                "module.",
+                "Run existing tests; add characterization tests for any untested branch.",
+                "Test suite green; characterization tests added for the targeted module.",
                 default_blocked_by=(),
             ),
             _t(
@@ -602,8 +581,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "refactor-apply",
                 "impl",
                 "Apply the refactor",
-                "Mechanically apply the design, keeping the public surface "
-                "identical.",
+                "Mechanically apply the design, keeping the public surface identical.",
                 "Refactor merged; public API unchanged.",
                 default_blocked_by=("refactor-design",),
             ),
@@ -623,7 +601,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
             strict_acceptance=True,
         ),
     )
-
 
     _M_REFACTOR_EXTRACT_SERVICE = EngineeringMethod(
         method_id="M-refactor-extract-service-001",
@@ -650,8 +627,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "extract-impl",
                 "impl",
                 "Implement the service",
-                "Create the new module/class and migrate the canonical logic "
-                "into it.",
+                "Create the new module/class and migrate the canonical logic into it.",
                 "Service module merged.",
                 default_blocked_by=("extract-contract",),
             ),
@@ -678,7 +654,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
             strict_acceptance=True,
         ),
     )
-
 
     _M_REFACTOR_RENAME = EngineeringMethod(
         method_id="M-refactor-rename-001",
@@ -722,11 +697,9 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     # ---------------------------------------------------------------------------
     # add_test_* — test-coverage patterns (3)
     # ---------------------------------------------------------------------------
-
 
     _M_ADD_UNIT_TEST = EngineeringMethod(
         method_id="M-add-unit-test-001",
@@ -743,8 +716,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "unit-enumerate",
                 "design",
                 "Enumerate cases",
-                "List boundary, negative, and equivalence-class inputs for the "
-                "target unit.",
+                "List boundary, negative, and equivalence-class inputs for the target unit.",
                 "Case list documented.",
                 default_blocked_by=(),
             ),
@@ -752,8 +724,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "unit-write",
                 "test",
                 "Write unit tests",
-                "Implement the cases as canonical unit tests with arrange / act "
-                "/ assert.",
+                "Implement the cases as canonical unit tests with arrange / act / assert.",
                 "All listed cases have a corresponding test.",
                 default_blocked_by=("unit-enumerate",),
             ),
@@ -771,7 +742,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
             strict_acceptance=False,
         ),
     )
-
 
     _M_ADD_INTEGRATION_TEST = EngineeringMethod(
         method_id="M-add-integration-test-001",
@@ -815,7 +785,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     _M_ADD_E2E_TEST = EngineeringMethod(
         method_id="M-add-e2e-test-001",
         pattern="add_e2e_test",
@@ -858,18 +827,15 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     # ---------------------------------------------------------------------------
     # add_doc_* — documentation patterns (3)
     # ---------------------------------------------------------------------------
-
 
     _M_ADD_README_SECTION = EngineeringMethod(
         method_id="M-add-readme-section-001",
         pattern="add_readme_section",
         description=(
-            "Add a section to the project README: pick the topic, draft content, "
-            "render, link."
+            "Add a section to the project README: pick the topic, draft content, render, link."
         ),
         tags=("docs", "readme"),
         preconditions=("readme_exists",),
@@ -906,13 +872,11 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     _M_ADD_API_DOC = EngineeringMethod(
         method_id="M-add-api-doc-001",
         pattern="add_api_doc",
         description=(
-            "Add API reference docs for a symbol: gather signature, write the "
-            "reference, render."
+            "Add API reference docs for a symbol: gather signature, write the reference, render."
         ),
         tags=("docs", "api"),
         preconditions=("doc_generator_present",),
@@ -922,8 +886,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "apidoc-source",
                 "design",
                 "Gather signature",
-                "Capture the canonical signature, params, return type, and "
-                "exceptions.",
+                "Capture the canonical signature, params, return type, and exceptions.",
                 "Signature block drafted.",
                 default_blocked_by=(),
             ),
@@ -950,13 +913,11 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     _M_ADD_CHANGELOG = EngineeringMethod(
         method_id="M-add-changelog-001",
         pattern="add_changelog",
         description=(
-            "Add a changelog entry for a release: list user-visible changes, "
-            "credit contributors."
+            "Add a changelog entry for a release: list user-visible changes, credit contributors."
         ),
         tags=("docs", "changelog"),
         preconditions=("release_version_known",),
@@ -966,8 +927,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "changelog-collect",
                 "design",
                 "Collect changes",
-                "Aggregate merged PRs / commits into Added / Changed / Fixed "
-                "buckets.",
+                "Aggregate merged PRs / commits into Added / Changed / Fixed buckets.",
                 "Buckets drafted.",
                 default_blocked_by=(),
             ),
@@ -994,11 +954,9 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     # ---------------------------------------------------------------------------
     # migrate_* — migration patterns (3)
     # ---------------------------------------------------------------------------
-
 
     _M_MIGRATE_DEPENDENCY = EngineeringMethod(
         method_id="M-migrate-dependency-001",
@@ -1015,8 +973,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "dep-plan",
                 "design",
                 "Plan migration",
-                "Decide dual-write window, removal criteria, and rollback "
-                "policy.",
+                "Decide dual-write window, removal criteria, and rollback policy.",
                 "Migration plan doc merged.",
                 default_blocked_by=(),
             ),
@@ -1053,7 +1010,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     _M_MIGRATE_DATABASE_SCHEMA = EngineeringMethod(
         method_id="M-migrate-database-schema-001",
         pattern="migrate_database_schema",
@@ -1077,8 +1033,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "schema-test",
                 "test",
                 "Test migration",
-                "Run the migration against a representative dataset and verify "
-                "down-migration.",
+                "Run the migration against a representative dataset and verify down-migration.",
                 "Up + down migrations succeed against the fixture.",
                 default_blocked_by=("schema-write",),
             ),
@@ -1106,7 +1061,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     _M_MIGRATE_API_VERSION = EngineeringMethod(
         method_id="M-migrate-api-version-001",
         pattern="migrate_api_version",
@@ -1122,8 +1076,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "apiver-design",
                 "design",
                 "Design new contract",
-                "Define breaking changes, the new contract, and the sunset "
-                "timeline.",
+                "Define breaking changes, the new contract, and the sunset timeline.",
                 "Contract doc published.",
                 default_blocked_by=(),
             ),
@@ -1158,18 +1111,15 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     # ---------------------------------------------------------------------------
     # add_ci_* — CI / automation patterns (2)
     # ---------------------------------------------------------------------------
-
 
     _M_ADD_GITHUB_ACTION = EngineeringMethod(
         method_id="M-add-github-action-001",
         pattern="add_github_action",
         description=(
-            "Add a GitHub Actions workflow: design triggers, author the workflow "
-            "file, verify runs."
+            "Add a GitHub Actions workflow: design triggers, author the workflow file, verify runs."
         ),
         tags=("ci", "automation"),
         preconditions=("repo_has_actions_enabled",),
@@ -1206,7 +1156,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     _M_ADD_PRE_COMMIT_HOOK = EngineeringMethod(
         method_id="M-add-pre-commit-hook-001",
         pattern="add_pre_commit_hook",
@@ -1238,8 +1187,7 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
                 "hook-verify",
                 "test",
                 "Verify hook",
-                "Run the hook on a sample dirty repo and confirm it blocks bad "
-                "changes.",
+                "Run the hook on a sample dirty repo and confirm it blocks bad changes.",
                 "Hook blocks a known-bad sample.",
                 default_blocked_by=("hook-impl",),
             ),
@@ -1250,18 +1198,14 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     # ---------------------------------------------------------------------------
     # release_* — release patterns (3)
     # ---------------------------------------------------------------------------
 
-
     _M_RELEASE_MINOR = EngineeringMethod(
         method_id="M-release-minor-001",
         pattern="release_minor",
-        description=(
-            "Cut a minor release: aggregate changes, bump version, tag, publish."
-        ),
+        description=("Cut a minor release: aggregate changes, bump version, tag, publish."),
         tags=("release", "minor"),
         preconditions=("release_branch_ready",),
         assumptions=("semver_strict",),
@@ -1304,7 +1248,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
             strict_acceptance=True,
         ),
     )
-
 
     _M_RELEASE_MAJOR = EngineeringMethod(
         method_id="M-release-major-001",
@@ -1364,13 +1307,11 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     _M_HOTFIX = EngineeringMethod(
         method_id="M-hotfix-001",
         pattern="hotfix",
         description=(
-            "Ship an out-of-band hotfix: branch from the release tag, patch, "
-            "backport, tag."
+            "Ship an out-of-band hotfix: branch from the release tag, patch, backport, tag."
         ),
         tags=("release", "hotfix"),
         preconditions=("incident_is_open",),
@@ -1416,11 +1357,9 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         ),
     )
 
-
     # ---------------------------------------------------------------------------
     # Master tuple
     # ---------------------------------------------------------------------------
-
 
     SEED_METHODS: Final[tuple[EngineeringMethod, ...]] = (
         # add_*
@@ -1458,8 +1397,6 @@ def build_seed_methods(  # type: ignore[no-untyped-def]
         _M_RELEASE_MAJOR,
         _M_HOTFIX,
     )
-
-
 
     return SEED_METHODS
 

@@ -54,7 +54,9 @@ def rank_session_rows(
             score += weights["workspace_files"] * overlap
 
         try:
-            score += weights["history_recency"] * min(1.0, float(row.get("last_updated") or 0) / 10_000_000_000)
+            score += weights["history_recency"] * min(
+                1.0, float(row.get("last_updated") or 0) / 10_000_000_000
+            )
         except (TypeError, ValueError):
             pass
         row = dict(row)
@@ -94,7 +96,14 @@ def _summary_text(summary: Any) -> str:
     if not isinstance(summary, dict):
         return ""
     parts: list[str] = []
-    for key in ("title", "goals", "open_threads", "next_action_candidates", "files_touched", "commands_seen"):
+    for key in (
+        "title",
+        "goals",
+        "open_threads",
+        "next_action_candidates",
+        "files_touched",
+        "commands_seen",
+    ):
         value = summary.get(key)
         if isinstance(value, str):
             parts.append(value)

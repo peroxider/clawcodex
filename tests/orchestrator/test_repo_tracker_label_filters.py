@@ -274,7 +274,9 @@ class TestClientDirect(unittest.IsolatedAsyncioTestCase):
     """Lower-level tests against RepositoryIssueClient (no adapter layer)."""
 
     async def test_client_construction_stores_frozensets(self) -> None:
-        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=[]))) as client:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, json=[]))
+        ) as client:
             c = RepositoryIssueClient(
                 platform="github",
                 owner="acme",
@@ -288,7 +290,9 @@ class TestClientDirect(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(c._require_any_labels, frozenset({"p0"}))
 
     async def test_client_default_has_empty_label_sets(self) -> None:
-        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=[]))) as client:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, json=[]))
+        ) as client:
             c = RepositoryIssueClient(
                 platform="github",
                 owner="acme",
@@ -331,9 +335,7 @@ class TestWorkflowConfigParsesLabelFilters(unittest.TestCase):
                 }
             }
         )
-        self.assertEqual(
-            sorted(config.tracker.skip_labels), ["Completed", "wontfix"]
-        )
+        self.assertEqual(sorted(config.tracker.skip_labels), ["Completed", "wontfix"])
         self.assertEqual(config.tracker.require_any_labels, ["p0"])
 
     def test_from_dict_defaults_to_empty_lists(self) -> None:

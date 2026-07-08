@@ -24,7 +24,9 @@ from clawcodex_ext.services.lodestone import (
 )
 
 
-def _ctx(workspace_root: Path | None = None, *, session_id: str | None = "sess-1") -> CommandContext:
+def _ctx(
+    workspace_root: Path | None = None, *, session_id: str | None = "sess-1"
+) -> CommandContext:
     ctx = CommandContext(workspace_root=workspace_root, cwd=workspace_root)
     setattr(ctx, "session_id", session_id)  # tolerate test mocks
     return ctx
@@ -47,9 +49,7 @@ async def test_register_lodestone_commands_adds_to_registry():
 
 def test_link_parse_outputs_anchor_payload():
     ctx = _ctx(workspace_root=Path("/abs").resolve())
-    result = asyncio.run(
-        LODESTONE_COMMAND.call('parse src/foo.py:42:13 and #123', ctx)
-    )
+    result = asyncio.run(LODESTONE_COMMAND.call("parse src/foo.py:42:13 and #123", ctx))
     payload = json.loads(result.value)
     kinds = [a["kind"] for a in payload]
     assert "file_path" in kinds
@@ -58,9 +58,7 @@ def test_link_parse_outputs_anchor_payload():
 
 def test_link_resolve_renders_anchors():
     ctx = _ctx(workspace_root=Path("/abs").resolve())
-    result = asyncio.run(
-        LODESTONE_COMMAND.call('resolve src/foo.py:42:13', ctx)
-    )
+    result = asyncio.run(LODESTONE_COMMAND.call("resolve src/foo.py:42:13", ctx))
     assert "vscode" in result.value or "file" in result.value
 
 
@@ -85,6 +83,7 @@ def test_link_config_mutates_and_persists(tmp_path, monkeypatch):
     assert "default_editor" in result.value
     # Read back via load_config
     from clawcodex_ext.services.lodestone.config import load_config
+
     cfg = load_config(path=tmp_path / "lodestone.json")
     assert cfg is not None
     assert cfg.default_editor == "cursor"
@@ -92,7 +91,11 @@ def test_link_config_mutates_and_persists(tmp_path, monkeypatch):
 
 def test_link_targets_register_then_unregister():
     ctx = _ctx()
-    asyncio.run(LODESTONE_COMMAND.call("targets register my-vscode file_path vscode://file/{abs}:{line}:{col}", ctx))
+    asyncio.run(
+        LODESTONE_COMMAND.call(
+            "targets register my-vscode file_path vscode://file/{abs}:{line}:{col}", ctx
+        )
+    )
     result = asyncio.run(LODESTONE_COMMAND.call("targets list", ctx))
     assert "my-vscode" in result.value
     asyncio.run(LODESTONE_COMMAND.call("targets unregister my-vscode", ctx))
@@ -103,18 +106,12 @@ def test_link_targets_register_then_unregister():
 def test_link_targets_register_rejects_bad_placeholder():
     ctx = _ctx()
     result = asyncio.run(
-        LODESTONE_COMMAND.call(
-            "targets register bad file_path vscode://file/{nope}:{line}", ctx
-        )
+        LODESTONE_COMMAND.call("targets register bad file_path vscode://file/{nope}:{line}", ctx)
     )
     assert "disallowed placeholder" in result.value or "register failed" in result.value
 
 
 def test_link_targets_test_renders_via_overridden_target():
     ctx = _ctx(workspace_root=Path("/abs").resolve())
-    result = asyncio.run(
-        LODESTONE_COMMAND.call(
-            "targets test cursor src/foo.py:42", ctx
-        )
-    )
+    result = asyncio.run(LODESTONE_COMMAND.call("targets test cursor src/foo.py:42", ctx))
     assert "cursor://file/" in result.value

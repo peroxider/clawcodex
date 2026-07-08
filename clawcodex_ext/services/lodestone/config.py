@@ -116,12 +116,20 @@ def _from_dict(raw: dict[str, Any]) -> LodestoneConfig:
     defaults = asdict(default_config())
     defaults.update({k: v for k, v in raw.items() if k in defaults})
     # Re-tuplify list fields.
-    for field_name in ("disabled_kinds", "custom_targets", "extra_hosts", "custom_placeholder_resolvers"):
+    for field_name in (
+        "disabled_kinds",
+        "custom_targets",
+        "extra_hosts",
+        "custom_placeholder_resolvers",
+    ):
         if isinstance(defaults.get(field_name), list):
             defaults[field_name] = tuple(defaults[field_name])
     if not isinstance(defaults.get("default_tracker_repo"), (list, tuple)):
         defaults["default_tracker_repo"] = None
-    elif isinstance(defaults["default_tracker_repo"], list) and len(defaults["default_tracker_repo"]) == 2:
+    elif (
+        isinstance(defaults["default_tracker_repo"], list)
+        and len(defaults["default_tracker_repo"]) == 2
+    ):
         defaults["default_tracker_repo"] = tuple(defaults["default_tracker_repo"])
     return LodestoneConfig(**defaults)
 

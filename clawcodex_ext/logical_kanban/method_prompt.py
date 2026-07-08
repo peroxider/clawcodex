@@ -77,9 +77,9 @@ def _levenshtein(a: str, b: str) -> int:
         for j, cb in enumerate(b, start=1):
             cost = 0 if ca == cb else 1
             curr[j] = min(
-                curr[j - 1] + 1,        # insertion
-                prev[j] + 1,            # deletion
-                prev[j - 1] + cost,     # substitution
+                curr[j - 1] + 1,  # insertion
+                prev[j] + 1,  # deletion
+                prev[j - 1] + cost,  # substitution
             )
         prev = curr
     return prev[-1]
@@ -253,9 +253,7 @@ def summarize_methods(
     *,
     goal: str = "",
     max_tokens: int = 1800,
-    header: str = (
-        "## Engineering Methods (use these templates when applicable)"
-    ),
+    header: str = ("## Engineering Methods (use these templates when applicable)"),
 ) -> MethodSummaryResult:
     """Render ``methods`` as a compact, budget-bounded summary block.
 

@@ -12,13 +12,13 @@ from .tracker import PullRequestFeedback, PullRequestRef, TrackerAdapter
 
 logger = logging.getLogger(__name__)
 
-REPLY_MARKER = 'Handled in the latest ClawCodex follow-up commit.'
+REPLY_MARKER = "Handled in the latest ClawCodex follow-up commit."
 CLAWCODEX_SYSTEM_MARKERS = (
-    '## ClawCodex Run Summary',
-    '## ClawCodex Automated Change',
-    '## ClawCodex Follow-up',
-    '## ClawCodex PR Review Follow-up Summary',
-    '<!-- metadata: report_path=',
+    "## ClawCodex Run Summary",
+    "## ClawCodex Automated Change",
+    "## ClawCodex Follow-up",
+    "## ClawCodex PR Review Follow-up Summary",
+    "<!-- metadata: report_path=",
 )
 
 
@@ -49,11 +49,11 @@ class ReviewFeedbackService:
         self._bot_login_explicit = False
 
     async def collect_followups(self, available_slots: int) -> list[ReviewFollowup]:
-        if available_slots <= 0 or not getattr(self.config, 'enabled', False):
+        if available_slots <= 0 or not getattr(self.config, "enabled", False):
             return []
 
         if not self._bot_login_resolved:
-            explicit = getattr(self.config, 'bot_login', None)
+            explicit = getattr(self.config, "bot_login", None)
             if explicit:
                 self._bot_login = explicit
                 self._bot_login_explicit = True
@@ -64,23 +64,23 @@ class ReviewFeedbackService:
                     pass
             self._bot_login_resolved = True
             if self._bot_login:
-                logger.debug('Bot login resolved: %s', self._bot_login)
+                logger.debug("Bot login resolved: %s", self._bot_login)
 
         followups: list[ReviewFollowup] = []
         for record in self.registry.iter_records_with_pr():
             if len(followups) >= available_slots:
                 break
-            timeout = getattr(self.config, 'pending_feedback_timeout_seconds', 600)
+            timeout = getattr(self.config, "pending_feedback_timeout_seconds", 600)
             cleared = self.registry.clear_stale_pending(record.issue_id, timeout)
             if cleared:
                 logger.info(
-                    'Cleared %d stale pending feedback item(s) for issue %s — will re-detect',
+                    "Cleared %d stale pending feedback item(s) for issue %s — will re-detect",
                     cleared,
                     record.issue_id,
                 )
             if not self.registry.can_follow_up(
                 record.issue_id,
-                getattr(self.config, 'max_followup_attempts_per_pr', 5),
+                getattr(self.config, "max_followup_attempts_per_pr", 5),
             ):
                 continue
 
@@ -91,15 +91,15 @@ class ReviewFeedbackService:
             feedback = await self.tracker.fetch_pull_request_feedback(
                 pull_request=pull_request,
                 issue_id=record.issue_id,
-                include_ci_failures=getattr(self.config, 'include_ci_failures', True),
-                max_log_chars_per_check=getattr(self.config, 'max_log_chars_per_check', 12_000),
+                include_ci_failures=getattr(self.config, "include_ci_failures", True),
+                max_log_chars_per_check=getattr(self.config, "max_log_chars_per_check", 12_000),
             )
             pending = self._filter_pending(record, feedback, bot_login=self._bot_login)
             if not pending:
                 self.registry.mark_feedback_checked(record.issue_id)
                 continue
 
-            limit = getattr(self.config, 'max_feedback_items_per_run', 20)
+            limit = getattr(self.config, "max_feedback_items_per_run", 20)
             selected = pending[:limit]
             self.registry.mark_feedback_pending(
                 record.issue_id,
@@ -118,7 +118,7 @@ class ReviewFeedbackService:
                     record=record,
                     pull_request=pull_request,
                     feedback=selected,
-                    prompt='',
+                    prompt="",
                 )
             )
         return followups
@@ -132,7 +132,7 @@ class ReviewFeedbackService:
     ) -> list[PullRequestFeedback]:
         ignored_authors = {
             author.strip().lower()
-            for author in getattr(self.config, 'ignore_authors', [])
+            for author in getattr(self.config, "ignore_authors", [])
             if author.strip()
         }
         # Only filter out bot's own comments when bot_login is EXPLICITLY
@@ -148,7 +148,7 @@ class ReviewFeedbackService:
         for item in feedback:
             if item.id in processed or item.id in already_pending:
                 continue
-            if item.status in {'resolved', 'outdated'}:
+            if item.status in {"resolved", "outdated"}:
                 continue
             if item.author_login and item.author_login.strip().lower() in ignored_authors:
                 continue

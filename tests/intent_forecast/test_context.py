@@ -97,7 +97,16 @@ def test_infer_language_falls_back_to_session_tail() -> None:
     assert (
         infer_response_language(
             [],
-            [{"transcript_tail": [{"role": "user", "content": "\u7ee7\u7eed\u5b8c\u6210\u6d4b\u8bd5\u8986\u76d6"}]}],
+            [
+                {
+                    "transcript_tail": [
+                        {
+                            "role": "user",
+                            "content": "\u7ee7\u7eed\u5b8c\u6210\u6d4b\u8bd5\u8986\u76d6",
+                        }
+                    ]
+                }
+            ],
         )
         == "Chinese"
     )

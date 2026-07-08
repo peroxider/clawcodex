@@ -120,4 +120,4 @@ def create_capacity_wake(outer_signal: asyncio.Event) -> CapacityWake:
     return CapacityWake(outer_signal)
 
 
-__all__ = ['CapacityWake', 'CapacitySignal', 'create_capacity_wake']
+__all__ = ["CapacityWake", "CapacitySignal", "create_capacity_wake"]

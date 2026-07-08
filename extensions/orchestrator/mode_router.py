@@ -47,8 +47,7 @@ class RouterResult:
 class Router(Protocol):
     """Backend ``ModeSelector`` consults when no explicit label is set."""
 
-    def choose(self, issue: "Issue") -> RouterResult:
-        ...
+    def choose(self, issue: "Issue") -> RouterResult: ...
 
 
 # ---------------------------------------------------------------------------
@@ -174,9 +173,7 @@ class HeuristicRouter:
 # ---------------------------------------------------------------------------
 
 
-_LLM_ROUTER_VALID_MODES: frozenset[str] = frozenset(
-    {"single", "pipeline", "coordinator", "debate"}
-)
+_LLM_ROUTER_VALID_MODES: frozenset[str] = frozenset({"single", "pipeline", "coordinator", "debate"})
 
 
 _LLM_ROUTER_SYSTEM_PROMPT: str = (
@@ -197,9 +194,9 @@ _LLM_ROUTER_SYSTEM_PROMPT: str = (
     "               design questions where multiple valid approaches\n"
     "               exist and a comparison adds value.\n\n"
     "Output ONLY a JSON object on a single line. Schema:\n"
-    "  {\"mode\": \"<one of single|pipeline|coordinator|debate>\",\n"
-    "   \"reason\": \"<one sentence, under 25 words>\",\n"
-    "   \"confidence\": <float between 0.0 and 1.0>}\n\n"
+    '  {"mode": "<one of single|pipeline|coordinator|debate>",\n'
+    '   "reason": "<one sentence, under 25 words>",\n'
+    '   "confidence": <float between 0.0 and 1.0>}\n\n'
     "Do not include any text outside the JSON. No code fences. No prose."
 )
 
@@ -260,8 +257,7 @@ class LLMRouter:
             return RouterResult(
                 mode="single",
                 reason=(
-                    f"LLMRouter: env var {self._api_key_env_var} is unset; "
-                    "cannot call provider"
+                    f"LLMRouter: env var {self._api_key_env_var} is unset; cannot call provider"
                 ),
                 confidence=0.1,
             )
@@ -269,9 +265,7 @@ class LLMRouter:
         try:
             response_text = self._post(api_key, issue)
         except Exception as exc:
-            logger.warning(
-                "LLMRouter: provider call failed (%s); falling back", exc
-            )
+            logger.warning("LLMRouter: provider call failed (%s); falling back", exc)
             return RouterResult(
                 mode="single",
                 reason=f"LLMRouter: provider call raised — {type(exc).__name__}",
@@ -294,9 +288,7 @@ class LLMRouter:
             with httpx.Client(timeout=self._timeout) as client:
                 resp = client.post(self._endpoint, json=body, headers=headers)
         else:
-            resp = self._http_client.post(
-                self._endpoint, json=body, headers=headers
-            )
+            resp = self._http_client.post(self._endpoint, json=body, headers=headers)
         resp.raise_for_status()
         data = resp.json()
         # OpenAI-compatible shape: choices[0].message.content
@@ -308,9 +300,7 @@ class LLMRouter:
         description = (getattr(issue, "description", "") or "(no description)")[
             :4000  # cap so we don't blow context for huge issues
         ]
-        user_msg = _LLM_ROUTER_USER_TEMPLATE.format(
-            title=title, description=description
-        )
+        user_msg = _LLM_ROUTER_USER_TEMPLATE.format(title=title, description=description)
         return {
             "model": self._model,
             "temperature": 0.0,
@@ -332,9 +322,7 @@ class LLMRouter:
         try:
             data = json.loads(cleaned)
         except json.JSONDecodeError:
-            logger.warning(
-                "LLMRouter: model returned non-JSON output: %r", response_text[:200]
-            )
+            logger.warning("LLMRouter: model returned non-JSON output: %r", response_text[:200])
             return RouterResult(
                 mode="single",
                 reason="LLMRouter: model returned non-JSON output",
@@ -343,9 +331,7 @@ class LLMRouter:
 
         mode = str(data.get("mode", "")).strip().lower()
         if mode not in _LLM_ROUTER_VALID_MODES:
-            logger.warning(
-                "LLMRouter: model picked unknown mode=%r; falling back", mode
-            )
+            logger.warning("LLMRouter: model picked unknown mode=%r; falling back", mode)
             return RouterResult(
                 mode="single",
                 reason=f"LLMRouter: model picked unknown mode={mode!r}",
@@ -366,9 +352,7 @@ class LLMRouter:
         )
 
 
-_JSON_FENCE_RE: re.Pattern[str] = re.compile(
-    r"^```(?:json)?\s*(.*?)\s*```$", re.DOTALL
-)
+_JSON_FENCE_RE: re.Pattern[str] = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.DOTALL)
 
 
 def _strip_json_fences(text: str) -> str:

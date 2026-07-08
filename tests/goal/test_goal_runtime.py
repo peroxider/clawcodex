@@ -114,9 +114,7 @@ def test_restore_after_resume_accounts_idle_active_goal_time(tmp_path: Path) -> 
 
     runtime.restore_after_resume()
     clock.advance(7)
-    progress = runtime.account_idle_goal_progress(
-        BudgetLimitedGoalDisposition.KEEP_ACTIVE
-    )
+    progress = runtime.account_idle_goal_progress(BudgetLimitedGoalDisposition.KEEP_ACTIVE)
 
     stored = service.get_goal("thread-1")
     assert progress is not None

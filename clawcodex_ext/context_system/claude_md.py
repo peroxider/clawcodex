@@ -368,9 +368,7 @@ def _external_includes_approved(original_cwd: str) -> bool:
     try:
         from src import config as config_mod
 
-        entry = config_mod.get_project_entry(
-            config_mod.get_project_path_for_config(original_cwd)
-        )
+        entry = config_mod.get_project_entry(config_mod.get_project_path_for_config(original_cwd))
         approved = bool(entry.get("hasClaudeMdExternalIncludesApproved"))
     except Exception:
         approved = False
@@ -378,9 +376,7 @@ def _external_includes_approved(original_cwd: str) -> bool:
     return approved
 
 
-def is_external_memory_file(
-    info: MemoryFileInfo, cwd: str | None = None
-) -> bool:
+def is_external_memory_file(info: MemoryFileInfo, cwd: str | None = None) -> bool:
     """TS getExternalClaudeMdIncludes predicate (claudemd.ts:1427-1437):
     a non-User-tier INCLUDED file (has a parent) living outside the
     original cwd. The User tier is excluded — the user's own
@@ -418,9 +414,7 @@ async def get_memory_files(
     # external-includes dialog. The cache keys on the EFFECTIVE value
     # so an approval recorded mid-session isn't masked by a stale
     # pre-approval entry.
-    include_external = force_include_external or _external_includes_approved(
-        original_cwd
-    )
+    include_external = force_include_external or _external_includes_approved(original_cwd)
     cache_key = f"{original_cwd}:{include_external}"
 
     cached = _memory_files_cache  # one-reference snapshot (thread-safe)

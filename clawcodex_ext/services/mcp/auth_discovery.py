@@ -33,6 +33,7 @@ def _lazy_auth_utils():
             handle_auth_metadata_response as _handle_auth_meta,
             handle_protected_resource_response as _handle_protected_resource,
         )
+
         _mcp_auth_utils = {
             "build_oauth_server_meta": _build_oauth_server_meta,
             "build_protected_resource": _build_protected_resource,
@@ -40,6 +41,7 @@ def _lazy_auth_utils():
             "handle_protected_resource": _handle_protected_resource,
         }
     return _mcp_auth_utils
+
 
 from .oauth_redaction import redact_sensitive_params
 
@@ -185,9 +187,7 @@ async def discover_oauth_metadata(
             raise OAuthDiscoveryError(server_url, attempted)
 
         # 2) RFC 9728 PRM probe.
-        prm_urls = _lazy_auth_utils()["build_protected_resource"](
-            www_auth_resource_url, server_url
-        )
+        prm_urls = _lazy_auth_utils()["build_protected_resource"](www_auth_resource_url, server_url)
         for url in prm_urls:
             attempted.append(url)
             authorization_servers = await _try_prm(client, url)

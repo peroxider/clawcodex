@@ -132,13 +132,11 @@ class MethodCoverageEvaluator:
             only_event = event_mids - field_mids
             if only_field:
                 warnings.append(
-                    f"Field layer has method refs missing from event layer: "
-                    f"{sorted(only_field)}"
+                    f"Field layer has method refs missing from event layer: {sorted(only_field)}"
                 )
             if only_event:
                 warnings.append(
-                    f"Event layer has method refs missing from field layer: "
-                    f"{sorted(only_event)}"
+                    f"Event layer has method refs missing from field layer: {sorted(only_event)}"
                 )
 
         # ---------- Golden-set hit rate ----------

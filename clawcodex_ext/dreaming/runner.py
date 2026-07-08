@@ -124,20 +124,23 @@ def run_dream_consolidation(
             _log.debug("dream on_message callback raised", exc_info=True)
     return DreamRunResult(files_touched=[], usage={}, summary="(stub run)")
 
+
 # ---------------------------------------------------------------------------
 # Real LLM-backed runner
 # ---------------------------------------------------------------------------
 
 DREAM_MAX_TURNS: int = 25
 
-DREAM_ALLOWED_TOOL_NAMES: frozenset[str] = frozenset({
-    "Read",
-    "Write",
-    "Edit",
-    "Bash",
-    "Glob",
-    "Grep",
-})
+DREAM_ALLOWED_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Glob",
+        "Grep",
+    }
+)
 
 DREAM_SYSTEM_PROMPT: str = (
     "You are running a dream \u2014 a background memory consolidation pass.\n\n"
@@ -313,9 +316,7 @@ def run_dream_with_llm(
             )
             return future.result()
     else:
-        return asyncio.run(
-            _run_dream_async(prompt, on_message, ws, max_turns)
-        )
+        return asyncio.run(_run_dream_async(prompt, on_message, ws, max_turns))
 
 
 def create_real_dream_runner_factory() -> RunnerFactory:

@@ -7,4 +7,6 @@ class PreprocessStageContract:
     output_files: list[str]
 
 
-PREPROCESS_CONTRACT = PreprocessStageContract(input_files=["raw/*"], output_files=["normalized.json"])
+PREPROCESS_CONTRACT = PreprocessStageContract(
+    input_files=["raw/*"], output_files=["normalized.json"]
+)

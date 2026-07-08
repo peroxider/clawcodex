@@ -132,9 +132,23 @@ def _render_markdown(summary: dict[str, Any], date: str) -> str:
 
     # Show top meaningful commands (excludes infrastructure noise).
     top_commands = summary.get("top_commands", []) or []
-    _NOISE_COMMANDS = frozenset({"version", "help", "telemetry", "config", "login",
-                                 "mcp", "daemon", "doctor", "orchestrator", "viz",
-                                 "autonomy", "schedule", "other"})
+    _NOISE_COMMANDS = frozenset(
+        {
+            "version",
+            "help",
+            "telemetry",
+            "config",
+            "login",
+            "mcp",
+            "daemon",
+            "doctor",
+            "orchestrator",
+            "viz",
+            "autonomy",
+            "schedule",
+            "other",
+        }
+    )
     sig_commands = [e for e in top_commands if e.get("name") not in _NOISE_COMMANDS][:10]
     cmd_failures = summary.get("command_failure", {}) or {}
     if sig_commands:

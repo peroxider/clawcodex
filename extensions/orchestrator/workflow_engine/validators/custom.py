@@ -62,6 +62,7 @@ async def validate_custom(
 
     # 构建环境变量
     import os
+
     process_env = os.environ.copy()
     process_env.update({str(k): str(v) for k, v in env.items()})
 

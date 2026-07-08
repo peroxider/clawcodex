@@ -623,18 +623,24 @@ class TestSidechainRecordAndRead:
     def test_record_returns_none_for_missing_session(self):
         from clawcodex_ext.agent.sidechain_transcript import record_btw_invocation
 
-        assert record_btw_invocation(
-            session_id=None,
-            question="q",
-            response="r",
-            usage={},
-        ) is None
-        assert record_btw_invocation(
-            session_id="",
-            question="q",
-            response="r",
-            usage={},
-        ) is None
+        assert (
+            record_btw_invocation(
+                session_id=None,
+                question="q",
+                response="r",
+                usage={},
+            )
+            is None
+        )
+        assert (
+            record_btw_invocation(
+                session_id="",
+                question="q",
+                response="r",
+                usage={},
+            )
+            is None
+        )
 
     def test_record_carries_error_field_on_failure(self):
         from clawcodex_ext.agent.sidechain_transcript import (
@@ -1125,9 +1131,7 @@ class TestBtwStatsModule:
         )
 
         increment_btw_use_count(question="x")
-        tmp = get_btw_stats_path().with_name(
-            get_btw_stats_path().name + ".tmp"
-        )
+        tmp = get_btw_stats_path().with_name(get_btw_stats_path().name + ".tmp")
         assert not tmp.exists(), "tmp file leaked after atomic replace"
 
     def test_file_permissions_are_0o600(self):
@@ -1269,6 +1273,7 @@ class TestBtwCommandRecordsStats:
             "clawcodex_ext.command_system.btw_command.run_side_question",
             _fake_run,
         )
+
         # Stub cache_safe_params builder so we don't need a real context.
         async def _fake_params(_ctx):
             from clawcodex_ext.agent.forked_agent import CacheSafeParams

@@ -25,13 +25,13 @@ logger = logging.getLogger(__name__)
 # Regex helpers
 # ---------------------------------------------------------------------------
 
-_LITERAL_PATTERN = re.compile(r'^Literal\s*\[\s*(.*?)\s*\]\s*$', re.DOTALL)
+_LITERAL_PATTERN = re.compile(r"^Literal\s*\[\s*(.*?)\s*\]\s*$", re.DOTALL)
 
-_ANNOTATED_PATTERN = re.compile(r'^Annotated\s*\[\s*(.+?)\s*,', re.DOTALL)
+_ANNOTATED_PATTERN = re.compile(r"^Annotated\s*\[\s*(.+?)\s*,", re.DOTALL)
 
-_OPTIONAL_PATTERN = re.compile(r'^Optional\s*\[\s*(.+?)\s*\]\s*$', re.DOTALL)
+_OPTIONAL_PATTERN = re.compile(r"^Optional\s*\[\s*(.+?)\s*\]\s*$", re.DOTALL)
 
-_UNION_PATTERN = re.compile(r'^Union\s*\[\s*(.+?)\s*\]\s*$', re.DOTALL)
+_UNION_PATTERN = re.compile(r"^Union\s*\[\s*(.+?)\s*\]\s*$", re.DOTALL)
 
 
 def _extract_literal_values(type_hint: str) -> list[Any] | None:
@@ -59,28 +59,28 @@ def _split_literal_args(raw: str) -> list[str]:
     for ch in raw:
         if in_quote:
             buf.append(ch)
-            if ch == in_quote and (not buf or buf[-2] != '\\'):
+            if ch == in_quote and (not buf or buf[-2] != "\\"):
                 in_quote = None
             continue
         if ch in ("'", '"'):
             in_quote = ch
             buf.append(ch)
             continue
-        if ch in ('[', '(', '{'):
+        if ch in ("[", "(", "{"):
             depth += 1
             buf.append(ch)
             continue
-        if ch in (']', ')', '}'):
+        if ch in ("]", ")", "}"):
             depth -= 1
             buf.append(ch)
             continue
-        if ch == ',' and depth == 0:
-            args.append(''.join(buf).strip())
+        if ch == "," and depth == 0:
+            args.append("".join(buf).strip())
             buf = []
             continue
         buf.append(ch)
     if buf:
-        args.append(''.join(buf).strip())
+        args.append("".join(buf).strip())
     return args
 
 
@@ -91,11 +91,11 @@ def _parse_literal_value(token: str) -> Any:
     """
     t = token.strip()
 
-    if t == 'None':
+    if t == "None":
         return None
-    if t == 'True':
+    if t == "True":
         return True
-    if t == 'False':
+    if t == "False":
         return False
 
     # String literal (single or double quotes)
@@ -133,8 +133,8 @@ def _unwrap_optional(type_hint: str) -> str | None:
     # Union[X, None] or Union[None, X]
     m = _UNION_PATTERN.match(cleaned)
     if m:
-        parts = [p.strip() for p in m.group(1).split(',')]
-        non_none = [p for p in parts if p not in ('None', 'NoneType')]
+        parts = [p.strip() for p in m.group(1).split(",")]
+        non_none = [p for p in parts if p not in ("None", "NoneType")]
         if len(non_none) == 1:
             return non_none[0]
         if len(non_none) > 1:
@@ -145,9 +145,9 @@ def _unwrap_optional(type_hint: str) -> str | None:
         return None
 
     # X | None (PEP 604)
-    if '|' in cleaned:
-        parts = [p.strip() for p in cleaned.split('|')]
-        non_none = [p for p in parts if p not in ('None', 'NoneType')]
+    if "|" in cleaned:
+        parts = [p.strip() for p in cleaned.split("|")]
+        non_none = [p for p in parts if p not in ("None", "NoneType")]
         if len(non_none) == 1 and len(parts) - len(non_none) == 1:
             return non_none[0]
         # Multiple non-None types or no None at all
@@ -162,49 +162,49 @@ def _bare_type_to_json_type(type_hint: str) -> str:
     to avoid circular imports.
     """
     _TYPE_MAP: dict[str, str] = {
-        'str': 'string',
-        'int': 'integer',
-        'float': 'number',
-        'bool': 'boolean',
-        'boolean': 'boolean',
-        'None': 'null',
-        'NoneType': 'null',
-        'dict': 'object',
-        'Dict': 'object',
-        'Mapping': 'object',
-        'Any': 'string',
-        'Path': 'string',
-        'PurePath': 'string',
-        'datetime': 'string',
-        'date': 'string',
-        'UUID': 'string',
-        'Decimal': 'number',
-        'bytes': 'string',
+        "str": "string",
+        "int": "integer",
+        "float": "number",
+        "bool": "boolean",
+        "boolean": "boolean",
+        "None": "null",
+        "NoneType": "null",
+        "dict": "object",
+        "Dict": "object",
+        "Mapping": "object",
+        "Any": "string",
+        "Path": "string",
+        "PurePath": "string",
+        "datetime": "string",
+        "date": "string",
+        "UUID": "string",
+        "Decimal": "number",
+        "bytes": "string",
     }
 
     cleaned = type_hint.strip()
     # List/Iterable/Set → array
     if cleaned.startswith(
         (
-            'List[',
-            'list[',
-            'Sequence[',
-            'sequence[',
-            'Iterable[',
-            'iterable[',
-            'Set[',
-            'set[',
-            'FrozenSet[',
-            'frozenset[',
+            "List[",
+            "list[",
+            "Sequence[",
+            "sequence[",
+            "Iterable[",
+            "iterable[",
+            "Set[",
+            "set[",
+            "FrozenSet[",
+            "frozenset[",
         )
     ):
-        return 'array'
+        return "array"
     # Dict/Mapping → object
-    if cleaned.startswith(('Dict[', 'dict[', 'Mapping[', 'mapping[', 'TypedDict')):
-        return 'object'
+    if cleaned.startswith(("Dict[", "dict[", "Mapping[", "mapping[", "TypedDict")):
+        return "object"
 
-    root = cleaned.split('[', 1)[0]
-    return _TYPE_MAP.get(root, 'string')
+    root = cleaned.split("[", 1)[0]
+    return _TYPE_MAP.get(root, "string")
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +218,7 @@ def param_to_json_schema_property(
     description: str,
     source_dir: str,  # Kept for API compatibility; may be used in future for
     # custom type resolution via file scanning.
-    fallback_json_type: str = 'string',
+    fallback_json_type: str = "string",
 ) -> dict[str, Any]:
     """Convert a parsed ``ParamSpec.type_hint`` to a JSON Schema property dict.
 
@@ -243,7 +243,7 @@ def param_to_json_schema_property(
         ``"properties"``, etc.
     """
     if not type_hint:
-        return {'type': fallback_json_type, 'description': description}
+        return {"type": fallback_json_type, "description": description}
 
     hint = type_hint.strip()
 
@@ -262,26 +262,26 @@ def param_to_json_schema_property(
     if literal_values is not None:
         # Infer the JSON type from actual values.
         value_types = {type(v).__name__ for v in literal_values if v is not None}
-        if 'str' in value_types or not value_types:
-            json_type = 'string'
-        elif 'int' in value_types or 'float' in value_types:
-            json_type = 'string'  # enum values are still strings in JSON Schema
+        if "str" in value_types or not value_types:
+            json_type = "string"
+        elif "int" in value_types or "float" in value_types:
+            json_type = "string"  # enum values are still strings in JSON Schema
         else:
-            json_type = 'string'
+            json_type = "string"
 
         prop: dict[str, Any] = {
-            'type': json_type,
-            'description': description,
-            'enum': literal_values,
+            "type": json_type,
+            "description": description,
+            "enum": literal_values,
         }
         if is_nullable:
-            prop['type'] = [json_type, 'null']
+            prop["type"] = [json_type, "null"]
         return prop
 
     # 4. Basic type mapping
     json_type = _bare_type_to_json_type(hint) or fallback_json_type
-    prop = {'type': json_type, 'description': description}
+    prop = {"type": json_type, "description": description}
     if is_nullable:
-        prop['type'] = [json_type, 'null']
+        prop["type"] = [json_type, "null"]
 
     return prop

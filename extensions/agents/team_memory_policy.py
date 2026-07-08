@@ -66,8 +66,7 @@ class TeamMemoryPolicy:
         """Membership gate for any read operation (recall / list)."""
         if not self.is_member(requester_agent_id):
             raise TeamMemoryPermissionError(
-                f"agent {requester_agent_id!r} is not a member of team "
-                f"{self._team.team_name!r}"
+                f"agent {requester_agent_id!r} is not a member of team {self._team.team_name!r}"
             )
 
     def can_see(self, *, requester_agent_id: str, entry: TeamMemoryEntry) -> bool:
@@ -112,8 +111,7 @@ class TeamMemoryPolicy:
         """
         if not self.is_member(author_agent_id):
             raise TeamMemoryPermissionError(
-                f"agent {author_agent_id!r} is not a member of team "
-                f"{self._team.team_name!r}"
+                f"agent {author_agent_id!r} is not a member of team {self._team.team_name!r}"
             )
         if scope == "lead_only" and not self.is_lead(author_agent_id):
             if require_lead_approval:

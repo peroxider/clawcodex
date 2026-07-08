@@ -97,9 +97,7 @@ def _team_memory_service(context: ToolContext):
 def _team_memory_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     action = tool_input.get("action")
     if not isinstance(action, str) or action not in _VALID_ACTIONS:
-        raise ToolInputError(
-            f"'action' must be one of {sorted(_VALID_ACTIONS)}, got {action!r}"
-        )
+        raise ToolInputError(f"'action' must be one of {sorted(_VALID_ACTIONS)}, got {action!r}")
 
     service, err = _team_memory_service(context)
     if service is None:
@@ -138,14 +136,10 @@ def _action_remember(service, tool_input: dict[str, Any], agent_id: str) -> Tool
         raise ToolInputError("'summary' must be a string when provided")
     source = tool_input.get("source", "manual")
     if not isinstance(source, str) or source not in _VALID_SOURCES:
-        raise ToolInputError(
-            f"'source' must be one of {sorted(_VALID_SOURCES)}, got {source!r}"
-        )
+        raise ToolInputError(f"'source' must be one of {sorted(_VALID_SOURCES)}, got {source!r}")
     scope = tool_input.get("scope", "team")
     if not isinstance(scope, str) or scope not in _VALID_SCOPES:
-        raise ToolInputError(
-            f"'scope' must be one of {sorted(_VALID_SCOPES)}, got {scope!r}"
-        )
+        raise ToolInputError(f"'scope' must be one of {sorted(_VALID_SCOPES)}, got {scope!r}")
     tags = tool_input.get("tags") or []
     if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
         raise ToolInputError("'tags' must be a list of strings")

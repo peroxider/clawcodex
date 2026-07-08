@@ -461,7 +461,9 @@ class TeamMemoryStore:
                 dst.write_bytes(data)
             else:
                 dst.write_text("", encoding="utf-8")
-            self._audit.record(action="archive", actor="system", entry_id="", reason=reason, archive=str(dst))
+            self._audit.record(
+                action="archive", actor="system", entry_id="", reason=reason, archive=str(dst)
+            )
             return dst
 
     # -- read --------------------------------------------------------------
@@ -491,7 +493,9 @@ class TeamMemoryStore:
                         )
                         continue
                     if not isinstance(obj, dict) or "id" not in obj:
-                        logger.warning("team_memory non-entry line %d in %s (skipped)", lineno, path)
+                        logger.warning(
+                            "team_memory non-entry line %d in %s (skipped)", lineno, path
+                        )
                         continue
                     try:
                         entry = TeamMemoryEntry.from_dict(obj)
@@ -549,9 +553,7 @@ class TeamMemoryStore:
         """Write ``content`` to ``path`` via tmp + ``os.replace`` (atomic)."""
         path.parent.mkdir(parents=True, exist_ok=True)
         # tmp in same dir guarantees same-filesystem rename.
-        fd, tmp_name = tempfile.mkstemp(
-            prefix=".tm-", suffix=".tmp", dir=str(path.parent)
-        )
+        fd, tmp_name = tempfile.mkstemp(prefix=".tm-", suffix=".tmp", dir=str(path.parent))
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 fh.write(content)
@@ -672,7 +674,9 @@ class TeamMemoryIndex:
             lex, matched = _lexical_score(query_terms, entry)
             if lex <= 0.0:
                 continue
-            tag_boost = 1.0 + (0.1 * len([t for t in query.tags if t in entry.tags])) if query.tags else 1.0
+            tag_boost = (
+                1.0 + (0.1 * len([t for t in query.tags if t in entry.tags])) if query.tags else 1.0
+            )
             source_w = SOURCE_WEIGHTS.get(entry.source, 1.0)
             recency = _recency_decay(entry.created_at, now=now)
             score = lex * tag_boost * source_w * recency * float(entry.confidence)
@@ -717,11 +721,12 @@ class TeamMemoryService:
         self._workspace_root = Path(workspace_root)
         self._config = config or TeamMemoryConfig()
         # Lazy-load team_file if not supplied.
-        self._team_file = team_file if team_file is not None else read_team_file(self._workspace_root)
+        self._team_file = (
+            team_file if team_file is not None else read_team_file(self._workspace_root)
+        )
         if self._team_file is None:
             raise TeamNotFoundError(
-                f"No .clawcodex/team.json in {self._workspace_root}; "
-                "TeamCreate must run first."
+                f"No .clawcodex/team.json in {self._workspace_root}; TeamCreate must run first."
             )
         self._team_id = self._team_file.team_name or self._workspace_root.name
         # Resolve the team-memory dir via the existing path-defense layer.

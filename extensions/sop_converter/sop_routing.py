@@ -108,7 +108,9 @@ def check_bundle_agent_delegation(
     if not looks_like_direct_sdk_execution(prompt):
         return None
 
-    examples = ", ".join(f'Agent(subagent_type="{name}", prompt="...")' for name in domain_agents[:4])
+    examples = ", ".join(
+        f'Agent(subagent_type="{name}", prompt="...")' for name in domain_agents[:4]
+    )
     if len(domain_agents) > 4:
         examples += ", ..."
     return (
@@ -180,11 +182,7 @@ def refresh_domain_agent_sop_prompts(agent_definitions: list[Any]) -> list[Any]:
                 if isinstance(stage_meta, dict) and stage_meta.get("name")
                 else infer_stage_label_from_skill(skill_name)
             )
-            stage_id = (
-                stage_meta.get("id")
-                if isinstance(stage_meta, dict)
-                else None
-            )
+            stage_id = stage_meta.get("id") if isinstance(stage_meta, dict) else None
             output_files = (
                 [str(f) for f in stage_meta.get("output_files", []) if f]
                 if isinstance(stage_meta, dict)

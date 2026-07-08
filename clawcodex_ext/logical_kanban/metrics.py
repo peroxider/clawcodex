@@ -14,18 +14,18 @@ from typing import Any, Callable
 logger = logging.getLogger(__name__)
 
 # Stable event names persisted/aggregated by tests and future sinks.
-VALIDATION_RUN = 'lkb_validation_run'
-COMMIT = 'lkb_commit'
-DENIAL = 'lkb_denial'
-ADAPTER_RESULT = 'lkb_adapter_result'
-BLOCKED_TASKS = 'lkb_blocked_tasks'
-STALE_ASSUMPTIONS = 'lkb_stale_assumptions'
-TIMEOUT = 'lkb_solver_timeout'
-SNAPSHOT_CACHE_HIT = 'lkb_snapshot_cache_hit'
-SNAPSHOT_CACHE_MISS = 'lkb_snapshot_cache_miss'
-LLM_FACTS_EXTRACTED = 'lkb_llm_facts_extracted'
-LLM_FACTS_DROPPED = 'lkb_llm_facts_dropped'
-LLM_FALLBACK_USED = 'lkb_llm_fallback_used'
+VALIDATION_RUN = "lkb_validation_run"
+COMMIT = "lkb_commit"
+DENIAL = "lkb_denial"
+ADAPTER_RESULT = "lkb_adapter_result"
+BLOCKED_TASKS = "lkb_blocked_tasks"
+STALE_ASSUMPTIONS = "lkb_stale_assumptions"
+TIMEOUT = "lkb_solver_timeout"
+SNAPSHOT_CACHE_HIT = "lkb_snapshot_cache_hit"
+SNAPSHOT_CACHE_MISS = "lkb_snapshot_cache_miss"
+LLM_FACTS_EXTRACTED = "lkb_llm_facts_extracted"
+LLM_FACTS_DROPPED = "lkb_llm_facts_dropped"
+LLM_FALLBACK_USED = "lkb_llm_fallback_used"
 
 _Sink = Callable[[str, dict[str, Any]], None]
 
@@ -65,12 +65,12 @@ def emit(event: str, **labels: Any) -> None:
     if not _sinks:
         return
     payload = dict(labels)
-    payload['_event'] = event
+    payload["_event"] = event
     for sink in list(_sinks):
         try:
             sink(event, payload)
         except Exception as exc:  # pragma: no cover - defensive only
-            logger.debug('LKB metrics sink %s failed: %s', sink, exc)
+            logger.debug("LKB metrics sink %s failed: %s", sink, exc)
 
 
 def record_validation_run(
@@ -81,8 +81,8 @@ def record_validation_run(
     duration_ms: int,
     task_count: int,
     task_id: str | None = None,
-    validation_run_id: str = '',
-    proposal_id: str = '',
+    validation_run_id: str = "",
+    proposal_id: str = "",
 ) -> None:
     """Record a completed validation run."""
     emit(
@@ -104,7 +104,7 @@ def record_denial(
     code: str,
     change_kind: str,
     task_id: str | None = None,
-    validation_run_id: str = '',
+    validation_run_id: str = "",
 ) -> None:
     """Record a denied proposal with the formal rule/code that caused it."""
     emit(
@@ -122,7 +122,7 @@ def record_commit(
     committed: bool,
     change_kind: str,
     task_id: str | None = None,
-    validation_run_id: str = '',
+    validation_run_id: str = "",
 ) -> None:
     """Record a commit attempt/result."""
     emit(
@@ -188,12 +188,12 @@ def record_snapshot_cache_miss() -> None:
     emit(SNAPSHOT_CACHE_MISS)
 
 
-def record_llm_facts_extracted(count: int, *, source: str = 'llm_extracted') -> None:
+def record_llm_facts_extracted(count: int, *, source: str = "llm_extracted") -> None:
     """Record LLM-derived facts that passed the glossary gate."""
     emit(LLM_FACTS_EXTRACTED, count=count, source=source)
 
 
-def record_llm_facts_dropped(count: int, *, reason: str = 'unknown_predicate') -> None:
+def record_llm_facts_dropped(count: int, *, reason: str = "unknown_predicate") -> None:
     """Record LLM-derived facts that were dropped by the glossary gate."""
     emit(LLM_FACTS_DROPPED, count=count, reason=reason)
 
@@ -204,32 +204,32 @@ def record_llm_fallback_used(*, phrase: str, kind: str) -> None:
 
 
 __all__ = [
-    'ADAPTER_RESULT',
-    'BLOCKED_TASKS',
-    'COMMIT',
-    'DENIAL',
-    'STALE_ASSUMPTIONS',
-    'SNAPSHOT_CACHE_HIT',
-    'SNAPSHOT_CACHE_MISS',
-    'TIMEOUT',
-    'VALIDATION_RUN',
-    'LLM_FACTS_EXTRACTED',
-    'LLM_FACTS_DROPPED',
-    'LLM_FALLBACK_USED',
-    'emit',
-    'record_adapter_result',
-    'record_blocked_tasks',
-    'record_commit',
-    'record_denial',
-    'record_llm_facts_dropped',
-    'record_llm_facts_extracted',
-    'record_llm_fallback_used',
-    'record_stale_assumptions',
-    'record_snapshot_cache_hit',
-    'record_snapshot_cache_miss',
-    'record_timeout',
-    'record_validation_run',
-    'register_sink',
-    'reset_sinks',
-    'unregister_sink',
+    "ADAPTER_RESULT",
+    "BLOCKED_TASKS",
+    "COMMIT",
+    "DENIAL",
+    "STALE_ASSUMPTIONS",
+    "SNAPSHOT_CACHE_HIT",
+    "SNAPSHOT_CACHE_MISS",
+    "TIMEOUT",
+    "VALIDATION_RUN",
+    "LLM_FACTS_EXTRACTED",
+    "LLM_FACTS_DROPPED",
+    "LLM_FALLBACK_USED",
+    "emit",
+    "record_adapter_result",
+    "record_blocked_tasks",
+    "record_commit",
+    "record_denial",
+    "record_llm_facts_dropped",
+    "record_llm_facts_extracted",
+    "record_llm_fallback_used",
+    "record_stale_assumptions",
+    "record_snapshot_cache_hit",
+    "record_snapshot_cache_miss",
+    "record_timeout",
+    "record_validation_run",
+    "register_sink",
+    "reset_sinks",
+    "unregister_sink",
 ]

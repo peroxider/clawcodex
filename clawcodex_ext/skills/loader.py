@@ -1118,9 +1118,7 @@ def get_all_skills(
 
     if bundle is not None:
         dynamic_skills = [
-            skill
-            for skill in get_dynamic_skills()
-            if skill.name in bundle.skill_names
+            skill for skill in get_dynamic_skills() if skill.name in bundle.skill_names
         ]
         deduped = {skill.name: skill for skill in dynamic_skills}
         _skill_registry.update(deduped)

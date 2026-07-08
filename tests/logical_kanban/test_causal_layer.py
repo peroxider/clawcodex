@@ -430,15 +430,18 @@ def test_thresholds_are_documented() -> None:
 
 def test_tag_for_thresholds() -> None:
     engine = CausalEngine()
-    assert engine.intervene_do(
-        CausalGraph(
-            nodes=frozenset({"A", "B"}),
-            edges=(CausalEdge(source="A", target="B", weight=0.95, mechanism="direct"),),
-        ),
-        "A",
-        "completed",
-        "B",
-    ).tag == "significant"
+    assert (
+        engine.intervene_do(
+            CausalGraph(
+                nodes=frozenset({"A", "B"}),
+                edges=(CausalEdge(source="A", target="B", weight=0.95, mechanism="direct"),),
+            ),
+            "A",
+            "completed",
+            "B",
+        ).tag
+        == "significant"
+    )
     assert engine.intervene_do(
         CausalGraph(
             nodes=frozenset({"A", "B"}),

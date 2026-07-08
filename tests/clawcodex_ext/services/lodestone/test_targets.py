@@ -18,9 +18,19 @@ def test_default_registry_has_all_built_in_targets():
     registry = build_default_registry(include_user_targets=False)
     ids = {t.target_id for t in registry.list()}
     expected = {
-        "vscode", "vscode-insiders", "cursor", "idea", "subl", "file",
-        "github", "gitcode", "gitee",
-        "tracker:gitcode", "tracker:github", "tracker:gitee", "tracker:linear",
+        "vscode",
+        "vscode-insiders",
+        "cursor",
+        "idea",
+        "subl",
+        "file",
+        "github",
+        "gitcode",
+        "gitee",
+        "tracker:gitcode",
+        "tracker:github",
+        "tracker:gitee",
+        "tracker:linear",
         "vscode-symbol",
     }
     assert expected.issubset(ids)
@@ -49,6 +59,7 @@ def test_custom_targets_passed_through():
 
 def test_user_custom_targets_are_registered():
     from clawcodex_ext.services.lodestone.models import AnchorTarget
+
     custom_target = AnchorTarget(
         kind="file_path",
         target_id="custom-vscode",

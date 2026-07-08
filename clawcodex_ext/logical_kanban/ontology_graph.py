@@ -55,7 +55,9 @@ def load_ontology_turtle(path: Path) -> OntologyGraph:
         return _load_turtle_subset(path, text)
 
 
-def merge_ontology_graphs(graphs: tuple[OntologyGraph, ...], *, source: str = "merged") -> OntologyGraph:
+def merge_ontology_graphs(
+    graphs: tuple[OntologyGraph, ...], *, source: str = "merged"
+) -> OntologyGraph:
     classes: set[str] = set()
     object_properties: set[str] = set()
     domains: set[str] = set()
@@ -118,7 +120,9 @@ def _load_with_rdflib(path: Path, text: str) -> OntologyGraph:
 
 def _load_turtle_subset(path: Path, text: str) -> OntologyGraph:
     classes = frozenset(match.group("name") for match in _OWL_CLASS_RE.finditer(text))
-    object_properties = frozenset(match.group("name") for match in _OBJECT_PROPERTY_RE.finditer(text))
+    object_properties = frozenset(
+        match.group("name") for match in _OBJECT_PROPERTY_RE.finditer(text)
+    )
     domain_refs = frozenset(match.group("name") for match in _DOMAIN_RE.finditer(text))
     range_refs = frozenset(match.group("name") for match in _RANGE_RE.finditer(text))
     if not classes and "owl:Class" not in text:

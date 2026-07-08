@@ -907,7 +907,9 @@ def _control_path(workspace_root: str | Path | None = None) -> Path:
     return base / ".orchestrator_control"
 
 
-def _write_control(cmd: str, issue_id: str, extra: str = "", workspace_root: str | Path | None = None) -> int:
+def _write_control(
+    cmd: str, issue_id: str, extra: str = "", workspace_root: str | Path | None = None
+) -> int:
     """Write a control command to be picked up by the orchestrator on next poll."""
     from pathlib import Path
 
@@ -1695,8 +1697,7 @@ def _run_stop(
         # _state.running and the control file will be silently ignored.
         if current_status != "running":
             print(
-                f"Warning: issue {issue_id} is not currently running "
-                f"(status: {current_status}).",
+                f"Warning: issue {issue_id} is not currently running (status: {current_status}).",
                 file=sys.stderr,
             )
             print(
@@ -1716,8 +1717,7 @@ def _run_stop(
                 print("  (use --id to target a running issue)")
     else:
         print(
-            f"Warning: issue {issue_id} not found in registry — "
-            "cannot verify current status.",
+            f"Warning: issue {issue_id} not found in registry — cannot verify current status.",
             file=sys.stderr,
         )
         if not skip_confirm:
@@ -2119,7 +2119,9 @@ def _mirror_intent_label(
         return False
 
 
-def _run_review(registry_path: Path | None, args: argparse.Namespace, workspace_root: str | Path | None = None) -> int:
+def _run_review(
+    registry_path: Path | None, args: argparse.Namespace, workspace_root: str | Path | None = None
+) -> int:
     """Approve or reject a LocalTracker issue's changes."""
     issue_id = getattr(args, "id", None)
     if not issue_id:
@@ -2230,7 +2232,9 @@ def _run_review(registry_path: Path | None, args: argparse.Namespace, workspace_
 # ---------------------------------------------------------------------------
 
 
-def _run_feedback(registry_path: Path | None, args: argparse.Namespace, workspace_root: str | Path | None = None) -> int:
+def _run_feedback(
+    registry_path: Path | None, args: argparse.Namespace, workspace_root: str | Path | None = None
+) -> int:
     """List, approve, or dismiss pending PR review feedback."""
     issue_id = getattr(args, "id", None)
     if not issue_id:
@@ -2278,7 +2282,9 @@ def _run_feedback(registry_path: Path | None, args: argparse.Namespace, workspac
         return 0
 
     if approve:
-        _write_control("review_followup", issue_id, ",".join(target_ids), workspace_root=workspace_root)
+        _write_control(
+            "review_followup", issue_id, ",".join(target_ids), workspace_root=workspace_root
+        )
         print(f"Approved {len(target_ids)} feedback item(s) for issue {issue_id}.")
         print("Follow-up will be triggered on next orchestrator poll cycle.")
         return 0
@@ -2661,7 +2667,9 @@ def _append_audit_log(
         return None
 
 
-def _run_rebase(registry_path: Path | None, args: argparse.Namespace, workspace_root: str | Path | None = None) -> int:
+def _run_rebase(
+    registry_path: Path | None, args: argparse.Namespace, workspace_root: str | Path | None = None
+) -> int:
     """F-120: CLI 兜底命令 — request a PR rebase via the built-in path.
 
     Unlike ``issue retry``, this command DOES NOT mutate the local
@@ -2790,10 +2798,7 @@ def _run_rebase(registry_path: Path | None, args: argparse.Namespace, workspace_
     print(f"  push method: {'--force' if force else '--force-with-lease'}")
     if reason:
         print(f"  reason: {reason}")
-    print(
-        "  The orchestrator will run `rebase_for_pr` on its next "
-        "poll cycle (default 30s)."
-    )
+    print("  The orchestrator will run `rebase_for_pr` on its next poll cycle (default 30s).")
     return 0
 
 
@@ -2917,9 +2922,7 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
                 # call may fail — both are non-fatal because the
                 # local registry.intent is the authoritative
                 # source.
-                _mirror_intent_label(
-                    tracker, issue_id, "agent:retry", remove=False
-                )
+                _mirror_intent_label(tracker, issue_id, "agent:retry", remove=False)
             action = "marked for reset"
         elif mode == "followup":
             registry.mark_intent(
@@ -2929,16 +2932,12 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
                 command=f"cli:followup:{reason[:64]}",
             )
             if tracker is not None:
-                _mirror_intent_label(
-                    tracker, issue_id, "agent:follow-up", remove=False
-                )
+                _mirror_intent_label(tracker, issue_id, "agent:follow-up", remove=False)
             action = "marked for follow-up"
         else:  # mode == "unblock"
             registry.unblock(registry_issue_id)
             if tracker is not None:
-                _mirror_intent_label(
-                    tracker, issue_id, "agent:blocked", remove=True
-                )
+                _mirror_intent_label(tracker, issue_id, "agent:blocked", remove=True)
             action = "unblocked"
         audit_priority = "high" if force else "normal"
         audit_event = "retry" if mode == "reset" else mode

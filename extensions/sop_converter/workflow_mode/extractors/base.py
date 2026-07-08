@@ -20,30 +20,31 @@ logger = logging.getLogger(__name__)
 
 
 class WorkflowExtractorBase(ABC):
-    def __init__(self, scan: SourceScanContext | None = None, *, mode: str = "fwa", allow_coarse: bool = False) -> None:
+    def __init__(
+        self,
+        scan: SourceScanContext | None = None,
+        *,
+        mode: str = "fwa",
+        allow_coarse: bool = False,
+    ) -> None:
         self._scan = scan
         self._mode = mode
         self._allow_coarse = allow_coarse
 
     @abstractmethod
-    def extract_stages(self, source_dir: Path) -> list[ExtractedStage]:
-        ...
+    def extract_stages(self, source_dir: Path) -> list[ExtractedStage]: ...
 
     @abstractmethod
-    def extract_transitions(self, source_dir: Path) -> list[Transition]:
-        ...
+    def extract_transitions(self, source_dir: Path) -> list[Transition]: ...
 
     @abstractmethod
-    def extract_gates(self, source_dir: Path) -> dict[int, GateSpec]:
-        ...
+    def extract_gates(self, source_dir: Path) -> dict[int, GateSpec]: ...
 
     @abstractmethod
-    def extract_decisions(self, source_dir: Path) -> dict[int, DecisionSpec]:
-        ...
+    def extract_decisions(self, source_dir: Path) -> dict[int, DecisionSpec]: ...
 
     @abstractmethod
-    def extract_contracts(self, source_dir: Path) -> dict[int, StageContract]:
-        ...
+    def extract_contracts(self, source_dir: Path) -> dict[int, StageContract]: ...
 
     def extract(self, source_dir: Path) -> WorkflowGraph:
         stages = self.extract_stages(source_dir)

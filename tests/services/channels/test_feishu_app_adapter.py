@@ -58,16 +58,16 @@ class _FakeChannel:
         self.disconnected = True
 
     async def send(self, to, message, opts=None) -> SendResult:
-        self.sent.append({'to': to, 'message': message})
+        self.sent.append({"to": to, "message": message})
         if self._send_results:
             result = self._send_results.pop(0)
             if isinstance(result, BaseException):
                 raise result
             return result
-        return SendResult.ok(message_id='om_sent')
+        return SendResult.ok(message_id="om_sent")
 
     async def update_card(self, message_id: str, card: dict) -> SendResult:
-        self.updated_cards.append({'message_id': message_id, 'card': card})
+        self.updated_cards.append({"message_id": message_id, "card": card})
         return SendResult.ok(message_id=message_id)
 
     @property
@@ -75,20 +75,20 @@ class _FakeChannel:
         return self._bot_identity
 
     async def fire_message(self, inbound: Any) -> None:
-        await self._handlers['message'](inbound)
+        await self._handlers["message"](inbound)
 
     async def fire_card_action(self, payload: Any) -> None:
-        await self._handlers['cardAction'](payload)
+        await self._handlers["cardAction"](payload)
 
     async def fire_reconnecting(self) -> None:
-        cb = self._handlers.get('reconnecting')
+        cb = self._handlers.get("reconnecting")
         if cb:
             res = cb()
             if inspect.isawaitable(res):
                 await res
 
     async def fire_reconnected(self) -> None:
-        cb = self._handlers.get('reconnected')
+        cb = self._handlers.get("reconnected")
         if cb:
             res = cb()
             if inspect.isawaitable(res):
@@ -155,37 +155,37 @@ class _FakeFeishuSenderStore:
 
 def _config(extra: dict | None = None) -> ChannelConfig:
     payload = {
-        'connection_mode': 'websocket',
-        'app_id': 'cli_app',
-        'app_secret': 'secret',
-        'allowed_user_open_id': 'ou_allowed',
-        'bot_open_id': 'ou_bot',
-        'batching': {'text_batch_delay_seconds': 0.01},
-        'send': {'sdk_send_attempts': 1, 'sdk_send_timeout_seconds': 1.0},
+        "connection_mode": "websocket",
+        "app_id": "cli_app",
+        "app_secret": "secret",
+        "allowed_user_open_id": "ou_allowed",
+        "bot_open_id": "ou_bot",
+        "batching": {"text_batch_delay_seconds": 0.01},
+        "send": {"sdk_send_attempts": 1, "sdk_send_timeout_seconds": 1.0},
     }
     if extra:
         payload.update(extra)
     return ChannelConfig(
         type=ChannelType.FEISHU,
-        webhook_url='',
-        name='feishu',
+        webhook_url="",
+        name="feishu",
         extra=payload,
     )
 
 
 def _sdk_inbound(
     *,
-    message_id: str = 'om_msg_1',
-    chat_id: str = 'oc_chat',
-    chat_type: str = 'p2p',
-    open_id: str = 'ou_allowed',
-    text: str = 'hello',
+    message_id: str = "om_msg_1",
+    chat_id: str = "oc_chat",
+    chat_type: str = "p2p",
+    open_id: str = "ou_allowed",
+    text: str = "hello",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         id=message_id,
         content_text=text,
         create_time=123,
-        raw_content_type='text',
+        raw_content_type="text",
         conversation=SimpleNamespace(chat_id=chat_id, chat_type=chat_type),
         sender=SimpleNamespace(open_id=open_id),
     )
@@ -195,28 +195,28 @@ def _card_action_event(
     *,
     approval_id: str,
     nonce: str,
-    choice: str = 'y',
-    operator_open_id: str = 'ou_allowed',
-    chat_id: str = 'oc_chat',
-    message_id: str = 'om_card',
+    choice: str = "y",
+    operator_open_id: str = "ou_allowed",
+    chat_id: str = "oc_chat",
+    message_id: str = "om_card",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         message_id=message_id,
         chat_id=chat_id,
         operator=SimpleNamespace(open_id=operator_open_id),
         action=SimpleNamespace(
-            tag='button',
+            tag="button",
             value={
-                'clawcodex_action': 'permission_approval',
-                'approval_id': approval_id,
-                'nonce': nonce,
-                'choice': choice,
+                "clawcodex_action": "permission_approval",
+                "approval_id": approval_id,
+                "nonce": nonce,
+                "choice": choice,
             },
         ),
     )
 
 
-def _send_error(code: FeishuChannelErrorCode, *, retryable: bool, hint: str = '') -> SendError:
+def _send_error(code: FeishuChannelErrorCode, *, retryable: bool, hint: str = "") -> SendError:
     return SendError(code=code, retryable=retryable, hint=hint)
 
 
@@ -231,25 +231,25 @@ def test_feishu_app_adapter_declares_capabilities() -> None:
 
 @pytest.mark.asyncio
 async def test_feishu_app_adapter_start_and_health_with_fake_channel() -> None:
-    channel = _FakeChannel(bot_identity=SimpleNamespace(open_id='ou_bot', name='ClawCodex'))
+    channel = _FakeChannel(bot_identity=SimpleNamespace(open_id="ou_bot", name="ClawCodex"))
     adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda s: channel)
 
     await adapter.start()
     health = await adapter.health_check()
 
     assert channel.connected is True
-    assert channel._handlers['message'] == adapter._on_message
-    assert channel._handlers['cardAction'] == adapter._on_card_action
+    assert channel._handlers["message"] == adapter._on_message
+    assert channel._handlers["cardAction"] == adapter._on_card_action
     assert health.healthy is True
-    assert health.account_status == 'websocket:connected'
-    assert health.extra['bot_open_id'] == 'ou_bot'
+    assert health.account_status == "websocket:connected"
+    assert health.extra["bot_open_id"] == "ou_bot"
 
 
 @pytest.mark.asyncio
 async def test_feishu_app_adapter_start_blocks_until_channel_ready() -> None:
     channel = _BlockingChannel()
     adapter = FeishuAppChannelAdapter(
-        _config({'websocket': {'startup_connect_timeout_seconds': 5}}),
+        _config({"websocket": {"startup_connect_timeout_seconds": 5}}),
         channel_factory=lambda s: channel,
     )
 
@@ -263,20 +263,20 @@ async def test_feishu_app_adapter_start_blocks_until_channel_ready() -> None:
     await asyncio.wait_for(start_task, timeout=1.0)
     health = await adapter.health_check()
 
-    assert health.account_status == 'websocket:connected'
+    assert health.account_status == "websocket:connected"
     assert adapter._connect_task is None
 
 
 @pytest.mark.asyncio
 async def test_feishu_app_adapter_initial_retryable_failure_enters_background_retry() -> None:
-    failing = _FakeChannel(connect_exc=RuntimeError('network down'))
+    failing = _FakeChannel(connect_exc=RuntimeError("network down"))
     channels = [failing, _FakeChannel()]
 
     def factory(settings):
         return channels.pop(0)
 
     adapter = FeishuAppChannelAdapter(
-        _config({'websocket': {'startup_connect_timeout_seconds': 0.1}}),
+        _config({"websocket": {"startup_connect_timeout_seconds": 0.1}}),
         channel_factory=factory,
     )
 
@@ -284,20 +284,20 @@ async def test_feishu_app_adapter_initial_retryable_failure_enters_background_re
     health = await adapter.health_check()
 
     assert health.healthy is False
-    assert health.account_status == 'websocket:retrying'
-    assert 'network down' in (health.last_error or '')
+    assert health.account_status == "websocket:retrying"
+    assert "network down" in (health.last_error or "")
     assert adapter._connect_task is not None
 
 
 @pytest.mark.asyncio
 async def test_feishu_app_adapter_background_retry_recovers_to_connected() -> None:
-    channels = [_FakeChannel(connect_exc=RuntimeError('network down')), _FakeChannel()]
+    channels = [_FakeChannel(connect_exc=RuntimeError("network down")), _FakeChannel()]
 
     def factory(settings):
         return channels.pop(0)
 
     adapter = FeishuAppChannelAdapter(
-        _config({'websocket': {'startup_connect_timeout_seconds': 0.1}}),
+        _config({"websocket": {"startup_connect_timeout_seconds": 0.1}}),
         channel_factory=factory,
         retry_sleep=lambda _seconds: asyncio.sleep(0),
     )
@@ -309,20 +309,20 @@ async def test_feishu_app_adapter_background_retry_recovers_to_connected() -> No
     health = await adapter.health_check()
 
     assert health.healthy is True
-    assert health.account_status == 'websocket:connected'
+    assert health.account_status == "websocket:connected"
 
 
 @pytest.mark.asyncio
 async def test_feishu_app_adapter_missing_credentials_do_not_retry() -> None:
     adapter = FeishuAppChannelAdapter(
-        _config({'app_id': '', 'app_secret': ''}),
+        _config({"app_id": "", "app_secret": ""}),
         channel_factory=lambda s: _FakeChannel(),
     )
 
     await adapter.start()
     health = await adapter.health_check()
 
-    assert health.account_status == 'credentials_missing'
+    assert health.account_status == "credentials_missing"
     assert adapter._connect_task is None
 
 
@@ -336,7 +336,7 @@ async def test_feishu_app_adapter_stop_disconnects_channel() -> None:
 
     assert channel.disconnected is True
     health = await adapter.health_check()
-    assert health.account_status == 'websocket:disconnected'
+    assert health.account_status == "websocket:disconnected"
 
 
 @pytest.mark.asyncio
@@ -369,9 +369,9 @@ async def test_feishu_adapter_inbound_translates_and_delivers() -> None:
     await channel.fire_message(_sdk_inbound())
 
     assert len(delivered) == 1
-    assert delivered[0].text == 'hello'
-    assert delivered[0].context_token == 'oc_chat'
-    assert delivered[0].from_user_id == 'ou_allowed'
+    assert delivered[0].text == "hello"
+    assert delivered[0].context_token == "oc_chat"
+    assert delivered[0].from_user_id == "ou_allowed"
 
 
 @pytest.mark.asyncio
@@ -382,7 +382,7 @@ async def test_feishu_adapter_inbound_drops_non_p2p() -> None:
     adapter.set_inbound_handler(delivered.append)
     await adapter.start()
 
-    await channel.fire_message(_sdk_inbound(chat_type='group'))
+    await channel.fire_message(_sdk_inbound(chat_type="group"))
 
     assert delivered == []
 
@@ -395,7 +395,7 @@ async def test_feishu_adapter_tracks_last_known_sender_from_inbound_chat() -> No
 
     await channel.fire_message(_sdk_inbound())
 
-    assert adapter.last_known_sender() == 'oc_chat'
+    assert adapter.last_known_sender() == "oc_chat"
 
 
 @pytest.mark.asyncio
@@ -407,14 +407,14 @@ async def test_feishu_adapter_last_sender_survives_restart_via_store() -> None:
     )
     await adapter.start()
 
-    await channel.fire_message(_sdk_inbound(message_id='om_persisted'))
+    await channel.fire_message(_sdk_inbound(message_id="om_persisted"))
 
     restarted = FeishuAppChannelAdapter(
         _config(), channel_factory=lambda s: _FakeChannel(), sender_store=store
     )
 
-    assert adapter.last_known_sender() == 'oc_chat'
-    assert restarted.last_known_sender() == 'oc_chat'
+    assert adapter.last_known_sender() == "oc_chat"
+    assert restarted.last_known_sender() == "oc_chat"
 
 
 @pytest.mark.asyncio
@@ -423,11 +423,11 @@ async def test_feishu_send_uses_context_token_chat_id() -> None:
     adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda s: channel)
     await adapter.start()
 
-    result = await adapter.send(ChannelMessage(text='hello'), context_token='oc_chat')
+    result = await adapter.send(ChannelMessage(text="hello"), context_token="oc_chat")
 
     assert result.ok is True
-    assert result.provider_receipt == 'om_sent'
-    assert channel.sent == [{'to': 'oc_chat', 'message': {'text': 'hello'}}]
+    assert result.provider_receipt == "om_sent"
+    assert channel.sent == [{"to": "oc_chat", "message": {"text": "hello"}}]
 
 
 @pytest.mark.asyncio
@@ -437,13 +437,13 @@ async def test_feishu_send_prefers_context_chat_id_when_target_is_origin_open_id
     await adapter.start()
 
     result = await adapter.send(
-        ChannelMessage(text='hello', metadata={'origin': 'feishu:dm:cli_app:ou_allowed'}),
-        target='ou_allowed',
-        context_token='oc_chat',
+        ChannelMessage(text="hello", metadata={"origin": "feishu:dm:cli_app:ou_allowed"}),
+        target="ou_allowed",
+        context_token="oc_chat",
     )
 
     assert result.ok is True
-    assert channel.sent[0]['to'] == 'oc_chat'
+    assert channel.sent[0]["to"] == "oc_chat"
 
 
 @pytest.mark.asyncio
@@ -452,7 +452,7 @@ async def test_feishu_send_returns_retryable_on_rate_limit() -> None:
         send_results=[
             SendResult.fail(
                 _send_error(
-                    FeishuChannelErrorCode.RATE_LIMITED, retryable=True, hint='rate limited'
+                    FeishuChannelErrorCode.RATE_LIMITED, retryable=True, hint="rate limited"
                 )
             )
         ]
@@ -460,7 +460,7 @@ async def test_feishu_send_returns_retryable_on_rate_limit() -> None:
     adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda s: channel)
     await adapter.start()
 
-    result = await adapter.send(ChannelMessage(text='hello'), target='oc_chat')
+    result = await adapter.send(ChannelMessage(text="hello"), target="oc_chat")
 
     assert result.ok is False
     assert result.status is SendStatus.RETRYABLE_ERROR
@@ -474,7 +474,7 @@ async def test_feishu_send_returns_nonretryable_on_bad_request() -> None:
         send_results=[
             SendResult.fail(
                 _send_error(
-                    FeishuChannelErrorCode.FORMAT_ERROR, retryable=False, hint='bad payload'
+                    FeishuChannelErrorCode.FORMAT_ERROR, retryable=False, hint="bad payload"
                 )
             )
         ]
@@ -482,7 +482,7 @@ async def test_feishu_send_returns_nonretryable_on_bad_request() -> None:
     adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda s: channel)
     await adapter.start()
 
-    result = await adapter.send(ChannelMessage(text='hello'), target='oc_chat')
+    result = await adapter.send(ChannelMessage(text="hello"), target="oc_chat")
 
     assert result.ok is False
     assert result.status is SendStatus.NONRETRYABLE_ERROR
@@ -495,23 +495,23 @@ async def test_feishu_send_falls_back_to_text_on_format_error() -> None:
         send_results=[
             SendResult.fail(
                 _send_error(
-                    FeishuChannelErrorCode.FORMAT_ERROR, retryable=False, hint='post rejected'
+                    FeishuChannelErrorCode.FORMAT_ERROR, retryable=False, hint="post rejected"
                 )
             ),
-            SendResult.ok(message_id='om_sent'),
+            SendResult.ok(message_id="om_sent"),
         ]
     )
-    cfg = _config({'send': {'sdk_send_attempts': 1, 'sdk_send_timeout_seconds': 1.0}})
+    cfg = _config({"send": {"sdk_send_attempts": 1, "sdk_send_timeout_seconds": 1.0}})
     adapter = FeishuAppChannelAdapter(cfg, channel_factory=lambda s: channel)
     await adapter.start()
 
     result = await adapter.send(
-        ChannelMessage(text='```code\nx\n```', markdown=True), target='oc_chat'
+        ChannelMessage(text="```code\nx\n```", markdown=True), target="oc_chat"
     )
 
     assert result.ok is True
-    assert channel.sent[0]['message'] == {'markdown': '```code\nx\n```'}
-    assert channel.sent[1]['message'] == {'text': '```code\nx\n```'}
+    assert channel.sent[0]["message"] == {"markdown": "```code\nx\n```"}
+    assert channel.sent[1]["message"] == {"text": "```code\nx\n```"}
 
 
 @pytest.mark.asyncio
@@ -520,26 +520,26 @@ async def test_feishu_permission_metadata_sends_interactive_card() -> None:
     adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda s: channel)
     await adapter.start()
     message = ChannelMessage(
-        text='fallback',
+        text="fallback",
         metadata={
-            'intent': 'permission_approval',
-            'permission': {
-                'message': 'ClawCodex wants to use Bash.',
-                'suggestion': 'Review command',
-                'options': [
-                    {'value': 'y', 'label': '允许'},
-                    {'value': 'n', 'label': '拒绝'},
+            "intent": "permission_approval",
+            "permission": {
+                "message": "ClawCodex wants to use Bash.",
+                "suggestion": "Review command",
+                "options": [
+                    {"value": "y", "label": "允许"},
+                    {"value": "n", "label": "拒绝"},
                 ],
-                'expires_in_seconds': 600,
+                "expires_in_seconds": 600,
             },
         },
     )
 
-    result = await adapter.send(message, context_token='oc_chat')
+    result = await adapter.send(message, context_token="oc_chat")
 
     assert result.ok is True
-    card = channel.sent[0]['message']['card']
-    assert card['header']['title']['content'] == '权限审批'
+    card = channel.sent[0]["message"]["card"]
+    assert card["header"]["title"]["content"] == "权限审批"
 
 
 @pytest.mark.asyncio
@@ -550,29 +550,29 @@ async def test_feishu_card_click_emits_approval_inbound_and_updates_card() -> No
     adapter.set_inbound_handler(delivered.append)
     await adapter.start()
     message = ChannelMessage(
-        text='fallback',
+        text="fallback",
         metadata={
-            'intent': 'permission_approval',
-            'permission': {
-                'message': 'ClawCodex wants to use Bash.',
-                'options': [{'value': 'y', 'label': '允许'}],
+            "intent": "permission_approval",
+            "permission": {
+                "message": "ClawCodex wants to use Bash.",
+                "options": [{"value": "y", "label": "允许"}],
             },
         },
     )
-    await adapter.send(message, context_token='oc_chat')
+    await adapter.send(message, context_token="oc_chat")
     pending = next(iter(adapter.approval_manager.pending.values()))
 
     await channel.fire_card_action(
-        _card_action_event(approval_id=pending.approval_id, nonce=pending.nonce, choice='y')
+        _card_action_event(approval_id=pending.approval_id, nonce=pending.nonce, choice="y")
     )
 
     assert len(delivered) == 1
-    assert delivered[0].text == 'y'
-    assert delivered[0].semantic_tags == ['approval']
+    assert delivered[0].text == "y"
+    assert delivered[0].semantic_tags == ["approval"]
     assert len(channel.updated_cards) == 1
-    resolved = channel.updated_cards[0]['card']
-    assert resolved['header']['template'] == 'green'
-    assert all(element.get('tag') != 'action' for element in resolved['elements'])
+    resolved = channel.updated_cards[0]["card"]
+    assert resolved["header"]["template"] == "green"
+    assert all(element.get("tag") != "action" for element in resolved["elements"])
 
 
 @pytest.mark.asyncio
@@ -583,7 +583,7 @@ async def test_feishu_card_click_invalid_payload_does_nothing() -> None:
     adapter.set_inbound_handler(delivered.append)
     await adapter.start()
 
-    await channel.fire_card_action(_card_action_event(approval_id='unknown', nonce='x'))
+    await channel.fire_card_action(_card_action_event(approval_id="unknown", nonce="x"))
 
     assert delivered == []
     assert channel.updated_cards == []
@@ -602,17 +602,17 @@ async def test_feishu_send_does_not_hang_forever_when_sdk_hangs() -> None:
             return SendResult.ok()  # pragma: no cover
 
     channel = _HangingChannel()
-    cfg = _config({'send': {'sdk_send_attempts': 1, 'sdk_send_timeout_seconds': 0.5}})
+    cfg = _config({"send": {"sdk_send_attempts": 1, "sdk_send_timeout_seconds": 0.5}})
     adapter = FeishuAppChannelAdapter(cfg, channel_factory=lambda s: channel)
     await adapter.start()
 
-    task = asyncio.create_task(adapter.send(ChannelMessage(text='first'), target='oc_chat'))
+    task = asyncio.create_task(adapter.send(ChannelMessage(text="first"), target="oc_chat"))
     await asyncio.wait_for(channel.send_started.wait(), timeout=1.0)
 
     try:
         result = await asyncio.wait_for(task, timeout=3.0)
     except asyncio.TimeoutError:
-        pytest.fail('adapter.send hung forever when channel.send never returned')
+        pytest.fail("adapter.send hung forever when channel.send never returned")
 
     assert result.ok is False
     assert result.error_category is ErrorCategory.TIMEOUT
@@ -625,9 +625,9 @@ async def test_feishu_health_reflects_reconnecting_reconnected_hooks() -> None:
     await adapter.start()
 
     await channel.fire_reconnecting()
-    assert (await adapter.health_check()).account_status == 'websocket:reconnecting'
+    assert (await adapter.health_check()).account_status == "websocket:reconnecting"
 
     await channel.fire_reconnected()
     health = await adapter.health_check()
-    assert health.account_status == 'websocket:connected'
+    assert health.account_status == "websocket:connected"
     assert health.healthy is True

@@ -95,7 +95,7 @@ def _transcripts_root() -> Path:
     ``~/.clawcodex`` matches the bash background dir at
     ``<tmp>/clawcodex-bg`` philosophically (per-user, not per-workspace).
     """
-    root = Path.home() / '.clawcodex' / 'transcripts'
+    root = Path.home() / ".clawcodex" / "transcripts"
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -124,15 +124,15 @@ def _warn_flat_fallback(parent_session_id: Optional[str]) -> None:
     global _flat_fallback_warned
     if _flat_fallback_warned:
         return
-    if os.environ.get('PYTEST_CURRENT_TEST') is not None:
+    if os.environ.get("PYTEST_CURRENT_TEST") is not None:
         return
     _flat_fallback_warned = True
     logger.warning(
-        'sub-agent transcript fell back to flat path '
-        '~/.clawcodex/transcripts/<id>.jsonl; no nested resolver '
-        'registered. This usually means the entry point skipped '
-        'src.init.init() — confirm init() runs before the agent '
-        'loop. parent_session_id=%r',
+        "sub-agent transcript fell back to flat path "
+        "~/.clawcodex/transcripts/<id>.jsonl; no nested resolver "
+        "registered. This usually means the entry point skipped "
+        "src.init.init() — confirm init() runs before the agent "
+        "loop. parent_session_id=%r",
         parent_session_id,
     )
 
@@ -159,7 +159,7 @@ def get_agent_transcript_path(
         if override is not None:
             return override
     _warn_flat_fallback(parent_session_id)
-    return str(_transcripts_root() / f'{safe_id}.jsonl')
+    return str(_transcripts_root() / f"{safe_id}.jsonl")
 
 
 def get_main_transcript_path(session_id: str) -> str:
@@ -179,11 +179,11 @@ def get_main_transcript_path(session_id: str) -> str:
     sub-agent resolver would only complicate the call sites.
     """
     safe_id = _sanitize_agent_id(session_id)
-    override = os.environ.get('CLAWCODEX_SESSIONS_DIR', '').strip()
+    override = os.environ.get("CLAWCODEX_SESSIONS_DIR", "").strip()
     sessions_dir = (
-        Path(override).expanduser() if override else Path.home() / '.clawcodex' / 'sessions'
+        Path(override).expanduser() if override else Path.home() / ".clawcodex" / "sessions"
     )
-    return str(sessions_dir / safe_id / 'transcript.jsonl')
+    return str(sessions_dir / safe_id / "transcript.jsonl")
 
 
 def get_workflow_run_path(run_id: str) -> str:
@@ -194,9 +194,9 @@ def get_workflow_run_path(run_id: str) -> str:
     can replay completed ``agent()`` calls from disk.
     """
     safe_id = _sanitize_agent_id(run_id)
-    root = _transcripts_root() / 'workflows'
+    root = _transcripts_root() / "workflows"
     root.mkdir(parents=True, exist_ok=True)
-    return str(root / f'{safe_id}.json')
+    return str(root / f"{safe_id}.json")
 
 
 def _sanitize_agent_id(agent_id: str) -> str:
@@ -208,13 +208,13 @@ def _sanitize_agent_id(agent_id: str) -> str:
     paths via ``../../etc/passwd``. Mirrors the chapter's symlink-attack
     rationale on TS Task.ts:96.
     """
-    if not agent_id or not all(c.isalnum() or c in '_-' for c in agent_id):
+    if not agent_id or not all(c.isalnum() or c in "_-" for c in agent_id):
         raise ValueError(
-            f'invalid agent_id for transcript path: {agent_id!r} '
+            f"invalid agent_id for transcript path: {agent_id!r} "
             "(allowed: alphanumeric + '_' + '-')"
         )
     if len(agent_id) > 64:
-        raise ValueError(f'agent_id too long ({len(agent_id)} > 64 chars)')
+        raise ValueError(f"agent_id too long ({len(agent_id)} > 64 chars)")
     return agent_id
 
 
@@ -250,27 +250,27 @@ def _serialize_message(message: Any, parent_session_id: str | None = None) -> st
         try:
             payload = asdict(message)
         except Exception:
-            payload = {'_unserializable': repr(message)}
+            payload = {"_unserializable": repr(message)}
     elif isinstance(message, dict):
         payload = message
     else:
         # Last-resort: try to serialize a str() of it.
-        payload = {'_unserializable': repr(message)}
+        payload = {"_unserializable": repr(message)}
     if parent_session_id is not None:
-        payload['parent_session_id'] = parent_session_id
+        payload["parent_session_id"] = parent_session_id
     # Normalize string content → single text block. Done after
     # ``asdict`` (so the asdict call doesn't need to know about the
     # shape) and before ``json.dumps`` (so the on-disk JSONL is
     # uniform). The API boundary still accepts both shapes.
-    content = payload.get('content')
+    content = payload.get("content")
     if isinstance(content, str):
-        payload['content'] = [{'type': 'text', 'text': content}]
+        payload["content"] = [{"type": "text", "text": content}]
     try:
         # ``ensure_ascii=False`` keeps unicode readable in transcripts;
         # ``separators`` with no spaces keeps lines compact.
-        return json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     except Exception as exc:
-        return json.dumps({'_unserializable': repr(message), '_error': str(exc)})
+        return json.dumps({"_unserializable": repr(message), "_error": str(exc)})
 
 
 def _extract_ts_epoch(message: Any) -> float | None:
@@ -289,21 +289,21 @@ def _extract_ts_epoch(message: Any) -> float | None:
     """
     candidate: Any = None
     if is_dataclass(message) and not isinstance(message, type):
-        candidate = getattr(message, 'timestamp', None)
+        candidate = getattr(message, "timestamp", None)
     elif isinstance(message, dict):
-        candidate = message.get('timestamp') or message.get('ts')
+        candidate = message.get("timestamp") or message.get("ts")
         if candidate is None:
-            inner = message.get('message')
+            inner = message.get("message")
             if isinstance(inner, dict):
-                candidate = inner.get('timestamp') or inner.get('ts')
+                candidate = inner.get("timestamp") or inner.get("ts")
     if not isinstance(candidate, str) or not candidate:
         return None
     # Accept both ``...Z`` and ``...+00:00`` ISO shapes. ``fromisoformat``
     # handles both from Python 3.11+; for the trailing-Z case we
     # normalize to ``+00:00`` so older interpreters don't choke.
     iso = candidate
-    if iso.endswith('Z'):
-        iso = iso[:-1] + '+00:00'
+    if iso.endswith("Z"):
+        iso = iso[:-1] + "+00:00"
     try:
         from datetime import datetime
 
@@ -370,7 +370,7 @@ class TranscriptWriter:
         # sensitive prompt content — readable by the user only.
         self._fd: int | None = os.open(
             self._path,
-            os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, 'O_CLOEXEC', 0),
+            os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_CLOEXEC", 0),
             0o600,
         )
         self._closed = False
@@ -399,9 +399,9 @@ class TranscriptWriter:
         land on disk in arrival order, which is the safest fallback.
         """
         if self._closed or self._fd is None:
-            raise RuntimeError('TranscriptWriter is closed')
-        line = _serialize_message(message, self._parent_session_id) + '\n'
-        encoded = line.encode('utf-8')
+            raise RuntimeError("TranscriptWriter is closed")
+        line = _serialize_message(message, self._parent_session_id) + "\n"
+        encoded = line.encode("utf-8")
         ts = _extract_ts_epoch(message)
         if ts is None:
             # Unparseable ts → write now, don't buffer. Also flush
@@ -421,8 +421,8 @@ class TranscriptWriter:
     def write_session_init(
         self,
         session_id: str,
-        provider: str = '',
-        model: str = '',
+        provider: str = "",
+        model: str = "",
         created_at: str | None = None,
     ) -> None:
         """F-49 P5-G: write a ``session_init`` line as the first transcript entry.
@@ -440,20 +440,20 @@ class TranscriptWriter:
              "model":"claude-sonnet-4-20250514","created_at":"2026-06-19T09:03:02"}
         """
         if self._closed or self._fd is None:
-            raise RuntimeError('TranscriptWriter is closed')
+            raise RuntimeError("TranscriptWriter is closed")
         from datetime import datetime
 
         payload: dict[str, Any] = {
-            'type': 'session_init',
-            'session_id': session_id,
+            "type": "session_init",
+            "session_id": session_id,
         }
         if provider:
-            payload['provider'] = provider
+            payload["provider"] = provider
         if model:
-            payload['model'] = model
-        payload['created_at'] = created_at or datetime.now().isoformat()
-        line = json.dumps(payload, ensure_ascii=False, separators=(',', ':')) + '\n'
-        self._write_raw(line.encode('utf-8'))
+            payload["model"] = model
+        payload["created_at"] = created_at or datetime.now().isoformat()
+        line = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
+        self._write_raw(line.encode("utf-8"))
 
     def _flush_sort_buffer(self) -> None:
         """Sort the buffered (ts, line) pairs ascending and write them out.
@@ -483,7 +483,7 @@ class TranscriptWriter:
             if written <= 0:
                 # Defensive: 0-byte returns shouldn't happen on regular
                 # files but the loop would spin forever otherwise.
-                raise OSError(f'transcript write returned {written}')
+                raise OSError(f"transcript write returned {written}")
             view = view[written:]
 
     def close(self) -> None:
@@ -495,17 +495,17 @@ class TranscriptWriter:
         try:
             self._flush_sort_buffer()
         except OSError:
-            logger.exception('transcript flush-on-close failed for %s', self._path)
+            logger.exception("transcript flush-on-close failed for %s", self._path)
         self._closed = True
         fd, self._fd = self._fd, None
         if fd is not None:
             try:
                 os.close(fd)
             except OSError:
-                logger.exception('transcript close failed for %s', self._path)
+                logger.exception("transcript close failed for %s", self._path)
 
     # Context-manager support so callers can write `with TranscriptWriter(...) as w:`
-    def __enter__(self) -> 'TranscriptWriter':
+    def __enter__(self) -> "TranscriptWriter":
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
@@ -552,7 +552,7 @@ class TranscriptReader:
     def _iterate(self) -> Iterator[Any]:
         """Yield one parsed object per line; skip blank/unparseable lines."""
         try:
-            handle = open(self._path, 'rb')
+            handle = open(self._path, "rb")
         except FileNotFoundError:
             return
         try:
@@ -569,7 +569,7 @@ class TranscriptReader:
                 # the writer is the only producer and uses utf-8
                 # round-trip, so the regime is safe; downstream replay
                 # consumers should validate message shape post-parse.
-                line = raw_line.decode('utf-8', errors='replace').rstrip('\r\n')
+                line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
                 if not line:
                     continue
                 try:
@@ -579,8 +579,8 @@ class TranscriptReader:
                         # Log once per reader instance — a corrupt
                         # transcript shouldn't spam the log.
                         logger.warning(
-                            'skipping unparseable transcript line in %s '
-                            '(file may have a trailing partial-write)',
+                            "skipping unparseable transcript line in %s "
+                            "(file may have a trailing partial-write)",
                             self._path,
                         )
                         self._logged_partial = True
@@ -604,15 +604,15 @@ def ensure_transcript_dir() -> str:
 
 
 __all__ = [
-    'TranscriptWriter',
-    'TranscriptReader',
-    'get_agent_transcript_path',
-    'get_main_transcript_path',
-    'get_workflow_run_path',
-    'ensure_transcript_dir',
-    'register_transcript_path_resolver',
-    'nested_session_path_resolver',
-    'init',
+    "TranscriptWriter",
+    "TranscriptReader",
+    "get_agent_transcript_path",
+    "get_main_transcript_path",
+    "get_workflow_run_path",
+    "ensure_transcript_dir",
+    "register_transcript_path_resolver",
+    "nested_session_path_resolver",
+    "init",
 ]
 
 
@@ -638,19 +638,19 @@ def nested_session_path_resolver(
         return None  # 回退到 flat ~/.clawcodex/transcripts/
 
     _safe_session = _sanitize_for_path(parent_session_id)
-    root = Path.home() / '.clawcodex' / 'sessions' / _safe_session / 'subagents'
+    root = Path.home() / ".clawcodex" / "sessions" / _safe_session / "subagents"
     root.mkdir(parents=True, exist_ok=True)
-    return str(root / f'agent-{agent_id}.jsonl')
+    return str(root / f"agent-{agent_id}.jsonl")
 
 
 def _sanitize_for_path(name: str) -> str:
     """轻量 sanitize — 只允许字母数字、连字符、下划线。"""
-    if not name or not all(c.isalnum() or c in '_-' for c in name):
+    if not name or not all(c.isalnum() or c in "_-" for c in name):
         raise ValueError(
             f"invalid component for session path: {name!r} (allowed: alphanumeric + '_' + '-')"
         )
     if len(name) > 128:
-        raise ValueError(f'session_id too long ({len(name)} > 128 chars)')
+        raise ValueError(f"session_id too long ({len(name)} > 128 chars)")
     return name
 
 
@@ -665,4 +665,4 @@ def init() -> None:
     register_transcript_path_resolver(nested_session_path_resolver)
     import logging
 
-    logging.getLogger(__name__).info('registered nested-session transcript path resolver')
+    logging.getLogger(__name__).info("registered nested-session transcript path resolver")

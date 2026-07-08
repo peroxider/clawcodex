@@ -186,7 +186,12 @@ class RemoteAgentRunner:
 
         async def run_loop() -> None:
             try:
-                from clawcodex_ext.bootstrap.state import SdkContext, SessionId, run_with_sdk_context
+                from clawcodex_ext.bootstrap.state import (
+                    SdkContext,
+                    SessionId,
+                    run_with_sdk_context,
+                )
+
                 # `src.outputStyles` + `src.query.agent_loop_compat` are public
                 # upstream APIs exercised by tests/remote_api/test_remote_api.py
                 # via ``unittest.mock.patch("src.…")`` (see :1006, :1013).

@@ -37,12 +37,12 @@ from clawcodex_ext.services.im_gateway.store import ReliabilityStore
 class _FakeWeChatAdapter(ChannelAdapter):
     """Minimal WeChat adapter for notification tests."""
 
-    def __init__(self, name: str = 'wechat', account_id: str = 'default') -> None:
+    def __init__(self, name: str = "wechat", account_id: str = "default") -> None:
         self._name = name
         self._account_id = account_id
         self._config = ChannelConfig(
             type=ChannelType.WECHAT,
-            webhook_url='https://ilinkai.weixin.qq.com/dummy',
+            webhook_url="https://ilinkai.weixin.qq.com/dummy",
             name=name,
             enabled=True,
         )
@@ -75,7 +75,7 @@ class _FakeWeChatAdapter(ChannelAdapter):
 
     async def send(self, message, *, target=None, context_token=None) -> ChannelSendResult:
         self.sends.append((message, target))
-        return ChannelSendResult.success(self._name, provider_receipt='r')
+        return ChannelSendResult.success(self._name, provider_receipt="r")
 
     def last_known_sender(self) -> str | None:
         return self._last_sender
@@ -91,13 +91,13 @@ class _FakeWeChatAdapter(ChannelAdapter):
 
 
 def _gateway_with_wechat(
-    tmp_path, *, sender: str | None = 'operator@im.wechat'
+    tmp_path, *, sender: str | None = "operator@im.wechat"
 ) -> tuple[MessageGateway, _FakeWeChatAdapter]:
     """Build a real gateway with a fake WeChat adapter that has a known sender.
 
     Returns (gateway, adapter) so the caller can inspect ``adapter.sends``.
     """
-    adapter = _FakeWeChatAdapter('wechat')
+    adapter = _FakeWeChatAdapter("wechat")
     adapter._last_sender = sender
     reg = ChannelAdapterRegistry()
     reg.register(adapter)
@@ -119,13 +119,13 @@ async def test_notify_on_connect_repl(tmp_path) -> None:
     gw, adapter = _gateway_with_wechat(tmp_path)
 
     gw.binding.bind(
-        'wechat:direct:*:*',
-        SessionTarget(session_id='repl-1', host_type='repl'),
+        "wechat:direct:*:*",
+        SessionTarget(session_id="repl-1", host_type="repl"),
     )
     await asyncio.sleep(0.05)  # let create_task notification run
 
     texts = [msg.text for msg, _ in adapter.sends]
-    assert 'clawcodex-REPL已连接' in texts
+    assert "clawcodex-REPL已连接" in texts
 
 
 @pytest.mark.asyncio
@@ -134,13 +134,13 @@ async def test_notify_on_connect_orchestrator(tmp_path) -> None:
     gw, adapter = _gateway_with_wechat(tmp_path)
 
     gw.binding.bind(
-        'wechat:direct:*:*',
-        SessionTarget(session_id='orchestrator-1', host_type='orchestrator'),
+        "wechat:direct:*:*",
+        SessionTarget(session_id="orchestrator-1", host_type="orchestrator"),
     )
     await asyncio.sleep(0.05)
 
     texts = [msg.text for msg, _ in adapter.sends]
-    assert 'clawcodex-orchestrator已连接' in texts
+    assert "clawcodex-orchestrator已连接" in texts
 
 
 @pytest.mark.asyncio
@@ -149,17 +149,17 @@ async def test_notify_on_disconnect_offline(tmp_path) -> None:
     gw, adapter = _gateway_with_wechat(tmp_path)
 
     gw.binding.bind(
-        'wechat:direct:*:*',
-        SessionTarget(session_id='repl-1', host_type='repl'),
+        "wechat:direct:*:*",
+        SessionTarget(session_id="repl-1", host_type="repl"),
     )
     await asyncio.sleep(0.05)
     adapter.sends.clear()
 
-    gw.binding.mark_offline('wechat:direct:*:*', session_id='repl-1')
+    gw.binding.mark_offline("wechat:direct:*:*", session_id="repl-1")
     await asyncio.sleep(0.05)
 
     texts = [msg.text for msg, _ in adapter.sends]
-    assert 'clawcodex-REPL已断开' in texts
+    assert "clawcodex-REPL已断开" in texts
 
 
 @pytest.mark.asyncio
@@ -168,17 +168,17 @@ async def test_notify_on_disconnect_terminated(tmp_path) -> None:
     gw, adapter = _gateway_with_wechat(tmp_path)
 
     gw.binding.bind(
-        'wechat:direct:*:*',
-        SessionTarget(session_id='orch-1', host_type='orchestrator'),
+        "wechat:direct:*:*",
+        SessionTarget(session_id="orch-1", host_type="orchestrator"),
     )
     await asyncio.sleep(0.05)
     adapter.sends.clear()
 
-    gw.binding.terminate('wechat:direct:*:*', session_id='orch-1')
+    gw.binding.terminate("wechat:direct:*:*", session_id="orch-1")
     await asyncio.sleep(0.05)
 
     texts = [msg.text for msg, _ in adapter.sends]
-    assert 'clawcodex-orchestrator已断开' in texts
+    assert "clawcodex-orchestrator已断开" in texts
 
 
 @pytest.mark.asyncio
@@ -187,24 +187,24 @@ async def test_notify_on_override_active_previous(tmp_path) -> None:
     gw, adapter = _gateway_with_wechat(tmp_path)
 
     gw.binding.bind(
-        'wechat:direct:*:*',
-        SessionTarget(session_id='orch-1', host_type='orchestrator'),
+        "wechat:direct:*:*",
+        SessionTarget(session_id="orch-1", host_type="orchestrator"),
     )
     await asyncio.sleep(0.05)
     adapter.sends.clear()
 
     # REPL replaces orchestrator (both in wechat:direct exclusive group)
     gw.binding.bind(
-        'wechat:direct:*:*',
-        SessionTarget(session_id='repl-1', host_type='repl'),
+        "wechat:direct:*:*",
+        SessionTarget(session_id="repl-1", host_type="repl"),
     )
     await asyncio.sleep(0.05)
 
     texts = [msg.text for msg, _ in adapter.sends]
-    assert 'clawcodex-orchestrator已断开' in texts
-    assert 'clawcodex-REPL已连接' in texts
+    assert "clawcodex-orchestrator已断开" in texts
+    assert "clawcodex-REPL已连接" in texts
     # Disconnect notification should come before connect notification
-    assert texts.index('clawcodex-orchestrator已断开') < texts.index('clawcodex-REPL已连接')
+    assert texts.index("clawcodex-orchestrator已断开") < texts.index("clawcodex-REPL已连接")
 
 
 @pytest.mark.asyncio
@@ -213,24 +213,24 @@ async def test_notify_on_override_offline_previous(tmp_path) -> None:
     gw, adapter = _gateway_with_wechat(tmp_path)
 
     gw.binding.bind(
-        'wechat:direct:*:*',
-        SessionTarget(session_id='orch-1', host_type='orchestrator'),
+        "wechat:direct:*:*",
+        SessionTarget(session_id="orch-1", host_type="orchestrator"),
     )
     await asyncio.sleep(0.05)
     # Mark offline first (e.g. socket closed before REPL registers)
-    gw.binding.mark_offline('wechat:direct:*:*', session_id='orch-1')
+    gw.binding.mark_offline("wechat:direct:*:*", session_id="orch-1")
     await asyncio.sleep(0.05)
     adapter.sends.clear()
 
     gw.binding.bind(
-        'wechat:direct:*:*',
-        SessionTarget(session_id='repl-1', host_type='repl'),
+        "wechat:direct:*:*",
+        SessionTarget(session_id="repl-1", host_type="repl"),
     )
     await asyncio.sleep(0.05)
 
     texts = [msg.text for msg, _ in adapter.sends]
-    assert 'clawcodex-REPL已连接' in texts
-    assert 'clawcodex-orchestrator已断开' not in texts  # already offline, no duplicate
+    assert "clawcodex-REPL已连接" in texts
+    assert "clawcodex-orchestrator已断开" not in texts  # already offline, no duplicate
 
 
 @pytest.mark.asyncio
@@ -239,8 +239,8 @@ async def test_notify_skipped_when_origin_unresolvable(tmp_path) -> None:
     gw, adapter = _gateway_with_wechat(tmp_path, sender=None)
 
     gw.binding.bind(
-        'wechat:direct:*:*',
-        SessionTarget(session_id='repl-1', host_type='repl'),
+        "wechat:direct:*:*",
+        SessionTarget(session_id="repl-1", host_type="repl"),
     )
     await asyncio.sleep(0.05)
 
@@ -256,14 +256,14 @@ async def test_notify_best_effort_does_not_raise(tmp_path) -> None:
     original_send = adapter.send
 
     async def _raising_send(message, *, target=None, context_token=None):
-        raise RuntimeError('simulated send failure')
+        raise RuntimeError("simulated send failure")
 
     adapter.send = _raising_send
 
     # Should not raise
     gw.binding.bind(
-        'wechat:direct:*:*',
-        SessionTarget(session_id='repl-1', host_type='repl'),
+        "wechat:direct:*:*",
+        SessionTarget(session_id="repl-1", host_type="repl"),
     )
     await asyncio.sleep(0.05)
 
@@ -279,21 +279,21 @@ async def test_notify_failed_send_result_is_not_logged_as_sent(tmp_path, caplog)
     async def _failed_send(message, *, target=None, context_token=None):
         adapter.sends.append((message, target))
         return ChannelSendResult.nonretryable_error(
-            'wechat',
-            message='session expired',
+            "wechat",
+            message="session expired",
             category=ErrorCategory.AUTH,
         )
 
     adapter.send = _failed_send
-    caplog.set_level(logging.INFO, logger='clawcodex_ext.services.im_gateway.gateway')
+    caplog.set_level(logging.INFO, logger="clawcodex_ext.services.im_gateway.gateway")
 
     gw.binding.bind(
-        'wechat:direct:*:*',
-        SessionTarget(session_id='orch-1', host_type='orchestrator'),
+        "wechat:direct:*:*",
+        SessionTarget(session_id="orch-1", host_type="orchestrator"),
     )
     await asyncio.sleep(0.05)
 
-    assert 'connection notify: send failed' in caplog.text
+    assert "connection notify: send failed" in caplog.text
     assert "connection notify: sent 'clawcodex-orchestrator已连接'" not in caplog.text
 
 
@@ -305,21 +305,21 @@ async def test_notify_enqueued_send_result_is_not_logged_as_sent(tmp_path, caplo
     async def _enqueued_send(message, *, target=None, context_token=None):
         adapter.sends.append((message, target))
         return ChannelSendResult.enqueued(
-            'wechat',
-            message='deferred due to rate limit',
-            raw={'retry_after_seconds': 10},
+            "wechat",
+            message="deferred due to rate limit",
+            raw={"retry_after_seconds": 10},
         )
 
     adapter.send = _enqueued_send
-    caplog.set_level(logging.INFO, logger='clawcodex_ext.services.im_gateway.gateway')
+    caplog.set_level(logging.INFO, logger="clawcodex_ext.services.im_gateway.gateway")
 
     gw.binding.bind(
-        'wechat:direct:*:*',
-        SessionTarget(session_id='orch-1', host_type='orchestrator'),
+        "wechat:direct:*:*",
+        SessionTarget(session_id="orch-1", host_type="orchestrator"),
     )
     await asyncio.sleep(0.05)
 
-    assert 'connection notify: enqueued' in caplog.text
+    assert "connection notify: enqueued" in caplog.text
     assert "connection notify: sent 'clawcodex-orchestrator宸茶繛鎺?" not in caplog.text
 
 
@@ -329,16 +329,16 @@ async def test_notify_concrete_origin(tmp_path) -> None:
     gw, adapter = _gateway_with_wechat(tmp_path)
 
     gw.binding.bind(
-        'wechat:direct:default:operator@im.wechat',
-        SessionTarget(session_id='repl-1', host_type='repl'),
+        "wechat:direct:default:operator@im.wechat",
+        SessionTarget(session_id="repl-1", host_type="repl"),
     )
     await asyncio.sleep(0.05)
 
     texts = [msg.text for msg, _ in adapter.sends]
-    assert 'clawcodex-REPL已连接' in texts
+    assert "clawcodex-REPL已连接" in texts
     # Verify it was sent to the correct target
     targets = [t for _, t in adapter.sends if t is not None]
-    assert 'operator@im.wechat' in targets
+    assert "operator@im.wechat" in targets
 
 
 @pytest.mark.asyncio
@@ -347,32 +347,32 @@ async def test_notify_terminate_matching_sends_for_each(tmp_path) -> None:
     gw, adapter = _gateway_with_wechat(tmp_path)
 
     gw.binding.bind(
-        'wechat:direct:default:user_a',
-        SessionTarget(session_id='repl-1', host_type='repl'),
+        "wechat:direct:default:user_a",
+        SessionTarget(session_id="repl-1", host_type="repl"),
     )
     await asyncio.sleep(0.05)
     adapter.sends.clear()
 
     # terminate_matching removes all bindings in the wechat:direct group
-    removed = gw.binding.terminate_matching('wechat:direct:*:*')
+    removed = gw.binding.terminate_matching("wechat:direct:*:*")
     assert len(removed) >= 1
     await asyncio.sleep(0.05)
 
     texts = [msg.text for msg, _ in adapter.sends]
-    assert 'clawcodex-REPL已断开' in texts
+    assert "clawcodex-REPL已断开" in texts
 
 
 class _FakeFeishuAdapter(ChannelAdapter):
     """Minimal Feishu adapter for notification broadcast tests."""
 
-    def __init__(self, name: str = 'feishu', last_sender: str | None = 'ou_feishu_user') -> None:
+    def __init__(self, name: str = "feishu", last_sender: str | None = "ou_feishu_user") -> None:
         self._name = name
         self._config = ChannelConfig(
             type=ChannelType.FEISHU,
-            webhook_url='',
+            webhook_url="",
             name=name,
             enabled=True,
-            extra={'connection_mode': 'websocket'},
+            extra={"connection_mode": "websocket"},
         )
         self._caps = ChannelCapabilitySet.of(
             ChannelCapability.OUTBOUND_TEXT,
@@ -407,7 +407,7 @@ class _FakeFeishuAdapter(ChannelAdapter):
 
     async def send(self, message, *, target=None, context_token=None) -> ChannelSendResult:
         self.sends.append((message, target))
-        return ChannelSendResult.success(self._name, provider_receipt='r')
+        return ChannelSendResult.success(self._name, provider_receipt="r")
 
     def last_known_sender(self) -> str | None:
         return self._last_sender
@@ -423,10 +423,10 @@ class _FakeFeishuAdapter(ChannelAdapter):
 
 
 def _gateway_with_feishu(
-    tmp_path, *, sender: str | None = 'ou_feishu_user'
+    tmp_path, *, sender: str | None = "ou_feishu_user"
 ) -> tuple[MessageGateway, _FakeFeishuAdapter]:
     """Build a real gateway with only a fake Feishu adapter (no WeChat)."""
-    adapter = _FakeFeishuAdapter('feishu')
+    adapter = _FakeFeishuAdapter("feishu")
     adapter._last_sender = sender
     reg = ChannelAdapterRegistry()
     reg.register(adapter)
@@ -448,45 +448,45 @@ async def test_notify_broadcasts_to_feishu_when_no_wechat(tmp_path) -> None:
     gw, adapter = _gateway_with_feishu(tmp_path)
 
     gw.binding.bind(
-        'wechat:direct:*:*',
-        SessionTarget(session_id='repl-1', host_type='repl'),
+        "wechat:direct:*:*",
+        SessionTarget(session_id="repl-1", host_type="repl"),
     )
     await asyncio.sleep(0.05)
 
     texts = [msg.text for msg, _ in adapter.sends]
-    assert 'clawcodex-REPL已连接' in texts
+    assert "clawcodex-REPL已连接" in texts
 
 
 def test_collect_broadcast_targets_uses_persisted_feishu_sender_after_restart(tmp_path) -> None:
     store = ReliabilityStore(tmp_path)
-    store.set_feishu_last_sender('feishu', 'oc_chat')
+    store.set_feishu_last_sender("feishu", "oc_chat")
     cfg = GatewayConfig(state_dir=str(tmp_path))
     cfg.replace_channel(
         ChannelConfig(
             type=ChannelType.FEISHU,
-            webhook_url='',
-            name='feishu',
+            webhook_url="",
+            name="feishu",
             enabled=True,
             extra={
-                'connection_mode': 'websocket',
-                'app_id': 'cli_app',
-                'app_secret': 'secret',
+                "connection_mode": "websocket",
+                "app_id": "cli_app",
+                "app_secret": "secret",
             },
         )
     )
 
     gw = MessageGateway(cfg, store=store)
 
-    assert _collect_broadcast_targets(gw.registry) == [('feishu', 'oc_chat')]
+    assert _collect_broadcast_targets(gw.registry) == [("feishu", "oc_chat")]
 
 
 @pytest.mark.asyncio
 async def test_notify_broadcasts_to_all_connected_channels(tmp_path) -> None:
     """Bug 1: REPL connect notification broadcasts to WeChat AND Feishu."""
-    wechat = _FakeWeChatAdapter('wechat')
-    wechat._last_sender = 'user_wx'
-    feishu = _FakeFeishuAdapter('feishu')
-    feishu._last_sender = 'ou_feishu_user'
+    wechat = _FakeWeChatAdapter("wechat")
+    wechat._last_sender = "user_wx"
+    feishu = _FakeFeishuAdapter("feishu")
+    feishu._last_sender = "ou_feishu_user"
     reg = ChannelAdapterRegistry()
     reg.register(wechat)
     reg.register(feishu)
@@ -494,12 +494,12 @@ async def test_notify_broadcasts_to_all_connected_channels(tmp_path) -> None:
     gw = MessageGateway(cfg, registry=reg)
 
     gw.binding.bind(
-        'wechat:direct:*:*',
-        SessionTarget(session_id='repl-1', host_type='repl'),
+        "wechat:direct:*:*",
+        SessionTarget(session_id="repl-1", host_type="repl"),
     )
     await asyncio.sleep(0.05)
 
     wechat_texts = [msg.text for msg, _ in wechat.sends]
     feishu_texts = [msg.text for msg, _ in feishu.sends]
-    assert 'clawcodex-REPL已连接' in wechat_texts
-    assert 'clawcodex-REPL已连接' in feishu_texts
+    assert "clawcodex-REPL已连接" in wechat_texts
+    assert "clawcodex-REPL已连接" in feishu_texts

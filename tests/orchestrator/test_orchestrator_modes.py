@@ -58,6 +58,7 @@ class _FakeIssue:
 
 def _make_fake_agent_runner() -> MagicMock:
     runner = MagicMock(name="AgentRunner")
+
     # ``SingleModeRunner.run`` awaits ``self._agent_runner.run(...)``, so the
     # mock's ``run`` must be an async method that returns a sentinel we can
     # assert on.
@@ -185,15 +186,11 @@ class TestModeSelector(unittest.TestCase):
         self.assertIn("router", decision.reason)
 
     def test_first_mode_label_wins(self) -> None:
-        decision = ModeSelector().choose(
-            _FakeIssue(labels=["bug", "mode:debate", "mode:pipeline"])
-        )
+        decision = ModeSelector().choose(_FakeIssue(labels=["bug", "mode:debate", "mode:pipeline"]))
         self.assertEqual(decision.mode, "debate")
 
     def test_non_mode_labels_ignored(self) -> None:
-        decision = ModeSelector().choose(
-            _FakeIssue(labels=["bug", "p1", "needs-design"])
-        )
+        decision = ModeSelector().choose(_FakeIssue(labels=["bug", "p1", "needs-design"]))
         self.assertEqual(decision.mode, DEFAULT_MODE)
 
     def test_invalid_default_rejected(self) -> None:
@@ -228,9 +225,7 @@ class TestIssueRecordModeFields(unittest.TestCase):
             mode_decision_reason="explicit label 'mode:pipeline'",
         )
         self.assertEqual(rec.collaboration_mode, "pipeline")
-        self.assertEqual(
-            rec.mode_decision_reason, "explicit label 'mode:pipeline'"
-        )
+        self.assertEqual(rec.mode_decision_reason, "explicit label 'mode:pipeline'")
 
 
 class TestIssueRegistryBackCompat(unittest.TestCase):
@@ -287,9 +282,7 @@ class TestIssueRegistryBackCompat(unittest.TestCase):
             r2 = reg2.get("i1")
             assert r2 is not None
             self.assertEqual(r2.collaboration_mode, "coordinator")
-            self.assertEqual(
-                r2.mode_decision_reason, "router: cross-module refactor"
-            )
+            self.assertEqual(r2.mode_decision_reason, "router: cross-module refactor")
 
 
 if __name__ == "__main__":

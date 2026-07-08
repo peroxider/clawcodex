@@ -100,7 +100,7 @@ class IssueStateCache:
         if history is None or len(history) < self.stable_skip_turns:
             return False
 
-        recent = history[-self.stable_skip_turns:]
+        recent = history[-self.stable_skip_turns :]
 
         if not all(s.is_active for s in recent):
             return False
@@ -167,7 +167,7 @@ class IssueStateCache:
             )
         )
         if len(history) > self._max_history:
-            del history[:-self._max_history]
+            del history[: -self._max_history]
 
     def invalidate(self, issue_id: Optional[str] = None) -> None:
         """Drop cached snapshots.

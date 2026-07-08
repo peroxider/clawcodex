@@ -19,18 +19,18 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-PROTOCOL_VERSION = 'gateway/1'
+PROTOCOL_VERSION = "gateway/1"
 
 
 class FrameType(str, Enum):
-    REGISTER = 'register'
-    UNREGISTER = 'unregister'
-    HEARTBEAT = 'heartbeat'
-    DELIVER = 'deliver'
-    ACK = 'ack'
-    NACK = 'nack'
-    EVENT = 'event'
-    OUTBOUND = 'outbound'  # client→server: reply text to send back to an IM origin
+    REGISTER = "register"
+    UNREGISTER = "unregister"
+    HEARTBEAT = "heartbeat"
+    DELIVER = "deliver"
+    ACK = "ack"
+    NACK = "nack"
+    EVENT = "event"
+    OUTBOUND = "outbound"  # client→server: reply text to send back to an IM origin
 
 
 @dataclass
@@ -57,26 +57,26 @@ class GatewayFrame:
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
-            'type': self.type.value,
-            'message_id': self.message_id,
-            'protocol_version': self.protocol_version,
+            "type": self.type.value,
+            "message_id": self.message_id,
+            "protocol_version": self.protocol_version,
         }
         for k in (
-            'session_id',
-            'origin',
-            'delivery_id',
-            'capabilities',
-            'token',
-            'text',
-            'semantic',
-            'ack_layer',
-            'reason',
-            'event_type',
-            'deadline_ms',
-            'payload',
-            'metadata',
-            'semantic_tags',
-            'context_token',
+            "session_id",
+            "origin",
+            "delivery_id",
+            "capabilities",
+            "token",
+            "text",
+            "semantic",
+            "ack_layer",
+            "reason",
+            "event_type",
+            "deadline_ms",
+            "payload",
+            "metadata",
+            "semantic_tags",
+            "context_token",
         ):
             v = getattr(self, k)
             if v not in (None, [], {}):
@@ -84,45 +84,45 @@ class GatewayFrame:
         return d
 
     def encode(self) -> bytes:
-        return (json.dumps(self.to_dict(), ensure_ascii=False) + '\n').encode('utf-8')
+        return (json.dumps(self.to_dict(), ensure_ascii=False) + "\n").encode("utf-8")
 
     @classmethod
     def decode(cls, raw: bytes | str) -> GatewayFrame:
         if isinstance(raw, bytes):
-            raw = raw.decode('utf-8')
+            raw = raw.decode("utf-8")
         data = json.loads(raw)
         return cls.from_dict(data)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> GatewayFrame:
         if not isinstance(data, dict):
-            raise ValueError('frame must be a JSON object')
-        ftype = data.get('type')
+            raise ValueError("frame must be a JSON object")
+        ftype = data.get("type")
         if ftype is None:
             raise ValueError("frame missing 'type'")
         try:
             ftype_enum = FrameType(ftype)
         except ValueError as exc:
-            raise ValueError(f'unknown frame type {ftype!r}') from exc
+            raise ValueError(f"unknown frame type {ftype!r}") from exc
         return cls(
             type=ftype_enum,
-            message_id=data.get('message_id', str(uuid.uuid4())),
-            protocol_version=data.get('protocol_version', PROTOCOL_VERSION),
-            session_id=data.get('session_id'),
-            origin=data.get('origin'),
-            delivery_id=data.get('delivery_id'),
-            capabilities=list(data.get('capabilities') or []),
-            token=data.get('token'),
-            text=data.get('text'),
-            semantic=data.get('semantic'),
-            ack_layer=data.get('ack_layer'),
-            reason=data.get('reason'),
-            event_type=data.get('event_type'),
-            deadline_ms=data.get('deadline_ms'),
-            payload=data.get('payload'),
-            metadata=data.get('metadata') if isinstance(data.get('metadata'), dict) else None,
-            semantic_tags=list(data.get('semantic_tags') or []),
-            context_token=data.get('context_token'),
+            message_id=data.get("message_id", str(uuid.uuid4())),
+            protocol_version=data.get("protocol_version", PROTOCOL_VERSION),
+            session_id=data.get("session_id"),
+            origin=data.get("origin"),
+            delivery_id=data.get("delivery_id"),
+            capabilities=list(data.get("capabilities") or []),
+            token=data.get("token"),
+            text=data.get("text"),
+            semantic=data.get("semantic"),
+            ack_layer=data.get("ack_layer"),
+            reason=data.get("reason"),
+            event_type=data.get("event_type"),
+            deadline_ms=data.get("deadline_ms"),
+            payload=data.get("payload"),
+            metadata=data.get("metadata") if isinstance(data.get("metadata"), dict) else None,
+            semantic_tags=list(data.get("semantic_tags") or []),
+            context_token=data.get("context_token"),
         )
 
     # -- convenience constructors ---------------------------------------
@@ -229,13 +229,13 @@ def constant_time_eq(a: str | None, b: str | None) -> bool:
 
     if a is None or b is None:
         return a is None and b is None
-    return _hmac.compare_digest(a.encode('utf-8'), b.encode('utf-8'))
+    return _hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
 
 
 __all__ = [
-    'PROTOCOL_VERSION',
-    'FrameType',
-    'GatewayFrame',
-    'GatewayIpcError',
-    'constant_time_eq',
+    "PROTOCOL_VERSION",
+    "FrameType",
+    "GatewayFrame",
+    "GatewayIpcError",
+    "constant_time_eq",
 ]

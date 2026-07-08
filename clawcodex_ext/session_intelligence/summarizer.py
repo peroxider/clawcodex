@@ -38,7 +38,9 @@ def summarize_session(session_id: str, *, sessions_dir: Path | None = None) -> d
     path = session_dir / "summary.json"
     tmp = path.with_suffix(".json.tmp")
     try:
-        tmp.write_text(json.dumps(summary.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.write_text(
+            json.dumps(summary.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         os.replace(tmp, path)
         write_status(
             session_dir,
@@ -103,7 +105,9 @@ def update_summary_from_away_summary(
     path = session_dir / "summary.json"
     tmp = path.with_suffix(".json.tmp")
     try:
-        tmp.write_text(json.dumps(summary.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.write_text(
+            json.dumps(summary.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         os.replace(tmp, path)
         write_status(
             session_dir,

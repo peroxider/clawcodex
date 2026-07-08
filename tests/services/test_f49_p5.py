@@ -346,21 +346,22 @@ class TestSessionSaveAndLoad:
         second_msgs = list(second.conversation.messages)
         second_uuids = [m.uuid for m in second_msgs]
         assert first_uuids == second_uuids, (
-            f"uuids changed across save→load→save→load: "
-            f"first={first_uuids}, second={second_uuids}"
+            f"uuids changed across save→load→save→load: first={first_uuids}, second={second_uuids}"
         )
 
     def test_load_enhanced_transcript_first_line_session_init(self, tmp_path: Path) -> None:
         """P5-B: ``_load_from_enhanced_transcript`` reads session_init as line 1."""
         transcript_path = tmp_path / "transcript.jsonl"
         lines = [
-            json.dumps({
-                "type": "session_init",
-                "session_id": "abc",
-                "provider": "openai",
-                "model": "gpt-4o",
-                "created_at": "2026-06-19T09:00:00",
-            }),
+            json.dumps(
+                {
+                    "type": "session_init",
+                    "session_id": "abc",
+                    "provider": "openai",
+                    "model": "gpt-4o",
+                    "created_at": "2026-06-19T09:00:00",
+                }
+            ),
             json.dumps(message_to_dict(UserMessage(content=[TextBlock(text="hi")]))),
             json.dumps(message_to_dict(AssistantMessage(content=[TextBlock(text="hello")]))),
             json.dumps({"type": "session_snapshot", "cost": {}}),
@@ -373,9 +374,7 @@ class TestSessionSaveAndLoad:
         assert loaded.model == "gpt-4o"
         assert len(loaded.conversation.messages) == 2
 
-    def test_load_enhanced_transcript_returns_none_for_legacy(
-        self, tmp_path: Path
-    ) -> None:
+    def test_load_enhanced_transcript_returns_none_for_legacy(self, tmp_path: Path) -> None:
         """P5-B: transcript without session_init marker → return None
         so caller falls back to session.json."""
         transcript_path = tmp_path / "transcript.jsonl"
@@ -386,9 +385,7 @@ class TestSessionSaveAndLoad:
         loaded = _load_from_enhanced_transcript("legacy", transcript_path)
         assert loaded is None
 
-    def test_load_enhanced_transcript_returns_none_for_empty_file(
-        self, tmp_path: Path
-    ) -> None:
+    def test_load_enhanced_transcript_returns_none_for_empty_file(self, tmp_path: Path) -> None:
         """Regression: an EMPTY transcript.jsonl must also return None.
 
         Pre-fix, an empty file produced a Session with empty
@@ -418,17 +415,23 @@ class TestSessionSaveAndLoad:
         session_dir.mkdir(parents=True, exist_ok=True)
         # Empty transcript alongside a fully-populated session.json.
         (session_dir / "transcript.jsonl").write_text("")
-        (session_dir / "session.json").write_text(json.dumps({
-            "session_id": session_id,
-            "provider": "anthropic",
-            "model": "claude-opus-4",
-            "conversation": {"messages": [
-                message_to_dict(UserMessage(content=[TextBlock(text="recovered")])),
-            ]},
-            "created_at": "2026-06-19",
-            "updated_at": "2026-06-19",
-            "cost": {"total_cost_usd": 0.0, "model_usage": {}},
-        }))
+        (session_dir / "session.json").write_text(
+            json.dumps(
+                {
+                    "session_id": session_id,
+                    "provider": "anthropic",
+                    "model": "claude-opus-4",
+                    "conversation": {
+                        "messages": [
+                            message_to_dict(UserMessage(content=[TextBlock(text="recovered")])),
+                        ]
+                    },
+                    "created_at": "2026-06-19",
+                    "updated_at": "2026-06-19",
+                    "cost": {"total_cost_usd": 0.0, "model_usage": {}},
+                }
+            )
+        )
 
         loaded = Session.load(session_id)
         assert loaded is not None
@@ -441,9 +444,7 @@ class TestSessionLoadLegacyFallback:
     """P5-B: Session.load() falls back to session.json when transcript
     lacks session_init marker (pre-Phase-5 saves)."""
 
-    def test_load_falls_back_to_session_json(
-        self, fake_home: Path, sessions_dir: Path
-    ) -> None:
+    def test_load_falls_back_to_session_json(self, fake_home: Path, sessions_dir: Path) -> None:
         session_id = f"legacy-{uuid4().hex[:12]}"
         _write_legacy_session(sessions_dir, session_id, num_turns=2)
 
@@ -461,14 +462,18 @@ class TestSessionLoadLegacyFallback:
         session_id = f"orch-{uuid4().hex[:12]}"
         session_dir = sessions_dir / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
-        (session_dir / "metadata.json").write_text(json.dumps({
-            "session_id": session_id,
-            "model": "claude-sonnet-4-20250514",
-            "start_time": time.time(),
-            "last_updated": time.time(),
-            "message_count": 2,
-            "tags": ["orchestrator"],
-        }))
+        (session_dir / "metadata.json").write_text(
+            json.dumps(
+                {
+                    "session_id": session_id,
+                    "model": "claude-sonnet-4-20250514",
+                    "start_time": time.time(),
+                    "last_updated": time.time(),
+                    "message_count": 2,
+                    "tags": ["orchestrator"],
+                }
+            )
+        )
         msg1 = message_to_dict(UserMessage(content=[TextBlock(text="Q")]))
         msg2 = message_to_dict(AssistantMessage(content=[TextBlock(text="A")]))
         (session_dir / "transcript.jsonl").write_text(
@@ -489,9 +494,7 @@ class TestSessionLoadLegacyFallback:
 class TestCostRestoreFromTranscriptTail:
     """P5-C: cost_restore prefers the transcript's session_snapshot line."""
 
-    def test_restores_from_session_snapshot_line(
-        self, fake_home: Path, sessions_dir: Path
-    ) -> None:
+    def test_restores_from_session_snapshot_line(self, fake_home: Path, sessions_dir: Path) -> None:
         session_id = f"p5c-{uuid4().hex[:12]}"
         session_dir = sessions_dir / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
@@ -515,16 +518,23 @@ class TestCostRestoreFromTranscriptTail:
             },
         }
         # transcript with session_init + messages + session_snapshot
-        transcript = "\n".join([
-            json.dumps({
-                "type": "session_init",
-                "session_id": session_id,
-                "provider": "anthropic",
-                "model": "claude-sonnet-4-20250514",
-            }),
-            json.dumps(message_to_dict(UserMessage(content=[TextBlock(text="Q")]))),
-            json.dumps({"type": "session_snapshot", "cost": cost_block}),
-        ]) + "\n"
+        transcript = (
+            "\n".join(
+                [
+                    json.dumps(
+                        {
+                            "type": "session_init",
+                            "session_id": session_id,
+                            "provider": "anthropic",
+                            "model": "claude-sonnet-4-20250514",
+                        }
+                    ),
+                    json.dumps(message_to_dict(UserMessage(content=[TextBlock(text="Q")]))),
+                    json.dumps({"type": "session_snapshot", "cost": cost_block}),
+                ]
+            )
+            + "\n"
+        )
         (session_dir / "transcript.jsonl").write_text(transcript)
 
         ok = restore_cost_state_for_session(session_id)
@@ -548,10 +558,15 @@ class TestCostRestoreFromTranscriptTail:
             "last_duration": 1.0,
             "model_usage": {},
         }
-        transcript = "\n".join([
-            json.dumps(message_to_dict(UserMessage(content=[TextBlock(text="Q")]))),
-            json.dumps({"type": "cost_block", "cost": cost_block}),
-        ]) + "\n"
+        transcript = (
+            "\n".join(
+                [
+                    json.dumps(message_to_dict(UserMessage(content=[TextBlock(text="Q")]))),
+                    json.dumps({"type": "cost_block", "cost": cost_block}),
+                ]
+            )
+            + "\n"
+        )
         (session_dir / "transcript.jsonl").write_text(transcript)
 
         ok = restore_cost_state_for_session(session_id)
@@ -565,15 +580,19 @@ class TestCostRestoreFromTranscriptTail:
         session_dir = sessions_dir / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
         cost_block = {"total_cost_usd": 0.5, "model_usage": {}}
-        (session_dir / "session.json").write_text(json.dumps({
-            "session_id": session_id,
-            "provider": "anthropic",
-            "model": "claude-opus-4",
-            "conversation": {"messages": []},
-            "created_at": "2026-06-19",
-            "updated_at": "2026-06-19",
-            "cost": cost_block,
-        }))
+        (session_dir / "session.json").write_text(
+            json.dumps(
+                {
+                    "session_id": session_id,
+                    "provider": "anthropic",
+                    "model": "claude-opus-4",
+                    "conversation": {"messages": []},
+                    "created_at": "2026-06-19",
+                    "updated_at": "2026-06-19",
+                    "cost": cost_block,
+                }
+            )
+        )
 
         ok = restore_cost_state_for_session(session_id)
         assert ok is True
@@ -690,9 +709,7 @@ class TestSessionMigration:
         assert second.migrated is False
         assert "session_init marker" in second.skipped_reason
 
-    def test_migrate_session_then_load_works(
-        self, fake_home: Path, sessions_dir: Path
-    ) -> None:
+    def test_migrate_session_then_load_works(self, fake_home: Path, sessions_dir: Path) -> None:
         """Acceptance scenario: after migration Session.load() reads the new format."""
         session_id = f"mig-load-{uuid4().hex[:12]}"
         _write_legacy_session(sessions_dir, session_id, num_turns=2, with_cost=True)
@@ -712,15 +729,19 @@ class TestSessionMigration:
         session_id = f"mig-nojson-{uuid4().hex[:12]}"
         session_dir = sessions_dir / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
-        (session_dir / "metadata.json").write_text(json.dumps({
-            "session_id": session_id,
-            "start_time": time.time(),
-            "model": "claude-opus-4",
-            "title": "nojson",
-            "last_updated": time.time(),
-            "message_count": 2,
-            "tags": [],
-        }))
+        (session_dir / "metadata.json").write_text(
+            json.dumps(
+                {
+                    "session_id": session_id,
+                    "start_time": time.time(),
+                    "model": "claude-opus-4",
+                    "title": "nojson",
+                    "last_updated": time.time(),
+                    "message_count": 2,
+                    "tags": [],
+                }
+            )
+        )
         msg1 = message_to_dict(UserMessage(content=[TextBlock(text="Q")]))
         msg2 = message_to_dict(AssistantMessage(content=[TextBlock(text="A")]))
         (session_dir / "transcript.jsonl").write_text(
@@ -734,16 +755,12 @@ class TestSessionMigration:
         first_line = (session_dir / "transcript.jsonl").read_text().splitlines()[0]
         assert json.loads(first_line).get("type") == "session_init"
 
-    def test_migrate_missing_session_directory(
-        self, fake_home: Path, sessions_dir: Path
-    ) -> None:
+    def test_migrate_missing_session_directory(self, fake_home: Path, sessions_dir: Path) -> None:
         result = migrate_session("does-not-exist", sessions_dir=sessions_dir)
         assert result.migrated is False
         assert result.error
 
-    def test_migrate_all_walks_directory(
-        self, fake_home: Path, sessions_dir: Path
-    ) -> None:
+    def test_migrate_all_walks_directory(self, fake_home: Path, sessions_dir: Path) -> None:
         for i in range(3):
             _write_legacy_session(
                 sessions_dir,
@@ -784,9 +801,7 @@ class TestSessionMigrateCLI:
     def test_session_migrate_all_runs(self, fake_home: Path, sessions_dir: Path, capsys) -> None:
         from clawcodex_ext.cli.session_migrate_cmd import run_session_command
 
-        _write_legacy_session(
-            sessions_dir, f"cli-{uuid4().hex[:8]}", num_turns=1, with_cost=True
-        )
+        _write_legacy_session(sessions_dir, f"cli-{uuid4().hex[:8]}", num_turns=1, with_cost=True)
         rc = run_session_command(["migrate", "--from-3-file", "--all"])
         captured = capsys.readouterr()
         assert rc == 0

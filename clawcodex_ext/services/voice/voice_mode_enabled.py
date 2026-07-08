@@ -28,6 +28,7 @@ The settings reads go through ``get_settings()`` (cached) and are
 invalidated by ``set_voice_provider`` / ``set_voice_enabled`` so the gate
 reflects mid-session changes immediately.
 """
+
 from __future__ import annotations
 
 import os

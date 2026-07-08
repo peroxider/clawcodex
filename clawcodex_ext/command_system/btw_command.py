@@ -56,6 +56,7 @@ def _should_render_scrollable(message: str) -> bool:
 # Command implementation
 # ---------------------------------------------------------------------------
 
+
 async def btw_command_run(args: str, context: CommandContext) -> InteractiveOutcome:
     """Handle /btw command.
 
@@ -118,6 +119,7 @@ async def btw_command_run(args: str, context: CommandContext) -> InteractiveOutc
 # CacheSafeParams builder
 # ---------------------------------------------------------------------------
 
+
 async def _build_cache_safe_params(
     context: CommandContext,
 ) -> CacheSafeParams | None:
@@ -176,8 +178,7 @@ async def _build_cache_safe_params(
                 logger.exception("btw: failed to set _active_provider on tool_context")
         else:
             logger.warning(
-                "btw: no provider available on context or tool_context — "
-                "forked agent may fail"
+                "btw: no provider available on context or tool_context — forked agent may fail"
             )
 
     # Fork context messages: use conversation messages if available
@@ -198,6 +199,7 @@ async def _build_cache_safe_params(
 # ---------------------------------------------------------------------------
 # Command definitions
 # ---------------------------------------------------------------------------
+
 
 class BtwCommand(InteractiveCommand):
     """/btw — side question without polluting the main conversation."""

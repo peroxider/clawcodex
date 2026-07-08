@@ -28,9 +28,7 @@ def test_cli_accept_saved_result(monkeypatch, tmp_path, capsys) -> None:
     save_forecast_result(
         ForecastResult(
             generated=True,
-            suggestions=[
-                ForecastSuggestion(id="s1", title="A", prompt="do saved", confidence=0.8)
-            ],
+            suggestions=[ForecastSuggestion(id="s1", title="A", prompt="do saved", confidence=0.8)],
         ),
         trigger="cli",
         cwd=tmp_path,

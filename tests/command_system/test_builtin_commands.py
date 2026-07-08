@@ -26,6 +26,7 @@ from src.command_system.registry import CommandRegistry
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def registry() -> CommandRegistry:
     """Fresh private registry with built-in commands only (no runtime)."""
@@ -58,12 +59,15 @@ def _cmd_names(reg: CommandRegistry) -> set[str]:
 # Registration completeness
 # ---------------------------------------------------------------------------
 
+
 def test_all_builtins_are_registered(registry: CommandRegistry) -> None:
     """Every command returned by ``get_builtin_commands`` must be in the registry."""
     builtins = get_builtin_commands()
     names = {c.name.lower() for c in builtins}
     # Use include_hidden=True because some commands (e.g. output-style) are hidden
-    registered = {c.name.lower() for c in registry.list_commands(include_disabled=True, include_hidden=True)}
+    registered = {
+        c.name.lower() for c in registry.list_commands(include_disabled=True, include_hidden=True)
+    }
     missing = names - registered
     assert not missing, f"Commands not in registry: {missing}"
 
@@ -158,6 +162,7 @@ def test_builtin_command_sync_execution(
 # Specific command behavior tests
 # ---------------------------------------------------------------------------
 
+
 def test_help_command_lists_all_commands(
     monkeypatch: pytest.MonkeyPatch,
     registry: CommandRegistry,
@@ -173,9 +178,7 @@ def test_help_command_lists_all_commands(
     assert success, f"/help failed: {error}"
     assert text is not None
     for cmd in registry.list_commands():
-        assert cmd.name in text, (
-            f"/help output missing command {cmd.name}"
-        )
+        assert cmd.name in text, f"/help output missing command {cmd.name}"
 
 
 @pytest.mark.parametrize("alias", ["reset", "new"])
@@ -248,17 +251,18 @@ def test_unknown_command_returns_false(
 # Permission command (REPL-native handler, not in command registry)
 # ---------------------------------------------------------------------------
 
+
 def test_permission_not_in_command_registry(registry: CommandRegistry) -> None:
     """``/permission`` is a REPL-native command, NOT in the command registry."""
     assert registry.get("permission") is None, (
-        "/permission should not be in the command registry "
-        "(it is handled directly by the REPL)"
+        "/permission should not be in the command registry (it is handled directly by the REPL)"
     )
 
 
 # ---------------------------------------------------------------------------
 # Resume command - session id validation
 # ---------------------------------------------------------------------------
+
 
 def test_resume_with_valid_session_id(
     monkeypatch: pytest.MonkeyPatch,
@@ -286,6 +290,7 @@ def test_resume_with_valid_session_id(
     finally:
         # Cleanup
         import shutil
+
         shutil.rmtree(fake_dir, ignore_errors=True)
 
 

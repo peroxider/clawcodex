@@ -30,9 +30,7 @@ from typing import IO, Optional
 __all__ = ["print_resume_hint", "reset_resume_hint_for_test_only"]
 
 
-_RESUME_HINT_TEMPLATE = (
-    "\nResume this session with: clawcodex --resume {session_id}\n"
-)
+_RESUME_HINT_TEMPLATE = "\nResume this session with: clawcodex --resume {session_id}\n"
 
 # Process-wide latch: once a hint is emitted, subsequent calls are no-ops.
 # Tests should call :func:`reset_resume_hint_for_test_only` in setup so the

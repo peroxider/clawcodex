@@ -166,10 +166,16 @@ async def collect_git_context(
         # status probe — a concurrent `git` in the user's other terminal
         # must never block on ours (TS context.ts:63-72; the flag rides
         # only status + log there — TS-exact, ch03 round-3 G2).
-        None, _git_cmd, ["--no-optional-locks", "status", "--short"], target,
+        None,
+        _git_cmd,
+        ["--no-optional-locks", "status", "--short"],
+        target,
     )
     commits_fut = loop.run_in_executor(
-        None, _git_cmd, ["--no-optional-locks", "log", "--oneline", "-n", "5"], target,
+        None,
+        _git_cmd,
+        ["--no-optional-locks", "log", "--oneline", "-n", "5"],
+        target,
     )
     user_fut = loop.run_in_executor(
         None,

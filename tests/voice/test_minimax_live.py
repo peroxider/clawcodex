@@ -20,6 +20,7 @@
    python3 tests/voice/test_minimax_live.py --stt      # 只测 STT（需要 websockets）
    python3 tests/voice/test_minimax_live.py --list     # 列出可用音色
 """
+
 from __future__ import annotations
 
 import argparse
@@ -79,10 +80,10 @@ AVAILABLE_VOICES = {
 }
 
 AVAILABLE_MODELS = [
-    "speech-2.8-hd",      # 最新旗舰，含语气词标签
-    "speech-2.8-turbo",   # 最新高速度
-    "speech-2.6-hd",      # 超低延时
-    "speech-2.6-turbo",   # 极速版
+    "speech-2.8-hd",  # 最新旗舰，含语气词标签
+    "speech-2.8-turbo",  # 最新高速度
+    "speech-2.6-hd",  # 超低延时
+    "speech-2.6-turbo",  # 极速版
 ]
 
 TEST_TEXTS = {
@@ -112,25 +113,28 @@ def test_tts_synthesize():
     print("--- 1/3: 测试模型切换 ---")
     for model in ("speech-2.8-turbo", "speech-2.8-hd"):
         print(f"  模型: {model} ... ", end="", flush=True)
-        payload = json.dumps({
-            "model": model,
-            "text": "你好，这是一个测试。",
-            "stream": False,
-            "language_boost": "Chinese",
-            "voice_setting": {
-                "voice_id": "Chinese (Mandarin)_Warm_Girl",
-                "speed": 1.0,
-                "vol": 1.0,
-                "pitch": 0,
-            },
-            "audio_setting": {
-                "sample_rate": 24000,
-                "format": "pcm",
-                "channel": 1,
-            },
-        }).encode("utf-8")
+        payload = json.dumps(
+            {
+                "model": model,
+                "text": "你好，这是一个测试。",
+                "stream": False,
+                "language_boost": "Chinese",
+                "voice_setting": {
+                    "voice_id": "Chinese (Mandarin)_Warm_Girl",
+                    "speed": 1.0,
+                    "vol": 1.0,
+                    "pitch": 0,
+                },
+                "audio_setting": {
+                    "sample_rate": 24000,
+                    "format": "pcm",
+                    "channel": 1,
+                },
+            }
+        ).encode("utf-8")
 
         import urllib.request
+
         req = urllib.request.Request(
             endpoint,
             data=payload,
@@ -148,7 +152,7 @@ def test_tts_synthesize():
                 audio_hex = resp_data.get("data", {}).get("audio", "")
                 pcm_len = len(bytes.fromhex(audio_hex)) if audio_hex else 0
                 extra = resp_data.get("extra_info", {})
-                print(f"✅ {pcm_len/1000:.0f}KB PCM, {extra.get('word_count', '?')}字符")
+                print(f"✅ {pcm_len / 1000:.0f}KB PCM, {extra.get('word_count', '?')}字符")
             else:
                 print(f"❌ {base.get('status_msg')}")
         except Exception as e:
@@ -158,23 +162,25 @@ def test_tts_synthesize():
     print("\n--- 2/3: 测试音色切换 ---")
     for name, voice_id in list(AVAILABLE_VOICES.items())[:6]:
         print(f"  音色 [{name}] ({voice_id[:30]}...) ... ", end="", flush=True)
-        payload = json.dumps({
-            "model": "speech-2.8-turbo",
-            "text": "今天天气真不错，阳光明媚，微风拂面。",
-            "stream": False,
-            "language_boost": "Chinese",
-            "voice_setting": {
-                "voice_id": voice_id,
-                "speed": 1.0,
-                "vol": 1.0,
-                "pitch": 0,
-            },
-            "audio_setting": {
-                "sample_rate": 24000,
-                "format": "pcm",
-                "channel": 1,
-            },
-        }).encode("utf-8")
+        payload = json.dumps(
+            {
+                "model": "speech-2.8-turbo",
+                "text": "今天天气真不错，阳光明媚，微风拂面。",
+                "stream": False,
+                "language_boost": "Chinese",
+                "voice_setting": {
+                    "voice_id": voice_id,
+                    "speed": 1.0,
+                    "vol": 1.0,
+                    "pitch": 0,
+                },
+                "audio_setting": {
+                    "sample_rate": 24000,
+                    "format": "pcm",
+                    "channel": 1,
+                },
+            }
+        ).encode("utf-8")
         req = urllib.request.Request(
             endpoint,
             data=payload,
@@ -191,7 +197,7 @@ def test_tts_synthesize():
             if base.get("status_code") == 0:
                 audio_hex = resp_data.get("data", {}).get("audio", "")
                 pcm_len = len(bytes.fromhex(audio_hex)) if audio_hex else 0
-                print(f"✅ {pcm_len/1000:.0f}KB")
+                print(f"✅ {pcm_len / 1000:.0f}KB")
             else:
                 print(f"❌ {base.get('status_msg')}")
         except Exception as e:
@@ -199,29 +205,33 @@ def test_tts_synthesize():
 
     # 3. 测试多语言
     print("\n--- 3/3: 测试多语言 ---")
-    texts_to_test = [("中文", "Chinese", "Chinese (Mandarin)_Warm_Girl"),
-                     ("英文", "English", "English_expressive_narrator"),
-                     ("中英混合", "auto", "Chinese (Mandarin)_Warm_Girl")]
+    texts_to_test = [
+        ("中文", "Chinese", "Chinese (Mandarin)_Warm_Girl"),
+        ("英文", "English", "English_expressive_narrator"),
+        ("中英混合", "auto", "Chinese (Mandarin)_Warm_Girl"),
+    ]
     for lang_name, lang_boost, voice_id in texts_to_test:
         text = TEST_TEXTS.get(lang_name, "你好。")
         print(f"  语言 [{lang_name}] language_boost={lang_boost} ... ", end="", flush=True)
-        payload = json.dumps({
-            "model": "speech-2.8-turbo",
-            "text": text,
-            "stream": False,
-            "language_boost": lang_boost,
-            "voice_setting": {
-                "voice_id": voice_id,
-                "speed": 1.0,
-                "vol": 1.0,
-                "pitch": 0,
-            },
-            "audio_setting": {
-                "sample_rate": 24000,
-                "format": "pcm",
-                "channel": 1,
-            },
-        }).encode("utf-8")
+        payload = json.dumps(
+            {
+                "model": "speech-2.8-turbo",
+                "text": text,
+                "stream": False,
+                "language_boost": lang_boost,
+                "voice_setting": {
+                    "voice_id": voice_id,
+                    "speed": 1.0,
+                    "vol": 1.0,
+                    "pitch": 0,
+                },
+                "audio_setting": {
+                    "sample_rate": 24000,
+                    "format": "pcm",
+                    "channel": 1,
+                },
+            }
+        ).encode("utf-8")
         req = urllib.request.Request(
             endpoint,
             data=payload,
@@ -239,7 +249,7 @@ def test_tts_synthesize():
                 audio_hex = resp_data.get("data", {}).get("audio", "")
                 pcm_len = len(bytes.fromhex(audio_hex)) if audio_hex else 0
                 extra = resp_data.get("extra_info", {})
-                print(f"✅ {pcm_len/1000:.0f}KB, {extra.get('word_count', '?')}字符")
+                print(f"✅ {pcm_len / 1000:.0f}KB, {extra.get('word_count', '?')}字符")
             else:
                 print(f"❌ {base.get('status_msg')}")
         except Exception as e:
@@ -262,25 +272,28 @@ def test_tts_streaming():
     print()
 
     import urllib.request
+
     text = "大家好(sighs)，欢迎使用 MiniMax 语音合成技术。今天我们为大家带来一段流式输出的测试。(laughs)希望效果令人满意。"
 
-    payload = json.dumps({
-        "model": "speech-2.8-hd",  # HD 支持语气词标签
-        "text": text,
-        "stream": True,
-        "language_boost": "Chinese",
-        "voice_setting": {
-            "voice_id": "Chinese (Mandarin)_Warm_Girl",
-            "speed": 1.0,
-            "vol": 1.0,
-            "pitch": 0,
-        },
-        "audio_setting": {
-            "sample_rate": 24000,
-            "format": "pcm",
-            "channel": 1,
-        },
-    }).encode("utf-8")
+    payload = json.dumps(
+        {
+            "model": "speech-2.8-hd",  # HD 支持语气词标签
+            "text": text,
+            "stream": True,
+            "language_boost": "Chinese",
+            "voice_setting": {
+                "voice_id": "Chinese (Mandarin)_Warm_Girl",
+                "speed": 1.0,
+                "vol": 1.0,
+                "pitch": 0,
+            },
+            "audio_setting": {
+                "sample_rate": 24000,
+                "format": "pcm",
+                "channel": 1,
+            },
+        }
+    ).encode("utf-8")
 
     url = endpoint
     if group_id:
@@ -323,8 +336,12 @@ def test_tts_streaming():
                         print(f"  chunk#{chunk_count}: ⚠️ non-hex frame")
                 if obj.get("is_final"):
                     extra = obj.get("extra_info", {})
-                    print(f"  ✅ 流式完成: {chunk_count} chunks, {len(total_pcm)/1000:.0f}KB 总PCM")
-                    print(f"     字符数: {extra.get('word_count', '?')}, 音频时长: {extra.get('audio_length', '?')}ms")
+                    print(
+                        f"  ✅ 流式完成: {chunk_count} chunks, {len(total_pcm) / 1000:.0f}KB 总PCM"
+                    )
+                    print(
+                        f"     字符数: {extra.get('word_count', '?')}, 音频时长: {extra.get('audio_length', '?')}ms"
+                    )
     except Exception as e:
         print(f"❌ 流式请求失败: {e}")
 
@@ -395,7 +412,7 @@ def test_stt_realtime():
                 raw = await asyncio.wait_for(ws.recv(), timeout=5)
                 payload = json.loads(raw) if isinstance(raw, (str, bytes)) else {}
                 msg_type = payload.get("type") or payload.get("event", "?")
-                print(f"  收到事件 [{i+1}]: {msg_type}")
+                print(f"  收到事件 [{i + 1}]: {msg_type}")
                 if msg_type == "session.created" or "ready" in str(msg_type).lower():
                     break
         except asyncio.TimeoutError:
@@ -405,18 +422,27 @@ def test_stt_realtime():
         print("\n--- 4/4: 模拟音频输入 (合成静音帧) ---")
         # 生成 0.5s 的静音 PCM16 帧
         import struct
+
         silent_frame = struct.pack(f"<{8000}h", *([0] * 8000))
         encoded = base64.b64encode(silent_frame).decode("ascii")
 
-        await ws.send(json.dumps({
-            "type": "input_audio_buffer.append",
-            "audio": encoded,
-        }))
+        await ws.send(
+            json.dumps(
+                {
+                    "type": "input_audio_buffer.append",
+                    "audio": encoded,
+                }
+            )
+        )
         print("  ✅ 发送 input_audio_buffer.append (0.5s 静音帧)")
 
-        await ws.send(json.dumps({
-            "type": "input_audio_buffer.commit",
-        }))
+        await ws.send(
+            json.dumps(
+                {
+                    "type": "input_audio_buffer.commit",
+                }
+            )
+        )
         print("  ✅ 发送 input_audio_buffer.commit")
 
         # 等待响应
@@ -444,13 +470,20 @@ def list_voices():
     print()
     print("中文 (普通话):")
     for v in [
-        "Chinese (Mandarin)_Warm_Girl", "Chinese (Mandarin)_Gentleman",
-        "Chinese (Mandarin)_News_Anchor", "Chinese (Mandarin)_Mature_Woman",
-        "Chinese (Mandarin)_Sweet_Lady", "Chinese (Mandarin)_Crisp_Girl",
-        "Chinese (Mandarin)_Reliable_Executive", "Chinese (Mandarin)_Male_Announcer",
-        "Chinese (Mandarin)_Cute_Spirit", "Chinese (Mandarin)_Soft_Girl",
-        "Chinese (Mandarin)_Warm_Bestie", "Chinese (Mandarin)_Lyrical_Voice",
-        "Chinese (Mandarin)_Gentle_Youth", "Chinese (Mandarin)_Kind-hearted_Elder",
+        "Chinese (Mandarin)_Warm_Girl",
+        "Chinese (Mandarin)_Gentleman",
+        "Chinese (Mandarin)_News_Anchor",
+        "Chinese (Mandarin)_Mature_Woman",
+        "Chinese (Mandarin)_Sweet_Lady",
+        "Chinese (Mandarin)_Crisp_Girl",
+        "Chinese (Mandarin)_Reliable_Executive",
+        "Chinese (Mandarin)_Male_Announcer",
+        "Chinese (Mandarin)_Cute_Spirit",
+        "Chinese (Mandarin)_Soft_Girl",
+        "Chinese (Mandarin)_Warm_Bestie",
+        "Chinese (Mandarin)_Lyrical_Voice",
+        "Chinese (Mandarin)_Gentle_Youth",
+        "Chinese (Mandarin)_Kind-hearted_Elder",
         "Chinese (Mandarin)_HK_Flight_Attendant",
     ]:
         print(f"  ✅ {v}")
@@ -458,24 +491,37 @@ def list_voices():
     print()
     print("英文 (English):")
     for v in [
-        "English_expressive_narrator", "English_radiant_girl",
-        "English_magnetic_voiced_man", "English_captivating_female1",
-        "English_Graceful_Lady", "English_Persuasive_Man",
-        "English_CalmWoman", "English_FriendlyPerson",
-        "English_Diligent_Man", "English_ManWithDeepVoice",
+        "English_expressive_narrator",
+        "English_radiant_girl",
+        "English_magnetic_voiced_man",
+        "English_captivating_female1",
+        "English_Graceful_Lady",
+        "English_Persuasive_Man",
+        "English_CalmWoman",
+        "English_FriendlyPerson",
+        "English_Diligent_Man",
+        "English_ManWithDeepVoice",
     ]:
         print(f"  ✅ {v}")
 
     print()
     print("日文 (Japanese):")
-    for v in ["Japanese_IntellectualSenior", "Japanese_GentleButler",
-               "Japanese_KindLady", "Japanese_CalmLady"]:
+    for v in [
+        "Japanese_IntellectualSenior",
+        "Japanese_GentleButler",
+        "Japanese_KindLady",
+        "Japanese_CalmLady",
+    ]:
         print(f"  ✅ {v}")
 
     print()
     print("粤语 (Cantonese):")
-    for v in ["Cantonese_GentleLady", "Cantonese_ProfessionalHost (F)",
-               "Cantonese_ProfessionalHost (M)", "Cantonese_CuteGirl"]:
+    for v in [
+        "Cantonese_GentleLady",
+        "Cantonese_ProfessionalHost (F)",
+        "Cantonese_ProfessionalHost (M)",
+        "Cantonese_CuteGirl",
+    ]:
         print(f"  ✅ {v}")
 
     print()
@@ -531,7 +577,7 @@ def test_clawcodex_tts():
         try:
             pcm = await provider.synthesize("你好，这是一个测试。今天天气真不错！", cfg)
             if pcm and len(pcm) > 0:
-                print(f"  ✅ 合成成功: {len(pcm)/1000:.0f}KB PCM ({len(pcm)} bytes)")
+                print(f"  ✅ 合成成功: {len(pcm) / 1000:.0f}KB PCM ({len(pcm)} bytes)")
             else:
                 print("  ❌ 合成返回空数据")
         except Exception as e:
@@ -567,10 +613,11 @@ def test_clawcodex_tts():
         await syn.feed_text("大家好(sighs)，欢迎使用 MiniMax 语音合成技术。")
         # 等待后台任务完成
         import asyncio
+
         await asyncio.sleep(2)
         if done:
             total = sum(len(c[0]) for c in audios)
-            print(f"  ✅ 流式完成: {len(audios)} frames, {total/1000:.0f}KB")
+            print(f"  ✅ 流式完成: {len(audios)} frames, {total / 1000:.0f}KB")
         elif errors:
             print(f"  ❌ 流式错误: {errors[0]}")
         else:
@@ -581,6 +628,7 @@ def test_clawcodex_tts():
     # 4. 测试音色列表
     print("\n--- 4/4: 内置音色索引 ---")
     from clawcodex_ext.services.voice.minimax_tts import MINIMAX_SYSTEM_VOICES
+
     for lang, voices in MINIMAX_SYSTEM_VOICES.items():
         print(f"  {lang}: {len(voices)} 个音色")
     print("  ✅ 音色索引就绪")
@@ -608,62 +656,118 @@ def test_with_real_api():
     import urllib.request
 
     test_cases = [
-        ("中文 Warm_Girl", {
-            "model": "speech-2.8-turbo",
-            "text": "你好，很高兴认识你。今天是个好天气。",
-            "stream": False,
-            "language_boost": "Chinese",
-            "voice_setting": {"voice_id": "Chinese (Mandarin)_Warm_Girl", "speed": 1.0, "vol": 1.0, "pitch": 0},
-            "audio_setting": {"sample_rate": 24000, "format": "pcm", "channel": 1},
-        }),
-        ("中文 Gentleman", {
-            "model": "speech-2.8-hd",
-            "text": "各位好(sighs)，欢迎参加今天的会议。让我们开始吧。",
-            "stream": False,
-            "language_boost": "Chinese",
-            "voice_setting": {"voice_id": "Chinese (Mandarin)_Gentleman", "speed": 1.0, "vol": 1.0, "pitch": 0},
-            "audio_setting": {"sample_rate": 24000, "format": "pcm", "channel": 1},
-        }),
-        ("英文 expressive_narrator", {
-            "model": "speech-2.8-turbo",
-            "text": "Hello(breath), welcome to the MiniMax TTS API. This is a quick test of the system voices.",
-            "stream": False,
-            "language_boost": "English",
-            "voice_setting": {"voice_id": "English_expressive_narrator", "speed": 1.0, "vol": 1.0, "pitch": 0},
-            "audio_setting": {"sample_rate": 24000, "format": "pcm", "channel": 1},
-        }),
-        ("日文 IntellectualSenior", {
-            "model": "speech-2.8-turbo",
-            "text": "こんにちは、今日はいい天気ですね。",
-            "stream": False,
-            "language_boost": "Japanese",
-            "voice_setting": {"voice_id": "Japanese_IntellectualSenior", "speed": 1.0, "vol": 1.0, "pitch": 0},
-            "audio_setting": {"sample_rate": 24000, "format": "pcm", "channel": 1},
-        }),
-        ("粤语 GentleLady", {
-            "model": "speech-2.8-hd",
-            "text": "早晨(sighs)，今日天氣幾好，我哋一齊去食早餐啦！",
-            "stream": False,
-            "language_boost": "Chinese,Yue",
-            "voice_setting": {"voice_id": "Cantonese_GentleLady", "speed": 1.0, "vol": 1.0, "pitch": 0},
-            "audio_setting": {"sample_rate": 24000, "format": "pcm", "channel": 1},
-        }),
-        ("语气词表情测试 HD", {
-            "model": "speech-2.8-hd",
-            "text": "哇(laughs)，这个真的太厉害了！(sighs) 不过我们还是小心一点比较好。",
-            "stream": False,
-            "language_boost": "Chinese",
-            "voice_setting": {"voice_id": "Chinese (Mandarin)_Warm_Girl", "speed": 1.0, "vol": 1.0, "pitch": 0},
-            "audio_setting": {"sample_rate": 24000, "format": "pcm", "channel": 1},
-        }),
-        ("高速模型 2.6-turbo", {
-            "model": "speech-2.6-turbo",
-            "text": "你好，这是一个快速测试。",
-            "stream": False,
-            "language_boost": "Chinese",
-            "voice_setting": {"voice_id": "Chinese (Mandarin)_Crisp_Girl", "speed": 1.0, "vol": 1.0, "pitch": 0},
-            "audio_setting": {"sample_rate": 24000, "format": "pcm", "channel": 1},
-        }),
+        (
+            "中文 Warm_Girl",
+            {
+                "model": "speech-2.8-turbo",
+                "text": "你好，很高兴认识你。今天是个好天气。",
+                "stream": False,
+                "language_boost": "Chinese",
+                "voice_setting": {
+                    "voice_id": "Chinese (Mandarin)_Warm_Girl",
+                    "speed": 1.0,
+                    "vol": 1.0,
+                    "pitch": 0,
+                },
+                "audio_setting": {"sample_rate": 24000, "format": "pcm", "channel": 1},
+            },
+        ),
+        (
+            "中文 Gentleman",
+            {
+                "model": "speech-2.8-hd",
+                "text": "各位好(sighs)，欢迎参加今天的会议。让我们开始吧。",
+                "stream": False,
+                "language_boost": "Chinese",
+                "voice_setting": {
+                    "voice_id": "Chinese (Mandarin)_Gentleman",
+                    "speed": 1.0,
+                    "vol": 1.0,
+                    "pitch": 0,
+                },
+                "audio_setting": {"sample_rate": 24000, "format": "pcm", "channel": 1},
+            },
+        ),
+        (
+            "英文 expressive_narrator",
+            {
+                "model": "speech-2.8-turbo",
+                "text": "Hello(breath), welcome to the MiniMax TTS API. This is a quick test of the system voices.",
+                "stream": False,
+                "language_boost": "English",
+                "voice_setting": {
+                    "voice_id": "English_expressive_narrator",
+                    "speed": 1.0,
+                    "vol": 1.0,
+                    "pitch": 0,
+                },
+                "audio_setting": {"sample_rate": 24000, "format": "pcm", "channel": 1},
+            },
+        ),
+        (
+            "日文 IntellectualSenior",
+            {
+                "model": "speech-2.8-turbo",
+                "text": "こんにちは、今日はいい天気ですね。",
+                "stream": False,
+                "language_boost": "Japanese",
+                "voice_setting": {
+                    "voice_id": "Japanese_IntellectualSenior",
+                    "speed": 1.0,
+                    "vol": 1.0,
+                    "pitch": 0,
+                },
+                "audio_setting": {"sample_rate": 24000, "format": "pcm", "channel": 1},
+            },
+        ),
+        (
+            "粤语 GentleLady",
+            {
+                "model": "speech-2.8-hd",
+                "text": "早晨(sighs)，今日天氣幾好，我哋一齊去食早餐啦！",
+                "stream": False,
+                "language_boost": "Chinese,Yue",
+                "voice_setting": {
+                    "voice_id": "Cantonese_GentleLady",
+                    "speed": 1.0,
+                    "vol": 1.0,
+                    "pitch": 0,
+                },
+                "audio_setting": {"sample_rate": 24000, "format": "pcm", "channel": 1},
+            },
+        ),
+        (
+            "语气词表情测试 HD",
+            {
+                "model": "speech-2.8-hd",
+                "text": "哇(laughs)，这个真的太厉害了！(sighs) 不过我们还是小心一点比较好。",
+                "stream": False,
+                "language_boost": "Chinese",
+                "voice_setting": {
+                    "voice_id": "Chinese (Mandarin)_Warm_Girl",
+                    "speed": 1.0,
+                    "vol": 1.0,
+                    "pitch": 0,
+                },
+                "audio_setting": {"sample_rate": 24000, "format": "pcm", "channel": 1},
+            },
+        ),
+        (
+            "高速模型 2.6-turbo",
+            {
+                "model": "speech-2.6-turbo",
+                "text": "你好，这是一个快速测试。",
+                "stream": False,
+                "language_boost": "Chinese",
+                "voice_setting": {
+                    "voice_id": "Chinese (Mandarin)_Crisp_Girl",
+                    "speed": 1.0,
+                    "vol": 1.0,
+                    "pitch": 0,
+                },
+                "audio_setting": {"sample_rate": 24000, "format": "pcm", "channel": 1},
+            },
+        ),
     ]
 
     passed = 0
@@ -689,7 +793,9 @@ def test_with_real_api():
                 pcm_len = len(bytes.fromhex(audio_hex)) if audio_hex else 0
                 elapsed = time.time() - t0
                 extra = resp_data.get("extra_info", {})
-                print(f"✅ {pcm_len/1000:.0f}KB PCM, {elapsed:.1f}s (chars={extra.get('word_count','?')})")
+                print(
+                    f"✅ {pcm_len / 1000:.0f}KB PCM, {elapsed:.1f}s (chars={extra.get('word_count', '?')})"
+                )
                 passed += 1
             else:
                 print(f"❌ {base.get('status_msg')}")

@@ -23,15 +23,15 @@ class RuntimeOptions:
     provider_name: str | None = None
     model: str | None = None
     prompt: str | None = None
-    output_format: str = 'text'
-    input_format: str = 'text'
+    output_format: str = "text"
+    input_format: str = "text"
     include_partial_messages: bool = False
     max_turns: int = 20
     allowed_tools: tuple[str, ...] = ()
     disallowed_tools: tuple[str, ...] = ()
     workspace_root: Path | None = None
     stream: bool = True
-    permission_mode: str = 'default'
+    permission_mode: str = "default"
     is_bypass_permissions_mode_available: bool = False
     skip_permissions: bool = False  # backward-compat alias for headless
     resume_session_id: str | None = None
@@ -39,7 +39,7 @@ class RuntimeOptions:
     fork_session_id: str | None = None
     resume_session_at: int | None = None  # S-R4-AT: message index to resume at
     verbose: bool = False
-    append_system_prompt: str = ''
+    append_system_prompt: str = ""
     agent_dir_override: Path | None = None
     gateway: bool = False
     gateway_origin: str | None = None
@@ -88,7 +88,7 @@ class RuntimeContext:
 
         # Resolve effective permission mode (handle skip_permissions alias)
         if options.skip_permissions:
-            effective_mode = 'bypassPermissions'
+            effective_mode = "bypassPermissions"
             bypass_available = True
         else:
             effective_mode = options.permission_mode
@@ -130,7 +130,7 @@ class RuntimeContext:
             ),
             tool_registry=tool_registry,
         )
-        if effective_mode == 'bypassPermissions':
+        if effective_mode == "bypassPermissions":
             tool_context.allow_docs = True
         tool_context.options.is_non_interactive_session = False
 
@@ -150,7 +150,7 @@ class RuntimeContext:
             import logging
 
             logging.getLogger(__name__).debug(
-                'dreaming system wiring failed; dream feature may be unavailable',
+                "dreaming system wiring failed; dream feature may be unavailable",
                 exc_info=True,
             )
 
@@ -173,7 +173,7 @@ class RuntimeContext:
                 # Create a brand new session
                 new_session = AgentSession.create(
                     provider_name,
-                    options.model or getattr(provider, 'model', ''),
+                    options.model or getattr(provider, "model", ""),
                 )
                 # Copy conversation messages from old session
                 if old_session.conversation and old_session.conversation.messages:
@@ -216,7 +216,7 @@ class RuntimeContext:
             return
         self.tail_follower = None
         try:
-            stop = getattr(follower, 'stop', None)
+            stop = getattr(follower, "stop", None)
             if stop is None:
                 return
             import asyncio
@@ -233,7 +233,7 @@ class RuntimeContext:
             import logging
 
             logging.getLogger(__name__).debug(
-                'F-125 C14: tail follower release failed (non-fatal)',
+                "F-125 C14: tail follower release failed (non-fatal)",
                 exc_info=True,
             )
 
@@ -255,7 +255,7 @@ class RuntimeContext:
 
             print(
                 f"Warning: provider '{provider_name}' is not in the built-in list — "
-                f'proceeding anyway',
+                f"proceeding anyway",
                 file=sys.stderr,
             )
         if model is not None:
@@ -280,12 +280,12 @@ class RuntimeContext:
         self.provider_name = provider_name
         self.tool_registry = tool_registry
         self.options.provider_name = provider_name
-        self.options.model = getattr(provider, 'model', model)
+        self.options.model = getattr(provider, "model", model)
 
         for attr, value in (
-            ('provider', provider),
-            ('provider_name', provider_name),
-            ('tool_registry', tool_registry),
+            ("provider", provider),
+            ("provider_name", provider_name),
+            ("tool_registry", tool_registry),
         ):
             if hasattr(self.tool_context, attr):
                 setattr(self.tool_context, attr, value)

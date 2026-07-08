@@ -34,22 +34,22 @@ def test_extract_json_plain_object() -> None:
 
 
 def test_extract_json_fenced_object() -> None:
-    text = "```json\n{\"category\": \"agent_runtime\"}\n```"
+    text = '```json\n{"category": "agent_runtime"}\n```'
     assert _extract_json(text) == {"category": "agent_runtime"}
 
 
 def test_extract_json_fenced_no_lang() -> None:
-    text = "```\n{\"category\": \"memory\"}\n```"
+    text = '```\n{"category": "memory"}\n```'
     assert _extract_json(text) == {"category": "memory"}
 
 
 def test_extract_json_fenced_array() -> None:
-    text = "```json\n[{\"title\": \"x\"}]\n```"
+    text = '```json\n[{"title": "x"}]\n```'
     assert _extract_json(text) == [{"title": "x"}]
 
 
 def test_extract_json_with_prose_around() -> None:
-    text = "Here you go:\n{\"a\": 1}\nThanks!"
+    text = 'Here you go:\n{"a": 1}\nThanks!'
     assert _extract_json(text) == {"a": 1}
 
 
@@ -128,8 +128,12 @@ def test_classifier_hook_parses_valid_response() -> None:
     try:
         hook = build_classifier_hook(LLMConfig(model="x"))
         record = FeatureRecord(
-            id="r1", source="aider", title="X", description="Y",
-            category=FeatureCategory.UNKNOWN, feature_type=FeatureType.NEW,
+            id="r1",
+            source="aider",
+            title="X",
+            description="Y",
+            category=FeatureCategory.UNKNOWN,
+            feature_type=FeatureType.NEW,
         )
         assert hook(record) == FeatureCategory.TOOL_SYSTEM
         assert fake.calls, "completion was invoked"
@@ -145,8 +149,12 @@ def test_classifier_hook_handles_unknown_category() -> None:
     try:
         hook = build_classifier_hook(LLMConfig(model="x"))
         record = FeatureRecord(
-            id="r1", source="aider", title="X", description="Y",
-            category=FeatureCategory.UNKNOWN, feature_type=FeatureType.NEW,
+            id="r1",
+            source="aider",
+            title="X",
+            description="Y",
+            category=FeatureCategory.UNKNOWN,
+            feature_type=FeatureType.NEW,
         )
         assert hook(record) == FeatureCategory.UNKNOWN
     finally:
@@ -159,8 +167,12 @@ def test_classifier_hook_returns_unknown_on_bad_json() -> None:
     try:
         hook = build_classifier_hook(LLMConfig(model="x"))
         record = FeatureRecord(
-            id="r1", source="aider", title="X", description="Y",
-            category=FeatureCategory.UNKNOWN, feature_type=FeatureType.NEW,
+            id="r1",
+            source="aider",
+            title="X",
+            description="Y",
+            category=FeatureCategory.UNKNOWN,
+            feature_type=FeatureType.NEW,
         )
         assert hook(record) == FeatureCategory.UNKNOWN
     finally:
@@ -176,8 +188,12 @@ def test_classifier_hook_swallows_completion_error() -> None:
     try:
         hook = build_classifier_hook(LLMConfig(model="x"))
         record = FeatureRecord(
-            id="r1", source="aider", title="X", description="Y",
-            category=FeatureCategory.UNKNOWN, feature_type=FeatureType.NEW,
+            id="r1",
+            source="aider",
+            title="X",
+            description="Y",
+            category=FeatureCategory.UNKNOWN,
+            feature_type=FeatureType.NEW,
         )
         assert hook(record) == FeatureCategory.UNKNOWN
     finally:
@@ -190,17 +206,23 @@ def test_classifier_hook_swallows_completion_error() -> None:
 
 
 def test_extractor_hook_refines_records() -> None:
-    payload = json.dumps([
-        {"title": "Refined A", "description": "new A"},
-        {"title": "Refined B", "description": "new B"},
-    ])
+    payload = json.dumps(
+        [
+            {"title": "Refined A", "description": "new A"},
+            {"title": "Refined B", "description": "new B"},
+        ]
+    )
     fake = _FakeLiteLLM(_assistant_message(f"```json\n{payload}\n```"))
     set_litellm_module(fake)
     try:
         hook = build_extractor_hook(LLMConfig(model="x"), max_keep=3)
         template = FeatureRecord(
-            id="r1", source="aider", title="old", description="old desc",
-            category=FeatureCategory.TOOL_SYSTEM, feature_type=FeatureType.NEW,
+            id="r1",
+            source="aider",
+            title="old",
+            description="old desc",
+            category=FeatureCategory.TOOL_SYSTEM,
+            feature_type=FeatureType.NEW,
         )
         out = hook([template], body="release body")
         assert [r.title for r in out] == ["Refined A", "Refined B"]
@@ -228,8 +250,12 @@ def test_extractor_hook_falls_back_on_bad_payload() -> None:
     try:
         hook = build_extractor_hook(LLMConfig(model="x"))
         template = FeatureRecord(
-            id="r1", source="aider", title="keep", description="keep desc",
-            category=FeatureCategory.TOOL_SYSTEM, feature_type=FeatureType.NEW,
+            id="r1",
+            source="aider",
+            title="keep",
+            description="keep desc",
+            category=FeatureCategory.TOOL_SYSTEM,
+            feature_type=FeatureType.NEW,
         )
         out = hook([template], body="x")
         # On failure, the original records are preserved (not empty).
@@ -249,8 +275,12 @@ def test_summarizer_hook_returns_text() -> None:
     try:
         hook = build_summarizer_hook(LLMConfig(model="x"))
         record = FeatureRecord(
-            id="r1", source="aider", title="X", description="Y",
-            category=FeatureCategory.TOOL_SYSTEM, feature_type=FeatureType.NEW,
+            id="r1",
+            source="aider",
+            title="X",
+            description="Y",
+            category=FeatureCategory.TOOL_SYSTEM,
+            feature_type=FeatureType.NEW,
         )
         summary = hook([record], ["aider"], [])
         assert summary == "本期重点：tool_system。"
@@ -267,8 +297,12 @@ def test_summarizer_hook_returns_empty_on_failure() -> None:
     try:
         hook = build_summarizer_hook(LLMConfig(model="x"))
         record = FeatureRecord(
-            id="r1", source="aider", title="X", description="Y",
-            category=FeatureCategory.TOOL_SYSTEM, feature_type=FeatureType.NEW,
+            id="r1",
+            source="aider",
+            title="X",
+            description="Y",
+            category=FeatureCategory.TOOL_SYSTEM,
+            feature_type=FeatureType.NEW,
         )
         assert hook([record], ["aider"], []) == ""
     finally:

@@ -4,6 +4,7 @@ Verifies that plugin manifests can be declared inside a ``pyproject.toml``
 file under the ``[tool.clawcodex.plugin]`` table, with parity to
 ``plugin.yaml`` / ``plugin.json`` for all supported fields.
 """
+
 from __future__ import annotations
 
 import sys
@@ -39,7 +40,12 @@ def _write_pyproject(plugin_dir: Path, table_lines: list[str]) -> None:
     """Write a pyproject.toml with a [tool.clawcodex.plugin] table."""
     plugin_dir.mkdir(parents=True, exist_ok=True)
     body = "\n".join(
-        ["[build-system]", 'requires = ["setuptools"]', "build-backend = 'setuptools.build_meta'", ""]
+        [
+            "[build-system]",
+            'requires = ["setuptools"]',
+            "build-backend = 'setuptools.build_meta'",
+            "",
+        ]
         + ["[tool.clawcodex.plugin]"]
         + table_lines
         + [""]

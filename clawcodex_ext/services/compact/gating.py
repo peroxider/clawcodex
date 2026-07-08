@@ -75,9 +75,7 @@ def _get_env_float(name: str) -> float | None:
         return None
     if parsed <= 0 or parsed >= 1.0:
         # Out of range: treat as unset. The configured default still applies.
-        logger.debug(
-            "F-106 ignoring %s=%s (must satisfy 0 < x < 1)", name, parsed
-        )
+        logger.debug("F-106 ignoring %s=%s (must satisfy 0 < x < 1)", name, parsed)
         return None
     return parsed
 

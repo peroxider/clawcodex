@@ -25,9 +25,7 @@ def build_computer_use_suite(
     backend: Any = None,
 ) -> ComputerUseSuite:
     shared_recorder = recorder or DryRunRecorder()
-    suite = build_provider_suite(
-        platform=platform, backend=backend, recorder=shared_recorder
-    )
+    suite = build_provider_suite(platform=platform, backend=backend, recorder=shared_recorder)
     suite["recorder"] = shared_recorder
     # Lightweight sanity check: every provider must implement the right ABC.
     screenshot = suite.get("screenshot")
@@ -41,9 +39,7 @@ def build_computer_use_suite(
         (window, WindowManager),
     ]:
         if provider is not None and not isinstance(provider, expected):
-            raise TypeError(
-                f"provider for {expected.__name__} must be a {expected.__name__}"
-            )
+            raise TypeError(f"provider for {expected.__name__} must be a {expected.__name__}")
     return suite
 
 

@@ -89,6 +89,7 @@ def record_skill(
 
 # ── 内部实现 ──────────────────────────────────────────────────────────
 
+
 def _record(
     agent_id: str,
     kind: str,
@@ -164,6 +165,7 @@ atexit.register(flush)
 
 # ── 查询 ──────────────────────────────────────────────────────────────
 
+
 def get_stats(
     kind: str | None = None,
     agent_id: str | None = None,
@@ -228,7 +230,13 @@ def get_summary(
     """
     rows = get_stats(kind=kind, agent_id=agent_id)
     if not rows:
-        return {"total_calls": 0, "by_name": {}, "by_name_ok": {}, "avg_duration_ms": 0.0, "error_rate": 0.0}
+        return {
+            "total_calls": 0,
+            "by_name": {},
+            "by_name_ok": {},
+            "avg_duration_ms": 0.0,
+            "error_rate": 0.0,
+        }
 
     total = len(rows)
     by_name: dict[str, int] = {}

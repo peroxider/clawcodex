@@ -103,9 +103,7 @@ class CommandEngine:
     registry: CommandRegistry
     workspace_root: Path
     context: CommandContext | None = None
-    _command_hooks: list[Callable[[str, CommandResult], None]] = field(
-        default_factory=list
-    )
+    _command_hooks: list[Callable[[str, CommandResult], None]] = field(default_factory=list)
 
     async def execute(
         self,

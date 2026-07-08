@@ -28,6 +28,7 @@ class TestWorkflowEngineImports(unittest.TestCase):
             WorkflowSchema,
             WorkflowState,
         )
+
         self.assertIsNotNone(WorkflowSchema)
         self.assertIsNotNone(WorkflowState)
 
@@ -35,12 +36,14 @@ class TestWorkflowEngineImports(unittest.TestCase):
         from extensions.orchestrator.workflow_engine.engine import (
             DeclarativeWorkflowEngine,
         )
+
         self.assertIsNotNone(DeclarativeWorkflowEngine)
 
     def test_stage_runner_import(self) -> None:
         from extensions.orchestrator.workflow_engine.stage_runner import (
             StageRunner,
         )
+
         self.assertIsNotNone(StageRunner)
 
     def test_observability_imports(self) -> None:
@@ -48,6 +51,7 @@ class TestWorkflowEngineImports(unittest.TestCase):
             WorkflowObservability,
             WorkflowProgressSink,
         )
+
         self.assertIsNotNone(WorkflowObservability)
         self.assertIsNotNone(WorkflowProgressSink)
 
@@ -56,6 +60,7 @@ class TestWorkflowEngineImports(unittest.TestCase):
             ContractValidator,
             ValidationResult,
         )
+
         self.assertIsNotNone(ContractValidator)
         self.assertIsNotNone(ValidationResult)
 
@@ -63,12 +68,14 @@ class TestWorkflowEngineImports(unittest.TestCase):
         from extensions.orchestrator.workflow_engine.checkpoint import (
             CheckpointManager,
         )
+
         self.assertIsNotNone(CheckpointManager)
 
     def test_workflow_orchestrator_import(self) -> None:
         from extensions.orchestrator.workflow_orchestrator import (
             WorkflowOrchestrator,
         )
+
         self.assertIsNotNone(WorkflowOrchestrator)
 
     def test_orchestrator_workflow_yaml_param(self) -> None:
@@ -209,11 +216,13 @@ class TestWorkflowOrchestratorInit(unittest.TestCase):
             WorkflowOrchestrator,
         )
 
-        wf_config = WorkflowConfig.from_dict({
-            "workspace": {"root": str(self._tmpdir.name)},
-            "agent": {},
-            "tracker": {"kind": "local"},
-        })
+        wf_config = WorkflowConfig.from_dict(
+            {
+                "workspace": {"root": str(self._tmpdir.name)},
+                "agent": {},
+                "tracker": {"kind": "local"},
+            }
+        )
 
         orch = WorkflowOrchestrator(
             workflow_config=wf_config,
@@ -234,11 +243,13 @@ class TestWorkflowOrchestratorInit(unittest.TestCase):
             ToolContextProgressSink,
         )
 
-        wf_config = WorkflowConfig.from_dict({
-            "workspace": {"root": str(self._tmpdir.name)},
-            "agent": {},
-            "tracker": {"kind": "local"},
-        })
+        wf_config = WorkflowConfig.from_dict(
+            {
+                "workspace": {"root": str(self._tmpdir.name)},
+                "agent": {},
+                "tracker": {"kind": "local"},
+            }
+        )
 
         orch = WorkflowOrchestrator(
             workflow_config=wf_config,
@@ -261,6 +272,7 @@ class TestWorkflowOrchestratorInit(unittest.TestCase):
 
 # ── 4. OrchestrationSubsystem workflow_yaml_path plumbing ─────────────
 
+
 class TestOrchestrationSubsystemPlumbing(unittest.TestCase):
     """Verify OrchestrationSubsystem passes workflow_yaml_path to Orchestrator."""
 
@@ -271,11 +283,13 @@ class TestOrchestrationSubsystemPlumbing(unittest.TestCase):
         import tempfile
 
         issues_dir = tempfile.mkdtemp()
-        wf_config = WorkflowConfig.from_dict({
-            "workspace": {"root": "/tmp/test"},
-            "agent": {},
-            "tracker": {"kind": "local", "issues_path": issues_dir},
-        })
+        wf_config = WorkflowConfig.from_dict(
+            {
+                "workspace": {"root": "/tmp/test"},
+                "agent": {},
+                "tracker": {"kind": "local", "issues_path": issues_dir},
+            }
+        )
 
         subsystem = OrchestrationSubsystem(
             wf_config,
@@ -290,11 +304,13 @@ class TestOrchestrationSubsystemPlumbing(unittest.TestCase):
         import tempfile
 
         issues_dir = tempfile.mkdtemp()
-        wf_config = WorkflowConfig.from_dict({
-            "workspace": {"root": "/tmp/test"},
-            "agent": {},
-            "tracker": {"kind": "local", "issues_path": issues_dir},
-        })
+        wf_config = WorkflowConfig.from_dict(
+            {
+                "workspace": {"root": "/tmp/test"},
+                "agent": {},
+                "tracker": {"kind": "local", "issues_path": issues_dir},
+            }
+        )
 
         subsystem = OrchestrationSubsystem(wf_config)
         self.assertIsNone(subsystem._workflow_yaml_path)

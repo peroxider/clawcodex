@@ -250,6 +250,7 @@ McpBatchCallTool: Tool = build_tool(
 # 3. MCP Progress 通知
 # ---------------------------------------------------------------------------
 
+
 def extract_mcp_progress(
     response: Any,
     *,

@@ -29,7 +29,7 @@ from clawcodex_ext.services.im_gateway.store import ReliabilityStore
 class _FakeOutAdapter(ChannelAdapter):
     def __init__(
         self,
-        name: str = 'fake',
+        name: str = "fake",
         *,
         supports_markdown: bool = False,
         send_result: ChannelSendResult | None = None,
@@ -76,7 +76,7 @@ class _FakeOutAdapter(ChannelAdapter):
             return self._results_seq[-1]
         if self._send_result is not None:
             return self._send_result
-        return ChannelSendResult.success(self._name, provider_receipt=f'mid_{len(self.sends)}')
+        return ChannelSendResult.success(self._name, provider_receipt=f"mid_{len(self.sends)}")
 
 
 async def _noop_sleep(_delay: float) -> None:
@@ -98,101 +98,101 @@ def _make_dispatcher(
 
 @pytest.mark.asyncio
 async def test_send_success_records_outbox_and_receipt(tmp_path) -> None:
-    adapter = _FakeOutAdapter('wechat-main', supports_markdown=False)
+    adapter = _FakeOutAdapter("wechat-main", supports_markdown=False)
     disp, store, _ = _make_dispatcher(tmp_path, adapter)
-    result = await disp.send(OutboundMessage(text='hello', channel='wechat-main'))
+    result = await disp.send(OutboundMessage(text="hello", channel="wechat-main"))
     assert result.ok is True
     assert result.provider_receipt is not None
     entries = store.outbox_entries()
-    statuses = [e['status'] for e in entries]
-    assert 'pending' in statuses and 'delivered' in statuses
-    delivered = [e for e in entries if e['status'] == 'delivered']
-    assert delivered[-1]['provider_receipt'] == result.provider_receipt
+    statuses = [e["status"] for e in entries]
+    assert "pending" in statuses and "delivered" in statuses
+    delivered = [e for e in entries if e["status"] == "delivered"]
+    assert delivered[-1]["provider_receipt"] == result.provider_receipt
 
 
 @pytest.mark.asyncio
 async def test_send_fail_closed_when_no_outbound_capability(tmp_path) -> None:
     caps = ChannelCapabilitySet.of(ChannelCapability.MEDIA_IMAGE)
-    adapter = _FakeOutAdapter('media-only', caps=caps)
+    adapter = _FakeOutAdapter("media-only", caps=caps)
     disp, store, _ = _make_dispatcher(tmp_path, adapter)
-    result = await disp.send(OutboundMessage(text='hi', channel='media-only'))
+    result = await disp.send(OutboundMessage(text="hi", channel="media-only"))
     assert result.ok is False
     assert result.status is SendStatus.UNSUPPORTED
-    assert any(e['status'] == 'dead' for e in store.outbox_entries())
+    assert any(e["status"] == "dead" for e in store.outbox_entries())
 
 
 @pytest.mark.asyncio
 async def test_send_strips_markdown_for_non_markdown_channel(tmp_path) -> None:
-    adapter = _FakeOutAdapter('wechat-main', supports_markdown=False)
+    adapter = _FakeOutAdapter("wechat-main", supports_markdown=False)
     disp, _, _ = _make_dispatcher(tmp_path, adapter)
     await disp.send(
-        OutboundMessage(text='**bold** and `code`', channel='wechat-main', markdown=True)
+        OutboundMessage(text="**bold** and `code`", channel="wechat-main", markdown=True)
     )
     assert len(adapter.sends) == 1
     sent = adapter.sends[0]
-    assert '**' not in sent.text
-    assert '`' not in sent.text
+    assert "**" not in sent.text
+    assert "`" not in sent.text
     assert sent.markdown is False  # stripped -> markdown False
 
 
 @pytest.mark.asyncio
 async def test_send_keeps_markdown_for_markdown_channel(tmp_path) -> None:
-    adapter = _FakeOutAdapter('slack-ops', supports_markdown=True)
+    adapter = _FakeOutAdapter("slack-ops", supports_markdown=True)
     disp, _, _ = _make_dispatcher(tmp_path, adapter)
-    await disp.send(OutboundMessage(text='**bold**', channel='slack-ops', markdown=True))
-    assert adapter.sends[0].text == '**bold**'
+    await disp.send(OutboundMessage(text="**bold**", channel="slack-ops", markdown=True))
+    assert adapter.sends[0].text == "**bold**"
     assert adapter.sends[0].markdown is True
 
 
 @pytest.mark.asyncio
 async def test_send_nonretryable_failure_goes_to_dead_letter(tmp_path) -> None:
     adapter = _FakeOutAdapter(
-        'wechat-main',
+        "wechat-main",
         supports_markdown=False,
         send_result=ChannelSendResult.nonretryable_error(
-            'wechat-main', message='bad', category=ErrorCategory.AUTH
+            "wechat-main", message="bad", category=ErrorCategory.AUTH
         ),
     )
     disp, store, _ = _make_dispatcher(tmp_path, adapter)
-    result = await disp.send(OutboundMessage(text='hi', channel='wechat-main'))
+    result = await disp.send(OutboundMessage(text="hi", channel="wechat-main"))
     assert result.ok is False
     assert len(store.dead_letter_entries()) == 1
-    assert store.dead_letter_entries()[0]['error_category'] == 'auth'
+    assert store.dead_letter_entries()[0]["error_category"] == "auth"
 
 
 @pytest.mark.asyncio
 async def test_send_retryable_exhausts_then_dead_letters(tmp_path) -> None:
     adapter = _FakeOutAdapter(
-        'wechat-main',
+        "wechat-main",
         send_result=ChannelSendResult.retryable_error(
-            'wechat-main', message='5xx', category=ErrorCategory.SERVER_ERROR
+            "wechat-main", message="5xx", category=ErrorCategory.SERVER_ERROR
         ),
     )
     disp, store, _ = _make_dispatcher(tmp_path, adapter)
-    result = await disp.send(OutboundMessage(text='hi', channel='wechat-main'))
+    result = await disp.send(OutboundMessage(text="hi", channel="wechat-main"))
     assert result.ok is False
     # default policy max_attempts=5 → 5 send calls then dead-letter
     assert len(adapter.sends) == 5
     assert len(store.dead_letter_entries()) == 1
     # retry_pending outbox entries recorded across attempts
-    statuses = [e['status'] for e in store.outbox_entries()]
-    assert 'retry_pending' in statuses
+    statuses = [e["status"] for e in store.outbox_entries()]
+    assert "retry_pending" in statuses
     assert store.outbox_pending() == []
 
 
 @pytest.mark.asyncio
 async def test_wechat_rate_limit_is_reported_without_hidden_deferred_success(tmp_path) -> None:
     adapter = _FakeOutAdapter(
-        'wechat',
+        "wechat",
         send_result=ChannelSendResult.rate_limited(
-            'wechat',
-            message='rate limited',
-            raw={'retry_after_seconds': 10},
+            "wechat",
+            message="rate limited",
+            raw={"retry_after_seconds": 10},
         ),
     )
     disp, store, _ = _make_dispatcher(tmp_path, adapter)
 
-    result = await disp.send(OutboundMessage(text='hi', channel='wechat', target='u1'))
+    result = await disp.send(OutboundMessage(text="hi", channel="wechat", target="u1"))
 
     assert result.ok is False
     assert result.error_category is ErrorCategory.RATE_LIMIT
@@ -200,26 +200,26 @@ async def test_wechat_rate_limit_is_reported_without_hidden_deferred_success(tmp
     assert len(adapter.sends) == 1
     assert store.dead_letter_entries() == []
     assert disp.deferred_outbound_count() == 0
-    assert not any(e['status'] == 'deferred' for e in store.outbox_entries())
-    assert any(e['status'] == 'failed' for e in store.outbox_entries())
+    assert not any(e["status"] == "deferred" for e in store.outbox_entries())
+    assert any(e["status"] == "failed" for e in store.outbox_entries())
 
 
 @pytest.mark.asyncio
 async def test_rate_limited_status_is_reported_without_channel_specific_retry(tmp_path) -> None:
     adapter = _FakeOutAdapter(
-        'line-direct',
+        "line-direct",
         send_result=ChannelSendResult(
             ok=False,
             status=SendStatus.RATE_LIMITED,
-            channel_id='line-direct',
+            channel_id="line-direct",
             error_category=ErrorCategory.RATE_LIMIT,
-            message='platform rate limited',
-            raw={'retry_after_seconds': 10},
+            message="platform rate limited",
+            raw={"retry_after_seconds": 10},
         ),
     )
     disp, store, _ = _make_dispatcher(tmp_path, adapter)
 
-    result = await disp.send(OutboundMessage(text='hi', channel='line-direct', target='u1'))
+    result = await disp.send(OutboundMessage(text="hi", channel="line-direct", target="u1"))
 
     assert result.ok is False
     assert result.status is SendStatus.RATE_LIMITED
@@ -227,22 +227,22 @@ async def test_rate_limited_status_is_reported_without_channel_specific_retry(tm
     assert len(adapter.sends) == 1
     assert store.dead_letter_entries() == []
     assert disp.deferred_outbound_count() == 0
-    assert not any(e['status'] == 'deferred' for e in store.outbox_entries())
-    assert any(e['status'] == 'failed' for e in store.outbox_entries())
+    assert not any(e["status"] == "deferred" for e in store.outbox_entries())
+    assert any(e["status"] == "failed" for e in store.outbox_entries())
 
 
 @pytest.mark.asyncio
 async def test_wechat_rate_limit_without_retry_after_still_does_not_retry(tmp_path) -> None:
     adapter = _FakeOutAdapter(
-        'wechat',
+        "wechat",
         send_result=ChannelSendResult.rate_limited(
-            'wechat',
-            message='rate limited',
+            "wechat",
+            message="rate limited",
         ),
     )
     disp, _, _ = _make_dispatcher(tmp_path, adapter)
 
-    result = await disp.send(OutboundMessage(text='hi', channel='wechat', target='u1'))
+    result = await disp.send(OutboundMessage(text="hi", channel="wechat", target="u1"))
 
     assert result.ok is False
     assert result.status is SendStatus.RATE_LIMITED
@@ -253,32 +253,32 @@ async def test_wechat_rate_limit_without_retry_after_still_does_not_retry(tmp_pa
 @pytest.mark.asyncio
 async def test_send_retryable_then_success_recovers(tmp_path) -> None:
     adapter = _FakeOutAdapter(
-        'wechat-main',
+        "wechat-main",
         results_seq=[
             ChannelSendResult.retryable_error(
-                'wechat-main', message='5xx', category=ErrorCategory.SERVER_ERROR
+                "wechat-main", message="5xx", category=ErrorCategory.SERVER_ERROR
             ),
             ChannelSendResult.retryable_error(
-                'wechat-main', message='5xx', category=ErrorCategory.SERVER_ERROR
+                "wechat-main", message="5xx", category=ErrorCategory.SERVER_ERROR
             ),
-            ChannelSendResult.success('wechat-main', provider_receipt='ok_mid'),
+            ChannelSendResult.success("wechat-main", provider_receipt="ok_mid"),
         ],
     )
     disp, store, _ = _make_dispatcher(tmp_path, adapter)
-    result = await disp.send(OutboundMessage(text='hi', channel='wechat-main'))
+    result = await disp.send(OutboundMessage(text="hi", channel="wechat-main"))
     assert result.ok is True
-    assert result.provider_receipt == 'ok_mid'
+    assert result.provider_receipt == "ok_mid"
     assert len(adapter.sends) == 3
     assert store.dead_letter_entries() == []
 
 
 @pytest.mark.asyncio
 async def test_broadcast_partial_failure_does_not_crash(tmp_path) -> None:
-    a_ok = _FakeOutAdapter('a')
+    a_ok = _FakeOutAdapter("a")
     a_bad = _FakeOutAdapter(
-        'b',
+        "b",
         send_result=ChannelSendResult.nonretryable_error(
-            'b', message='x', category=ErrorCategory.AUTH
+            "b", message="x", category=ErrorCategory.AUTH
         ),
     )
     reg = ChannelAdapterRegistry()
@@ -287,15 +287,15 @@ async def test_broadcast_partial_failure_does_not_crash(tmp_path) -> None:
     store = ReliabilityStore(tmp_path)
     config = GatewayConfig(state_dir=str(tmp_path), reliability=ReliabilityConfig())
     disp = OutboundDispatcher(reg, CapabilityGate(reg), store, config)
-    results = await disp.broadcast(OutboundMessage(text='hi', channel='a'))
-    assert results['a'].ok is True
-    assert results['b'].ok is False
+    results = await disp.broadcast(OutboundMessage(text="hi", channel="a"))
+    assert results["a"].ok is True
+    assert results["b"].ok is False
 
 
 @pytest.mark.asyncio
 async def test_send_unknown_channel_returns_not_found(tmp_path) -> None:
-    adapter = _FakeOutAdapter('a')
+    adapter = _FakeOutAdapter("a")
     disp, store, _ = _make_dispatcher(tmp_path, adapter)
-    result = await disp.send(OutboundMessage(text='hi', channel='missing'))
+    result = await disp.send(OutboundMessage(text="hi", channel="missing"))
     assert result.ok is False
     assert result.error_category is ErrorCategory.NOT_FOUND

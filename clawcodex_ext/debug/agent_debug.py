@@ -10,13 +10,13 @@ from pathlib import Path
 from typing import Mapping, TextIO
 
 
-_TRUTHY = {'1', 'true', 'yes', 'on'}
-_FALSEY = {'', '0', 'false', 'no', 'off'}
+_TRUTHY = {"1", "true", "yes", "on"}
+_FALSEY = {"", "0", "false", "no", "off"}
 
 
 def agent_debug_enabled(environ: Mapping[str, str] | None = None) -> bool:
     env = os.environ if environ is None else environ
-    raw = str(env.get('CLAWCODEX_AGENT_DEBUG', '')).strip().lower()
+    raw = str(env.get("CLAWCODEX_AGENT_DEBUG", "")).strip().lower()
     if raw in _TRUTHY:
         return True
     if raw in _FALSEY:
@@ -30,29 +30,29 @@ def resolve_repl_history_file(
     home: Path | None = None,
 ) -> Path:
     env = os.environ if environ is None else environ
-    explicit = str(env.get('CLAWCODEX_HISTORY_FILE', '')).strip()
+    explicit = str(env.get("CLAWCODEX_HISTORY_FILE", "")).strip()
     if explicit:
         return Path(explicit).expanduser()
 
     home_path = Path.home() if home is None else home
     if not agent_debug_enabled(env):
-        return home_path / '.clawcodex' / 'history'
+        return home_path / ".clawcodex" / "history"
 
-    debug_dir = str(env.get('CLAWCODEX_AGENT_DEBUG_DIR', '')).strip()
+    debug_dir = str(env.get("CLAWCODEX_AGENT_DEBUG_DIR", "")).strip()
     base = (
         Path(debug_dir).expanduser()
         if debug_dir
-        else Path(tempfile.gettempdir()) / 'clawcodex-agent-debug'
+        else Path(tempfile.gettempdir()) / "clawcodex-agent-debug"
     )
-    return base / 'history'
+    return base / "history"
 
 
 def resolve_agent_debug_dir(environ: Mapping[str, str] | None = None) -> Path:
     env = os.environ if environ is None else environ
-    debug_dir = str(env.get('CLAWCODEX_AGENT_DEBUG_DIR', '')).strip()
+    debug_dir = str(env.get("CLAWCODEX_AGENT_DEBUG_DIR", "")).strip()
     if debug_dir:
         return Path(debug_dir).expanduser()
-    return Path(tempfile.gettempdir()) / 'clawcodex-agent-debug'
+    return Path(tempfile.gettempdir()) / "clawcodex-agent-debug"
 
 
 def apply_agent_debug_environment(
@@ -63,12 +63,12 @@ def apply_agent_debug_environment(
     env = os.environ if environ is None else environ
     base = debug_dir if debug_dir is not None else resolve_agent_debug_dir(env)
 
-    env['CLAWCODEX_AGENT_DEBUG'] = '1'
-    env['CLAWCODEX_AGENT_DEBUG_DIR'] = str(base)
-    env['CLAWCODEX_HOME'] = str(base)
-    env['CLAWCODEX_HISTORY_FILE'] = str(base / 'history')
-    env['CLAWCODEX_SESSIONS_DIR'] = str(base / 'sessions')
-    env['CLAW_TELEMETRY_STORAGE_DIR'] = str(base / 'telemetry')
+    env["CLAWCODEX_AGENT_DEBUG"] = "1"
+    env["CLAWCODEX_AGENT_DEBUG_DIR"] = str(base)
+    env["CLAWCODEX_HOME"] = str(base)
+    env["CLAWCODEX_HISTORY_FILE"] = str(base / "history")
+    env["CLAWCODEX_SESSIONS_DIR"] = str(base / "sessions")
+    env["CLAW_TELEMETRY_STORAGE_DIR"] = str(base / "telemetry")
     return env
 
 
@@ -83,6 +83,6 @@ def emit_agent_debug_marker(
         return
 
     target = sys.stderr if stream is None else stream
-    body = json.dumps(dict(payload or {}), sort_keys=True, separators=(',', ':'))
-    target.write(f'CLAWCODEX_AGENT_DEBUG::{name}::{body}\n')
+    body = json.dumps(dict(payload or {}), sort_keys=True, separators=(",", ":"))
+    target.write(f"CLAWCODEX_AGENT_DEBUG::{name}::{body}\n")
     target.flush()

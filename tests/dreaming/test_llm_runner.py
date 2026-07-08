@@ -107,7 +107,9 @@ class TestOnEventHandler:
         calls: list[dict] = []
 
         def on_msg(*, text: str, tool_use_count: int, touched_paths: list[str]) -> None:
-            calls.append({"text": text, "tool_use_count": tool_use_count, "touched_paths": touched_paths})
+            calls.append(
+                {"text": text, "tool_use_count": tool_use_count, "touched_paths": touched_paths}
+            )
 
         files: list[str] = []
         handler = _make_on_event_handler(on_msg, files)

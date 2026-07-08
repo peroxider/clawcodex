@@ -58,7 +58,9 @@ def fake_wiring(monkeypatch):
 
     def _fake_get_provider_class(_name):
         def _factory(api_key, base_url=None, model=None, **_kwargs):
-            return _FakeProvider(api_key, base_url=base_url, model=model, responses=list(scripted_responses))
+            return _FakeProvider(
+                api_key, base_url=base_url, model=model, responses=list(scripted_responses)
+            )
 
         return _factory
 
@@ -382,9 +384,7 @@ def test_headless_without_skip_permissions_installs_auto_deny_handler(fake_wirin
     # Non-interactive mode installs an auto-deny handler.
     from src.permissions.types import PermissionAskRequest
 
-    reply = ctx.permission_handler(
-        PermissionAskRequest(tool_name="Bash", message="needs approval")
-    )
+    reply = ctx.permission_handler(PermissionAskRequest(tool_name="Bash", message="needs approval"))
     assert reply.behavior == "deny"
 
 
@@ -497,6 +497,7 @@ def _wire_tty_wiring(monkeypatch, scripted_responses):
     def _fake_get_provider_class(_name):
         def _factory(api_key, base_url=None, model=None, **_kwargs):
             return _FakeProvider(api_key, model=model, responses=list(scripted_responses))
+
         return _factory
 
     def _fake_get_provider_config(_name):
@@ -506,17 +507,15 @@ def _wire_tty_wiring(monkeypatch, scripted_responses):
             "default_model": "fake-model",
         }
 
-    monkeypatch.setattr(
-        ext_headless, "get_provider_class", _fake_get_provider_class, raising=False
-    )
+    monkeypatch.setattr(ext_headless, "get_provider_class", _fake_get_provider_class, raising=False)
     monkeypatch.setattr(
         ext_headless, "get_provider_config", _fake_get_provider_config, raising=False
     )
+    monkeypatch.setattr(ext_headless, "get_default_provider", lambda: "anthropic", raising=False)
     monkeypatch.setattr(
-        ext_headless, "get_default_provider", lambda: "anthropic", raising=False
-    )
-    monkeypatch.setattr(
-        ext_headless, "build_default_registry", lambda provider=None: _FakeRegistry(),
+        ext_headless,
+        "build_default_registry",
+        lambda provider=None: _FakeRegistry(),
         raising=False,
     )
 

@@ -226,7 +226,7 @@ def _request_headers(fmt: str, user_agent: str) -> dict[str, str]:
 
 def _charset_from_content_type(content_type: str) -> str | None:
     match = re.search(r"charset=([^\s;]+)", content_type or "", flags=re.IGNORECASE)
-    return match.group(1).strip().strip('"\'') if match else None
+    return match.group(1).strip().strip("\"'") if match else None
 
 
 def _read_response_body(resp) -> str:

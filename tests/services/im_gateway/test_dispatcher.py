@@ -30,16 +30,16 @@ def _make_message(origin: str, text: str, *, message_id: str | None = None) -> I
     return InboundMessage(
         origin=origin,
         text=text,
-        message_id=message_id or f'mid-{origin}-{abs(hash(text))}',
-        channel='wechat',
+        message_id=message_id or f"mid-{origin}-{abs(hash(text))}",
+        channel="wechat",
     )
 
 
 def _make_dispatcher(
     tmp_path,
     *,
-    repl_origin: str = 'wechat:acct:user1',
-    orchestrator_origin: str = 'wechat:acct:user2',
+    repl_origin: str = "wechat:acct:user1",
+    orchestrator_origin: str = "wechat:acct:user2",
 ) -> tuple[InboundDispatcher, SessionRouter, list[InboundMessage]]:
     """构造一个 dispatcher，REPL 与 orchestrator 各绑定一个 origin。
 
@@ -48,10 +48,10 @@ def _make_dispatcher(
     """
     store = ReliabilityStore(tmp_path)
     binding = BindingPolicy()
-    binding.bind(repl_origin, SessionTarget(session_id='repl-sess', host_type='repl'))
+    binding.bind(repl_origin, SessionTarget(session_id="repl-sess", host_type="repl"))
     binding.bind(
         orchestrator_origin,
-        SessionTarget(session_id='orch-sess', host_type='orchestrator'),
+        SessionTarget(session_id="orch-sess", host_type="orchestrator"),
     )
     router = SessionRouter(binding, store)
 
@@ -73,26 +73,26 @@ def _make_dispatcher(
 async def test_repl_blocked_command_not_pushed(tmp_path) -> None:
     """REPL 绑定的 origin 发送 /exit → 返回拒绝 ack，push_handler 不被调用。"""
     dispatcher, router, pushed = _make_dispatcher(tmp_path)
-    msg = _make_message('wechat:acct:user1', '/exit')
+    msg = _make_message("wechat:acct:user1", "/exit")
 
     receipt = await dispatcher.process(msg)
 
-    assert len(pushed) == 0, 'blocked command must not be pushed to REPL'
+    assert len(pushed) == 0, "blocked command must not be pushed to REPL"
     assert receipt.layer == AckLayer.ACCEPTED
-    assert '/exit' in (receipt.message or '')
+    assert "/exit" in (receipt.message or "")
 
 
 @pytest.mark.asyncio
 async def test_repl_blocked_command_with_args_not_pushed(tmp_path) -> None:
     """REPL 绑定的 origin 发送 /model gpt-4 → 拒绝，push_handler 不被调用。"""
     dispatcher, router, pushed = _make_dispatcher(tmp_path)
-    msg = _make_message('wechat:acct:user1', '/model gpt-4')
+    msg = _make_message("wechat:acct:user1", "/model gpt-4")
 
     receipt = await dispatcher.process(msg)
 
     assert len(pushed) == 0
     assert receipt.layer == AckLayer.ACCEPTED
-    assert '/model' in (receipt.message or '')
+    assert "/model" in (receipt.message or "")
 
 
 # -- REPL 目标：白名单命令被放行 ---------------------------------------------
@@ -102,12 +102,12 @@ async def test_repl_blocked_command_with_args_not_pushed(tmp_path) -> None:
 async def test_repl_allowed_command_pushed(tmp_path) -> None:
     """REPL 绑定的 origin 发送 /clear → push_handler 被调用。"""
     dispatcher, router, pushed = _make_dispatcher(tmp_path)
-    msg = _make_message('wechat:acct:user1', '/clear')
+    msg = _make_message("wechat:acct:user1", "/clear")
 
     receipt = await dispatcher.process(msg)
 
     assert len(pushed) == 1
-    assert pushed[0].text == '/clear'
+    assert pushed[0].text == "/clear"
     assert receipt.layer == AckLayer.ENQUEUED
 
 
@@ -115,7 +115,7 @@ async def test_repl_allowed_command_pushed(tmp_path) -> None:
 async def test_repl_allowed_command_with_args_pushed(tmp_path) -> None:
     """REPL 绑定的 origin 发送 /goal finish → push_handler 被调用。"""
     dispatcher, router, pushed = _make_dispatcher(tmp_path)
-    msg = _make_message('wechat:acct:user1', '/goal finish the task')
+    msg = _make_message("wechat:acct:user1", "/goal finish the task")
 
     receipt = await dispatcher.process(msg)
 
@@ -127,7 +127,7 @@ async def test_repl_allowed_command_with_args_pushed(tmp_path) -> None:
 async def test_repl_stop_command_pushed(tmp_path) -> None:
     """REPL 绑定的 origin 发送 /stop → push_handler 被调用（/stop 在白名单内）。"""
     dispatcher, router, pushed = _make_dispatcher(tmp_path)
-    msg = _make_message('wechat:acct:user1', '/stop')
+    msg = _make_message("wechat:acct:user1", "/stop")
 
     receipt = await dispatcher.process(msg)
 
@@ -142,7 +142,7 @@ async def test_repl_stop_command_pushed(tmp_path) -> None:
 async def test_repl_plain_text_pushed(tmp_path) -> None:
     """REPL 绑定的 origin 发送普通文本 → push_handler 被调用（白名单不影响非斜杠输入）。"""
     dispatcher, router, pushed = _make_dispatcher(tmp_path)
-    msg = _make_message('wechat:acct:user1', '你好，请帮我写个函数')
+    msg = _make_message("wechat:acct:user1", "你好，请帮我写个函数")
 
     receipt = await dispatcher.process(msg)
 
@@ -157,26 +157,26 @@ async def test_repl_plain_text_pushed(tmp_path) -> None:
 async def test_orchestrator_blocked_command_not_pushed(tmp_path) -> None:
     """orchestrator 绑定的 origin 发送 /dashboard → 拒绝，push_handler 不被调用。"""
     dispatcher, router, pushed = _make_dispatcher(tmp_path)
-    msg = _make_message('wechat:acct:user2', '/dashboard')
+    msg = _make_message("wechat:acct:user2", "/dashboard")
 
     receipt = await dispatcher.process(msg)
 
-    assert len(pushed) == 0, 'blocked command must not be pushed to orchestrator'
+    assert len(pushed) == 0, "blocked command must not be pushed to orchestrator"
     assert receipt.layer == AckLayer.ACCEPTED
     assert receipt.notify_user is True
-    assert receipt.message == '不支持 /dashboard 执行'
+    assert receipt.message == "不支持 /dashboard 执行"
 
 
 @pytest.mark.asyncio
 async def test_orchestrator_allowed_issue_command_pushed(tmp_path) -> None:
     """orchestrator 绑定的 origin 发送 /issue list → push_handler 被调用。"""
     dispatcher, router, pushed = _make_dispatcher(tmp_path)
-    msg = _make_message('wechat:acct:user2', '/issue list')
+    msg = _make_message("wechat:acct:user2", "/issue list")
 
     receipt = await dispatcher.process(msg)
 
     assert len(pushed) == 1
-    assert pushed[0].text == '/issue list'
+    assert pushed[0].text == "/issue list"
     assert pushed[0].semantic is MessageSemantics.COMMAND
     assert receipt.layer == AckLayer.ENQUEUED
 
@@ -185,12 +185,12 @@ async def test_orchestrator_allowed_issue_command_pushed(tmp_path) -> None:
 async def test_orchestrator_allowed_server_status_pushed(tmp_path) -> None:
     """orchestrator 绑定的 origin 发送 /server status → push_handler 被调用。"""
     dispatcher, router, pushed = _make_dispatcher(tmp_path)
-    msg = _make_message('wechat:acct:user2', '/server status')
+    msg = _make_message("wechat:acct:user2", "/server status")
 
     receipt = await dispatcher.process(msg)
 
     assert len(pushed) == 1
-    assert pushed[0].text == '/server status'
+    assert pushed[0].text == "/server status"
     assert pushed[0].semantic is MessageSemantics.COMMAND
     assert receipt.layer == AckLayer.ENQUEUED
 
@@ -202,27 +202,27 @@ async def test_orchestrator_allowed_server_status_pushed(tmp_path) -> None:
 async def test_repl_blocked_command_records_audit(tmp_path) -> None:
     """REPL 绑定的 origin 发送非白名单命令 → audit.ndjson 记录 repl_command_blocked 事件。"""
     dispatcher, router, pushed = _make_dispatcher(tmp_path)
-    msg = _make_message('wechat:acct:user1', '/exit')
+    msg = _make_message("wechat:acct:user1", "/exit")
 
     await dispatcher.process(msg)
 
     audit_entries = dispatcher._store.audit_entries()
-    blocked_entries = [e for e in audit_entries if e.get('event_type') == 'repl_command_blocked']
+    blocked_entries = [e for e in audit_entries if e.get("event_type") == "repl_command_blocked"]
     assert len(blocked_entries) == 1
-    assert '/exit' in (blocked_entries[0].get('command') or '')
+    assert "/exit" in (blocked_entries[0].get("command") or "")
 
 
 @pytest.mark.asyncio
 async def test_orchestrator_blocked_command_records_audit(tmp_path) -> None:
     """orchestrator 绑定的 origin 发送非白名单命令 → audit.ndjson 记录事件。"""
     dispatcher, router, pushed = _make_dispatcher(tmp_path)
-    msg = _make_message('wechat:acct:user2', '/server stop')
+    msg = _make_message("wechat:acct:user2", "/server stop")
 
     await dispatcher.process(msg)
 
     audit_entries = dispatcher._store.audit_entries()
     blocked_entries = [
-        e for e in audit_entries if e.get('event_type') == 'orchestrator_command_blocked'
+        e for e in audit_entries if e.get("event_type") == "orchestrator_command_blocked"
     ]
     assert len(blocked_entries) == 1
-    assert '/server stop' in (blocked_entries[0].get('command') or '')
+    assert "/server stop" in (blocked_entries[0].get("command") or "")

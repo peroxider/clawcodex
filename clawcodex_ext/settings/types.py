@@ -127,6 +127,7 @@ class SpinnerVerbsSettings:
     ``"append"`` adds ``verbs`` to the built-in defaults; ``"replace"``
     uses only ``verbs``. See :mod:`src.constants.spinner_verbs`.
     """
+
     mode: str = "append"  # "append" | "replace"
     verbs: list[str] = field(default_factory=list)
 

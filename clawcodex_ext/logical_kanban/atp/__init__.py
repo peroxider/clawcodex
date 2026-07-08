@@ -12,10 +12,10 @@ from .prover9 import Prover9SolverAdapter
 from .vampire import VampireSolverAdapter
 
 __all__ = [
-    'ExternalAtpSolverAdapter',
-    'Mace4SolverAdapter',
-    'Prover9SolverAdapter',
-    'VampireSolverAdapter',
-    'parse_mace4_interpretation',
-    'parse_szs_status',
+    "ExternalAtpSolverAdapter",
+    "Mace4SolverAdapter",
+    "Prover9SolverAdapter",
+    "VampireSolverAdapter",
+    "parse_mace4_interpretation",
+    "parse_szs_status",
 ]

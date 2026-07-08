@@ -204,8 +204,7 @@ def migrate_session(
     # Already migrated: transcript.jsonl has a session_init marker.
     if _has_session_init_marker(transcript_jsonl):
         result.skipped_reason = (
-            "transcript.jsonl already has session_init marker; "
-            "session is in the new format"
+            "transcript.jsonl already has session_init marker; session is in the new format"
         )
         return result
 
@@ -290,9 +289,10 @@ def migrate_session(
                         # are legacy and the new session_snapshot
                         # supersedes them.
                         continue
-                    if entry.get("role") == "system" and entry.get(
-                        "content"
-                    ) == "__background_complete__":
+                    if (
+                        entry.get("role") == "system"
+                        and entry.get("content") == "__background_complete__"
+                    ):
                         continue
                     existing_message_lines.append(raw)
         except OSError as exc:
@@ -335,15 +335,10 @@ def migrate_session(
                 "model": model,
                 "created_at": created_at,
             }
-            f.write(
-                json.dumps(init_payload, ensure_ascii=False, separators=(",", ":"))
-                + "\n"
-            )
+            f.write(json.dumps(init_payload, ensure_ascii=False, separators=(",", ":")) + "\n")
             # Middle lines: messages
             for msg in combined:
-                f.write(
-                    json.dumps(msg, ensure_ascii=False, separators=(",", ":")) + "\n"
-                )
+                f.write(json.dumps(msg, ensure_ascii=False, separators=(",", ":")) + "\n")
             # Last line: session_snapshot (only when we have cost data)
             if cost_block:
                 snap_payload: dict[str, Any] = {
@@ -352,10 +347,7 @@ def migrate_session(
                     "provider": provider,
                     "model": model,
                 }
-                f.write(
-                    json.dumps(snap_payload, ensure_ascii=False, separators=(",", ":"))
-                    + "\n"
-                )
+                f.write(json.dumps(snap_payload, ensure_ascii=False, separators=(",", ":")) + "\n")
                 result.cost_migrated = True
             result.messages_migrated = len(combined)
     except OSError as exc:
@@ -370,9 +362,7 @@ def migrate_session(
             session_json.unlink()
             result.removed_session_json = True
         except OSError as exc:
-            logger.warning(
-                "migrated %s but could not remove session.json: %s", session_id, exc
-            )
+            logger.warning("migrated %s but could not remove session.json: %s", session_id, exc)
 
     return result
 
@@ -398,9 +388,7 @@ def migrate_all(
         if not entry.is_dir():
             continue
         summary.total_sessions += 1
-        result = migrate_session(
-            entry.name, sessions_dir=base, remove_legacy=remove_legacy
-        )
+        result = migrate_session(entry.name, sessions_dir=base, remove_legacy=remove_legacy)
         summary.results.append(result)
         if result.error:
             summary.error_count += 1

@@ -268,8 +268,10 @@ def _lkb_clarify(tool_ctx, _args: str) -> str:
 
     lines: list[str] = []
     for tid, phrase, sev in pending:
-        lines.append(f"  {tid}  \"{phrase}\"")
-        lines.append(f"          Severity: {sev}  Hint: use /agent retry to refine the task description")
+        lines.append(f'  {tid}  "{phrase}"')
+        lines.append(
+            f"          Severity: {sev}  Hint: use /agent retry to refine the task description"
+        )
     return _panel("\n".join(lines), "Pending Clarifications")
 
 

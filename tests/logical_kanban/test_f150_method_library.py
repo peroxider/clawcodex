@@ -109,7 +109,9 @@ def _make_task(
     )
 
 
-def _make_plan(tasks: tuple[ProposedTask, ...], *, assumptions: tuple[str, ...] = ()) -> DecompositionPlan:
+def _make_plan(
+    tasks: tuple[ProposedTask, ...], *, assumptions: tuple[str, ...] = ()
+) -> DecompositionPlan:
     return DecompositionPlan(
         decomposition_run_id="D-test",
         goal="test",
@@ -248,9 +250,7 @@ class TestEngineeringMethod:
 
     def test_to_dict_round_trip(self) -> None:
         method = _make_method(
-            acceptance=AcceptanceTemplate(
-                assertion_template="Done()", strict_acceptance=True
-            ),
+            acceptance=AcceptanceTemplate(assertion_template="Done()", strict_acceptance=True),
         )
         data = method.to_dict()
         assert data["methodId"] == "M-test-001"
@@ -317,9 +317,7 @@ class TestRegistry:
         assert "M-fix-x-001" not in add_ids
 
     def test_list_methods_filters_by_tag(self) -> None:
-        register_method(
-            _make_method(method_id="M-tagged-001", pattern="tagged_thing")
-        )
+        register_method(_make_method(method_id="M-tagged-001", pattern="tagged_thing"))
         # Patch tags via a fresh method
         m = _make_method(method_id="M-tagged-002", pattern="tagged_thing2")
         register_method(m)
@@ -355,9 +353,7 @@ class TestSerialization:
             assert len(loaded) == len(METHOD_LIBRARY)
             assert loaded[0].method_id == METHOD_LIBRARY[0].method_id
             assert loaded[0].pattern == METHOD_LIBRARY[0].pattern
-            assert len(loaded[0].subtask_templates) == len(
-                METHOD_LIBRARY[0].subtask_templates
-            )
+            assert len(loaded[0].subtask_templates) == len(METHOD_LIBRARY[0].subtask_templates)
 
     def test_save_creates_parent_directories(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -454,8 +450,7 @@ class TestSeedLibrary:
             for template in method.subtask_templates:
                 for blocker in template.default_blocked_by:
                     assert blocker in ids, (
-                        f"{method.method_id}: {template.template_id} -> "
-                        f"unknown blocker {blocker}"
+                        f"{method.method_id}: {template.template_id} -> unknown blocker {blocker}"
                     )
 
     def test_unique_method_ids(self) -> None:
@@ -474,9 +469,9 @@ class TestSeedLibrary:
     def test_list_methods_finds_by_pattern_prefix(self) -> None:
         # Golden-set assertions (per Phase 5 spec).
         assert any(m.pattern == "add_api_endpoint" for m in METHOD_LIBRARY)
-        assert any(
-            m.pattern == "fix_bug" for m in METHOD_LIBRARY
-        ), "Should find add_api_endpoint and fix_bug methods"
+        assert any(m.pattern == "fix_bug" for m in METHOD_LIBRARY), (
+            "Should find add_api_endpoint and fix_bug methods"
+        )
         assert any(m.pattern.startswith("refactor_") for m in METHOD_LIBRARY)
 
     def test_list_methods_with_prefix_returns_subset(self) -> None:
@@ -518,12 +513,8 @@ class TestValidateMethodCompliance:
                 assumptions=("tested_first",),
                 assertions=("EndpointStable(/api/v1)",),
             ),
-            _make_task(
-                "tmp-b", method_ref="M-comp-001", blocked_by=("tmp-a",)
-            ),
-            _make_task(
-                "tmp-c", method_ref="M-comp-001", blocked_by=("tmp-b",)
-            ),
+            _make_task("tmp-b", method_ref="M-comp-001", blocked_by=("tmp-a",)),
+            _make_task("tmp-c", method_ref="M-comp-001", blocked_by=("tmp-b",)),
         )
         plan = _make_plan(tasks)
         issues = validate_method_compliance(plan)
@@ -539,9 +530,7 @@ class TestValidateMethodCompliance:
         assert "R-METHOD-001-INCOMPLETE" in codes
 
     def test_r_method_002_precondition_triggers_warning(self) -> None:
-        method = _make_method(
-            method_id="M-precond-001", preconditions=("database_initialized",)
-        )
+        method = _make_method(method_id="M-precond-001", preconditions=("database_initialized",))
         register_method(method)
         tasks = (
             _make_task("tmp-a", method_ref="M-precond-001"),
@@ -554,9 +543,7 @@ class TestValidateMethodCompliance:
         assert "R-METHOD-002-PRECONDITION" in codes
 
     def test_r_method_002_plan_assumptions_satisfy_precondition(self) -> None:
-        method = _make_method(
-            method_id="M-precond-002", preconditions=("route_registry_exists",)
-        )
+        method = _make_method(method_id="M-precond-002", preconditions=("route_registry_exists",))
         register_method(method)
         tasks = (
             _make_task("tmp-a", method_ref="M-precond-002"),
@@ -829,9 +816,7 @@ class TestGoldenSet:
             ("migrate the database to v3 schema", "migrate_"),
         ],
     )
-    def test_goal_finds_related_method(
-        self, goal: str, expected_pattern_prefix: str
-    ) -> None:
+    def test_goal_finds_related_method(self, goal: str, expected_pattern_prefix: str) -> None:
         # Golden-set tests are advisory: we just confirm that
         # list_methods(pattern_prefix=...) returns at least one candidate
         # for each common goal category.  Downstream prompt injection

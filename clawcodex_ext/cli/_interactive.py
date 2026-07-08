@@ -46,14 +46,14 @@ def _clear_rendered_lines(line_count: int) -> None:
     """
     if line_count <= 0:
         return
-    sys.stdout.write(f'\033[{line_count}A\033[J')
+    sys.stdout.write(f"\033[{line_count}A\033[J")
     sys.stdout.flush()
 
 
 def arrow_select(
     options: list[tuple[str, str]],
     *,
-    title: str = '',
+    title: str = "",
     allow_other: bool = False,
     multi_select: bool = False,
     run_wrapper: Callable[[Callable[[], object]], object] | None = None,
@@ -89,49 +89,49 @@ def arrow_select(
     def get_menu_fragments() -> list[tuple[str, str]]:
         fragments: list[tuple[str, str]] = []
         if title:
-            fragments.append(('[bold]', f'\n{title}\n\n'))
+            fragments.append(("[bold]", f"\n{title}\n\n"))
         for i, (label, desc) in enumerate(options):
             is_cursor = i == cursor[0]
             is_sel = multi_select and i in (selected or set())
-            prefix = '▸' if is_cursor else ' '
-            check = '✓' if is_sel else ' '
-            item_style = 'class:arrow-cursor' if is_cursor else ''
-            fragments.append((item_style, f'  {prefix} {check} {i + 1}. {label}'))
+            prefix = "▸" if is_cursor else " "
+            check = "✓" if is_sel else " "
+            item_style = "class:arrow-cursor" if is_cursor else ""
+            fragments.append((item_style, f"  {prefix} {check} {i + 1}. {label}"))
             if desc:
-                fragments.append(('class:dim', f'    {desc}'))
-            fragments.append(('', '\n'))
+                fragments.append(("class:dim", f"    {desc}"))
+            fragments.append(("", "\n"))
         if allow_other:
             i = len(options)
             is_cursor = i == cursor[0]
-            prefix = '▸' if is_cursor else ' '
-            item_style = 'class:arrow-cursor' if is_cursor else ''
-            fragments.append((item_style, f'  {prefix}   {i + 1}. Other'))
-            fragments.append(('class:dim', '  (provide custom text)'))
-            fragments.append(('', '\n'))
+            prefix = "▸" if is_cursor else " "
+            item_style = "class:arrow-cursor" if is_cursor else ""
+            fragments.append((item_style, f"  {prefix}   {i + 1}. Other"))
+            fragments.append(("class:dim", "  (provide custom text)"))
+            fragments.append(("", "\n"))
         if multi_select:
-            hint = '  ↑↓ navigate · Space toggle · Enter confirm · 1-9 quick select · Esc cancel'
+            hint = "  ↑↓ navigate · Space toggle · Enter confirm · 1-9 quick select · Esc cancel"
         else:
-            hint = '  ↑↓ navigate · Enter select · 1-9 quick select · Esc cancel'
-        fragments.append(('class:dim', f'\n{hint}'))
+            hint = "  ↑↓ navigate · Enter select · 1-9 quick select · Esc cancel"
+        fragments.append(("class:dim", f"\n{hint}"))
         # 统计本次渲染的行数用于退出后清行。
         # 行数 = \n 数 + 1：最后 hint 行无结尾 \n，但占一个光标位置
         # （prompt_toolkit 退出时光标停在该行末尾）。
-        rendered_lines[0] = sum(text.count('\n') for _style, text in fragments) + 1
+        rendered_lines[0] = sum(text.count("\n") for _style, text in fragments) + 1
         return fragments
 
     kb = KeyBindings()
 
-    @kb.add('up')
+    @kb.add("up")
     def _move_up(event):  # noqa: ANN001
         cursor[0] = max(0, cursor[0] - 1)
         event.app.invalidate()
 
-    @kb.add('down')
+    @kb.add("down")
     def _move_down(event):  # noqa: ANN001
         cursor[0] = min(total - 1, cursor[0] + 1)
         event.app.invalidate()
 
-    @kb.add('enter')
+    @kb.add("enter")
     def _handle_enter(event):  # noqa: ANN001
         if multi_select:
             sel_list = sorted(selected) if selected else [0]
@@ -139,7 +139,7 @@ def arrow_select(
         else:
             event.app.exit(result=cursor[0])
 
-    @kb.add('space')
+    @kb.add("space")
     def _handle_space(event):  # noqa: ANN001
         if multi_select:
             if cursor[0] < len(options):
@@ -153,11 +153,11 @@ def arrow_select(
         else:
             event.app.exit(result=cursor[0])
 
-    @kb.add('escape')
+    @kb.add("escape")
     def _handle_escape(event):  # noqa: ANN001
         event.app.exit(result=None)
 
-    @kb.add('c-c')
+    @kb.add("c-c")
     def _handle_ctrl_c(event):  # noqa: ANN001
         event.app.exit(result=None)
 
@@ -178,7 +178,7 @@ def arrow_select(
             else:
                 event.app.exit(result=actual)
 
-    pt_style = Style.from_dict({'arrow-cursor': 'bold', 'dim': 'fg:gray'})
+    pt_style = Style.from_dict({"arrow-cursor": "bold", "dim": "fg:gray"})
 
     app = Application(
         layout=Layout(
@@ -221,25 +221,25 @@ def prompt_with_escape(prompt_str: str) -> tuple[str, bool]:
     if not _HAS_PROMPT_TOOLKIT:
         line = input(prompt_str)
         stripped = line.strip()
-        if stripped == '':
-            return '', True
+        if stripped == "":
+            return "", True
         return stripped, False
 
     from prompt_toolkit import PromptSession
     from prompt_toolkit.key_binding import KeyBindings
 
     kb = KeyBindings()
-    state = {'escaped': False}
+    state = {"escaped": False}
 
-    @kb.add('escape')
+    @kb.add("escape")
     def _escape(event):  # noqa: ANN001
-        state['escaped'] = True
-        event.app.exit(result='')
+        state["escaped"] = True
+        event.app.exit(result="")
 
     session = PromptSession(key_bindings=kb)
     line = session.prompt(prompt_str)
-    if state['escaped']:
-        return '', True
+    if state["escaped"]:
+        return "", True
     return str(line).strip(), False
 
 
@@ -264,7 +264,7 @@ class InteractiveInput:
         self,
         options: list[tuple[str, str]],
         *,
-        title: str = '',
+        title: str = "",
     ) -> int | None:
         """Choose one option. Returns 0-based index, or ``None`` for ESC."""
         if self._input_fn is not None or not _HAS_PROMPT_TOOLKIT:
@@ -286,7 +286,7 @@ class InteractiveInput:
         if self._input_fn is not None or not _HAS_PROMPT_TOOLKIT:
             return self._confirm_via_input_fn(prompt_str)
         idx = arrow_select(
-            [('Yes', ''), ('No', '')],
+            [("Yes", ""), ("No", "")],
             title=prompt_str,
         )
         if idx is None:
@@ -302,24 +302,24 @@ class InteractiveInput:
         title: str,
     ) -> int | None:
         if title:
-            print(f'\n{title}')
+            print(f"\n{title}")
         for i, (label, desc) in enumerate(options, 1):
-            line = f'  {i}) {label}'
+            line = f"  {i}) {label}"
             if desc:
-                line += f'   {desc}'
+                line += f"   {desc}"
             print(line)
         while True:
-            raw = self._read('选择 (1-{} / 留空=返回): '.format(len(options)))
+            raw = self._read("选择 (1-{} / 留空=返回): ".format(len(options)))
             if raw is None:
                 return None
             try:
                 idx = int(raw) - 1
             except ValueError:
-                print('无效输入')
+                print("无效输入")
                 continue
             if 0 <= idx < len(options):
                 return idx
-            print('序号超出范围')
+            print("序号超出范围")
 
     def _prompt_via_input_fn(self, prompt_str: str) -> str | None:
         value = self._read(prompt_str)
@@ -333,18 +333,18 @@ class InteractiveInput:
             if raw is None:
                 return None
             lowered = raw.lower()
-            if lowered in ('y', 'yes'):
+            if lowered in ("y", "yes"):
                 return True
-            if lowered in ('n', 'no'):
+            if lowered in ("n", "no"):
                 return False
-            print('请输入 y/n（留空=返回）')
+            print("请输入 y/n（留空=返回）")
 
     def _read(self, prompt_str: str) -> str | None:
         """Read one line via the injected input_fn; empty => None (ESC)."""
         assert self._input_fn is not None or not _HAS_PROMPT_TOOLKIT
         reader = self._input_fn if self._input_fn is not None else input
         line = reader(prompt_str)
-        stripped = line.strip() if isinstance(line, str) else ''
-        if stripped == '':
+        stripped = line.strip() if isinstance(line, str) else ""
+        if stripped == "":
             return None
         return stripped

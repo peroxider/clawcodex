@@ -41,11 +41,13 @@ def _source(name: str = "aider") -> WatchSource:
 
 def test_fetch_releases_via_git_with_precreated_clone_dir(tmp_path: Path) -> None:
     """When the clone dir already exists with a CHANGELOG, git clone is skipped."""
-    source = WatchSource.from_dict({
-        "name": "testproj",
-        "repo": "owner/testproj",
-        "changelog_path": "CHANGELOG.md",
-    })
+    source = WatchSource.from_dict(
+        {
+            "name": "testproj",
+            "repo": "owner/testproj",
+            "changelog_path": "CHANGELOG.md",
+        }
+    )
     safe = Fetcher._safe_clone_name(source.name)
     clone_dir = tmp_path / "git-clones" / safe
     clone_dir.mkdir(parents=True)
@@ -62,10 +64,12 @@ def test_fetch_releases_via_git_with_precreated_clone_dir(tmp_path: Path) -> Non
 
 def test_fetch_releases_no_changelog_returns_empty(tmp_path: Path) -> None:
     """When the clone dir exists but has no changelog file, empty list is returned."""
-    source = WatchSource.from_dict({
-        "name": "nolog",
-        "repo": "owner/nolog",
-    })
+    source = WatchSource.from_dict(
+        {
+            "name": "nolog",
+            "repo": "owner/nolog",
+        }
+    )
     safe = Fetcher._safe_clone_name(source.name)
     clone_dir = tmp_path / "git-clones" / safe
     clone_dir.mkdir(parents=True)
@@ -79,10 +83,12 @@ def test_fetch_releases_no_changelog_returns_empty(tmp_path: Path) -> None:
 
 def test_fetch_swallows_errors_into_result(tmp_path: Path) -> None:
     """Errors during fetch_releases are caught and stored in result.errors."""
-    source = WatchSource.from_dict({
-        "name": "badrepo",
-        "repo": "owner/badrepo",
-    })
+    source = WatchSource.from_dict(
+        {
+            "name": "badrepo",
+            "repo": "owner/badrepo",
+        }
+    )
     # No pre-created clone dir → Fetcher will call _git_clone which needs
     # the real git binary and a real remote.  Patch _git_clone to raise.
     with patch.object(Fetcher, "_git_clone", side_effect=RuntimeError("clone failed")):
@@ -97,11 +103,13 @@ def test_fetch_swallows_errors_into_result(tmp_path: Path) -> None:
 
 def test_fetch_releases_incremental_triggers_fetch(tmp_path: Path) -> None:
     """incremental=True triggers git fetch on an existing clone dir."""
-    source = WatchSource.from_dict({
-        "name": "incrproj",
-        "repo": "owner/incrproj",
-        "changelog_path": "CHANGELOG.md",
-    })
+    source = WatchSource.from_dict(
+        {
+            "name": "incrproj",
+            "repo": "owner/incrproj",
+            "changelog_path": "CHANGELOG.md",
+        }
+    )
     safe = Fetcher._safe_clone_name(source.name)
     clone_dir = tmp_path / "git-clones" / safe
     clone_dir.mkdir(parents=True)
@@ -229,8 +237,9 @@ def test_read_changelog_tries_multiple_paths(tmp_path: Path) -> None:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _mock_response(status_code: int = 200, json_data: Any = None,
-                   headers: dict[str, str] | None = None) -> MagicMock:
+def _mock_response(
+    status_code: int = 200, json_data: Any = None, headers: dict[str, str] | None = None
+) -> MagicMock:
     """Build a minimal mock HTTP response."""
     resp = MagicMock()
     resp.status_code = status_code
@@ -247,10 +256,13 @@ def _make_client_mock(responses: list[MagicMock]) -> MagicMock:
     return client
 
 
-def _api_release_payload(tag: str = "v1.0.0", name: str = "1.0.0",
-                         body: str = "### Added\n- Feature X\n",
-                         published_at: str = "2026-06-01T12:00:00Z",
-                         prerelease: bool = False) -> dict[str, Any]:
+def _api_release_payload(
+    tag: str = "v1.0.0",
+    name: str = "1.0.0",
+    body: str = "### Added\n- Feature X\n",
+    published_at: str = "2026-06-01T12:00:00Z",
+    prerelease: bool = False,
+) -> dict[str, Any]:
     return {
         "tag_name": tag,
         "name": name,
@@ -264,7 +276,10 @@ def _api_release_payload(tag: str = "v1.0.0", name: str = "1.0.0",
 def _tag_payload(name: str = "v1.0.0") -> dict[str, Any]:
     return {
         "name": name,
-        "commit": {"sha": "abc123", "url": "https://api.github.com/repos/owner/repo/commits/abc123"},
+        "commit": {
+            "sha": "abc123",
+            "url": "https://api.github.com/repos/owner/repo/commits/abc123",
+        },
         "zipball_url": f"https://api.github.com/repos/owner/repo/zipball/{name}",
         "tarball_url": f"https://api.github.com/repos/owner/repo/tarball/{name}",
     }
@@ -307,8 +322,20 @@ def test_split_changelog_sections_without_brackets() -> None:
 def test_merge_changelog_raw_matches_by_tag() -> None:
     """raw_body is populated when the release tag matches a CHANGELOG section."""
     releases = [
-        Release(tag="v2.0.0", name="2.0.0", body="API body", published_at="2026-06-01T12:00:00Z", url="https://gh/releases/v2.0.0"),
-        Release(tag="v1.0.0", name="1.0.0", body="API body", published_at="2026-05-01T12:00:00Z", url="https://gh/releases/v1.0.0"),
+        Release(
+            tag="v2.0.0",
+            name="2.0.0",
+            body="API body",
+            published_at="2026-06-01T12:00:00Z",
+            url="https://gh/releases/v2.0.0",
+        ),
+        Release(
+            tag="v1.0.0",
+            name="1.0.0",
+            body="API body",
+            published_at="2026-05-01T12:00:00Z",
+            url="https://gh/releases/v1.0.0",
+        ),
     ]
     changelog = "## [v2.0.0] - 2026-06-01\n### Added\n- Feature X\n## [v1.0.0] - 2026-05-01\n### Added\n- Feature Y\n"
     result = Fetcher._merge_changelog_raw(releases, changelog)
@@ -319,7 +346,13 @@ def test_merge_changelog_raw_matches_by_tag() -> None:
 def test_merge_changelog_raw_no_match_keeps_raw_body_empty() -> None:
     """When no CHANGELOG section matches, raw_body stays empty."""
     releases = [
-        Release(tag="v99.0.0", name="99.0.0", body="API body", published_at="2026-06-01T12:00:00Z", url="https://gh/releases/v99.0.0"),
+        Release(
+            tag="v99.0.0",
+            name="99.0.0",
+            body="API body",
+            published_at="2026-06-01T12:00:00Z",
+            url="https://gh/releases/v99.0.0",
+        ),
     ]
     changelog = "## [v1.0.0] - 2026-05-01\n### Added\n- Feature Y\n"
     result = Fetcher._merge_changelog_raw(releases, changelog)
@@ -340,7 +373,9 @@ def test_merge_changelog_raw_empty_changelog() -> None:
 
 def test_apply_tag_filter_prefix_match() -> None:
     """Only releases whose tag starts with the filter are kept."""
-    source = WatchSource.from_dict({"name": "test", "repo": "owner/repo", "release_tag_filter": "v"})
+    source = WatchSource.from_dict(
+        {"name": "test", "repo": "owner/repo", "release_tag_filter": "v"}
+    )
     releases = [
         Release(tag="v1.0.0", name="1.0.0", body="", published_at=None, url=""),
         Release(tag="v2.0.0", name="2.0.0", body="", published_at=None, url=""),
@@ -364,7 +399,9 @@ def test_apply_tag_filter_no_filter_returns_all() -> None:
 
 def test_apply_tag_filter_excludes_all() -> None:
     """When filter matches nothing, empty list is returned."""
-    source = WatchSource.from_dict({"name": "test", "repo": "owner/repo", "release_tag_filter": "zzz"})
+    source = WatchSource.from_dict(
+        {"name": "test", "repo": "owner/repo", "release_tag_filter": "zzz"}
+    )
     releases = [
         Release(tag="v1.0.0", name="1.0.0", body="", published_at=None, url=""),
     ]
@@ -408,7 +445,9 @@ def test_layer1_returns_releases_on_200() -> None:
     source = _source("test")
     payload = [
         _api_release_payload("v1.0.0", "1.0.0", "### Added\n- X\n", "2026-06-01T12:00:00Z"),
-        _api_release_payload("v0.9.0", "0.9.0", "### Added\n- Y\n", "2026-05-01T12:00:00Z", prerelease=True),
+        _api_release_payload(
+            "v0.9.0", "0.9.0", "### Added\n- Y\n", "2026-05-01T12:00:00Z", prerelease=True
+        ),
     ]
     client = _make_client_mock([_mock_response(200, payload)])
     fetcher = Fetcher(cache_dir=Path("/tmp"), client=client)
@@ -496,6 +535,7 @@ def test_layer2_403_returns_empty() -> None:
 def test_layer3_returns_decoded_content(tmp_path: Path) -> None:
     """On HTTP 200 with base64 content, decoded text is returned and cached."""
     import base64
+
     source = _source("test")
     changelog_text = "## 1.0.0\n### Added\n- X\n"
     encoded = base64.b64encode(changelog_text.encode("utf-8")).decode("utf-8")
@@ -524,6 +564,7 @@ def test_layer3_uses_cache_on_hit(tmp_path: Path) -> None:
 def test_layer3_cache_expired_triggers_api(tmp_path: Path) -> None:
     """When the cache is expired or missing, the API is queried."""
     import base64
+
     source = _source("test")
     _write_changelog_cache(tmp_path, source, "stale")
     new_text = "## 2.0.0\n### Added\n- Fresh\n"
@@ -541,14 +582,17 @@ def test_layer3_cache_expired_triggers_api(tmp_path: Path) -> None:
 def test_layer3_404_tries_next_path(tmp_path: Path) -> None:
     """When CHANGELOG.md returns 404, the next file path is tried."""
     import base64
+
     source = _source("test")
     changelog_text = "## 1.0.0\ncontent\n"
     encoded = base64.b64encode(changelog_text.encode("utf-8")).decode("utf-8")
     # First path (CHANGELOG.md) returns 404, second (CHANGELOG) succeeds
-    client = _make_client_mock([
-        _mock_response(404),                          # CHANGELOG.md
-        _mock_response(200, {"encoding": "base64", "content": encoded}),  # CHANGELOG
-    ])
+    client = _make_client_mock(
+        [
+            _mock_response(404),  # CHANGELOG.md
+            _mock_response(200, {"encoding": "base64", "content": encoded}),  # CHANGELOG
+        ]
+    )
     fetcher = Fetcher(cache_dir=tmp_path, client=client)
     result = fetcher._fetch_changelog_raw(source)
     assert result == changelog_text
@@ -570,12 +614,17 @@ def test_layer3_all_paths_fail_returns_none(tmp_path: Path) -> None:
 def test_layer3_respects_custom_changelog_path(tmp_path: Path) -> None:
     """source.changelog_path is tried first."""
     import base64
-    source = WatchSource.from_dict({"name": "test", "repo": "owner/repo", "changelog_path": "docs/CHANGES.md"})
+
+    source = WatchSource.from_dict(
+        {"name": "test", "repo": "owner/repo", "changelog_path": "docs/CHANGES.md"}
+    )
     changelog_text = "## 5.0.0\n### Added\n- Custom path\n"
     encoded = base64.b64encode(changelog_text.encode("utf-8")).decode("utf-8")
-    client = _make_client_mock([
-        _mock_response(200, {"encoding": "base64", "content": encoded}),
-    ])
+    client = _make_client_mock(
+        [
+            _mock_response(200, {"encoding": "base64", "content": encoded}),
+        ]
+    )
     fetcher = Fetcher(cache_dir=tmp_path, client=client)
     result = fetcher._fetch_changelog_raw(source)
     assert result == changelog_text
@@ -591,6 +640,7 @@ def test_layer3_respects_custom_changelog_path(tmp_path: Path) -> None:
 def test_fetch_releases_layer1_succeeds_with_raw_body(tmp_path: Path) -> None:
     """When Layer 1 returns releases and Layer 3 has CHANGELOG, raw_body is merged."""
     import base64
+
     source = _source("test")
     api_payload = [
         _api_release_payload("v1.0.0", "1.0.0", "API body"),
@@ -599,10 +649,12 @@ def test_fetch_releases_layer1_succeeds_with_raw_body(tmp_path: Path) -> None:
     changelog_text = "## [v1.0.0] - 2026-06-01\n### Added\n- CHANGELOG detail\n## [v0.9.0] - 2026-05-01\n### Added\n- Old detail\n"
     encoded = base64.b64encode(changelog_text.encode("utf-8")).decode("utf-8")
     # Layer 1 call + Layer 3 call (one path)
-    client = _make_client_mock([
-        _mock_response(200, api_payload),                                        # L1
-        _mock_response(200, {"encoding": "base64", "content": encoded}),         # L3
-    ])
+    client = _make_client_mock(
+        [
+            _mock_response(200, api_payload),  # L1
+            _mock_response(200, {"encoding": "base64", "content": encoded}),  # L3
+        ]
+    )
     fetcher = Fetcher(cache_dir=tmp_path, client=client)
     releases = fetcher.fetch_releases(source)
     assert len(releases) == 2
@@ -616,10 +668,12 @@ def test_fetch_releases_falls_back_to_layer2(tmp_path: Path) -> None:
     """When Layer 1 returns empty (no GitHub Releases), Layer 2 tags are used."""
     source = _source("test")
     payload = [_tag_payload("v1.0.0"), _tag_payload("v2.0.0")]
-    client = _make_client_mock([
-        _mock_response(200, []),          # L1: empty
-        _mock_response(200, payload),     # L2: tags
-    ])
+    client = _make_client_mock(
+        [
+            _mock_response(200, []),  # L1: empty
+            _mock_response(200, payload),  # L2: tags
+        ]
+    )
     fetcher = Fetcher(cache_dir=tmp_path, client=client)
     releases = fetcher.fetch_releases(source)
     assert len(releases) == 2
@@ -631,15 +685,18 @@ def test_fetch_releases_falls_back_to_layer2(tmp_path: Path) -> None:
 def test_fetch_releases_falls_back_to_layer3(tmp_path: Path) -> None:
     """When L1 and L2 fail, L3 (CHANGELOG API) is used."""
     import base64
+
     source = _source("test")
     changelog_text = "## [1.0.0] - 2026-06-01\n### Added\n- From CHANGELOG\n"
     encoded = base64.b64encode(changelog_text.encode("utf-8")).decode("utf-8")
     # L1 + L2 fail, L3 succeeds
-    client = _make_client_mock([
-        _mock_response(200, []),                                         # L1: empty
-        _mock_response(200, []),                                         # L2: empty
-        _mock_response(200, {"encoding": "base64", "content": encoded}), # L3: success
-    ])
+    client = _make_client_mock(
+        [
+            _mock_response(200, []),  # L1: empty
+            _mock_response(200, []),  # L2: empty
+            _mock_response(200, {"encoding": "base64", "content": encoded}),  # L3: success
+        ]
+    )
     fetcher = Fetcher(cache_dir=tmp_path, client=client)
     releases = fetcher.fetch_releases(source)
     assert len(releases) == 1
@@ -650,11 +707,13 @@ def test_fetch_releases_falls_back_to_layer3(tmp_path: Path) -> None:
 
 def test_fetch_releases_falls_back_to_layer4(tmp_path: Path) -> None:
     """When L1/L2/L3 all fail, L4 (git clone) is used as last resort."""
-    source = WatchSource.from_dict({
-        "name": "clonefallback",
-        "repo": "owner/clonefallback",
-        "changelog_path": "CHANGELOG.md",
-    })
+    source = WatchSource.from_dict(
+        {
+            "name": "clonefallback",
+            "repo": "owner/clonefallback",
+            "changelog_path": "CHANGELOG.md",
+        }
+    )
     # Pre-create clone dir so _git_clone is skipped
     safe = Fetcher._safe_clone_name(source.name)
     clone_dir = tmp_path / "git-clones" / safe
@@ -663,15 +722,17 @@ def test_fetch_releases_falls_back_to_layer4(tmp_path: Path) -> None:
         "## 3.0.0 - 2026-07-01\n### Added\n- Clone fallback feature\n", encoding="utf-8"
     )
     # L1, L2, L3 all fail (empty/error)
-    client = _make_client_mock([
-        _mock_response(200, []),   # L1
-        _mock_response(200, []),   # L2
-        _mock_response(404),       # L3: CHANGELOG.md
-        _mock_response(404),       # L3: CHANGELOG
-        _mock_response(404),       # L3: RELEASE.md
-        _mock_response(404),       # L3: RELEASE_NOTES.md
-        _mock_response(404),       # L3: History.md
-    ])
+    client = _make_client_mock(
+        [
+            _mock_response(200, []),  # L1
+            _mock_response(200, []),  # L2
+            _mock_response(404),  # L3: CHANGELOG.md
+            _mock_response(404),  # L3: CHANGELOG
+            _mock_response(404),  # L3: RELEASE.md
+            _mock_response(404),  # L3: RELEASE_NOTES.md
+            _mock_response(404),  # L3: History.md
+        ]
+    )
     fetcher = Fetcher(cache_dir=tmp_path, client=client)
     releases = fetcher.fetch_releases(source)
     assert len(releases) == 1
@@ -682,10 +743,12 @@ def test_fetch_releases_falls_back_to_layer4(tmp_path: Path) -> None:
 
 def test_fetch_releases_tag_filter_applied_in_all_layers(tmp_path: Path) -> None:
     """release_tag_filter filters results regardless of which layer wins."""
-    source = WatchSource.from_dict({"name": "test", "repo": "owner/repo", "release_tag_filter": "v"})
+    source = WatchSource.from_dict(
+        {"name": "test", "repo": "owner/repo", "release_tag_filter": "v"}
+    )
     payload = [
         _api_release_payload("v1.0.0", "1.0.0"),
-        _api_release_payload("1.0.0", "1.0.0"),   # won't match filter
+        _api_release_payload("1.0.0", "1.0.0"),  # won't match filter
         _api_release_payload("v2.0.0", "2.0.0"),
     ]
     client = _make_client_mock([_mock_response(200, payload)])
@@ -741,8 +804,11 @@ def test_changelog_cache_expired(tmp_path: Path) -> None:
 def test_release_raw_body_roundtrip() -> None:
     """raw_body survives to_dict() → from_dict() roundtrip."""
     r = Release(
-        tag="v1.0.0", name="1.0.0", body="API body",
-        published_at="2026-06-01T12:00:00Z", url="https://gh/releases/v1.0.0",
+        tag="v1.0.0",
+        name="1.0.0",
+        body="API body",
+        published_at="2026-06-01T12:00:00Z",
+        url="https://gh/releases/v1.0.0",
         raw_body="### Added\n- CHANGELOG detail",
     )
     d = r.to_dict()

@@ -89,7 +89,9 @@ class CheckpointManager:
         self._run_dir.mkdir(parents=True, exist_ok=True)
         self._checkpoint_path = self._run_dir / "checkpoint.json"
 
-    def save(self, state: WorkflowState, decision_history: list[dict[str, Any]] | None = None) -> Checkpoint:
+    def save(
+        self, state: WorkflowState, decision_history: list[dict[str, Any]] | None = None
+    ) -> Checkpoint:
         """保存检查点。
 
         使用原子写入：先写 temp 文件，再 rename。
@@ -125,8 +127,11 @@ class CheckpointManager:
             temp_path.write_text(json_text, encoding="utf-8")
             temp_path.replace(self._checkpoint_path)
 
-            logger.info("Checkpoint saved: stage %s, %s stages completed",
-                         checkpoint.current_stage, len(checkpoint.completed_stages))
+            logger.info(
+                "Checkpoint saved: stage %s, %s stages completed",
+                checkpoint.current_stage,
+                len(checkpoint.completed_stages),
+            )
         except Exception as exc:
             raise CheckpointError(f"Failed to save checkpoint: {exc}") from exc
 

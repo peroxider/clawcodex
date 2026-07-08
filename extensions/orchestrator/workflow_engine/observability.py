@@ -42,89 +42,142 @@ class WorkflowObservability:
         self._journal = journal
         self._tool_events_path = tool_events_path
 
-    def write_stage_start(self, stage_id: int, stage_name: str, phase: str = "", **kwargs: Any) -> None:
+    def write_stage_start(
+        self, stage_id: int, stage_name: str, phase: str = "", **kwargs: Any
+    ) -> None:
         """写入 stage_start 事件。"""
-        self._emit("workflow_stage_start", {
-            "stage_id": stage_id,
-            "stage_name": stage_name,
-            "phase": phase,
-            **kwargs,
-        })
+        self._emit(
+            "workflow_stage_start",
+            {
+                "stage_id": stage_id,
+                "stage_name": stage_name,
+                "phase": phase,
+                **kwargs,
+            },
+        )
 
-    def write_stage_complete(self, stage_id: int, stage_name: str, cost: float = 0.0, duration: float = 0.0, **kwargs: Any) -> None:
+    def write_stage_complete(
+        self,
+        stage_id: int,
+        stage_name: str,
+        cost: float = 0.0,
+        duration: float = 0.0,
+        **kwargs: Any,
+    ) -> None:
         """写入 stage_complete 事件。"""
-        self._emit("workflow_stage_complete", {
-            "stage_id": stage_id,
-            "stage_name": stage_name,
-            "cost_usd": cost,
-            "duration_seconds": duration,
-            **kwargs,
-        })
+        self._emit(
+            "workflow_stage_complete",
+            {
+                "stage_id": stage_id,
+                "stage_name": stage_name,
+                "cost_usd": cost,
+                "duration_seconds": duration,
+                **kwargs,
+            },
+        )
 
-    def write_stage_failed(self, stage_id: int, stage_name: str, error: str = "", **kwargs: Any) -> None:
+    def write_stage_failed(
+        self, stage_id: int, stage_name: str, error: str = "", **kwargs: Any
+    ) -> None:
         """写入 stage_failed 事件。"""
-        self._emit("workflow_stage_failed", {
-            "stage_id": stage_id,
-            "stage_name": stage_name,
-            "error": error,
-            **kwargs,
-        })
+        self._emit(
+            "workflow_stage_failed",
+            {
+                "stage_id": stage_id,
+                "stage_name": stage_name,
+                "error": error,
+                **kwargs,
+            },
+        )
 
-    def write_gate_request(self, stage_id: int, stage_name: str, mode: str = "", **kwargs: Any) -> None:
+    def write_gate_request(
+        self, stage_id: int, stage_name: str, mode: str = "", **kwargs: Any
+    ) -> None:
         """写入 gate_request 事件。"""
-        self._emit("workflow_gate_request", {
-            "stage_id": stage_id,
-            "stage_name": stage_name,
-            "gate_mode": mode,
-            **kwargs,
-        })
+        self._emit(
+            "workflow_gate_request",
+            {
+                "stage_id": stage_id,
+                "stage_name": stage_name,
+                "gate_mode": mode,
+                **kwargs,
+            },
+        )
 
-    def write_gate_result(self, stage_id: int, stage_name: str, approved: bool, reason: str = "", **kwargs: Any) -> None:
+    def write_gate_result(
+        self, stage_id: int, stage_name: str, approved: bool, reason: str = "", **kwargs: Any
+    ) -> None:
         """写入 gate_result 事件。"""
-        self._emit("workflow_gate_result", {
-            "stage_id": stage_id,
-            "stage_name": stage_name,
-            "approved": approved,
-            "reason": reason,
-            **kwargs,
-        })
+        self._emit(
+            "workflow_gate_result",
+            {
+                "stage_id": stage_id,
+                "stage_name": stage_name,
+                "approved": approved,
+                "reason": reason,
+                **kwargs,
+            },
+        )
 
-    def write_decision(self, stage_id: int, outcome: str, next_stage: int | None = None, **kwargs: Any) -> None:
+    def write_decision(
+        self, stage_id: int, outcome: str, next_stage: int | None = None, **kwargs: Any
+    ) -> None:
         """写入 decision 事件。"""
-        self._emit("workflow_decision", {
-            "stage_id": stage_id,
-            "outcome": outcome,
-            "next_stage": next_stage,
-            **kwargs,
-        })
+        self._emit(
+            "workflow_decision",
+            {
+                "stage_id": stage_id,
+                "outcome": outcome,
+                "next_stage": next_stage,
+                **kwargs,
+            },
+        )
 
-    def write_workflow_complete(self, total_cost: float, total_duration: float, completed_stages: int, total_stages: int, **kwargs: Any) -> None:
+    def write_workflow_complete(
+        self,
+        total_cost: float,
+        total_duration: float,
+        completed_stages: int,
+        total_stages: int,
+        **kwargs: Any,
+    ) -> None:
         """写入 workflow_complete 事件。"""
-        self._emit("workflow_complete", {
-            "total_cost_usd": total_cost,
-            "total_duration_seconds": total_duration,
-            "completed_stages": completed_stages,
-            "total_stages": total_stages,
-            **kwargs,
-        })
+        self._emit(
+            "workflow_complete",
+            {
+                "total_cost_usd": total_cost,
+                "total_duration_seconds": total_duration,
+                "completed_stages": completed_stages,
+                "total_stages": total_stages,
+                **kwargs,
+            },
+        )
 
     def write_workflow_error(self, error: str, stage_id: int | None = None, **kwargs: Any) -> None:
         """写入 workflow_error 事件。"""
-        self._emit("workflow_error", {
-            "error": error,
-            "stage_id": stage_id,
-            **kwargs,
-        })
+        self._emit(
+            "workflow_error",
+            {
+                "error": error,
+                "stage_id": stage_id,
+                **kwargs,
+            },
+        )
 
-    def write_cost_event(self, total_usd: float, stage_usd: float, budget_max: float, **kwargs: Any) -> None:
+    def write_cost_event(
+        self, total_usd: float, stage_usd: float, budget_max: float, **kwargs: Any
+    ) -> None:
         """写入成本追踪事件。"""
-        self._emit("workflow_cost", {
-            "total_usd": total_usd,
-            "stage_usd": stage_usd,
-            "budget_max": budget_max,
-            "usage_pct": round((total_usd / budget_max * 100), 1) if budget_max > 0 else 0,
-            **kwargs,
-        })
+        self._emit(
+            "workflow_cost",
+            {
+                "total_usd": total_usd,
+                "stage_usd": stage_usd,
+                "budget_max": budget_max,
+                "usage_pct": round((total_usd / budget_max * 100), 1) if budget_max > 0 else 0,
+                **kwargs,
+            },
+        )
 
     def _emit(self, event_type: str, data: dict[str, Any]) -> None:
         """发射事件到 State Journal 和审计日志。"""
@@ -185,15 +238,20 @@ class WorkflowProgressSink:
         """阶段开始。"""
         self.current_stage = f"{stage_name}"
 
-    def on_stage_complete(self, stage_id: int, stage_name: str = "", cost: float = 0.0, duration: float = 0.0) -> None:
+    def on_stage_complete(
+        self, stage_id: int, stage_name: str = "", cost: float = 0.0, duration: float = 0.0
+    ) -> None:
         """阶段完成时更新进度。"""
         self.completed_stages += 1
-        progress = (self.completed_stages / self.total_stages * 100) if self.total_stages > 0 else None
+        progress = (
+            (self.completed_stages / self.total_stages * 100) if self.total_stages > 0 else None
+        )
 
         for sink in self._progress_sinks:
             try:
                 if hasattr(sink, "on_phase_complete"):
                     from ...api.query import PhaseComplete
+
                     event = PhaseComplete(
                         phase=self.completed_stages,
                         progress=progress,
@@ -213,6 +271,7 @@ class WorkflowProgressSink:
             try:
                 if hasattr(sink, "on_session_complete"):
                     from ...api.query import SessionComplete
+
                     event = SessionComplete(reason="success")
                     sink.on_session_complete(event, None)
             except Exception as exc:

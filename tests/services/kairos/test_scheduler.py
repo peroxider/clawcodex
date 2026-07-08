@@ -255,9 +255,7 @@ class TestTickSchedulerPause:
             time.sleep(0.15)
             s.resume()
             assert s.is_paused is False
-            assert _wait_for(
-                lambda: len(events) >= 3, timeout=2.0
-            )
+            assert _wait_for(lambda: len(events) >= 3, timeout=2.0)
         finally:
             s.stop()
 
@@ -269,9 +267,7 @@ class TestTickSchedulerPause:
 
 class TestTickSchedulerJitter:
     def test_no_jitter_drift_is_zero(self) -> None:
-        cfg = TickConfig(
-            id="x", interval_seconds=0.05, jitter_fraction=0.0
-        )
+        cfg = TickConfig(id="x", interval_seconds=0.05, jitter_fraction=0.0)
         s = TickScheduler(cfg)
         events: list[TickEvent] = []
         try:
@@ -285,9 +281,7 @@ class TestTickSchedulerJitter:
             s.stop()
 
     def test_jitter_stays_within_bounds(self) -> None:
-        cfg = TickConfig(
-            id="x", interval_seconds=0.05, jitter_fraction=0.5
-        )
+        cfg = TickConfig(id="x", interval_seconds=0.05, jitter_fraction=0.5)
         # Use a deterministic RNG so we can assert the exact bounds.
         import random as _r
 
@@ -304,9 +298,7 @@ class TestTickSchedulerJitter:
             s.stop()
 
     def test_jitter_applied_affects_drift(self) -> None:
-        cfg = TickConfig(
-            id="x", interval_seconds=0.05, jitter_fraction=0.5
-        )
+        cfg = TickConfig(id="x", interval_seconds=0.05, jitter_fraction=0.5)
         import random as _r
 
         rng = _r.Random(0xC0FFEE)

@@ -27,29 +27,29 @@ import sys
 from clawcodex_ext.cli.subcommand_registry import register
 
 _USAGE = (
-    'usage: clawcodex-dev gateway {start|stop|status|restart|setup|disconnect|login} [options]\n'
-    '       clawcodex-dev gateway {status|restart|disconnect|login} <name>\n\n'
-    'Manage the IM Message Gateway daemon and channel configuration.\n'
-    '  start            Start the daemon (idempotent; --state-dir, -v/--verbose).\n'
-    '  stop             Stop the daemon (idempotent; --state-dir).\n'
-    '  restart          Restart the daemon (no positional).\n'
-    '  restart <name>   Rebuild a channel adapter and reload its config.\n'
-    '  status           Daemon health + all-channels overview (unified view).\n'
-    '  status <name>    Show channel health/status.\n'
-    '  setup            Guided channel configuration wizard.\n'
-    '  disconnect <name> Remove the active REPL/orchestrator connection.\n'
-    '  login <name>     WeChat iLink QR login.\n'
-    '  --state-dir PATH  Override gateway state directory.\n'
-    '  -v, --verbose     Enable DEBUG-level IM logging (default: only WARNING and above).\n'
-    '                    Also set via CLAWCODEX_GATEWAY_LOG_LEVEL=INFO|DEBUG.\n'
+    "usage: clawcodex-dev gateway {start|stop|status|restart|setup|disconnect|login} [options]\n"
+    "       clawcodex-dev gateway {status|restart|disconnect|login} <name>\n\n"
+    "Manage the IM Message Gateway daemon and channel configuration.\n"
+    "  start            Start the daemon (idempotent; --state-dir, -v/--verbose).\n"
+    "  stop             Stop the daemon (idempotent; --state-dir).\n"
+    "  restart          Restart the daemon (no positional).\n"
+    "  restart <name>   Rebuild a channel adapter and reload its config.\n"
+    "  status           Daemon health + all-channels overview (unified view).\n"
+    "  status <name>    Show channel health/status.\n"
+    "  setup            Guided channel configuration wizard.\n"
+    "  disconnect <name> Remove the active REPL/orchestrator connection.\n"
+    "  login <name>     WeChat iLink QR login.\n"
+    "  --state-dir PATH  Override gateway state directory.\n"
+    "  -v, --verbose     Enable DEBUG-level IM logging (default: only WARNING and above).\n"
+    "                    Also set via CLAWCODEX_GATEWAY_LOG_LEVEL=INFO|DEBUG.\n"
 )
 
 
-@register('gateway')
+@register("gateway")
 def run_gateway_command(args: list[str]) -> int:
     from extensions.im_gateway.server import DaemonPaths, GatewayDaemon
 
-    if not args or args[0] in ('help', '--help', '-h'):
+    if not args or args[0] in ("help", "--help", "-h"):
         print(_USAGE)
         return 0
 
@@ -59,11 +59,11 @@ def run_gateway_command(args: list[str]) -> int:
     positional: list[str] = []
     i = 0
     while i < len(args):
-        if args[i] == '--state-dir' and i + 1 < len(args):
+        if args[i] == "--state-dir" and i + 1 < len(args):
             state_dir = args[i + 1]
             i += 2
             continue
-        if args[i] in ('-v', '--verbose'):
+        if args[i] in ("-v", "--verbose"):
             verbose = True
             i += 1
             continue
@@ -79,28 +79,28 @@ def run_gateway_command(args: list[str]) -> int:
 
     # -- channel operations (verb + positional name) ------------------------
 
-    if verb == 'status' and rest:
+    if verb == "status" and rest:
         from clawcodex_ext.cli.channels_cmd.commands import format_status
 
         print(format_status(None, rest[0], state_dir=state_dir))
         return 0
 
-    if verb == 'restart' and rest:
+    if verb == "restart" and rest:
         from clawcodex_ext.cli.channels_cmd.commands import restart_channel
 
         return restart_channel(rest[0], state_dir=state_dir)
 
-    if verb in ('disconnect', 'unbind'):
+    if verb in ("disconnect", "unbind"):
         if not rest:
-            print(f'error: gateway {verb} <name>', file=sys.stderr)
+            print(f"error: gateway {verb} <name>", file=sys.stderr)
             return 2
         from clawcodex_ext.cli.channels_cmd.commands import _disconnect_gateway_connection
 
         return _disconnect_gateway_connection(rest[0], state_dir=state_dir)
 
-    if verb == 'login':
+    if verb == "login":
         if not rest:
-            print('error: gateway login <wechat-name>', file=sys.stderr)
+            print("error: gateway login <wechat-name>", file=sys.stderr)
             return 2
         from clawcodex_ext.cli.channels_cmd.commands import wechat_login
 
@@ -111,7 +111,7 @@ def run_gateway_command(args: list[str]) -> int:
     paths = DaemonPaths.for_state_dir(state_dir)
     daemon = GatewayDaemon(paths)
 
-    if verb == 'status':
+    if verb == "status":
         # Unified view: daemon status line + all channels.
         daemon.status()
         from clawcodex_ext.cli.channels_cmd.commands import format_status
@@ -119,29 +119,29 @@ def run_gateway_command(args: list[str]) -> int:
         print(format_status(None, None, state_dir=state_dir))
         return 0
 
-    if verb == 'start':
+    if verb == "start":
         if rest:
-            print('error: start takes no channel name', file=sys.stderr)
+            print("error: start takes no channel name", file=sys.stderr)
             return 2
         return daemon.start(verbose=verbose)
 
-    if verb == 'stop':
+    if verb == "stop":
         if rest:
-            print('error: stop takes no channel name', file=sys.stderr)
+            print("error: stop takes no channel name", file=sys.stderr)
             return 2
         return daemon.stop()
 
-    if verb == 'restart':
+    if verb == "restart":
         return daemon.restart(verbose=verbose)
 
-    if verb == 'setup':
+    if verb == "setup":
         from clawcodex_ext.cli.channels_cmd.commands import run_wizard
 
         return run_wizard(None)
 
-    print(f'error: unknown gateway subcommand {verb!r}', file=sys.stderr)
+    print(f"error: unknown gateway subcommand {verb!r}", file=sys.stderr)
     print(_USAGE, file=sys.stderr)
     return 2
 
 
-__all__ = ['run_gateway_command']
+__all__ = ["run_gateway_command"]

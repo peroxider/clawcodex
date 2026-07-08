@@ -152,7 +152,9 @@ def register_bundle_skills(bundle_path: Path, workspace_root: Path) -> BundleSki
     tool_names: dict[str, bool] = {}
 
     for base in search_dirs:
-        for skill in load_skills_from_skills_dir(str(base), "projectSettings", loaded_from="project"):
+        for skill in load_skills_from_skills_dir(
+            str(base), "projectSettings", loaded_from="project"
+        ):
             _dynamic_skills[skill.name] = skill
             registered.append(skill.name)
             for tool in skill.allowed_tools or []:

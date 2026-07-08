@@ -249,7 +249,9 @@ def _cron_run_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResu
         current_dir=getattr(context, "current_dir", None),
     )
     if run is None:
-        return ToolResult(name="CronRun", output={"success": False, "id": normalized_id, "run": None})
+        return ToolResult(
+            name="CronRun", output={"success": False, "id": normalized_id, "run": None}
+        )
     return ToolResult(
         name="CronRun",
         output={

@@ -7,7 +7,10 @@ def test_task_state_extracts_blocker_and_pending_tests() -> None:
     state = build_task_state(
         current_messages=[
             {"role": "user", "content": "继续实现 intent forecast"},
-            {"role": "assistant", "content": "pytest failed: tests/intent_forecast/test_service.py"},
+            {
+                "role": "assistant",
+                "content": "pytest failed: tests/intent_forecast/test_service.py",
+            },
         ],
         sessions=[],
         workspace={

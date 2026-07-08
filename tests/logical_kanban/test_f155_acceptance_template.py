@@ -53,7 +53,9 @@ def _reset() -> None:
     reset_acceptance_template_proposals()
 
 
-def _template(template_id: str = "T-custom-check-001", *, status: str = "approved") -> AcceptanceTemplate:
+def _template(
+    template_id: str = "T-custom-check-001", *, status: str = "approved"
+) -> AcceptanceTemplate:
     return AcceptanceTemplate(
         template_id=template_id,
         description="Custom check",
@@ -179,9 +181,7 @@ def test_module_register_adds_template() -> None:
 def test_list_filters_status() -> None:
     register_acceptance_template(_template("T-draft-check-001", status="draft"))
     assert "T-draft-check-001" not in {t.template_id for t in list_acceptance_templates()}
-    assert "T-draft-check-001" in {
-        t.template_id for t in list_acceptance_templates(status="draft")
-    }
+    assert "T-draft-check-001" in {t.template_id for t in list_acceptance_templates(status="draft")}
 
 
 def test_governance_approve_registers_template() -> None:

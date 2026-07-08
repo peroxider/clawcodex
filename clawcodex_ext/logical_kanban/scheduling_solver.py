@@ -136,8 +136,7 @@ class Resource:
                 or not all(isinstance(x, int) for x in window)
             ):
                 raise SchedulingError(
-                    f"Resource({self.resource_id!r}).availability entries must be "
-                    "(int, int) tuples"
+                    f"Resource({self.resource_id!r}).availability entries must be (int, int) tuples"
                 )
             start, end = window
             if start < 0 or end <= start:
@@ -167,7 +166,9 @@ class Resource:
         """Deserialize from a dict (the inverse of :meth:`to_dict`)."""
         rid = d.get("resourceId") or d.get("resource_id")
         if not isinstance(rid, str) or not rid.strip():
-            raise SchedulingError("Resource dict must contain a non-empty 'resourceId' or 'resource_id'")
+            raise SchedulingError(
+                "Resource dict must contain a non-empty 'resourceId' or 'resource_id'"
+            )
         capacity = d.get("capacity", 1)
         if not isinstance(capacity, int) or capacity < 1:
             capacity = 1
@@ -247,8 +248,7 @@ class SchedulingTask:
             not isinstance(self.latest_finish, int) or self.latest_finish < 0
         ):
             raise SchedulingError(
-                f"SchedulingTask({self.task_id!r}).latest_finish must be a "
-                "non-negative int or None"
+                f"SchedulingTask({self.task_id!r}).latest_finish must be a non-negative int or None"
             )
         if (
             self.earliest_start is not None
@@ -271,9 +271,7 @@ class SchedulingTask:
                     "be non-empty strings"
                 )
         if not isinstance(self.priority, int):
-            raise SchedulingError(
-                f"SchedulingTask({self.task_id!r}).priority must be an integer"
-            )
+            raise SchedulingError(f"SchedulingTask({self.task_id!r}).priority must be an integer")
 
 
 # Possible status values returned in :attr:`Schedule.status`.
@@ -473,9 +471,7 @@ class SchedulingSolver:
             presence: dict[str, Any] = {}
             optional_intervals: dict[str, Any] = {}
             for res_idx, res in enumerate(resource_list):
-                is_present = model.NewBoolVar(
-                    f"pres_{task.task_id}_{res.resource_id}"
-                )
+                is_present = model.NewBoolVar(f"pres_{task.task_id}_{res.resource_id}")
                 opt_iv = model.NewOptionalIntervalVar(
                     start, task.duration, end, is_present, f"iv_{task.task_id}_{res.resource_id}"
                 )
@@ -511,9 +507,7 @@ class SchedulingSolver:
         for tid, tv in task_vars.items():
             for pred_id in tv.task.predecessors:
                 if pred_id not in task_vars:
-                    raise SchedulingError(
-                        f"Task {tid!r} lists unknown predecessor {pred_id!r}"
-                    )
+                    raise SchedulingError(f"Task {tid!r} lists unknown predecessor {pred_id!r}")
                 pred_end = task_vars[pred_id].end
                 model.Add(pred_end <= tv.start)
 
@@ -593,8 +587,7 @@ class SchedulingSolver:
             makespan_value = max((a[1] for a in assignments.values()), default=0)
             if objective == "weighted_completion":
                 obj_value = sum(
-                    tv.task.priority * assignments[tv.task.task_id][1]
-                    for tv in task_vars.values()
+                    tv.task.priority * assignments[tv.task.task_id][1] for tv in task_vars.values()
                 )
             else:
                 obj_value = makespan_value
@@ -636,13 +629,11 @@ class SchedulingSolver:
             upper = t.latest_finish if t.latest_finish is not None else horizon
             if t.earliest_start is not None and t.earliest_start >= horizon:
                 raise SchedulingError(
-                    f"Task {t.task_id!r} earliest_start={t.earliest_start} is "
-                    f">= horizon={horizon}"
+                    f"Task {t.task_id!r} earliest_start={t.earliest_start} is >= horizon={horizon}"
                 )
             if t.latest_finish is not None and t.latest_finish > horizon:
                 raise SchedulingError(
-                    f"Task {t.task_id!r} latest_finish={t.latest_finish} is "
-                    f"> horizon={horizon}"
+                    f"Task {t.task_id!r} latest_finish={t.latest_finish} is > horizon={horizon}"
                 )
         # Skills / resource matching: every task must be assignable to
         # at least one resource, otherwise the model is trivially
@@ -702,8 +693,7 @@ def validate_schedule(
             issues.append(f"Task {tid!r} has negative start {start}")
         if end <= start:
             issues.append(
-                f"Task {tid!r} has end {end} <= start {start} "
-                f"(duration must be positive)"
+                f"Task {tid!r} has end {end} <= start {start} (duration must be positive)"
             )
         if end - start != task.duration:
             issues.append(
@@ -712,13 +702,11 @@ def validate_schedule(
             )
         if task.earliest_start is not None and start < task.earliest_start:
             issues.append(
-                f"Task {tid!r} starts at {start} before earliest_start "
-                f"{task.earliest_start}"
+                f"Task {tid!r} starts at {start} before earliest_start {task.earliest_start}"
             )
         if task.latest_finish is not None and end > task.latest_finish:
             issues.append(
-                f"Task {tid!r} finishes at {end} after latest_finish "
-                f"{task.latest_finish}"
+                f"Task {tid!r} finishes at {end} after latest_finish {task.latest_finish}"
             )
         res = res_by_id.get(rid)
         if res is None:
@@ -730,8 +718,7 @@ def validate_schedule(
                 f"resource {rid!r} which only offers {sorted(res.skills)}"
             )
         if res.availability and not any(
-            win_start <= start and end <= win_end
-            for win_start, win_end in res.availability
+            win_start <= start and end <= win_end for win_start, win_end in res.availability
         ):
             issues.append(
                 f"Task {tid!r} runs at [{start}, {end}] but resource "

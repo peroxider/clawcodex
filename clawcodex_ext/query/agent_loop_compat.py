@@ -57,7 +57,6 @@ from src.tool_system.renderers import (
 )
 
 
-
 def build_effective_system_prompt(style_prompt: str, tool_context: ToolContext) -> str:
     """Assemble the cold-start system prompt for headless+TUI cutover.
 

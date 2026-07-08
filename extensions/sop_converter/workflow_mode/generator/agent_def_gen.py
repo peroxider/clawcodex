@@ -120,9 +120,7 @@ class AgentDefinitionGenerator:
             if profile.mapped_agent and profile.mapped_agent not in used_names:
                 agent_name = profile.mapped_agent
             else:
-                agent_name = self._resolve_agent_name(
-                    stage.name, project_name, used_names
-                )
+                agent_name = self._resolve_agent_name(stage.name, project_name, used_names)
             profile.mapped_agent = agent_name
             used_names.add(agent_name)
             if profile.mapped_skill:
@@ -160,8 +158,9 @@ class AgentDefinitionGenerator:
             for n in range(1, min(4, len(parts) + 1)):
                 callee_kebab.add("-".join(parts[-n:]))
 
-        scoped = [t for t in profile_tools if t.replace("-", "_") in callee_names
-                  or t in callee_kebab]
+        scoped = [
+            t for t in profile_tools if t.replace("-", "_") in callee_names or t in callee_kebab
+        ]
         return scoped if scoped else profile_tools
 
     def generate_stage_agents(
@@ -202,9 +201,7 @@ class AgentDefinitionGenerator:
             # Scope tools to those actually called in the stage implementation
             scoped_tools = self._scope_tools(source_dir, stage, profile.recommended_tools)
             profile.recommended_tools = scoped_tools
-            tools = stage_agent_tool_names(
-                tools_for_profile(profile, bridge_tool=bridge_tool)
-            )
+            tools = stage_agent_tool_names(tools_for_profile(profile, bridge_tool=bridge_tool))
 
             contract = graph.contracts.get(stage.id)
             input_files = contract.input_files if contract else []
@@ -228,16 +225,14 @@ class AgentDefinitionGenerator:
                 "skills": [stage_skill_name],
                 "steps": [
                     f'调用 `Skill(skill="{stage_skill_name}")`（阻塞，仅一次）',
-                    f'ToolSearch 找到主工具：`{tools[0] if tools else "researchclaw-pipeline-execute-stage"}`',
+                    f"ToolSearch 找到主工具：`{tools[0] if tools else 'researchclaw-pipeline-execute-stage'}`",
                     f'调用主工具：`stage`="{stage.label}" 或 `stage_id`={stage.id}，`run_dir`/`project_dir`=<run_dir>',
                     "验证输出契约",
                 ],
                 "input_files": input_files,
                 "output_files": output_files,
                 "contract_dod": stage_dod,
-                "output_descriptions": output_descriptions(
-                    output_files, stage_dod=stage_dod
-                ),
+                "output_descriptions": output_descriptions(output_files, stage_dod=stage_dod),
                 "bridge_tool": bridge_tool,
                 "wrapper_command": wrapper_command,
             }

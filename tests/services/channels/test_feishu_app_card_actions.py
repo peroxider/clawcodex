@@ -14,35 +14,35 @@ class _FakeChannel:
         self.updated_cards: list[dict] = []
 
     async def update_card(self, message_id: str, card: dict) -> None:
-        self.updated_cards.append({'message_id': message_id, 'card': card})
+        self.updated_cards.append({"message_id": message_id, "card": card})
 
 
 def _config() -> ChannelConfig:
     return ChannelConfig(
         type=ChannelType.FEISHU,
-        webhook_url='',
-        name='feishu',
+        webhook_url="",
+        name="feishu",
         extra={
-            'connection_mode': 'websocket',
-            'app_id': 'cli_app',
-            'app_secret': 'secret',
-            'allowed_user_open_id': 'ou_allowed',
+            "connection_mode": "websocket",
+            "app_id": "cli_app",
+            "app_secret": "secret",
+            "allowed_user_open_id": "ou_allowed",
         },
     )
 
 
 def _card_action_event(*, approval_id: str, nonce: str) -> SimpleNamespace:
     return SimpleNamespace(
-        message_id='om_card',
-        chat_id='oc_chat',
-        operator=SimpleNamespace(open_id='ou_allowed'),
+        message_id="om_card",
+        chat_id="oc_chat",
+        operator=SimpleNamespace(open_id="ou_allowed"),
         action=SimpleNamespace(
-            tag='button',
+            tag="button",
             value={
-                'clawcodex_action': 'permission_approval',
-                'approval_id': approval_id,
-                'nonce': nonce,
-                'choice': 'y',
+                "clawcodex_action": "permission_approval",
+                "approval_id": approval_id,
+                "nonce": nonce,
+                "choice": "y",
             },
         ),
     )
@@ -65,10 +65,10 @@ async def test_feishu_card_click_updates_card_before_slow_gateway_handler() -> N
 
     adapter.set_inbound_handler(_slow_handler)
     pending = adapter.approval_manager.create_pending(
-        origin='feishu:dm:cli_app:ou_allowed',
-        chat_id='oc_chat',
-        allowed_user_open_id='ou_allowed',
-        choices={'y'},
+        origin="feishu:dm:cli_app:ou_allowed",
+        chat_id="oc_chat",
+        allowed_user_open_id="ou_allowed",
+        choices={"y"},
         ttl_seconds=60,
     )
 
@@ -79,7 +79,7 @@ async def test_feishu_card_click_updates_card_before_slow_gateway_handler() -> N
     )
     await asyncio.wait_for(started.wait(), timeout=1.0)
     try:
-        assert channel.updated_cards, 'card should be resolved before gateway delivery finishes'
+        assert channel.updated_cards, "card should be resolved before gateway delivery finishes"
     finally:
         release.set()
         await asyncio.wait_for(task, timeout=1.0)

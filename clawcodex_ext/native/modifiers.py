@@ -45,8 +45,7 @@ class ModifierState:
 
     def __repr__(self) -> str:
         return (
-            f"ModifierState(shift={self.shift}, ctrl={self.ctrl}, "
-            f"alt={self.alt}, meta={self.meta})"
+            f"ModifierState(shift={self.shift}, ctrl={self.ctrl}, alt={self.alt}, meta={self.meta})"
         )
 
     def __eq__(self, other: object) -> bool:
@@ -68,11 +67,13 @@ def _detect_backend() -> Optional[str]:
     if sys.platform.startswith("linux"):
         try:
             import evdev  # noqa: F401
+
             return "evdev"
         except ImportError:
             pass
     try:
         import pynput  # noqa: F401
+
         return "pynput"
     except ImportError:
         return None
@@ -96,12 +97,14 @@ class ModifiersModule:
         if self._backend == "evdev":
             try:
                 import evdev
+
                 return f"evdev/{getattr(evdev, '__version__', 'unknown')}"
             except ImportError:
                 return "unavailable"
         if self._backend == "pynput":
             try:
                 import pynput
+
                 return f"pynput/{getattr(pynput, '__version__', 'unknown')}"
             except ImportError:
                 return "unavailable"
@@ -117,9 +120,8 @@ class ModifiersModule:
         """
         if self._backend is None:
             from clawcodex_ext.native import NativeModuleError
-            raise NativeModuleError(
-                "modifiers backend unavailable (install pynput or evdev)"
-            )
+
+            raise NativeModuleError("modifiers backend unavailable (install pynput or evdev)")
         if self._backend == "evdev":
             return self._state_evdev()
         return self._state_pynput()
@@ -223,7 +225,13 @@ class _PynputStateTracker:
             self.ctrl = value
         elif key in (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r, keyboard.Key.alt_gr):
             self.alt = value
-        elif key in (keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r, keyboard.Key.win, keyboard.Key.menu):
+        elif key in (
+            keyboard.Key.cmd,
+            keyboard.Key.cmd_l,
+            keyboard.Key.cmd_r,
+            keyboard.Key.win,
+            keyboard.Key.menu,
+        ):
             self.meta = value
 
 

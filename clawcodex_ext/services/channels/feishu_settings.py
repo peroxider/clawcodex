@@ -21,12 +21,12 @@ from .models import ChannelConfig
 class FeishuAppSettings:
     channel_id: str
     connection_mode: str
-    app_id: str = ''
-    app_secret: str = ''
-    encrypt_key: str = ''
-    verification_token: str = ''
-    domain: str = 'feishu'
-    allowed_user_open_id: str = ''
+    app_id: str = ""
+    app_secret: str = ""
+    encrypt_key: str = ""
+    verification_token: str = ""
+    domain: str = "feishu"
+    allowed_user_open_id: str = ""
     bot_open_id: str | None = None
     bot_name: str | None = None
     # Adapter-level first-connect budget for ``connect_until_ready``. WS
@@ -57,61 +57,61 @@ class FeishuAppSettings:
     ) -> FeishuAppSettings:
         env = environ if environ is not None else os.environ
         extra = dict(config.extra or {})
-        websocket = _mapping(extra.get('websocket'))
-        batching = _mapping(extra.get('batching'))
-        send = _mapping(extra.get('send'))
-        approval_cards = _mapping(extra.get('approval_cards'))
-        mode = str(extra.get('connection_mode') or '').strip().lower()
+        websocket = _mapping(extra.get("websocket"))
+        batching = _mapping(extra.get("batching"))
+        send = _mapping(extra.get("send"))
+        approval_cards = _mapping(extra.get("approval_cards"))
+        mode = str(extra.get("connection_mode") or "").strip().lower()
         if not mode and config.webhook_url:
-            mode = 'webhook'
+            mode = "webhook"
         if not mode:
-            mode = 'websocket'
+            mode = "websocket"
         return cls(
             channel_id=config.name,
             connection_mode=mode,
-            app_id=_resolve(extra.get('app_id'), env, 'FEISHU_APP_ID'),
-            app_secret=_resolve(extra.get('app_secret'), env, 'FEISHU_APP_SECRET'),
-            encrypt_key=_resolve(extra.get('encrypt_key'), env, 'FEISHU_ENCRYPT_KEY'),
+            app_id=_resolve(extra.get("app_id"), env, "FEISHU_APP_ID"),
+            app_secret=_resolve(extra.get("app_secret"), env, "FEISHU_APP_SECRET"),
+            encrypt_key=_resolve(extra.get("encrypt_key"), env, "FEISHU_ENCRYPT_KEY"),
             verification_token=_resolve(
-                extra.get('verification_token'), env, 'FEISHU_VERIFICATION_TOKEN'
+                extra.get("verification_token"), env, "FEISHU_VERIFICATION_TOKEN"
             ),
-            domain=str(_resolve(extra.get('domain'), env, 'FEISHU_DOMAIN') or 'feishu').lower(),
+            domain=str(_resolve(extra.get("domain"), env, "FEISHU_DOMAIN") or "feishu").lower(),
             allowed_user_open_id=_resolve(
-                extra.get('allowed_user_open_id'), env, 'FEISHU_ALLOWED_USER_OPEN_ID'
+                extra.get("allowed_user_open_id"), env, "FEISHU_ALLOWED_USER_OPEN_ID"
             ),
             bot_open_id=_none_if_empty(
-                _resolve(extra.get('bot_open_id'), env, 'FEISHU_BOT_OPEN_ID')
+                _resolve(extra.get("bot_open_id"), env, "FEISHU_BOT_OPEN_ID")
             ),
-            bot_name=_none_if_empty(str(extra.get('bot_name') or '')),
+            bot_name=_none_if_empty(str(extra.get("bot_name") or "")),
             startup_connect_timeout_seconds=_as_float(
-                websocket.get('startup_connect_timeout_seconds'), 120.0
+                websocket.get("startup_connect_timeout_seconds"), 120.0
             ),
-            dedup_cache_size=_as_int(batching.get('dedup_cache_size'), 2048),
-            dedup_ttl_seconds=_as_int(batching.get('dedup_ttl_seconds'), 86400),
-            text_batch_delay_seconds=_as_float(batching.get('text_batch_delay_seconds'), 0.6),
+            dedup_cache_size=_as_int(batching.get("dedup_cache_size"), 2048),
+            dedup_ttl_seconds=_as_int(batching.get("dedup_ttl_seconds"), 86400),
+            text_batch_delay_seconds=_as_float(batching.get("text_batch_delay_seconds"), 0.6),
             text_batch_split_delay_seconds=_as_float(
-                batching.get('text_batch_split_delay_seconds'), 1.2
+                batching.get("text_batch_split_delay_seconds"), 1.2
             ),
-            text_batch_max_messages=_as_int(batching.get('text_batch_max_messages'), 8),
-            text_batch_max_chars=_as_int(batching.get('text_batch_max_chars'), 4000),
-            sdk_send_attempts=_as_int(send.get('sdk_send_attempts'), 3),
-            sdk_send_backoff_base_seconds=_as_float(send.get('sdk_send_backoff_base_seconds'), 1.0),
-            sdk_send_timeout_seconds=_as_float(send.get('sdk_send_timeout_seconds'), 30.0),
-            approval_cards_enabled=_as_bool(approval_cards.get('enabled'), True),
-            action_token_ttl_seconds=_as_int(approval_cards.get('action_token_ttl_seconds'), 900),
-            decision_ttl_seconds=_as_int(approval_cards.get('decision_ttl_seconds'), 600),
+            text_batch_max_messages=_as_int(batching.get("text_batch_max_messages"), 8),
+            text_batch_max_chars=_as_int(batching.get("text_batch_max_chars"), 4000),
+            sdk_send_attempts=_as_int(send.get("sdk_send_attempts"), 3),
+            sdk_send_backoff_base_seconds=_as_float(send.get("sdk_send_backoff_base_seconds"), 1.0),
+            sdk_send_timeout_seconds=_as_float(send.get("sdk_send_timeout_seconds"), 30.0),
+            approval_cards_enabled=_as_bool(approval_cards.get("enabled"), True),
+            action_token_ttl_seconds=_as_int(approval_cards.get("action_token_ttl_seconds"), 900),
+            decision_ttl_seconds=_as_int(approval_cards.get("decision_ttl_seconds"), 600),
         )
 
     def validation_errors(self) -> list[str]:
-        if self.connection_mode == 'webhook':
+        if self.connection_mode == "webhook":
             return []
         errors: list[str] = []
         if not self.app_id:
-            errors.append('app_id is required for feishu websocket mode')
+            errors.append("app_id is required for feishu websocket mode")
         if not self.app_secret:
-            errors.append('app_secret is required for feishu websocket mode')
-        if self.domain not in {'feishu', 'lark'}:
-            errors.append('domain must be feishu or lark')
+            errors.append("app_secret is required for feishu websocket mode")
+        if self.domain not in {"feishu", "lark"}:
+            errors.append("domain must be feishu or lark")
         return errors
 
 
@@ -120,12 +120,12 @@ def _mapping(value: Any) -> dict[str, Any]:
 
 
 def _resolve(value: Any, env: Mapping[str, str], env_name: str) -> str:
-    text = '' if value is None else str(value).strip()
-    if text.startswith('${') and text.endswith('}'):
-        return str(env.get(text[2:-1], '')).strip()
+    text = "" if value is None else str(value).strip()
+    if text.startswith("${") and text.endswith("}"):
+        return str(env.get(text[2:-1], "")).strip()
     if text:
         return text
-    return str(env.get(env_name, '')).strip()
+    return str(env.get(env_name, "")).strip()
 
 
 def _none_if_empty(value: str) -> str | None:
@@ -134,7 +134,7 @@ def _none_if_empty(value: str) -> str | None:
 
 
 def _as_int(value: Any, default: int) -> int:
-    if value in (None, ''):
+    if value in (None, ""):
         return default
     try:
         return int(value)
@@ -143,7 +143,7 @@ def _as_int(value: Any, default: int) -> int:
 
 
 def _as_float(value: Any, default: float) -> float:
-    if value in (None, ''):
+    if value in (None, ""):
         return default
     try:
         return float(value)
@@ -156,7 +156,7 @@ def _as_bool(value: Any, default: bool) -> bool:
         return default
     if isinstance(value, bool):
         return value
-    return str(value).strip().lower() in {'1', 'true', 'yes', 'y', 'on'}
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-__all__ = ['FeishuAppSettings']
+__all__ = ["FeishuAppSettings"]

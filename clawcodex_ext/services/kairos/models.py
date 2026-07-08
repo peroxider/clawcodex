@@ -29,8 +29,7 @@ def _validate_id(value: str, *, what: str = "id") -> None:
         raise ValueError(f"{what} must be a non-empty string")
     if not _ID_RE.match(value):
         raise ValueError(
-            f"{what} has invalid characters or length: {value!r} "
-            "(expected [A-Za-z0-9._-]{1,64})"
+            f"{what} has invalid characters or length: {value!r} (expected [A-Za-z0-9._-]{{1,64}})"
         )
 
 
@@ -47,10 +46,7 @@ def _validate_jitter(value: float) -> None:
     if value < 0:
         raise ValueError(f"jitter must be non-negative (got {value!r})")
     if value > 1:
-        raise ValueError(
-            "jitter is a fraction of the interval; must be in [0, 1] "
-            f"(got {value!r})"
-        )
+        raise ValueError(f"jitter is a fraction of the interval; must be in [0, 1] (got {value!r})")
 
 
 @dataclass(frozen=True)
@@ -82,9 +78,7 @@ class TickConfig:
 
     def __post_init__(self) -> None:
         _validate_id(self.id)
-        _validate_positive_interval(
-            self.interval_seconds, what="interval_seconds"
-        )
+        _validate_positive_interval(self.interval_seconds, what="interval_seconds")
         _validate_jitter(self.jitter_fraction)
         if self.name is not None and not isinstance(self.name, str):
             raise ValueError("name must be a string when provided")
@@ -93,9 +87,7 @@ class TickConfig:
         if self.metadata:
             for key in self.metadata:
                 if not isinstance(key, str) or not key:
-                    raise ValueError(
-                        f"metadata keys must be non-empty strings: {key!r}"
-                    )
+                    raise ValueError(f"metadata keys must be non-empty strings: {key!r}")
 
     @property
     def display_name(self) -> str:
@@ -159,9 +151,7 @@ class BriefSummarySnapshot:
         if not isinstance(self.session_id, str) or not self.session_id:
             raise ValueError("session_id must be a non-empty string")
         if not isinstance(self.tick_number, int) or self.tick_number < 0:
-            raise ValueError(
-                f"tick_number must be a non-negative int (got {self.tick_number!r})"
-            )
+            raise ValueError(f"tick_number must be a non-negative int (got {self.tick_number!r})")
         if self.pending_tasks and not isinstance(self.pending_tasks, tuple):
             # Coerce silently for ergonomics; the public API expects a tuple.
             object.__setattr__(self, "pending_tasks", tuple(self.pending_tasks))

@@ -166,9 +166,7 @@ class LLMConfig:
             model=m,
             api_key=api_key,
             api_base=api_base,
-            timeout_seconds=float(
-                os.environ.get("CLAWCODEX_RADAR_LLM_TIMEOUT", "30.0")
-            ),
+            timeout_seconds=float(os.environ.get("CLAWCODEX_RADAR_LLM_TIMEOUT", "30.0")),
         )
 
 
@@ -213,7 +211,7 @@ _CLASSIFIER_PROMPT = (
     "You are classifying a single community feature record from an open-source "
     "agent project. Pick the single best ClawCodex taxonomy category and feature type.\n"
     "Allowed categories: {cats}.\nAllowed types: {types}.\n"
-    "Respond with JSON only, no prose: {{\"category\": \"<one>\", \"feature_type\": \"<one>\"}}.\n\n"
+    'Respond with JSON only, no prose: {{"category": "<one>", "feature_type": "<one>"}}.\n\n'
     "Title: {title}\nDescription: {description}\nSource: {source}\n"
 )
 
@@ -259,7 +257,7 @@ def build_classifier_hook(
 _EXTRACTOR_PROMPT = (
     "You are refining a list of feature candidates extracted from a release note. "
     "Re-rank them by importance, drop pure bug-fix entries, and return a JSON array. "
-    "Each element: {{\"title\": \"<short>\", \"description\": \"<one sentence>\"}}.\n"
+    'Each element: {{"title": "<short>", "description": "<one sentence>"}}.\n'
     "If a candidate is not actually a feature, omit it. Keep at most {max_keep} items.\n\n"
     "Source: {source}\nRelease tag: {tag}\nRelease body:\n{body}\n\n"
     "Candidates (one per line):\n{candidates}\n"
@@ -368,8 +366,7 @@ def build_summarizer_hook(
             n_features=len(features),
             n_projects=len(projects),
             projects=", ".join(projects[:8]) or "(none)",
-            categories=", ".join(f"{k}={v}" for k, v in counts.most_common(5))
-            or "(none)",
+            categories=", ".join(f"{k}={v}" for k, v in counts.most_common(5)) or "(none)",
             breaking="\n".join(f"- {b.title}" for b in breaking[:5]) or "(none)",
         )
         return _complete(prompt, cfg).strip()

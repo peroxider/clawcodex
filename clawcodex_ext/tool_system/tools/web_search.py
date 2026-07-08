@@ -311,10 +311,12 @@ def _format_output(
 
     # Structured links
     if hits:
-        results.append({
-            "tool_use_id": "tavily-search",
-            "content": [{"title": h["title"], "url": h["url"]} for h in hits],
-        })
+        results.append(
+            {
+                "tool_use_id": "tavily-search",
+                "content": [{"title": h["title"], "url": h["url"]} for h in hits],
+            }
+        )
 
     if not results:
         results.append("No results found.")

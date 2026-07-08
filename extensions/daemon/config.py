@@ -117,9 +117,7 @@ class DaemonConfig:
         if self.backoff_initial_ms < 1:
             raise InvalidDaemonConfigError("backoff_initial_ms must be >= 1")
         if self.backoff_cap_ms < self.backoff_initial_ms:
-            raise InvalidDaemonConfigError(
-                "backoff_cap_ms must be >= backoff_initial_ms"
-            )
+            raise InvalidDaemonConfigError("backoff_cap_ms must be >= backoff_initial_ms")
 
     # ------------------------------------------------------------------
     # Ergonomics — frozen dataclasses can't be mutated, so we offer

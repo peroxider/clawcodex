@@ -44,8 +44,8 @@ logger = logging.getLogger(__name__)
 
 HISTORY_PAGE_SIZE: Final[int] = 100
 
-_ANTHROPIC_VERSION: Final[str] = '2023-06-01'
-_ANTHROPIC_BETA_CCR_BYOC: Final[str] = 'ccr-byoc-2025-07-29'
+_ANTHROPIC_VERSION: Final[str] = "2023-06-01"
+_ANTHROPIC_BETA_CCR_BYOC: Final[str] = "ccr-byoc-2025-07-29"
 _DEFAULT_TIMEOUT_SECONDS: Final[float] = 15.0
 
 
@@ -91,11 +91,11 @@ def _oauth_headers(access_token: str, org_uuid: str) -> dict[str, str]:
     POST callers — see gap-analysis §2.1 bullet 7).
     """
     return {
-        'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/json',
-        'anthropic-version': _ANTHROPIC_VERSION,
-        'anthropic-beta': _ANTHROPIC_BETA_CCR_BYOC,
-        'x-organization-uuid': org_uuid,
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "anthropic-version": _ANTHROPIC_VERSION,
+        "anthropic-beta": _ANTHROPIC_BETA_CCR_BYOC,
+        "x-organization-uuid": org_uuid,
     }
 
 
@@ -104,7 +104,7 @@ async def create_history_auth_ctx(
     access_token: str,
     org_uuid: str,
     *,
-    base_url: str = 'https://api.anthropic.com',
+    base_url: str = "https://api.anthropic.com",
 ) -> HistoryAuthCtx:
     """Build a reusable auth context bound to a session.
 
@@ -114,7 +114,7 @@ async def create_history_auth_ctx(
     the call sites.
     """
     return HistoryAuthCtx(
-        base_url=f'{base_url.rstrip("/")}/v1/sessions/{session_id}/events',
+        base_url=f"{base_url.rstrip('/')}/v1/sessions/{session_id}/events",
         headers=_oauth_headers(access_token, org_uuid),
     )
 
@@ -148,31 +148,31 @@ async def _fetch_page(
                 timeout=_DEFAULT_TIMEOUT_SECONDS,
             )
     except (httpx.HTTPError, httpx.TimeoutException):
-        logger.debug('[%s] HTTP error', label)
+        logger.debug("[%s] HTTP error", label)
         return None
 
     if resp.status_code != 200:
-        logger.debug('[%s] HTTP %d', label, resp.status_code)
+        logger.debug("[%s] HTTP %d", label, resp.status_code)
         return None
 
     try:
         data = resp.json()
     except ValueError:
-        logger.debug('[%s] non-JSON body', label)
+        logger.debug("[%s] non-JSON body", label)
         return None
 
     if not isinstance(data, dict):
-        logger.debug('[%s] body is not a dict', label)
+        logger.debug("[%s] body is not a dict", label)
         return None
 
-    events_raw = data.get('data')
+    events_raw = data.get("data")
     events: list[dict[str, Any]] = events_raw if isinstance(events_raw, list) else []
     return HistoryPage(
         events=events,
-        first_id=data.get('first_id'),
+        first_id=data.get("first_id"),
         # ``False`` default mirrors TS JS-coercion of missing ``has_more``
         # (undefined → falsy). No bool() cast — server is contract source.
-        has_more=data.get('has_more', False),
+        has_more=data.get("has_more", False),
     )
 
 
@@ -188,8 +188,8 @@ async def fetch_latest_events(
     """
     return await _fetch_page(
         ctx,
-        {'limit': limit, 'anchor_to_latest': True},
-        'fetch_latest_events',
+        {"limit": limit, "anchor_to_latest": True},
+        "fetch_latest_events",
         client=client,
     )
 
@@ -206,17 +206,17 @@ async def fetch_older_events(
     """
     return await _fetch_page(
         ctx,
-        {'limit': limit, 'before_id': before_id},
-        'fetch_older_events',
+        {"limit": limit, "before_id": before_id},
+        "fetch_older_events",
         client=client,
     )
 
 
 __all__ = [
-    'HISTORY_PAGE_SIZE',
-    'HistoryAuthCtx',
-    'HistoryPage',
-    'create_history_auth_ctx',
-    'fetch_latest_events',
-    'fetch_older_events',
+    "HISTORY_PAGE_SIZE",
+    "HistoryAuthCtx",
+    "HistoryPage",
+    "create_history_auth_ctx",
+    "fetch_latest_events",
+    "fetch_older_events",
 ]

@@ -237,16 +237,12 @@ class REPLScreen(Screen):
             from src.services.memory_append import append_memory_note, pick_saving_message
 
             note = text[1:]
-            ok = append_memory_note(
-                str(Path.home() / ".claude" / "CLAUDE.md"), note
-            )
+            ok = append_memory_note(str(Path.home() / ".claude" / "CLAUDE.md"), note)
             if ok:
                 msg = pick_saving_message()
                 self.transcript.append_system(msg, style="success")
             else:
-                self.transcript.append_system(
-                    "Failed to save memory note", style="error"
-                )
+                self.transcript.append_system("Failed to save memory note", style="error")
             return
         # F-89: expand @agent-name mentions in TUI.
         try:
@@ -392,6 +388,7 @@ class REPLScreen(Screen):
                     if text.strip():
                         app.app_state.queued_prompts.append(text)
                         from ..messages import QueuedPromptReady
+
                         self.post_message(QueuedPromptReady())
                     goal_controller.drain_pending_injection()
             except Exception:

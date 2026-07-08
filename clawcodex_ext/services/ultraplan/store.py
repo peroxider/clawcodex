@@ -74,19 +74,13 @@ class PlanStore:
                 raw = target.read_text(encoding="utf-8")
                 data: Any = json.loads(raw)
             except json.JSONDecodeError as exc:
-                raise PlanCorruptError(
-                    f"plan {plan_id!r} contains invalid JSON: {exc}"
-                ) from exc
+                raise PlanCorruptError(f"plan {plan_id!r} contains invalid JSON: {exc}") from exc
             except OSError as exc:
-                raise PlanCorruptError(
-                    f"plan {plan_id!r} could not be read: {exc}"
-                ) from exc
+                raise PlanCorruptError(f"plan {plan_id!r} could not be read: {exc}") from exc
         try:
             return Plan.from_dict(data)
         except (ValueError, TypeError) as exc:
-            raise PlanCorruptError(
-                f"plan {plan_id!r} failed validation: {exc}"
-            ) from exc
+            raise PlanCorruptError(f"plan {plan_id!r} failed validation: {exc}") from exc
 
     def exists(self, plan_id: str) -> bool:
         with self._lock:

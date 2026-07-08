@@ -232,8 +232,7 @@ class LlmFactExtractor:
             body=pred(predicate, *encoded_args),
             quantifier="forall",
             vars=tuple(
-                IRVariable(name=f"arg_{i}", type="Entity")
-                for i in range(len(encoded_args))
+                IRVariable(name=f"arg_{i}", type="Entity") for i in range(len(encoded_args))
             ),
             schema_version="1.0",
         )

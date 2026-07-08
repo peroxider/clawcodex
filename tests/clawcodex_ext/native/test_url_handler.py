@@ -14,6 +14,7 @@ from clawcodex_ext.native.url_handler import UrlHandlerModule
 
 def test_url_handler_registered():
     from clawcodex_ext.native import NativeModuleRegistry
+
     assert NativeModuleRegistry.is_registered("url_handler")
 
 
@@ -45,6 +46,7 @@ def test_url_handler_open_clawcodex_prefix():
 
 def test_url_handler_open_url_handles_error():
     import webbrowser
+
     mod = UrlHandlerModule()
     with mock.patch("webbrowser.open", side_effect=webbrowser.Error("no browser")):
         assert mod.open_url("https://example.com") is False

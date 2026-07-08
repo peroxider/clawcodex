@@ -25,6 +25,7 @@ def _ctx(cfg: LodestoneConfig | None = None, **kwargs):
     root = kwargs.pop("workspace_root", None)
     if isinstance(root, str):
         from pathlib import Path
+
         root = Path(root)
     return AnchorContext(
         workspace_root=root,
@@ -42,8 +43,9 @@ def _ctx(cfg: LodestoneConfig | None = None, **kwargs):
 
 
 def test_render_template_basic():
-    out = _render_template("vscode://file/{abs}:{line}:{col}",
-                          {"abs": "/x", "line": "1", "col": "2"})
+    out = _render_template(
+        "vscode://file/{abs}:{line}:{col}", {"abs": "/x", "line": "1", "col": "2"}
+    )
     assert out == "vscode://file//x:1:2"
 
 
@@ -129,6 +131,7 @@ def test_renderer_markdown_escape_url_with_brackets():
 
 def test_service_resolve_text_replaces_anchor_with_markdown():
     from clawcodex_ext.services.lodestone import LodestoneService
+
     cfg = LodestoneConfig(default_editor="vscode", renderer="markdown")
     svc = LodestoneService(config=cfg)
     out = svc.resolve_text("see x.py:42", workspace_root="/abs")
@@ -139,6 +142,7 @@ def test_service_resolve_text_replaces_anchor_with_markdown():
 
 def test_service_disabled_returns_plain_text():
     from clawcodex_ext.services.lodestone import LodestoneService
+
     cfg = LodestoneConfig(enabled=False, renderer="markdown")
     svc = LodestoneService(config=cfg)
     out = svc.resolve_text("see x.py:42", workspace_root="/abs")
@@ -147,4 +151,5 @@ def test_service_disabled_returns_plain_text():
 
 def _ctx_registry():
     from clawcodex_ext.services.lodestone.targets import build_default_registry
+
     return build_default_registry()

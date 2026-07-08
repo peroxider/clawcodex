@@ -9,6 +9,7 @@ Covers:
 * ``/voice`` command (toggle / provider select / status / help / errors).
 * Settings schema round-trip of ``voice_provider`` / ``voice_enabled``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -191,9 +192,7 @@ class TestVoiceModeEnabled(unittest.TestCase):
         class _S:
             voice_provider: str = "doubao"
 
-        with mock.patch(
-            "src.settings.settings.get_settings", return_value=_S()
-        ):
+        with mock.patch("src.settings.settings.get_settings", return_value=_S()):
             self.assertEqual(vme.get_voice_provider(), "doubao")
 
     def test_get_voice_provider_unknown_falls_back(self) -> None:
@@ -201,9 +200,7 @@ class TestVoiceModeEnabled(unittest.TestCase):
         class _S:
             voice_provider: str = "watson"
 
-        with mock.patch(
-            "src.settings.settings.get_settings", return_value=_S()
-        ):
+        with mock.patch("src.settings.settings.get_settings", return_value=_S()):
             self.assertEqual(vme.get_voice_provider(), "anthropic")
 
 
@@ -294,6 +291,7 @@ class TestAudioChunkQueue(unittest.TestCase):
 
     def test_async_wait_for_chunks(self) -> None:
         """Consumer blocks on an empty queue and wakes when producer pushes."""
+
         async def run() -> None:
             q = AudioChunkQueue()
             received: list[bytes] = []
@@ -419,15 +417,11 @@ class TestPushToTalkController(unittest.TestCase):
         return PushToTalkController(recorder=recorder)
 
     def test_can_start_requires_enabled(self) -> None:
-        controller = self._make_controller(
-            provider=_StubStreamingProvider(), enabled=False
-        )
+        controller = self._make_controller(provider=_StubStreamingProvider(), enabled=False)
         self.assertFalse(controller.can_start())
 
     def test_can_start_true_when_enabled(self) -> None:
-        controller = self._make_controller(
-            provider=_StubStreamingProvider(), enabled=True
-        )
+        controller = self._make_controller(provider=_StubStreamingProvider(), enabled=True)
         self.assertTrue(controller.can_start())
 
     def test_start_transitions_to_recording(self) -> None:
@@ -438,7 +432,9 @@ class TestPushToTalkController(unittest.TestCase):
         errors: list[str] = []
         controller._on_error = errors.append  # type: ignore[assignment]
         ok = controller.start()
-        self.assertTrue(ok, f"start() returned False; errors={errors}; can_start={controller.can_start()}")
+        self.assertTrue(
+            ok, f"start() returned False; errors={errors}; can_start={controller.can_start()}"
+        )
         self.assertEqual(controller.state, VoiceSessionState.RECORDING)
         self.assertIn(VoiceSessionState.RECORDING, states)
 
@@ -523,19 +519,16 @@ class TestVoiceCommand(unittest.TestCase):
         self.assertIn("kill-switch", out)
 
     def test_off_disables(self) -> None:
-        with mock.patch(
-            "clawcodex_ext.command_system.voice_command.set_voice_enabled"
-        ) as m:
+        with mock.patch("clawcodex_ext.command_system.voice_command.set_voice_enabled") as m:
             out = self._run("off")
         self.assertEqual(out, "Voice mode disabled.")
         m.assert_called_once_with(False)
 
     def test_anthropic_enables_and_sets_provider(self) -> None:
-        with mock.patch(
-            "clawcodex_ext.command_system.voice_command.set_voice_enabled"
-        ) as m_en, mock.patch(
-            "clawcodex_ext.command_system.voice_command.set_voice_provider"
-        ) as m_prov:
+        with (
+            mock.patch("clawcodex_ext.command_system.voice_command.set_voice_enabled") as m_en,
+            mock.patch("clawcodex_ext.command_system.voice_command.set_voice_provider") as m_prov,
+        ):
             out = self._run("anthropic")
         self.assertIn("enabled", out)
         self.assertIn("anthropic", out)
@@ -543,37 +536,39 @@ class TestVoiceCommand(unittest.TestCase):
         m_prov.assert_called_once_with("anthropic")
 
     def test_doubao_enables_and_sets_provider(self) -> None:
-        with mock.patch(
-            "clawcodex_ext.command_system.voice_command.set_voice_enabled"
-        ) as m_en, mock.patch(
-            "clawcodex_ext.command_system.voice_command.set_voice_provider"
-        ) as m_prov:
+        with (
+            mock.patch("clawcodex_ext.command_system.voice_command.set_voice_enabled") as m_en,
+            mock.patch("clawcodex_ext.command_system.voice_command.set_voice_provider") as m_prov,
+        ):
             out = self._run("doubao")
         self.assertIn("doubao", out)
         m_en.assert_called_once_with(True)
         m_prov.assert_called_once_with("doubao")
 
     def test_toggle_off_when_currently_on(self) -> None:
-        with mock.patch(
-            "clawcodex_ext.command_system.voice_command.is_voice_enabled",
-            return_value=True,
-        ), mock.patch(
-            "clawcodex_ext.command_system.voice_command.set_voice_enabled"
-        ) as m:
+        with (
+            mock.patch(
+                "clawcodex_ext.command_system.voice_command.is_voice_enabled",
+                return_value=True,
+            ),
+            mock.patch("clawcodex_ext.command_system.voice_command.set_voice_enabled") as m,
+        ):
             out = self._run("")
         self.assertEqual(out, "Voice mode disabled.")
         m.assert_called_once_with(False)
 
     def test_toggle_on_when_currently_off(self) -> None:
-        with mock.patch(
-            "clawcodex_ext.command_system.voice_command.is_voice_enabled",
-            return_value=False,
-        ), mock.patch(
-            "clawcodex_ext.command_system.voice_command.get_voice_provider",
-            return_value="anthropic",
-        ), mock.patch(
-            "clawcodex_ext.command_system.voice_command.set_voice_enabled"
-        ) as m:
+        with (
+            mock.patch(
+                "clawcodex_ext.command_system.voice_command.is_voice_enabled",
+                return_value=False,
+            ),
+            mock.patch(
+                "clawcodex_ext.command_system.voice_command.get_voice_provider",
+                return_value="anthropic",
+            ),
+            mock.patch("clawcodex_ext.command_system.voice_command.set_voice_enabled") as m,
+        ):
             out = self._run("")
         self.assertIn("enabled", out)
         self.assertIn("anthropic", out)
@@ -624,8 +619,9 @@ class TestVoicePersistence(unittest.TestCase):
 
         mgr = mock.MagicMock()
         mgr.load_global.return_value = {}
-        with mock.patch("src.config._get_default_manager", return_value=mgr), mock.patch(
-            "src.settings.settings.invalidate_settings_cache"
+        with (
+            mock.patch("src.config._get_default_manager", return_value=mgr),
+            mock.patch("src.settings.settings.invalidate_settings_cache"),
         ):
             set_voice_provider("DOUBAO")
         section = mgr.save_global.call_args.args[0]["settings"]
@@ -636,8 +632,9 @@ class TestVoicePersistence(unittest.TestCase):
 
         mgr = mock.MagicMock()
         mgr.load_global.return_value = {}
-        with mock.patch("src.config._get_default_manager", return_value=mgr), mock.patch(
-            "src.settings.settings.invalidate_settings_cache"
+        with (
+            mock.patch("src.config._get_default_manager", return_value=mgr),
+            mock.patch("src.settings.settings.invalidate_settings_cache"),
         ):
             set_voice_provider("nonsense")
         section = mgr.save_global.call_args.args[0]["settings"]
@@ -648,8 +645,9 @@ class TestVoicePersistence(unittest.TestCase):
 
         mgr = mock.MagicMock()
         mgr.load_global.return_value = {}
-        with mock.patch("src.config._get_default_manager", return_value=mgr), mock.patch(
-            "src.settings.settings.invalidate_settings_cache"
+        with (
+            mock.patch("src.config._get_default_manager", return_value=mgr),
+            mock.patch("src.settings.settings.invalidate_settings_cache"),
         ):
             set_voice_enabled(True)
         section = mgr.save_global.call_args.args[0]["settings"]

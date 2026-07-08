@@ -156,8 +156,7 @@ class Redactor:
             if not line:
                 continue
             is_project_line = bool(
-                self.project_roots
-                and any(marker in line for marker in self.project_roots)
+                self.project_roots and any(marker in line for marker in self.project_roots)
             )
             # Track whether we are inside a project-owned frame block.
             if is_project_line:

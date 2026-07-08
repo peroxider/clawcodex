@@ -41,7 +41,9 @@ class OrchestrationSubsystem:
     status_dashboard: StatusDashboard
     _orchestrator: "Orchestrator | None" = None
 
-    def __init__(self, workflow_config: WorkflowConfig, *, workflow_yaml_path: str | None = None) -> None:
+    def __init__(
+        self, workflow_config: WorkflowConfig, *, workflow_yaml_path: str | None = None
+    ) -> None:
         from ..orchestrator.agent_runner import AgentRunner
         from ..orchestrator.orchestrator import Orchestrator
 
@@ -69,7 +71,9 @@ class OrchestrationSubsystem:
 
                 agents = register_bundle_agents(bundle_dir)
                 if agents:
-                    logger.info("Loaded %d stage agents from bundle %s", len(agents), bundle_dir.name)
+                    logger.info(
+                        "Loaded %d stage agents from bundle %s", len(agents), bundle_dir.name
+                    )
                 register_bundle_skills(bundle_dir, Path(workflow_config.workspace.root))
             except ImportError as exc:
                 logger.debug("Bundle workflow bootstrap skipped: %s", exc)

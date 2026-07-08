@@ -43,7 +43,7 @@ class Term:
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name:
-            raise ValueError(f'Term name must be a non-empty string, got {self.name!r}')
+            raise ValueError(f"Term name must be a non-empty string, got {self.name!r}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,10 +60,10 @@ class Literal:
     args: tuple[Term, ...]
     positive: bool
 
-    def negated(self) -> 'Literal':
+    def negated(self) -> "Literal":
         return Literal(self.predicate, self.args, not self.positive)
 
-    def complement(self, other: 'Literal') -> bool:
+    def complement(self, other: "Literal") -> bool:
         """Return True if ``self`` and ``other`` are complementary literals."""
         return (
             self.predicate == other.predicate
@@ -91,7 +91,7 @@ class Clause:
                 return True
         return False
 
-    def subsumes(self, other: 'Clause') -> bool:
+    def subsumes(self, other: "Clause") -> bool:
         """A clause subsumes another iff its literal set is a subset.
 
         Tautological and empty clauses are handled specially.
@@ -111,7 +111,7 @@ class Clause:
 def pred(name: str, *args: str, positive: bool = True) -> Literal:
     """Build a Literal from a predicate name and string arguments."""
     return Literal(
-        predicate=f'{name}/{len(args)}',
+        predicate=f"{name}/{len(args)}",
         args=tuple(Term(a) for a in args),
         positive=positive,
     )
@@ -126,7 +126,7 @@ def clause(*literals: Literal) -> Clause:
         # universally-true clause (``{}`` is the empty clause = $false,
         # so we use a sentinel with a single tautological literal that
         # the prover drops before saturation).
-        return Clause(frozenset({Literal('__tautology__/0', (), True)}))
+        return Clause(frozenset({Literal("__tautology__/0", (), True)}))
     return c
 
 
@@ -146,7 +146,7 @@ def _resolve_pair(c1: Clause, c2: Clause) -> Iterable[Clause]:
         for lit2 in c2.literals:
             if lit1.complement(lit2):
                 new_lits = (c1.literals - {lit1}) | (c2.literals - {lit2})
-                if any(lit.predicate == '__tautology__/0' for lit in new_lits):
+                if any(lit.predicate == "__tautology__/0" for lit in new_lits):
                     continue
                 resolvent = Clause(frozenset(new_lits))
                 if not resolvent.is_tautology():
@@ -208,14 +208,14 @@ def saturate(
 # The four invariant predicates the adapter encodes as FOL clauses. Kept
 # here so the adapter and the tests can refer to them by name.
 INVARIANT_PREDICATES = (
-    'task/1',
-    'do_proposal/1',
-    'complete_proposal/1',
-    'reopen_proposal/1',
-    'blocked/1',
-    'in_cycle/1',
-    'has_acceptance_proof/1',
-    'strict_acceptance/0',
+    "task/1",
+    "do_proposal/1",
+    "complete_proposal/1",
+    "reopen_proposal/1",
+    "blocked/1",
+    "in_cycle/1",
+    "has_acceptance_proof/1",
+    "strict_acceptance/0",
 )
 
 
@@ -246,8 +246,8 @@ def encode_lkb_axioms(
     for c in constants:
         clauses.append(
             clause(
-                pred('do_proposal', c, positive=False),
-                pred('blocked', c, positive=False),
+                pred("do_proposal", c, positive=False),
+                pred("blocked", c, positive=False),
             )
         )
 
@@ -257,8 +257,8 @@ def encode_lkb_axioms(
     for c in constants:
         clauses.append(
             clause(
-                pred('do_proposal', c, positive=False),
-                pred('in_cycle', c, positive=False),
+                pred("do_proposal", c, positive=False),
+                pred("in_cycle", c, positive=False),
             )
         )
 
@@ -269,9 +269,9 @@ def encode_lkb_axioms(
         for c in constants:
             clauses.append(
                 clause(
-                    pred('complete_proposal', c, positive=False),
-                    pred('strict_acceptance', positive=False),
-                    pred('has_acceptance_proof', c, positive=True),
+                    pred("complete_proposal", c, positive=False),
+                    pred("strict_acceptance", positive=False),
+                    pred("has_acceptance_proof", c, positive=True),
                 )
             )
 
@@ -280,20 +280,20 @@ def encode_lkb_axioms(
     for c in constants:
         clauses.append(
             clause(
-                pred('do_proposal', c, positive=False),
-                pred('task', c, positive=True),
+                pred("do_proposal", c, positive=False),
+                pred("task", c, positive=True),
             )
         )
         clauses.append(
             clause(
-                pred('complete_proposal', c, positive=False),
-                pred('task', c, positive=True),
+                pred("complete_proposal", c, positive=False),
+                pred("task", c, positive=True),
             )
         )
         clauses.append(
             clause(
-                pred('reopen_proposal', c, positive=False),
-                pred('task', c, positive=True),
+                pred("reopen_proposal", c, positive=False),
+                pred("task", c, positive=True),
             )
         )
 
@@ -328,49 +328,47 @@ def encode_lkb_facts(
     """
     clauses: list[Clause] = []
 
-    snapshot_ids = (
-        snapshot_task_ids if snapshot_task_ids is not None else frozenset(constants)
-    )
+    snapshot_ids = snapshot_task_ids if snapshot_task_ids is not None else frozenset(constants)
 
     # task(c) / ¬task(c)
     for c in constants:
-        clauses.append(clause(pred('task', c, positive=(c in snapshot_ids))))
+        clauses.append(clause(pred("task", c, positive=(c in snapshot_ids))))
 
     # blocked(c) / not blocked(c)
     for c in constants:
         if c in blocked_ids:
-            clauses.append(clause(pred('blocked', c, positive=True)))
+            clauses.append(clause(pred("blocked", c, positive=True)))
         else:
-            clauses.append(clause(pred('blocked', c, positive=False)))
+            clauses.append(clause(pred("blocked", c, positive=False)))
 
     # in_cycle(c) / not in_cycle(c)
     for c in constants:
         if c in cycle_ids:
-            clauses.append(clause(pred('in_cycle', c, positive=True)))
+            clauses.append(clause(pred("in_cycle", c, positive=True)))
         else:
-            clauses.append(clause(pred('in_cycle', c, positive=False)))
+            clauses.append(clause(pred("in_cycle", c, positive=False)))
 
     # has_acceptance_proof(c) / not has_acceptance_proof(c)
     for c in constants:
         if c in has_proof_ids:
-            clauses.append(clause(pred('has_acceptance_proof', c, positive=True)))
+            clauses.append(clause(pred("has_acceptance_proof", c, positive=True)))
         else:
-            clauses.append(clause(pred('has_acceptance_proof', c, positive=False)))
+            clauses.append(clause(pred("has_acceptance_proof", c, positive=False)))
 
     # strict_acceptance flag
     if strict_acceptance:
-        clauses.append(clause(pred('strict_acceptance', positive=True)))
+        clauses.append(clause(pred("strict_acceptance", positive=True)))
     else:
-        clauses.append(clause(pred('strict_acceptance', positive=False)))
+        clauses.append(clause(pred("strict_acceptance", positive=False)))
 
     # Proposal atoms (the conjecture under test)
     if proposal_target is not None and proposal_status is not None:
-        if proposal_status == 'in_progress':
-            clauses.append(clause(pred('do_proposal', proposal_target, positive=True)))
-        elif proposal_status == 'completed':
-            clauses.append(clause(pred('complete_proposal', proposal_target, positive=True)))
-        elif proposal_status == 'pending':
-            clauses.append(clause(pred('reopen_proposal', proposal_target, positive=True)))
+        if proposal_status == "in_progress":
+            clauses.append(clause(pred("do_proposal", proposal_target, positive=True)))
+        elif proposal_status == "completed":
+            clauses.append(clause(pred("complete_proposal", proposal_target, positive=True)))
+        elif proposal_status == "pending":
+            clauses.append(clause(pred("reopen_proposal", proposal_target, positive=True)))
         # deleted / unknown statuses are silently dropped: the
         # invariant clauses won't fire and the prover reports SAT
         # (mirroring the Layer-1 engine's neutral behaviour).
@@ -432,14 +430,14 @@ def prove_lkb_request(
 
     derived_false, total = saturate(facts + axioms, max_new=max_new_clauses)
     if total >= max_new_clauses:
-        return 'unknown', {
-            'reason': 'saturation_cap',
-            'clause_count': total,
-            'cap': max_new_clauses,
+        return "unknown", {
+            "reason": "saturation_cap",
+            "clause_count": total,
+            "cap": max_new_clauses,
         }
     if derived_false:
-        return 'fail', {'reason': 'refutation', 'clause_count': total}
-    return 'pass', {'reason': 'saturation_silent', 'clause_count': total}
+        return "fail", {"reason": "refutation", "clause_count": total}
+    return "pass", {"reason": "saturation_silent", "clause_count": total}
 
 
 # ---------------------------------------------------------------------------
@@ -456,17 +454,17 @@ def _tptp_atom(literal: Literal) -> str:
     """
     from .solver_adapter import encode_solver_literal
 
-    if literal.predicate == '__tautology__/0':
-        return '$true'
-    name, _, arity_str = literal.predicate.partition('/')
+    if literal.predicate == "__tautology__/0":
+        return "$true"
+    name, _, arity_str = literal.predicate.partition("/")
     arity = int(arity_str)
-    args = ', '.join(encode_solver_literal(a.name) for a in literal.args)
-    atom = f'{name}({args})' if arity else name
+    args = ", ".join(encode_solver_literal(a.name) for a in literal.args)
+    atom = f"{name}({args})" if arity else name
     # TPTP forbids ``$`` inside atom names; wrap in double quotes so the
     # encoded literal (which may contain underscores/digits/etc.) is a
     # TPTP-distinct-object.
     quoted = f'"{atom}"'
-    return quoted if literal.positive else f'~{quoted}'
+    return quoted if literal.positive else f"~{quoted}"
 
 
 def emit_tptp_program(
@@ -487,84 +485,78 @@ def emit_tptp_program(
     """
     from .solver_adapter import encode_solver_literal
 
-    lines: list[str] = ['% Generated by lkb-atp-tptp']
+    lines: list[str] = ["% Generated by lkb-atp-tptp"]
     counter = 0
 
     def next_name(prefix: str) -> str:
         nonlocal counter
         counter += 1
-        return f'{prefix}_{counter}'
+        return f"{prefix}_{counter}"
 
     # Snapshot facts (axioms).
     for c in constants:
         lines.append(
-            f"fof({next_name('task')}, axiom, { _tptp_atom(pred('task', c, positive=True)) } )."
+            f"fof({next_name('task')}, axiom, {_tptp_atom(pred('task', c, positive=True))} )."
         )
 
     for c in constants:
-        lit = pred('blocked', c, positive=(c in blocked_ids))
-        lines.append(f'fof({next_name("blocked")}, axiom, { _tptp_atom(lit) } ).')
+        lit = pred("blocked", c, positive=(c in blocked_ids))
+        lines.append(f"fof({next_name('blocked')}, axiom, {_tptp_atom(lit)} ).")
 
     for c in constants:
-        lit = pred('in_cycle', c, positive=(c in cycle_ids))
-        lines.append(f'fof({next_name("cycle")}, axiom, { _tptp_atom(lit) } ).')
+        lit = pred("in_cycle", c, positive=(c in cycle_ids))
+        lines.append(f"fof({next_name('cycle')}, axiom, {_tptp_atom(lit)} ).")
 
     for c in constants:
-        lit = pred('has_acceptance_proof', c, positive=(c in has_proof_ids))
-        lines.append(
-            f'fof({next_name("proof")}, axiom, { _tptp_atom(lit) } ).'
-        )
+        lit = pred("has_acceptance_proof", c, positive=(c in has_proof_ids))
+        lines.append(f"fof({next_name('proof')}, axiom, {_tptp_atom(lit)} ).")
 
-    sa_atom = pred('strict_acceptance', positive=strict_acceptance)
-    lines.append(
-        f'fof({next_name("strict")}, axiom, { _tptp_atom(sa_atom) } ).'
-    )
+    sa_atom = pred("strict_acceptance", positive=strict_acceptance)
+    lines.append(f"fof({next_name('strict')}, axiom, {_tptp_atom(sa_atom)} ).")
 
     # Invariant rules (axioms). Rendered as universally quantified FOF
     # so the emitted TPTP is faithful to the LKB rule shape; the
     # in-process prover grounds these eagerly.
     for c in constants:
         lines.append(
-            f'fof({next_name("r002")}, axiom, '
-            f'! [X] : ({ _tptp_atom(pred("do_proposal", c, positive=False)) } | '
-            f'{ _tptp_atom(pred("blocked", c, positive=False)) }) ).'
+            f"fof({next_name('r002')}, axiom, "
+            f"! [X] : ({_tptp_atom(pred('do_proposal', c, positive=False))} | "
+            f"{_tptp_atom(pred('blocked', c, positive=False))}) )."
         )
     for c in constants:
         lines.append(
-            f'fof({next_name("r006")}, axiom, '
-            f'! [X] : ({ _tptp_atom(pred("do_proposal", c, positive=False)) } | '
-            f'{ _tptp_atom(pred("in_cycle", c, positive=False)) }) ).'
+            f"fof({next_name('r006')}, axiom, "
+            f"! [X] : ({_tptp_atom(pred('do_proposal', c, positive=False))} | "
+            f"{_tptp_atom(pred('in_cycle', c, positive=False))}) )."
         )
     if strict_acceptance:
         for c in constants:
             lines.append(
-                f'fof({next_name("r005")}, axiom, '
-                f'! [X] : ('
-                f'{ _tptp_atom(pred("complete_proposal", c, positive=False)) } | '
-                f'{ _tptp_atom(pred("strict_acceptance", positive=False)) } | '
-                f'{ _tptp_atom(pred("has_acceptance_proof", c, positive=True)) } '
-                f') ).'
+                f"fof({next_name('r005')}, axiom, "
+                f"! [X] : ("
+                f"{_tptp_atom(pred('complete_proposal', c, positive=False))} | "
+                f"{_tptp_atom(pred('strict_acceptance', positive=False))} | "
+                f"{_tptp_atom(pred('has_acceptance_proof', c, positive=True))} "
+                f") )."
             )
 
     # Proposal as conjecture — a real ATP would attempt to prove it.
     if proposal_target is not None and proposal_status is not None:
         safe_target = encode_solver_literal(proposal_target)
-        if proposal_status == 'in_progress':
+        if proposal_status == "in_progress":
             atom = f'"do_proposal({safe_target})"'
-        elif proposal_status == 'completed':
+        elif proposal_status == "completed":
             atom = f'"complete_proposal({safe_target})"'
-        elif proposal_status == 'pending':
+        elif proposal_status == "pending":
             atom = f'"reopen_proposal({safe_target})"'
         else:
-            atom = '$true'
-        lines.append(
-            f'fof({next_name("conjecture")}, conjecture, {atom} ).'
-        )
+            atom = "$true"
+        lines.append(f"fof({next_name('conjecture')}, conjecture, {atom} ).")
 
-    return '\n'.join(lines) + '\n'
+    return "\n".join(lines) + "\n"
 
 
-def build_tptp_program(snapshot: 'FactsSnapshot', request: 'SolverRequest') -> str:
+def build_tptp_program(snapshot: "FactsSnapshot", request: "SolverRequest") -> str:
     """Build a replayable TPTP FOF program for an LKB solver request.
 
     The program is deliberately side-effect-free and uses only canonical
@@ -581,19 +573,19 @@ def build_tptp_program(snapshot: 'FactsSnapshot', request: 'SolverRequest') -> s
     has_proof_ids = frozenset(
         task_id
         for task_id, task in snapshot.normalized_tasks.items()
-        if (task.get('metadata') or {}).get('lkb', {}).get('acceptance_proof')
+        if (task.get("metadata") or {}).get("lkb", {}).get("acceptance_proof")
     )
 
     lines: list[str] = [
-        '% Generated by lkb-build-tptp-program',
-        '% solver_syntax: tptp-fof',
+        "% Generated by lkb-build-tptp-program",
+        "% solver_syntax: tptp-fof",
     ]
     counter = 0
 
     def next_name(prefix: str) -> str:
         nonlocal counter
         counter += 1
-        return f'{prefix}_{counter}'
+        return f"{prefix}_{counter}"
 
     def obj(value: str) -> str:
         return f'"{encode_solver_literal(value)}"'
@@ -601,89 +593,88 @@ def build_tptp_program(snapshot: 'FactsSnapshot', request: 'SolverRequest') -> s
     def atom(name: str, *args: str) -> str:
         if not args:
             return name
-        return f'{name}({", ".join(obj(arg) for arg in args)})'
+        return f"{name}({', '.join(obj(arg) for arg in args)})"
 
     for task_id in universe:
         is_known = task_id in snapshot.normalized_tasks
         lines.append(
-            f'fof({next_name("task")}, axiom, '
-            f'{"~" if not is_known else ""}{atom("task", task_id)} ).'
+            f"fof({next_name('task')}, axiom, "
+            f"{'~' if not is_known else ''}{atom('task', task_id)} )."
         )
         if is_known:
             task = snapshot.normalized_tasks[task_id]
-            subject = str(task.get('subject', task_id))
+            subject = str(task.get("subject", task_id))
             lines.append(
-                f'fof({next_name("task_subject")}, axiom, '
-                f'task_subject({obj(task_id)}, {obj(subject)}) ).'
+                f"fof({next_name('task_subject')}, axiom, "
+                f"task_subject({obj(task_id)}, {obj(subject)}) )."
             )
 
     for task_id in universe:
         lines.append(
-            f'fof({next_name("blocked")}, axiom, '
-            f'{"~" if task_id not in snapshot.blocked_ids else ""}{atom("blocked", task_id)} ).'
+            f"fof({next_name('blocked')}, axiom, "
+            f"{'~' if task_id not in snapshot.blocked_ids else ''}{atom('blocked', task_id)} )."
         )
         lines.append(
-            f'fof({next_name("cycle")}, axiom, '
-            f'{"~" if task_id not in snapshot.cycle_task_ids else ""}{atom("in_cycle", task_id)} ).'
+            f"fof({next_name('cycle')}, axiom, "
+            f"{'~' if task_id not in snapshot.cycle_task_ids else ''}{atom('in_cycle', task_id)} )."
         )
         lines.append(
-            f'fof({next_name("acceptance")}, axiom, '
-            f'{"~" if task_id not in has_proof_ids else ""}'
-            f'{atom("has_acceptance_proof", task_id)} ).'
+            f"fof({next_name('acceptance')}, axiom, "
+            f"{'~' if task_id not in has_proof_ids else ''}"
+            f"{atom('has_acceptance_proof', task_id)} )."
         )
 
     for task_id, blockers in sorted(snapshot.blocked_by.items()):
         for blocker in blockers:
             lines.append(
-                f'fof({next_name("requires")}, axiom, {atom("requires", blocker, task_id)} ).'
+                f"fof({next_name('requires')}, axiom, {atom('requires', blocker, task_id)} )."
             )
 
     lines.extend(
         [
-            'fof(r002_blocked_no_doing, axiom, '
-            '! [T] : ((blocked(T) & do_proposal(T)) => $false) ).',
-            'fof(r006_cycle_no_doing, axiom, '
-            '! [T] : ((in_cycle(T) & do_proposal(T)) => $false) ).',
-            'fof(lkb_transition_known_task_do, axiom, '
-            '! [T] : ((do_proposal(T) & ~task(T)) => $false) ).',
-            'fof(lkb_transition_known_task_complete, axiom, '
-            '! [T] : ((complete_proposal(T) & ~task(T)) => $false) ).',
-            'fof(lkb_transition_known_task_reopen, axiom, '
-            '! [T] : ((reopen_proposal(T) & ~task(T)) => $false) ).',
+            "fof(r002_blocked_no_doing, axiom, "
+            "! [T] : ((blocked(T) & do_proposal(T)) => $false) ).",
+            "fof(r006_cycle_no_doing, axiom, ! [T] : ((in_cycle(T) & do_proposal(T)) => $false) ).",
+            "fof(lkb_transition_known_task_do, axiom, "
+            "! [T] : ((do_proposal(T) & ~task(T)) => $false) ).",
+            "fof(lkb_transition_known_task_complete, axiom, "
+            "! [T] : ((complete_proposal(T) & ~task(T)) => $false) ).",
+            "fof(lkb_transition_known_task_reopen, axiom, "
+            "! [T] : ((reopen_proposal(T) & ~task(T)) => $false) ).",
         ]
     )
     if request.strict_acceptance:
         lines.append(
-            'fof(r005_done_requires_acceptance_proof, axiom, '
-            '! [T] : ((complete_proposal(T) & ~has_acceptance_proof(T)) => $false) ).'
+            "fof(r005_done_requires_acceptance_proof, axiom, "
+            "! [T] : ((complete_proposal(T) & ~has_acceptance_proof(T)) => $false) )."
         )
 
     if request.target_task_id is not None and request.target_status is not None:
-        if request.target_status == 'in_progress':
-            proposal_atom = atom('do_proposal', request.target_task_id)
-        elif request.target_status == 'completed':
-            proposal_atom = atom('complete_proposal', request.target_task_id)
-        elif request.target_status == 'pending':
-            proposal_atom = atom('reopen_proposal', request.target_task_id)
+        if request.target_status == "in_progress":
+            proposal_atom = atom("do_proposal", request.target_task_id)
+        elif request.target_status == "completed":
+            proposal_atom = atom("complete_proposal", request.target_task_id)
+        elif request.target_status == "pending":
+            proposal_atom = atom("reopen_proposal", request.target_task_id)
         else:
-            proposal_atom = '$true'
-        lines.append(f'fof({next_name("proposal")}, conjecture, {proposal_atom} ).')
+            proposal_atom = "$true"
+        lines.append(f"fof({next_name('proposal')}, conjecture, {proposal_atom} ).")
 
-    return '\n'.join(lines) + '\n'
+    return "\n".join(lines) + "\n"
 
 
 __all__ = [
-    'Clause',
-    'build_tptp_program',
-    'INVARIANT_PREDICATES',
-    'Literal',
-    'Term',
-    'clause',
-    'emit_tptp_program',
-    'encode_lkb_axioms',
-    'encode_lkb_facts',
-    'pred',
-    'prove_lkb_request',
-    'saturate',
-    'task_constants',
+    "Clause",
+    "build_tptp_program",
+    "INVARIANT_PREDICATES",
+    "Literal",
+    "Term",
+    "clause",
+    "emit_tptp_program",
+    "encode_lkb_axioms",
+    "encode_lkb_facts",
+    "pred",
+    "prove_lkb_request",
+    "saturate",
+    "task_constants",
 ]

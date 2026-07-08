@@ -59,18 +59,14 @@ class CheckKind(str, Enum):
     CUSTOM = "custom"
 
 
-_TERMINAL_STEP_STATUSES = frozenset(
-    {StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.SKIPPED}
-)
+_TERMINAL_STEP_STATUSES = frozenset({StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.SKIPPED})
 
 
 def _validate_id(value: str, *, kind: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{kind} id must be a non-empty string")
     if not _ID_RE.match(value):
-        raise ValueError(
-            f"{kind} id must match [A-Za-z0-9._-]{{1,64}}; got: {value!r}"
-        )
+        raise ValueError(f"{kind} id must match [A-Za-z0-9._-]{{1,64}}; got: {value!r}")
     return value
 
 
@@ -211,9 +207,7 @@ class Step:
             title=str(data["title"]),
             description=str(data["description"]),
             kind=StepKind(str(data.get("kind", StepKind.OTHER.value))),
-            criteria=[
-                AcceptanceCriteria.from_dict(c) for c in (data.get("criteria") or [])
-            ],
+            criteria=[AcceptanceCriteria.from_dict(c) for c in (data.get("criteria") or [])],
             depends_on=list(data.get("depends_on") or []),
             status=StepStatus(str(data.get("status", StepStatus.PENDING.value))),
             started_at=data.get("started_at"),
@@ -248,9 +242,7 @@ class SubPlan:
         seen: set[str] = set()
         for step in self.steps:
             if step.id in seen:
-                raise ValueError(
-                    f"SubPlan {self.id!r} has duplicate step id {step.id!r}"
-                )
+                raise ValueError(f"SubPlan {self.id!r} has duplicate step id {step.id!r}")
             seen.add(step.id)
         if self.notes is not None and not isinstance(self.notes, str):
             raise TypeError("SubPlan.notes must be a string or None")
@@ -316,9 +308,7 @@ class Plan:
         seen: set[str] = set()
         for sp in self.sub_plans:
             if sp.id in seen:
-                raise ValueError(
-                    f"Plan {self.id!r} has duplicate sub_plan id {sp.id!r}"
-                )
+                raise ValueError(f"Plan {self.id!r} has duplicate sub_plan id {sp.id!r}")
             seen.add(sp.id)
         # Cross-sub-plan step id uniqueness.
         all_step_ids: set[str] = set()
@@ -326,8 +316,7 @@ class Plan:
             for step in sp.steps:
                 if step.id in all_step_ids:
                     raise ValueError(
-                        f"Plan {self.id!r} has duplicate step id {step.id!r} "
-                        "across sub_plans"
+                        f"Plan {self.id!r} has duplicate step id {step.id!r} across sub_plans"
                     )
                 all_step_ids.add(step.id)
         # Validate depends_on references: a step may only depend on steps

@@ -32,7 +32,9 @@ def build_forecast_command() -> LocalCommand:
 def _forecast_call(args: str, context: Any) -> LocalCommandResult:
     parts = args.strip().split()
     action = parts[0].lower() if parts else "run"
-    cwd = Path(str(getattr(context, "cwd", None) or getattr(context, "workspace_root", None) or Path.cwd()))
+    cwd = Path(
+        str(getattr(context, "cwd", None) or getattr(context, "workspace_root", None) or Path.cwd())
+    )
     key = str(cwd)
 
     if action == "status":
@@ -74,10 +76,17 @@ def _forecast_call(args: str, context: Any) -> LocalCommandResult:
             result = controller.last_result
             suggestion = parse_selection(selection, result.suggestions)
             if suggestion is None:
-                return LocalCommandResult(type="text", value=f"No forecast suggestion matches {selection!r}.")
+                return LocalCommandResult(
+                    type="text", value=f"No forecast suggestion matches {selection!r}."
+                )
             cfg = load_intent_forecast_config(cwd=cwd)
             if cfg.feedback_enabled:
-                record_feedback("accepted_started", suggestion=suggestion, cwd=cwd, fingerprint=result.fingerprint)
+                record_feedback(
+                    "accepted_started",
+                    suggestion=suggestion,
+                    cwd=cwd,
+                    fingerprint=result.fingerprint,
+                )
             if hasattr(controller, "_last_result"):
                 try:
                     controller._last_result = None
@@ -88,17 +97,25 @@ def _forecast_call(args: str, context: Any) -> LocalCommandResult:
         if result is None:
             result = load_latest_forecast(cwd=cwd)
         if result is None:
-            return LocalCommandResult(type="text", value="No forecast suggestion is available to accept.")
+            return LocalCommandResult(
+                type="text", value="No forecast suggestion is available to accept."
+            )
         selection = parts[1] if len(parts) > 1 else "1"
         suggestion = parse_selection(selection, result.suggestions)
         if suggestion is None:
-            return LocalCommandResult(type="text", value=f"No forecast suggestion matches {selection!r}.")
+            return LocalCommandResult(
+                type="text", value=f"No forecast suggestion matches {selection!r}."
+            )
         cfg = load_intent_forecast_config(cwd=cwd)
         if cfg.feedback_enabled:
-            record_feedback("accepted_started", suggestion=suggestion, cwd=cwd, fingerprint=result.fingerprint)
+            record_feedback(
+                "accepted_started", suggestion=suggestion, cwd=cwd, fingerprint=result.fingerprint
+            )
         return LocalCommandResult(type="prompt", value=suggestion.prompt)
     if action != "run":
-        return LocalCommandResult(type="text", value="Usage: /forecast [run|status|accept <n>|dismiss|on|off]")
+        return LocalCommandResult(
+            type="text", value="Usage: /forecast [run|status|accept <n>|dismiss|on|off]"
+        )
 
     provider, model, session, conversation = _resolve_runtime(context)
     cfg = load_intent_forecast_config(cwd=cwd)

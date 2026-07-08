@@ -98,9 +98,7 @@ def _patch_supervisor_to_run_inproc(monkeypatch, workers: dict[str, _InProcWorke
         elif rc == EXIT_CODE_OK:
             return  # no restart
 
-    monkeypatch.setattr(
-        "extensions.daemon.supervisor.spawn_worker", fake_spawn_worker
-    )
+    monkeypatch.setattr("extensions.daemon.supervisor.spawn_worker", fake_spawn_worker)
 
 
 # ---------------------------------------------------------------------------

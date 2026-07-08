@@ -109,9 +109,7 @@ async def _handle_stop_hooks_generator(
         # Gate on the SAME event the executor will dispatch (SubagentStop
         # when agent_id is set, hook_executor.py:561) — gating on "Stop"
         # alone silently disables SubagentStop-only configurations.
-        if not has_hook_for_event(
-            "SubagentStop" if agent_id else "Stop", tool_use_context
-        ):
+        if not has_hook_for_event("SubagentStop" if agent_id else "Stop", tool_use_context):
             return
 
         blocking_errors: list[Message] = []

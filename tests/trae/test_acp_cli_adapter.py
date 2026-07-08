@@ -139,9 +139,16 @@ async def test_process_message_spawns_run_and_streams_trajectory(tmp_path: Path)
 
     # 写入 trajectory 事件 (tool + text 两种)，然后让进程退出
     traj.write_text(
-        json.dumps({"id": "e1", "step": "think", "content": "analyzing", "model": "claude"}) + "\n"
+        json.dumps({"id": "e1", "step": "think", "content": "analyzing", "model": "claude"})
+        + "\n"
         + json.dumps(
-            {"id": "e2", "step": "act", "tool_name": "edit_file", "tool_input": {"path": "a.py"}, "content": "edit"}
+            {
+                "id": "e2",
+                "step": "act",
+                "tool_name": "edit_file",
+                "tool_input": {"path": "a.py"},
+                "content": "edit",
+            }
         )
         + "\n",
         encoding="utf-8",
@@ -187,9 +194,7 @@ async def test_process_message_skips_unparseable_trajectory_lines(tmp_path: Path
     session = await adapter.create_session(str(tmp_path))
     traj = adapter._trajectories[session.id]
     traj.write_text(
-        "not-json-line\n"
-        + json.dumps({"id": "e1", "content": "good"}) + "\n"
-        + "{broken\n",
+        "not-json-line\n" + json.dumps({"id": "e1", "content": "good"}) + "\n" + "{broken\n",
         encoding="utf-8",
     )
     msg = ACPMessage(type=ACPMessageType.MESSAGE_SEND, session_id=session.id, content="t")
@@ -350,7 +355,9 @@ def test_env_includes_provider_and_model() -> None:
 
 def test_env_includes_mcp_servers_json() -> None:
     cfg = TraeCliConfig(
-        mcp_servers=[{"name": "clawcodex", "command": "python", "args": ["-m", "extensions.trae.mcp_bridge"]}]
+        mcp_servers=[
+            {"name": "clawcodex", "command": "python", "args": ["-m", "extensions.trae.mcp_bridge"]}
+        ]
     )
     adapter = TraeCliACPAdapter(cfg, "/tmp")
     env = adapter._env()

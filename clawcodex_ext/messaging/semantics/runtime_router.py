@@ -50,23 +50,23 @@ class InboundRuntimeRouter:
         is_busy: bool = False,
     ) -> RoutingDecision:
         if semantic is MessageSemantics.FOLLOW_UP:
-            return RoutingDecision(semantic, 'handler')
+            return RoutingDecision(semantic, "handler")
         if semantic is MessageSemantics.CONTEXT_ONLY:
             return RoutingDecision(
-                semantic, 'context_only', control=self._control.context_only_target(None)
+                semantic, "context_only", control=self._control.context_only_target(None)
             )
         if semantic is MessageSemantics.INTERRUPT:
             ctrl = self._control.resolve(semantic, None)
-            return RoutingDecision(semantic, 'control', control=ctrl)
+            return RoutingDecision(semantic, "control", control=ctrl)
         if semantic is MessageSemantics.APPROVAL:
             # approval requires a bound wait-point; without one the dispatcher rejects.
-            return RoutingDecision(semantic, 'approval')
+            return RoutingDecision(semantic, "approval")
         if semantic is MessageSemantics.COMMAND:
             route = self._commands.route(message)
             ctrl = self._control.resolve(semantic, route)
-            return RoutingDecision(semantic, 'command', route=route, control=ctrl)
+            return RoutingDecision(semantic, "command", route=route, control=ctrl)
         # newPrompt → host agent (default) or opt-in target
-        return RoutingDecision(semantic, 'host_agent')
+        return RoutingDecision(semantic, "host_agent")
 
 
-__all__ = ['InboundRuntimeRouter', 'RoutingDecision']
+__all__ = ["InboundRuntimeRouter", "RoutingDecision"]

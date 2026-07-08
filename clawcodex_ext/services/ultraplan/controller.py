@@ -46,7 +46,9 @@ class UltraplanController:
             )
         return result
 
-    async def run_plan(self, plan_id: str, *, remote: bool = False, cwd: str | None = None) -> Progress:
+    async def run_plan(
+        self, plan_id: str, *, remote: bool = False, cwd: str | None = None
+    ) -> Progress:
         plan = self.store.load(plan_id)
         if remote:
             if self.ccr is None:

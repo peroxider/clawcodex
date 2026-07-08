@@ -193,9 +193,7 @@ class AgnesVideoProvider(VideoProvider):
 
         video_url = data.get("video_url") or data.get("url", "")
         if not video_url:
-            raise RuntimeError(
-                f"Task {task_id} completed but no video_url in response: {data}"
-            )
+            raise RuntimeError(f"Task {task_id} completed but no video_url in response: {data}")
 
         # Attempt to derive duration from num_frames / frame_rate if present.
         duration: float | None = None

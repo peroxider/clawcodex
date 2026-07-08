@@ -118,9 +118,7 @@ class CollapseEngine:
             threshold_fraction=self._config.threshold_fraction,
             keep_recent=self._config.keep_recent,
         )
-        self._summary: SummaryGenerator = (
-            summary_generator or HeadlineSummaryGenerator()
-        )
+        self._summary: SummaryGenerator = summary_generator or HeadlineSummaryGenerator()
         self._detector = detector or BoundaryDetector(
             treat_legacy_as_boundary=self._config.use_legacy_boundary
         )
@@ -222,9 +220,7 @@ class CollapseEngine:
         last_error: BaseException | None = None,
         hints: dict[str, Any] | None = None,
     ) -> CollapseRecoveryResult:
-        decision = self.evaluate(
-            messages, last_error=last_error, hints=hints
-        )
+        decision = self.evaluate(messages, last_error=last_error, hints=hints)
         return self.apply(messages, decision)
 
     # ------------------------------------------------------------------
@@ -257,8 +253,7 @@ class CollapseEngine:
             return result
         if last_exc is not None:
             raise ContextLengthExceededError(
-                "context still over budget after emergency collapse: "
-                f"{last_exc!r}"
+                f"context still over budget after emergency collapse: {last_exc!r}"
             ) from last_exc
         return CollapseRecoveryResult(
             applied=False,

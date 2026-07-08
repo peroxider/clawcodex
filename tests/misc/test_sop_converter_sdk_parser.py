@@ -118,13 +118,15 @@ class TestParseSimpleList(unittest.TestCase):
     def test_newline_separated(self) -> None:
         methods = SdkParser("foo\nbar\nbaz").parse()
         self.assertEqual(
-            [m.name for m in methods], ["foo", "bar", "baz"],
+            [m.name for m in methods],
+            ["foo", "bar", "baz"],
         )
 
     def test_mixed_separators(self) -> None:
         methods = SdkParser("foo,bar\nbaz").parse()
         self.assertEqual(
-            [m.name for m in methods], ["foo", "bar", "baz"],
+            [m.name for m in methods],
+            ["foo", "bar", "baz"],
         )
 
     def test_empty_input(self) -> None:
@@ -387,6 +389,7 @@ class TestParseSdkSpec(unittest.TestCase):
     def test_passes_through_errors(self) -> None:
         # Force an internal exception by mocking parse() to raise.
         from unittest.mock import patch
+
         parser = SdkParser("alpha")
         with patch.object(parser, "parse", side_effect=RuntimeError("boom")):
             with patch(

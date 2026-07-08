@@ -70,7 +70,9 @@ def test_fallback_uses_chinese_when_context_language_is_chinese(tmp_path) -> Non
     ).generate(trigger="test", force=True)
 
     assert result.suggestions[0].title == "\u7ee7\u7eed\u6700\u8fd1\u7684\u4efb\u52a1"
-    assert result.suggestions[0].prompt.startswith("\u8bf7\u57fa\u4e8e\u6700\u65b0\u7528\u6237\u8bf7\u6c42")
+    assert result.suggestions[0].prompt.startswith(
+        "\u8bf7\u57fa\u4e8e\u6700\u65b0\u7528\u6237\u8bf7\u6c42"
+    )
 
 
 def test_filter_drops_english_suggestions_when_chinese_required(tmp_path) -> None:

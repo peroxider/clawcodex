@@ -57,12 +57,12 @@ _STATUS_STYLES: dict[TaskStatus, tuple[str, str]] = {
 # ── LKB derived-status badge table ──────────────────────────────────────
 # Each entry: (emoji, zh_label, en_label, rich_style)
 _LKB_BADGE_STYLES: dict[str, tuple[str, str, str, str]] = {
-    "fail":           ("✗", "验证未通过",     "Validation failed",      "bold red"),
-    "blocked":        ("▣", "被阻塞",          "Blocked",                "bold yellow"),
-    "needs_clarify":  ("?",  "待澄清",          "Needs clarification",   "bold cyan"),
-    "stale":          ("△", "假设已失效",      "Stale assumption",      "bold #d4943a"),
-    "verified":       ("✓", "已验证",          "Verified",              "bold green"),
-    "needs_recheck":  ("◎", "需复查",          "Needs recheck",         "dim yellow"),
+    "fail": ("✗", "验证未通过", "Validation failed", "bold red"),
+    "blocked": ("▣", "被阻塞", "Blocked", "bold yellow"),
+    "needs_clarify": ("?", "待澄清", "Needs clarification", "bold cyan"),
+    "stale": ("△", "假设已失效", "Stale assumption", "bold #d4943a"),
+    "verified": ("✓", "已验证", "Verified", "bold green"),
+    "needs_recheck": ("◎", "需复查", "Needs recheck", "dim yellow"),
 }
 
 
@@ -72,18 +72,18 @@ def _lkb_badge(lkb: LkbStatus | None) -> Text | None:
         return None
 
     key: str | None = None
-    if lkb.validation_result == 'fail':
-        key = 'fail'
+    if lkb.validation_result == "fail":
+        key = "fail"
     elif lkb.is_blocked:
-        key = 'blocked'
+        key = "blocked"
     elif lkb.has_pending_clarification:
-        key = 'needs_clarify'
+        key = "needs_clarify"
     elif lkb.stale_assumptions:
-        key = 'stale'
-    elif lkb.validation_result == 'pass':
-        key = 'verified'
-    elif lkb.derived_status == 'needs_recheck':
-        key = 'needs_recheck'
+        key = "stale"
+    elif lkb.validation_result == "pass":
+        key = "verified"
+    elif lkb.derived_status == "needs_recheck":
+        key = "needs_recheck"
 
     if key is None:
         return None

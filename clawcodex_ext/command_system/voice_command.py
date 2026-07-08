@@ -36,6 +36,7 @@ Design decisions (mirrors TS)
   required by ``test_all_builtins_have_call_impl`` which asserts every
   registered ``LocalCommand`` has ``_call_impl`` set.
 """
+
 from __future__ import annotations
 
 from .types import CommandContext, LocalCommand, LocalCommandResult
@@ -78,8 +79,12 @@ def _status_text() -> str:
     lines = [f"Voice mode: {'on' if enabled else 'off'}", f"Provider: {provider}"]
     lines.append("")
     lines.append("Availability:")
-    lines.append(f"  feature flag (FEATURE_VOICE_MODE): {'on' if is_voice_feature_enabled() else 'off'}")
-    lines.append(f"  kill-switch (CLAWCODEX_VOICE_DISABLED): {'set' if is_voice_disabled_by_kill_switch() else 'clear'}")
+    lines.append(
+        f"  feature flag (FEATURE_VOICE_MODE): {'on' if is_voice_feature_enabled() else 'off'}"
+    )
+    lines.append(
+        f"  kill-switch (CLAWCODEX_VOICE_DISABLED): {'set' if is_voice_disabled_by_kill_switch() else 'clear'}"
+    )
     lines.append(f"  overall available: {'yes' if is_voice_available() else 'no'}")
     lines.append(f"  Anthropic OAuth token: {'present' if has_voice_auth() else 'missing'}")
     lines.append("")

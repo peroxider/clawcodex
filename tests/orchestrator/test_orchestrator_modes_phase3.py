@@ -56,10 +56,7 @@ class _StubAgentRunner:
                 "turn_count_at_entry": session.turn_count,
             }
         )
-        if (
-            self._raise_on_call is not None
-            and len(self.calls) == self._raise_on_call
-        ):
+        if self._raise_on_call is not None and len(self.calls) == self._raise_on_call:
             raise RuntimeError("simulated agent crash")
         # Mimic AgentRunner.run's side effects.
         session.turn_count = 5
@@ -100,9 +97,7 @@ class TestCoordinatorModeRunner(unittest.TestCase):
         agent.agent_config.coordinator_mode = False
         runner = CoordinatorModeRunner(agent)
         asyncio.run(runner.run(_make_session(), MagicMock()))
-        self.assertEqual(
-            agent.calls[0]["coordinator_mode_at_entry"], True
-        )
+        self.assertEqual(agent.calls[0]["coordinator_mode_at_entry"], True)
 
     def test_restores_original_value_after_run(self) -> None:
         agent = _StubAgentRunner()
@@ -117,9 +112,7 @@ class TestCoordinatorModeRunner(unittest.TestCase):
         runner = CoordinatorModeRunner(agent)
         asyncio.run(runner.run(_make_session(), MagicMock()))
         self.assertTrue(agent.agent_config.coordinator_mode)
-        self.assertEqual(
-            agent.calls[0]["coordinator_mode_at_entry"], True
-        )
+        self.assertEqual(agent.calls[0]["coordinator_mode_at_entry"], True)
 
     def test_restores_value_even_if_run_raises(self) -> None:
         agent = _StubAgentRunner(raise_on_call=1)
@@ -218,9 +211,7 @@ class TestDebateModeRunner(unittest.TestCase):
 
     def test_custom_proposer_names(self) -> None:
         agent = _StubAgentRunner()
-        runner = DebateModeRunner(
-            agent, proposers=("alice", "bob", "carol")
-        )
+        runner = DebateModeRunner(agent, proposers=("alice", "bob", "carol"))
         session = _make_session()
         results = asyncio.run(runner.run(session, MagicMock()))
         self.assertEqual(
@@ -228,9 +219,7 @@ class TestDebateModeRunner(unittest.TestCase):
             ["alice", "bob", "carol", "judge"],
         )
         # Proposer count interpolated into the prompt.
-        self.assertIn(
-            "one of 3 independent proposers", agent.calls[0]["prompt"]
-        )
+        self.assertIn("one of 3 independent proposers", agent.calls[0]["prompt"])
 
     def test_proposer_done_sentinel_uses_uppercase_name(self) -> None:
         agent = _StubAgentRunner()
@@ -252,9 +241,7 @@ class TestModesConfigDebate(unittest.TestCase):
         self.assertEqual(cfg.debate_proposers, ["proposer_a", "proposer_b"])
 
     def test_custom_proposers(self) -> None:
-        cfg = _parse_modes_config(
-            {"debate": {"proposers": ["alice", "bob", "carol"]}}
-        )
+        cfg = _parse_modes_config({"debate": {"proposers": ["alice", "bob", "carol"]}})
         self.assertEqual(cfg.debate_proposers, ["alice", "bob", "carol"])
 
 
@@ -273,15 +260,11 @@ class TestOrchestratorPhase3Registration(unittest.TestCase):
         instance = MagicMock(spec=["_register_collaboration_modes"])
         Orchestrator._register_collaboration_modes(
             instance,
-            workflow=WorkflowConfig.from_dict(
-                {"modes": {"enabled": ["single", "coordinator"]}}
-            ),
+            workflow=WorkflowConfig.from_dict({"modes": {"enabled": ["single", "coordinator"]}}),
             agent_runner=_StubAgentRunner(),
         )
         self.assertIn("coordinator", mode_registry.available())
-        self.assertIsInstance(
-            mode_registry.get("coordinator"), CoordinatorModeRunner
-        )
+        self.assertIsInstance(mode_registry.get("coordinator"), CoordinatorModeRunner)
 
     def test_register_debate_when_enabled(self) -> None:
         from extensions.orchestrator.orchestrator import Orchestrator
@@ -371,9 +354,7 @@ class TestDebateProposerLensDiversity(unittest.TestCase):
         session = _make_session()
         asyncio.run(runner.run(session, MagicMock()))
         # The full lens instruction (not just name) is in the prompt.
-        self.assertIn(
-            "Prefer the simplest possible approach", agent.calls[0]["prompt"]
-        )
+        self.assertIn("Prefer the simplest possible approach", agent.calls[0]["prompt"])
 
 
 class TestDebateWorkspaceIsolation(unittest.TestCase):
@@ -403,11 +384,12 @@ class TestDebateWorkspaceIsolation(unittest.TestCase):
         runner = DebateModeRunner(agent, proposers=("alpha", "beta"))
         session = _make_session()
 
-        with patch.object(
-            DebateModeRunner, "_snapshot_workspace_head", return_value="abc123"
-        ) as snap, patch.object(
-            DebateModeRunner, "_reset_workspace_to"
-        ) as reset:
+        with (
+            patch.object(
+                DebateModeRunner, "_snapshot_workspace_head", return_value="abc123"
+            ) as snap,
+            patch.object(DebateModeRunner, "_reset_workspace_to") as reset,
+        ):
             asyncio.run(runner.run(session, MagicMock()))
 
         # Snapshot once at start.
@@ -471,9 +453,7 @@ class TestPipelineStructuredHandoff(unittest.TestCase):
             session = _make_session()
             session.workspace.path = tmp
             session.issue.id = "ISSUE-X"
-            with self.assertLogs(
-                "extensions.orchestrator.modes.pipeline", level="WARNING"
-            ) as cm:
+            with self.assertLogs("extensions.orchestrator.modes.pipeline", level="WARNING") as cm:
                 PipelineModeRunner._log_plan_file_status(session, "analyzer")
             joined = "\n".join(cm.output)
             self.assertIn("did NOT write", joined)
@@ -495,9 +475,7 @@ class _StubWorkflow:
 class TestDebateJudgeModelOverride(unittest.TestCase):
     def test_no_override_when_judge_model_none(self) -> None:
         agent = _StubAgentRunner()
-        runner = DebateModeRunner(
-            agent, proposers=("alpha",), judge_model=None
-        )
+        runner = DebateModeRunner(agent, proposers=("alpha",), judge_model=None)
         wf = _StubWorkflow(model="deepseek-v4-flash")
         session = _make_session()
         asyncio.run(runner.run(session, wf))
@@ -525,9 +503,7 @@ class TestDebateJudgeModelOverride(unittest.TestCase):
         session = _make_session()
         asyncio.run(runner.run(session, wf))
         # 2 calls: proposer (default model) + judge (override).
-        self.assertEqual(
-            observed_models, ["deepseek-v4-flash", "deepseek-v4-strong"]
-        )
+        self.assertEqual(observed_models, ["deepseek-v4-flash", "deepseek-v4-strong"])
         # After the runner returns, model is restored.
         self.assertEqual(wf.agent.model, "deepseek-v4-flash")
 
@@ -574,15 +550,12 @@ class TestDebateWorktreeIsolation(unittest.TestCase):
         from unittest.mock import patch
 
         agent = _StubAgentRunner()
-        runner = DebateModeRunner(
-            agent, proposers=("a", "b"), isolation="none"
-        )
+        runner = DebateModeRunner(agent, proposers=("a", "b"), isolation="none")
         session = _make_session()
-        with patch.object(
-            DebateModeRunner, "_reset_workspace_to"
-        ) as reset, patch.object(
-            DebateModeRunner, "_create_worktree_and_swap"
-        ) as create_wt:
+        with (
+            patch.object(DebateModeRunner, "_reset_workspace_to") as reset,
+            patch.object(DebateModeRunner, "_create_worktree_and_swap") as create_wt,
+        ):
             asyncio.run(runner.run(session, MagicMock()))
         # With isolation=none, neither reset nor worktree-create runs.
         self.assertEqual(reset.call_count, 0)
@@ -593,26 +566,25 @@ class TestDebateWorktreeIsolation(unittest.TestCase):
         from pathlib import Path
 
         agent = _StubAgentRunner()
-        runner = DebateModeRunner(
-            agent, proposers=("a", "b"), isolation="worktree"
-        )
+        runner = DebateModeRunner(agent, proposers=("a", "b"), isolation="worktree")
         session = _make_session()
         session.workspace.path = "/tmp/fake-workspace"
         fake_wt_paths = [Path("/tmp/wt-a"), Path("/tmp/wt-b")]
 
-        with patch.object(
-            DebateModeRunner,
-            "_snapshot_workspace_head",
-            return_value="abc123",
-        ), patch.object(
-            DebateModeRunner,
-            "_create_worktree_and_swap",
-            side_effect=fake_wt_paths,
-        ) as create_wt, patch.object(
-            DebateModeRunner, "_remove_worktree"
-        ) as remove_wt, patch.object(
-            DebateModeRunner, "_reset_workspace_to"
-        ) as reset:
+        with (
+            patch.object(
+                DebateModeRunner,
+                "_snapshot_workspace_head",
+                return_value="abc123",
+            ),
+            patch.object(
+                DebateModeRunner,
+                "_create_worktree_and_swap",
+                side_effect=fake_wt_paths,
+            ) as create_wt,
+            patch.object(DebateModeRunner, "_remove_worktree") as remove_wt,
+            patch.object(DebateModeRunner, "_reset_workspace_to") as reset,
+        ):
             asyncio.run(runner.run(session, MagicMock()))
 
         # Per proposer: one worktree created + torn down.
@@ -640,17 +612,13 @@ class TestModesConfigPhase3Hardening(unittest.TestCase):
     def test_pipeline_max_retries_negative_clamped(self) -> None:
         from extensions.orchestrator.config.schema import _parse_modes_config
 
-        cfg = _parse_modes_config(
-            {"pipeline": {"max_retries_per_stage": -3}}
-        )
+        cfg = _parse_modes_config({"pipeline": {"max_retries_per_stage": -3}})
         self.assertEqual(cfg.pipeline_max_retries_per_stage, 0)
 
     def test_debate_judge_model_parsed(self) -> None:
         from extensions.orchestrator.config.schema import _parse_modes_config
 
-        cfg = _parse_modes_config(
-            {"debate": {"judge_model": "deepseek-v4-strong"}}
-        )
+        cfg = _parse_modes_config({"debate": {"judge_model": "deepseek-v4-strong"}})
         self.assertEqual(cfg.debate_judge_model, "deepseek-v4-strong")
 
     def test_debate_judge_model_empty_string_treated_as_none(self) -> None:
@@ -737,9 +705,7 @@ class TestPipelineStageModelOverride(unittest.TestCase):
 
         agent.run = _patched  # type: ignore[assignment]
 
-        runner = PipelineModeRunner(
-            agent, stage_models={"analyzer": "model-a"}
-        )
+        runner = PipelineModeRunner(agent, stage_models={"analyzer": "model-a"})
         wf = _StubWorkflow(model="default-flash")
         session = _make_session()
         try:
@@ -778,6 +744,7 @@ class TestPipelineMailboxHandoff(unittest.TestCase):
             team_path = Path(tmp) / ".clawcodex/team.json"
             self.assertTrue(team_path.exists(), "team.json must be written")
             import json
+
             data = json.loads(team_path.read_text())
             self.assertEqual(data["team_name"], "pipeline-team")
             self.assertEqual([m["name"] for m in data["members"]], ["analyzer", "implementer"])
@@ -844,9 +811,7 @@ class TestDebateProposerModelOverride(unittest.TestCase):
 
     def test_parallel_with_proposer_models_warns_and_ignores(self) -> None:
         # parallel + proposer_models → logged warning + models NOT applied.
-        with self.assertLogs(
-            "extensions.orchestrator.modes.debate", level="WARNING"
-        ) as cm:
+        with self.assertLogs("extensions.orchestrator.modes.debate", level="WARNING") as cm:
             DebateModeRunner(
                 _StubAgentRunner(),
                 proposers=("a", "b"),
@@ -894,22 +859,22 @@ class TestDebateParallelProposers(unittest.TestCase):
                 active["count"] -= 1
 
         agent = _CountingAgent()
-        runner = DebateModeRunner(
-            agent, proposers=("a", "b"), parallel=True, isolation="worktree"
-        )
+        runner = DebateModeRunner(agent, proposers=("a", "b"), parallel=True, isolation="worktree")
         session = _make_session()
         session.workspace.path = "/tmp/whatever"
 
-        with patch.object(
-            DebateModeRunner,
-            "_snapshot_workspace_head",
-            return_value="abc123",
-        ), patch.object(
-            DebateModeRunner,
-            "_create_worktree_and_swap",
-            side_effect=[Path("/tmp/wt-a"), Path("/tmp/wt-b")],
-        ), patch.object(
-            DebateModeRunner, "_remove_worktree"
+        with (
+            patch.object(
+                DebateModeRunner,
+                "_snapshot_workspace_head",
+                return_value="abc123",
+            ),
+            patch.object(
+                DebateModeRunner,
+                "_create_worktree_and_swap",
+                side_effect=[Path("/tmp/wt-a"), Path("/tmp/wt-b")],
+            ),
+            patch.object(DebateModeRunner, "_remove_worktree"),
         ):
             asyncio.run(runner.run(session, MagicMock()))
 
@@ -926,14 +891,16 @@ class TestPhase4ModesConfigParsing(unittest.TestCase):
         self._parse = _parse_modes_config
 
     def test_pipeline_stage_models_parsed(self) -> None:
-        cfg = self._parse({
-            "pipeline": {
-                "stage_models": {
-                    "analyzer": "model-strong",
-                    "tester": "deepseek-chat",
+        cfg = self._parse(
+            {
+                "pipeline": {
+                    "stage_models": {
+                        "analyzer": "model-strong",
+                        "tester": "deepseek-chat",
+                    }
                 }
             }
-        })
+        )
         self.assertEqual(
             cfg.pipeline_stage_models,
             {"analyzer": "model-strong", "tester": "deepseek-chat"},
@@ -956,14 +923,8 @@ class TestPhase4ModesConfigParsing(unittest.TestCase):
         self.assertEqual(cfg.pipeline_handoff, "prompt")
 
     def test_debate_proposer_models_parsed(self) -> None:
-        cfg = self._parse({
-            "debate": {
-                "proposer_models": {"a": "model-b", "b": "model-c"}
-            }
-        })
-        self.assertEqual(
-            cfg.debate_proposer_models, {"a": "model-b", "b": "model-c"}
-        )
+        cfg = self._parse({"debate": {"proposer_models": {"a": "model-b", "b": "model-c"}}})
+        self.assertEqual(cfg.debate_proposer_models, {"a": "model-b", "b": "model-c"})
 
     def test_debate_parallel_parsed(self) -> None:
         cfg = self._parse({"debate": {"parallel": True}})
@@ -1020,6 +981,7 @@ class TestBugFixAgentNameEnvOnlyForMailbox(unittest.TestCase):
 
     def test_mailbox_handoff_does_set_agent_name_env(self) -> None:
         import tempfile
+
         agent = _StubAgentRunner()
         runner = PipelineModeRunner(
             agent,
@@ -1107,13 +1069,15 @@ class TestDebateParallelExceptionIsolation(unittest.TestCase):
         session = _make_session()
         session.workspace.path = "/tmp/whatever"
 
-        with patch.object(
-            DebateModeRunner, "_snapshot_workspace_head", return_value="abc123"
-        ), patch.object(
-            DebateModeRunner,
-            "_create_worktree_and_swap",
-            side_effect=[Path("/tmp/wt-a"), Path("/tmp/wt-b")],
-        ), patch.object(DebateModeRunner, "_remove_worktree"):
+        with (
+            patch.object(DebateModeRunner, "_snapshot_workspace_head", return_value="abc123"),
+            patch.object(
+                DebateModeRunner,
+                "_create_worktree_and_swap",
+                side_effect=[Path("/tmp/wt-a"), Path("/tmp/wt-b")],
+            ),
+            patch.object(DebateModeRunner, "_remove_worktree"),
+        ):
             # Must NOT raise — parallel isolation catches per-branch
             # exception + surfaces it as a failed _StageResult upstream.
             results = asyncio.run(runner.run(session, MagicMock()))
@@ -1139,9 +1103,7 @@ class TestUnknownKeyWarnings(unittest.TestCase):
     config working' trap."""
 
     def test_pipeline_stage_models_unknown_key_warns(self) -> None:
-        with self.assertLogs(
-            "extensions.orchestrator.modes.pipeline", level="WARNING"
-        ) as cm:
+        with self.assertLogs("extensions.orchestrator.modes.pipeline", level="WARNING") as cm:
             PipelineModeRunner(
                 _StubAgentRunner(),
                 stages=("analyzer", "implementer", "tester"),
@@ -1152,9 +1114,7 @@ class TestUnknownKeyWarnings(unittest.TestCase):
         self.assertIn("analzer", joined)
 
     def test_debate_proposer_models_unknown_key_warns(self) -> None:
-        with self.assertLogs(
-            "extensions.orchestrator.modes.debate", level="WARNING"
-        ) as cm:
+        with self.assertLogs("extensions.orchestrator.modes.debate", level="WARNING") as cm:
             DebateModeRunner(
                 _StubAgentRunner(),
                 proposers=("proposer_a", "proposer_b"),
@@ -1203,9 +1163,7 @@ class TestPipelineTeamJsonReWrittenPerStage(unittest.TestCase):
             handoff="prompt",  # default
         )
         session = _make_session()
-        with patch.object(
-            PipelineModeRunner, "_ensure_team_file"
-        ) as spy:
+        with patch.object(PipelineModeRunner, "_ensure_team_file") as spy:
             asyncio.run(runner.run(session, MagicMock()))
         # prompt mode → team.json auto-write is completely skipped.
         self.assertEqual(spy.call_count, 0)
@@ -1234,9 +1192,7 @@ class TestDebateJudgeMode(unittest.TestCase):
 
     def test_pick_mode_uses_pick_prompt(self) -> None:
         agent = _StubAgentRunner()
-        runner = DebateModeRunner(
-            agent, proposers=("a", "b"), judge_mode="pick"
-        )
+        runner = DebateModeRunner(agent, proposers=("a", "b"), judge_mode="pick")
         session = _make_session()
         asyncio.run(runner.run(session, MagicMock()))
         judge_prompt = agent.calls[-1]["prompt"]  # last call = judge
@@ -1246,9 +1202,7 @@ class TestDebateJudgeMode(unittest.TestCase):
 
     def test_synthesize_mode_uses_synthesize_prompt(self) -> None:
         agent = _StubAgentRunner()
-        runner = DebateModeRunner(
-            agent, proposers=("a", "b"), judge_mode="synthesize"
-        )
+        runner = DebateModeRunner(agent, proposers=("a", "b"), judge_mode="synthesize")
         session = _make_session()
         asyncio.run(runner.run(session, MagicMock()))
         judge_prompt = agent.calls[-1]["prompt"]
@@ -1276,9 +1230,7 @@ class TestPipelineStageOverLogFix(unittest.TestCase):
         )
         wf = _StubWorkflow(model="same-model")  # same as stage model
         session = _make_session()
-        with self.assertLogs(
-            "extensions.orchestrator.modes.pipeline", level="INFO"
-        ) as cm:
+        with self.assertLogs("extensions.orchestrator.modes.pipeline", level="INFO") as cm:
             asyncio.run(runner.run(session, wf))
         joined = "\n".join(cm.output)
         # No noisy "overriding X → X" line.
@@ -1293,9 +1245,7 @@ class TestPipelineStageOverLogFix(unittest.TestCase):
         )
         wf = _StubWorkflow(model="workflow-default")
         session = _make_session()
-        with self.assertLogs(
-            "extensions.orchestrator.modes.pipeline", level="INFO"
-        ) as cm:
+        with self.assertLogs("extensions.orchestrator.modes.pipeline", level="INFO") as cm:
             asyncio.run(runner.run(session, wf))
         joined = "\n".join(cm.output)
         self.assertIn("temporarily overriding workflow.agent.model", joined)
@@ -1319,7 +1269,7 @@ class TestPipelineStageMaxTurns(unittest.TestCase):
         class _MaxTurnsAgent:
             def __init__(self) -> None:
                 self.agent_config = _StubAgentConfig()
-                self.max_turns = 10        # base
+                self.max_turns = 10  # base
                 self.observed: list[tuple[str, int]] = []
 
             async def run(self, s: Any, w: Any, **h: Any) -> None:
@@ -1359,9 +1309,7 @@ class TestPipelineStageMaxTurns(unittest.TestCase):
         self.assertEqual(runner.stage_max_turns, {})
 
     def test_stage_max_turns_unknown_key_warns(self) -> None:
-        with self.assertLogs(
-            "extensions.orchestrator.modes.pipeline", level="WARNING"
-        ) as cm:
+        with self.assertLogs("extensions.orchestrator.modes.pipeline", level="WARNING") as cm:
             PipelineModeRunner(
                 _StubAgentRunner(),
                 stages=("analyzer",),
@@ -1379,25 +1327,23 @@ class TestSchemaRound6Parsing(unittest.TestCase):
         self._parse = _parse_modes_config
 
     def test_pipeline_stage_max_turns_parsed(self) -> None:
-        cfg = self._parse({
-            "pipeline": {"stage_max_turns": {"analyzer": 20, "tester": 3}}
-        })
-        self.assertEqual(
-            cfg.pipeline_stage_max_turns, {"analyzer": 20, "tester": 3}
-        )
+        cfg = self._parse({"pipeline": {"stage_max_turns": {"analyzer": 20, "tester": 3}}})
+        self.assertEqual(cfg.pipeline_stage_max_turns, {"analyzer": 20, "tester": 3})
 
     def test_pipeline_stage_max_turns_filters_bad_values(self) -> None:
-        cfg = self._parse({
-            "pipeline": {
-                "stage_max_turns": {
-                    "analyzer": 20,
-                    "implementer": 0,
-                    "tester": "not-a-number",
-                    "": 5,
-                    "bogus": -3,
+        cfg = self._parse(
+            {
+                "pipeline": {
+                    "stage_max_turns": {
+                        "analyzer": 20,
+                        "implementer": 0,
+                        "tester": "not-a-number",
+                        "": 5,
+                        "bogus": -3,
+                    }
                 }
             }
-        })
+        )
         # Only analyzer:20 survives — 0 is < min_value=1, "not-a-number"
         # can't be int-coerced, "" is empty key, -3 is < min.
         self.assertEqual(cfg.pipeline_stage_max_turns, {"analyzer": 20})
@@ -1511,9 +1457,7 @@ class TestPipelineNestedStageSpec(unittest.TestCase):
             )
 
     def test_stage_specs_unknown_stage_warns(self) -> None:
-        with self.assertLogs(
-            "extensions.orchestrator.modes.pipeline", level="WARNING"
-        ) as cm:
+        with self.assertLogs("extensions.orchestrator.modes.pipeline", level="WARNING") as cm:
             PipelineModeRunner(
                 _StubAgentRunner(),
                 stages=("analyzer",),
@@ -1557,16 +1501,18 @@ class TestSchemaRound7Parsing(unittest.TestCase):
         self.assertEqual(cfg.pipeline_stage_specs, {})
 
     def test_stage_specs_parsed(self) -> None:
-        cfg = self._parse({
-            "pipeline": {
-                "stage_specs": {
-                    "implementer": {
-                        "kind": "debate",
-                        "config": {"proposers": ["a", "b"]},
+        cfg = self._parse(
+            {
+                "pipeline": {
+                    "stage_specs": {
+                        "implementer": {
+                            "kind": "debate",
+                            "config": {"proposers": ["a", "b"]},
+                        }
                     }
                 }
             }
-        })
+        )
         self.assertEqual(
             cfg.pipeline_stage_specs,
             {
@@ -1578,14 +1524,8 @@ class TestSchemaRound7Parsing(unittest.TestCase):
         )
 
     def test_stage_specs_unknown_kind_dropped_with_warn(self) -> None:
-        with self.assertLogs(
-            "extensions.orchestrator.config.schema", level="WARNING"
-        ) as cm:
-            cfg = self._parse({
-                "pipeline": {
-                    "stage_specs": {"implementer": {"kind": "quantum"}}
-                }
-            })
+        with self.assertLogs("extensions.orchestrator.config.schema", level="WARNING") as cm:
+            cfg = self._parse({"pipeline": {"stage_specs": {"implementer": {"kind": "quantum"}}}})
         joined = "\n".join(cm.output)
         self.assertIn("quantum", joined)
         # Bad entry is dropped, not silently kept.
@@ -1595,11 +1535,7 @@ class TestSchemaRound7Parsing(unittest.TestCase):
         # Config layer allows only agent/debate/coordinator. pipeline
         # would let the loader through but PipelineModeRunner would
         # then reject at construction. Belt-and-braces.
-        cfg = self._parse({
-            "pipeline": {
-                "stage_specs": {"x": {"kind": "pipeline"}}
-            }
-        })
+        cfg = self._parse({"pipeline": {"stage_specs": {"x": {"kind": "pipeline"}}}})
         self.assertEqual(cfg.pipeline_stage_specs, {})
 
 
@@ -1662,9 +1598,7 @@ class TestPipelineNestedEagerValidation(unittest.TestCase):
         # kind=agent + non-empty config = wired-something-that-never-fires.
         # Warn loudly at construction so the operator doesn't debug
         # phantom problems for 30 minutes.
-        with self.assertLogs(
-            "extensions.orchestrator.modes.pipeline", level="WARNING"
-        ) as cm:
+        with self.assertLogs("extensions.orchestrator.modes.pipeline", level="WARNING") as cm:
             PipelineModeRunner(
                 _StubAgentRunner(),
                 stages=("analyzer",),
@@ -1697,9 +1631,7 @@ class TestPipelineNestedEagerValidation(unittest.TestCase):
         )
         session = _make_session()
         session.workspace.path = "/tmp/whatever"
-        with self.assertLogs(
-            "extensions.orchestrator.modes.pipeline", level="INFO"
-        ) as cm:
+        with self.assertLogs("extensions.orchestrator.modes.pipeline", level="INFO") as cm:
             asyncio.run(runner.run(session, MagicMock()))
         joined = "\n".join(cm.output)
         # Plain agent stage shows the actual handoff mode:

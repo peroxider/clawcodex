@@ -103,9 +103,7 @@ def _make_session_dir(
 
 class TestBgSessionModel:
     def test_frozen_dataclass_roundtrip(self) -> None:
-        s = BgSession(
-            id="x", session_id="x", workspace_root=Path("/tmp"), status="running", pid=1
-        )
+        s = BgSession(id="x", session_id="x", workspace_root=Path("/tmp"), status="running", pid=1)
         d = s.to_dict()
         assert d["workspace_root"] == "/tmp"
         s2 = BgSession.from_dict(d)
@@ -137,7 +135,9 @@ class TestBgSessionRegistry:
     def test_scan_empty_dir(self, registry: BgSessionRegistry) -> None:
         assert registry.scan() == []
 
-    def test_scan_finds_marker(self, registry: BgSessionRegistry, enabled_config: BgSessionConfig) -> None:
+    def test_scan_finds_marker(
+        self, registry: BgSessionRegistry, enabled_config: BgSessionConfig
+    ) -> None:
         _make_session_dir(registry.sessions_dir, "s1", pid=99999)
         result = registry.scan()
         assert len(result) == 1
@@ -156,12 +156,8 @@ class TestBgSessionRegistry:
         assert registry.scan() == []
 
     def test_list_workspace_filter(self, registry: BgSessionRegistry) -> None:
-        _make_session_dir(
-            registry.sessions_dir, "s1", workspace_root="/tmp/wsA"
-        )
-        _make_session_dir(
-            registry.sessions_dir, "s2", workspace_root="/tmp/wsB"
-        )
+        _make_session_dir(registry.sessions_dir, "s1", workspace_root="/tmp/wsA")
+        _make_session_dir(registry.sessions_dir, "s2", workspace_root="/tmp/wsB")
         registry.scan()
         ws_a = Path("/tmp/wsA")
         result = registry.list(workspace_root=ws_a)
@@ -216,25 +212,38 @@ class TestBgSessionRegistry:
 
 
 class TestBgSessionHealth:
-    def test_marker_completed_wins(self, manager: BgSessionManager, registry: BgSessionRegistry) -> None:
+    def test_marker_completed_wins(
+        self, manager: BgSessionManager, registry: BgSessionRegistry
+    ) -> None:
         _make_session_dir(
-            registry.sessions_dir, "s1", pid=99999, status="completed",
-            write_transcript=True, transcript_content='{"role":"system","content":"__background_complete__"}',
+            registry.sessions_dir,
+            "s1",
+            pid=99999,
+            status="completed",
+            write_transcript=True,
+            transcript_content='{"role":"system","content":"__background_complete__"}',
         )
         sessions = registry.scan()
         assert sessions[0].status == "completed"
 
     def test_running_pid_dead_no_completion_orphaned(self, registry: BgSessionRegistry) -> None:
         _make_session_dir(
-            registry.sessions_dir, "s1", pid=99999, status="running",
-            write_transcript=True, transcript_content='{"role":"user","content":"hi"}',
+            registry.sessions_dir,
+            "s1",
+            pid=99999,
+            status="running",
+            write_transcript=True,
+            transcript_content='{"role":"user","content":"hi"}',
         )
         sessions = registry.scan()
         assert sessions[0].status == "orphaned"
 
     def test_running_pid_dead_with_completion_completed(self, registry: BgSessionRegistry) -> None:
         _make_session_dir(
-            registry.sessions_dir, "s1", pid=99999, status="running",
+            registry.sessions_dir,
+            "s1",
+            pid=99999,
+            status="running",
             write_transcript=True,
             transcript_content='{"role":"system","content":"__background_complete__"}',
         )
@@ -243,8 +252,12 @@ class TestBgSessionHealth:
 
     def test_running_pid_alive_stale_warning(self, registry: BgSessionRegistry) -> None:
         _make_session_dir(
-            registry.sessions_dir, "s1", pid=os.getpid(), status="running",
-            write_transcript=True, transcript_content='{"role":"user","content":"hi"}',
+            registry.sessions_dir,
+            "s1",
+            pid=os.getpid(),
+            status="running",
+            write_transcript=True,
+            transcript_content='{"role":"user","content":"hi"}',
         )
         sessions = registry.scan()
         assert sessions[0].status == "running"
@@ -255,7 +268,10 @@ class TestBgSessionHealth:
 
     def test_marker_failed_wins(self, registry: BgSessionRegistry) -> None:
         _make_session_dir(
-            registry.sessions_dir, "s1", pid=99999, status="failed",
+            registry.sessions_dir,
+            "s1",
+            pid=99999,
+            status="failed",
         )
         sessions = registry.scan()
         assert sessions[0].status == "failed"
@@ -297,8 +313,12 @@ class TestBgSessionManager:
         self, manager: BgSessionManager, registry: BgSessionRegistry
     ) -> None:
         _make_session_dir(
-            registry.sessions_dir, "s1", pid=99999, status="completed",
-            write_transcript=True, transcript_content='{"content":"__background_complete__"}',
+            registry.sessions_dir,
+            "s1",
+            pid=99999,
+            status="completed",
+            write_transcript=True,
+            transcript_content='{"content":"__background_complete__"}',
         )
         registry.scan()
         assert manager.list_sessions() == []
@@ -314,10 +334,13 @@ class TestBgSessionManager:
         self, manager: BgSessionManager, registry: BgSessionRegistry
     ) -> None:
         _make_session_dir(
-            registry.sessions_dir, "s1", pid=99999, status="completed",
+            registry.sessions_dir,
+            "s1",
+            pid=99999,
+            status="completed",
             workspace_root="/tmp/ws",
             write_transcript=True,
-            transcript_content='line1\nline2\n__background_complete__\n',
+            transcript_content="line1\nline2\n__background_complete__\n",
         )
         registry.scan()
         result = manager.attach("s1", current_workspace=Path("/tmp/ws"))
@@ -328,8 +351,12 @@ class TestBgSessionManager:
         self, manager: BgSessionManager, registry: BgSessionRegistry
     ) -> None:
         _make_session_dir(
-            registry.sessions_dir, "s1", pid=99999, workspace_root="/tmp/wsA",
-            write_transcript=True, transcript_content="x",
+            registry.sessions_dir,
+            "s1",
+            pid=99999,
+            workspace_root="/tmp/wsA",
+            write_transcript=True,
+            transcript_content="x",
         )
         registry.scan()
         with pytest.raises(BgSessionPermissionError):
@@ -339,8 +366,12 @@ class TestBgSessionManager:
         self, manager: BgSessionManager, registry: BgSessionRegistry
     ) -> None:
         _make_session_dir(
-            registry.sessions_dir, "s1", pid=99999, workspace_root="/tmp/wsA",
-            write_transcript=True, transcript_content="x",
+            registry.sessions_dir,
+            "s1",
+            pid=99999,
+            workspace_root="/tmp/wsA",
+            write_transcript=True,
+            transcript_content="x",
         )
         registry.scan()
         # allow_cross_workspace=True
@@ -358,7 +389,9 @@ class TestBgSessionManager:
         result = manager.stop("s1")
         assert result.status in ("stopped", "orphaned")
 
-    def test_stop_force_on_live_pid(self, manager: BgSessionManager, registry: BgSessionRegistry) -> None:
+    def test_stop_force_on_live_pid(
+        self, manager: BgSessionManager, registry: BgSessionRegistry
+    ) -> None:
         # 用当前进程 pid 模拟存活，但 force=True 应能"停止"（实际不杀自己，验证路径）
         # 这里用一个已死 pid 测试 force 路径不抛
         _make_session_dir(registry.sessions_dir, "s1", pid=99998, status="running")
@@ -366,7 +399,9 @@ class TestBgSessionManager:
         result = manager.stop("s1", force=True)
         assert result.status == "stopped"
 
-    def test_cleanup_removes_orphaned(self, manager: BgSessionManager, registry: BgSessionRegistry) -> None:
+    def test_cleanup_removes_orphaned(
+        self, manager: BgSessionManager, registry: BgSessionRegistry
+    ) -> None:
         _make_session_dir(registry.sessions_dir, "s1", pid=99999, status="running")
         registry.scan()
         removed = manager.cleanup()
@@ -405,9 +440,7 @@ class TestUpsertAfterLaunch:
     def test_enabled_upserts_and_saves(
         self, manager: BgSessionManager, registry: BgSessionRegistry
     ) -> None:
-        sess = manager.upsert_after_launch(
-            "s1", 12345, workspace_root=Path("/tmp/ws")
-        )
+        sess = manager.upsert_after_launch("s1", 12345, workspace_root=Path("/tmp/ws"))
         assert sess is not None
         assert sess.status == "running"
         assert registry.get("s1") is not None
@@ -450,9 +483,7 @@ class TestBgSessionsPanel:
             reg = BgSessionRegistry()
             assert footer_summary(reg) == ""
 
-    def test_footer_shows_running_count(
-        self, registry: BgSessionRegistry
-    ) -> None:
+    def test_footer_shows_running_count(self, registry: BgSessionRegistry) -> None:
         from clawcodex_ext.repl.bg_sessions_panel import footer_summary
 
         _make_session_dir(registry.sessions_dir, "s1", pid=os.getpid())
@@ -464,7 +495,9 @@ class TestBgSessionsPanel:
         from clawcodex_ext.repl.bg_sessions_panel import format_completion_notification
 
         s = BgSession(
-            id="s1", session_id="s1", workspace_root=Path("/tmp"),
+            id="s1",
+            session_id="s1",
+            workspace_root=Path("/tmp"),
             status="completed",
         )
         text = format_completion_notification(s)

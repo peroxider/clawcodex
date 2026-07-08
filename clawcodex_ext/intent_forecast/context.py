@@ -179,7 +179,9 @@ class IntentForecastContextBuilder:
                         pass
             rows.append(row)
         recent_text = "\n".join(
-            str(msg.get("content") or "") for msg in current_messages[-8:] if msg.get("role") == "user"
+            str(msg.get("content") or "")
+            for msg in current_messages[-8:]
+            if msg.get("role") == "user"
         )
         return rank_session_rows(
             rows,
@@ -249,7 +251,12 @@ class IntentForecastContextBuilder:
             if not path.is_file():
                 continue
             try:
-                rows.append({"path": name, "content": path.read_text(encoding="utf-8", errors="replace")[:4000]})
+                rows.append(
+                    {
+                        "path": name,
+                        "content": path.read_text(encoding="utf-8", errors="replace")[:4000],
+                    }
+                )
             except OSError:
                 continue
         dot = self.workspace_root / ".clawcodex"
@@ -388,7 +395,9 @@ def _last_test_failures(last_command: dict[str, Any]) -> list[str]:
         return []
     if exit_code == 0 or ("pytest" not in command.lower() and "test" not in command.lower()):
         return []
-    output = str(last_command.get("output") or last_command.get("stderr") or last_command.get("stdout") or "")
+    output = str(
+        last_command.get("output") or last_command.get("stderr") or last_command.get("stdout") or ""
+    )
     failures: list[str] = []
     for line in output.splitlines():
         lower = line.lower()

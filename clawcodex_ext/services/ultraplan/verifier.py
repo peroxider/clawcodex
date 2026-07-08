@@ -294,9 +294,7 @@ class AcceptanceVerifier:
     def _run_custom(self, target: str, args: dict[str, Any]) -> CheckResult:
         fn = self._custom_checks.get(target)
         if fn is None:
-            raise UnknownCheckKindError(
-                f"no custom check registered under name {target!r}"
-            )
+            raise UnknownCheckKindError(f"no custom check registered under name {target!r}")
         return fn(target, args)
 
     # ------------------------------------------------------------------
@@ -326,9 +324,7 @@ class AcceptanceVerifier:
     def verify_sub_plan(self, sub_plan_id: str) -> dict[str, dict[str, CheckResult]]:
         sp = self._plan.find_sub_plan(sub_plan_id)
         if sp is None:
-            raise ValueError(
-                f"sub_plan {sub_plan_id!r} not found in plan {self._plan.id!r}"
-            )
+            raise ValueError(f"sub_plan {sub_plan_id!r} not found in plan {self._plan.id!r}")
         with self._lock:
             return {step.id: self._verify_step(step) for step in sp.steps}
 
@@ -355,9 +351,7 @@ class AcceptanceVerifier:
                         step = sub_plan.find_step(step_id)
                         if step is None:
                             continue
-                        criterion = next(
-                            (c for c in step.criteria if c.id == cid), None
-                        )
+                        criterion = next((c for c in step.criteria if c.id == cid), None)
                         if criterion is not None and criterion.required:
                             return False
         return True
@@ -374,11 +368,8 @@ class AcceptanceVerifier:
                         step = sub_plan.find_step(step_id)
                         if step is None:
                             continue
-                        criterion = next(
-                            (c for c in step.criteria if c.id == cid), None
-                        )
+                        criterion = next((c for c in step.criteria if c.id == cid), None)
                         if criterion is not None and criterion.required:
                             raise VerificationCheckFailedError(
-                                f"criterion {cid!r} for step {step_id!r} failed: "
-                                f"{result.details}"
+                                f"criterion {cid!r} for step {step_id!r} failed: {result.details}"
                             )

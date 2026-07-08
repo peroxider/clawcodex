@@ -8,7 +8,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from clawcodex_ext.services.templates import TemplateCatalogue, TemplateKind, TemplateRegistry, get_manifest
+from clawcodex_ext.services.templates import (
+    TemplateCatalogue,
+    TemplateKind,
+    TemplateRegistry,
+    get_manifest,
+)
 
 
 @dataclass(frozen=True)

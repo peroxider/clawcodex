@@ -22,6 +22,7 @@ path uses ``aiohttp`` if available, falling back to a thread-pool
 wrapper around the stdlib batch POST (which still streams the response
 body — we just read it in chunks from a worker thread).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -88,7 +89,9 @@ class OpenAITTSProvider(TTSProvider):
     or Gemini Live (P1 providers).
     """
 
-    def __init__(self, *, api_key: Optional[str] = None, endpoint: str = OPENAI_TTS_ENDPOINT) -> None:
+    def __init__(
+        self, *, api_key: Optional[str] = None, endpoint: str = OPENAI_TTS_ENDPOINT
+    ) -> None:
         self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
         self._endpoint = endpoint
 
@@ -163,13 +166,15 @@ class OpenAITTSProvider(TTSProvider):
     def _post_speech_sync(self, text: str, cfg: TTSConfig, api_key: str) -> bytes:
         import urllib.request
 
-        body = json.dumps({
-            "model": cfg.model,
-            "input": text,
-            "voice": cfg.voice,
-            "response_format": "pcm",
-            "speed": cfg.speed,
-        }).encode("utf-8")
+        body = json.dumps(
+            {
+                "model": cfg.model,
+                "input": text,
+                "voice": cfg.voice,
+                "response_format": "pcm",
+                "speed": cfg.speed,
+            }
+        ).encode("utf-8")
         req = urllib.request.Request(
             self._endpoint,
             data=body,

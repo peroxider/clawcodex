@@ -101,8 +101,12 @@ class NativeModuleRegistry:
 
         def _decorator(mod_cls: type) -> type:
             cls._registry[name] = mod_cls
-            _logger.debug("registered native module %r → %s.%s",
-                          name, mod_cls.__module__, mod_cls.__qualname__)
+            _logger.debug(
+                "registered native module %r → %s.%s",
+                name,
+                mod_cls.__module__,
+                mod_cls.__qualname__,
+            )
             return mod_cls
 
         return _decorator
@@ -241,9 +245,7 @@ def load_or_fallback(name: str) -> NativeModule:
     fallback_factory = getattr(cls_obj, "fallback", None)
     if callable(fallback_factory):
         return fallback_factory()  # type: ignore[return-value]
-    raise NativeModuleError(
-        f"native module {name!r} unavailable and has no fallback"
-    )
+    raise NativeModuleError(f"native module {name!r} unavailable and has no fallback")
 
 
 def available_names() -> list[str]:

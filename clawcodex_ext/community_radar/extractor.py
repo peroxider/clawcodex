@@ -200,9 +200,7 @@ class FeatureExtractor:
     )
 
     #: Section names that always indicate deprecations.
-    DEPRECATION_SECTION_ALIASES: tuple[str, ...] = (
-        "deprecation notice",
-    )
+    DEPRECATION_SECTION_ALIASES: tuple[str, ...] = ("deprecation notice",)
 
     def __init__(self, llm_hook: LLMHook | None = None) -> None:
         self._llm_hook = llm_hook
@@ -243,9 +241,7 @@ class FeatureExtractor:
                 _log.warning("LLM hook raised (%s); keeping rule-based output", exc)
         return records
 
-    def extract_many(
-        self, releases: Iterable[Release], source: str
-    ) -> list[FeatureRecord]:
+    def extract_many(self, releases: Iterable[Release], source: str) -> list[FeatureRecord]:
         """Run :meth:`extract` over multiple releases and merge."""
         out: list[FeatureRecord] = []
         for release in releases:

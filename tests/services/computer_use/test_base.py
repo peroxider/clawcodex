@@ -50,4 +50,6 @@ def test_methods_are_async_or_sync_consistently() -> None:
     for cls in (ScreenshotProvider, InputSimulator, ClipboardManager, WindowManager):
         for method_name in _abstract_methods(cls):
             method = getattr(cls, method_name)
-            assert not inspect.iscoroutinefunction(method), f"{cls.__name__}.{method_name} must be sync"
+            assert not inspect.iscoroutinefunction(method), (
+                f"{cls.__name__}.{method_name} must be sync"
+            )

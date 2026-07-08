@@ -78,8 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help=(
-            "Override the daemon state directory "
-            "(default: ~/.clawcodex/daemon). Useful for tests."
+            "Override the daemon state directory (default: ~/.clawcodex/daemon). Useful for tests."
         ),
     )
     sub = parser.add_subparsers(dest="verb", required=True)
@@ -159,9 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Don't fork — run the supervisor in the current process.",
     )
 
-    p_attach = sub.add_parser(
-        "attach", help="Attach to the supervisor log (MVP: prints a notice)"
-    )
+    p_attach = sub.add_parser("attach", help="Attach to the supervisor log (MVP: prints a notice)")
     p_attach.add_argument("--name", default=DEFAULT_DAEMON_NAME)
 
     p_logs = sub.add_parser("logs", help="Print recent supervisor log lines")
@@ -280,8 +277,7 @@ async def cmd_start(args: argparse.Namespace) -> int:
             print(f"daemon: started {name!r}")
             return 0
     print(
-        f"daemon: forked but {name!r} did not report running within 2s; "
-        f"check `daemon status`",
+        f"daemon: forked but {name!r} did not report running within 2s; check `daemon status`",
         file=sys.stderr,
     )
     return 1
@@ -384,8 +380,7 @@ async def cmd_stop(args: argparse.Namespace) -> int:
             print(f"daemon: {name!r} stopped cleanly")
             return 0
     print(
-        f"daemon: {name!r} did not stop within {args.timeout_ms}ms; "
-        f"escalating to SIGKILL",
+        f"daemon: {name!r} did not stop within {args.timeout_ms}ms; escalating to SIGKILL",
         file=sys.stderr,
     )
     try:

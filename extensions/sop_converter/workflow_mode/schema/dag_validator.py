@@ -15,7 +15,9 @@ class DagValidationResult:
         return not self.errors
 
 
-def _kahn_order(stage_ids: set[int], depends_on: dict[int, list[int]]) -> tuple[list[int] | None, str | None]:
+def _kahn_order(
+    stage_ids: set[int], depends_on: dict[int, list[int]]
+) -> tuple[list[int] | None, str | None]:
     in_degree = {sid: len(depends_on.get(sid, [])) for sid in stage_ids}
     adj: dict[int, list[int]] = {sid: [] for sid in stage_ids}
     for sid, deps in depends_on.items():
@@ -115,9 +117,7 @@ def validate_workflow_dict(data: dict) -> DagValidationResult:
                         try:
                             ref_int = int(ref)
                         except (TypeError, ValueError):
-                            result.warnings.append(
-                                f"stage {sid} outcome {outcome}: invalid {key}"
-                            )
+                            result.warnings.append(f"stage {sid} outcome {outcome}: invalid {key}")
                             continue
                         if ref_int not in id_set:
                             result.errors.append(

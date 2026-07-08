@@ -60,7 +60,9 @@ class TickEmitter:
 
     def start(self) -> bool:
         started = self._scheduler.start()
-        self._ctrl.set_next_tick_at((time.time() * 1000) + self._scheduler.config.interval_seconds * 1000)
+        self._ctrl.set_next_tick_at(
+            (time.time() * 1000) + self._scheduler.config.interval_seconds * 1000
+        )
         return started
 
     def stop(self) -> bool:
@@ -116,4 +118,6 @@ class TickEmitter:
             self._outbox.append(ProactivePromptEvent(prompt=tick_text, source="tick"))
 
     def _reschedule(self) -> None:
-        self._ctrl.set_next_tick_at((time.time() * 1000) + self._scheduler.config.interval_seconds * 1000)
+        self._ctrl.set_next_tick_at(
+            (time.time() * 1000) + self._scheduler.config.interval_seconds * 1000
+        )

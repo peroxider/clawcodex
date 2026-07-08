@@ -66,12 +66,12 @@ from .transport import (
 
 logger = logging.getLogger(__name__)
 
-ILINK_CHANNEL_ID = 'openclaw-weixin'
-ILINK_APP_ID = 'bot'
+ILINK_CHANNEL_ID = "openclaw-weixin"
+ILINK_APP_ID = "bot"
 ILINK_APP_CLIENT_VERSION = (2 << 16) | (2 << 8) | 0
 # ``base_info.channel_version`` carried on every POST. Must match the
 # ``ILINK_APP_CLIENT_VERSION`` encoding above (v2.2.0 → 131584).
-ILINK_CHANNEL_VERSION = '2.2.0'
+ILINK_CHANNEL_VERSION = "2.2.0"
 # iLink body-level error codes (returned inside an HTTP 200 response, NOT
 # via HTTP status). Mirrors hermes-agent ``weixin.py`` / AstrBot
 # ``weixin_oc_adapter.py``: -14 == session expired (re-scan required),
@@ -79,8 +79,8 @@ ILINK_CHANNEL_VERSION = '2.2.0'
 # which is a stale-session signal treated as session-expired.
 ILINK_SESSION_EXPIRED_ERRCODE = -14
 ILINK_RATE_LIMIT_ERRCODE = -2
-_STALE_SESSION_ERRMSG = 'unknown error'
-ILINK_QR_BOT_TYPE = '3'
+_STALE_SESSION_ERRMSG = "unknown error"
+ILINK_QR_BOT_TYPE = "3"
 ILINK_QR_TIMEOUT_SECONDS = 480
 ILINK_QR_REQUEST_TIMEOUT_SECONDS = 35.0
 ILINK_QR_POLL_INTERVAL_SECONDS = 1.0
@@ -106,10 +106,10 @@ DEFAULT_LONG_POLL_TIMEOUT_MS = 35000
 DEFAULT_MAX_CONSECUTIVE_FAILURES = 10
 POLL_BACKOFF_SECONDS = 30  # after 3 consecutive failures (per package monitor.ts)
 PAIRING_CODE_TTL_SECONDS = 600
-EP_GET_UPDATES = '/ilink/bot/getupdates'
-EP_SEND_MESSAGE = '/ilink/bot/sendmessage'
-EP_GET_BOT_QR = '/ilink/bot/get_bot_qrcode'
-EP_GET_QR_STATUS = '/ilink/bot/get_qrcode_status'
+EP_GET_UPDATES = "/ilink/bot/getupdates"
+EP_SEND_MESSAGE = "/ilink/bot/sendmessage"
+EP_GET_BOT_QR = "/ilink/bot/get_bot_qrcode"
+EP_GET_QR_STATUS = "/ilink/bot/get_qrcode_status"
 
 
 # -- auth record + encrypted store --------------------------------------
@@ -137,23 +137,23 @@ class WeChatIlinkAuthStore:
         self,
         path: str | Path,
         *,
-        secret_env: str = 'CLAWCODEX_IM_SECRET',
+        secret_env: str = "CLAWCODEX_IM_SECRET",
     ) -> None:
         self._path = Path(path)
         self._secret_env = secret_env
-        self._key_file = self._path.with_suffix('.key')
+        self._key_file = self._path.with_suffix(".key")
         self._lock = threading.Lock()
 
     def _load_key(self) -> bytes:
         env_val = os.environ.get(self._secret_env)
         if env_val:
-            return env_val.encode('utf-8')
+            return env_val.encode("utf-8")
         # Fallback: per-install key file (0o600). Generate once, reuse.
         self._path.parent.mkdir(parents=True, exist_ok=True)
         if not self._key_file.exists():
             logger.debug(
-                '%s not set; falling back to 0o600 key file at %s. '
-                'Set the env var for production deployments.',
+                "%s not set; falling back to 0o600 key file at %s. "
+                "Set the env var for production deployments.",
                 self._secret_env,
                 self._key_file,
             )
@@ -164,17 +164,17 @@ class WeChatIlinkAuthStore:
 
     def save(self, record: WeChatAuthRecord) -> None:
         fernet = Fernet(self._load_key())
-        blob = fernet.encrypt(record.bot_token.encode('utf-8'))
+        blob = fernet.encrypt(record.bot_token.encode("utf-8"))
         payload = {
-            'bot_token_enc': blob.decode('utf-8'),
-            'account_id': record.account_id,
-            'base_url': record.base_url,
-            'user_id': record.user_id,
-            'saved_at': record.saved_at,
+            "bot_token_enc": blob.decode("utf-8"),
+            "account_id": record.account_id,
+            "base_url": record.base_url,
+            "user_id": record.user_id,
+            "saved_at": record.saved_at,
         }
         with self._lock:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self._path.with_suffix(self._path.suffix + '.tmp')
+            tmp = self._path.with_suffix(self._path.suffix + ".tmp")
             tmp.write_bytes(encode_json_body(payload))
             os.replace(tmp, self._path)
             os.chmod(self._path, 0o600)
@@ -183,21 +183,21 @@ class WeChatIlinkAuthStore:
         with self._lock:
             if not self._path.exists():
                 return None
-            data = decode_json_body(self._path.read_text(encoding='utf-8'), default={})
-        enc = data.get('bot_token_enc')
+            data = decode_json_body(self._path.read_text(encoding="utf-8"), default={})
+        enc = data.get("bot_token_enc")
         if not enc:
             return None
         try:
-            token = Fernet(self._load_key()).decrypt(enc.encode('utf-8')).decode('utf-8')
+            token = Fernet(self._load_key()).decrypt(enc.encode("utf-8")).decode("utf-8")
         except InvalidToken:
-            logger.error('failed to decrypt bot_token (key mismatch?)')
+            logger.error("failed to decrypt bot_token (key mismatch?)")
             return None
         return WeChatAuthRecord(
             bot_token=token,
-            account_id=data.get('account_id', 'default'),
-            base_url=data.get('base_url', ''),
-            user_id=data.get('user_id'),
-            saved_at=data.get('saved_at', 0.0),
+            account_id=data.get("account_id", "default"),
+            base_url=data.get("base_url", ""),
+            user_id=data.get("user_id"),
+            saved_at=data.get("saved_at", 0.0),
         )
 
     def clear(self) -> None:
@@ -277,7 +277,7 @@ class WeChatPairingStore:
             yield
             return
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path = self._path.with_suffix(self._path.suffix + '.lock')
+        lock_path = self._path.with_suffix(self._path.suffix + ".lock")
         fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX)
@@ -295,34 +295,34 @@ class WeChatPairingStore:
             return
         self._path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
-            'codes': [
+            "codes": [
                 {
-                    'code': c.code,
-                    'created_at': c.created_at,
-                    'consumed_at': c.consumed_at,
-                    'bound_user_id': c.bound_user_id,
+                    "code": c.code,
+                    "created_at": c.created_at,
+                    "consumed_at": c.consumed_at,
+                    "bound_user_id": c.bound_user_id,
                 }
                 for c in self._codes.values()
             ],
-            'allowed': sorted(self._allowed),
+            "allowed": sorted(self._allowed),
         }
-        tmp = self._path.with_suffix(self._path.suffix + '.tmp')
+        tmp = self._path.with_suffix(self._path.suffix + ".tmp")
         tmp.write_bytes(encode_json_body(payload))
         os.replace(tmp, self._path)
         os.chmod(self._path, 0o600)
 
     def _load(self) -> None:
         assert self._path is not None
-        data = decode_json_body(self._path.read_text(encoding='utf-8'), default={})
+        data = decode_json_body(self._path.read_text(encoding="utf-8"), default={})
         self._codes.clear()
-        for c in data.get('codes', []):
-            self._codes[c['code']] = PairingCode(
-                code=c['code'],
-                created_at=c.get('created_at', 0.0),
-                consumed_at=c.get('consumed_at'),
-                bound_user_id=c.get('bound_user_id'),
+        for c in data.get("codes", []):
+            self._codes[c["code"]] = PairingCode(
+                code=c["code"],
+                created_at=c.get("created_at", 0.0),
+                consumed_at=c.get("consumed_at"),
+                bound_user_id=c.get("bound_user_id"),
             )
-        self._allowed = set(data.get('allowed', []))
+        self._allowed = set(data.get("allowed", []))
 
 
 # -- client -------------------------------------------------------------
@@ -334,12 +334,12 @@ def _extract_text_item_list(item_list: Any) -> str | None:
     for item in item_list:
         if not isinstance(item, dict):
             continue
-        item_type = item.get('type')
-        if item_type not in (1, '1', 'TEXT', 'text'):
+        item_type = item.get("type")
+        if item_type not in (1, "1", "TEXT", "text"):
             continue
-        text_item = item.get('text_item') or {}
+        text_item = item.get("text_item") or {}
         if isinstance(text_item, dict):
-            text = text_item.get('text')
+            text = text_item.get("text")
             if text:
                 return str(text)
     return None
@@ -347,16 +347,16 @@ def _extract_text_item_list(item_list: Any) -> str | None:
 
 def _message_type_from_item_list(item_list: Any) -> str:
     if not isinstance(item_list, list):
-        return 'TEXT'
+        return "TEXT"
     for item in item_list:
         if not isinstance(item, dict):
             continue
-        item_type = item.get('type')
-        if item_type in (1, '1', 'TEXT', 'text'):
-            return 'TEXT'
+        item_type = item.get("type")
+        if item_type in (1, "1", "TEXT", "text"):
+            return "TEXT"
         if item_type is not None:
             return str(item_type)
-    return 'TEXT'
+    return "TEXT"
 
 
 @dataclass
@@ -375,24 +375,24 @@ class WeixinMessage:
 
     @property
     def is_text(self) -> bool:
-        return self.msg_type.upper() == 'TEXT'
+        return self.msg_type.upper() == "TEXT"
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> WeixinMessage:
-        item_list = payload.get('item_list') or []
-        text = payload.get('text') or payload.get('content') or _extract_text_item_list(item_list)
-        msg_type = payload.get('msg_type') or payload.get('type')
+        item_list = payload.get("item_list") or []
+        text = payload.get("text") or payload.get("content") or _extract_text_item_list(item_list)
+        msg_type = payload.get("msg_type") or payload.get("type")
         if not msg_type:
-            msg_type = 'TEXT' if text else _message_type_from_item_list(item_list)
+            msg_type = "TEXT" if text else _message_type_from_item_list(item_list)
         return cls(
-            message_id=str(payload.get('msg_id') or payload.get('message_id') or ''),
-            from_user_id=str(payload.get('from_user_id') or ''),
-            to_user_id=str(payload.get('to_user_id') or ''),
-            msg_type=str(msg_type or 'TEXT').upper(),
+            message_id=str(payload.get("msg_id") or payload.get("message_id") or ""),
+            from_user_id=str(payload.get("from_user_id") or ""),
+            to_user_id=str(payload.get("to_user_id") or ""),
+            msg_type=str(msg_type or "TEXT").upper(),
             text=text,
-            context_token=payload.get('context_token'),
-            seq=payload.get('seq'),
-            create_time_ms=payload.get('create_time_ms'),
+            context_token=payload.get("context_token"),
+            seq=payload.get("seq"),
+            create_time_ms=payload.get("create_time_ms"),
             raw=payload,
         )
 
@@ -407,7 +407,7 @@ def _random_wechat_uin() -> str:
     QR login already issued a valid ``bot_token``.
     """
     value = secrets.randbits(32)
-    return base64.b64encode(str(value).encode('utf-8')).decode('ascii')
+    return base64.b64encode(str(value).encode("utf-8")).decode("ascii")
 
 
 class WeChatIlinkClient:
@@ -418,12 +418,12 @@ class WeChatIlinkClient:
         *,
         base_url: str,
         bot_token: str,
-        account_id: str = 'default',
-        bot_agent: str = 'ClawCodex/1.0',
+        account_id: str = "default",
+        bot_agent: str = "ClawCodex/1.0",
         transport: ChannelTransport | None = None,
         long_poll_timeout_ms: int = DEFAULT_LONG_POLL_TIMEOUT_MS,
     ) -> None:
-        self._base_url = base_url.rstrip('/')
+        self._base_url = base_url.rstrip("/")
         self._bot_token = bot_token
         self._account_id = account_id
         self._bot_agent = bot_agent
@@ -435,22 +435,22 @@ class WeChatIlinkClient:
 
     def _headers(self) -> dict[str, str]:
         h = default_headers()
-        h['AuthorizationType'] = 'ilink_bot_token'
-        h['Authorization'] = f'Bearer {self._bot_token}'
-        h['Bot-Agent'] = self._bot_agent
-        h['iLink-App-Id'] = ILINK_APP_ID
-        h['iLink-App-ClientVersion'] = str(ILINK_APP_CLIENT_VERSION)
-        h['X-WECHAT-UIN'] = _random_wechat_uin()
+        h["AuthorizationType"] = "ilink_bot_token"
+        h["Authorization"] = f"Bearer {self._bot_token}"
+        h["Bot-Agent"] = self._bot_agent
+        h["iLink-App-Id"] = ILINK_APP_ID
+        h["iLink-App-ClientVersion"] = str(ILINK_APP_CLIENT_VERSION)
+        h["X-WECHAT-UIN"] = _random_wechat_uin()
         return h
 
     def _url(self, path: str, *, base_url: str | None = None) -> str:
-        return f'{(base_url or self._base_url).rstrip("/")}{path}'
+        return f"{(base_url or self._base_url).rstrip('/')}{path}"
 
     def _qr_headers(self) -> dict[str, str]:
         return {
-            'User-Agent': default_headers().get('User-Agent', 'clawcodex-channels/0.1'),
-            'iLink-App-Id': ILINK_APP_ID,
-            'iLink-App-ClientVersion': str(ILINK_APP_CLIENT_VERSION),
+            "User-Agent": default_headers().get("User-Agent", "clawcodex-channels/0.1"),
+            "iLink-App-Id": ILINK_APP_ID,
+            "iLink-App-ClientVersion": str(ILINK_APP_CLIENT_VERSION),
         }
 
     async def _get(
@@ -460,7 +460,7 @@ class WeChatIlinkClient:
         timeout: float,
         base_url: str | None = None,
     ) -> dict[str, Any]:
-        assert self._transport is not None, 'transport not set'
+        assert self._transport is not None, "transport not set"
         resp: TransportResponse = await self._transport.get(
             self._url(path, base_url=base_url),
             headers=self._qr_headers(),
@@ -469,13 +469,13 @@ class WeChatIlinkClient:
         return _parse_ilink_response(resp)
 
     async def _post(self, path: str, body: dict[str, Any], *, timeout: float) -> dict[str, Any]:
-        assert self._transport is not None, 'transport not set'
+        assert self._transport is not None, "transport not set"
         # The iLink contract requires ``base_info.channel_version`` on every
         # POST (getupdates/sendmessage). Without it the server rejects the
         # request, so the bot never establishes a live message stream even
         # though QR login already issued a bot_token — clawcodex would report
         # "logged_in" while the WeChat side shows no connection.
-        body = {**body, 'base_info': {'channel_version': ILINK_CHANNEL_VERSION}}
+        body = {**body, "base_info": {"channel_version": ILINK_CHANNEL_VERSION}}
         resp: TransportResponse = await self._transport.post(
             self._url(path), encode_json_body(body), headers=self._headers(), timeout=timeout
         )
@@ -488,12 +488,12 @@ class WeChatIlinkClient:
         # server silently drop the session's message stream. Normalize None
         # → "" at the wire boundary so every caller is safe.
         body: dict[str, Any] = {
-            'get_updates_buf': get_updates_buf if get_updates_buf is not None else '',
+            "get_updates_buf": get_updates_buf if get_updates_buf is not None else "",
         }
         data = await self._post(EP_GET_UPDATES, body, timeout=self._long_poll_timeout_ms / 1000 + 5)
-        items = data.get('msgs') or []
+        items = data.get("msgs") or []
         messages = [WeixinMessage.from_payload(m) for m in items if isinstance(m, dict)]
-        new_buf = data.get('get_updates_buf')
+        new_buf = data.get("get_updates_buf")
         return messages, new_buf
 
     async def sendmessage(
@@ -503,18 +503,18 @@ class WeChatIlinkClient:
         text: str,
         context_token: str | None = None,
     ) -> ChannelSendResult:
-        client_id = f'local-{uuid.uuid4()}'
+        client_id = f"local-{uuid.uuid4()}"
         msg: dict[str, Any] = {
-            'from_user_id': '',
-            'to_user_id': to_user_id,
-            'client_id': client_id,
-            'message_type': 2,
-            'message_state': 2,
-            'item_list': [{'type': 1, 'text_item': {'text': text}}],
+            "from_user_id": "",
+            "to_user_id": to_user_id,
+            "client_id": client_id,
+            "message_type": 2,
+            "message_state": 2,
+            "item_list": [{"type": 1, "text_item": {"text": text}}],
         }
         if context_token:
-            msg['context_token'] = context_token
-        body = {'msg': msg}
+            msg["context_token"] = context_token
+        body = {"msg": msg}
         try:
             data = await self._post(EP_SEND_MESSAGE, body, timeout=DEFAULT_TIMEOUT_SECONDS)
         except TransportError as exc:
@@ -531,15 +531,15 @@ class WeChatIlinkClient:
             if exc.is_rate_limited:
                 return ChannelSendResult.retryable_error(
                     ILINK_CHANNEL_ID,
-                    message=f'rate limited: {exc.errmsg or exc.msg}',
+                    message=f"rate limited: {exc.errmsg or exc.msg}",
                     category=ErrorCategory.RATE_LIMIT,
                 )
             return ChannelSendResult.nonretryable_error(
                 ILINK_CHANNEL_ID, message=str(exc), category=ErrorCategory.UNKNOWN
             )
-        receipt = data.get('message_id') or data.get('client_id') or client_id
+        receipt = data.get("message_id") or data.get("client_id") or client_id
         logger.info(
-            'wechat sendmessage ok: to=%s receipt=%s',
+            "wechat sendmessage ok: to=%s receipt=%s",
             _safe_id(to_user_id),
             _safe_id(receipt),
         )
@@ -547,7 +547,7 @@ class WeChatIlinkClient:
 
     async def get_bot_qrcode(self, *, bot_type: str = ILINK_QR_BOT_TYPE) -> dict[str, Any]:
         return await self._get(
-            f'{EP_GET_BOT_QR}?bot_type={quote(bot_type)}',
+            f"{EP_GET_BOT_QR}?bot_type={quote(bot_type)}",
             timeout=ILINK_QR_REQUEST_TIMEOUT_SECONDS,
         )
 
@@ -558,7 +558,7 @@ class WeChatIlinkClient:
         base_url: str | None = None,
     ) -> dict[str, Any]:
         return await self._get(
-            f'{EP_GET_QR_STATUS}?qrcode={quote(qrcode)}',
+            f"{EP_GET_QR_STATUS}?qrcode={quote(qrcode)}",
             timeout=ILINK_QR_REQUEST_TIMEOUT_SECONDS,
             base_url=base_url,
         )
@@ -572,13 +572,13 @@ def _parse_ilink_response(resp: TransportResponse) -> dict[str, Any]:
     data = decode_json_body(resp.body, default={}, raise_on_error=True)
     if isinstance(data, dict) and _is_ilink_payload_error(data):
         # iLink signals errors via ret/errcode inside an HTTP 200 body.
-        ret = data.get('ret')
-        errcode = data.get('errcode')
-        errmsg = str(data.get('errmsg') or data.get('msg') or data.get('message') or '')
+        ret = data.get("ret")
+        errcode = data.get("errcode")
+        errmsg = str(data.get("errmsg") or data.get("msg") or data.get("message") or "")
         code = str(
             ret
-            if ret not in (None, 0, '0')
-            else (errcode if errcode not in (None, 0, '0') else data.get('code'))
+            if ret not in (None, 0, "0")
+            else (errcode if errcode not in (None, 0, "0") else data.get("code"))
         )
         raise _IlinkPlatformError(code, errmsg, ret=ret, errcode=errcode, errmsg=errmsg)
     return data or {}
@@ -588,7 +588,7 @@ class _IlinkHttpError(Exception):
     def __init__(self, status: int, body: bytes) -> None:
         self.status = status
         self.body = body
-        super().__init__(f'ilink HTTP {status}')
+        super().__init__(f"ilink HTTP {status}")
 
 
 class _IlinkPlatformError(Exception):
@@ -615,7 +615,7 @@ class _IlinkPlatformError(Exception):
         self.ret = _ilink_int(ret)
         self.errcode = _ilink_int(errcode)
         self.errmsg = errmsg
-        super().__init__(f'ilink platform error {code}: {msg}')
+        super().__init__(f"ilink platform error {code}: {msg}")
 
     @property
     def is_session_expired(self) -> bool:
@@ -627,7 +627,7 @@ class _IlinkPlatformError(Exception):
         # ret/errcode == -2 with errmsg "unknown error" is a stale-session
         # signal, not a genuine rate limit (mirrors hermes _is_stale_session_ret).
         if (self.ret == ILINK_RATE_LIMIT_ERRCODE or self.errcode == ILINK_RATE_LIMIT_ERRCODE) and (
-            self.errmsg or ''
+            self.errmsg or ""
         ).lower() == _STALE_SESSION_ERRMSG:
             return True
         return False
@@ -641,7 +641,7 @@ class _IlinkPlatformError(Exception):
 
 def _ilink_int(value: Any) -> int | None:
     """Coerce an iLink ``ret``/``errcode`` to int; None for absent/invalid."""
-    if value is None or value == '':
+    if value is None or value == "":
         return None
     try:
         return int(value)
@@ -656,15 +656,15 @@ def _is_ilink_payload_error(data: dict[str, Any]) -> bool:
     ``ret not in {0, None}`` and AstrBot ``int(ret or 0) == 0``). The legacy
     ``code`` field is also honored for non-iLink-shaped errors.
     """
-    ret = _ilink_int(data.get('ret'))
-    errcode = _ilink_int(data.get('errcode'))
+    ret = _ilink_int(data.get("ret"))
+    errcode = _ilink_int(data.get("errcode"))
     if ret not in (None, 0) or errcode not in (None, 0):
         return True
     # Legacy envelope (not used by the iLink bot contract today, but kept so
     # unexpected server shapes still surface as errors rather than silently
     # being treated as success).
-    code = data.get('code')
-    if code not in (None, 0, '0'):
+    code = data.get("code")
+    if code not in (None, 0, "0"):
         return True
     return False
 
@@ -688,9 +688,9 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         long_poll_timeout_ms: int = DEFAULT_LONG_POLL_TIMEOUT_MS,
         max_consecutive_failures: int = DEFAULT_MAX_CONSECUTIVE_FAILURES,
         allowed_users: list[str] | None = None,
-        account_id: str = 'default',
-        base_url: str = 'https://ilinkai.weixin.qq.com',
-        bot_agent: str = 'ClawCodex/1.0',
+        account_id: str = "default",
+        base_url: str = "https://ilinkai.weixin.qq.com",
+        bot_agent: str = "ClawCodex/1.0",
     ) -> None:
         self._config = config
         self._auth_store = auth_store
@@ -711,7 +711,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         self._client: WeChatIlinkClient | None = None
         # iLink requires get_updates_buf as a string ("") on the first poll;
         # null makes the server silently drop the session's message stream.
-        self._get_updates_buf: str = ''
+        self._get_updates_buf: str = ""
         self._bot_user_id: str | None = None
         self._circuit_state = CircuitState.CLOSED
         self._consecutive_failures = 0
@@ -736,7 +736,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         # resolve wildcard OUTBOUND origins; falls back to persisted
         # context tokens via ``last_known_sender`` after a restart.
         self._last_from_user_id: str | None = None
-        self._account_status = 'unconfigured'  # unconfigured|logged_in|session_expired|circuit_open
+        self._account_status = "unconfigured"  # unconfigured|logged_in|session_expired|circuit_open
         self._poll_task: asyncio.Task[None] | None = None
         self._on_inbound: InboundHandler | None = None
 
@@ -768,9 +768,9 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
     def validate_config(self) -> ValidationResult:
         errors: list[str] = []
         if not self._base_url:
-            errors.append('base_url must be non-empty')
+            errors.append("base_url must be non-empty")
         if not self._config.name:
-            errors.append('name must be non-empty')
+            errors.append("name must be non-empty")
         return ValidationResult.fail(errors) if errors else ValidationResult.ok_result()
 
     async def health_check(self) -> ChannelHealth:
@@ -779,7 +779,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         cooldown_remaining = max(send_cooldown_remaining, poll_cooldown_remaining)
         return ChannelHealth(
             healthy=self._circuit_state is CircuitState.CLOSED
-            and self._account_status == 'logged_in',
+            and self._account_status == "logged_in",
             channel_id=self.channel_id,
             circuit_state=self._circuit_state.value,
             last_error=self._last_error,
@@ -789,9 +789,9 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
             consecutive_failures=self._consecutive_failures,
             account_status=self._account_status,
             extra={
-                'rate_limit_cooldown_remaining_seconds': cooldown_remaining,
-                'send_rate_limit_cooldown_remaining_seconds': send_cooldown_remaining,
-                'poll_rate_limit_cooldown_remaining_seconds': poll_cooldown_remaining,
+                "rate_limit_cooldown_remaining_seconds": cooldown_remaining,
+                "send_rate_limit_cooldown_remaining_seconds": send_cooldown_remaining,
+                "poll_rate_limit_cooldown_remaining_seconds": poll_cooldown_remaining,
             },
         )
 
@@ -799,8 +799,8 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
     def load_credentials(self) -> WeChatAuthRecord | None:
         record = self._auth_store.load()
         if record is None:
-            self._account_status = 'unconfigured'
-            logger.info('wechat no credentials: channel=%s', self.channel_id)
+            self._account_status = "unconfigured"
+            logger.info("wechat no credentials: channel=%s", self.channel_id)
             return None
         if record.account_id != self._account_id or record.user_id != self._bot_user_id:
             self._last_from_user_id = None
@@ -817,14 +817,14 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         )
         if self._store is not None:
             self._get_updates_buf = self._store.get_wechat_cursor(self._account_id)
-        self._account_status = 'logged_in'
+        self._account_status = "logged_in"
         # A fresh credential load (initial start, send with no client, or a QR
         # re-scan) means a new session; clear any active poll cooldown so the
         # account can resume inbound polling immediately.
         self._poll_rate_limit_cooldown_until = None
         self._poll_rate_limit_cooldown_seconds = WECHAT_RATE_LIMIT_RETRY_DELAY_SECONDS
         logger.info(
-            'wechat credentials loaded: channel=%s account=%s',
+            "wechat credentials loaded: channel=%s account=%s",
             self.channel_id,
             _safe_id(self._account_id),
         )
@@ -839,21 +839,21 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
     ) -> dict[str, Any]:
         """Perform QR login; on success persist encrypted bot_token."""
         if self._transport is None:
-            raise RuntimeError('transport not set')
+            raise RuntimeError("transport not set")
         # Bootstrap a temp client without a token to fetch and poll the QR code.
         boot = WeChatIlinkClient(
             base_url=self._base_url,
-            bot_token='',
+            bot_token="",
             account_id=self._account_id,
             bot_agent=self._bot_agent,
             transport=self._transport,
             long_poll_timeout_ms=self._long_poll_timeout_ms,
         )
         qr_data = await boot.get_bot_qrcode()
-        qrcode_value = str(qr_data.get('qrcode') or '')
-        code_url = str(qr_data.get('qrcode_img_content') or qr_data.get('code_url') or '')
+        qrcode_value = str(qr_data.get("qrcode") or "")
+        code_url = str(qr_data.get("qrcode_img_content") or qr_data.get("code_url") or "")
         if not qrcode_value:
-            raise _IlinkPlatformError('missing_qrcode', 'QR response missing qrcode')
+            raise _IlinkPlatformError("missing_qrcode", "QR response missing qrcode")
         scan_data = code_url or qrcode_value
         if on_code is not None:
             on_code(scan_data)
@@ -865,65 +865,65 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
             try:
                 status_data = await boot.get_qrcode_status(qrcode_value, base_url=current_base_url)
             except TransportError as exc:
-                logger.debug('wechat QR poll transient transport error: %s', exc)
+                logger.debug("wechat QR poll transient transport error: %s", exc)
                 if on_status is not None:
-                    on_status('wait')
+                    on_status("wait")
                 await asyncio.sleep(ILINK_QR_POLL_INTERVAL_SECONDS)
                 continue
-            status = str(status_data.get('status') or 'wait')
+            status = str(status_data.get("status") or "wait")
             if on_status is not None:
                 on_status(status)
-            if status == 'confirmed':
-                account_id = str(status_data.get('ilink_bot_id') or self._account_id or 'default')
-                bot_token = str(status_data.get('bot_token') or '')
-                base_url = str(status_data.get('baseurl') or current_base_url or self._base_url)
-                user_id = str(status_data.get('ilink_user_id') or '') or None
+            if status == "confirmed":
+                account_id = str(status_data.get("ilink_bot_id") or self._account_id or "default")
+                bot_token = str(status_data.get("bot_token") or "")
+                base_url = str(status_data.get("baseurl") or current_base_url or self._base_url)
+                user_id = str(status_data.get("ilink_user_id") or "") or None
                 if not account_id or not bot_token:
                     raise _IlinkPlatformError(
-                        'incomplete_qr_credentials',
-                        'QR confirmed but credential payload was incomplete',
+                        "incomplete_qr_credentials",
+                        "QR confirmed but credential payload was incomplete",
                     )
                 record = WeChatAuthRecord(
                     bot_token=bot_token,
                     account_id=account_id,
-                    base_url=base_url.rstrip('/'),
+                    base_url=base_url.rstrip("/"),
                     user_id=user_id,
                 )
                 self._auth_store.save(record)
                 self.load_credentials()
                 return {
-                    'status': 'confirmed',
-                    'qrcode': qrcode_value,
-                    'code_url': scan_data,
-                    'bot_token': bot_token,
-                    'account_id': account_id,
-                    'base_url': record.base_url,
-                    'user_id': user_id,
+                    "status": "confirmed",
+                    "qrcode": qrcode_value,
+                    "code_url": scan_data,
+                    "bot_token": bot_token,
+                    "account_id": account_id,
+                    "base_url": record.base_url,
+                    "user_id": user_id,
                 }
-            if status == 'scaned_but_redirect':
-                redirect_host = str(status_data.get('redirect_host') or '')
+            if status == "scaned_but_redirect":
+                redirect_host = str(status_data.get("redirect_host") or "")
                 if redirect_host:
                     current_base_url = (
-                        redirect_host.rstrip('/')
-                        if redirect_host.startswith(('http://', 'https://'))
-                        else f'https://{redirect_host}'
+                        redirect_host.rstrip("/")
+                        if redirect_host.startswith(("http://", "https://"))
+                        else f"https://{redirect_host}"
                     )
-            elif status == 'expired':
+            elif status == "expired":
                 refresh_count += 1
                 if refresh_count > 3:
-                    return {'status': 'expired', 'qrcode': qrcode_value, 'code_url': scan_data}
+                    return {"status": "expired", "qrcode": qrcode_value, "code_url": scan_data}
                 qr_data = await boot.get_bot_qrcode()
-                qrcode_value = str(qr_data.get('qrcode') or '')
-                code_url = str(qr_data.get('qrcode_img_content') or qr_data.get('code_url') or '')
+                qrcode_value = str(qr_data.get("qrcode") or "")
+                code_url = str(qr_data.get("qrcode_img_content") or qr_data.get("code_url") or "")
                 if not qrcode_value:
-                    raise _IlinkPlatformError('missing_qrcode', 'QR refresh missing qrcode')
+                    raise _IlinkPlatformError("missing_qrcode", "QR refresh missing qrcode")
                 scan_data = code_url or qrcode_value
                 current_base_url = self._base_url
                 if on_code is not None:
                     on_code(scan_data)
             await asyncio.sleep(ILINK_QR_POLL_INTERVAL_SECONDS)
 
-        return {'status': 'timeout', 'qrcode': qrcode_value, 'code_url': scan_data}
+        return {"status": "timeout", "qrcode": qrcode_value, "code_url": scan_data}
 
     # -- inbound_polling ------------------------------------------------
     def set_inbound_handler(self, handler: InboundHandler) -> None:
@@ -955,7 +955,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         if self._client is None:
             self.load_credentials()
         if self._client is None:
-            logger.warning('wechat adapter %s has no credentials; not polling', self.channel_id)
+            logger.warning("wechat adapter %s has no credentials; not polling", self.channel_id)
             return
         self._poll_task = asyncio.create_task(self._poll_loop())
 
@@ -970,11 +970,11 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
 
     async def _poll_loop(self) -> None:
         logger.info(
-            'wechat poll loop START channel=%s account=%s base=%s cursor=%r',
+            "wechat poll loop START channel=%s account=%s base=%s cursor=%r",
             self.channel_id,
             _safe_id(self._account_id),
             self._base_url,
-            (self._get_updates_buf or '')[:24],
+            (self._get_updates_buf or "")[:24],
         )
         while True:
             try:
@@ -982,7 +982,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
             except asyncio.CancelledError:
                 raise
             except Exception:  # noqa: BLE001
-                logger.exception('wechat poll loop error')
+                logger.exception("wechat poll loop error")
             await asyncio.sleep(0.1)
 
     def _cooldown_remaining(self, attr: str) -> float:
@@ -999,7 +999,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         return max(0.0, self._send_rate_limit_circuit_until - time.monotonic())
 
     def _poll_rate_limit_remaining(self) -> float:
-        return self._cooldown_remaining('_poll_rate_limit_cooldown_until')
+        return self._cooldown_remaining("_poll_rate_limit_cooldown_until")
 
     def _rate_limit_remaining(self) -> float:
         return max(self._send_rate_limit_remaining(), self._poll_rate_limit_remaining())
@@ -1037,8 +1037,8 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
             self.channel_id,
             message=message,
             raw={
-                'retry_after_seconds': retry_after,
-                'cooldown_until': time.time() + retry_after,
+                "retry_after_seconds": retry_after,
+                "cooldown_until": time.time() + retry_after,
             },
         )
 
@@ -1046,9 +1046,9 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         self,
         message: str,
         *,
-        reason: str = 'rate_limit',
+        reason: str = "rate_limit",
         status: int | None = None,
-        scope: str = 'send',
+        scope: str = "send",
     ) -> ChannelSendResult:
         retry_after = self._poll_rate_limit_cooldown_seconds
         self._poll_rate_limit_cooldown_until = time.monotonic() + retry_after
@@ -1056,22 +1056,22 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         self._poll_rate_limit_cooldown_seconds = WECHAT_RATE_LIMIT_BACKOFF_SECONDS
         self._last_error = message
         logger.info(
-            'wechat rate-limit cooldown: channel=%s account=%s scope=%s retry_after=%.0fs',
+            "wechat rate-limit cooldown: channel=%s account=%s scope=%s retry_after=%.0fs",
             self.channel_id,
             _safe_id(self._account_id),
             scope,
             retry_after,
         )
         audit_payload = {
-            'channel': self.channel_id,
-            'account_id': self._account_id,
-            'reason': reason,
-            'scope': scope,
-            'retry_after_seconds': retry_after,
+            "channel": self.channel_id,
+            "account_id": self._account_id,
+            "reason": reason,
+            "scope": scope,
+            "retry_after_seconds": retry_after,
         }
         if status is not None:
-            audit_payload['status'] = status
-        self._store.audit('wechat_rate_limit_cooldown', **audit_payload)
+            audit_payload["status"] = status
+        self._store.audit("wechat_rate_limit_cooldown", **audit_payload)
         return self._rate_limit_result(message, retry_after)
 
     def _mark_session_expired(
@@ -1088,22 +1088,22 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         is called. Polling and sending are blocked by the ``account_status``
         check in ``_poll_once`` and ``send``.
         """
-        self._account_status = 'session_expired'
+        self._account_status = "session_expired"
         self._last_error = message
         logger.warning(
-            'wechat session expired: channel=%s account=%s reason=%s',
+            "wechat session expired: channel=%s account=%s reason=%s",
             self.channel_id,
             _safe_id(self._account_id),
             reason,
         )
         audit_payload = {
-            'channel': self.channel_id,
-            'account_id': self._account_id,
-            'reason': reason,
+            "channel": self.channel_id,
+            "account_id": self._account_id,
+            "reason": reason,
         }
         if status is not None:
-            audit_payload['status'] = status
-        self._store.audit('wechat_session_expired', **audit_payload)
+            audit_payload["status"] = status
+        self._store.audit("wechat_session_expired", **audit_payload)
 
     def _send_window_retry_after(self) -> float:
         now = time.monotonic()
@@ -1117,7 +1117,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
     async def _poll_once(self) -> None:
         if self._circuit_state is CircuitState.OPEN:
             return
-        if self._account_status == 'session_expired':
+        if self._account_status == "session_expired":
             return
         if self._poll_rate_limit_remaining() > 0:
             return
@@ -1126,12 +1126,12 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         try:
             messages, new_buf = await self._client.getupdates(self._get_updates_buf)
         except _IlinkHttpError as exc:
-            logger.error('wechat getupdates HTTP %s', exc.status)
+            logger.error("wechat getupdates HTTP %s", exc.status)
             await self._handle_poll_http_error(exc.status, exc.body)
             return
         except _IlinkPlatformError as exc:
             logger.error(
-                'wechat getupdates platform error ret=%s errcode=%s errmsg=%s session_expired=%s',
+                "wechat getupdates platform error ret=%s errcode=%s errmsg=%s session_expired=%s",
                 exc.ret,
                 exc.errcode,
                 exc.errmsg,
@@ -1139,21 +1139,21 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
             )
             if exc.is_session_expired:
                 self._mark_session_expired(
-                    f'session expired (ret={exc.ret} errcode={exc.errcode}); re-scan required',
-                    reason='session_expired',
+                    f"session expired (ret={exc.ret} errcode={exc.errcode}); re-scan required",
+                    reason="session_expired",
                 )
                 return
             if exc.errcode == ILINK_RATE_LIMIT_ERRCODE:
                 self._enter_rate_limit_cooldown(
-                    f'wechat rate limited (ret={exc.ret} errcode={exc.errcode}); cooldown before retry',
-                    reason='rate_limit',
-                    scope='poll',
+                    f"wechat rate limited (ret={exc.ret} errcode={exc.errcode}); cooldown before retry",
+                    reason="rate_limit",
+                    scope="poll",
                 )
                 return
             self._record_failure(str(exc))
             return
         except TransportError as exc:
-            logger.error('wechat getupdates transport error: %s', exc)
+            logger.error("wechat getupdates transport error: %s", exc)
             self._record_failure(str(exc))
             return
         # success — only advance the cursor when the server returns a real
@@ -1167,7 +1167,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         self._last_poll_at = time.time()
         self._poll_rate_limit_cooldown_seconds = WECHAT_RATE_LIMIT_RETRY_DELAY_SECONDS
         logger.debug(
-            'wechat getupdates ok: %d message(s), cursor_advanced=%s',
+            "wechat getupdates ok: %d message(s), cursor_advanced=%s",
             len(messages),
             bool(new_buf),
         )
@@ -1178,12 +1178,12 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         category = classify_http_status(status)
         if category is ErrorCategory.AUTH:
             self._mark_session_expired(
-                f'HTTP {status}: session expired; re-scan required',
-                reason='http_401',
+                f"HTTP {status}: session expired; re-scan required",
+                reason="http_401",
                 status=status,
             )
             return
-        self._record_failure(f'HTTP {status}: {body[:120]!r}')
+        self._record_failure(f"HTTP {status}: {body[:120]!r}")
 
     def _record_failure(self, message: str) -> None:
         self._consecutive_failures += 1
@@ -1191,15 +1191,15 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         self._last_poll_at = time.time()
         if self._consecutive_failures >= self._max_consecutive_failures:
             self._circuit_state = CircuitState.OPEN
-            self._account_status = 'circuit_open'
+            self._account_status = "circuit_open"
             logger.warning(
-                'wechat circuit OPENED: channel=%s account=%s consecutive_failures=%d',
+                "wechat circuit OPENED: channel=%s account=%s consecutive_failures=%d",
                 self.channel_id,
                 _safe_id(self._account_id),
                 self._consecutive_failures,
             )
             self._store.audit(
-                'wechat_circuit_open',
+                "wechat_circuit_open",
                 channel=self.channel_id,
                 account_id=self._account_id,
                 consecutive_failures=self._consecutive_failures,
@@ -1208,7 +1208,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
     def reset_circuit(self) -> None:
         """Manual recovery via `clawcodex channels restart wechat`."""
         logger.info(
-            'wechat circuit reset: channel=%s account=%s',
+            "wechat circuit reset: channel=%s account=%s",
             self.channel_id,
             _safe_id(self._account_id),
         )
@@ -1220,21 +1220,21 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         self._send_window_attempts.clear()
         self._send_rate_limit_retries = 0
         self._reset_send_rate_limit_circuit()
-        if self._account_status in {'circuit_open', 'session_expired'}:
-            self._account_status = 'logged_in' if self._client is not None else 'unconfigured'
+        if self._account_status in {"circuit_open", "session_expired"}:
+            self._account_status = "logged_in" if self._client is not None else "unconfigured"
 
     async def _handle_inbound(self, msg: WeixinMessage) -> None:
         logger.info(
-            'wechat inbound: msg_id=%s from=%s to=%s account=%s bot_user=%s '
-            'msg_type=%s text=%r context_token=%s',
+            "wechat inbound: msg_id=%s from=%s to=%s account=%s bot_user=%s "
+            "msg_type=%s text=%r context_token=%s",
             msg.message_id,
             _safe_id(msg.from_user_id),
             _safe_id(msg.to_user_id),
             _safe_id(self._account_id),
             _safe_id(self._bot_user_id),
             msg.msg_type,
-            (msg.text or '')[:80],
-            'yes' if msg.context_token else 'no',
+            (msg.text or "")[:80],
+            "yes" if msg.context_token else "no",
         )
         # anti-loop: drop the bot's own messages. iLink marks a bot-originated
         # message with from_user_id == the bot's account_id (...@im.bot), NOT
@@ -1243,9 +1243,9 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         # fills the bot's @im.wechat id into from_user_id for inbound DMs.
         # Mirrors hermes-agent (_process_message: sender_id == self._account_id).
         if msg.from_user_id and msg.from_user_id == self._account_id:
-            logger.info('wechat anti-loop drop (from==account_id): msg_id=%s', msg.message_id)
+            logger.info("wechat anti-loop drop (from==account_id): msg_id=%s", msg.message_id)
             self._store.audit(
-                'wechat_self_message_dropped',
+                "wechat_self_message_dropped",
                 channel=self.channel_id,
                 account_id=self._account_id,
                 message_id=msg.message_id,
@@ -1262,14 +1262,14 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         if not msg.is_text:
             self._store.record_unsupported_media(
                 {
-                    'channel': self.channel_id,
-                    'account_id': self._account_id,
-                    'message_id': msg.message_id,
-                    'from_user_hash': _hash_user(msg.from_user_id),
-                    'media_type': msg.msg_type,
-                    'size': _media_size(msg.raw),
-                    'received_at': time.time(),
-                    'raw_type': msg.msg_type,
+                    "channel": self.channel_id,
+                    "account_id": self._account_id,
+                    "message_id": msg.message_id,
+                    "from_user_hash": _hash_user(msg.from_user_id),
+                    "media_type": msg.msg_type,
+                    "size": _media_size(msg.raw),
+                    "received_at": time.time(),
+                    "raw_type": msg.msg_type,
                 }
             )
             # Fire-and-forget: the unsupported-media reply goes through the
@@ -1281,7 +1281,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
             return
         self._last_inbound_at = time.time()
         logger.info(
-            'wechat inbound → dispatcher: from=%s msg_id=%s',
+            "wechat inbound → dispatcher: from=%s msg_id=%s",
             _safe_id(msg.from_user_id),
             msg.message_id,
         )
@@ -1290,7 +1290,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
 
             inbound = InboundMessage(
                 origin=str(OriginKey.wechat(self._account_id, msg.from_user_id)),
-                text=msg.text or '',
+                text=msg.text or "",
                 message_id=msg.message_id,
                 channel=self.channel_id,
                 context_token=msg.context_token,
@@ -1302,7 +1302,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
     async def _reply_unsupported(self, msg: WeixinMessage) -> None:
         await self.send(
             ChannelMessage(
-                text='当前 WeChat v1 仅支持文本消息，请改用文字描述或等待媒体能力开启。'
+                text="当前 WeChat v1 仅支持文本消息，请改用文字描述或等待媒体能力开启。"
             ),
             target=msg.from_user_id,
             context_token=msg.context_token,
@@ -1320,7 +1320,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         if self._client is None:
             return ChannelSendResult.nonretryable_error(
                 self.channel_id,
-                message='wechat_ilink adapter is not connected',
+                message="wechat_ilink adapter is not connected",
                 category=ErrorCategory.AUTH,
             )
 
@@ -1329,7 +1329,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         # This caps the post-exhaustion NACK→retry→NACK tight loop.
         send_cooldown = self._send_rate_limit_remaining()
         if send_cooldown > 0:
-            return self._rate_limit_result('wechat send circuit open; backing off', send_cooldown)
+            return self._rate_limit_result("wechat send circuit open; backing off", send_cooldown)
 
         # Hermes-style rate-limit retry: 2s for 1st-2nd, 30s for 3+,
         # max 5 retries, then return the failure. The backoff sleep happens
@@ -1368,13 +1368,13 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
                         self._reset_send_rate_limit_circuit()
                     return result
                 # Rate-limited — record event; hermes-style backoff retry.
-                self._last_error = result.message or 'wechat rate limited'
+                self._last_error = result.message or "wechat rate limited"
                 if self._store is not None:
                     self._store.audit(
-                        'wechat_rate_limit_observed',
+                        "wechat_rate_limit_observed",
                         channel=self.channel_id,
                         account_id=self._account_id,
-                        scope='send',
+                        scope="send",
                         attempt=attempt + 1,
                         message=self._last_error,
                     )
@@ -1388,7 +1388,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
                 else WECHAT_RATE_LIMIT_BACKOFF_SECONDS
             )
             logger.warning(
-                'wechat sendmessage rate limited (attempt %d/%d); retry in %.0fs',
+                "wechat sendmessage rate limited (attempt %d/%d); retry in %.0fs",
                 attempt + 1,
                 WECHAT_RATE_LIMIT_MAX_RETRIES,
                 wait,
@@ -1398,12 +1398,12 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         # short-circuits instead of immediately hitting the platform again.
         if self._record_send_rate_limit_event():
             logger.warning(
-                'wechat send circuit opened for %.0fs after %d rate-limited attempts',
+                "wechat send circuit opened for %.0fs after %d rate-limited attempts",
                 WECHAT_SEND_RATE_LIMIT_CIRCUIT_OPEN_SECONDS,
                 WECHAT_RATE_LIMIT_MAX_RETRIES,
             )
         return self._rate_limit_result(
-            result.message or 'wechat rate limited',
+            result.message or "wechat rate limited",
             self._send_rate_limit_remaining(),
         )
 
@@ -1418,26 +1418,26 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
             self.load_credentials()
         if self._client is None:
             return ChannelSendResult.nonretryable_error(
-                self.channel_id, message='wechat not logged in', category=ErrorCategory.AUTH
+                self.channel_id, message="wechat not logged in", category=ErrorCategory.AUTH
             )
-        if self._account_status == 'session_expired':
+        if self._account_status == "session_expired":
             return ChannelSendResult.nonretryable_error(
                 self.channel_id,
-                message='wechat session expired; re-scan required',
+                message="wechat session expired; re-scan required",
                 category=ErrorCategory.AUTH,
             )
         if target is None:
             return ChannelSendResult.nonretryable_error(
                 self.channel_id,
-                message='target (to_user_id) required for wechat send',
+                message="target (to_user_id) required for wechat send",
                 category=ErrorCategory.CLIENT_ERROR,
             )
         # load saved context_token if not provided
         if context_token is None:
             context_token = self._store.get_context_token(self._account_id, target)
-        text = message.text or ''
+        text = message.text or ""
         chunks = [text[i : i + TEXT_CHUNK_SIZE] for i in range(0, len(text), TEXT_CHUNK_SIZE)] or [
-            ''
+            ""
         ]
         last: ChannelSendResult | None = None
         for chunk in chunks:
@@ -1453,34 +1453,34 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
                     cat = classify_http_status(exc.status)
                     if cat is ErrorCategory.AUTH:
                         self._mark_session_expired(
-                            f'HTTP {exc.status}: session expired; re-scan required',
-                            reason='http_401',
+                            f"HTTP {exc.status}: session expired; re-scan required",
+                            reason="http_401",
                             status=exc.status,
                         )
                         last = ChannelSendResult.nonretryable_error(
                             self.channel_id,
-                            message='wechat session expired; re-scan required',
+                            message="wechat session expired; re-scan required",
                             category=ErrorCategory.AUTH,
                         )
                     elif cat in self._retry_policy.retryable_categories:
                         last = ChannelSendResult.retryable_error(
-                            self.channel_id, message=f'HTTP {exc.status}', category=cat
+                            self.channel_id, message=f"HTTP {exc.status}", category=cat
                         )
                     else:
                         last = ChannelSendResult.nonretryable_error(
-                            self.channel_id, message=f'HTTP {exc.status}', category=cat
+                            self.channel_id, message=f"HTTP {exc.status}", category=cat
                         )
                     break
                 except (_IlinkPlatformError, TransportError) as exc:
                     if isinstance(exc, _IlinkPlatformError) and exc.is_session_expired:
                         self._store.set_context_token(self._account_id, target, None)
                         self._mark_session_expired(
-                            'wechat session expired during sendmessage; re-scan required',
-                            reason='session_expired',
+                            "wechat session expired during sendmessage; re-scan required",
+                            reason="session_expired",
                         )
                         last = ChannelSendResult.nonretryable_error(
                             self.channel_id,
-                            message='wechat session expired; re-scan required',
+                            message="wechat session expired; re-scan required",
                             category=ErrorCategory.AUTH,
                         )
                     else:
@@ -1521,27 +1521,27 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
 
 
 def _hash_user(user_id: str) -> str:
-    return hashlib.sha256(user_id.encode('utf-8')).hexdigest()[:16]
+    return hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:16]
 
 
 def _safe_id(value: str | None, keep: int = 16) -> str:
     """Truncate an id for log readability (full ids are noisy and PII-ish)."""
-    raw = str(value or '').strip()
+    raw = str(value or "").strip()
     if not raw:
-        return '<empty>'
-    return raw if len(raw) <= keep else raw[:keep] + '…'
+        return "<empty>"
+    return raw if len(raw) <= keep else raw[:keep] + "…"
 
 
 def _media_size(raw: dict[str, Any]) -> int | None:
-    for key in ('size', 'file_size'):
+    for key in ("size", "file_size"):
         value = raw.get(key)
         if isinstance(value, int):
             return value
         if isinstance(value, str) and value.isdigit():
             return int(value)
-    media = raw.get('media') or raw.get('file') or raw.get('image')
+    media = raw.get("media") or raw.get("file") or raw.get("image")
     if isinstance(media, dict):
-        value = media.get('size') or media.get('file_size')
+        value = media.get("size") or media.get("file_size")
         if isinstance(value, int):
             return value
         if isinstance(value, str) and value.isdigit():
@@ -1550,15 +1550,15 @@ def _media_size(raw: dict[str, Any]) -> int | None:
 
 
 __all__ = [
-    'DEFAULT_LONG_POLL_TIMEOUT_MS',
-    'DEFAULT_MAX_CONSECUTIVE_FAILURES',
-    'ILINK_CHANNEL_ID',
-    'PAIRING_CODE_TTL_SECONDS',
-    'TEXT_CHUNK_SIZE',
-    'WeChatAuthRecord',
-    'WeChatIlinkAuthStore',
-    'WeChatIlinkChannelAdapter',
-    'WeChatIlinkClient',
-    'WeChatPairingStore',
-    'WeixinMessage',
+    "DEFAULT_LONG_POLL_TIMEOUT_MS",
+    "DEFAULT_MAX_CONSECUTIVE_FAILURES",
+    "ILINK_CHANNEL_ID",
+    "PAIRING_CODE_TTL_SECONDS",
+    "TEXT_CHUNK_SIZE",
+    "WeChatAuthRecord",
+    "WeChatIlinkAuthStore",
+    "WeChatIlinkChannelAdapter",
+    "WeChatIlinkClient",
+    "WeChatPairingStore",
+    "WeixinMessage",
 ]

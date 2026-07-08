@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from src.services.templates import RenderedTemplate, TemplateGenerator, TemplateOverwriteError, TemplateUnsafePathError
+from src.services.templates import (
+    RenderedTemplate,
+    TemplateGenerator,
+    TemplateOverwriteError,
+    TemplateUnsafePathError,
+)
 
 
 def test_generator_writes_file(tmp_path: Path) -> None:

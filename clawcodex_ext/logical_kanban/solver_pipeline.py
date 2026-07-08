@@ -51,11 +51,11 @@ class SolverPipeline:
         *,
         proposal_id: str,
         task_id: str | None = None,
-        input_facts_hash: str = '',
-        ruleset_hash: str = '',
-        snapshot_hash: str = '',
+        input_facts_hash: str = "",
+        ruleset_hash: str = "",
+        snapshot_hash: str = "",
         timeout_seconds: float = 30.0,
-        requested_by: str = 'system',
+        requested_by: str = "system",
     ) -> ValidationRun:
         """Run every configured adapter and return a single ``ValidationRun``."""
         if not self.adapters:
@@ -65,7 +65,7 @@ class SolverPipeline:
                 input_facts_hash=input_facts_hash,
                 ruleset_hash=ruleset_hash,
                 snapshot_hash=snapshot_hash,
-                message='No solver adapters are configured.',
+                message="No solver adapters are configured.",
                 requested_by=requested_by,
             )
 
@@ -80,16 +80,16 @@ class SolverPipeline:
             adapter_duration_ms = int((time.perf_counter() - adapter_start) * 1000)
             results.append(
                 {
-                    'adapter': adapter.name,
-                    'version': adapter.version,
-                    'available': adapter.available(),
-                    'durationMs': adapter_duration_ms,
+                    "adapter": adapter.name,
+                    "version": adapter.version,
+                    "available": adapter.available(),
+                    "durationMs": adapter_duration_ms,
                     **response.to_dict(),
                 }
             )
-            if response.result == 'fail':
+            if response.result == "fail":
                 any_fail = True
-            elif response.result in ('unknown', 'timeout', 'error'):
+            elif response.result in ("unknown", "timeout", "error"):
                 any_uncertain = True
             metrics.record_adapter_result(
                 adapter=adapter.name,
@@ -98,7 +98,7 @@ class SolverPipeline:
                 timeout_seconds=timeout_seconds,
                 task_id=request.target_task_id,
             )
-            if response.result == 'timeout':
+            if response.result == "timeout":
                 metrics.record_timeout(
                     adapter=adapter.name,
                     timeout_seconds=timeout_seconds,
@@ -109,20 +109,20 @@ class SolverPipeline:
 
         # Conservative aggregation.
         if any_fail:
-            overall_result = 'fail'
+            overall_result = "fail"
         elif any_uncertain:
-            overall_result = 'unknown'
+            overall_result = "unknown"
         else:
-            overall_result = 'pass'
+            overall_result = "pass"
 
         primary = self.adapters[0]
         derived_facts, proof_trace, violated_rule, message, cycle_tasks = _merge_responses(
-            [r for r in results if r.get('result') in ('pass', 'fail')]
+            [r for r in results if r.get("result") in ("pass", "fail")]
         )
         counterexample = _first_counterexample(results)
 
         return ValidationRun(
-            validation_run_id=_new_id('V-'),
+            validation_run_id=_new_id("V-"),
             proposal_id=proposal_id,
             task_id=task_id,
             input_facts_hash=input_facts_hash,
@@ -151,9 +151,9 @@ class SolverPipeline:
         """Invoke ``adapter.solve`` with a timeout, catching all failures."""
         if not adapter.available():
             return SolverResponse(
-                result='unknown',
-                message=f'{adapter.name} is not available.',
-                error_info={'reason': 'engine_unavailable'},
+                result="unknown",
+                message=f"{adapter.name} is not available.",
+                error_info={"reason": "engine_unavailable"},
             )
 
         result_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=1)
@@ -164,9 +164,9 @@ class SolverPipeline:
                     request,
                     timeout_seconds=timeout_seconds,
                 )
-                result_queue.put(('response', response))
+                result_queue.put(("response", response))
             except Exception as exc:  # noqa: BLE001
-                result_queue.put(('exception', exc))
+                result_queue.put(("exception", exc))
 
         thread = threading.Thread(target=_target, daemon=True)
         thread.start()
@@ -174,29 +174,29 @@ class SolverPipeline:
 
         if thread.is_alive():
             return SolverResponse(
-                result='timeout',
-                message=f'{adapter.name} exceeded the {timeout_seconds}s timeout.',
-                error_info={'reason': 'timeout', 'timeout_seconds': timeout_seconds},
+                result="timeout",
+                message=f"{adapter.name} exceeded the {timeout_seconds}s timeout.",
+                error_info={"reason": "timeout", "timeout_seconds": timeout_seconds},
             )
 
         try:
             kind, value = result_queue.get(block=False)
         except queue.Empty:
             return SolverResponse(
-                result='timeout',
-                message=f'{adapter.name} exceeded the {timeout_seconds}s timeout.',
-                error_info={'reason': 'timeout', 'timeout_seconds': timeout_seconds},
+                result="timeout",
+                message=f"{adapter.name} exceeded the {timeout_seconds}s timeout.",
+                error_info={"reason": "timeout", "timeout_seconds": timeout_seconds},
             )
 
-        if kind == 'exception':
+        if kind == "exception":
             exc = value
             return SolverResponse(
-                result='error',
-                message=f'{adapter.name} raised {type(exc).__name__}: {exc}',
+                result="error",
+                message=f"{adapter.name} raised {type(exc).__name__}: {exc}",
                 error_info={
-                    'reason': 'exception',
-                    'exception': type(exc).__name__,
-                    'detail': str(exc),
+                    "reason": "exception",
+                    "exception": type(exc).__name__,
+                    "detail": str(exc),
                 },
             )
         return value
@@ -213,24 +213,24 @@ class SolverPipeline:
         requested_by: str,
     ) -> ValidationRun:
         return ValidationRun(
-            validation_run_id=_new_id('V-'),
+            validation_run_id=_new_id("V-"),
             proposal_id=proposal_id,
             task_id=task_id,
             input_facts_hash=input_facts_hash,
             ruleset_hash=ruleset_hash,
             snapshot_hash=snapshot_hash,
-            engine='solver-pipeline',
-            engine_version='',
-            result='error',
+            engine="solver-pipeline",
+            engine_version="",
+            result="error",
             duration_ms=0,
             derived_facts=(),
             proof_trace=(),
             repair_suggestions=(),
             issues=(
                 ValidationIssue(
-                    code='solver_pipeline_empty',
+                    code="solver_pipeline_empty",
                     message=message,
-                    rule='LKB-SOLVER-001',
+                    rule="LKB-SOLVER-001",
                     task_id=task_id,
                 ),
             ),
@@ -252,20 +252,20 @@ def _merge_responses(
     traces: list[dict[str, Any]] = []
     seen_traces: set[tuple[str, str, tuple[str, ...]]] = set()
     violated_rule: str | None = None
-    message = ''
+    message = ""
     cycle_tasks: set[str] = set()
 
     for response in responses:
-        facts.update(response.get('derivedFacts', []))
-        if response.get('result') == 'fail':
+        facts.update(response.get("derivedFacts", []))
+        if response.get("result") == "fail":
             if violated_rule is None:
-                violated_rule = response.get('violatedRule')
+                violated_rule = response.get("violatedRule")
             if not message:
-                message = response.get('message', '')
-            cycle_tasks.update(response.get('cycleTasks', []))
-        for trace in response.get('proofTrace', []):
-            premises = tuple(trace.get('premises', []))
-            key = (trace.get('rule', ''), trace.get('conclusion', ''), premises)
+                message = response.get("message", "")
+            cycle_tasks.update(response.get("cycleTasks", []))
+        for trace in response.get("proofTrace", []):
+            premises = tuple(trace.get("premises", []))
+            key = (trace.get("rule", ""), trace.get("conclusion", ""), premises)
             if key in seen_traces:
                 continue
             seen_traces.add(key)
@@ -276,14 +276,14 @@ def _merge_responses(
 
 def _first_counterexample(responses: list[dict[str, Any]]) -> dict[str, Any] | None:
     for response in responses:
-        counterexample = response.get('counterexample')
+        counterexample = response.get("counterexample")
         if isinstance(counterexample, dict):
             return counterexample
     return None
 
 
 def _new_id(prefix: str) -> str:
-    return f'{prefix}{uuid.uuid4().hex[:12]}'
+    return f"{prefix}{uuid.uuid4().hex[:12]}"
 
 
-__all__ = ['SolverPipeline']
+__all__ = ["SolverPipeline"]

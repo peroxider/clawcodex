@@ -94,12 +94,14 @@ def validate_settings(settings: SettingsSchema) -> list[ValidationError]:
     if settings.spinner_verbs is not None and (
         settings.spinner_verbs.mode not in VALID_SPINNER_VERB_MODES
     ):
-        errors.append(ValidationError(
-            field="spinner_verbs.mode",
-            message=f"Invalid spinner verbs mode: {settings.spinner_verbs.mode!r}. "
-                    f"Must be one of {VALID_SPINNER_VERB_MODES}",
-            value=settings.spinner_verbs.mode,
-        ))
+        errors.append(
+            ValidationError(
+                field="spinner_verbs.mode",
+                message=f"Invalid spinner verbs mode: {settings.spinner_verbs.mode!r}. "
+                f"Must be one of {VALID_SPINNER_VERB_MODES}",
+                value=settings.spinner_verbs.mode,
+            )
+        )
 
     # Max turns (0 = unlimited, otherwise must be positive)
     if settings.max_turns < 0:

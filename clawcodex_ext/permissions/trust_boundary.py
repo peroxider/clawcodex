@@ -70,97 +70,99 @@ __all__ = [
 # project-scoped sources may only set these. If a key needs to apply
 # pre-trust from a project file, port the corresponding TS entry; if it
 # isn't on the TS list, it waits for the post-trust full pass.
-SAFE_ENV_KEYS: frozenset[str] = frozenset({
-    # Model selection (Anthropic + Vertex + Bedrock)
-    "ANTHROPIC_CUSTOM_HEADERS",
-    "ANTHROPIC_CUSTOM_MODEL_OPTION",
-    "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION",
-    "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES",
-    "ANTHROPIC_MODEL",
-    "ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION",
-    "ANTHROPIC_SMALL_FAST_MODEL",
-    "AWS_DEFAULT_REGION",
-    "AWS_PROFILE",
-    "AWS_REGION",
-    # Bash tool tuning
-    "BASH_DEFAULT_TIMEOUT_MS",
-    "BASH_MAX_OUTPUT_LENGTH",
-    "BASH_MAX_TIMEOUT_MS",
-    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR",
-    # CLAUDE_CODE_* runtime flags
-    "CLAUDE_CODE_API_KEY_HELPER_TTL_MS",
-    "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
-    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE",
-    "CLAUDE_CODE_ENABLE_TELEMETRY",
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
-    "CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL",
-    "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
-    "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
-    "CLAUDE_CODE_SKIP_FOUNDRY_AUTH",
-    "CLAUDE_CODE_SKIP_VERTEX_AUTH",
-    "CLAUDE_CODE_SUBAGENT_MODEL",
-    "CLAUDE_CODE_USE_BEDROCK",
-    "CLAUDE_CODE_USE_FOUNDRY",
-    "CLAUDE_CODE_USE_GITHUB",
-    "CLAUDE_CODE_USE_VERTEX",
-    # Feature disables (no security impact)
-    "DISABLE_AUTOUPDATER",
-    "DISABLE_BUG_COMMAND",
-    "DISABLE_COST_WARNINGS",
-    "DISABLE_ERROR_REPORTING",
-    "DISABLE_FEEDBACK_COMMAND",
-    "DISABLE_TELEMETRY",
-    # Tool budgets
-    "ENABLE_TOOL_SEARCH",
-    "MAX_MCP_OUTPUT_TOKENS",
-    "MAX_THINKING_TOKENS",
-    "MCP_TIMEOUT",
-    "MCP_TOOL_TIMEOUT",
-    # OpenTelemetry config (sans endpoint, which is dangerous)
-    "OTEL_EXPORTER_OTLP_HEADERS",
-    "OTEL_EXPORTER_OTLP_LOGS_HEADERS",
-    "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL",
-    "OTEL_EXPORTER_OTLP_METRICS_CLIENT_CERTIFICATE",
-    "OTEL_EXPORTER_OTLP_METRICS_CLIENT_KEY",
-    "OTEL_EXPORTER_OTLP_METRICS_HEADERS",
-    "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL",
-    "OTEL_EXPORTER_OTLP_PROTOCOL",
-    "OTEL_EXPORTER_OTLP_TRACES_HEADERS",
-    "OTEL_LOG_TOOL_DETAILS",
-    "OTEL_LOG_USER_PROMPTS",
-    "OTEL_LOGS_EXPORT_INTERVAL",
-    "OTEL_LOGS_EXPORTER",
-    "OTEL_METRIC_EXPORT_INTERVAL",
-    "OTEL_METRICS_EXPORTER",
-    "OTEL_METRICS_INCLUDE_ACCOUNT_UUID",
-    "OTEL_METRICS_INCLUDE_SESSION_ID",
-    "OTEL_METRICS_INCLUDE_VERSION",
-    "OTEL_RESOURCE_ATTRIBUTES",
-    # Misc
-    "USE_BUILTIN_RIPGREP",
-    "VERTEX_REGION_CLAUDE_3_5_HAIKU",
-    "VERTEX_REGION_CLAUDE_3_5_SONNET",
-    "VERTEX_REGION_CLAUDE_3_7_SONNET",
-    "VERTEX_REGION_CLAUDE_4_0_OPUS",
-    "VERTEX_REGION_CLAUDE_4_0_SONNET",
-    "VERTEX_REGION_CLAUDE_4_1_OPUS",
-    "VERTEX_REGION_CLAUDE_4_5_SONNET",
-    "VERTEX_REGION_CLAUDE_4_6_SONNET",
-    "VERTEX_REGION_CLAUDE_HAIKU_4_5",
-})
+SAFE_ENV_KEYS: frozenset[str] = frozenset(
+    {
+        # Model selection (Anthropic + Vertex + Bedrock)
+        "ANTHROPIC_CUSTOM_HEADERS",
+        "ANTHROPIC_CUSTOM_MODEL_OPTION",
+        "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION",
+        "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL_NAME",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL_NAME",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES",
+        "ANTHROPIC_MODEL",
+        "ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION",
+        "ANTHROPIC_SMALL_FAST_MODEL",
+        "AWS_DEFAULT_REGION",
+        "AWS_PROFILE",
+        "AWS_REGION",
+        # Bash tool tuning
+        "BASH_DEFAULT_TIMEOUT_MS",
+        "BASH_MAX_OUTPUT_LENGTH",
+        "BASH_MAX_TIMEOUT_MS",
+        "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR",
+        # CLAUDE_CODE_* runtime flags
+        "CLAUDE_CODE_API_KEY_HELPER_TTL_MS",
+        "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+        "CLAUDE_CODE_DISABLE_TERMINAL_TITLE",
+        "CLAUDE_CODE_ENABLE_TELEMETRY",
+        "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
+        "CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL",
+        "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
+        "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
+        "CLAUDE_CODE_SKIP_FOUNDRY_AUTH",
+        "CLAUDE_CODE_SKIP_VERTEX_AUTH",
+        "CLAUDE_CODE_SUBAGENT_MODEL",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_FOUNDRY",
+        "CLAUDE_CODE_USE_GITHUB",
+        "CLAUDE_CODE_USE_VERTEX",
+        # Feature disables (no security impact)
+        "DISABLE_AUTOUPDATER",
+        "DISABLE_BUG_COMMAND",
+        "DISABLE_COST_WARNINGS",
+        "DISABLE_ERROR_REPORTING",
+        "DISABLE_FEEDBACK_COMMAND",
+        "DISABLE_TELEMETRY",
+        # Tool budgets
+        "ENABLE_TOOL_SEARCH",
+        "MAX_MCP_OUTPUT_TOKENS",
+        "MAX_THINKING_TOKENS",
+        "MCP_TIMEOUT",
+        "MCP_TOOL_TIMEOUT",
+        # OpenTelemetry config (sans endpoint, which is dangerous)
+        "OTEL_EXPORTER_OTLP_HEADERS",
+        "OTEL_EXPORTER_OTLP_LOGS_HEADERS",
+        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL",
+        "OTEL_EXPORTER_OTLP_METRICS_CLIENT_CERTIFICATE",
+        "OTEL_EXPORTER_OTLP_METRICS_CLIENT_KEY",
+        "OTEL_EXPORTER_OTLP_METRICS_HEADERS",
+        "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL",
+        "OTEL_EXPORTER_OTLP_PROTOCOL",
+        "OTEL_EXPORTER_OTLP_TRACES_HEADERS",
+        "OTEL_LOG_TOOL_DETAILS",
+        "OTEL_LOG_USER_PROMPTS",
+        "OTEL_LOGS_EXPORT_INTERVAL",
+        "OTEL_LOGS_EXPORTER",
+        "OTEL_METRIC_EXPORT_INTERVAL",
+        "OTEL_METRICS_EXPORTER",
+        "OTEL_METRICS_INCLUDE_ACCOUNT_UUID",
+        "OTEL_METRICS_INCLUDE_SESSION_ID",
+        "OTEL_METRICS_INCLUDE_VERSION",
+        "OTEL_RESOURCE_ATTRIBUTES",
+        # Misc
+        "USE_BUILTIN_RIPGREP",
+        "VERTEX_REGION_CLAUDE_3_5_HAIKU",
+        "VERTEX_REGION_CLAUDE_3_5_SONNET",
+        "VERTEX_REGION_CLAUDE_3_7_SONNET",
+        "VERTEX_REGION_CLAUDE_4_0_OPUS",
+        "VERTEX_REGION_CLAUDE_4_0_SONNET",
+        "VERTEX_REGION_CLAUDE_4_1_OPUS",
+        "VERTEX_REGION_CLAUDE_4_5_SONNET",
+        "VERTEX_REGION_CLAUDE_4_6_SONNET",
+        "VERTEX_REGION_CLAUDE_HAIKU_4_5",
+    }
+)
 
 
 # Explicit unsafe set. Redundant with default-deny (anything not in
@@ -218,9 +220,7 @@ _last_mdm_env: dict[str, str] = {}
 def reset_trust_boundary_for_test_only() -> None:
     """Reset module state. Test-only (PYTEST_CURRENT_TEST-gated)."""
     if os.environ.get("PYTEST_CURRENT_TEST") is None:
-        raise RuntimeError(
-            "reset_trust_boundary_for_test_only can only be called in tests"
-        )
+        raise RuntimeError("reset_trust_boundary_for_test_only can only be called in tests")
     global _shell_env_keys, _last_mdm_env
     _shell_env_keys = None
     _last_mdm_env = {}
@@ -229,9 +229,7 @@ def reset_trust_boundary_for_test_only() -> None:
 def _capture_shell_env_keys() -> frozenset[str]:
     global _shell_env_keys
     if _shell_env_keys is None:
-        _shell_env_keys = frozenset(
-            key for key, value in os.environ.items() if value.strip()
-        )
+        _shell_env_keys = frozenset(key for key, value in os.environ.items() if value.strip())
     return _shell_env_keys
 
 
@@ -332,13 +330,13 @@ def _load_project_scoped_env(cwd: str | Path | None = None) -> dict[str, str]:
     merged: dict[str, str] = {}
 
     cm = config_mod.ConfigManager(cwd=cwd)
-    merged.update(_coerce_env_block(cm.load_project().get("env")))          # S3
+    merged.update(_coerce_env_block(cm.load_project().get("env")))  # S3
     merged.update(
-        _read_settings_env(settings_paths.project_settings_path(cwd_str))   # S4
+        _read_settings_env(settings_paths.project_settings_path(cwd_str))  # S4
     )
-    merged.update(_coerce_env_block(cm.load_local().get("env")))            # S5
+    merged.update(_coerce_env_block(cm.load_local().get("env")))  # S5
     merged.update(
-        _read_settings_env(settings_paths.local_settings_path(cwd_str))     # S6
+        _read_settings_env(settings_paths.local_settings_path(cwd_str))  # S6
     )
     return merged
 
@@ -364,15 +362,11 @@ def apply_safe_config_environment_variables(
     ``config_env`` overrides the S1 global-config tier (test seam).
     ``extra_env`` is the MDM payload env from :func:`extract_mdm_env`.
     """
-    _apply(
-        _load_global_config_env() if config_env is None else dict(config_env)
-    )
+    _apply(_load_global_config_env() if config_env is None else dict(config_env))
     _apply(_load_user_settings_env())
-    _apply({
-        key: value
-        for key, value in _load_project_scoped_env().items()
-        if is_safe_env_key(key)
-    })
+    _apply(
+        {key: value for key, value in _load_project_scoped_env().items() if is_safe_env_key(key)}
+    )
     if extra_env:
         global _last_mdm_env
         _last_mdm_env = dict(extra_env)
@@ -400,9 +394,7 @@ def apply_full_config_environment_variables(
     is only the constructor-captured api_key/base_url CONFIG snapshot
     (provider config read pre-gates), refreshed next launch.
     """
-    _apply(
-        _load_global_config_env() if config_env is None else dict(config_env)
-    )
+    _apply(_load_global_config_env() if config_env is None else dict(config_env))
     _apply(_load_user_settings_env())
     _apply(_load_project_scoped_env())
     if _last_mdm_env:

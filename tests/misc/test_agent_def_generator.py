@@ -6,9 +6,17 @@ from pathlib import Path
 
 from extensions.sop_converter.skill_grouper import GroupStrategy, SkillSpec, group_source_components
 from extensions.sop_converter.source_parser import SourceCodeParser
-from extensions.sop_converter.workflow_mode.capability import StageCapabilityMapper, ensure_arc_stage_skills
-from extensions.sop_converter.workflow_mode.extractors.adapters.generic import GenericPipelineExtractor
-from extensions.sop_converter.workflow_mode.generator import AgentDefinitionGenerator, coarse_agent_skills
+from extensions.sop_converter.workflow_mode.capability import (
+    StageCapabilityMapper,
+    ensure_arc_stage_skills,
+)
+from extensions.sop_converter.workflow_mode.extractors.adapters.generic import (
+    GenericPipelineExtractor,
+)
+from extensions.sop_converter.workflow_mode.generator import (
+    AgentDefinitionGenerator,
+    coarse_agent_skills,
+)
 from extensions.sop_converter.workflow_mode.generator.overview_gen import control_flow_markdown
 from extensions.sop_converter.workflow_mode.scan_context import SourceScanContext
 
@@ -48,7 +56,9 @@ class TestAgentDefinitionGenerator:
         skill_agent_map = {s.name: f"{s.name}-agent" for s in skills}
 
         stages = AgentDefinitionGenerator().enrich_workflow_stages(
-            graph, agent_map, skill_agent_map=skill_agent_map,
+            graph,
+            agent_map,
+            skill_agent_map=skill_agent_map,
         )
         assert len(stages) == len(graph.stages)
         assert any("[GATE:" in s.description for s in stages)

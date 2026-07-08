@@ -39,7 +39,7 @@ class GatewayIpcClient:
         self,
         socket_path: str | Path,
         *,
-        instance_id: str = 'client',
+        instance_id: str = "client",
         on_deliver: OnDeliverFn | None = None,
     ) -> None:
         self.socket_path = Path(socket_path)
@@ -55,7 +55,7 @@ class GatewayIpcClient:
     async def connect(self) -> None:
         self._reader, self._writer = await asyncio.open_unix_connection(str(self.socket_path))
         self._write_lock = asyncio.Lock()
-        logger.info('gateway ipc client connected: %s', self.socket_path)
+        logger.info("gateway ipc client connected: %s", self.socket_path)
         # Background read loop routes reply frames to pending requests and
         # server-pushed DELIVER frames to on_deliver.
         self._read_task = asyncio.create_task(self._read_loop())
@@ -63,12 +63,12 @@ class GatewayIpcClient:
     async def close(self) -> None:
         if self._read_task is not None:
             self._read_task.cancel()
-            with __import__('contextlib').suppress(asyncio.CancelledError):
+            with __import__("contextlib").suppress(asyncio.CancelledError):
                 await self._read_task
             self._read_task = None
         if self._writer is not None:
             self._writer.close()
-            with __import__('contextlib').suppress(ConnectionError, RuntimeError):
+            with __import__("contextlib").suppress(ConnectionError, RuntimeError):
                 await self._writer.wait_closed()
             self._writer = None
             self._reader = None
@@ -77,7 +77,7 @@ class GatewayIpcClient:
             if not fut.done():
                 fut.set_result(None)  # type: ignore[arg-type]
         self._pending.clear()
-        logger.debug('gateway ipc client closed')
+        logger.debug("gateway ipc client closed")
 
     async def _read_loop(self) -> None:
         if self._reader is None:
@@ -92,7 +92,7 @@ class GatewayIpcClient:
             try:
                 frame = GatewayFrame.decode(raw)
             except ValueError:
-                logger.debug('gateway ipc: dropping undecodable frame')
+                logger.debug("gateway ipc: dropping undecodable frame")
                 continue
             self._dispatch_incoming(frame)
 
@@ -117,7 +117,7 @@ class GatewayIpcClient:
                 if result is not None:
                     asyncio.ensure_future(result)
             except Exception:  # noqa: BLE001
-                logger.exception('gateway ipc: on_deliver callback failed')
+                logger.exception("gateway ipc: on_deliver callback failed")
 
     async def _send(self, frame: GatewayFrame) -> GatewayFrame | None:
         """Write a frame and await its reply (routed by the read loop).
@@ -134,7 +134,7 @@ class GatewayIpcClient:
         either may be stopped independently.
         """
         if self._writer is None:
-            raise RuntimeError('not connected')
+            raise RuntimeError("not connected")
         keys = [k for k in (frame.message_id, frame.delivery_id) if k]
         fut: asyncio.Future[GatewayFrame] = asyncio.get_running_loop().create_future()
         for k in keys:
@@ -151,7 +151,7 @@ class GatewayIpcClient:
             # so the caller can reconnect — never propagate transport errors.
             for k in keys:
                 self._pending.pop(k, None)
-            logger.debug('gateway ipc: send failed (connection lost): %s', exc)
+            logger.debug("gateway ipc: send failed (connection lost): %s", exc)
             return None
         if not keys:
             return None  # fire-and-forget frame (no reply expected)
@@ -160,13 +160,13 @@ class GatewayIpcClient:
         except asyncio.TimeoutError:
             for k in keys:
                 self._pending.pop(k, None)
-            logger.debug('gateway ipc: reply timed out for keys=%s', keys)
+            logger.debug("gateway ipc: reply timed out for keys=%s", keys)
             return None
 
     async def _write_frame_no_reply(self, frame: GatewayFrame) -> None:
         """Write a frame that is itself a reply and should not get another reply."""
         if self._writer is None:
-            raise RuntimeError('not connected')
+            raise RuntimeError("not connected")
         if self._write_lock is None:
             self._write_lock = asyncio.Lock()
         try:
@@ -174,7 +174,7 @@ class GatewayIpcClient:
                 self._writer.write(frame.encode())
                 await self._writer.drain()
         except (ConnectionError, BrokenPipeError) as exc:
-            logger.debug('gateway ipc: send failed (connection lost): %s', exc)
+            logger.debug("gateway ipc: send failed (connection lost): %s", exc)
             return None
 
     async def register(
@@ -213,11 +213,11 @@ class GatewayIpcClient:
                     origin=origin,
                     capabilities=capabilities,
                 )
-                if response is not None and response.ack_layer == 'accepted':
+                if response is not None and response.ack_layer == "accepted":
                     return response
             except Exception:  # noqa: BLE001
                 logger.debug(
-                    'gateway ipc: reconnect attempt %d/%d failed',
+                    "gateway ipc: reconnect attempt %d/%d failed",
                     attempt + 1,
                     max_attempts,
                     exc_info=True,
@@ -226,7 +226,7 @@ class GatewayIpcClient:
                 await asyncio.sleep(delay)
                 delay = min(delay * 2 if delay else base_delay, max_delay)
         logger.warning(
-            'gateway ipc: reconnect exhausted after %d attempts (session=%s)',
+            "gateway ipc: reconnect exhausted after %d attempts (session=%s)",
             max_attempts,
             session_id[:16],
         )
@@ -262,7 +262,7 @@ class GatewayIpcClient:
                 context_token=context_token,
             )
         )
-        if response is not None and response.ack_layer in {'accepted', 'enqueued', 'processed'}:
+        if response is not None and response.ack_layer in {"accepted", "enqueued", "processed"}:
             self._seen_delivery_ids.add(delivery_id)
         return response
 
@@ -289,7 +289,7 @@ class GatewayIpcClient:
         while still treating delivery as best-effort at the IM channel layer.
         """
         if self._writer is None:
-            raise RuntimeError('not connected')
+            raise RuntimeError("not connected")
         frame = GatewayFrame.outbound(
             origin=origin,
             text=text,
@@ -299,29 +299,29 @@ class GatewayIpcClient:
         )
         response = await self._send(frame)
         if response is None:
-            logger.warning('gateway ipc: OUTBOUND timed out origin=%s', origin[:24])
+            logger.warning("gateway ipc: OUTBOUND timed out origin=%s", origin[:24])
         elif response.type is FrameType.NACK:
             logger.warning(
-                'gateway ipc: OUTBOUND rejected origin=%s reason=%s',
+                "gateway ipc: OUTBOUND rejected origin=%s reason=%s",
                 origin[:24],
-                response.reason or '',
+                response.reason or "",
             )
         else:
-            logger.debug('gateway ipc: sent OUTBOUND origin=%s len=%d', origin[:24], len(text))
+            logger.debug("gateway ipc: sent OUTBOUND origin=%s len=%d", origin[:24], len(text))
         return response
 
     async def reload_channel(self, name: str) -> GatewayFrame | None:
         return await self._send(
-            GatewayFrame.event(event_type='control.reload', payload={'channel': name})
+            GatewayFrame.event(event_type="control.reload", payload={"channel": name})
         )
 
     async def unbind_origin(self, origin: str) -> GatewayFrame | None:
         return await self._send(
-            GatewayFrame.event(event_type='control.unbind', payload={'origin': origin})
+            GatewayFrame.event(event_type="control.unbind", payload={"origin": origin})
         )
 
     async def status(self) -> dict | None:
-        resp = await self._send(GatewayFrame.event(event_type='control.status'))
+        resp = await self._send(GatewayFrame.event(event_type="control.status"))
         if resp is not None and resp.payload is not None:
             return resp.payload
         return None

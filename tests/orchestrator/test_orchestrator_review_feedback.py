@@ -41,14 +41,14 @@ from extensions.orchestrator.tracker import (
 
 
 def _feedback(
-    id: str = 'fb-1',
+    id: str = "fb-1",
     *,
-    body: str = 'please fix this',
-    author_login: str | None = 'alice',
-    status: str | None = 'open',
-    source: str = 'conversation',
-    created_at: str = '2026-01-01T00:00:00Z',
-    updated_at: str = '2026-01-01T00:00:00Z',
+    body: str = "please fix this",
+    author_login: str | None = "alice",
+    status: str | None = "open",
+    source: str = "conversation",
+    created_at: str = "2026-01-01T00:00:00Z",
+    updated_at: str = "2026-01-01T00:00:00Z",
 ) -> PullRequestFeedback:
     return PullRequestFeedback(
         id=id,
@@ -67,18 +67,18 @@ def _build_registry(
     issues: list[dict[str, Any]] | None = None,
 ) -> IssueRegistry:
     """Build a registry with PR-bearing records for testing."""
-    registry = IssueRegistry(storage_path=Path(tmp_dir) / 'registry.json')
+    registry = IssueRegistry(storage_path=Path(tmp_dir) / "registry.json")
     for entry in issues or []:
         registry.register(
-            issue_id=entry['issue_id'],
-            issue_identifier=entry['issue_identifier'],
-            branch_name=entry['branch_name'],
+            issue_id=entry["issue_id"],
+            issue_identifier=entry["issue_identifier"],
+            branch_name=entry["branch_name"],
         )
         registry.mark_synced(
-            entry['issue_id'],
-            branch_name=entry['branch_name'],
-            pr_number=entry.get('pr_number', 1),
-            pr_url=entry.get('pr_url', 'https://x/y/pull/1'),
+            entry["issue_id"],
+            branch_name=entry["branch_name"],
+            pr_number=entry.get("pr_number", 1),
+            pr_url=entry.get("pr_url", "https://x/y/pull/1"),
         )
     return registry
 
@@ -105,13 +105,13 @@ class _FakeTracker:
 
     async def get_authenticated_user(self) -> str:
         self.user_calls += 1
-        return 'clawcodex-bot'
+        return "clawcodex-bot"
 
 
 def _config(**overrides: Any) -> SimpleNamespace:
     base = dict(
         enabled=True,
-        bot_login='',
+        bot_login="",
         pending_feedback_timeout_seconds=600,
         max_followup_attempts_per_pr=5,
         max_feedback_items_per_run=20,
@@ -130,16 +130,16 @@ def _config(**overrides: Any) -> SimpleNamespace:
 
 class TestIsClawcodexSystemComment(unittest.TestCase):
     def test_empty_body_returns_false(self) -> None:
-        self.assertFalse(_is_clawcodex_system_comment(''))
+        self.assertFalse(_is_clawcodex_system_comment(""))
 
     def test_none_body_returns_false(self) -> None:
         self.assertFalse(_is_clawcodex_system_comment(None))
 
     def test_normal_comment_returns_false(self) -> None:
-        self.assertFalse(_is_clawcodex_system_comment('Please fix the lint'))
+        self.assertFalse(_is_clawcodex_system_comment("Please fix the lint"))
 
     def test_reply_marker_detected(self) -> None:
-        body = 'Some prose.\n\nHandled in the latest ClawCodex follow-up commit.\n'
+        body = "Some prose.\n\nHandled in the latest ClawCodex follow-up commit.\n"
         self.assertTrue(_is_clawcodex_system_comment(body))
 
     def test_each_system_marker_detected(self) -> None:
@@ -148,12 +148,12 @@ class TestIsClawcodexSystemComment(unittest.TestCase):
                 self.assertTrue(_is_clawcodex_system_comment(marker))
 
     def test_marker_in_middle_of_body(self) -> None:
-        body = 'I checked\n\n## ClawCodex Run Summary\n\nSome details.'
+        body = "I checked\n\n## ClawCodex Run Summary\n\nSome details."
         self.assertTrue(_is_clawcodex_system_comment(body))
 
     def test_case_sensitive(self) -> None:
         # Marker is case-sensitive.
-        self.assertFalse(_is_clawcodex_system_comment('clawcodex run summary'))
+        self.assertFalse(_is_clawcodex_system_comment("clawcodex run summary"))
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +166,7 @@ class TestFilterPending(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.registry = _build_registry(self.tmp.name)
-        record = self.registry.register('i1', 'owner/repo#1', branch_name='feat/x')
+        record = self.registry.register("i1", "owner/repo#1", branch_name="feat/x")
         self.record = record
         self.service = ReviewFeedbackService(
             tracker=_FakeTracker(),
@@ -178,25 +178,25 @@ class TestFilterPending(unittest.TestCase):
         self.assertEqual(self.service._filter_pending(self.record, []), [])
 
     def test_open_feedback_kept(self) -> None:
-        result = self.service._filter_pending(self.record, [_feedback(id='fb-1')])
-        self.assertEqual([f.id for f in result], ['fb-1'])
+        result = self.service._filter_pending(self.record, [_feedback(id="fb-1")])
+        self.assertEqual([f.id for f in result], ["fb-1"])
 
     def test_resolved_feedback_dropped(self) -> None:
-        result = self.service._filter_pending(self.record, [_feedback(status='resolved')])
+        result = self.service._filter_pending(self.record, [_feedback(status="resolved")])
         self.assertEqual(result, [])
 
     def test_outdated_feedback_dropped(self) -> None:
-        result = self.service._filter_pending(self.record, [_feedback(status='outdated')])
+        result = self.service._filter_pending(self.record, [_feedback(status="outdated")])
         self.assertEqual(result, [])
 
     def test_already_processed_dropped(self) -> None:
-        self.registry.mark_feedback_processed('i1', ['fb-1'])
-        result = self.service._filter_pending(self.record, [_feedback(id='fb-1')])
+        self.registry.mark_feedback_processed("i1", ["fb-1"])
+        result = self.service._filter_pending(self.record, [_feedback(id="fb-1")])
         self.assertEqual(result, [])
 
     def test_already_pending_dropped(self) -> None:
-        self.registry.mark_feedback_pending('i1', ['fb-1'])
-        result = self.service._filter_pending(self.record, [_feedback(id='fb-1')])
+        self.registry.mark_feedback_pending("i1", ["fb-1"])
+        result = self.service._filter_pending(self.record, [_feedback(id="fb-1")])
         self.assertEqual(result, [])
 
     def test_bot_login_excluded(self) -> None:
@@ -205,13 +205,13 @@ class TestFilterPending(unittest.TestCase):
         service_with_explicit_bot = ReviewFeedbackService(
             tracker=_FakeTracker(),
             registry=self.registry,
-            config=_config(bot_login='clawcodex-bot'),
+            config=_config(bot_login="clawcodex-bot"),
         )
         service_with_explicit_bot._bot_login_explicit = True
         result = service_with_explicit_bot._filter_pending(
             self.record,
-            [_feedback(author_login='clawcodex-bot')],
-            bot_login='clawcodex-bot',
+            [_feedback(author_login="clawcodex-bot")],
+            bot_login="clawcodex-bot",
         )
         self.assertEqual(result, [])
 
@@ -219,27 +219,27 @@ class TestFilterPending(unittest.TestCase):
         service = ReviewFeedbackService(
             tracker=_FakeTracker(),
             registry=self.registry,
-            config=_config(ignore_authors=['ignored-user']),
+            config=_config(ignore_authors=["ignored-user"]),
         )
-        result = service._filter_pending(self.record, [_feedback(author_login='ignored-user')])
+        result = service._filter_pending(self.record, [_feedback(author_login="ignored-user")])
         self.assertEqual(result, [])
 
     def test_ignore_authors_case_insensitive(self) -> None:
         service = ReviewFeedbackService(
             tracker=_FakeTracker(),
             registry=self.registry,
-            config=_config(ignore_authors=['IGNORED-USER']),
+            config=_config(ignore_authors=["IGNORED-USER"]),
         )
-        result = service._filter_pending(self.record, [_feedback(author_login='ignored-user')])
+        result = service._filter_pending(self.record, [_feedback(author_login="ignored-user")])
         self.assertEqual(result, [])
 
     def test_system_comment_dropped(self) -> None:
-        body = '## ClawCodex Run Summary\nAll green'
+        body = "## ClawCodex Run Summary\nAll green"
         result = self.service._filter_pending(self.record, [_feedback(body=body)])
         self.assertEqual(result, [])
 
     def test_reply_marker_dropped(self) -> None:
-        body = 'Handled in the latest ClawCodex follow-up commit.'
+        body = "Handled in the latest ClawCodex follow-up commit."
         result = self.service._filter_pending(self.record, [_feedback(body=body)])
         self.assertEqual(result, [])
 
@@ -247,29 +247,29 @@ class TestFilterPending(unittest.TestCase):
         service_with_explicit_bot = ReviewFeedbackService(
             tracker=_FakeTracker(),
             registry=self.registry,
-            config=_config(bot_login='clawcodex-bot'),
+            config=_config(bot_login="clawcodex-bot"),
         )
         service_with_explicit_bot._bot_login_explicit = True
         result = service_with_explicit_bot._filter_pending(
             self.record,
             [
-                _feedback(id='fb-keep-1', author_login='alice'),
-                _feedback(id='fb-keep-2', author_login='bob'),
-                _feedback(id='fb-resolved', status='resolved'),
-                _feedback(id='fb-bot', author_login='clawcodex-bot'),
+                _feedback(id="fb-keep-1", author_login="alice"),
+                _feedback(id="fb-keep-2", author_login="bob"),
+                _feedback(id="fb-resolved", status="resolved"),
+                _feedback(id="fb-bot", author_login="clawcodex-bot"),
             ],
-            bot_login='clawcodex-bot',
+            bot_login="clawcodex-bot",
         )
-        self.assertEqual([f.id for f in result], ['fb-keep-1', 'fb-keep-2'])
+        self.assertEqual([f.id for f in result], ["fb-keep-1", "fb-keep-2"])
 
     def test_no_author_login_kept(self) -> None:
         # Missing author_login → no author-based exclusion.
         result = self.service._filter_pending(
             self.record,
             [_feedback(author_login=None)],
-            bot_login='clawcodex-bot',
+            bot_login="clawcodex-bot",
         )
-        self.assertEqual([f.id for f in result], ['fb-1'])
+        self.assertEqual([f.id for f in result], ["fb-1"])
 
 
 # ---------------------------------------------------------------------------
@@ -296,10 +296,10 @@ class TestCollectFollowups(unittest.TestCase):
             self.tmp.name,
             issues=[
                 {
-                    'issue_id': 'i1',
-                    'issue_identifier': 'owner/repo#1',
-                    'branch_name': 'feat/1',
-                    'pr_number': 1,
+                    "issue_id": "i1",
+                    "issue_identifier": "owner/repo#1",
+                    "branch_name": "feat/1",
+                    "pr_number": 1,
                 }
             ],
         )
@@ -342,65 +342,65 @@ class TestCollectFollowups(unittest.TestCase):
         service = ReviewFeedbackService(
             tracker=tracker,
             registry=self.registry,
-            config=_config(bot_login='explicit-bot'),
+            config=_config(bot_login="explicit-bot"),
         )
         _run(service.collect_followups(available_slots=1))
         self.assertEqual(tracker.user_calls, 0)
 
     def test_no_pending_feedback_marks_checked(self) -> None:
         # No feedback → record marked as checked, no followup.
-        tracker = _FakeTracker(feedback_by_issue={'i1': []})
+        tracker = _FakeTracker(feedback_by_issue={"i1": []})
         service = ReviewFeedbackService(
             tracker=tracker,
             registry=self.registry,
-            config=_config(bot_login='clawcodex-bot'),
+            config=_config(bot_login="clawcodex-bot"),
         )
         result = _run(service.collect_followups(available_slots=1))
         self.assertEqual(result, [])
-        record = self.registry.get('i1')
+        record = self.registry.get("i1")
         self.assertIsNotNone(record.last_feedback_checked_at)
 
     def test_pending_feedback_returns_followup(self) -> None:
         tracker = _FakeTracker(
-            feedback_by_issue={'i1': [_feedback(id='fb-1', author_login='alice')]}
+            feedback_by_issue={"i1": [_feedback(id="fb-1", author_login="alice")]}
         )
         service = ReviewFeedbackService(
             tracker=tracker,
             registry=self.registry,
-            config=_config(bot_login='clawcodex-bot'),
+            config=_config(bot_login="clawcodex-bot"),
         )
         result = _run(service.collect_followups(available_slots=1))
         self.assertEqual(len(result), 1)
         followup = result[0]
-        self.assertEqual(followup.record.issue_id, 'i1')
-        self.assertEqual(followup.feedback[0].id, 'fb-1')
+        self.assertEqual(followup.record.issue_id, "i1")
+        self.assertEqual(followup.feedback[0].id, "fb-1")
         # Pending recorded.
-        record = self.registry.get('i1')
-        self.assertIn('fb-1', record.pending_feedback_ids)
+        record = self.registry.get("i1")
+        self.assertIn("fb-1", record.pending_feedback_ids)
 
     def test_followup_attempt_cap_enforced(self) -> None:
         # Pre-load with max attempts.
         for _ in range(5):
-            self.registry.increment_followup_attempt('i1')
+            self.registry.increment_followup_attempt("i1")
         tracker = _FakeTracker(
-            feedback_by_issue={'i1': [_feedback(id='fb-1', author_login='alice')]}
+            feedback_by_issue={"i1": [_feedback(id="fb-1", author_login="alice")]}
         )
         service = ReviewFeedbackService(
             tracker=tracker,
             registry=self.registry,
-            config=_config(bot_login='clawcodex-bot', max_followup_attempts_per_pr=5),
+            config=_config(bot_login="clawcodex-bot", max_followup_attempts_per_pr=5),
         )
         result = _run(service.collect_followups(available_slots=1))
         self.assertEqual(result, [])
 
     def test_max_feedback_items_per_run_truncates(self) -> None:
         # 5 feedback, max 2 per run.
-        feedback = [_feedback(id=f'fb-{i}', author_login='alice') for i in range(5)]
-        tracker = _FakeTracker(feedback_by_issue={'i1': feedback})
+        feedback = [_feedback(id=f"fb-{i}", author_login="alice") for i in range(5)]
+        tracker = _FakeTracker(feedback_by_issue={"i1": feedback})
         service = ReviewFeedbackService(
             tracker=tracker,
             registry=self.registry,
-            config=_config(bot_login='clawcodex-bot', max_feedback_items_per_run=2),
+            config=_config(bot_login="clawcodex-bot", max_feedback_items_per_run=2),
         )
         result = _run(service.collect_followups(available_slots=1))
         self.assertEqual(len(result), 1)
@@ -408,31 +408,31 @@ class TestCollectFollowups(unittest.TestCase):
 
     def test_stale_pending_cleared(self) -> None:
         # Pre-mark feedback as pending long ago.
-        self.registry.mark_feedback_pending('i1', ['stale-fb'])
-        record = self.registry.get('i1')
+        self.registry.mark_feedback_pending("i1", ["stale-fb"])
+        record = self.registry.get("i1")
         # Force stale.
         record.pending_feedback_since = 0.0  # ancient
         self.registry._save()
 
         tracker = _FakeTracker(
-            feedback_by_issue={'i1': [_feedback(id='new-fb', author_login='alice')]}
+            feedback_by_issue={"i1": [_feedback(id="new-fb", author_login="alice")]}
         )
         service = ReviewFeedbackService(
             tracker=tracker,
             registry=self.registry,
-            config=_config(bot_login='clawcodex-bot', pending_feedback_timeout_seconds=600),
+            config=_config(bot_login="clawcodex-bot", pending_feedback_timeout_seconds=600),
         )
         result = _run(service.collect_followups(available_slots=1))
         self.assertEqual(len(result), 1)
         # The stale pending was cleared.
-        record = self.registry.get('i1')
-        self.assertNotIn('stale-fb', record.pending_feedback_ids)
+        record = self.registry.get("i1")
+        self.assertNotIn("stale-fb", record.pending_feedback_ids)
         # The new feedback is pending.
-        self.assertIn('new-fb', record.pending_feedback_ids)
+        self.assertIn("new-fb", record.pending_feedback_ids)
 
     def test_bot_login_resolved_via_tracker_once(self) -> None:
         tracker = _FakeTracker(
-            feedback_by_issue={'i1': [_feedback(id='fb-1', author_login='alice')]}
+            feedback_by_issue={"i1": [_feedback(id="fb-1", author_login="alice")]}
         )
         service = ReviewFeedbackService(
             tracker=tracker,
@@ -448,28 +448,28 @@ class TestCollectFollowups(unittest.TestCase):
     def test_cursor_set_to_updated_at(self) -> None:
         tracker = _FakeTracker(
             feedback_by_issue={
-                'i1': [
-                    _feedback(id='fb-1', author_login='alice', updated_at='2026-05-01T00:00:00Z')
+                "i1": [
+                    _feedback(id="fb-1", author_login="alice", updated_at="2026-05-01T00:00:00Z")
                 ]
             }
         )
         service = ReviewFeedbackService(
             tracker=tracker,
             registry=self.registry,
-            config=_config(bot_login='clawcodex-bot'),
+            config=_config(bot_login="clawcodex-bot"),
         )
         _run(service.collect_followups(available_slots=1))
-        record = self.registry.get('i1')
-        self.assertEqual(record.feedback_cursor, '2026-05-01T00:00:00Z')
+        record = self.registry.get("i1")
+        self.assertEqual(record.feedback_cursor, "2026-05-01T00:00:00Z")
 
     def test_cursor_falls_back_to_created_at(self) -> None:
         tracker = _FakeTracker(
             feedback_by_issue={
-                'i1': [
+                "i1": [
                     _feedback(
-                        id='fb-1',
-                        author_login='alice',
-                        created_at='2026-04-01T00:00:00Z',
+                        id="fb-1",
+                        author_login="alice",
+                        created_at="2026-04-01T00:00:00Z",
                         updated_at=None,
                     )
                 ]
@@ -478,45 +478,45 @@ class TestCollectFollowups(unittest.TestCase):
         service = ReviewFeedbackService(
             tracker=tracker,
             registry=self.registry,
-            config=_config(bot_login='clawcodex-bot'),
+            config=_config(bot_login="clawcodex-bot"),
         )
         _run(service.collect_followups(available_slots=1))
-        record = self.registry.get('i1')
-        self.assertEqual(record.feedback_cursor, '2026-04-01T00:00:00Z')
+        record = self.registry.get("i1")
+        self.assertEqual(record.feedback_cursor, "2026-04-01T00:00:00Z")
 
     def test_cursor_falls_back_to_id(self) -> None:
         tracker = _FakeTracker(
             feedback_by_issue={
-                'i1': [
-                    _feedback(id='fb-99', author_login='alice', created_at=None, updated_at=None)
+                "i1": [
+                    _feedback(id="fb-99", author_login="alice", created_at=None, updated_at=None)
                 ]
             }
         )
         service = ReviewFeedbackService(
             tracker=tracker,
             registry=self.registry,
-            config=_config(bot_login='clawcodex-bot'),
+            config=_config(bot_login="clawcodex-bot"),
         )
         _run(service.collect_followups(available_slots=1))
-        record = self.registry.get('i1')
-        self.assertEqual(record.feedback_cursor, 'fb-99')
+        record = self.registry.get("i1")
+        self.assertEqual(record.feedback_cursor, "fb-99")
 
     def test_ignores_issues_without_pr(self) -> None:
         # Add an extra issue with no PR — should be skipped.
-        self.registry.register('i-no-pr', 'owner/repo#np', branch_name='feat/np')
-        self.registry.mark_running('i-no-pr')
+        self.registry.register("i-no-pr", "owner/repo#np", branch_name="feat/np")
+        self.registry.mark_running("i-no-pr")
         # The mark_running reset run_id, but the record still has no PR.
-        tracker = _FakeTracker(feedback_by_issue={'i1': [_feedback()]})
+        tracker = _FakeTracker(feedback_by_issue={"i1": [_feedback()]})
         service = ReviewFeedbackService(
             tracker=tracker,
             registry=self.registry,
-            config=_config(bot_login='clawcodex-bot'),
+            config=_config(bot_login="clawcodex-bot"),
         )
         result = _run(service.collect_followups(available_slots=5))
         # Only i1 should be processed.
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].record.issue_id, 'i1')
+        self.assertEqual(result[0].record.issue_id, "i1")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

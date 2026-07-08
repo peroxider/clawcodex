@@ -27,11 +27,13 @@ def _try_import_backend() -> Optional[str]:
     """返回可用后端名：``"pyaudio"`` / ``"sounddevice"`` / ``None``."""
     try:
         import pyaudio  # noqa: F401
+
         return "pyaudio"
     except ImportError:
         pass
     try:
         import sounddevice  # noqa: F401
+
         return "sounddevice"
     except ImportError:
         return None
@@ -58,12 +60,14 @@ class AudioCaptureModule:
         if self._backend == "pyaudio":
             try:
                 import pyaudio
+
                 return getattr(pyaudio, "__version__", "pyaudio-unknown")
             except ImportError:
                 return "unavailable"
         if self._backend == "sounddevice":
             try:
                 import sounddevice
+
                 return getattr(sounddevice, "__version__", "sounddevice-unknown")
             except ImportError:
                 return "unavailable"
@@ -89,16 +93,13 @@ class AudioCaptureModule:
         """
         if self._backend is None:
             from clawcodex_ext.native import NativeModuleError
-            raise NativeModuleError(
-                "audio backend unavailable (install pyaudio or sounddevice)"
-            )
+
+            raise NativeModuleError("audio backend unavailable (install pyaudio or sounddevice)")
         if self._backend == "pyaudio":
             return await self._record_pyaudio(duration_sec, sample_rate, channels)
         return await self._record_sounddevice(duration_sec, sample_rate, channels)
 
-    async def _record_pyaudio(
-        self, duration_sec: float, sample_rate: int, channels: int
-    ) -> bytes:
+    async def _record_pyaudio(self, duration_sec: float, sample_rate: int, channels: int) -> bytes:
         import pyaudio
 
         p = pyaudio.PyAudio()
@@ -147,9 +148,7 @@ class AudioCaptureModule:
             sampwidth=2,
         )
 
-    async def stream(
-        self, sample_rate: int = 16000, channels: int = 1
-    ) -> AsyncIterator[bytes]:
+    async def stream(self, sample_rate: int = 16000, channels: int = 1) -> AsyncIterator[bytes]:
         """实时音频流 —— 持续 yield PCM16 字节块.
 
         调用方负责在不需要时 ``break`` 退出 ``async for``，本生成器会在
@@ -157,9 +156,8 @@ class AudioCaptureModule:
         """
         if self._backend is None:
             from clawcodex_ext.native import NativeModuleError
-            raise NativeModuleError(
-                "audio backend unavailable (install pyaudio or sounddevice)"
-            )
+
+            raise NativeModuleError("audio backend unavailable (install pyaudio or sounddevice)")
         if self._backend == "pyaudio":
             async for chunk in self._stream_pyaudio(sample_rate, channels):
                 yield chunk
@@ -167,9 +165,7 @@ class AudioCaptureModule:
             async for chunk in self._stream_sounddevice(sample_rate, channels):
                 yield chunk
 
-    async def _stream_pyaudio(
-        self, sample_rate: int, channels: int
-    ) -> AsyncIterator[bytes]:
+    async def _stream_pyaudio(self, sample_rate: int, channels: int) -> AsyncIterator[bytes]:
         import pyaudio
 
         p = pyaudio.PyAudio()
@@ -188,9 +184,7 @@ class AudioCaptureModule:
             stream.close()
             p.terminate()
 
-    async def _stream_sounddevice(
-        self, sample_rate: int, channels: int
-    ) -> AsyncIterator[bytes]:
+    async def _stream_sounddevice(self, sample_rate: int, channels: int) -> AsyncIterator[bytes]:
         import sounddevice as sd
 
         blocksize = 1024
@@ -210,9 +204,7 @@ class AudioCaptureModule:
     # -- WAV 编码工具 -----------------------------------------------------
 
     @staticmethod
-    def _encode_wav(
-        pcm: bytes, sample_rate: int, channels: int, sampwidth: int
-    ) -> bytes:
+    def _encode_wav(pcm: bytes, sample_rate: int, channels: int, sampwidth: int) -> bytes:
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
             wf.setnchannels(channels)
@@ -253,13 +245,9 @@ class AudioFallback:
         """返回指定时长的静音 WAV 字节."""
         n_samples = int(duration_sec * sample_rate)
         silence = b"\x00\x00" * n_samples * channels
-        return AudioCaptureModule._encode_wav(
-            silence, sample_rate, channels, sampwidth=2
-        )
+        return AudioCaptureModule._encode_wav(silence, sample_rate, channels, sampwidth=2)
 
-    async def stream(
-        self, sample_rate: int = 16000, channels: int = 1
-    ) -> AsyncIterator[bytes]:
+    async def stream(self, sample_rate: int = 16000, channels: int = 1) -> AsyncIterator[bytes]:
         """无限 yield 静音块（调用方应自行 ``break``）."""
         silence_block = b"\x00\x00" * 1024 * channels
         while True:

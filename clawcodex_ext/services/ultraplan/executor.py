@@ -29,15 +29,11 @@ from .models import Plan, PlanStatus, Step, StepStatus, SubPlan
 # step is in a terminal state (``COMPLETED``, ``FAILED``, ``SKIPPED``)
 # it cannot leave.
 _ALLOWED_STEP_TRANSITIONS: dict[StepStatus, frozenset[StepStatus]] = {
-    StepStatus.PENDING: frozenset(
-        {StepStatus.IN_PROGRESS, StepStatus.SKIPPED, StepStatus.BLOCKED}
-    ),
+    StepStatus.PENDING: frozenset({StepStatus.IN_PROGRESS, StepStatus.SKIPPED, StepStatus.BLOCKED}),
     StepStatus.IN_PROGRESS: frozenset(
         {StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.BLOCKED, StepStatus.SKIPPED}
     ),
-    StepStatus.BLOCKED: frozenset(
-        {StepStatus.PENDING, StepStatus.SKIPPED, StepStatus.IN_PROGRESS}
-    ),
+    StepStatus.BLOCKED: frozenset({StepStatus.PENDING, StepStatus.SKIPPED, StepStatus.IN_PROGRESS}),
     StepStatus.COMPLETED: frozenset(),
     StepStatus.FAILED: frozenset(),
     StepStatus.SKIPPED: frozenset(),
@@ -137,9 +133,7 @@ class PlanExecutor:
     def get_sub_plan(self, sub_plan_id: str) -> SubPlan:
         sp = self._plan.find_sub_plan(sub_plan_id)
         if sp is None:
-            raise SubPlanNotFoundError(
-                f"no sub_plan {sub_plan_id!r} in plan {self._plan.id!r}"
-            )
+            raise SubPlanNotFoundError(f"no sub_plan {sub_plan_id!r} in plan {self._plan.id!r}")
         return sp
 
     # ------------------------------------------------------------------
@@ -246,15 +240,11 @@ class PlanExecutor:
         note: str | None = None,
     ) -> Step:
         sp, step = self.get_step(step_id)
-        return self._transition_step(
-            step, sp, StepStatus.COMPLETED, result=result, note=note
-        )
+        return self._transition_step(step, sp, StepStatus.COMPLETED, result=result, note=note)
 
     def mark_failed(self, step_id: str, error: str, *, note: str | None = None) -> Step:
         sp, step = self.get_step(step_id)
-        return self._transition_step(
-            step, sp, StepStatus.FAILED, error=error, note=note
-        )
+        return self._transition_step(step, sp, StepStatus.FAILED, error=error, note=note)
 
     def mark_skipped(self, step_id: str, *, note: str | None = None) -> Step:
         sp, step = self.get_step(step_id)

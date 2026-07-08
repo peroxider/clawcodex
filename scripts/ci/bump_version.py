@@ -52,17 +52,13 @@ PATCHERS: list[dict] = [
     # install.sh — two readonly vars on consecutive lines
     {
         "path": "install.sh",
-        "pattern": re.compile(
-            r'(readonly INSTALLER_VERSION=")\d+\.\d+\.\d+(")'
-        ),
-        "replacement": r'\g<1>{ver}\g<2>',
+        "pattern": re.compile(r'(readonly INSTALLER_VERSION=")\d+\.\d+\.\d+(")'),
+        "replacement": r"\g<1>{ver}\g<2>",
     },
     {
         "path": "install.sh",
-        "pattern": re.compile(
-            r'(readonly CLAWCODEX_VERSION=")\d+\.\d+\.\d+(")'
-        ),
-        "replacement": r'\g<1>{ver}\g<2>',
+        "pattern": re.compile(r'(readonly CLAWCODEX_VERSION=")\d+\.\d+\.\d+(")'),
+        "replacement": r"\g<1>{ver}\g<2>",
     },
     # install.ps1 — two $script: vars (PowerShell counterpart of install.sh).
     # The patterns match `$script:<Name>  = '<ver>'` with arbitrary whitespace
@@ -71,24 +67,18 @@ PATCHERS: list[dict] = [
     # step will surface the drift loudly.
     {
         "path": "install.ps1",
-        "pattern": re.compile(
-            r"(\$script:InstallerVersion\s*=\s*')\d+\.\d+\.\d+(')"
-        ),
+        "pattern": re.compile(r"(\$script:InstallerVersion\s*=\s*')\d+\.\d+\.\d+(')"),
         "replacement": r"\g<1>{ver}\g<2>",
     },
     {
         "path": "install.ps1",
-        "pattern": re.compile(
-            r"(\$script:ClawCodexVersion\s*=\s*')\d+\.\d+\.\d+(')"
-        ),
+        "pattern": re.compile(r"(\$script:ClawCodexVersion\s*=\s*')\d+\.\d+\.\d+(')"),
         "replacement": r"\g<1>{ver}\g<2>",
     },
     # uv.lock — clawcodex-dev-mind entry (must match exactly one)
     {
         "path": "uv.lock",
-        "pattern": re.compile(
-            r'(name = "clawcodex-dev-mind"\n)version = "\d+\.\d+\.\d+"'
-        ),
+        "pattern": re.compile(r'(name = "clawcodex-dev-mind"\n)version = "\d+\.\d+\.\d+"'),
         "replacement": r'\g<1>version = "{ver}"',
     },
     # test fixtures
@@ -100,7 +90,7 @@ PATCHERS: list[dict] = [
     {
         "path": "tests/telemetry/telemetry_issue_push_real.py",
         "pattern": re.compile(r'("app_version": ")\d+\.\d+\.\d+'),
-        "replacement": r'\g<1>{ver}',
+        "replacement": r"\g<1>{ver}",
     },
     {
         "path": "tests/telemetry/test_storage.py",

@@ -53,8 +53,8 @@ InboundHandler = Callable[[Any], Awaitable[None] | None]
 ChannelFactory = Callable[[FeishuAppSettings], Any]
 RetrySleep = Callable[[float], Awaitable[None]]
 
-_MARKDOWN_HINT_RE = re.compile(r'(```)|(^#{1,6}\s)|(\*\*.+\*\*)|(^[-*]\s)', re.MULTILINE)
-_FEISHU_SDK_WS_TASK_NAMES = frozenset({'_ping_loop', '_receive_message_loop', '_start_clear_cron'})
+_MARKDOWN_HINT_RE = re.compile(r"(```)|(^#{1,6}\s)|(\*\*.+\*\*)|(^[-*]\s)", re.MULTILINE)
+_FEISHU_SDK_WS_TASK_NAMES = frozenset({"_ping_loop", "_receive_message_loop", "_start_clear_cron"})
 
 _FEISHU_CAPABILITIES = ChannelCapabilitySet.of(
     ChannelCapability.OUTBOUND_TEXT,
@@ -67,7 +67,7 @@ _FEISHU_CAPABILITIES = ChannelCapabilitySet.of(
             supports_markdown=True,
             max_text_length=4000,
             requires_login=True,
-            extra={'approval_cards': True},
+            extra={"approval_cards": True},
         )
     },
 )
@@ -96,7 +96,7 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         self._main_loop: asyncio.AbstractEventLoop | None = None
         self._running = False
         self._connect_task: asyncio.Task[None] | None = None
-        self._account_status = 'websocket:disconnected'
+        self._account_status = "websocket:disconnected"
         self._last_error: str | None = None
         self._last_sender: str | None = None
         self._last_inbound_at: float | None = None
@@ -124,31 +124,31 @@ class FeishuAppChannelAdapter(ChannelAdapter):
 
     def validate_config(self) -> ValidationResult:
         errors = self._settings.validation_errors()
-        if self._settings.connection_mode != 'websocket':
-            errors.append('FeishuAppChannelAdapter requires connection_mode=websocket')
+        if self._settings.connection_mode != "websocket":
+            errors.append("FeishuAppChannelAdapter requires connection_mode=websocket")
         if not feishu_dependencies_available() and self._channel_factory is build_feishu_channel:
-            errors.append('missing lark_oapi; install with `uv sync --locked --extra feishu`')
+            errors.append("missing lark_oapi; install with `uv sync --locked --extra feishu`")
         if errors:
             return ValidationResult.fail(errors)
         return ValidationResult.ok_result()
 
     async def health_check(self) -> ChannelHealth:
-        healthy = self._running and self._account_status == 'websocket:connected'
+        healthy = self._running and self._account_status == "websocket:connected"
         return ChannelHealth(
             healthy=healthy,
             channel_id=self.channel_id,
-            circuit_state='closed',
+            circuit_state="closed",
             last_error=self._last_error,
             last_inbound_at=self._last_inbound_at,
             last_outbound_at=self._last_outbound_at,
             account_status=self._account_status,
             extra={
-                'connection_mode': 'websocket',
-                'domain': self._settings.domain,
-                'bot_open_id': self._settings.bot_open_id,
-                'approval_cards': 'supported'
+                "connection_mode": "websocket",
+                "domain": self._settings.domain,
+                "bot_open_id": self._settings.bot_open_id,
+                "approval_cards": "supported"
                 if self._settings.approval_cards_enabled
-                else 'disabled',
+                else "disabled",
             },
         )
 
@@ -158,7 +158,7 @@ class FeishuAppChannelAdapter(ChannelAdapter):
     def last_known_sender(self) -> str | None:
         if self._last_sender:
             return self._last_sender
-        get_last_sender = getattr(self._sender_store, 'get_feishu_last_sender', None)
+        get_last_sender = getattr(self._sender_store, "get_feishu_last_sender", None)
         if callable(get_last_sender):
             return get_last_sender(self.channel_id)
         return None
@@ -167,25 +167,25 @@ class FeishuAppChannelAdapter(ChannelAdapter):
 
     async def start(self) -> None:
         if self._running:
-            logger.debug('feishu adapter already running')
+            logger.debug("feishu adapter already running")
             return
         errors = self._settings.validation_errors()
         if errors:
-            self._last_error = '; '.join(errors)
-            self._account_status = 'credentials_missing'
+            self._last_error = "; ".join(errors)
+            self._account_status = "credentials_missing"
             return
         self._running = True
         self._main_loop = asyncio.get_running_loop()
-        self._account_status = 'websocket:connecting'
+        self._account_status = "websocket:connecting"
         try:
             await self._connect_once(ready_timeout=self._settings.startup_connect_timeout_seconds)
         except FeishuDependencyMissingError as exc:
             self._last_error = str(exc)
-            self._account_status = 'dependency_missing'
+            self._account_status = "dependency_missing"
             self._running = False
         except Exception as exc:  # noqa: BLE001
             self._last_error = str(exc)
-            self._account_status = 'websocket:retrying'
+            self._account_status = "websocket:retrying"
             self._connect_task = asyncio.create_task(self._connect_loop())
 
     async def _connect_loop(self) -> None:
@@ -204,12 +204,12 @@ class FeishuAppChannelAdapter(ChannelAdapter):
                 return
             except FeishuDependencyMissingError as exc:
                 self._last_error = str(exc)
-                self._account_status = 'dependency_missing'
+                self._account_status = "dependency_missing"
                 return
             except Exception as exc:  # noqa: BLE001
                 attempt += 1
                 self._last_error = str(exc)
-                self._account_status = 'websocket:retrying'
+                self._account_status = "websocket:retrying"
                 delay = min(30.0 * (2 ** (attempt - 1)), max_delay)
 
     async def _connect_once(self, *, ready_timeout: float | None) -> None:
@@ -220,7 +220,7 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         self._register_handlers()
         await channel.connect_until_ready(timeout=ready_timeout)
         self._refresh_bot_identity()
-        self._account_status = 'websocket:connected'
+        self._account_status = "websocket:connected"
         self._last_error = None
 
     def _register_handlers(self) -> None:
@@ -238,17 +238,17 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         channel = self._channel
         if channel is None:
             return
-        identity = getattr(channel, 'bot_identity', None)
-        open_id = getattr(identity, 'open_id', None) if identity is not None else None
+        identity = getattr(channel, "bot_identity", None)
+        open_id = getattr(identity, "open_id", None) if identity is not None else None
         if open_id:
-            name = getattr(identity, 'name', None) or self._settings.bot_name
+            name = getattr(identity, "name", None) or self._settings.bot_name
             self._settings = replace(self._settings, bot_open_id=str(open_id), bot_name=name)
 
     def _on_reconnecting(self, *args: Any) -> None:
-        self._account_status = 'websocket:reconnecting'
+        self._account_status = "websocket:reconnecting"
 
     def _on_reconnected(self, *args: Any) -> None:
-        self._account_status = 'websocket:connected'
+        self._account_status = "websocket:connected"
         self._last_error = None
 
     async def stop(self) -> None:
@@ -268,7 +268,7 @@ class FeishuAppChannelAdapter(ChannelAdapter):
                 await channel.disconnect()
             await _drain_feishu_sdk_ws_loop(ws_loop)
             self._channel = None
-        self._account_status = 'websocket:disconnected'
+        self._account_status = "websocket:disconnected"
 
     # -- inbound ---------------------------------------------------------
 
@@ -292,7 +292,7 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         channel = self._channel
         if channel is None:
             return
-        message_id = getattr(payload, 'message_id', None) or ''
+        message_id = getattr(payload, "message_id", None) or ""
         if not message_id:
             return
         card = build_resolved_permission_card(
@@ -302,7 +302,7 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         try:
             await channel.update_card(message_id, card)
         except Exception as exc:  # noqa: BLE001
-            logger.warning('feishu update_card failed: %s', exc)
+            logger.warning("feishu update_card failed: %s", exc)
 
     async def _emit_inbound(self, message: Any) -> None:
         if self._on_inbound is None:
@@ -320,13 +320,13 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         try:
             future.result(timeout=5)
         except Exception as exc:  # noqa: BLE001
-            logger.warning('feishu inbound delivery to gateway failed: %s', exc)
+            logger.warning("feishu inbound delivery to gateway failed: %s", exc)
 
     def _remember_sender(self, sender: str | None) -> None:
         if not sender:
             return
         self._last_sender = sender
-        set_last_sender = getattr(self._sender_store, 'set_feishu_last_sender', None)
+        set_last_sender = getattr(self._sender_store, "set_feishu_last_sender", None)
         if callable(set_last_sender):
             set_last_sender(self.channel_id, sender)
 
@@ -343,7 +343,7 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         if not chat_id:
             return ChannelSendResult.nonretryable_error(
                 self.channel_id,
-                message='target or context_token chat_id is required for feishu send',
+                message="target or context_token chat_id is required for feishu send",
                 category=ErrorCategory.CLIENT_ERROR,
             )
         if _is_permission_approval(message) and self._settings.approval_cards_enabled:
@@ -352,13 +352,13 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         result = await self._send_with_retry(chat_id, payload, raw_extra=None)
         if (
             not result.ok
-            and payload.get('markdown') is not None
+            and payload.get("markdown") is not None
             and result.error_category is ErrorCategory.CLIENT_ERROR
         ):
             result = await self._send_with_retry(
                 chat_id,
-                {'text': message.text},
-                raw_extra={'fallback': 'post_to_text'},
+                {"text": message.text},
+                raw_extra={"fallback": "post_to_text"},
             )
         return result
 
@@ -368,28 +368,28 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         *,
         chat_id: str,
     ) -> ChannelSendResult:
-        permission = dict((message.metadata or {}).get('permission') or {})
+        permission = dict((message.metadata or {}).get("permission") or {})
         options = _permission_options(permission)
         state = self.approval_manager.create_pending(
             origin=_origin_from_message(message, self._settings),
             chat_id=chat_id,
             allowed_user_open_id=self._settings.allowed_user_open_id,
-            choices={str(option.get('value')) for option in options},
+            choices={str(option.get("value")) for option in options},
             ttl_seconds=int(
-                permission.get('expires_in_seconds') or self._settings.decision_ttl_seconds
+                permission.get("expires_in_seconds") or self._settings.decision_ttl_seconds
             ),
         )
         card_body = build_permission_card(
-            message=str(permission.get('message') or message.text),
-            suggestion=permission.get('suggestion'),
+            message=str(permission.get("message") or message.text),
+            suggestion=permission.get("suggestion"),
             options=options,
             approval_id=state.approval_id,
             nonce=state.nonce,
-        )['content']
+        )["content"]
         return await self._send_with_retry(
             chat_id,
-            {'card': card_body},
-            raw_extra={'approval_id': state.approval_id},
+            {"card": card_body},
+            raw_extra={"approval_id": state.approval_id},
         )
 
     async def _send_with_retry(
@@ -402,7 +402,7 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         if self._channel is None:
             return ChannelSendResult.nonretryable_error(
                 self.channel_id,
-                message='feishu channel is not connected',
+                message="feishu channel is not connected",
                 category=ErrorCategory.AUTH,
             )
         attempts = max(1, self._settings.sdk_send_attempts)
@@ -412,9 +412,9 @@ class FeishuAppChannelAdapter(ChannelAdapter):
             try:
                 result = await asyncio.wait_for(channel.send(chat_id, payload), timeout=timeout)
             except asyncio.TimeoutError:
-                self._last_error = f'feishu send timed out after {timeout:.0f}s'
+                self._last_error = f"feishu send timed out after {timeout:.0f}s"
                 logger.warning(
-                    'feishu send timed out: chat_id=%s attempt=%d/%d timeout=%.0fs',
+                    "feishu send timed out: chat_id=%s attempt=%d/%d timeout=%.0fs",
                     chat_id[:16],
                     attempt,
                     attempts,
@@ -425,7 +425,7 @@ class FeishuAppChannelAdapter(ChannelAdapter):
                     continue
                 return ChannelSendResult.retryable_error(
                     self.channel_id,
-                    message=f'feishu send timed out after {timeout:.0f}s',
+                    message=f"feishu send timed out after {timeout:.0f}s",
                     category=ErrorCategory.TIMEOUT,
                     attempts=attempt,
                     raw=raw_extra,
@@ -452,16 +452,16 @@ class FeishuAppChannelAdapter(ChannelAdapter):
                     attempts=attempt,
                     raw_extra=raw_extra,
                 )
-            if getattr(result, 'success', False):
+            if getattr(result, "success", False):
                 self._last_outbound_at = self._clock()
                 self._last_error = None
                 return ChannelSendResult.success(
                     self.channel_id,
-                    provider_receipt=str(getattr(result, 'message_id', None) or ''),
+                    provider_receipt=str(getattr(result, "message_id", None) or ""),
                     attempts=attempt,
-                    raw={**(raw_extra or {}), 'response': _result_raw(result)},
+                    raw={**(raw_extra or {}), "response": _result_raw(result)},
                 )
-            error = getattr(result, 'error', None)
+            error = getattr(result, "error", None)
             category, retryable = _classify_send_error(error)
             self._last_error = _send_error_message(error)
             if retryable and attempt < attempts:
@@ -476,7 +476,7 @@ class FeishuAppChannelAdapter(ChannelAdapter):
             )
         return ChannelSendResult.nonretryable_error(
             self.channel_id,
-            message='feishu send failed',
+            message="feishu send failed",
             category=ErrorCategory.UNKNOWN,
             attempts=attempts,
             raw=raw_extra,
@@ -490,7 +490,7 @@ async def _await_handler(handler: InboundHandler, message: Any) -> None:
 
 
 def _feishu_sdk_ws_client(channel: Any) -> Any | None:
-    return getattr(channel, '_ws_client', None)
+    return getattr(channel, "_ws_client", None)
 
 
 def _feishu_sdk_ws_loop(ws_client: Any | None) -> asyncio.AbstractEventLoop | None:
@@ -502,7 +502,7 @@ def _feishu_sdk_ws_loop(ws_client: Any | None) -> asyncio.AbstractEventLoop | No
     with contextlib.suppress(Exception):  # noqa: BLE001
         from lark_oapi.ws import client as ws_client_module  # noqa: PLC0415
 
-        module_loop = getattr(ws_client_module, 'loop', None)
+        module_loop = getattr(ws_client_module, "loop", None)
         if isinstance(module_loop, asyncio.AbstractEventLoop):
             return module_loop
     return None
@@ -516,8 +516,8 @@ def _feishu_sdk_cache_loop(ws_client: Any | None) -> asyncio.AbstractEventLoop |
 
 
 def _feishu_sdk_cache_cron(ws_client: Any | None) -> asyncio.Task | None:
-    cache = getattr(ws_client, '_cache', None)
-    cron = getattr(cache, '_cron', None)
+    cache = getattr(ws_client, "_cache", None)
+    cron = getattr(cache, "_cron", None)
     if isinstance(cron, asyncio.Task):
         return cron
     return None
@@ -527,7 +527,7 @@ def _prepare_feishu_sdk_ws_shutdown(ws_client: Any | None) -> None:
     if ws_client is None:
         return
     with contextlib.suppress(Exception):  # noqa: BLE001
-        setattr(ws_client, '_auto_reconnect', False)
+        setattr(ws_client, "_auto_reconnect", False)
     cron = _feishu_sdk_cache_cron(ws_client)
     if cron is not None:
         _cancel_task_on_own_loop(cron)
@@ -539,7 +539,7 @@ async def _cancel_feishu_sdk_ws_tasks(loop: asyncio.AbstractEventLoop | None) ->
 
 def _is_feishu_sdk_ws_task(task: asyncio.Task) -> bool:
     coro = task.get_coro()
-    name = getattr(coro, '__name__', '')
+    name = getattr(coro, "__name__", "")
     return name in _FEISHU_SDK_WS_TASK_NAMES
 
 
@@ -631,40 +631,40 @@ def _consume_task_exception(task: asyncio.Task) -> None:
 
 
 def _build_outbound_payload(message: ChannelMessage) -> dict[str, Any]:
-    text = message.text or ''
+    text = message.text or ""
     if message.markdown and _MARKDOWN_HINT_RE.search(text):
-        return {'markdown': text}
-    return {'text': text}
+        return {"markdown": text}
+    return {"text": text}
 
 
 def _classify_send_error(error: Any) -> tuple[ErrorCategory, bool]:
     """Map an SDK ``SendError`` to (category, retryable)."""
     errors = load_error_helpers()
-    code = getattr(error, 'code', None)
+    code = getattr(error, "code", None)
     retryable = bool(errors.is_retryable(code)) if code is not None else False
-    code_value = getattr(code, 'value', str(code or ''))
-    if code_value == 'rate_limited':
+    code_value = getattr(code, "value", str(code or ""))
+    if code_value == "rate_limited":
         return ErrorCategory.RATE_LIMIT, True
-    if code_value == 'format_error':
+    if code_value == "format_error":
         return ErrorCategory.CLIENT_ERROR, False
-    if code_value == 'permission_denied':
+    if code_value == "permission_denied":
         return ErrorCategory.AUTH, retryable
-    if code_value == 'target_revoked':
+    if code_value == "target_revoked":
         return ErrorCategory.CLIENT_ERROR, False
-    if code_value == 'send_timeout':
+    if code_value == "send_timeout":
         return ErrorCategory.TIMEOUT, True
     return ErrorCategory.UNKNOWN, retryable
 
 
 def _send_error_message(error: Any) -> str:
     if error is None:
-        return 'feishu send failed'
-    hint = getattr(error, 'hint', None) or getattr(error, 'code', None)
-    return str(hint or 'feishu send failed')
+        return "feishu send failed"
+    hint = getattr(error, "hint", None) or getattr(error, "code", None)
+    return str(hint or "feishu send failed")
 
 
 def _result_raw(result: Any) -> dict[str, Any]:
-    raw = getattr(result, 'raw', None)
+    raw = getattr(result, "raw", None)
     if isinstance(raw, dict):
         return raw
     return {}
@@ -696,15 +696,15 @@ def _error_result_for(
 
 
 def _is_permission_approval(message: ChannelMessage) -> bool:
-    return (message.metadata or {}).get('intent') == 'permission_approval'
+    return (message.metadata or {}).get("intent") == "permission_approval"
 
 
 def _origin_from_message(message: ChannelMessage, settings: FeishuAppSettings) -> str:
     metadata = message.metadata or {}
-    origin = metadata.get('origin')
+    origin = metadata.get("origin")
     if isinstance(origin, str) and origin:
         return origin
-    return f'feishu:dm:{settings.app_id}:{settings.allowed_user_open_id}'
+    return f"feishu:dm:{settings.app_id}:{settings.allowed_user_open_id}"
 
 
 def _resolve_send_chat_id(*, target: str | None, context_token: str | None) -> str | None:
@@ -719,25 +719,25 @@ def _resolve_send_chat_id(*, target: str | None, context_token: str | None) -> s
 
 
 def _looks_like_chat_id(value: str) -> bool:
-    return value.startswith(('oc_', 'chat_', 'feishu_chat_id:'))
+    return value.startswith(("oc_", "chat_", "feishu_chat_id:"))
 
 
 def _looks_like_open_id(value: str) -> bool:
-    return value.startswith('ou_')
+    return value.startswith("ou_")
 
 
 def _permission_options(permission: dict[str, Any]) -> list[dict[str, str]]:
-    options = permission.get('options')
+    options = permission.get("options")
     if isinstance(options, list) and options:
         return [
             {
-                'value': str(item.get('value') or ''),
-                'label': str(item.get('label') or item.get('value') or ''),
+                "value": str(item.get("value") or ""),
+                "label": str(item.get("label") or item.get("value") or ""),
             }
             for item in options
-            if isinstance(item, dict) and item.get('value')
+            if isinstance(item, dict) and item.get("value")
         ]
-    return [{'value': 'y', 'label': '允许'}, {'value': 'n', 'label': '拒绝'}]
+    return [{"value": "y", "label": "允许"}, {"value": "n", "label": "拒绝"}]
 
 
-__all__ = ['FeishuAppChannelAdapter']
+__all__ = ["FeishuAppChannelAdapter"]

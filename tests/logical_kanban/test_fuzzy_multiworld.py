@@ -69,7 +69,6 @@ def _generic_distance_library():
     )
 
 
-
 @pytest.fixture
 def empty_context(tmp_path: Path) -> ToolContext:
     return ToolContext(workspace_root=tmp_path)
@@ -180,7 +179,7 @@ class TestAmbiguityDetector:
                 ),
                 refinement_rules=(driving_keyword_distance,),
                 clarification_prompt="您说的距离是指步行距离、直线距离还是驾车距离？",
-            )
+            ),
         )
         detector = AmbiguityDetector(library=library)
         report = detector.detect("驾车离家50米", assertion_id="A-4")
@@ -244,23 +243,21 @@ class TestWorldGenerator:
         report = detector.detect("很快完成", assertion_id="A-6")
         worlds = WorldGenerator(library=library).generate(report, _base_assertion())
 
-        selected_codes = [
-            {a.assumed_value for a in w.assumptions} for w in worlds
-        ]
+        selected_codes = [{a.assumed_value for a in w.assumptions} for w in worlds]
         # Sanity check: the constraint must actually trigger — at least one
         # surviving world carries ``immediate`` or ``needs_acceptance_proof``,
         # but never both.
         immediate_worlds = [c for c in selected_codes if "immediate" in c]
-        accept_proof_worlds = [
-            c for c in selected_codes if "needs_acceptance_proof" in c
-        ]
+        accept_proof_worlds = [c for c in selected_codes if "needs_acceptance_proof" in c]
         assert immediate_worlds or accept_proof_worlds
         for codes in selected_codes:
             assert not ({"immediate", "needs_acceptance_proof"} <= codes)
 
 
 class TestMultiWorldValidator:
-    def test_validates_consistent_worlds(self, empty_context: ToolContext, engine: Layer1RuleEngine) -> None:
+    def test_validates_consistent_worlds(
+        self, empty_context: ToolContext, engine: Layer1RuleEngine
+    ) -> None:
         _add_task(empty_context, "A", status="completed")
         _add_task(empty_context, "B", status="pending", blocked_by=["A"])
         snapshot = engine.from_context(empty_context)
@@ -270,14 +267,18 @@ class TestMultiWorldValidator:
         worlds = WorldGenerator().generate(report, _base_assertion())
 
         validator = MultiWorldValidator(engine)
-        results = validator.validate(worlds, snapshot, target_task_id="B", target_status="in_progress")
+        results = validator.validate(
+            worlds, snapshot, target_task_id="B", target_status="in_progress"
+        )
 
         assert len(results) == len(worlds)
         assert all(r.result == "pass" for r in results)
         conclusion_hashes = {r.conclusion_hash for r in results}
         assert len(conclusion_hashes) == 1
 
-    def test_detects_divergent_worlds(self, empty_context: ToolContext, engine: Layer1RuleEngine) -> None:
+    def test_detects_divergent_worlds(
+        self, empty_context: ToolContext, engine: Layer1RuleEngine
+    ) -> None:
         _add_task(empty_context, "A", status="pending")
         _add_task(empty_context, "B", status="pending", blocked_by=["A"])
         snapshot = engine.from_context(empty_context)

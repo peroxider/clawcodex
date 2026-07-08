@@ -71,27 +71,27 @@ class OutboundDispatcher:
         return chunks, stripped
 
     async def send(self, message: OutboundMessage) -> ChannelSendResult:
-        idem = message.idempotency_key or f'out:{uuid.uuid4()}'
+        idem = message.idempotency_key or f"out:{uuid.uuid4()}"
         channel = message.channel
 
         adapter = self._registry.get(channel)
         if adapter is None:
             self._store.append_outbox(
                 {
-                    'idempotency_key': idem,
-                    'channel': channel,
-                    'status': 'dead',
-                    'error': 'channel_not_found',
-                    'at': time.time(),
+                    "idempotency_key": idem,
+                    "channel": channel,
+                    "status": "dead",
+                    "error": "channel_not_found",
+                    "at": time.time(),
                 }
             )
             return ChannelSendResult.nonretryable_error(
                 channel,
-                message=f'channel {channel!r} not registered',
+                message=f"channel {channel!r} not registered",
                 category=ErrorCategory.NOT_FOUND,
             )
         logger.debug(
-            'outbound send: channel=%s idem=%s len=%d', channel, idem[:16], len(message.text)
+            "outbound send: channel=%s idem=%s len=%d", channel, idem[:16], len(message.text)
         )
 
         # fail-closed capability gate
@@ -100,29 +100,29 @@ class OutboundDispatcher:
         except Exception as exc:  # noqa: BLE001
             self._store.append_outbox(
                 {
-                    'idempotency_key': idem,
-                    'channel': channel,
-                    'status': 'dead',
-                    'error': f'capability_gate: {exc}',
-                    'at': time.time(),
+                    "idempotency_key": idem,
+                    "channel": channel,
+                    "status": "dead",
+                    "error": f"capability_gate: {exc}",
+                    "at": time.time(),
                 }
             )
-            logger.warning('outbound send: capability gate rejected channel=%s: %s', channel, exc)
+            logger.warning("outbound send: capability gate rejected channel=%s: %s", channel, exc)
             return ChannelSendResult.unsupported(channel, message=str(exc))
 
         sender = cast(OutboundCapability, adapter)
         chunks, stripped = self._prepare_text(channel, message.text)
         last_result: ChannelSendResult | None = None
         for idx, chunk in enumerate(chunks):
-            chunk_idem = idem if len(chunks) == 1 else f'{idem}#{idx}'
+            chunk_idem = idem if len(chunks) == 1 else f"{idem}#{idx}"
             self._store.append_outbox(
                 {
-                    'idempotency_key': chunk_idem,
-                    'channel': channel,
-                    'target': message.target,
-                    'payload_size': len(chunk),
-                    'status': 'pending',
-                    'at': time.time(),
+                    "idempotency_key": chunk_idem,
+                    "channel": channel,
+                    "target": message.target,
+                    "payload_size": len(chunk),
+                    "status": "pending",
+                    "at": time.time(),
                 }
             )
             last_result = await self._send_chunk_with_retry(
@@ -135,15 +135,15 @@ class OutboundDispatcher:
             )
             if not last_result.ok:
                 logger.warning(
-                    'outbound send: chunk %d failed channel=%s status=%s error=%s',
+                    "outbound send: chunk %d failed channel=%s status=%s error=%s",
                     idx,
                     channel,
-                    last_result.status.value if last_result.status else '?',
-                    last_result.message or '',
+                    last_result.status.value if last_result.status else "?",
+                    last_result.message or "",
                 )
                 return last_result
-        success_text = 'ok' if last_result and last_result.ok else 'empty'
-        logger.info('outbound send: %s channel=%s', success_text, channel)
+        success_text = "ok" if last_result and last_result.ok else "empty"
+        logger.info("outbound send: %s channel=%s", success_text, channel)
         return last_result or ChannelSendResult.success(channel)
 
     async def _send_chunk_with_retry(
@@ -190,25 +190,25 @@ class OutboundDispatcher:
             if result.ok:
                 self._store.append_outbox(
                     {
-                        'idempotency_key': chunk_idem,
-                        'channel': channel,
-                        'status': 'delivered',
-                        'provider_receipt': result.provider_receipt,
-                        'attempts': attempt,
-                        'at': time.time(),
+                        "idempotency_key": chunk_idem,
+                        "channel": channel,
+                        "status": "delivered",
+                        "provider_receipt": result.provider_receipt,
+                        "attempts": attempt,
+                        "at": time.time(),
                     }
                 )
                 return result
             if result.status is SendStatus.RATE_LIMITED:
                 self._store.append_outbox(
                     {
-                        'idempotency_key': chunk_idem,
-                        'channel': channel,
-                        'status': 'failed',
-                        'error_category': result.error_category.value,
-                        'message': result.message,
-                        'attempts': attempt,
-                        'at': time.time(),
+                        "idempotency_key": chunk_idem,
+                        "channel": channel,
+                        "status": "failed",
+                        "error_category": result.error_category.value,
+                        "message": result.message,
+                        "attempts": attempt,
+                        "at": time.time(),
                     }
                 )
                 return result
@@ -216,58 +216,58 @@ class OutboundDispatcher:
             if not result.retryable or attempt >= max_attempts:
                 self._store.append_outbox(
                     {
-                        'idempotency_key': chunk_idem,
-                        'channel': channel,
-                        'status': 'failed',
-                        'error_category': result.error_category.value,
-                        'message': result.message,
-                        'attempts': attempt,
-                        'at': time.time(),
+                        "idempotency_key": chunk_idem,
+                        "channel": channel,
+                        "status": "failed",
+                        "error_category": result.error_category.value,
+                        "message": result.message,
+                        "attempts": attempt,
+                        "at": time.time(),
                     }
                 )
                 self._store.append_dead_letter(
                     {
-                        'idempotency_key': chunk_idem,
-                        'channel': channel,
-                        'target': message.target,
-                        'error_category': result.error_category.value,
-                        'message': result.message,
-                        'attempts': attempt,
-                        'at': time.time(),
+                        "idempotency_key": chunk_idem,
+                        "channel": channel,
+                        "target": message.target,
+                        "error_category": result.error_category.value,
+                        "message": result.message,
+                        "attempts": attempt,
+                        "at": time.time(),
                     }
                 )
                 if not result.retryable:
                     logger.warning(
-                        'outbound dead-letter: channel=%s idem=%s category=%s message=%s',
+                        "outbound dead-letter: channel=%s idem=%s category=%s message=%s",
                         channel,
                         chunk_idem[:16],
                         result.error_category.value,
-                        result.message or '',
+                        result.message or "",
                     )
                 else:
                     logger.warning(
-                        'outbound exhausted: channel=%s idem=%s attempts=%d/%d last=%s',
+                        "outbound exhausted: channel=%s idem=%s attempts=%d/%d last=%s",
                         channel,
                         chunk_idem[:16],
                         attempt,
                         max_attempts,
-                        result.message or '',
+                        result.message or "",
                     )
                 return result
             # retryable + under budget → backoff and retry
             self._store.append_outbox(
                 {
-                    'idempotency_key': chunk_idem,
-                    'channel': channel,
-                    'status': 'retry_pending',
-                    'error_category': result.error_category.value,
-                    'attempt': attempt,
-                    'at': time.time(),
+                    "idempotency_key": chunk_idem,
+                    "channel": channel,
+                    "status": "retry_pending",
+                    "error_category": result.error_category.value,
+                    "attempt": attempt,
+                    "at": time.time(),
                 }
             )
             delay = compute_backoff(attempt, policy)
             logger.info(
-                'outbound retry: channel=%s idem=%s attempt=%d/%d delay=%.1fs category=%s',
+                "outbound retry: channel=%s idem=%s attempt=%d/%d delay=%.1fs category=%s",
                 channel,
                 chunk_idem[:16],
                 attempt,
@@ -312,11 +312,11 @@ class OutboundDispatcher:
                     )
                 )
             except Exception as exc:  # noqa: BLE001
-                logger.warning('outbound broadcast failed: channel=%s: %s', name, exc)
+                logger.warning("outbound broadcast failed: channel=%s: %s", name, exc)
                 results[name] = ChannelSendResult.nonretryable_error(
-                    name, message=f'broadcast raised: {exc}', category=ErrorCategory.UNKNOWN
+                    name, message=f"broadcast raised: {exc}", category=ErrorCategory.UNKNOWN
                 )
         return results
 
 
-__all__ = ['OutboundDispatcher']
+__all__ = ["OutboundDispatcher"]

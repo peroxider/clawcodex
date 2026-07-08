@@ -67,7 +67,10 @@ def test_run_plan_advances_all_runnable_steps(tmp_path) -> None:
 
     assert progress.completed == 2
     assert saved.status is PlanStatus.COMPLETED
-    assert [step.status for step in saved.all_steps()] == [StepStatus.COMPLETED, StepStatus.COMPLETED]
+    assert [step.status for step in saved.all_steps()] == [
+        StepStatus.COMPLETED,
+        StepStatus.COMPLETED,
+    ]
     assert (tmp_path / "audit" / "p1.ndjson").exists()
 
 

@@ -126,13 +126,18 @@ class LLMPlanner:
                     plan=plan,
                     raw_response=raw,
                     provider=type(self.provider).__name__,
-                    model=response.model or context.model or getattr(self.provider, "model", "") or "",
+                    model=response.model
+                    or context.model
+                    or getattr(self.provider, "model", "")
+                    or "",
                     latency_ms=latency,
                     retry_count=attempt,
                 )
             except Exception as exc:  # noqa: BLE001 - folded into PlannerFailedError below
                 last_error = exc
-        raise PlannerFailedError(f"could not generate a valid ultraplan: {last_error}") from last_error
+        raise PlannerFailedError(
+            f"could not generate a valid ultraplan: {last_error}"
+        ) from last_error
 
     def parse_plan(self, raw_response: str, context: PlannerContext) -> Plan:
         data = _extract_json_object(raw_response)
@@ -250,7 +255,9 @@ def _validate_plan_shape(data: dict[str, Any], context: PlannerContext) -> None:
             if kind not in {item.value for item in StepKind}:
                 raise PlannerFailedError(f"{step_where}.kind is invalid: {kind}")
             depends_on = step.get("depends_on", [])
-            if not isinstance(depends_on, list) or not all(isinstance(dep, str) for dep in depends_on):
+            if not isinstance(depends_on, list) or not all(
+                isinstance(dep, str) for dep in depends_on
+            ):
                 raise PlannerFailedError(f"{step_where}.depends_on must be a string list")
             pending_dep_checks.append((step_where, depends_on))
             criteria = step.get("criteria", [])

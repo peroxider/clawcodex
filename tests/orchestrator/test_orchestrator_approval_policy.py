@@ -100,8 +100,16 @@ class TestApproveSafeOnlyPolicy(unittest.TestCase):
         return ToolCallEvent(tool_name=name, params={})
 
     def test_safe_tools_are_approved(self) -> None:
-        for safe in ("glob", "grep", "read", "read_multiple_files",
-                     "web_search", "web_fetch", "toolsearch", "ask_user_question"):
+        for safe in (
+            "glob",
+            "grep",
+            "read",
+            "read_multiple_files",
+            "web_search",
+            "web_fetch",
+            "toolsearch",
+            "ask_user_question",
+        ):
             with self.subTest(tool=safe):
                 event = self._event(safe)
                 self.assertTrue(self.policy.evaluate(event, {}))

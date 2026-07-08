@@ -269,8 +269,7 @@ class CompressionPipeline:
                 # check so the token estimate doesn't count them, but
                 # keep them in the final message stream.
                 filtered_messages = [
-                    m for m in current_messages
-                    if not _is_goal_steering_message(m)
+                    m for m in current_messages if not _is_goal_steering_message(m)
                 ]
             try:
                 result = await auto_compact_if_needed(

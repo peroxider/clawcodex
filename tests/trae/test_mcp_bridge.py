@@ -63,7 +63,9 @@ def test_stability_gate_tool_has_empty_schema() -> None:
 
 
 def test_bridge_config_from_env_reads_workspace() -> None:
-    cfg = BridgeConfig.from_env({"CLAWCODEX_WORKSPACE": "/tmp/ws", "CLAWCODEX_REPORTS_DIR": "/tmp/ws/.reports/"})
+    cfg = BridgeConfig.from_env(
+        {"CLAWCODEX_WORKSPACE": "/tmp/ws", "CLAWCODEX_REPORTS_DIR": "/tmp/ws/.reports/"}
+    )
     assert cfg.workspace == "/tmp/ws"
     assert cfg.reports_dir == "/tmp/ws/.reports/"
 
@@ -106,10 +108,12 @@ def test_win_to_wsl_empty_and_quoted() -> None:
 
 def test_bridge_config_from_env_converts_windows_paths() -> None:
     """Trae CN 经 wsl.exe 启动时，env 里 Windows 路径需自动转 WSL 路径。"""
-    cfg = BridgeConfig.from_env({
-        "CLAWCODEX_WORKSPACE": "C:\\WorkSpace\\clawcodex",
-        "CLAWCODEX_REPORTS_DIR": "C:\\WorkSpace\\clawcodex\\.reports\\",
-    })
+    cfg = BridgeConfig.from_env(
+        {
+            "CLAWCODEX_WORKSPACE": "C:\\WorkSpace\\clawcodex",
+            "CLAWCODEX_REPORTS_DIR": "C:\\WorkSpace\\clawcodex\\.reports\\",
+        }
+    )
     assert cfg.workspace == "/mnt/c/WorkSpace/clawcodex"
     assert cfg.reports_dir == "/mnt/c/WorkSpace/clawcodex/.reports/"
     assert cfg.stability_gate_cwd == "/mnt/c/WorkSpace/clawcodex"
@@ -117,10 +121,12 @@ def test_bridge_config_from_env_converts_windows_paths() -> None:
 
 def test_bridge_config_from_env_disabled_conversion() -> None:
     """CLAWCODEX_AUTO_WIN_TO_WSL=0 时禁用转换（纯 Linux 部署场景）。"""
-    cfg = BridgeConfig.from_env({
-        "CLAWCODEX_WORKSPACE": "C:\\foo",
-        "CLAWCODEX_AUTO_WIN_TO_WSL": "0",
-    })
+    cfg = BridgeConfig.from_env(
+        {
+            "CLAWCODEX_WORKSPACE": "C:\\foo",
+            "CLAWCODEX_AUTO_WIN_TO_WSL": "0",
+        }
+    )
     assert cfg.workspace == "C:\\foo"
 
 
@@ -149,7 +155,9 @@ async def test_call_tool_orch_run_fire_and_forget(tmp_path: Path) -> None:
         config=BridgeConfig(reports_dir=str(tmp_path / ".reports")),
         orchestrator_enqueue=fake_enqueue,
     )
-    result = await bridge.call_tool(TOOL_ORCH_RUN, {"issue_url": "https://gitcode.com/x/y/issues/1"})
+    result = await bridge.call_tool(
+        TOOL_ORCH_RUN, {"issue_url": "https://gitcode.com/x/y/issues/1"}
+    )
     assert "run-123" in result
     assert "queued" in result
     assert enqueued == [("https://gitcode.com/x/y/issues/1", None)]

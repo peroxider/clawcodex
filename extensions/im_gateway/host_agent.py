@@ -29,18 +29,18 @@ class HostAgentContract:
     callers (the inbound runtime router) can target it safely.
     """
 
-    cwd: str = '.'
-    provider: str = 'anthropic'
-    model: str = 'claude-sonnet-4-6'
-    approval_policy: str = 'auto_deny'  # headless default: deny tools
-    tool_bundle: str = 'bare'
-    transcript_dir: str = '~/.clawcodex/gateway/transcripts'
+    cwd: str = "."
+    provider: str = "anthropic"
+    model: str = "claude-sonnet-4-6"
+    approval_policy: str = "auto_deny"  # headless default: deny tools
+    tool_bundle: str = "bare"
+    transcript_dir: str = "~/.clawcodex/gateway/transcripts"
     max_turns: int = 50
     stop_on_interrupt: bool = True
-    reply_channel: str = 'im_outbound'  # replies flow to OutboundDispatcher
+    reply_channel: str = "im_outbound"  # replies flow to OutboundDispatcher
 
     def session_id(self, origin: str) -> str:
-        return f'im:default:{origin}'
+        return f"im:default:{origin}"
 
 
 @dataclass
@@ -57,7 +57,7 @@ class HostAgentManager:
     # WeChat channel name to route replies to. Defaults to the wizard's
     # single-instance ``wechat``; inject the configured name so renamed channels still
     # receive replies instead of silently routing to a non-existent channel.
-    wechat_channel_name: str = 'wechat'
+    wechat_channel_name: str = "wechat"
     _sessions: dict[str, str] = field(default_factory=dict)  # origin -> session_id
 
     def claim(self, origin: str) -> str:
@@ -93,12 +93,12 @@ class HostAgentManager:
     def _route(self, origin: str) -> tuple[str, str]:
         """Derive (channel, target) from a wechat origin key."""
         # origin = wechat:direct:{account}:{user}
-        parts = origin.split(':')
-        if len(parts) >= 4 and parts[0] == 'wechat':
+        parts = origin.split(":")
+        if len(parts) >= 4 and parts[0] == "wechat":
             target = parts[3]
         else:
-            target = ''
+            target = ""
         return self.wechat_channel_name, target
 
 
-__all__ = ['HostAgentContract', 'HostAgentManager']
+__all__ = ["HostAgentContract", "HostAgentManager"]

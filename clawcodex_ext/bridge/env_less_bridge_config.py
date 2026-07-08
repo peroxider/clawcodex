@@ -67,7 +67,7 @@ class EnvLessBridgeConfig(BaseModel):
     teardown_archive_timeout_ms: int = Field(default=1500, ge=500, le=2000)
     # Observed p99 connect ~2-3s; 15s = ~5× headroom. Floor 5s, cap 60s.
     connect_timeout_ms: int = Field(default=15_000, ge=5_000, le=60_000)
-    min_version: str = Field(default='0.0.0')
+    min_version: str = Field(default="0.0.0")
     should_show_app_upgrade_message: bool = False
 
 
@@ -116,7 +116,7 @@ async def check_env_less_bridge_min_version() -> str | None:
     ``'0.0.0'`` passes everything), so this always returns ``None``.
     """
     cfg = await get_env_less_bridge_config()
-    if cfg.min_version == '0.0.0':
+    if cfg.min_version == "0.0.0":
         return None
     # When a real min_version arrives via Phase 10 GB integration, swap
     # this branch for a real semver comparison.
@@ -137,10 +137,10 @@ async def should_show_app_upgrade_message() -> bool:
 
 
 __all__ = [
-    'DEFAULT_ENV_LESS_BRIDGE_CONFIG',
-    'EnvLessBridgeConfig',
-    'check_env_less_bridge_min_version',
-    'get_env_less_bridge_config',
-    'should_show_app_upgrade_message',
-    'validate_env_less_bridge_config_raw',
+    "DEFAULT_ENV_LESS_BRIDGE_CONFIG",
+    "EnvLessBridgeConfig",
+    "check_env_less_bridge_min_version",
+    "get_env_less_bridge_config",
+    "should_show_app_upgrade_message",
+    "validate_env_less_bridge_config_raw",
 ]

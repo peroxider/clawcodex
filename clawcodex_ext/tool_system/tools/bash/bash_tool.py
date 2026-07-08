@@ -258,7 +258,12 @@ def _bash_check_permissions(
     if shell == "auto":
         import sys as _sys_mod2
         from clawcodex_ext.utils.shell_resolver import find_powershell_path
-        shell = "powershell" if _sys_mod2.platform == "win32" and find_powershell_path() is not None else "bash"
+
+        shell = (
+            "powershell"
+            if _sys_mod2.platform == "win32" and find_powershell_path() is not None
+            else "bash"
+        )
     result = check_bash_command_safety(command, cwd=cwd_str, shell=shell)
     if result is not None:
         return result
@@ -683,7 +688,7 @@ BashTool: Tool = build_tool(
             "shell": {
                 "type": "string",
                 "enum": ["bash", "powershell", "auto"],
-                "description": "Shell to use. \"auto\" detects platform default (PowerShell on Windows, bash on POSIX).",
+                "description": 'Shell to use. "auto" detects platform default (PowerShell on Windows, bash on POSIX).',
             },
         },
         "required": ["command"],
@@ -695,9 +700,17 @@ BashTool: Tool = build_tool(
     map_result_to_api=_bash_map_result_to_api,
     check_permissions=_bash_check_permissions,
     validate_input=_bash_validate_input,
-    is_read_only=lambda _input: is_command_read_only((_input or {}).get("command", ""), shell=(_input or {}).get("shell", "auto")),
-    is_concurrency_safe=lambda _input: is_command_read_only((_input or {}).get("command", ""), shell=(_input or {}).get("shell", "auto")),
-    is_destructive=lambda _input: not is_command_read_only((_input or {}).get("command", ""), shell=(_input or {}).get("shell", "auto")),
+    is_read_only=lambda _input: is_command_read_only(
+        (_input or {}).get("command", ""), shell=(_input or {}).get("shell", "auto")
+    ),
+    is_concurrency_safe=lambda _input: is_command_read_only(
+        (_input or {}).get("command", ""), shell=(_input or {}).get("shell", "auto")
+    ),
+    is_destructive=lambda _input: (
+        not is_command_read_only(
+            (_input or {}).get("command", ""), shell=(_input or {}).get("shell", "auto")
+        )
+    ),
     user_facing_name=_bash_user_facing_name,
     search_hint="shell terminal execute run command",
     to_auto_classifier_input=_bash_classifier_input,

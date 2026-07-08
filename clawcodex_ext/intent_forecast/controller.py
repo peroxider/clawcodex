@@ -174,7 +174,9 @@ class IntentForecastController:
     def _on_idle_timer(self) -> None:
         with self._lock:
             if self._busy or self._running:
-                logger.debug("_on_idle_timer skipped: busy=%s running=%s", self._busy, self._running)
+                logger.debug(
+                    "_on_idle_timer skipped: busy=%s running=%s", self._busy, self._running
+                )
                 return
             cfg = self.config_loader()
             reasons = self._guard_reasons(cfg)
@@ -186,7 +188,11 @@ class IntentForecastController:
             self._generation_id += 1
             generation_id = self._generation_id
 
-        logger.debug("_on_idle_timer firing: generation_id=%s retry=%d", generation_id, self._auto_retry_count)
+        logger.debug(
+            "_on_idle_timer firing: generation_id=%s retry=%d",
+            generation_id,
+            self._auto_retry_count,
+        )
         success = False
         try:
             service = IntentForecastService(
@@ -299,7 +305,9 @@ class IntentForecastController:
                 suggestion=pending.get("suggestion"),
                 cwd=self.workspace_root,
                 fingerprint=str(pending.get("fingerprint") or ""),
-                features=pending.get("features") if isinstance(pending.get("features"), dict) else {},
+                features=pending.get("features")
+                if isinstance(pending.get("features"), dict)
+                else {},
             )
         self._pending_acceptance = None
 

@@ -15,69 +15,69 @@ from clawcodex_ext.services.im_gateway.store import ReliabilityStore
 
 def _write_ndjson(path, entries) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open('w', encoding='utf-8') as fh:
+    with path.open("w", encoding="utf-8") as fh:
         for entry in entries:
-            fh.write(json.dumps(entry, ensure_ascii=False) + '\n')
+            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 def _read_ndjson(path) -> list[dict]:
     if not path.exists():
         return []
-    return [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines() if line]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
 def _write_json(path, data) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
 
 def _read_json(path):
     if not path.exists():
         return None
-    return json.loads(path.read_text(encoding='utf-8'))
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def test_dead_letter_rotates_on_max_bytes(tmp_path) -> None:
     cfg = ReliabilityConfig(dead_letter_max_bytes=100, dead_letter_backup_count=3)
     store = ReliabilityStore(tmp_path, reliability=cfg)
-    path = tmp_path / 'dead_letter.ndjson'
-    _write_ndjson(path, [{'k': 'x' * 200}])
+    path = tmp_path / "dead_letter.ndjson"
+    _write_ndjson(path, [{"k": "x" * 200}])
 
-    store.append_dead_letter({'k': 'new'})
+    store.append_dead_letter({"k": "new"})
 
     assert path.exists()
-    assert (tmp_path / 'dead_letter.ndjson.1').exists()
-    assert _read_ndjson(path) == [{'k': 'new'}]
+    assert (tmp_path / "dead_letter.ndjson.1").exists()
+    assert _read_ndjson(path) == [{"k": "new"}]
 
 
 def test_audit_rotates_on_max_bytes(tmp_path) -> None:
     cfg = ReliabilityConfig(audit_max_bytes=100, audit_backup_count=3)
     store = ReliabilityStore(tmp_path, reliability=cfg)
-    path = tmp_path / 'audit.ndjson'
-    _write_ndjson(path, [{'event_type': 'old', 'payload': 'x' * 200}])
+    path = tmp_path / "audit.ndjson"
+    _write_ndjson(path, [{"event_type": "old", "payload": "x" * 200}])
 
-    store.audit('test_event', payload='new')
+    store.audit("test_event", payload="new")
 
     assert path.exists()
-    assert (tmp_path / 'audit.ndjson.1').exists()
+    assert (tmp_path / "audit.ndjson.1").exists()
 
 
 def test_purge_processed_inbound_uses_seen_at(tmp_path) -> None:
     store = ReliabilityStore(tmp_path)
     now = time.time()
     _write_ndjson(
-        tmp_path / 'processed_inbound.ndjson',
+        tmp_path / "processed_inbound.ndjson",
         [
-            {'key': 'old', 'seen_at': now - 8 * 86400},
-            {'key': 'new', 'seen_at': now - 100},
+            {"key": "old", "seen_at": now - 8 * 86400},
+            {"key": "new", "seen_at": now - 100},
         ],
     )
 
     removed = store.purge_processed_inbound(ttl_seconds=7 * 86400, max_entries=10000)
 
     assert removed == 1
-    assert _read_ndjson(tmp_path / 'processed_inbound.ndjson') == [
-        {'key': 'new', 'seen_at': pytest.approx(now - 100)}
+    assert _read_ndjson(tmp_path / "processed_inbound.ndjson") == [
+        {"key": "new", "seen_at": pytest.approx(now - 100)}
     ]
 
 
@@ -85,23 +85,23 @@ def test_purge_outbox_uses_at_with_timestamp_fallback(tmp_path) -> None:
     store = ReliabilityStore(tmp_path)
     now = time.time()
     _write_ndjson(
-        tmp_path / 'outbox.ndjson',
+        tmp_path / "outbox.ndjson",
         [
-            {'id': 'old-at', 'at': now - 31 * 86400},
-            {'id': 'new-at', 'at': now - 100},
-            {'id': 'old-timestamp', 'timestamp': now - 31 * 86400},
-            {'id': 'new-timestamp', 'timestamp': now - 100},
-            {'id': 'legacy-no-time'},
+            {"id": "old-at", "at": now - 31 * 86400},
+            {"id": "new-at", "at": now - 100},
+            {"id": "old-timestamp", "timestamp": now - 31 * 86400},
+            {"id": "new-timestamp", "timestamp": now - 100},
+            {"id": "legacy-no-time"},
         ],
     )
 
     removed = store.purge_outbox(ttl_seconds=30 * 86400, max_entries=50000)
 
     assert removed == 2
-    assert {entry['id'] for entry in _read_ndjson(tmp_path / 'outbox.ndjson')} == {
-        'new-at',
-        'new-timestamp',
-        'legacy-no-time',
+    assert {entry["id"] for entry in _read_ndjson(tmp_path / "outbox.ndjson")} == {
+        "new-at",
+        "new-timestamp",
+        "legacy-no-time",
     }
 
 
@@ -109,36 +109,36 @@ def test_purge_unsupported_inbound_uses_received_at(tmp_path) -> None:
     store = ReliabilityStore(tmp_path)
     now = time.time()
     _write_ndjson(
-        tmp_path / 'unsupported_inbound.ndjson',
+        tmp_path / "unsupported_inbound.ndjson",
         [
-            {'id': 'old', 'received_at': now - 8 * 86400},
-            {'id': 'new', 'received_at': now - 100},
-            {'id': 'legacy-no-time'},
+            {"id": "old", "received_at": now - 8 * 86400},
+            {"id": "new", "received_at": now - 100},
+            {"id": "legacy-no-time"},
         ],
     )
 
     removed = store.purge_unsupported_inbound(ttl_seconds=7 * 86400, max_entries=10000)
 
     assert removed == 1
-    assert {entry['id'] for entry in _read_ndjson(tmp_path / 'unsupported_inbound.ndjson')} == {
-        'new',
-        'legacy-no-time',
+    assert {entry["id"] for entry in _read_ndjson(tmp_path / "unsupported_inbound.ndjson")} == {
+        "new",
+        "legacy-no-time",
     }
 
 
 def test_purge_unsupported_inbound_caps_legacy_without_timestamps(tmp_path) -> None:
     store = ReliabilityStore(tmp_path)
     _write_ndjson(
-        tmp_path / 'unsupported_inbound.ndjson',
-        [{'id': f'legacy-{idx}'} for idx in range(5)],
+        tmp_path / "unsupported_inbound.ndjson",
+        [{"id": f"legacy-{idx}"} for idx in range(5)],
     )
 
     removed = store.purge_unsupported_inbound(ttl_seconds=7 * 86400, max_entries=2)
 
     assert removed == 3
-    assert [entry['id'] for entry in _read_ndjson(tmp_path / 'unsupported_inbound.ndjson')] == [
-        'legacy-3',
-        'legacy-4',
+    assert [entry["id"] for entry in _read_ndjson(tmp_path / "unsupported_inbound.ndjson")] == [
+        "legacy-3",
+        "legacy-4",
     ]
 
 
@@ -147,78 +147,78 @@ def test_purge_all_only_manages_bounded_append_files(tmp_path) -> None:
     store = ReliabilityStore(tmp_path, reliability=cfg)
     now = time.time()
     _write_ndjson(
-        tmp_path / 'processed_inbound.ndjson',
-        [{'key': 'old', 'seen_at': now - 8 * 86400}],
+        tmp_path / "processed_inbound.ndjson",
+        [{"key": "old", "seen_at": now - 8 * 86400}],
     )
-    _write_ndjson(tmp_path / 'outbox.ndjson', [{'id': 'old', 'at': now - 31 * 86400}])
+    _write_ndjson(tmp_path / "outbox.ndjson", [{"id": "old", "at": now - 31 * 86400}])
     _write_ndjson(
-        tmp_path / 'unsupported_inbound.ndjson',
-        [{'id': 'old', 'received_at': now - 8 * 86400}],
+        tmp_path / "unsupported_inbound.ndjson",
+        [{"id": "old", "received_at": now - 8 * 86400}],
     )
-    _write_json(tmp_path / 'im_session_map.json', {'legacy': {'session_id': 'old'}})
-    _write_json(tmp_path / 'wechat_context_tokens.json', {'acct:user': 'ctx'})
-    _write_json(tmp_path / 'feishu_last_senders.json', {'feishu': 'ou_user'})
-    _write_json(tmp_path / 'wechat_accounts.json', {'default': {'get_updates_buf': 'cursor'}})
-    _write_json(tmp_path / 'wechat' / 'wechat_pairing.json', {'codes': [{'code': 'abc'}]})
+    _write_json(tmp_path / "im_session_map.json", {"legacy": {"session_id": "old"}})
+    _write_json(tmp_path / "wechat_context_tokens.json", {"acct:user": "ctx"})
+    _write_json(tmp_path / "feishu_last_senders.json", {"feishu": "ou_user"})
+    _write_json(tmp_path / "wechat_accounts.json", {"default": {"get_updates_buf": "cursor"}})
+    _write_json(tmp_path / "wechat" / "wechat_pairing.json", {"codes": [{"code": "abc"}]})
 
     result = store.purge_all(cfg)
 
     assert result == {
-        'processed_inbound.ndjson': 1,
-        'outbox.ndjson': 1,
-        'unsupported_inbound.ndjson': 1,
+        "processed_inbound.ndjson": 1,
+        "outbox.ndjson": 1,
+        "unsupported_inbound.ndjson": 1,
     }
-    assert _read_json(tmp_path / 'im_session_map.json') == {'legacy': {'session_id': 'old'}}
-    assert _read_json(tmp_path / 'wechat_context_tokens.json') == {'acct:user': 'ctx'}
-    assert _read_json(tmp_path / 'feishu_last_senders.json') == {'feishu': 'ou_user'}
-    assert _read_json(tmp_path / 'wechat_accounts.json') == {
-        'default': {'get_updates_buf': 'cursor'}
+    assert _read_json(tmp_path / "im_session_map.json") == {"legacy": {"session_id": "old"}}
+    assert _read_json(tmp_path / "wechat_context_tokens.json") == {"acct:user": "ctx"}
+    assert _read_json(tmp_path / "feishu_last_senders.json") == {"feishu": "ou_user"}
+    assert _read_json(tmp_path / "wechat_accounts.json") == {
+        "default": {"get_updates_buf": "cursor"}
     }
-    assert _read_json(tmp_path / 'wechat' / 'wechat_pairing.json') == {'codes': [{'code': 'abc'}]}
+    assert _read_json(tmp_path / "wechat" / "wechat_pairing.json") == {"codes": [{"code": "abc"}]}
 
 
 def test_disabled_returns_empty_and_does_not_modify(tmp_path) -> None:
     cfg = ReliabilityConfig(retention_enabled=False)
-    _write_ndjson(tmp_path / 'processed_inbound.ndjson', [{'key': 'k', 'seen_at': 0}])
+    _write_ndjson(tmp_path / "processed_inbound.ndjson", [{"key": "k", "seen_at": 0}])
 
     result = run_retention_sweep(str(tmp_path), cfg)
 
     assert result == {}
-    assert _read_ndjson(tmp_path / 'processed_inbound.ndjson') == [{'key': 'k', 'seen_at': 0}]
+    assert _read_ndjson(tmp_path / "processed_inbound.ndjson") == [{"key": "k", "seen_at": 0}]
 
 
 def test_run_retention_sweep_enabled(tmp_path) -> None:
     cfg = ReliabilityConfig()
     now = time.time()
     _write_ndjson(
-        tmp_path / 'processed_inbound.ndjson',
-        [{'key': 'old', 'seen_at': now - 8 * 86400}],
+        tmp_path / "processed_inbound.ndjson",
+        [{"key": "old", "seen_at": now - 8 * 86400}],
     )
 
     result = run_retention_sweep(str(tmp_path), cfg)
 
-    assert result.get('processed_inbound.ndjson') == 1
+    assert result.get("processed_inbound.ndjson") == 1
 
 
 def test_run_retention_sweep_exception_returns_empty(tmp_path, monkeypatch) -> None:
     import clawcodex_ext.services.im_gateway.retention as retention_mod
 
     def boom(self, *args, **kwargs) -> None:
-        raise RuntimeError('boom')
+        raise RuntimeError("boom")
 
-    monkeypatch.setattr(retention_mod.ReliabilityStore, '__init__', boom)
+    monkeypatch.setattr(retention_mod.ReliabilityStore, "__init__", boom)
 
     assert run_retention_sweep(str(tmp_path), ReliabilityConfig()) == {}
 
 
 def test_corrupted_ndjson_file_does_not_crash_purge(tmp_path) -> None:
     store = ReliabilityStore(tmp_path)
-    path = tmp_path / 'processed_inbound.ndjson'
+    path = tmp_path / "processed_inbound.ndjson"
     path.write_text(
-        '{"key": "ok", "seen_at": ' + str(time.time()) + '}\n'
-        'not json\n'
-        '{"key": "ok2", "seen_at": ' + str(time.time()) + '}\n',
-        encoding='utf-8',
+        '{"key": "ok", "seen_at": ' + str(time.time()) + "}\n"
+        "not json\n"
+        '{"key": "ok2", "seen_at": ' + str(time.time()) + "}\n",
+        encoding="utf-8",
     )
 
     assert store.purge_processed_inbound(ttl_seconds=7 * 86400, max_entries=100) == 0
@@ -233,7 +233,7 @@ def test_retention_loop_executes_and_cancels(tmp_path, monkeypatch) -> None:
         nonlocal call_count
         call_count += 1
 
-    monkeypatch.setattr(server_mod, 'run_retention_sweep', fake_sweep)
+    monkeypatch.setattr(server_mod, "run_retention_sweep", fake_sweep)
 
     async def run() -> None:
         task = asyncio.create_task(
@@ -256,9 +256,9 @@ def test_retention_loop_swallows_exception(tmp_path, monkeypatch) -> None:
     def flaky_sweep(state_dir, reliability) -> None:
         nonlocal call_count
         call_count += 1
-        raise RuntimeError('flaky')
+        raise RuntimeError("flaky")
 
-    monkeypatch.setattr(server_mod, 'run_retention_sweep', flaky_sweep)
+    monkeypatch.setattr(server_mod, "run_retention_sweep", flaky_sweep)
 
     async def run() -> None:
         task = asyncio.create_task(

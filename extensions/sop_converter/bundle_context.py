@@ -211,8 +211,10 @@ def load_bundle_persisted_tools(registry: ToolRegistry, bundle_path: Path) -> in
             if tool_dir == TOOL_DIR:
                 if spec.bundle_id and spec.bundle_id != bundle_name:
                     continue
-                if not spec.bundle_id and allowed_names and not _spec_allowed_for_bundle(
-                    spec, allowed_names
+                if (
+                    not spec.bundle_id
+                    and allowed_names
+                    and not _spec_allowed_for_bundle(spec, allowed_names)
                 ):
                     continue
                 if not is_sop_converter_spec_source(spec.source):
@@ -301,8 +303,10 @@ def ensure_bundle_tools_registered(
             if tool_dir == TOOL_DIR:
                 if spec.bundle_id and spec.bundle_id != bundle_name:
                     continue
-                if not spec.bundle_id and allowed_names and not _spec_allowed_for_bundle(
-                    spec, allowed_names
+                if (
+                    not spec.bundle_id
+                    and allowed_names
+                    and not _spec_allowed_for_bundle(spec, allowed_names)
                 ):
                     continue
                 if not is_sop_converter_spec_source(spec.source):

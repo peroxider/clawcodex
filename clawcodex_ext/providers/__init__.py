@@ -24,9 +24,7 @@ def _extend_builtin_models(provider_info: dict) -> None:
     supersets of the upstream baseline).
     """
     # Anthropic — add OpenRouter-style paths + newer variants
-    anthropic_models = provider_info.setdefault("anthropic", {}).setdefault(
-        "available_models", []
-    )
+    anthropic_models = provider_info.setdefault("anthropic", {}).setdefault("available_models", [])
     _anthropic_extras = [
         "anthropic/claude-3.5-haiku",
         "anthropic/claude-3.5-sonnet",
@@ -39,9 +37,7 @@ def _extend_builtin_models(provider_info: dict) -> None:
             anthropic_models.append(m)
 
     # OpenAI — add OpenRouter-style paths + newer variants
-    openai_models = provider_info.setdefault("openai", {}).setdefault(
-        "available_models", []
-    )
+    openai_models = provider_info.setdefault("openai", {}).setdefault("available_models", [])
     _openai_extras = [
         "openai/gpt-4o",
         "openai/gpt-4o-mini",
@@ -76,9 +72,7 @@ def _extend_builtin_models(provider_info: dict) -> None:
             glm_models.append(m)
 
     # DeepSeek — add OpenRouter-style paths + downstream variants
-    deepseek_models = provider_info.setdefault("deepseek", {}).setdefault(
-        "available_models", []
-    )
+    deepseek_models = provider_info.setdefault("deepseek", {}).setdefault("available_models", [])
     _deepseek_extras = [
         "deepseek/deepseek-chat-v3.1",
         "deepseek/deepseek-r1-0528",
@@ -93,9 +87,7 @@ def _extend_builtin_models(provider_info: dict) -> None:
             deepseek_models.append(m)
 
     # Gemini — add OpenRouter-style paths
-    gemini_models = provider_info.setdefault("gemini", {}).setdefault(
-        "available_models", []
-    )
+    gemini_models = provider_info.setdefault("gemini", {}).setdefault("available_models", [])
     _gemini_extras = [
         "google/gemini-2.0-flash",
         "google/gemini-2.5-flash",
@@ -108,9 +100,7 @@ def _extend_builtin_models(provider_info: dict) -> None:
     # Minimax — add M3 series (current default in ~/.clawcodex/config.json).
     # The upstream PROVIDER_INFO entry only lists the M2.x line; M3 ships as a
     # downstream-only variant served by the same Anthropic-compatible endpoint.
-    minimax_models = provider_info.setdefault("minimax", {}).setdefault(
-        "available_models", []
-    )
+    minimax_models = provider_info.setdefault("minimax", {}).setdefault("available_models", [])
     _minimax_extras = [
         "MiniMax-M3",
         "MiniMax-M3-highspeed",

@@ -22,16 +22,13 @@ def format_discrimination_summary(disc: DiscriminationResult) -> str:
     if not disc.forced:
         qual = "passed" if disc.fwa_qualified else "not passed"
         lines.append(
-            f"  FWA combo gate: {qual} "
-            "(needs stage_enum + state_transition or gate_definition)"
+            f"  FWA combo gate: {qual} (needs stage_enum + state_transition or gate_definition)"
         )
     lines.append(f"  Recommended extractor: {disc.recommended_extractor}")
     lines.append("  Matched features:")
     for m in disc.matches:
         if m.matched:
-            lines.append(
-                f"    + {m.name} (weight={m.weight}, score={m.score:.2f}): {m.evidence}"
-            )
+            lines.append(f"    + {m.name} (weight={m.weight}, score={m.score:.2f}): {m.evidence}")
     for m in disc.matches:
         if not m.matched:
             lines.append(f"    - {m.name} (weight={m.weight}): not detected")
@@ -48,9 +45,7 @@ def format_discrimination_summary(disc: DiscriminationResult) -> str:
             "→ workflow-capable, lighter emit defaults"
         )
     else:
-        lines.append(
-            "  Selection: score < sdk threshold → SDK-only grouping, no workflow bundle"
-        )
+        lines.append("  Selection: score < sdk threshold → SDK-only grouping, no workflow bundle")
     return "\n".join(lines)
 
 

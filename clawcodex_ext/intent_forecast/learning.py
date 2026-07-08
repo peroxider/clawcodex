@@ -118,14 +118,25 @@ def build_feedback_features(
     workspace = getattr(context, "workspace", {}) if context is not None else {}
     task_state = getattr(context, "task_state", {}) if context is not None else {}
     focuses = workspace.get("focuses") if isinstance(workspace, dict) else None
-    changed_files = [str(path) for path in (workspace.get("changed_files") if isinstance(workspace, dict) else []) or []]
+    changed_files = [
+        str(path)
+        for path in (workspace.get("changed_files") if isinstance(workspace, dict) else []) or []
+    ]
     features: dict[str, Any] = {
         "stage": str(getattr(context, "intent_stage", "") or ""),
-        "focus_ids": [str(item.get("id")) for item in focuses or [] if isinstance(item, dict) and item.get("id")],
+        "focus_ids": [
+            str(item.get("id"))
+            for item in focuses or []
+            if isinstance(item, dict) and item.get("id")
+        ],
         "changed_file_globs": changed_file_globs(changed_files),
         "suggestion_kind": classify_suggestion_kind(suggestion),
-        "has_dirty_worktree": bool((workspace.get("git_status") if isinstance(workspace, dict) else "") or changed_files),
-        "had_recent_failure": bool(task_state.get("blocked_reason") if isinstance(task_state, dict) else False),
+        "has_dirty_worktree": bool(
+            (workspace.get("git_status") if isinstance(workspace, dict) else "") or changed_files
+        ),
+        "had_recent_failure": bool(
+            task_state.get("blocked_reason") if isinstance(task_state, dict) else False
+        ),
         "language": str(getattr(context, "response_language", "") or ""),
         "trigger": trigger,
     }
@@ -136,7 +147,9 @@ def classify_suggestion_kind(suggestion: ForecastSuggestion | None) -> str:
     if suggestion is None:
         return ""
     text = " ".join([suggestion.title, suggestion.prompt, suggestion.reason]).lower()
-    if _contains_any(text, ("failed", "failure", "fix failing", "traceback", "失败", "报错", "修复最近失败")):
+    if _contains_any(
+        text, ("failed", "failure", "fix failing", "traceback", "失败", "报错", "修复最近失败")
+    ):
         return "fix_failure"
     if _contains_any(text, ("pytest", "test", "测试", "验证")):
         return "run_tests"

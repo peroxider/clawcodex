@@ -95,7 +95,7 @@ class _PollIntervalSchema(BaseModel):
         ge=0,
     )
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def _validate_at_capacity_liveness(self) -> Self:
         """Enforce the two TS ``.refine()`` cross-field invariants.
 
@@ -107,22 +107,22 @@ class _PollIntervalSchema(BaseModel):
         """
         if self.non_exclusive_heartbeat_interval_ms == 0 and self.poll_interval_ms_at_capacity == 0:
             raise ValueError(
-                'at-capacity liveness requires '
-                'non_exclusive_heartbeat_interval_ms > 0 or '
-                'poll_interval_ms_at_capacity > 0'
+                "at-capacity liveness requires "
+                "non_exclusive_heartbeat_interval_ms > 0 or "
+                "poll_interval_ms_at_capacity > 0"
             )
         if (
             self.non_exclusive_heartbeat_interval_ms == 0
             and self.multisession_poll_interval_ms_at_capacity == 0
         ):
             raise ValueError(
-                'at-capacity liveness requires '
-                'non_exclusive_heartbeat_interval_ms > 0 or '
-                'multisession_poll_interval_ms_at_capacity > 0'
+                "at-capacity liveness requires "
+                "non_exclusive_heartbeat_interval_ms > 0 or "
+                "multisession_poll_interval_ms_at_capacity > 0"
             )
         return self
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def _validate_at_capacity_zero_or_min(self) -> Self:
         """``poll_interval_ms_at_capacity`` must be 0 (disabled) OR >= 100.
 
@@ -131,11 +131,11 @@ class _PollIntervalSchema(BaseModel):
         """
         v = self.poll_interval_ms_at_capacity
         if v != 0 and v < 100:
-            raise ValueError('poll_interval_ms_at_capacity must be 0 (disabled) or ≥100ms')
+            raise ValueError("poll_interval_ms_at_capacity must be 0 (disabled) or ≥100ms")
         v = self.multisession_poll_interval_ms_at_capacity
         if v != 0 and v < 100:
             raise ValueError(
-                'multisession_poll_interval_ms_at_capacity must be 0 (disabled) or ≥100ms'
+                "multisession_poll_interval_ms_at_capacity must be 0 (disabled) or ≥100ms"
             )
         return self
 
@@ -181,6 +181,6 @@ def validate_poll_interval_config_raw(raw: object) -> PollIntervalConfig:
 
 
 __all__ = [
-    'get_poll_interval_config',
-    'validate_poll_interval_config_raw',
+    "get_poll_interval_config",
+    "validate_poll_interval_config_raw",
 ]

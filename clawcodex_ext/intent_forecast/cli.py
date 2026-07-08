@@ -82,7 +82,13 @@ def run_forecast_command(args: list[str]) -> int:
                 fingerprint=result.fingerprint,
             )
         if ns.json:
-            print(json.dumps({"prompt": suggestion.prompt, "suggestion_id": suggestion.id}, ensure_ascii=False, indent=2))
+            print(
+                json.dumps(
+                    {"prompt": suggestion.prompt, "suggestion_id": suggestion.id},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
         else:
             print(suggestion.prompt)
         return 0
@@ -96,7 +102,10 @@ def run_forecast_command(args: list[str]) -> int:
             _print(process_pending_summary_jobs(), ns.json)
             return 0
         if not ns.session:
-            print("usage: clawcodex forecast summarize --session <session_id> [--pending]", file=sys.stderr)
+            print(
+                "usage: clawcodex forecast summarize --session <session_id> [--pending]",
+                file=sys.stderr,
+            )
             return 2
         result = summarize_session(ns.session)
         _print(result, ns.json)

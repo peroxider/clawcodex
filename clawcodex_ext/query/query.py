@@ -56,6 +56,7 @@ from .hook_registry import call_hooks, LoopHookPhase
 # disable the entire hook pipeline without changing the call sites.
 # ---------------------------------------------------------------------------
 
+
 def _call_hooks_if_enabled(phase: LoopHookPhase, *args: Any, **kwargs: Any) -> tuple[Any, ...]:
     """Call hooks only when the corresponding feature gate is enabled.
 
@@ -74,6 +75,8 @@ def _call_hooks_if_enabled(phase: LoopHookPhase, *args: Any, **kwargs: Any) -> t
         # Feature gate is disabled — return args unchanged.
         return args
     return call_hooks(phase, *args, **kwargs)
+
+
 from .recovery_strategies import RecoveryContext, find_recovery_strategies
 from .transitions import (
     QueryState,
@@ -1400,11 +1403,7 @@ def _resolve_effective_tools(
         tool_use_context.options.tools = list(params.tools)
 
     base_tools = tool_use_context.options.tools or params.tools
-    model = (
-        tool_use_context.options.main_loop_model
-        or getattr(params.provider, "model", "")
-        or ""
-    )
+    model = tool_use_context.options.main_loop_model or getattr(params.provider, "model", "") or ""
 
     filtered = filter_tools_for_request(base_tools, model, messages)
     try:
@@ -1667,6 +1666,7 @@ async def query(
         effective_tools = _resolve_effective_tools(params, tool_use_context, messages)
 
         try:
+
             async def _call_model_attempt(_attempt: int, _retry_ctx: Any):
                 return await _call_model_sync(
                     provider=params.provider,
@@ -1693,7 +1693,9 @@ async def query(
             _goal_record_usage(assistant_messages)
 
             # P102-D: post_llm hook — LLM 响应返回后、工具执行前
-            hook_result = _call_hooks_if_enabled("post_llm", assistant_messages, tool_use_blocks, state=state, params=params)
+            hook_result = _call_hooks_if_enabled(
+                "post_llm", assistant_messages, tool_use_blocks, state=state, params=params
+            )
             assistant_messages = hook_result[0]
             tool_use_blocks = hook_result[1]
 
@@ -1899,7 +1901,9 @@ async def query(
             logger.warning("Failed to save CacheSafeParams", exc_info=True)
 
         # P102-D: pre_tool hook — 在工具执行之前允许外部策略修改 tool_use_blocks
-        hook_result = _call_hooks_if_enabled("pre_tool", tool_use_blocks, state=state, params=params)
+        hook_result = _call_hooks_if_enabled(
+            "pre_tool", tool_use_blocks, state=state, params=params
+        )
         tool_use_blocks = hook_result[0]
 
         tool_results = await _run_tools_partitioned(

@@ -30,9 +30,9 @@ def _make_repl_client(capacity=3):
         size[0] += 1
 
     client = ReplGatewayClient(
-        '/tmp/gw.sock',
-        session_id='repl_main',
-        origin='wechat:direct:default:u',
+        "/tmp/gw.sock",
+        session_id="repl_main",
+        origin="wechat:direct:default:u",
         enqueue=enqueue,
         queue_size=lambda: size[0],
         queue_capacity=capacity,
@@ -52,7 +52,7 @@ class _FakeConsole:
     def __init__(self) -> None:
         self.messages: list[str] = []
 
-    def print(self, message: str = '', *args, **kwargs) -> None:
+    def print(self, message: str = "", *args, **kwargs) -> None:
         self.messages.append(str(message))
 
 
@@ -112,7 +112,7 @@ def test_repl_gateway_command_status_tracks_connect_disconnect(monkeypatch) -> N
 
         async def connect(self):
             self.connected = True
-            return SimpleNamespace(ack_layer='accepted')
+            return SimpleNamespace(ack_layer="accepted")
 
         async def start_heartbeat(self, interval=30.0):
             return None
@@ -122,25 +122,25 @@ def test_repl_gateway_command_status_tracks_connect_disconnect(monkeypatch) -> N
             self.closed = True
 
     monkeypatch.setattr(
-        'clawcodex_ext.frontend.repl_gateway.ReplGatewayClient',
+        "clawcodex_ext.frontend.repl_gateway.ReplGatewayClient",
         _FakeRuntimeClient,
     )
 
     repl = _FakeReplForGatewayCommand()
     _install_gateway_client(repl, _gateway_ctx())
 
-    command = repl.command_registry.commands['gateway']
-    assert 'connect' in command.description.lower()
-    assert 'status' in command.description.lower()
-    assert 'disconnect' in command.description.lower()
-    assert 'disconnected' in repl._handle_gateway_command('status')
-    assert 'connected' in repl._handle_gateway_command(
-        'connect --origin wechat:direct:default:user --sock /tmp/gateway.sock'
+    command = repl.command_registry.commands["gateway"]
+    assert "connect" in command.description.lower()
+    assert "status" in command.description.lower()
+    assert "disconnect" in command.description.lower()
+    assert "disconnected" in repl._handle_gateway_command("status")
+    assert "connected" in repl._handle_gateway_command(
+        "connect --origin wechat:direct:default:user --sock /tmp/gateway.sock"
     )
-    assert 'connected' in repl._handle_gateway_command('status')
-    assert 'wechat:direct:default:user' in repl._handle_gateway_command('status')
-    assert 'disconnected' in repl._handle_gateway_command('disconnect')
-    assert 'disconnected' in repl._handle_gateway_command('status')
+    assert "connected" in repl._handle_gateway_command("status")
+    assert "wechat:direct:default:user" in repl._handle_gateway_command("status")
+    assert "disconnected" in repl._handle_gateway_command("disconnect")
+    assert "disconnected" in repl._handle_gateway_command("status")
     assert created[-1].closed is True
 
 
@@ -148,11 +148,11 @@ def test_repl_gateway_is_advertised_in_slash_suggestions() -> None:
     """Typing /g should surface /gateway with the runtime actions in the popup."""
     from clawcodex_ext.repl.core import ClawcodexREPL
 
-    description = ClawcodexREPL._REPL_EXTRA_BUILTIN_DESCRIPTIONS.get('gateway')
+    description = ClawcodexREPL._REPL_EXTRA_BUILTIN_DESCRIPTIONS.get("gateway")
 
     assert description is not None
     lowered = description.lower()
-    for action in ('connect', 'status', 'disconnect'):
+    for action in ("connect", "status", "disconnect"):
         assert action in lowered
 
 
@@ -165,22 +165,22 @@ def test_repl_gateway_connect_missing_daemon_fails_without_client(monkeypatch) -
             pass
 
         async def connect(self):
-            raise FileNotFoundError('/tmp/missing.sock')
+            raise FileNotFoundError("/tmp/missing.sock")
 
         async def close(self):
             return None
 
     monkeypatch.setattr(
-        'clawcodex_ext.frontend.repl_gateway.ReplGatewayClient',
+        "clawcodex_ext.frontend.repl_gateway.ReplGatewayClient",
         _MissingGatewayClient,
     )
 
     repl = _FakeReplForGatewayCommand()
     _install_gateway_client(repl, _gateway_ctx())
 
-    result = repl._handle_gateway_command('connect --sock /tmp/missing.sock')
+    result = repl._handle_gateway_command("connect --sock /tmp/missing.sock")
 
-    assert 'IM gateway daemon is not running' in result
+    assert "IM gateway daemon is not running" in result
     assert repl._gateway_client is None
 
 
@@ -190,19 +190,19 @@ async def test_repl_close_unregisters_before_closing_socket(monkeypatch) -> None
     calls: list[tuple[str, str | None]] = []
 
     async def _fake_unregister(session_id: str):
-        calls.append(('unregister', session_id))
+        calls.append(("unregister", session_id))
         return None
 
     async def _fake_close():
-        calls.append(('close', None))
+        calls.append(("close", None))
         return None
 
-    monkeypatch.setattr(client._client, 'unregister', _fake_unregister, raising=False)
-    monkeypatch.setattr(client._client, 'close', _fake_close)
+    monkeypatch.setattr(client._client, "unregister", _fake_unregister, raising=False)
+    monkeypatch.setattr(client._client, "close", _fake_close)
 
     await client.close()
 
-    assert calls == [('unregister', 'repl_main'), ('close', None)]
+    assert calls == [("unregister", "repl_main"), ("close", None)]
 
 
 @pytest.mark.asyncio
@@ -213,21 +213,21 @@ async def test_repl_on_pushed_deliver_enqueues_into_repl(monkeypatch) -> None:
     async def _fake_ack(*, delivery_id, layer, message=None):
         return None
 
-    monkeypatch.setattr(client._client, 'ack', _fake_ack)
+    monkeypatch.setattr(client._client, "ack", _fake_ack)
 
     # simulate the IPC read loop delivering a pushed frame
     from clawcodex_ext.services.im_gateway.ipc_protocol import GatewayFrame
 
     frame = GatewayFrame.deliver(
-        delivery_id='d_push',
-        session_id='repl_main',
-        origin='wechat:direct:default:u',
-        text='hello from wechat',
-        context_token='ctx_abc',
+        delivery_id="d_push",
+        session_id="repl_main",
+        origin="wechat:direct:default:u",
+        text="hello from wechat",
+        context_token="ctx_abc",
     )
     await client._on_pushed_deliver(frame)
-    assert enqueued == ['hello from wechat']
-    assert client.peek_reply_context_token() == 'ctx_abc'
+    assert enqueued == ["hello from wechat"]
+    assert client.peek_reply_context_token() == "ctx_abc"
 
 
 def test_im_reply_controller_sends_when_loop_is_not_running() -> None:
@@ -254,7 +254,7 @@ def test_im_reply_controller_sends_when_loop_is_not_running() -> None:
     class _FakeClient:
         def __init__(self):
             self._client = _FakeIpc()
-            self._reply_origins = collections.deque(['wechat:direct:a:u1'])
+            self._reply_origins = collections.deque(["wechat:direct:a:u1"])
 
         def pop_reply_origin(self) -> str | None:
             return self._reply_origins.popleft() if self._reply_origins else None
@@ -267,8 +267,8 @@ def test_im_reply_controller_sends_when_loop_is_not_running() -> None:
         def _get_last_assistant_text(self):
             return self._text
 
-    repl = _FakeRepl('agent reply')
-    controller = _ImReplyController(repl, _FakeClient(), 'wechat:direct:*:*')
+    repl = _FakeRepl("agent reply")
+    controller = _ImReplyController(repl, _FakeClient(), "wechat:direct:*:*")
 
     # Simulate the post-chat() state: loop is NOT running
     assert not repl._cron_loop.is_running()
@@ -285,8 +285,8 @@ def test_im_reply_controller_sends_when_loop_is_not_running() -> None:
             repl._cron_loop.run_until_complete(asyncio.sleep(0.02))
     finally:
         repl._cron_loop.close()
-    assert sent == [('wechat:direct:a:u1', 'agent reply')], (
-        'OUTBOUND must be sent when loop is NOT running (the post-chat() state)'
+    assert sent == [("wechat:direct:a:u1", "agent reply")], (
+        "OUTBOUND must be sent when loop is NOT running (the post-chat() state)"
     )
 
 
@@ -321,14 +321,14 @@ def test_im_reply_controller_skips_keyboard_turns() -> None:
         _last_sent = None
 
         def _get_last_assistant_text(self):
-            return 'keyboard reply'
+            return "keyboard reply"
 
     repl = _FakeRepl()
-    controller = _ImReplyController(repl, _FakeClient(), 'wechat:direct:*:*')
+    controller = _ImReplyController(repl, _FakeClient(), "wechat:direct:*:*")
 
     controller.on_assistant_turn_complete()
 
-    assert sent == [], 'keyboard turn must NOT send OUTBOUND to WeChat'
+    assert sent == [], "keyboard turn must NOT send OUTBOUND to WeChat"
 
 
 def test_repl_all_private_binding_replies_to_actual_inbound_origin(monkeypatch) -> None:
@@ -349,28 +349,28 @@ def test_repl_all_private_binding_replies_to_actual_inbound_origin(monkeypatch) 
 
     class _FakeRepl:
         def __init__(self):
-            self._text = 'reply to sender'
+            self._text = "reply to sender"
             self._cron_loop = asyncio.new_event_loop()
 
         def _get_last_assistant_text(self):
             return self._text
 
     client, _ = _make_repl_client(capacity=5)
-    client._origin = 'wechat:direct:*:*'
+    client._origin = "wechat:direct:*:*"
     client._client = _FakeInner()
-    monkeypatch.setattr(client, '_ack', _fake_ack, raising=False)
-    monkeypatch.setattr(client._client, 'ack', _fake_ack, raising=False)
+    monkeypatch.setattr(client, "_ack", _fake_ack, raising=False)
+    monkeypatch.setattr(client._client, "ack", _fake_ack, raising=False)
 
     frame = GatewayFrame.deliver(
-        delivery_id='d_sender',
-        session_id='repl_main',
-        origin='wechat:direct:acct:user_sender',
-        text='hello',
+        delivery_id="d_sender",
+        session_id="repl_main",
+        origin="wechat:direct:acct:user_sender",
+        text="hello",
     )
     asyncio.run(client._on_pushed_deliver(frame))
 
     repl = _FakeRepl()
-    controller = _ImReplyController(repl, client, 'wechat:direct:*:*')
+    controller = _ImReplyController(repl, client, "wechat:direct:*:*")
     try:
         repl._cron_loop.call_soon(controller.on_assistant_turn_complete)
         import time
@@ -381,7 +381,7 @@ def test_repl_all_private_binding_replies_to_actual_inbound_origin(monkeypatch) 
     finally:
         repl._cron_loop.close()
 
-    assert sent == [('wechat:direct:acct:user_sender', 'reply to sender')]
+    assert sent == [("wechat:direct:acct:user_sender", "reply to sender")]
 
 
 def test_repl_feishu_reply_preserves_context_token_for_chat_id(monkeypatch) -> None:
@@ -401,28 +401,28 @@ def test_repl_feishu_reply_preserves_context_token_for_chat_id(monkeypatch) -> N
 
     class _FakeRepl:
         def __init__(self):
-            self._text = 'reply to feishu'
+            self._text = "reply to feishu"
             self._cron_loop = asyncio.new_event_loop()
 
         def _get_last_assistant_text(self):
             return self._text
 
     client, _ = _make_repl_client(capacity=5)
-    client._origin = 'feishu:dm:*:*'
+    client._origin = "feishu:dm:*:*"
     client._client = _FakeInner()
-    monkeypatch.setattr(client._client, 'ack', _fake_ack, raising=False)
+    monkeypatch.setattr(client._client, "ack", _fake_ack, raising=False)
 
     frame = GatewayFrame.deliver(
-        delivery_id='d_feishu',
-        session_id='repl_main',
-        origin='feishu:dm:cli_app:ou_user',
-        text='hello',
-        context_token='oc_chat',
+        delivery_id="d_feishu",
+        session_id="repl_main",
+        origin="feishu:dm:cli_app:ou_user",
+        text="hello",
+        context_token="oc_chat",
     )
     asyncio.run(client._on_pushed_deliver(frame))
 
     repl = _FakeRepl()
-    controller = _ImReplyController(repl, client, 'feishu:dm:*:*')
+    controller = _ImReplyController(repl, client, "feishu:dm:*:*")
     try:
         repl._cron_loop.call_soon(controller.on_assistant_turn_complete)
         import time
@@ -433,7 +433,7 @@ def test_repl_feishu_reply_preserves_context_token_for_chat_id(monkeypatch) -> N
     finally:
         repl._cron_loop.close()
 
-    assert sent == [('feishu:dm:cli_app:ou_user', 'reply to feishu', 'oc_chat')]
+    assert sent == [("feishu:dm:cli_app:ou_user", "reply to feishu", "oc_chat")]
 
 
 def test_im_reply_controller_sends_command_feedback_with_context() -> None:
@@ -451,7 +451,7 @@ def test_im_reply_controller_sends_command_feedback_with_context() -> None:
     class _FakeClient:
         def __init__(self):
             self._client = _FakeInner()
-            self._reply_context = [('feishu:dm:cli_app:ou_user', 'oc_chat')]
+            self._reply_context = [("feishu:dm:cli_app:ou_user", "oc_chat")]
 
         def pop_reply_context(self) -> tuple[str | None, str | None]:
             return self._reply_context.pop(0) if self._reply_context else (None, None)
@@ -462,9 +462,9 @@ def test_im_reply_controller_sends_command_feedback_with_context() -> None:
 
     repl = _FakeRepl()
     client = _FakeClient()
-    controller = _ImReplyController(repl, client, 'feishu:dm:*:*')
+    controller = _ImReplyController(repl, client, "feishu:dm:*:*")
     try:
-        repl._cron_loop.call_soon(controller.send_command_feedback, '/clear')
+        repl._cron_loop.call_soon(controller.send_command_feedback, "/clear")
         deadline = time.time() + 1.0
         while not sent and time.time() < deadline:
             repl._cron_loop.run_until_complete(asyncio.sleep(0.02))
@@ -473,15 +473,15 @@ def test_im_reply_controller_sends_command_feedback_with_context() -> None:
 
     assert sent == [
         {
-            'origin': 'feishu:dm:cli_app:ou_user',
-            'text': '命令已执行：/clear',
-            'context_token': 'oc_chat',
-            'metadata': {
-                'intent': 'command_feedback',
-                'command': '/clear',
-                'success': True,
+            "origin": "feishu:dm:cli_app:ou_user",
+            "text": "命令已执行：/clear",
+            "context_token": "oc_chat",
+            "metadata": {
+                "intent": "command_feedback",
+                "command": "/clear",
+                "success": True,
             },
-            'semantic_tags': ['command_feedback'],
+            "semantic_tags": ["command_feedback"],
         }
     ]
     assert client._reply_context == []
@@ -523,7 +523,7 @@ def test_im_reply_controller_sends_permission_prompt_without_consuming_origin(mo
             return None
 
     monkeypatch.setattr(
-        'clawcodex_ext.services.im_gateway.ipc_client.GatewayIpcClient',
+        "clawcodex_ext.services.im_gateway.ipc_client.GatewayIpcClient",
         _FakeOneShot,
     )
 
@@ -532,11 +532,11 @@ def test_im_reply_controller_sends_permission_prompt_without_consuming_origin(mo
             sent.append((origin, text))
 
     class _FakeClient:
-        _socket_path = '/tmp/gw.sock'
+        _socket_path = "/tmp/gw.sock"
 
         def __init__(self):
             self._client = _FakeIpc()
-            self._reply_origins = collections.deque(['wechat:direct:a:u1'])
+            self._reply_origins = collections.deque(["wechat:direct:a:u1"])
 
         def peek_reply_origin(self) -> str | None:
             return self._reply_origins[0] if self._reply_origins else None
@@ -547,19 +547,19 @@ def test_im_reply_controller_sends_permission_prompt_without_consuming_origin(mo
     class _FakeRepl:
         def __init__(self):
             self._cron_loop = asyncio.new_event_loop()
-            self._text = 'done'
+            self._text = "done"
 
         def _get_last_assistant_text(self):
             return self._text
 
     repl = _FakeRepl()
     client = _FakeClient()
-    controller = _ImReplyController(repl, client, 'wechat:direct:*:*')
+    controller = _ImReplyController(repl, client, "wechat:direct:*:*")
 
     try:
         assert controller.send_permission_prompt(
-            message='Tool Bash wants to delete files',
-            options=[('y', 'Yes, allow this action'), ('n', 'No, deny this action')],
+            message="Tool Bash wants to delete files",
+            options=[("y", "Yes, allow this action"), ("n", "No, deny this action")],
         )
 
         # Thread path delivers the permission menu without running _cron_loop.
@@ -568,7 +568,7 @@ def test_im_reply_controller_sends_permission_prompt_without_consuming_origin(mo
             time.sleep(0.02)
 
         # The permission menu used the origin without consuming it.
-        assert list(client._reply_origins) == ['wechat:direct:a:u1']
+        assert list(client._reply_origins) == ["wechat:direct:a:u1"]
 
         controller.on_assistant_turn_complete()
         deadline = time.time() + 1.0
@@ -577,10 +577,10 @@ def test_im_reply_controller_sends_permission_prompt_without_consuming_origin(mo
     finally:
         repl._cron_loop.close()
 
-    assert sent[0][0] == 'wechat:direct:a:u1'
-    assert '需要权限' in sent[0][1]
-    assert '1. [y] 是，允许此操作' in sent[0][1]
-    assert sent[1] == ('wechat:direct:a:u1', 'done')
+    assert sent[0][0] == "wechat:direct:a:u1"
+    assert "需要权限" in sent[0][1]
+    assert "1. [y] 是，允许此操作" in sent[0][1]
+    assert sent[1] == ("wechat:direct:a:u1", "done")
 
 
 def test_im_permission_prompt_sent_immediately_via_thread_path(monkeypatch) -> None:
@@ -616,7 +616,7 @@ def test_im_permission_prompt_sent_immediately_via_thread_path(monkeypatch) -> N
             return None
 
     monkeypatch.setattr(
-        'clawcodex_ext.services.im_gateway.ipc_client.GatewayIpcClient',
+        "clawcodex_ext.services.im_gateway.ipc_client.GatewayIpcClient",
         _FakeOneShot,
     )
 
@@ -625,11 +625,11 @@ def test_im_permission_prompt_sent_immediately_via_thread_path(monkeypatch) -> N
             sent.append((origin, text))  # only reached by the buggy loop-queue path
 
     class _FakeClient:
-        _socket_path = '/tmp/gw.sock'
+        _socket_path = "/tmp/gw.sock"
 
         def __init__(self) -> None:
             self._client = _FakeInner()
-            self._reply_origins = collections.deque(['wechat:direct:a:u1'])
+            self._reply_origins = collections.deque(["wechat:direct:a:u1"])
 
         def peek_reply_origin(self) -> str | None:
             return self._reply_origins[0] if self._reply_origins else None
@@ -639,12 +639,12 @@ def test_im_permission_prompt_sent_immediately_via_thread_path(monkeypatch) -> N
             self._cron_loop = asyncio.new_event_loop()  # NOT running
 
     repl = _FakeRepl()
-    controller = _ImReplyController(repl, _FakeClient(), 'wechat:direct:*:*')
+    controller = _ImReplyController(repl, _FakeClient(), "wechat:direct:*:*")
 
     assert not repl._cron_loop.is_running()
     assert controller.send_permission_prompt(
-        message='Tool Bash wants to delete files',
-        options=[('y', 'Yes, allow this action'), ('n', 'No, deny this action')],
+        message="Tool Bash wants to delete files",
+        options=[("y", "Yes, allow this action"), ("n", "No, deny this action")],
     )
 
     # Deliberately do NOT run _cron_loop. The thread path must deliver without it.
@@ -653,9 +653,9 @@ def test_im_permission_prompt_sent_immediately_via_thread_path(monkeypatch) -> N
         time.sleep(0.02)
     repl._cron_loop.close()
 
-    assert sent, 'permission OUTBOUND must be sent immediately via the thread path'
-    assert sent[0][0] == 'wechat:direct:a:u1'
-    assert '需要权限' in sent[0][1]
+    assert sent, "permission OUTBOUND must be sent immediately via the thread path"
+    assert sent[0][0] == "wechat:direct:a:u1"
+    assert "需要权限" in sent[0][1]
 
 
 def test_im_permission_prompt_sends_structured_metadata() -> None:
@@ -668,7 +668,7 @@ def test_im_permission_prompt_sends_structured_metadata() -> None:
 
     class _FakeClient:
         def __init__(self):
-            self._reply_origins = collections.deque(['wechat:direct:a:u1'])
+            self._reply_origins = collections.deque(["wechat:direct:a:u1"])
 
         def peek_reply_origin(self) -> str | None:
             return self._reply_origins[0] if self._reply_origins else None
@@ -676,15 +676,15 @@ def test_im_permission_prompt_sends_structured_metadata() -> None:
     class _FakeRepl:
         _cron_loop = None
 
-    controller = _ImReplyController(_FakeRepl(), _FakeClient(), 'wechat:direct:*:*')
+    controller = _ImReplyController(_FakeRepl(), _FakeClient(), "wechat:direct:*:*")
 
     def _capture(im_origin, text, *, metadata=None, semantic_tags=None):
         sent.append(
             {
-                'origin': im_origin,
-                'text': text,
-                'metadata': metadata,
-                'semantic_tags': semantic_tags,
+                "origin": im_origin,
+                "text": text,
+                "metadata": metadata,
+                "semantic_tags": semantic_tags,
             }
         )
         return True
@@ -692,21 +692,21 @@ def test_im_permission_prompt_sends_structured_metadata() -> None:
     controller._send_outbound_text = _capture
 
     assert controller.send_permission_prompt(
-        message='Claude wants to use Bash. Allow?',
-        options=[('y', 'Yes, allow this action'), ('n', 'No, deny this action')],
-        suggestion='Review command',
+        message="Claude wants to use Bash. Allow?",
+        options=[("y", "Yes, allow this action"), ("n", "No, deny this action")],
+        suggestion="Review command",
         interactive=True,
     )
 
-    assert sent[0]['origin'] == 'wechat:direct:a:u1'
-    assert sent[0]['metadata']['intent'] == 'permission_approval'
-    assert sent[0]['metadata']['permission']['message'].startswith('ClawCodex wants')
-    assert sent[0]['metadata']['permission']['suggestion'] == 'Review command'
-    assert [option['value'] for option in sent[0]['metadata']['permission']['options']] == [
-        'y',
-        'n',
+    assert sent[0]["origin"] == "wechat:direct:a:u1"
+    assert sent[0]["metadata"]["intent"] == "permission_approval"
+    assert sent[0]["metadata"]["permission"]["message"].startswith("ClawCodex wants")
+    assert sent[0]["metadata"]["permission"]["suggestion"] == "Review command"
+    assert [option["value"] for option in sent[0]["metadata"]["permission"]["options"]] == [
+        "y",
+        "n",
     ]
-    assert sent[0]['semantic_tags'] == ['approval']
+    assert sent[0]["semantic_tags"] == ["approval"]
 
 
 def test_permission_prompt_renders_chinese_and_rebrands_claude() -> None:
@@ -717,35 +717,35 @@ def test_permission_prompt_renders_chinese_and_rebrands_claude() -> None:
     from clawcodex_ext.frontend.repl_extensions import _ImReplyController
 
     text = _ImReplyController._format_permission_prompt(
-        message='Claude wants to use Bash. Allow?',
+        message="Claude wants to use Bash. Allow?",
         options=[
-            ('y', 'Yes, allow this action'),
-            ('n', 'No, deny this action'),
+            ("y", "Yes, allow this action"),
+            ("n", "No, deny this action"),
         ],
-        suggestion='可在设置中开启 allow_docs',
+        suggestion="可在设置中开启 allow_docs",
         interactive=True,
     )
-    assert '需要权限' in text
-    assert 'ClawCodex 想使用 Bash，是否允许？' in text
-    assert 'Claude' not in text
-    assert '1. [y] 是，允许此操作' in text
-    assert '2. [n] 否，拒绝此操作' in text
-    assert '选项：' in text
-    assert '建议：' in text
-    assert '请回复选项编号或字母' in text
+    assert "需要权限" in text
+    assert "ClawCodex 想使用 Bash，是否允许？" in text
+    assert "Claude" not in text
+    assert "1. [y] 是，允许此操作" in text
+    assert "2. [n] 否，拒绝此操作" in text
+    assert "选项：" in text
+    assert "建议：" in text
+    assert "请回复选项编号或字母" in text
 
     # Enable-and-allow option form is translated for any setting name.
     text2 = _ImReplyController._format_permission_prompt(
-        message='Claude wants to use Read. Allow?',
+        message="Claude wants to use Read. Allow?",
         options=[
-            ('e', 'Enable allow_docs and allow'),
-            ('y', 'Yes, allow this action'),
-            ('n', 'No, deny this action'),
+            ("e", "Enable allow_docs and allow"),
+            ("y", "Yes, allow this action"),
+            ("n", "No, deny this action"),
         ],
         interactive=False,
     )
-    assert '1. [e] 启用 allow_docs 并允许' in text2
-    assert '请在 REPL 中选择对应的选项以继续' in text2
+    assert "1. [e] 启用 allow_docs 并允许" in text2
+    assert "请在 REPL 中选择对应的选项以继续" in text2
 
 
 def test_handle_im_permission_reply_maps_choices_and_stop() -> None:
@@ -761,40 +761,40 @@ def test_handle_im_permission_reply_maps_choices_and_stop() -> None:
         r = _FakeRepl()
         r._im_permission_lock = threading.Lock()
         r._im_permission_wait = {
-            'event': threading.Event(),
-            'choice': None,
-            'valid': set(valid),
+            "event": threading.Event(),
+            "choice": None,
+            "valid": set(valid),
         }
         return r
 
-    valid = {'1', '2', 'y', 'n', 'yes', 'no'}
+    valid = {"1", "2", "y", "n", "yes", "no"}
 
     # numeric choice → consumed, choice recorded, event set
     r = _repl_with_wait(valid)
-    assert _handle_im_permission_reply(r, '1') is True
-    assert r._im_permission_wait['choice'] == '1'
-    assert r._im_permission_wait['event'].is_set()
+    assert _handle_im_permission_reply(r, "1") is True
+    assert r._im_permission_wait["choice"] == "1"
+    assert r._im_permission_wait["event"].is_set()
 
     # letter choice
     r = _repl_with_wait(valid)
-    assert _handle_im_permission_reply(r, 'Y') is True  # case-insensitive
-    assert r._im_permission_wait['choice'] == 'y'
+    assert _handle_im_permission_reply(r, "Y") is True  # case-insensitive
+    assert r._im_permission_wait["choice"] == "y"
 
     # /stop during permission wait → deny
     r = _repl_with_wait(valid)
-    assert _handle_im_permission_reply(r, '/stop') is True
-    assert r._im_permission_wait['choice'] == 'n'
+    assert _handle_im_permission_reply(r, "/stop") is True
+    assert r._im_permission_wait["choice"] == "n"
 
     # non-choice → not consumed, fall through to enqueue
     r = _repl_with_wait(valid)
-    assert _handle_im_permission_reply(r, 'hello there') is False
-    assert r._im_permission_wait['choice'] is None
-    assert not r._im_permission_wait['event'].is_set()
+    assert _handle_im_permission_reply(r, "hello there") is False
+    assert r._im_permission_wait["choice"] is None
+    assert not r._im_permission_wait["event"].is_set()
 
     # no active wait → not consumed
     r = _repl_with_wait(valid)
     r._im_permission_wait = None
-    assert _handle_im_permission_reply(r, '1') is False
+    assert _handle_im_permission_reply(r, "1") is False
 
 
 @pytest.mark.asyncio
@@ -806,7 +806,7 @@ async def test_repl_deliver_permission_reply_intercepted_before_enqueue(monkeypa
     acks: list[tuple] = []
 
     def _probe(text: str) -> bool:
-        return (text or '').strip().lower() in {'1', '2', 'y', 'n'}
+        return (text or "").strip().lower() in {"1", "2", "y", "n"}
 
     client._permission_probe = _probe  # injected by _install_gateway_client
 
@@ -814,16 +814,16 @@ async def test_repl_deliver_permission_reply_intercepted_before_enqueue(monkeypa
         acks.append((delivery_id, layer, message))
         return None
 
-    monkeypatch.setattr(client._client, 'ack', _fake_ack)
+    monkeypatch.setattr(client._client, "ack", _fake_ack)
 
     # valid choice → consumed, acked processed, NOT enqueued
-    await client.deliver(delivery_id='d_perm', text='1', origin='wechat:direct:a:u')
+    await client.deliver(delivery_id="d_perm", text="1", origin="wechat:direct:a:u")
     assert enqueued == []
-    assert acks == [('d_perm', 'processed', 'permission reply')]
+    assert acks == [("d_perm", "processed", "permission reply")]
 
     # non-choice → falls through to enqueue
-    await client.deliver(delivery_id='d_msg', text='hello', origin='wechat:direct:a:u')
-    assert enqueued == ['hello']
+    await client.deliver(delivery_id="d_msg", text="hello", origin="wechat:direct:a:u")
+    assert enqueued == ["hello"]
 
 
 @pytest.mark.asyncio
@@ -831,25 +831,25 @@ async def test_gateway_ipc_ack_is_fire_and_forget(monkeypatch) -> None:
     from clawcodex_ext.services.im_gateway.ipc_client import GatewayIpcClient
     from clawcodex_ext.services.im_gateway.ipc_protocol import FrameType
 
-    client = GatewayIpcClient('/tmp/gw.sock')
+    client = GatewayIpcClient("/tmp/gw.sock")
     written = []
 
     async def _send(_frame):
-        raise AssertionError('ACK replies to server-pushed DELIVER must not wait for another ACK')
+        raise AssertionError("ACK replies to server-pushed DELIVER must not wait for another ACK")
 
     async def _write_frame_no_reply(frame):
         written.append(frame)
 
-    monkeypatch.setattr(client, '_send', _send)
-    monkeypatch.setattr(client, '_write_frame_no_reply', _write_frame_no_reply, raising=False)
+    monkeypatch.setattr(client, "_send", _send)
+    monkeypatch.setattr(client, "_write_frame_no_reply", _write_frame_no_reply, raising=False)
 
-    response = await client.ack(delivery_id='d_perm', layer='processed', message='permission reply')
+    response = await client.ack(delivery_id="d_perm", layer="processed", message="permission reply")
 
     assert response is None
     assert len(written) == 1
     assert written[0].type is FrameType.ACK
-    assert written[0].delivery_id == 'd_perm'
-    assert written[0].ack_layer == 'processed'
+    assert written[0].delivery_id == "d_perm"
+    assert written[0].ack_layer == "processed"
 
 
 def test_repl_gateway_uses_runtime_options_and_registers_once(monkeypatch) -> None:
@@ -858,10 +858,10 @@ def test_repl_gateway_uses_runtime_options_and_registers_once(monkeypatch) -> No
 
     from clawcodex_ext.frontend import repl_extensions
 
-    monkeypatch.delenv('CLAWCODEX_GATEWAY_ORIGIN', raising=False)
-    monkeypatch.delenv('CLAWCODEX_IM_ORIGIN', raising=False)
-    monkeypatch.delenv('CLAWCODEX_GATEWAY_SOCK', raising=False)
-    monkeypatch.delenv('CLAWCODEX_IM_GATEWAY_SOCK', raising=False)
+    monkeypatch.delenv("CLAWCODEX_GATEWAY_ORIGIN", raising=False)
+    monkeypatch.delenv("CLAWCODEX_IM_ORIGIN", raising=False)
+    monkeypatch.delenv("CLAWCODEX_GATEWAY_SOCK", raising=False)
+    monkeypatch.delenv("CLAWCODEX_IM_GATEWAY_SOCK", raising=False)
 
     class _FakeInner:
         def __init__(self):
@@ -884,7 +884,7 @@ def test_repl_gateway_uses_runtime_options_and_registers_once(monkeypatch) -> No
         async def _heartbeat_loop(self, interval):
             self.heartbeat_intervals.append(interval)
 
-    monkeypatch.setattr('clawcodex_ext.frontend.repl_gateway.ReplGatewayClient', _FakeClient)
+    monkeypatch.setattr("clawcodex_ext.frontend.repl_gateway.ReplGatewayClient", _FakeClient)
 
     class _FakeRepl:
         _queued_prompts = []
@@ -898,36 +898,36 @@ def test_repl_gateway_uses_runtime_options_and_registers_once(monkeypatch) -> No
     repl = _FakeRepl()
     ctx = SimpleNamespace(
         options=SimpleNamespace(
-            gateway_origin='wechat:direct:default:user1',
-            gateway_sock='/tmp/clawcodex-gateway.sock',
+            gateway_origin="wechat:direct:default:user1",
+            gateway_sock="/tmp/clawcodex-gateway.sock",
         )
     )
     repl_extensions._install_gateway_client(repl, ctx)
 
     client = repl._gateway_client
-    assert client.socket_path == '/tmp/clawcodex-gateway.sock'
-    assert client.kwargs['origin'] == 'wechat:direct:default:user1'
+    assert client.socket_path == "/tmp/clawcodex-gateway.sock"
+    assert client.kwargs["origin"] == "wechat:direct:default:user1"
     asyncio.run(repl._gateway_init(None))
     assert client.connect_calls == 1
     assert client._client.raw_registers == []
-    assert callable(client.kwargs['control_handler'])
+    assert callable(client.kwargs["control_handler"])
 
 
 def test_repl_gateway_switch_registers_all_private_messages(monkeypatch) -> None:
     """--gateway binds REPL to all supported private IM messages by default."""
     from clawcodex_ext.frontend import repl_extensions
 
-    monkeypatch.delenv('CLAWCODEX_GATEWAY_ORIGIN', raising=False)
-    monkeypatch.delenv('CLAWCODEX_IM_ORIGIN', raising=False)
-    monkeypatch.delenv('CLAWCODEX_GATEWAY_SOCK', raising=False)
-    monkeypatch.delenv('CLAWCODEX_IM_GATEWAY_SOCK', raising=False)
+    monkeypatch.delenv("CLAWCODEX_GATEWAY_ORIGIN", raising=False)
+    monkeypatch.delenv("CLAWCODEX_IM_ORIGIN", raising=False)
+    monkeypatch.delenv("CLAWCODEX_GATEWAY_SOCK", raising=False)
+    monkeypatch.delenv("CLAWCODEX_IM_GATEWAY_SOCK", raising=False)
 
     class _FakeClient:
         def __init__(self, socket_path, **kwargs):
             self.socket_path = socket_path
             self.kwargs = kwargs
 
-    monkeypatch.setattr('clawcodex_ext.frontend.repl_gateway.ReplGatewayClient', _FakeClient)
+    monkeypatch.setattr("clawcodex_ext.frontend.repl_gateway.ReplGatewayClient", _FakeClient)
 
     class _FakeRepl:
         _queued_prompts = []
@@ -943,13 +943,13 @@ def test_repl_gateway_switch_registers_all_private_messages(monkeypatch) -> None
         options=SimpleNamespace(
             gateway=True,
             gateway_origin=None,
-            gateway_sock='/tmp/clawcodex-gateway.sock',
+            gateway_sock="/tmp/clawcodex-gateway.sock",
         )
     )
     repl_extensions._install_gateway_client(repl, ctx)
 
-    assert repl._gateway_client.kwargs['origin'] == IM_DIRECT_ALL_ORIGIN
-    assert callable(repl._gateway_client.kwargs['control_handler'])
+    assert repl._gateway_client.kwargs["origin"] == IM_DIRECT_ALL_ORIGIN
+    assert callable(repl._gateway_client.kwargs["control_handler"])
 
 
 def test_repl_gateway_im_init_no_auto_start_on_missing_socket(monkeypatch) -> None:
@@ -972,12 +972,12 @@ def test_repl_gateway_im_init_no_auto_start_on_missing_socket(monkeypatch) -> No
 
         async def connect(self):
             self.connect_calls += 1
-            raise FileNotFoundError(2, 'No such file or directory')
+            raise FileNotFoundError(2, "No such file or directory")
 
         async def _heartbeat_loop(self, interval):
             self.heartbeat_intervals.append(interval)
 
-    monkeypatch.setattr('clawcodex_ext.frontend.repl_gateway.ReplGatewayClient', _FakeClient)
+    monkeypatch.setattr("clawcodex_ext.frontend.repl_gateway.ReplGatewayClient", _FakeClient)
 
     class _FakeRepl:
         _queued_prompts = []
@@ -991,8 +991,8 @@ def test_repl_gateway_im_init_no_auto_start_on_missing_socket(monkeypatch) -> No
     repl = _FakeRepl()
     ctx = SimpleNamespace(
         options=SimpleNamespace(
-            gateway_origin='wechat:direct:default:user1',
-            gateway_sock='/tmp/clawcodex-gateway.sock',
+            gateway_origin="wechat:direct:default:user1",
+            gateway_sock="/tmp/clawcodex-gateway.sock",
         )
     )
     repl_extensions._install_gateway_client(repl, ctx)
@@ -1023,9 +1023,9 @@ def test_repl_gateway_im_init_no_retry_when_daemon_start_fails(monkeypatch) -> N
 
         async def connect(self):
             self.connect_calls += 1
-            raise FileNotFoundError(2, 'No such file or directory')
+            raise FileNotFoundError(2, "No such file or directory")
 
-    monkeypatch.setattr('clawcodex_ext.frontend.repl_gateway.ReplGatewayClient', _FakeClient)
+    monkeypatch.setattr("clawcodex_ext.frontend.repl_gateway.ReplGatewayClient", _FakeClient)
 
     class _FakeRepl:
         _queued_prompts = []
@@ -1039,8 +1039,8 @@ def test_repl_gateway_im_init_no_retry_when_daemon_start_fails(monkeypatch) -> N
     repl = _FakeRepl()
     ctx = SimpleNamespace(
         options=SimpleNamespace(
-            gateway_origin='wechat:direct:default:user1',
-            gateway_sock='/tmp/clawcodex-gateway.sock',
+            gateway_origin="wechat:direct:default:user1",
+            gateway_sock="/tmp/clawcodex-gateway.sock",
         )
     )
     repl_extensions._install_gateway_client(repl, ctx)
@@ -1054,17 +1054,17 @@ def test_repl_gateway_control_handler_stops_active_run(monkeypatch) -> None:
     """The installed REPL control callback maps IM /stop to active-run cancel."""
     from clawcodex_ext.frontend import repl_extensions
 
-    monkeypatch.delenv('CLAWCODEX_GATEWAY_ORIGIN', raising=False)
-    monkeypatch.delenv('CLAWCODEX_IM_ORIGIN', raising=False)
-    monkeypatch.delenv('CLAWCODEX_GATEWAY_SOCK', raising=False)
-    monkeypatch.delenv('CLAWCODEX_IM_GATEWAY_SOCK', raising=False)
+    monkeypatch.delenv("CLAWCODEX_GATEWAY_ORIGIN", raising=False)
+    monkeypatch.delenv("CLAWCODEX_IM_ORIGIN", raising=False)
+    monkeypatch.delenv("CLAWCODEX_GATEWAY_SOCK", raising=False)
+    monkeypatch.delenv("CLAWCODEX_IM_GATEWAY_SOCK", raising=False)
 
     class _FakeClient:
         def __init__(self, socket_path, **kwargs):
             self.socket_path = socket_path
             self.kwargs = kwargs
 
-    monkeypatch.setattr('clawcodex_ext.frontend.repl_gateway.ReplGatewayClient', _FakeClient)
+    monkeypatch.setattr("clawcodex_ext.frontend.repl_gateway.ReplGatewayClient", _FakeClient)
 
     class _FakeRepl:
         _queued_prompts = []
@@ -1073,27 +1073,27 @@ def test_repl_gateway_control_handler_stops_active_run(monkeypatch) -> None:
             self.interrupts: list[str] = []
 
         def _enqueue_prompt(self, text):
-            raise AssertionError('/stop should not be enqueued as a normal prompt')
+            raise AssertionError("/stop should not be enqueued as a normal prompt")
 
         def _wake_prompt_for_im(self):
             return None
 
         def _interrupt_active_chat_from_im(self) -> bool:
-            self.interrupts.append('stop')
+            self.interrupts.append("stop")
             return True
 
     repl = _FakeRepl()
     ctx = SimpleNamespace(
         options=SimpleNamespace(
-            gateway_origin='wechat:direct:default:user1',
-            gateway_sock='/tmp/clawcodex-gateway.sock',
+            gateway_origin="wechat:direct:default:user1",
+            gateway_sock="/tmp/clawcodex-gateway.sock",
         )
     )
     repl_extensions._install_gateway_client(repl, ctx)
 
-    handler = repl._gateway_client.kwargs['control_handler']
-    assert handler('/stop', 'wechat:direct:default:user1') is True
-    assert repl.interrupts == ['stop']
+    handler = repl._gateway_client.kwargs["control_handler"]
+    assert handler("/stop", "wechat:direct:default:user1") is True
+    assert repl.interrupts == ["stop"]
 
 
 @pytest.mark.asyncio
@@ -1117,10 +1117,10 @@ async def test_repl_deliver_wakes_blocked_prompt_loop(monkeypatch) -> None:
     async def _fake_ack(*, delivery_id, layer, message=None):
         return None
 
-    monkeypatch.setattr(client._client, 'ack', _fake_ack)
-    await client.deliver(delivery_id='d_wake', text='hello from wechat')
-    assert enqueued == ['hello from wechat']
-    assert wakes == [1], 'deliver() must wake the REPL prompt loop after enqueue'
+    monkeypatch.setattr(client._client, "ack", _fake_ack)
+    await client.deliver(delivery_id="d_wake", text="hello from wechat")
+    assert enqueued == ["hello from wechat"]
+    assert wakes == [1], "deliver() must wake the REPL prompt loop after enqueue"
 
 
 @pytest.mark.asyncio
@@ -1138,23 +1138,23 @@ async def test_repl_stop_command_uses_priority_control_path(monkeypatch) -> None
     async def _fake_ack(*, delivery_id, layer, message=None):
         return None
 
-    monkeypatch.setattr(client._client, 'ack', _fake_ack)
+    monkeypatch.setattr(client._client, "ack", _fake_ack)
     await client.deliver(
-        delivery_id='d_stop',
-        text='/stop',
-        origin='wechat:direct:default:u',
-        semantic='command',
+        delivery_id="d_stop",
+        text="/stop",
+        origin="wechat:direct:default:u",
+        semantic="command",
     )
     await client.deliver(
-        delivery_id='d_interrupt',
-        text='please stop',
-        origin='wechat:direct:default:u',
-        semantic='interrupt',
+        delivery_id="d_interrupt",
+        text="please stop",
+        origin="wechat:direct:default:u",
+        semantic="interrupt",
     )
 
     assert calls == [
-        ('/stop', 'wechat:direct:default:u'),
-        ('please stop', 'wechat:direct:default:u'),
+        ("/stop", "wechat:direct:default:u"),
+        ("please stop", "wechat:direct:default:u"),
     ]
     assert enqueued == []
 
@@ -1166,11 +1166,11 @@ async def test_repl_rejects_at_capacity_without_silent_drop(monkeypatch) -> None
     async def _fake_deliver(*, delivery_id, session_id, origin, text, semantic=None):
         return None
 
-    monkeypatch.setattr(client._client, 'deliver', _fake_deliver)
+    monkeypatch.setattr(client._client, "deliver", _fake_deliver)
     # simulate a full queue
     client._queue_size = lambda: 2
     with pytest.raises(QueueFull):
-        await client.deliver(delivery_id='d1', text='a')
+        await client.deliver(delivery_id="d1", text="a")
     assert enqueued == []  # not silently dropped
 
 
@@ -1181,11 +1181,11 @@ async def test_repl_dedups_by_delivery_id(monkeypatch) -> None:
     async def _fake_ack(*, delivery_id, layer, message=None):
         return None
 
-    monkeypatch.setattr(client._client, 'ack', _fake_ack)
+    monkeypatch.setattr(client._client, "ack", _fake_ack)
     # first deliver enqueues "a"
-    await client.deliver(delivery_id='d1', text='a')
+    await client.deliver(delivery_id="d1", text="a")
     # second with same id → deduped, returns None, no extra enqueue
-    res = await client.deliver(delivery_id='d1', text='a')
+    res = await client.deliver(delivery_id="d1", text="a")
     assert res is None
     assert len(enqueued) == 1
 
@@ -1196,17 +1196,17 @@ async def test_repl_ack_uses_ack_frame_not_deliver(monkeypatch) -> None:
     calls: list[tuple] = []
 
     async def _fake_ack(*, delivery_id, layer, message=None):
-        calls.append(('ack', delivery_id, layer, message))
+        calls.append(("ack", delivery_id, layer, message))
         return None
 
     async def _bad_deliver(**_kwargs):
-        raise AssertionError('REPL enqueue ack must not send a second DELIVER frame')
+        raise AssertionError("REPL enqueue ack must not send a second DELIVER frame")
 
-    monkeypatch.setattr(client._client, 'ack', _fake_ack, raising=False)
-    monkeypatch.setattr(client._client, 'deliver', _bad_deliver)
-    await client.deliver(delivery_id='d1', text='a')
-    assert enqueued == ['a']
-    assert calls == [('ack', 'd1', 'enqueued', 'enqueued')]
+    monkeypatch.setattr(client._client, "ack", _fake_ack, raising=False)
+    monkeypatch.setattr(client._client, "deliver", _bad_deliver)
+    await client.deliver(delivery_id="d1", text="a")
+    assert enqueued == ["a"]
+    assert calls == [("ack", "d1", "enqueued", "enqueued")]
 
 
 # -- OrchestratorGatewayClient -----------------------------------------
@@ -1216,25 +1216,25 @@ def _handlers():
     calls: list[tuple] = []
 
     def queue_pending_message(issue, text):
-        calls.append(('queue_pending', issue, text))
+        calls.append(("queue_pending", issue, text))
 
     def control_verb(verb, issue):
-        calls.append(('control', verb, issue))
+        calls.append(("control", verb, issue))
 
     def issue_inject(issue, hint):
-        calls.append(('inject', issue, hint))
+        calls.append(("inject", issue, hint))
 
     def operator_hints(issue, text):
-        calls.append(('hints', issue, text))
+        calls.append(("hints", issue, text))
 
     def agent_intent(verb, issue):
-        calls.append(('intent', verb, issue))
+        calls.append(("intent", verb, issue))
 
     def issue_cli(verb, issue, payload):
-        calls.append(('issue_cli', verb, issue, payload))
+        calls.append(("issue_cli", verb, issue, payload))
 
     def bridge_interrupt(issue, payload):
-        calls.append(('bridge_interrupt', issue, payload))
+        calls.append(("bridge_interrupt", issue, payload))
 
     return OrchestratorHandlers(
         queue_pending_message=queue_pending_message,
@@ -1250,22 +1250,22 @@ def _handlers():
 def test_orchestrator_followup_to_queue_pending_message() -> None:
     h, calls = _handlers()
     c = OrchestratorGatewayClient(h)
-    msg = InboundMessage('o', 'more notes', 'm1', 'wechat-main', raw={'issue_id': 'AGENTSDK-15'})
+    msg = InboundMessage("o", "more notes", "m1", "wechat-main", raw={"issue_id": "AGENTSDK-15"})
     status = c.dispatch(msg, MessageSemantics.FOLLOW_UP)
-    assert status == 'followup_queued'
-    assert calls[0][0] == 'queue_pending'
-    assert calls[0][1] == 'AGENTSDK-15'
+    assert status == "followup_queued"
+    assert calls[0][0] == "queue_pending"
+    assert calls[0][1] == "AGENTSDK-15"
 
 
 def test_orchestrator_control_verb_to_control_socket() -> None:
     h, calls = _handlers()
     c = OrchestratorGatewayClient(h)
     msg = InboundMessage(
-        'o', '/pause AGENTSDK-15', 'm1', 'wechat-main', raw={'issue_id': 'AGENTSDK-15'}
+        "o", "/pause AGENTSDK-15", "m1", "wechat-main", raw={"issue_id": "AGENTSDK-15"}
     )
     status = c.dispatch(msg, MessageSemantics.COMMAND)
-    assert status == 'control_pause'
-    assert calls[0] == ('control', 'pause', 'AGENTSDK-15')
+    assert status == "control_pause"
+    assert calls[0] == ("control", "pause", "AGENTSDK-15")
 
 
 def test_orchestrator_inject_to_issue_inject_not_control_socket() -> None:
@@ -1273,97 +1273,97 @@ def test_orchestrator_inject_to_issue_inject_not_control_socket() -> None:
     h, calls = _handlers()
     c = OrchestratorGatewayClient(h)
     msg = InboundMessage(
-        'o', '/inject fix the tests', 'm1', 'wechat-main', raw={'issue_id': 'AGENTSDK-15'}
+        "o", "/inject fix the tests", "m1", "wechat-main", raw={"issue_id": "AGENTSDK-15"}
     )
     status = c.dispatch(msg, MessageSemantics.COMMAND)
-    assert status == 'inject_delivered'
-    assert calls[0][0] == 'inject'
-    assert calls[0][1] == 'AGENTSDK-15'
+    assert status == "inject_delivered"
+    assert calls[0][0] == "inject"
+    assert calls[0][1] == "AGENTSDK-15"
     # no control-socket call
-    assert not any(c0[0] == 'control' for c0 in calls)
+    assert not any(c0[0] == "control" for c0 in calls)
 
 
 def test_orchestrator_agent_intent() -> None:
     h, calls = _handlers()
     c = OrchestratorGatewayClient(h)
     msg = InboundMessage(
-        'o', '/agent retry AGENTSDK-15', 'm1', 'wechat-main', raw={'issue_id': 'AGENTSDK-15'}
+        "o", "/agent retry AGENTSDK-15", "m1", "wechat-main", raw={"issue_id": "AGENTSDK-15"}
     )
     status = c.dispatch(msg, MessageSemantics.COMMAND)
-    assert status == 'agent_retry'
-    assert calls[0] == ('intent', 'retry', 'AGENTSDK-15')
+    assert status == "agent_retry"
+    assert calls[0] == ("intent", "retry", "AGENTSDK-15")
 
 
 def test_orchestrator_context_only_to_operator_hints() -> None:
     h, calls = _handlers()
     c = OrchestratorGatewayClient(h)
-    msg = InboundMessage('o', 'ctx note', 'm1', 'wechat-main', raw={'issue_id': 'AGENTSDK-15'})
+    msg = InboundMessage("o", "ctx note", "m1", "wechat-main", raw={"issue_id": "AGENTSDK-15"})
     status = c.dispatch(msg, MessageSemantics.CONTEXT_ONLY)
-    assert status == 'context_only_recorded'
-    assert calls[0][0] == 'hints'
+    assert status == "context_only_recorded"
+    assert calls[0][0] == "hints"
 
 
 def test_orchestrator_interrupt_to_control_verb() -> None:
     h, calls = _handlers()
     c = OrchestratorGatewayClient(h)
     msg = InboundMessage(
-        'o', 'x', 'm1', 'wechat-main', raw={'issue_id': 'AGENTSDK-15', 'deliverAs': 'interrupt'}
+        "o", "x", "m1", "wechat-main", raw={"issue_id": "AGENTSDK-15", "deliverAs": "interrupt"}
     )
     status = c.dispatch(msg, MessageSemantics.INTERRUPT)
-    assert status == 'interrupt_dispatched'
-    assert calls[0][0] == 'bridge_interrupt'
+    assert status == "interrupt_dispatched"
+    assert calls[0][0] == "bridge_interrupt"
 
 
 def test_orchestrator_issue_cli_commands_call_handler() -> None:
-    for verb in ('clarify', 'review', 'feedback'):
+    for verb in ("clarify", "review", "feedback"):
         h, calls = _handlers()
         c = OrchestratorGatewayClient(h)
         msg = InboundMessage(
-            'o',
-            f'/{verb} AGENTSDK-15 approve',
-            'm1',
-            'wechat-main',
-            raw={'issue_id': 'AGENTSDK-15'},
+            "o",
+            f"/{verb} AGENTSDK-15 approve",
+            "m1",
+            "wechat-main",
+            raw={"issue_id": "AGENTSDK-15"},
         )
         status = c.dispatch(msg, MessageSemantics.COMMAND)
-        assert status == f'issue_cli_{verb}'
-        assert calls[0][0] == 'issue_cli'
+        assert status == f"issue_cli_{verb}"
+        assert calls[0][0] == "issue_cli"
         assert calls[0][1] == verb
-        assert calls[0][2] == 'AGENTSDK-15'
+        assert calls[0][2] == "AGENTSDK-15"
 
 
 def test_orchestrator_cli_command_queues_captured_output() -> None:
     h, _calls = _handlers()
     c = OrchestratorGatewayClient(
         h,
-        cli_runner=lambda argv: (0, f'argv={argv!r}\nissue output\n', ''),
+        cli_runner=lambda argv: (0, f"argv={argv!r}\nissue output\n", ""),
     )
-    msg = InboundMessage('o', '/issue list', 'm1', 'wechat-main')
+    msg = InboundMessage("o", "/issue list", "m1", "wechat-main")
 
     status = c.dispatch(msg, MessageSemantics.COMMAND)
 
-    assert status == 'orchestrator_cli_issue_list'
+    assert status == "orchestrator_cli_issue_list"
     pending = list(c._pending_outbound)
     assert len(pending) == 1
-    assert '命令已执行：/issue list' in pending[0]
+    assert "命令已执行：/issue list" in pending[0]
     assert "argv=['issue', 'list']" in pending[0]
-    assert 'issue output' in pending[0]
+    assert "issue output" in pending[0]
 
 
 def test_orchestrator_issue_stop_routes_to_control_handler() -> None:
     h, calls = _handlers()
 
     def _fail_cli(_argv):
-        raise AssertionError('control-like issue commands must not run interactive CLI')
+        raise AssertionError("control-like issue commands must not run interactive CLI")
 
     c = OrchestratorGatewayClient(h, cli_runner=_fail_cli)
-    msg = InboundMessage('o', '/issue stop --id AGENTSDK-15', 'm1', 'wechat-main')
+    msg = InboundMessage("o", "/issue stop --id AGENTSDK-15", "m1", "wechat-main")
 
     status = c.dispatch(msg, MessageSemantics.COMMAND)
 
-    assert status == 'orchestrator_cli_issue_stop'
-    assert calls[0] == ('control', 'stop', 'AGENTSDK-15')
-    assert 'Control command' in list(c._pending_outbound)[0]
+    assert status == "orchestrator_cli_issue_stop"
+    assert calls[0] == ("control", "stop", "AGENTSDK-15")
+    assert "Control command" in list(c._pending_outbound)[0]
 
 
 @pytest.mark.asyncio
@@ -1379,30 +1379,30 @@ async def test_orchestrator_pushed_cli_command_sends_outbound_reply() -> None:
 
         async def send_outbound(self, *, origin, text):
             self.sent.append((origin, text))
-            return GatewayFrame.ack(delivery_id='d1', layer='processed', message='sent')
+            return GatewayFrame.ack(delivery_id="d1", layer="processed", message="sent")
 
     ipc = _FakeIpc()
     c = OrchestratorGatewayClient(
         h,
         ipc_client=ipc,
-        origin='feishu:dm:*:*',
-        cli_runner=lambda argv: (0, 'Orchestrator daemon: RUNNING\n', ''),
+        origin="feishu:dm:*:*",
+        cli_runner=lambda argv: (0, "Orchestrator daemon: RUNNING\n", ""),
     )
 
     await c._on_pushed_deliver(
         GatewayFrame.deliver(
-            delivery_id='d1',
-            session_id='orch',
-            origin='feishu:dm:cli_app:ou_user',
-            text='/server status',
-            semantic='command',
+            delivery_id="d1",
+            session_id="orch",
+            origin="feishu:dm:cli_app:ou_user",
+            text="/server status",
+            semantic="command",
         )
     )
 
     assert ipc.sent == [
         (
-            'feishu:dm:*:*',
-            '命令已执行：/server status\n\nOrchestrator daemon: RUNNING',
+            "feishu:dm:*:*",
+            "命令已执行：/server status\n\nOrchestrator daemon: RUNNING",
         )
     ]
 
@@ -1410,11 +1410,11 @@ async def test_orchestrator_pushed_cli_command_sends_outbound_reply() -> None:
 def test_orchestrator_issue_tail_returns_bounded_notice() -> None:
     h, _calls = _handlers()
     c = OrchestratorGatewayClient(h)
-    msg = InboundMessage('o', '/issue tail --id AGENTSDK-15', 'm1', 'wechat-main')
+    msg = InboundMessage("o", "/issue tail --id AGENTSDK-15", "m1", "wechat-main")
 
     status = c.dispatch(msg, MessageSemantics.COMMAND)
 
-    assert status == 'orchestrator_cli_issue_tail'
+    assert status == "orchestrator_cli_issue_tail"
     reply = list(c._pending_outbound)[0]
-    assert 'streaming command' in reply
-    assert 'AGENTSDK-15' in reply
+    assert "streaming command" in reply
+    assert "AGENTSDK-15" in reply
