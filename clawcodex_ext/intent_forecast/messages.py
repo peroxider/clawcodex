@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 
@@ -74,3 +75,33 @@ def result_to_dict(result: ForecastResult) -> dict[str, Any]:
             for s in result.suggestions
         ],
     }
+
+
+def create_forecast_system_message(
+    result: ForecastResult,
+    *,
+    trigger: str = "auto",
+) -> Any:
+    """Create a SystemMessage with subtype='intent_forecast' for persistence.
+
+    Mirrors ``create_away_summary_message`` so forecast content survives
+    REPL→TUI transitions and ``--resume`` replay.
+    """
+    from clawcodex_ext.types.messages import SystemMessage
+
+    text = format_forecast_for_display(result)
+    msg = SystemMessage(
+        content=text,
+        timestamp=datetime.now().isoformat(),
+        subtype="intent_forecast",
+        level="info",
+        isMeta=False,
+    )
+    msg._forecast_meta = {
+        "trigger": trigger,
+        "fingerprint": result.fingerprint,
+        "suggestion_count": len(result.suggestions),
+        "generated": result.generated,
+        "created_at": msg.timestamp,
+    }
+    return msg

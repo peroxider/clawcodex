@@ -1457,6 +1457,12 @@ class ClawCodexTUI(App):
                         style='light',
                         render='markdown',
                     )
+                elif subtype == 'intent_forecast' and self._repl_screen is not None:
+                    self._repl_screen.transcript.append_system(
+                        getattr(msg, 'content', '') or '',
+                        style='light',
+                        render='markdown',
+                    )
                 continue
             if role == 'assistant':
                 text = _flatten_message_text(content)

@@ -3677,6 +3677,11 @@ class ClawcodexREPL:
                         display = str(getattr(msg, 'content', '') or '')
                     self.console.print()
                     self.console.print(Markdown(display))
+                elif subtype == 'intent_forecast':
+                    display = str(getattr(msg, 'content', '') or '')
+                    if display:
+                        self.console.print()
+                        self.console.print(Markdown(display))
                 continue
 
             if role == 'user':
