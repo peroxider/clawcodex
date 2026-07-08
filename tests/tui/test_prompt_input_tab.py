@@ -107,29 +107,8 @@ async def test_tab_with_no_ghost_falls_through_to_focus_next():
 
 
 @pytest.mark.asyncio
-async def test_configured_accept_key_still_works():
-    """Plan 3 must NOT regress the configured accept key (default Ctrl+E)."""
-    prompt = _make_prompt()
-    prompt._history = ["git status"]
-
-    host = _Host(prompt)
-    async with host.run_test() as pilot:
-        await pilot.pause()
-        prompt._input.value = "git"
-        prompt._input.cursor_position = 3
-        prompt.on_input_changed(type(prompt._input).Changed(prompt._input, prompt._input.value))
-        await pilot.pause()
-        assert not prompt._ghost_suggestion.has_class("-hidden")
-
-        # Ctrl+E (the configured key) still works after plan 3.
-        await pilot.press("ctrl+e")
-        await pilot.pause()
-        assert prompt._input.value == "git status"
-
-
-@pytest.mark.asyncio
-async def test_ghost_hint_mentions_tab_alias():
-    """The ghost-text hint must mention ``TAB`` as a secondary key."""
+async def test_ghost_hint_mentions_tab():
+    """The ghost-text hint must mention ``TAB``."""
     prompt = _make_prompt()
     prompt._history = ["git status"]
 
@@ -141,92 +120,8 @@ async def test_ghost_hint_mentions_tab_alias():
         prompt.on_input_changed(type(prompt._input).Changed(prompt._input, prompt._input.value))
         await pilot.pause()
         # Render the ghost widget to a string to inspect the hint.
-        # Rich ``Text.plain`` is the plain (no-style) view; ``str(Text)``
-        # gives a span representation, not what we want here.
         ghost_text = prompt._ghost_suggestion.renderable
         plain = ghost_text.plain
         assert "TAB" in plain
-        assert "CTRL + E" in plain
-
-
-# ---- Plan 4 opt-out tests (accept_suggestion_tab_alias=False) ----
-
-
-def _make_prompt_no_alias() -> PromptInput:
-    """PromptInput with tab alias explicitly disabled."""
-    return PromptInput(
-        words_provider=lambda: ["/help", "/exit", "/repl"],
-        vim_mode=False,
-        accept_suggestion_tab_alias=False,
-    )
-
-
-@pytest.mark.asyncio
-async def test_tab_alias_disabled_does_not_accept_ghost():
-    """When the tab alias is disabled, Tab does NOT accept ghost text.
-
-    Even with ghost visible, Tab should fall through (not consume the
-    event), so focus moves to the next widget.
-    """
-    prompt = _make_prompt_no_alias()
-    prompt._history = ["git status"]
-
-    host = _Host(prompt)
-    async with host.run_test() as pilot:
-        await pilot.pause()
-        prompt._input.value = "git"
-        prompt._input.cursor_position = 3
-        prompt.on_input_changed(type(prompt._input).Changed(prompt._input, prompt._input.value))
-        await pilot.pause()
-        # Ghost is visible.
-        assert not prompt._ghost_suggestion.has_class("-hidden")
-
-        prompt._input.focus()
-        await pilot.pause()
-        # Tab -> should NOT accept; focus should move to the button.
-        await pilot.press("tab")
-        await pilot.pause()
-        # Input value unchanged (ghost not accepted).
-        assert prompt._input.value == "git"
-        assert prompt._input.has_focus is False
-        assert host.query_one("#after-prompt", Button).has_focus is True
-
-
-@pytest.mark.asyncio
-async def test_tab_alias_disabled_hint_omits_tab():
-    """When the tab alias is disabled, the ghost hint must NOT mention TAB."""
-    prompt = _make_prompt_no_alias()
-    prompt._history = ["git status"]
-
-    host = _Host(prompt)
-    async with host.run_test() as pilot:
-        await pilot.pause()
-        prompt._input.value = "git"
-        prompt._input.cursor_position = 3
-        prompt.on_input_changed(type(prompt._input).Changed(prompt._input, prompt._input.value))
-        await pilot.pause()
-        ghost_text = prompt._ghost_suggestion.renderable
-        plain = ghost_text.plain
-        assert "TAB" not in plain
-        assert "CTRL + E" in plain
-
-
-@pytest.mark.asyncio
-async def test_configured_key_still_works_when_alias_disabled():
-    """Even with alias disabled, the primary accept key (Ctrl+E) still works."""
-    prompt = _make_prompt_no_alias()
-    prompt._history = ["git status"]
-
-    host = _Host(prompt)
-    async with host.run_test() as pilot:
-        await pilot.pause()
-        prompt._input.value = "git"
-        prompt._input.cursor_position = 3
-        prompt.on_input_changed(type(prompt._input).Changed(prompt._input, prompt._input.value))
-        await pilot.pause()
-        assert not prompt._ghost_suggestion.has_class("-hidden")
-
-        # Ctrl+E (the configured key) still accepts when alias is off.
-        await pilot.press("ctrl+e")
-        await pilot.pause()
-        assert prompt._input.value == "git status"
+        # CTRL+E must NOT appear — only Tab completion is supported.
+        assert "CTRL + E" not in plain

@@ -33,31 +33,6 @@ def _log(msg: str) -> None:
             f.write(msg + "\n")
 
 
-def _configured_accept_suggestion_key() -> str:
-    """Read ``settings.accept_suggestion_key`` with a safe fallback.
-
-    Settings is the single source of truth; the REPL side reads the
-    same value at its own construction site. Both default to ``"c-e"``
-    so existing users see no change.
-    """
-    try:
-        from src.settings.settings import get_settings
-
-        return getattr(get_settings(), "accept_suggestion_key", "c-e") or "c-e"
-    except Exception:
-        return "c-e"
-
-
-def _configured_accept_suggestion_tab_alias() -> bool:
-    """Read ``settings.accept_suggestion_tab_alias`` with a safe fallback."""
-    try:
-        from src.settings.settings import get_settings
-
-        return bool(getattr(get_settings(), "accept_suggestion_tab_alias", True))
-    except Exception:
-        return True
-
-
 from textual.app import ComposeResult
 from textual.screen import Screen
 
@@ -154,8 +129,6 @@ class REPLScreen(Screen):
             message_history_provider=message_history_provider,
             agents_provider=agents_provider,
             cwd=self._workspace_root,
-            accept_suggestion_key=_configured_accept_suggestion_key(),
-            accept_suggestion_tab_alias=_configured_accept_suggestion_tab_alias(),
             initial_history=initial_history,
         )
         # ARIA live region — stays height: 1 and only announces the

@@ -57,7 +57,7 @@ from clawcodex_ext.utils.completers import (
     rank_message_history,
     rank_suggestions,
 )
-from clawcodex_ext.utils.key_format import display_key, to_prompt_toolkit_key, to_textual_key
+
 
 # Reuse the same matching machinery as the prompt_toolkit REPL.
 # ``_AT_TOKEN_RE`` matches ``@<query>`` at the cursor position;
@@ -318,8 +318,6 @@ class PromptInput(Vertical):
         files_provider: Callable[[], list[str]] | None = None,
         cwd: str | os.PathLike[str] | None = None,
         vim_mode: bool = False,
-        accept_suggestion_key: str = 'c-e',
-        accept_suggestion_tab_alias: bool = True,
         initial_history: list[str] | None = None,
     ) -> None:
         super().__init__()
@@ -349,13 +347,6 @@ class PromptInput(Vertical):
         )
         self._ultraplan_trigger_preview.renderable = ''
         self._vim = VimState(enabled=vim_mode)
-        # Configured ghost-suggestion accept key. Stored in two forms:
-        # ``_accept_key_raw`` is the canonical prompt_toolkit spelling
-        # (used to render the hint) and ``_accept_key_textual`` is the
-        # Textual event.key form (used in ``on_key`` to dispatch).
-        self._accept_key_raw: str = accept_suggestion_key or 'c-e'
-        self._accept_key_textual: str = to_textual_key(self._accept_key_raw)
-        self._accept_tab_alias: bool = bool(accept_suggestion_tab_alias)
         self._yank_buffer: str = ''
         # Round 2 / WI-R2.5: most-recent bracketed paste classification.
         # Test seam — the host reads :class:`PromptPasted` instead.
@@ -690,23 +681,13 @@ class PromptInput(Vertical):
             event.stop()
             return
 
-        # Accept-key: accept the ghost-text suggestion.
-        # The key is configurable via ``accept_suggestion_key`` (default
-        # ``ctrl+e``) — mirrors REPL's AutoSuggestFromHistory accept key
-        # ⌃E. Only fires when the suggestion is visible.
-        if key == self._accept_key_textual:
-            if not self._ghost_suggestion.has_class('-hidden'):
-                self._accept_ghost_suggestion()
-                event.stop()
-                return
-
-        # Context-aware Tab: if any suggestion popup is open, accept the
-        # highlighted item (F-38 Enter/Tab separation). Otherwise accept
-        # the ghost-text suggestion when one is visible. If neither,
+        # Tab: if any suggestion popup is open, accept the highlighted
+        # item (F-38 Enter/Tab separation). Otherwise accept the
+        # ghost-text suggestion when one is visible. If neither,
         # let the event bubble up to the App's default ``focus_next``
         # binding — crucially we do NOT call ``event.stop()`` in that
         # case so widget-to-widget focus navigation still works.
-        if key == 'tab' and self._accept_tab_alias:
+        if key == 'tab':
             if self._suggest_mode:
                 accepted = self._accept_suggestion()
                 if accepted:
@@ -811,16 +792,10 @@ class PromptInput(Vertical):
         match = self._find_history_suggestion(text)
         if match is not None:
             suffix = match[len(text) :]
-            # Mirror the REPL's ``_ghost_hint_for`` shape so the TUI and
-            # REPL hint read identically. ``TAB`` is always advertised
-            # as a context-aware secondary accept key unless the user
-            # has already remapped the primary key to ``tab`` itself.
-            base = display_key(self._accept_key_raw)
-            if self._accept_tab_alias and to_prompt_toolkit_key(self._accept_key_raw) != 'tab':
-                base = f'{base} or {display_key("tab")}'
+            # Show "TAB to accept" hint next to the dimmed completion.
             hint = Text()
             hint.append(suffix, style='dim')
-            hint.append(f' ({base} to accept)', style='dim cyan')
+            hint.append(f' (TAB to accept)', style='dim cyan')
             self._ghost_suggestion.renderable = hint
             self._ghost_suggestion.update(hint)
             self._ghost_suggestion.remove_class('-hidden')
