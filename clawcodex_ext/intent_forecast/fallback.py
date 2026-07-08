@@ -38,6 +38,7 @@ def fallback_rules() -> list[FallbackRule]:
         FallbackRule("focused_tests", _focused_tests),
         FallbackRule("document", _document),
         FallbackRule("commit", _commit),
+        FallbackRule("recent_commits", _recent_commits),
         FallbackRule("intent_forecast_focus", _intent_forecast_focus),
         FallbackRule("intent_forecast_tests", _intent_forecast_tests),
         FallbackRule("intent_forecast_history", _intent_forecast_history),
@@ -139,6 +140,38 @@ def _commit(context: ForecastContext, min_confidence: float) -> ForecastSuggesti
         else "The current intent stage is closest to pre-commit preparation.",
         confidence=max(min_confidence, 0.65),
         refs=["intent_stage:commit"],
+    )
+
+
+def _recent_commits(
+    context: ForecastContext, min_confidence: float
+) -> ForecastSuggestion | None:
+    """Continue from the most recent commit when no other strong signal exists."""
+
+    commits = context.workspace.get("recent_commits") or []
+    if not commits:
+        return None
+    last = commits[0] if isinstance(commits[0], dict) else {}
+    subject = str(last.get("subject") or "").strip()
+    if not subject:
+        return None
+    short_hash = str(last.get("short_hash") or last.get("hash") or "")[:10]
+    zh = _zh(context)
+    anchor = f"`{short_hash} {subject}`" if short_hash else f"`{subject}`"
+    return _suggestion(
+        title="基于最近提交继续" if zh else "Continue from recent commits",
+        prompt=(
+            f"请基于最近提交 {anchor} 继续推进，并预测合理的下一步计划。\n\n最近提交主题：{subject}"
+            if zh
+            else f"Continue from the most recent commit {anchor} and predict the next step.\n\nMost recent commit subject: {subject}"
+        ),
+        reason=(
+            "工作区最近的提交是最强的本地信号；没有更新的对话或未提交改动时，应基于 commit 主题预测下一步。"
+            if zh
+            else "Recent commits are the strongest local signal — when no newer dialog or uncommitted changes exist, predict the next step from the most recent commit subject."
+        ),
+        confidence=max(min_confidence, 0.58),
+        refs=["git:recent-commits"],
     )
 
 

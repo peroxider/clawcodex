@@ -85,3 +85,37 @@ def test_fallback_history_strategy_prefers_session_next_action(tmp_path) -> None
     suggestions = fallback_suggestions(context, min_confidence=0.45)
 
     assert suggestions[0].title == "Continue historical task"
+
+
+def test_fallback_uses_recent_commits_when_only_signal(tmp_path) -> None:
+    context = ForecastContext(
+        cwd=str(tmp_path),
+        response_language="English",
+        workspace={
+            "recent_commits": [
+                {
+                    "hash": "abc1234",
+                    "short_hash": "abc1234",
+                    "subject": "fix: tune no_suggestion_gate threshold",
+                    "author": "alice",
+                    "timestamp": "1718000000",
+                }
+            ]
+        },
+    )
+
+    suggestions = fallback_suggestions(context, min_confidence=0.45)
+
+    assert suggestions
+    assert suggestions[0].title == "Continue from recent commits"
+    assert "abc1234" in suggestions[0].prompt
+    assert "tune no_suggestion_gate threshold" in suggestions[0].prompt
+    assert "git:recent-commits" in suggestions[0].refs()
+
+
+def test_fallback_recent_commits_silent_when_empty(tmp_path) -> None:
+    context = ForecastContext(cwd=str(tmp_path), response_language="English")
+
+    suggestions = fallback_suggestions(context, min_confidence=0.45)
+
+    assert all("git:recent-commits" not in s.refs() for s in suggestions)

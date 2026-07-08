@@ -6,6 +6,7 @@ from clawcodex_ext.intent_forecast.prompt import build_forecast_messages
 from clawcodex_ext.intent_forecast.service import (
     IntentForecastService,
     filter_suggestions_for_context,
+    no_suggestion_gate,
     parse_forecast_response,
 )
 
@@ -290,3 +291,81 @@ def test_auto_forecast_suppresses_weak_empty_context(tmp_path) -> None:
 
     assert result.generated is False
     assert result.reason == "No confident next-step suggestions are available."
+
+
+def test_no_suggestion_gate_keeps_suggestions_when_recent_commits_exist() -> None:
+    """recent_commits counts as a strong signal — auto forecast should not suppress."""
+
+    context = ForecastContext(
+        cwd="/tmp/repo",
+        response_language="English",
+        workspace={
+            "recent_commits": [
+                {
+                    "hash": "abc1234",
+                    "short_hash": "abc1234",
+                    "subject": "fix: tweak recent_commits signal",
+                    "author": "alice",
+                    "timestamp": "1718000000",
+                }
+            ]
+        },
+    )
+    suggestions = [
+        ForecastSuggestion(
+            id="s1", title="Continue forecast work", prompt="continue", confidence=0.55
+        )
+    ]
+
+    kept = no_suggestion_gate(suggestions, context=context, trigger="auto", min_confidence=0.45)
+
+    assert [s.id for s in kept] == ["s1"]
+
+
+def test_no_suggestion_gate_still_suppresses_weak_auto_without_commits() -> None:
+    """Without any strong signal, auto trigger still suppresses — back-compat guard."""
+
+    context = ForecastContext(cwd="/tmp/repo", response_language="English", workspace={})
+    suggestions = [
+        ForecastSuggestion(
+            id="s1", title="Continue forecast work", prompt="continue", confidence=0.55
+        )
+    ]
+
+    kept = no_suggestion_gate(suggestions, context=context, trigger="auto", min_confidence=0.45)
+
+    assert kept == []
+
+
+def test_auto_forecast_generates_with_only_recent_commits_signal(tmp_path) -> None:
+    """End-to-end: with only recent_commits and no provider, the fallback rule fires."""
+
+    context = ForecastContext(
+        cwd=str(tmp_path),
+        response_language="English",
+        workspace={
+            "recent_commits": [
+                {
+                    "hash": "abc1234",
+                    "short_hash": "abc1234",
+                    "subject": "feat: add recent_commits signal",
+                    "author": "alice",
+                    "timestamp": "1718000000",
+                }
+            ]
+        },
+        fingerprint="fp",
+    )
+
+    result = IntentForecastService(
+        conversation=None,
+        provider=None,
+        model=None,
+        workspace_root=tmp_path,
+        context=context,
+    ).generate(trigger="auto", force=True)
+
+    assert result.generated is True
+    assert result.suggestions
+    assert result.suggestions[0].title == "Continue from recent commits"
+    assert "feat: add recent_commits signal" in result.suggestions[0].prompt

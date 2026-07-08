@@ -289,6 +289,7 @@ class IntentForecastContextBuilder:
             "untracked_files": _untracked_files_from_status(git_status),
             "changed_test_mapping": _changed_test_mapping(changed_files),
             "diff_hunks_summary": _diff_hunks_summary(self.workspace_root, diff_names),
+            "recent_commits": _recent_commits_from_log(self.workspace_root, limit=10),
             "last_command": last_command.get("command", ""),
             "last_command_exit": last_command.get("exit_code", None),
             "last_test_failures": _last_test_failures(last_command),
@@ -310,6 +311,72 @@ def _run_git(cwd: Path, args: list[str]) -> str:
     except Exception:
         return ""
     return (proc.stdout or proc.stderr or "").strip()
+
+
+def _recent_commits_from_log(cwd: Path, *, limit: int = 10) -> list[dict[str, str]]:
+    """Collect the most recent commits as a structured signal for Intent Forecast.
+
+    Returns a list of ``{hash, short_hash, subject, author, timestamp}`` rows.
+    Empty list when cwd is not a git repository or git log fails — callers
+    should treat that as ``no commit signal``.
+
+    Each field is fetched in its own ``git log`` call so a ``|`` (or any other
+    separator) inside the subject or author name cannot corrupt the other
+    fields. Field misalignment on a single line is impossible because the
+    lists are aligned by index, not parsed from a single line.
+    """
+
+    n = max(1, limit)
+    hashes = _git_log_field(cwd, n, "%H")
+    if not hashes:
+        return []
+    short_hashes = _git_log_field(cwd, n, "%h")
+    subjects = _git_log_field(cwd, n, "%s")
+    authors = _git_log_field(cwd, n, "%an")
+    timestamps = _git_log_field(cwd, n, "%at")
+
+    rows: list[dict[str, str]] = []
+    for idx, hash_ in enumerate(hashes[:n]):
+        if not hash_:
+            continue
+        subject = subjects[idx] if idx < len(subjects) else ""
+        if not subject.strip():
+            continue
+        short_hash = short_hashes[idx] if idx < len(short_hashes) else hash_[:7]
+        author = authors[idx] if idx < len(authors) else ""
+        timestamp = timestamps[idx] if idx < len(timestamps) else ""
+        rows.append(
+            {
+                "hash": hash_,
+                "short_hash": short_hash or hash_[:7],
+                "subject": subject[:240],
+                "author": author[:120],
+                "timestamp": timestamp,
+            }
+        )
+    return rows
+
+
+def _git_log_field(cwd: Path, limit: int, fmt: str) -> list[str]:
+    """Run ``git log`` with a single-field format and return the trimmed values.
+
+    ``_run_git`` returns ``""`` on failure (non-git repo, timeout, missing
+    binary), so the caller can short-circuit when the hash list is empty.
+    """
+
+    raw = _run_git(
+        cwd,
+        [
+            "log",
+            f"-{max(1, limit)}",
+            "--no-color",
+            "--no-decorate",
+            f"--format={fmt}",
+        ],
+    )
+    if not raw:
+        return []
+    return [line.strip() for line in raw.splitlines() if line.strip()]
 
 
 def _project_files(cwd: Path) -> list[str]:

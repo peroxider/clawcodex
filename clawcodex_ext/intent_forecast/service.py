@@ -151,6 +151,7 @@ def no_suggestion_gate(
     strong_signal = bool(
         context.current_messages
         or context.workspace.get("git_status")
+        or context.workspace.get("recent_commits")
         or task_state.get("blocked_reason")
         or task_state.get("pending_tests")
         or any(

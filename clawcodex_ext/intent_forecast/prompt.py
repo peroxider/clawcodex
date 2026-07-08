@@ -34,7 +34,9 @@ Rules:
 - If `intent_strategy` is `history`, first decide from relevant session summaries and feedback; use current user/workspace only to filter stale or off-topic history.
 - If `task_state.blocked_reason` is present, prioritize fixing that failure.
 - If `task_state.open_questions` is non-empty, do not suggest autonomous implementation; suggest answering or resolving the question.
-- If `intent_stage` is `test` or `debug`, keep suggestions focused on verification or failure repair."""
+- If `intent_stage` is `test` or `debug`, keep suggestions focused on verification or failure repair.
+- Treat `workspace.recent_commits` as the strongest evidence of where the user has actually been working: predict the next step that continues, verifies, or extends the most recent commit subject — do not invent unrelated directions.
+- If `workspace.recent_commits` is non-empty but other signals (user messages, git status, blocked_reason, pending_tests) are empty or stale, lean on `recent_commits` rather than on older session summaries."""
 
 
 def build_forecast_messages(
