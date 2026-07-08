@@ -55,6 +55,17 @@ class ParamSpec:
     description: str = ""
 
 
+_FACTORY_PREFIXES = frozenset({"create_", "build_", "make_", "new_"})
+
+
+_SIMPLE_RETURN_TYPES = frozenset({
+    "str", "int", "float", "bool",
+    "list", "dict", "tuple", "set",
+    "None", "NoneType",
+    "Path", "str | None", "int | None",
+})
+
+
 @dataclass
 class SourceOperation:
     """组件内的一个可被 Agent 调用的操作。"""
@@ -69,6 +80,8 @@ class SourceOperation:
     has_docstring: bool = False  # 原始 docstring 是否非空
     is_async: bool = False  # 是否为 async def
     is_async_generator: bool = False  # async def 且返回/产出 async iterator
+    is_property: bool = False  # @property 装饰的只读属性（无参数，不可调用）
+    is_factory: bool = False  # 是否为工厂函数（create_xxx, build_xxx, make_xxx）
 
 
 @dataclass
@@ -434,6 +447,22 @@ class SourceCodeParser:
 
         has_doc = bool(docstring and docstring.strip())
 
+        is_property = any(
+            (isinstance(d, ast.Name) and d.id == "property")
+            or (isinstance(d, ast.Attribute) and d.attr == "property")
+            for d in node.decorator_list
+        )
+        if is_property:
+            ast_params = []
+
+        has_factory_prefix = node.name.startswith(tuple(_FACTORY_PREFIXES))
+        has_complex_return_type = (
+            return_type is not None
+            and return_type.strip() not in _SIMPLE_RETURN_TYPES
+            and not return_type.strip().startswith(("list[", "dict[", "tuple[", "set["))
+        )
+        is_factory = has_factory_prefix and has_complex_return_type
+
         return SourceOperation(
             name=node.name,
             description=description or node.name,
@@ -444,6 +473,8 @@ class SourceCodeParser:
             has_docstring=has_doc,
             is_async=isinstance(node, ast.AsyncFunctionDef),
             is_async_generator=is_async_generator_operation(node, return_type),
+            is_property=is_property,
+            is_factory=is_factory,
         )
 
     # ---- docstring parsing ------------------------------------------------

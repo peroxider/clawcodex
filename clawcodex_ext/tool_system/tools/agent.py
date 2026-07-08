@@ -277,34 +277,56 @@ def make_agent_tool(
         mode (``CLAUDE_CODE_COORDINATOR_MODE=true``), inject WORKER_AGENT
         so the coordinator system prompt's ``subagent_type: "worker"`` calls
         resolve. Falls through to filesystem-based discovery.
+
+        Also loads agents from ``--agent <dir>`` override if present, even when
+        ``options.agent_definitions`` is pre-populated, to ensure SOP bundle
+        agents are available.
         """
         agent_defs = getattr(context.options, "agent_definitions", None)
         if agent_defs and isinstance(agent_defs, dict):
             active = agent_defs.get("active_agents")
             if active and isinstance(active, list):
-                return active
-        # Coordinator mode: inject WORKER_AGENT so
-        # ``subagent_type: "worker"`` resolves correctly.
-        from src.coordinator.mode import is_coordinator_mode
+                agents = list(active)
+            else:
+                agents = []
+        else:
+            agents = []
 
-        if is_coordinator_mode():
-            from src.coordinator.worker_agent import get_coordinator_agents
-
-            return get_coordinator_agents()
-        cwd = str(context.cwd or context.workspace_root)
-        agents = get_agent_definitions_with_overrides(cwd)
-        # Also load agents from the custom agent directory override
-        # (set by ``--agent <dir>``).  The override directory has
-        # higher priority: its agents *replace* project-root agents
-        # with the same ``agent_type`` rather than being skipped.
+        # Always check for bundle agent override, even when pre-populated
+        # This ensures SOP bundle agents are available when using --agent <dir>
         ad_override = getattr(context, "_agent_dir_override", None)
         if ad_override is not None:
             extra = get_agent_definitions_with_overrides(str(ad_override))
             extra_types = {a.agent_type for a in extra}
-            # Remove project-root agents that are shadowed by the
+            # Remove pre-populated agents that are shadowed by the
             # bundle directory, then append the bundle's versions.
             agents = [a for a in agents if a.agent_type not in extra_types]
             agents.extend(extra)
+
+        # If no agents yet, fall back to filesystem discovery
+        if not agents:
+            # Coordinator mode: inject WORKER_AGENT so
+            # ``subagent_type: "worker"`` resolves correctly.
+            from src.coordinator.mode import is_coordinator_mode
+
+            if is_coordinator_mode():
+                from src.coordinator.worker_agent import get_coordinator_agents
+
+                return get_coordinator_agents()
+            cwd = str(context.cwd or context.workspace_root)
+            agents = get_agent_definitions_with_overrides(cwd)
+            # Also load agents from the custom agent directory override
+            # (set by ``--agent <dir>``).  The override directory has
+            # higher priority: its agents *replace* project-root agents
+            # with the same ``agent_type`` rather than being skipped.
+            if ad_override is not None:
+                extra = get_agent_definitions_with_overrides(str(ad_override))
+                extra_types = {a.agent_type for a in extra}
+                # Remove project-root agents that are shadowed by the
+                # bundle directory, then append the bundle's versions.
+                agents = [a for a in agents if a.agent_type not in extra_types]
+                agents.extend(extra)
+
         available_mcp = list(context.mcp_clients.keys()) if context.mcp_clients else []
         agents = filter_agents_by_mcp_requirements(agents, available_mcp)
         try:

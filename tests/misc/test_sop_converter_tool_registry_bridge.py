@@ -31,10 +31,12 @@ from extensions.sop_converter.source_parser import (
     SourceOperation,
 )
 from extensions.sop_converter.tool_registry_bridge import (
+    _coerce_param_expression,
     _enrich_bridge_params,
     _generate_cli_handler_stub,
     _generate_method_stub,
     _generate_wrapper_script,
+    _infer_extra_sys_path_entries,
     _is_cli_handler_op,
     _merge_init_and_method_params,
     _param_signature_parts,
@@ -317,6 +319,61 @@ class TestResolveModulePath(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# _infer_extra_sys_path_entries (backend subproject imports)
+# ---------------------------------------------------------------------------
+
+
+class TestBackendSubprojectSysPath(unittest.TestCase):
+    def test_detects_backend_subproject_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            app_root = root / "AgentSDK" / "data_generation_platform"
+            utils_dir = app_root / "backend" / "utils"
+            models_dir = app_root / "backend" / "models"
+            utils_dir.mkdir(parents=True)
+            models_dir.mkdir(parents=True)
+            (models_dir / "constants.py").write_text(
+                "DEFAULT_CHUNK_SIZE = 500\n",
+                encoding="utf-8",
+            )
+            (utils_dir / "text_utils.py").write_text(
+                textwrap.dedent(
+                    """\
+                    from backend.models.constants import DEFAULT_CHUNK_SIZE
+
+                    def split_text(text: str) -> list[str]:
+                        return [text[:DEFAULT_CHUNK_SIZE]]
+                    """
+                ),
+                encoding="utf-8",
+            )
+            module_name = (
+                "AgentSDK.data_generation_platform.backend.utils.text_utils"
+            )
+            entries = _infer_extra_sys_path_entries(str(root), module_name)
+            self.assertEqual(entries, [str(app_root.resolve())])
+
+    def test_skips_openjiuwen_style_modules(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            pkg = root / "openjiuwen" / "core" / "demo"
+            pkg.mkdir(parents=True)
+            (pkg / "demo.py").write_text(
+                textwrap.dedent(
+                    """\
+                    def run() -> str:
+                        return "ok"
+                    """
+                ),
+                encoding="utf-8",
+            )
+            entries = _infer_extra_sys_path_entries(
+                str(root), "openjiuwen.core.demo.demo"
+            )
+            self.assertEqual(entries, [])
+
+
+# ---------------------------------------------------------------------------
 # _script_name_for_class / _script_name_for_functions
 # ---------------------------------------------------------------------------
 
@@ -582,8 +639,89 @@ class TestGenerateWrapperScript(unittest.TestCase):
 
             content = script_path.read_text()
             self.assertIn("from demo_pkg.enums import WidgetMode, WidgetStatus", content)
+            path_idx = content.index("sys.path.insert(0, _SOURCE_DIR)")
+            import_idx = content.index("from demo_pkg.enums import WidgetMode, WidgetStatus")
+            self.assertLess(path_idx, import_idx)
 
             compile(content, str(script_path), "exec")
+
+    def test_wrapper_injects_backend_subproject_sys_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            app_root = root / "AgentSDK" / "data_generation_platform"
+            utils_dir = app_root / "backend" / "utils"
+            utils_dir.mkdir(parents=True)
+            models_dir = app_root / "backend" / "models"
+            models_dir.mkdir(parents=True)
+            (models_dir / "constants.py").write_text(
+                textwrap.dedent(
+                    """\
+                    DEFAULT_CHUNK_SIZE = 100
+                    DEFAULT_CHUNK_OVERLAP = 10
+                    SPLIT_METHOD_SENTENCE = "sentence"
+                    """
+                ),
+                encoding="utf-8",
+            )
+            (utils_dir / "text_utils.py").write_text(
+                textwrap.dedent(
+                    """\
+                    from backend.models.constants import DEFAULT_CHUNK_SIZE
+
+                    def split_text(text: str, chunk_size: int = DEFAULT_CHUNK_SIZE) -> list[str]:
+                        return [text[:chunk_size]]
+                    """
+                ),
+                encoding="utf-8",
+            )
+
+            op = SourceOperation(
+                name="split_text",
+                description="Split text.",
+                parameters=[
+                    _make_param("text", "str", required=True),
+                    _make_param(
+                        "chunk_size",
+                        "int",
+                        required=False,
+                        default="DEFAULT_CHUNK_SIZE",
+                    ),
+                ],
+                file_stem="text_utils",
+            )
+            script_path = _generate_wrapper_script(
+                [op],
+                class_name=None,
+                module_name=(
+                    "AgentSDK.data_generation_platform.backend.utils.text_utils"
+                ),
+                file_stem="text_utils",
+                source_dir=str(root),
+                scripts_dir=self.scripts_dir,
+            )
+            content = script_path.read_text(encoding="utf-8")
+            self.assertIn(str(app_root.resolve()), content)
+            path_idx = content.index("sys.path.insert(0, _SOURCE_DIR)")
+            extra_idx = content.index(f'sys.path.insert(0, r"{app_root.resolve()}")')
+            self.assertLess(extra_idx, path_idx)
+            if (
+                "from AgentSDK.data_generation_platform.backend.utils.text_utils import"
+                in content
+            ):
+                import_idx = content.index(
+                    "from AgentSDK.data_generation_platform.backend.utils.text_utils import"
+                )
+                self.assertLess(path_idx, import_idx)
+
+            args = json.dumps({"text": "hello world from backend subproject test"})
+            result = __import__("subprocess").run(
+                [__import__("sys").executable, str(script_path), "split_text", args],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout.strip()), ["hello world from backend subproject test"])
 
     def test_team_backend_wrapper_imports_member_mode(self) -> None:
         jiouwen_root = Path("D:/projects/JiuwenAgent")
@@ -1175,7 +1313,7 @@ class SharedMemoryManager:
             description="Ensure team-memory directory exists.",
             class_name="SharedMemoryManager",
         )
-        stub = _generate_method_stub(
+        stub, _imports = _generate_method_stub(
             op,
             is_class_method=True,
             module_name="openjiuwen.agent_teams.memory.shared_memory",
@@ -1233,6 +1371,314 @@ class SharedMemoryManager:
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertTrue(Path("/tmp/p0-fix-team-memory").is_dir())
+
+
+# ---------------------------------------------------------------------------
+# Pydantic / dataclass parameter coercion (wrapper runtime)
+# ---------------------------------------------------------------------------
+
+
+class TestPydanticParamCoercion(unittest.TestCase):
+    """JSON dict tool args must be coerced back to SDK model instances."""
+
+    def setUp(self) -> None:
+        self._cleanup, self.tool_dir, self.scripts_dir = _isolated_dirs()
+        self.addCleanup(self._cleanup)
+
+    def test_stub_includes_model_coercion(self) -> None:
+        op = SourceOperation(
+            name="create_llm_agent",
+            description="Create an LLM agent.",
+            parameters=[
+                ParamSpec(
+                    name="agent_config",
+                    type_hint="AgentConfig",
+                    required=True,
+                ),
+            ],
+            file_stem="agent",
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            pkg = tmp / "demo_pkg"
+            pkg.mkdir()
+            (pkg / "__init__.py").write_text("", encoding="utf-8")
+            (pkg / "agent.py").write_text(
+                textwrap.dedent(
+                    '''
+                    from pydantic import BaseModel
+
+
+                    class AgentConfig(BaseModel):
+                        controller_type: str = "react"
+                        model: str = "gpt-4"
+                    '''
+                ),
+                encoding="utf-8",
+            )
+            stub, imports = _generate_method_stub(
+                op,
+                is_class_method=False,
+                module_name="demo_pkg.agent",
+                source_dir=str(tmp),
+            )
+            self.assertIn("_coerce_sdk_type(AgentConfig, agent_config)", stub)
+            self.assertIn(("demo_pkg.agent", "AgentConfig"), imports)
+
+    @unittest.skipUnless(
+        __import__("importlib").util.find_spec("pydantic") is not None,
+        "pydantic not installed",
+    )
+    def test_wrapper_coerces_pydantic_dict_at_runtime(self) -> None:
+        source = textwrap.dedent(
+            '''
+            from pydantic import BaseModel
+
+
+            class AgentConfig(BaseModel):
+                controller_type: str = "react"
+                model: str = "gpt-4"
+
+
+            def create_llm_agent(agent_config: AgentConfig) -> str:
+                """Create agent and return controller type."""
+                return agent_config.controller_type
+            '''
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            pkg = tmp / "demo_pkg"
+            pkg.mkdir()
+            (pkg / "__init__.py").write_text("", encoding="utf-8")
+            (pkg / "agent.py").write_text(source, encoding="utf-8")
+
+            op = SourceOperation(
+                name="create_llm_agent",
+                description="Create agent.",
+                parameters=[
+                    ParamSpec(
+                        name="agent_config",
+                        type_hint="AgentConfig",
+                        required=True,
+                    ),
+                ],
+                file_stem="agent",
+            )
+            script_path = _generate_wrapper_script(
+                [op],
+                class_name=None,
+                module_name="demo_pkg.agent",
+                file_stem="agent",
+                source_dir=str(tmp),
+                scripts_dir=self.scripts_dir,
+            )
+            content = script_path.read_text(encoding="utf-8")
+            path_idx = content.index("sys.path.insert(0, _SOURCE_DIR)")
+            import_idx = content.index("from demo_pkg.agent import AgentConfig")
+            self.assertLess(path_idx, import_idx)
+
+            args = json.dumps(
+                {"agent_config": {"controller_type": "react", "model": "gpt-4"}}
+            )
+            result = __import__("subprocess").run(
+                [__import__("sys").executable, str(script_path), "create_llm_agent", args],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout.strip()), "react")
+
+    def test_wrapper_coerces_dataclass_init_param(self) -> None:
+        source = textwrap.dedent(
+            '''
+            from dataclasses import dataclass
+
+
+            @dataclass
+            class Settings:
+                mode: str
+
+
+            class Service:
+                def __init__(self, settings: Settings) -> None:
+                    self.settings = settings
+
+                def mode(self) -> str:
+                    return self.settings.mode
+            '''
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            pkg = tmp / "demo_pkg"
+            pkg.mkdir()
+            (pkg / "__init__.py").write_text("", encoding="utf-8")
+            (pkg / "service.py").write_text(source, encoding="utf-8")
+
+            init_params = [
+                ParamSpec(name="settings", type_hint="Settings", required=True),
+            ]
+            op = SourceOperation(
+                name="mode",
+                description="Return settings mode.",
+                class_name="Service",
+                file_stem="service",
+            )
+            script_path = _generate_wrapper_script(
+                [op],
+                class_name="Service",
+                module_name="demo_pkg.service",
+                file_stem="service",
+                source_dir=str(tmp),
+                init_params=init_params,
+                scripts_dir=self.scripts_dir,
+            )
+            args = json.dumps({"settings": {"mode": "debug"}})
+            result = __import__("subprocess").run(
+                [__import__("sys").executable, str(script_path), "mode", args],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout.strip()), "debug")
+
+    def test_wrapper_resolves_model_alias_from_import_context(self) -> None:
+        """When two modules define the same name, coercion uses the imported alias."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            pkg = tmp / "demo_pkg"
+            pkg.mkdir()
+            (pkg / "__init__.py").write_text("", encoding="utf-8")
+            (pkg / "new_config.py").write_text(
+                textwrap.dedent(
+                    '''
+                    from dataclasses import dataclass
+
+
+                    @dataclass
+                    class ReActAgentConfig:
+                        model: str = "gpt-4"
+                    '''
+                ),
+                encoding="utf-8",
+            )
+            (pkg / "legacy_config.py").write_text(
+                textwrap.dedent(
+                    '''
+                    from dataclasses import dataclass
+
+
+                    @dataclass
+                    class LegacyReActAgentConfig:
+                        controller_type: str = "react"
+                        model: str = "gpt-4"
+
+
+                    ReActAgentConfig = LegacyReActAgentConfig
+                    '''
+                ),
+                encoding="utf-8",
+            )
+            (pkg / "agent.py").write_text(
+                textwrap.dedent(
+                    '''
+                    from demo_pkg.legacy_config import ReActAgentConfig
+
+
+                    def create_llm_agent(agent_config: ReActAgentConfig) -> str:
+                        """Create agent and return controller type."""
+                        return agent_config.controller_type
+                    '''
+                ),
+                encoding="utf-8",
+            )
+
+            op = SourceOperation(
+                name="create_llm_agent",
+                description="Create agent.",
+                parameters=[
+                    ParamSpec(
+                        name="agent_config",
+                        type_hint="ReActAgentConfig",
+                        required=True,
+                    ),
+                ],
+                file_stem="agent",
+            )
+            script_path = _generate_wrapper_script(
+                [op],
+                class_name=None,
+                module_name="demo_pkg.agent",
+                file_stem="agent",
+                source_dir=str(tmp),
+                scripts_dir=self.scripts_dir,
+            )
+            content = script_path.read_text(encoding="utf-8")
+            # The wrapper must import the legacy class, not the new one.
+            self.assertIn("from demo_pkg.legacy_config import LegacyReActAgentConfig", content)
+            self.assertNotIn("from demo_pkg.new_config import ReActAgentConfig", content)
+
+            args = json.dumps({"agent_config": {"controller_type": "react", "model": "gpt-4"}})
+            result = __import__("subprocess").run(
+                [__import__("sys").executable, str(script_path), "create_llm_agent", args],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout.strip()), "react")
+
+    def test_jiuwen_create_llm_agent_wrapper_uses_legacy_config(self) -> None:
+        """Generated llm_agent wrapper must coerce agent_config via LegacyReActAgentConfig."""
+        jiouwen_root = Path("D:/projects/JiuwenAgent")
+        llm_agent_py = (
+            jiouwen_root
+            / "openjiuwen"
+            / "core"
+            / "application"
+            / "llm_agent"
+            / "llm_agent.py"
+        )
+        if not llm_agent_py.is_file():
+            self.skipTest("JiuwenAgent source tree not available")
+
+        from extensions.sop_converter.source_parser import SourceCodeParser
+
+        parser = SourceCodeParser(str(jiouwen_root / "openjiuwen"))
+        components = parser.parse()
+        llm_ops = [
+            op
+            for comp in components
+            for op in comp.operations
+            if op.file_stem == "llm_agent" and op.name == "create_llm_agent"
+        ]
+        self.assertTrue(llm_ops, "create_llm_agent operation not found in SDK parse")
+        op = llm_ops[0]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            script_path = _generate_wrapper_script(
+                [op],
+                class_name=None,
+                module_name="openjiuwen.core.application.llm_agent.llm_agent",
+                file_stem="llm_agent",
+                source_dir=str(jiouwen_root),
+                scripts_dir=Path(tmpdir),
+            )
+            content = script_path.read_text(encoding="utf-8")
+            self.assertIn(
+                "from openjiuwen.core.single_agent.legacy.config import LegacyReActAgentConfig",
+                content,
+            )
+            self.assertNotIn(
+                "from openjiuwen.core.single_agent.agents.react_agent import ReActAgentConfig",
+                content,
+            )
+            self.assertIn(
+                "_coerce_sdk_type(LegacyReActAgentConfig, agent_config)",
+                content,
+            )
+            compile(content, str(script_path), "exec")
 
 
 # ---------------------------------------------------------------------------
@@ -1374,6 +1820,152 @@ class TestCliHandlerBridge(unittest.TestCase):
         )
         self.assertEqual(spec.input_schema["properties"]["args"]["type"], "string")
         self.assertIn("project", spec.input_schema["properties"]["args"]["description"])
+
+
+from extensions.sop_converter.sdk_serialization import normalize_mapping_inputs
+
+
+class TestMappingInputsCoercion(unittest.TestCase):
+    def test_normalize_mapping_inputs_string(self) -> None:
+        self.assertEqual(normalize_mapping_inputs("ping"), {"query": "ping"})
+
+    def test_normalize_mapping_inputs_json_string(self) -> None:
+        self.assertEqual(
+            normalize_mapping_inputs('{"query": "ping", "conversation_id": "s1"}'),
+            {"query": "ping", "conversation_id": "s1"},
+        )
+
+    def test_normalize_mapping_inputs_dict_passthrough(self) -> None:
+        payload = {"query": "hello"}
+        self.assertIs(normalize_mapping_inputs(payload), payload)
+
+    def test_coerce_inputs_any_uses_wrapper_helper(self) -> None:
+        expr, imports = _coerce_param_expression("inputs", "Any", "/tmp/sdk")
+        self.assertEqual(expr, "_normalize_mapping_inputs(inputs)")
+        self.assertEqual(imports, set())
+
+    def test_coerce_inputs_dict_uses_wrapper_helper(self) -> None:
+        expr, imports = _coerce_param_expression(
+            "inputs", "dict[str, Any]", "/tmp/sdk"
+        )
+        self.assertEqual(expr, "_normalize_mapping_inputs(inputs)")
+        self.assertEqual(imports, set())
+
+    def test_coerce_inputs_str_is_not_wrapped(self) -> None:
+        expr, imports = _coerce_param_expression("inputs", "str", "/tmp/sdk")
+        self.assertIsNone(expr)
+        self.assertEqual(imports, set())
+
+    def test_coerce_other_param_any_is_not_wrapped(self) -> None:
+        expr, imports = _coerce_param_expression("payload", "Any", "/tmp/sdk")
+        self.assertIsNone(expr)
+        self.assertEqual(imports, set())
+
+    def test_generated_stub_includes_normalize_helper(self) -> None:
+        op = _make_op(
+            "run_agent",
+            parameters=[
+                _make_param("agent", "str"),
+                _make_param("inputs", "Any"),
+            ],
+            class_name="Runner",
+        )
+        body, _imports = _generate_method_stub(
+            op,
+            is_class_method=True,
+            module_name="openjiuwen.core.runner.runner",
+            init_params=[],
+            source_dir="/tmp/sdk",
+        )
+        self.assertIn("_normalize_mapping_inputs(inputs)", body)
+
+
+class TestWrapperHelpersCompile(unittest.TestCase):
+    def test_embedded_helpers_are_valid_python(self) -> None:
+        import py_compile
+        import tempfile
+
+        from extensions.sop_converter.sdk_serialization import (
+            WRAPPER_COERCION_HELPERS,
+            WRAPPER_SERIALIZATION_HELPERS,
+        )
+
+        code = WRAPPER_SERIALIZATION_HELPERS + "\n" + WRAPPER_COERCION_HELPERS
+        with tempfile.NamedTemporaryFile(
+            suffix=".py", mode="w", encoding="utf-8", delete=False
+        ) as handle:
+            handle.write(code)
+            path = handle.name
+        py_compile.compile(path, doraise=True)
+
+    def test_model_coerce_uses_coerce_sdk_type(self) -> None:
+        sdk_root = Path("D:/projects/JiuwenAgent")
+        if not (sdk_root / "openjiuwen").is_dir():
+            self.skipTest("JiuwenAgent source tree not available")
+        expr, _imports = _coerce_param_expression(
+            "agent_config",
+            "ReActAgentConfig",
+            str(sdk_root),
+            module_path="openjiuwen.core.application.llm_agent.llm_agent",
+        )
+        self.assertIsNotNone(expr)
+        self.assertIn("_coerce_sdk_type(LegacyReActAgentConfig, agent_config)", expr or "")
+
+    def test_list_dict_elements_not_coerced(self) -> None:
+        expr, imports = _coerce_param_expression(
+            "prompt_template",
+            "List[Dict]",
+            "/tmp/sdk",
+            module_path="openjiuwen.core.application.llm_agent.llm_agent",
+        )
+        self.assertIsNone(expr)
+        self.assertEqual(imports, set())
+
+    def test_generated_wrapper_passes_py_compile(self) -> None:
+        cleanup, _tool_dir, scripts_dir = _isolated_dirs()
+        self.addCleanup(cleanup)
+        with tempfile.TemporaryDirectory() as tmp:
+            op = _make_op(
+                "create_llm_agent",
+                parameters=[_make_param("agent_config", "ReActAgentConfig")],
+                file_stem="llm_agent",
+            )
+            script = _generate_wrapper_script(
+                [op],
+                class_name=None,
+                module_name="demo.mod",
+                file_stem="llm_agent",
+                source_dir=tmp,
+                scripts_dir=scripts_dir,
+            )
+            import py_compile
+
+            py_compile.compile(str(script), doraise=True)
+
+
+class TestToolSpecModulePathAlignment(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.sdk_root = Path("D:/projects/JiuwenAgent")
+        cls.llm_module = "openjiuwen.core.application.llm_agent.llm_agent"
+        if not (cls.sdk_root / "openjiuwen" / "core" / "application" / "llm_agent" / "llm_agent.py").is_file():
+            raise unittest.SkipTest("JiuwenAgent source tree not available")
+
+    def test_create_llm_agent_spec_uses_legacy_react_config_title(self) -> None:
+        from extensions.sop_converter.type_schema import pydantic_schema_for_type
+
+        schema = pydantic_schema_for_type(
+            str(self.sdk_root),
+            "ReActAgentConfig",
+            module_path=self.llm_module,
+        )
+        self.assertIsNotNone(schema)
+        assert schema is not None
+        self.assertEqual(schema.get("title"), "LegacyReActAgentConfig")
+        props = schema.get("properties") or {}
+        self.assertIn("id", props)
+        self.assertIn("memory_scope_id", props)
+        self.assertNotIn("mem_scope_id", props)
 
 
 class TestPipelineExecuteStageSchema(unittest.TestCase):

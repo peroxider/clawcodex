@@ -17,7 +17,9 @@ from extensions.sop_converter.source_parser import (
     SourceOperation,
 )
 from extensions.sop_converter.task_guide import (
+    _ensure_registry_chain_entries,
     _entry_point_score,
+    _extract_noun,
     _resolve_operation,
     _select_task_guide_entries,
     _task_guide_rank_key,
@@ -285,9 +287,9 @@ class TestSopOverviewRouting(unittest.TestCase):
     def test_forbids_general_purpose_delegation(self) -> None:
         self.assertIn("general-purpose", SOP_OVERVIEW_ROUTING)
         self.assertIn("禁止", SOP_OVERVIEW_ROUTING)
-        self.assertIn("openjiuwen_merged-agent", SOP_OVERVIEW_ROUTING)
-        self.assertIn("memory-agent", SOP_OVERVIEW_ROUTING)
-        self.assertIn("ensure-dir", SOP_OVERVIEW_ROUTING)
+        self.assertIn("SDK 模块总览", SOP_OVERVIEW_ROUTING)
+        self.assertIn("SDK_OVERVIEW.md", SOP_OVERVIEW_ROUTING)
+        self.assertIn("跨域编排", SOP_OVERVIEW_ROUTING)
 
     def test_includes_interactive_terminal_stop_loss(self) -> None:
         self.assertIn("交互式终端停损", SOP_OVERVIEW_ROUTING)
@@ -332,6 +334,173 @@ class TestToolSearchDocstringQuery(unittest.TestCase):
             max_results=5,
         )
         self.assertEqual(matches[0], "example-widgets-cli-open-widget-ui")
+
+
+class TestRegistryChainInjection(unittest.TestCase):
+    """_ensure_registry_chain_entries — SDK-adaptive registry tool surfacing."""
+
+    @staticmethod
+    def _make_op(name: str, description: str = "", **kwargs: object) -> SourceOperation:
+        kw: dict[str, object] = {"name": name, "description": description, "has_docstring": True}
+        kw.update(kwargs)  # type: ignore[call-overload]
+        return SourceOperation(**kw)  # type: ignore[arg-type]
+
+    def _make_comp(self, comp_name: str, ops: list[SourceOperation]) -> SourceComponent:
+        return SourceComponent(
+            name=comp_name,
+            file_path=f"example/{comp_name}.py",
+            description=f"{comp_name} component",
+            operations=ops,
+        )
+
+    def test_registry_injected_when_runner_present(self) -> None:
+        """add_agent is injected when run_agent is already selected."""
+        runner_op = self._make_op("run_agent", "Run a registered agent.")
+        reg_op = self._make_op("add_agent", "Register an agent with the Runner.")
+        components = [
+            self._make_comp("runner", [runner_op]),
+            self._make_comp("resources", [reg_op]),
+        ]
+        index = build_operation_index(components)
+        # Simulate: only run_agent is selected by normal scoring
+        selected: list[tuple[str, SourceComponent, SourceOperation]] = [
+            ("runner-run-agent", components[0], runner_op),
+        ]
+        skill = SkillSpec(
+            name="core",
+            description="Core APIs",
+            allowed_tools=["runner-run-agent", "resources-add-agent"],
+        )
+        result = _ensure_registry_chain_entries(selected, skill, index)
+        tool_names = [ref for ref, _comp, _op in result]
+        self.assertIn("runner-run-agent", tool_names)
+        self.assertIn("resources-add-agent", tool_names)
+
+    def test_registry_not_injected_without_matching_noun(self) -> None:
+        """add_workflow is NOT injected when only run_agent is selected."""
+        runner_op = self._make_op("run_agent", "Run a registered agent.")
+        reg_op = self._make_op("add_workflow", "Register a workflow.")
+        components = [
+            self._make_comp("runner", [runner_op]),
+            self._make_comp("resources", [reg_op]),
+        ]
+        index = build_operation_index(components)
+        selected: list[tuple[str, SourceComponent, SourceOperation]] = [
+            ("runner-run-agent", components[0], runner_op),
+        ]
+        skill = SkillSpec(
+            name="core",
+            description="Core APIs",
+            allowed_tools=["runner-run-agent", "resources-add-workflow"],
+        )
+        result = _ensure_registry_chain_entries(selected, skill, index)
+        tool_names = [ref for ref, _comp, _op in result]
+        self.assertIn("runner-run-agent", tool_names)
+        self.assertNotIn("resources-add-workflow", tool_names)
+
+    def test_plural_matches_singular(self) -> None:
+        """add_agents (plural) matches run_agent (singular)."""
+        runner_op = self._make_op("run_agent", "Run a registered agent.")
+        reg_op = self._make_op("add_agents", "Register agents with the Runner.")
+        components = [
+            self._make_comp("runner", [runner_op]),
+            self._make_comp("resources", [reg_op]),
+        ]
+        index = build_operation_index(components)
+        selected: list[tuple[str, SourceComponent, SourceOperation]] = [
+            ("runner-run-agent", components[0], runner_op),
+        ]
+        skill = SkillSpec(
+            name="core",
+            description="Core APIs",
+            allowed_tools=["runner-run-agent", "resources-add-agents"],
+        )
+        result = _ensure_registry_chain_entries(selected, skill, index)
+        tool_names = [ref for ref, _comp, _op in result]
+        self.assertIn("resources-add-agents", tool_names)
+
+    def test_no_duplicate_when_already_selected(self) -> None:
+        """Registry tool is not duplicated if already in the selected list."""
+        runner_op = self._make_op("run_agent", "Run a registered agent.")
+        reg_op = self._make_op("add_agent", "Register an agent with the Runner.")
+        components = [
+            self._make_comp("runner", [runner_op]),
+            self._make_comp("resources", [reg_op]),
+        ]
+        index = build_operation_index(components)
+        selected: list[tuple[str, SourceComponent, SourceOperation]] = [
+            ("runner-run-agent", components[0], runner_op),
+            ("resources-add-agent", components[1], reg_op),  # already there
+        ]
+        skill = SkillSpec(
+            name="core",
+            description="Core APIs",
+            allowed_tools=["runner-run-agent", "resources-add-agent"],
+        )
+        result = _ensure_registry_chain_entries(selected, skill, index)
+        # Count occurrences
+        add_agent_count = sum(
+            1 for ref, _comp, _op in result if ref == "resources-add-agent"
+        )
+        self.assertEqual(add_agent_count, 1, "add-agent should not be duplicated")
+
+    def test_extract_noun_edge_cases(self) -> None:
+        """_extract_noun handles edge cases correctly."""
+        from extensions.sop_converter.task_guide import (
+            _ORCHESTRATION_NAME_PREFIXES,
+            _REGISTRY_NAME_PREFIXES,
+        )
+
+        # Standard cases
+        self.assertEqual(
+            _extract_noun("run_agent", _ORCHESTRATION_NAME_PREFIXES), "agent"
+        )
+        self.assertEqual(
+            _extract_noun("add_agent", _REGISTRY_NAME_PREFIXES), "agent"
+        )
+        self.assertEqual(
+            _extract_noun("register_workflow", _REGISTRY_NAME_PREFIXES),
+            "workflow",
+        )
+
+        # No match
+        self.assertIsNone(
+            _extract_noun("configure", _ORCHESTRATION_NAME_PREFIXES)
+        )
+        self.assertIsNone(
+            _extract_noun("run_", _ORCHESTRATION_NAME_PREFIXES)
+        )
+
+        # build_ is not in _ORCHESTRATION_NAME_PREFIXES
+        self.assertIsNone(
+            _extract_noun("build_agent", _ORCHESTRATION_NAME_PREFIXES)
+        )
+
+    def test_end_to_end_task_guide_includes_registry(self) -> None:
+        """Full generate_task_guide_markdown injects registry when runner present."""
+        runner_op = self._make_op(
+            "run_agent",
+            "Execute a single agent by ID.",
+            file_stem="runner",
+        )
+        reg_op = self._make_op(
+            "add_agent",
+            "Register a built agent with the resource manager.",
+            file_stem="manager",
+        )
+        components = [
+            self._make_comp("runner", [runner_op]),
+            self._make_comp("resources", [reg_op]),
+        ]
+        skill = SkillSpec(
+            name="core_merged",
+            description="Core domain",
+            allowed_tools=["runner-run-agent", "resources-add-agent"],
+        )
+        guide = generate_task_guide_markdown(skill, components)
+        self.assertIn("## 任务指南", guide)
+        self.assertIn("runner-run-agent", guide)
+        self.assertIn("resources-add-agent", guide)
 
 
 if __name__ == "__main__":

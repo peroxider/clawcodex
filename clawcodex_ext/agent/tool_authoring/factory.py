@@ -20,6 +20,10 @@ from clawcodex_ext.agent.tool_authoring.call_handlers import (
     execute_http,
     PythonCallError,
     execute_python,
+    SdkWrapperCallError,
+    execute_sdk_wrapper_in_process,
+    parse_sdk_wrapper_call_impl,
+    should_use_in_process_sdk_wrapper,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,7 +49,21 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
 
     def _call_impl(input: dict[str, Any], _context: ToolContext) -> ToolResult:
         try:
-            if spec.call_type == "bash":
+            if should_use_in_process_sdk_wrapper(spec):
+                parsed = parse_sdk_wrapper_call_impl(str(spec.call_impl))
+                if parsed is None:
+                    raise SdkWrapperCallError(
+                        f"Cannot parse stateful wrapper call_impl for {spec.name}"
+                    )
+                script_path, method_name = parsed
+                output = execute_sdk_wrapper_in_process(
+                    script_path=script_path,
+                    method_name=method_name,
+                    kwargs=input,
+                    session_id=_context.session_id,
+                    agent_id=_context.agent_id,
+                )
+            elif spec.call_type == "bash":
                 # Auto-inject {json_args} for sop-converter bridge tools
                 # (and any other tool whose template uses this placeholder).
                 # Harmless no-op when the template doesn't contain {json_args}.
@@ -67,7 +85,7 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
                 output = execute_python(spec.call_impl, input)
             else:
                 output = f"Unknown call_type: {spec.call_type}"
-        except (BashCallError, HttpCallError, PythonCallError) as exc:
+        except (BashCallError, HttpCallError, PythonCallError, SdkWrapperCallError) as exc:
             return ToolResult(
                 name=spec.name,
                 output={"error": str(exc)},

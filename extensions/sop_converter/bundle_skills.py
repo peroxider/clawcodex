@@ -16,18 +16,100 @@ class BundleSkillLoadResult:
     tool_names: list[str]
 
 
+def resolve_bundle_skill_workspace(bundle_path: Path, workspace_root: Path) -> Path:
+    """Find the project root that owns flat SOP skills for *bundle_path*."""
+    bundle = bundle_path.resolve()
+    ws = workspace_root.resolve()
+
+    if _resolve_project_skills_dir(bundle, ws) is not None:
+        return ws
+
+    current = bundle.parent
+    for _ in range(16):
+        if _resolve_project_skills_dir(bundle, current) is not None:
+            return current
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+    current = ws
+    for _ in range(16):
+        if _resolve_project_skills_dir(bundle, current) is not None:
+            return current
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+    return ws
+
+
+def _bundle_id_names(bundle_path: Path) -> list[str]:
+    names = [bundle_path.name]
+    try:
+        from extensions.sop_converter.bundle_manifest import read_bundle_manifest
+
+        manifest = read_bundle_manifest(bundle_path)
+        if manifest is not None and manifest.bundle_id:
+            bundle_id = manifest.bundle_id.strip()
+            if bundle_id and bundle_id not in names:
+                names.append(bundle_id)
+    except ImportError:
+        pass
+    return names
+
+
+def _compact_bundle_name(name: str) -> str:
+    if name.startswith("JiuwenAgent_v"):
+        return "JiuwenAgent_" + name[len("JiuwenAgent_v") :]
+    return name
+
+
+def _resolve_project_skills_dir(bundle_path: Path, workspace_root: Path) -> Path | None:
+    """Locate ``skills/<bundle>/`` even when folder name differs from bundle dir."""
+    ws = workspace_root.resolve()
+    for name in _bundle_id_names(bundle_path):
+        candidate = ws / "skills" / name
+        if candidate.is_dir():
+            return candidate
+
+    skills_root = ws / "skills"
+    if not skills_root.is_dir():
+        return None
+
+    flat_dirs = [
+        d
+        for d in skills_root.iterdir()
+        if d.is_dir() and any(d.glob("*-skill.md"))
+    ]
+    if not flat_dirs:
+        return None
+
+    targets = {_compact_bundle_name(n).lower() for n in _bundle_id_names(bundle_path)}
+    hits = [d for d in flat_dirs if _compact_bundle_name(d.name).lower() in targets]
+    if len(hits) == 1:
+        return hits[0]
+
+    prefix = _bundle_id_names(bundle_path)[0].split("_")[0]
+    prefixed = [d for d in flat_dirs if d.name.startswith(prefix)]
+    if len(prefixed) == 1:
+        return prefixed[0]
+
+    return None
+
+
 def _bundle_skill_search_dirs(bundle_path: Path, workspace_root: Path) -> list[Path]:
     """Directories that may contain loadable skill markdown for a POS bundle."""
     bundle = bundle_path.resolve()
-    ws = workspace_root.resolve()
+    ws = resolve_bundle_skill_workspace(bundle, workspace_root)
     dirs: list[Path] = [
         bundle / ".atomcode" / "skills",
         bundle / ".clawcodex" / "skills",
     ]
-    # pos convert --skills ./skills/JiuwenAgent_tool_test → flat *-skill.md
-    sibling = ws / "skills" / bundle.name
-    if sibling.is_dir():
-        dirs.append(sibling)
+    project_skills = _resolve_project_skills_dir(bundle, ws)
+    if project_skills is not None:
+        dirs.append(project_skills)
     return [d for d in dirs if d.is_dir()]
 
 

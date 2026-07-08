@@ -23,6 +23,7 @@ _IMPERATIVE_LEAD_RE = re.compile(
     re.IGNORECASE,
 )
 _ORCHESTRATION_NAME_PREFIXES = ("run_", "start_", "open_", "launch_", "ensure_", "invoke_")
+_REGISTRY_NAME_PREFIXES = ("add_", "register_")
 _INTERACTIVE_NAME_RE = re.compile(r"(?:^run_.*_cli$|^.*_cli$|cli$)", re.IGNORECASE)
 _MAX_BUILD_ENTRIES = 4
 
@@ -110,6 +111,71 @@ def _entry_point_score(comp: SourceComponent, op: SourceOperation) -> int:
 
 def is_entry_point(comp: SourceComponent, op: SourceOperation) -> bool:
     return _entry_point_score(comp, op) >= 4
+
+
+def _extract_noun(op_name: str, prefixes: tuple[str, ...]) -> str | None:
+    """Extract the entity noun after a verb prefix.
+
+    >>> _extract_noun("run_agent", ("run_",))
+    'agent'
+    >>> _extract_noun("add_agents", ("add_", "register_"))
+    'agents'
+    >>> _extract_noun("configure", ("run_",))
+    None
+    """
+    for prefix in prefixes:
+        if op_name.startswith(prefix):
+            noun = op_name[len(prefix):]
+            if noun:
+                return noun
+    return None
+
+
+def _ensure_registry_chain_entries(
+    selected: list[tuple[str, SourceComponent, SourceOperation]],
+    skill: SkillSpec,
+    index: dict[str, tuple[SourceComponent, SourceOperation]],
+) -> list[tuple[str, SourceComponent, SourceOperation]]:
+    """Force-include registry tools whose entity noun matches a selected runner tool.
+
+    SDK-adaptive: no hardcoded tool names.  Any ``add_*`` / ``register_*`` tool
+    whose entity noun (e.g. "agent" from ``add_agent``) appears in an
+    already-selected orchestrator tool (e.g. ``run_agent`` → noun "agent")
+    gets appended to the task guide.
+
+    Plural forms match their singular root:
+    ``run_agent`` (noun "agent") ↔ ``add_agents`` (noun "agents").
+    """
+    selected_tool_names = {tool_ref for tool_ref, _comp, _op in selected}
+
+    # Collect nouns from selected runner / orchestrator entries.
+    selected_nouns: set[str] = set()
+    for _tool_ref, _comp, op in selected:
+        noun = _extract_noun(op.name, _ORCHESTRATION_NAME_PREFIXES)
+        if noun:
+            selected_nouns.add(noun)
+
+    if not selected_nouns:
+        return selected
+
+    # Find registry tools in allowed_tools whose noun matches a selected noun.
+    for tool_ref in skill.allowed_tools:
+        if tool_ref in selected_tool_names:
+            continue
+        resolved = _resolve_operation(tool_ref, index)
+        if resolved is None:
+            continue
+        comp, op = resolved
+        reg_noun = _extract_noun(op.name, _REGISTRY_NAME_PREFIXES)
+        if reg_noun is None:
+            continue
+        for sn in selected_nouns:
+            # Bidirectional startswith handles singular/plural: "agents" vs "agent".
+            if reg_noun.startswith(sn) or sn.startswith(reg_noun):
+                selected.append((tool_ref, comp, op))
+                break
+
+    return selected
 
 
 def _orchestration_rank_boost(op: SourceOperation) -> int:
@@ -206,6 +272,8 @@ def _build_row_summary(
     comp: SourceComponent,
     op: SourceOperation,
     peers: list[SourceOperation],
+    *,
+    tool_deps_index: dict | None = None,
 ) -> str:
     summary = (op.description or op.name).strip()
     summary = re.split(r"[。\n]", summary, maxsplit=1)[0].strip()
@@ -217,6 +285,7 @@ def _build_row_summary(
     params_note = _format_required_params_note(comp, op)
     if params_note:
         summary = f"{summary}{params_note}"
+    # Cross-tool order: ORCHESTRATION_ROUTES.md + x-sop-dependencies — not task guide.
     if _looks_like_interactive_terminal(comp, op):
         summary = f"{summary}{_interactive_terminal_footnote()}"
     return summary
@@ -288,6 +357,7 @@ def generate_task_guide_markdown(
     components: list[SourceComponent],
     *,
     max_entries: int = 12,
+    tool_deps_index: dict | None = None,
 ) -> str:
     """Build the ``## 任务指南`` markdown block for a skill."""
     if not skill.allowed_tools or not components:
@@ -311,6 +381,7 @@ def generate_task_guide_markdown(
     ranked.sort(key=lambda item: item[0], reverse=True)
 
     selected = _select_task_guide_entries(ranked, max_entries=max_entries)
+    selected = _ensure_registry_chain_entries(selected, skill, index)
 
     composite_rows = _composite_task_guide_rows(skill)
     if not selected and not composite_rows:
@@ -321,7 +392,7 @@ def generate_task_guide_markdown(
     lines = [
         "## 任务指南",
         "",
-        f'调用表中任何 SDK 工具之前，**必须先** ``Skill(skill="{skill_name}")``，'
+        f"调用表中任何 SDK 工具之前，**必须先** ``Skill(skill=\"{skill_name}\")``，"
         "再按「搜索建议」调用 ``ToolSearch``，最后调用工具本身。",
         "",
         "用户用自然语言描述任务时，**先读下表**，再用表中「搜索建议」作为 "
@@ -338,8 +409,15 @@ def generate_task_guide_markdown(
     for tool_ref, comp, op in selected:
         intents = "；".join(_intent_examples_from_doc(op.description, op.name))
         search = format_search_suggestions(op, comp_name=comp.name)
-        summary = _build_row_summary(comp, op, peer_ops)
-        lines.append(f"| {intents} | `{tool_ref}` | {search} | {summary} |")
+        summary = _build_row_summary(
+            comp,
+            op,
+            peer_ops,
+            tool_deps_index=tool_deps_index,
+        )
+        lines.append(
+            f"| {intents} | `{tool_ref}` | {search} | {summary} |"
+        )
 
     lines.append("")
     lines.append(
@@ -354,9 +432,15 @@ def append_task_guide_to_skill_body(
     body: str,
     skill: SkillSpec,
     components: list[SourceComponent],
+    *,
+    tool_deps_index: dict | None = None,
 ) -> str:
     """Insert task guide after the skill description block."""
-    guide = generate_task_guide_markdown(skill, components)
+    guide = generate_task_guide_markdown(
+        skill,
+        components,
+        tool_deps_index=tool_deps_index,
+    )
     if not guide:
         return body
     if "## 任务指南" in body:
@@ -374,6 +458,7 @@ def format_flat_skill_markdown(
     skill_suffix: str = "-skill",
     contract: object | None = None,
     bridge_tool: str | None = None,
+    tool_deps_index: dict | None = None,
 ) -> str:
     """Format a flat ``*-skill.md`` file (frontmatter + body + optional tool list)."""
     from extensions.sop_converter.workflow_mode.generator.artifact_semantics import (
@@ -420,7 +505,11 @@ def format_flat_skill_markdown(
             description=skill.description,
             allowed_tools=allowed_tools,
         )
-        guide = generate_task_guide_markdown(guide_skill, components)
+        guide = generate_task_guide_markdown(
+            guide_skill,
+            components,
+            tool_deps_index=tool_deps_index,
+        )
         if guide:
             lines.append(guide)
 

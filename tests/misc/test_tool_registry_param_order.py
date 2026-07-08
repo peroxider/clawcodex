@@ -89,7 +89,7 @@ class TestWrapperParamOrder(unittest.TestCase):
             description="Ensure.",
             class_name="SharedMemoryManager",
         )
-        stub = self.trb._generate_method_stub(
+        stub, _imports = self.trb._generate_method_stub(
             op,
             is_class_method=True,
             module_name="demo.memory",
@@ -169,7 +169,7 @@ class SharedMemoryManager:
             parser = SourceCodeParser(tmp, extern_only=False)
             components = parser.parse()
             op = next(o for o in components[0].operations if o.name == "request")
-            stub = self.trb._generate_method_stub(
+            stub, _imports = self.trb._generate_method_stub(
                 op,
                 is_class_method=False,
                 module_name="demo_pkg._http",

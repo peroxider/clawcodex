@@ -235,9 +235,7 @@ def _handle_convert(args: list[str]) -> int:
 
     # If --out is specified, write the output files to the target directory
     if opts.output_dir:
-        _write_output_files(
-            opts.output_dir, result, opts.sdk_spec, opts.requirements, opts.agent_name
-        )
+        _write_output_files(opts.output_dir, result, opts.sdk_spec, opts.requirements, opts.agent_name)
 
     return 0
 
@@ -283,10 +281,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 f"quality={workflow_graph.extraction_quality}"
             )
         elif disc.mode in ("fwa", "hybrid"):
-            print(
-                "   Warning: workflow mode selected but graph extraction returned empty",
-                file=sys.stderr,
-            )
+            print("   Warning: workflow mode selected but graph extraction returned empty", file=sys.stderr)
 
     if opts.json_output:
         payload = disc.to_dict()
@@ -356,10 +351,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
 
         if resolve_arc_pipeline_dir(sdk_path) is not None:
             grouped_skills = ensure_arc_stage_skills(
-                workflow_graph,
-                components,
-                grouped_skills,
-                sdk_path,
+                workflow_graph, components, grouped_skills, sdk_path,
             )
             skill_agent_map = {s.name: f"{s.name}-agent" for s in grouped_skills}
 
@@ -371,12 +363,18 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
 
         gen = AgentDefinitionGenerator()
         workflow_stages = gen.enrich_workflow_stages(
-            workflow_graph,
-            agent_map,
-            skill_agent_map=skill_agent_map,
+            workflow_graph, agent_map, skill_agent_map=skill_agent_map,
         )
     elif workflow_graph:
         workflow_stages = build_workflow_stages(workflow_graph, skill_agent_map=skill_agent_map)
+
+    tool_deps_index = None
+    try:
+        from extensions.sop_converter.tool_dependencies import build_tool_dependency_index
+
+        tool_deps_index = build_tool_dependency_index(components, source_dir=str(sdk_path))
+    except Exception:
+        tool_deps_index = None
 
     if opts.register_tools and not opts.preview and not opts.validate_only:
         try:
@@ -385,6 +383,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 _to_kebab_case,
             )
 
+            print("   Registering component tools...")
             registered = register_component_tools(
                 components,
                 str(sdk_path),
@@ -426,11 +425,12 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                                 skill.allowed_tools.insert(0, tool_name)
                 if opts.output_dir:
                     out_composite = Path(opts.output_dir)
+                    composite_project_name = opts.agent_name or sdk_path.name
                     for spec in builtin_composite_tools():
                         wf = emit_composite_workflow_yaml(
                             spec,
                             out_composite,
-                            project_name=project_name,
+                            project_name=composite_project_name,
                         )
                         if wf:
                             print(f"   Composite workflow: {wf.name}")
@@ -477,9 +477,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
             print("[Preview] Workflow extraction:")
             print(format_workflow_preview(workflow_graph, disc))
         else:
-            print(
-                f"[Preview] Workflow mode: {disc.mode} (score={disc.total_score:.2f}), no graph extracted"
-            )
+            print(f"[Preview] Workflow mode: {disc.mode} (score={disc.total_score:.2f}), no graph extracted")
         strategy_labels = {
             "IO_RELATION": "IO_RELATION",
             "KEYWORD_MATCH": "KEYWORD_MATCH",
@@ -583,7 +581,12 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 )
 
     # Finalize stage agent names before workflow.yaml / overview reference them.
-    if workflow_graph and agent_map and emit_workflow_bundle and emit_stage_agents:
+    if (
+        workflow_graph
+        and agent_map
+        and emit_workflow_bundle
+        and emit_stage_agents
+    ):
         from extensions.sop_converter.workflow_mode.generator import (
             AgentDefinitionGenerator,
             stage_agent_existing_names,
@@ -606,23 +609,13 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
             existing_agent_names=existing_stage_names,
         )
         workflow_stages = sync_workflow_stages_agents(
-            workflow_stages,
-            workflow_graph,
-            agent_map,
+            workflow_stages, workflow_graph, agent_map,
         )
         overview_info = sync_overview_component_agents(
-            overview_info,
-            workflow_graph,
-            agent_map,
+            overview_info, workflow_graph, agent_map,
         )
 
-    if (
-        workflow_graph
-        and agent_map
-        and out_path
-        and emit_workflow_bundle
-        and opts.emit_workflow_yaml
-    ):
+    if workflow_graph and agent_map and out_path and emit_workflow_bundle and opts.emit_workflow_yaml:
         from extensions.sop_converter.workflow_mode.schema import emit_engine_workflow_yaml
 
         yaml_path = emit_engine_workflow_yaml(
@@ -643,6 +636,27 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
         )
 
         out_path = Path(opts.output_dir)
+        from extensions.sop_converter.cross_domain_orchestration import (
+            write_orchestration_routes,
+        )
+        from extensions.sop_converter.sdk_overview import write_sdk_overview
+
+        overview_md_path = write_sdk_overview(
+            out_path,
+            components,
+            skills=grouped_skills,
+            sdk_source_dir=sdk_path,
+            group_strategy=group_strategy,
+        )
+        print(f"   SDK overview: {overview_md_path.name}")
+        orch_path = write_orchestration_routes(
+            out_path,
+            grouped_skills,
+            components=components,
+            tool_deps_index=tool_deps_index,
+        )
+        print(f"   Orchestration routes: {orch_path.name}")
+
         for skill in coarse_agent_skills(grouped_skills, workflow_graph):
             skill_name = f"{skill.name}-skill"
             agent_def = {
@@ -661,6 +675,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 component_agents=overview_info,
                 workflow_stages=workflow_stages,
                 output_dir=out_path,
+                sdk_source_dir=sdk_path,
             )
 
         # F-50-E: write hybrid/wrapper/native stage agents last so coarse write_agent cannot overwrite them
@@ -690,6 +705,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
 
     if opts.skills_dir:
         from extensions.sop_converter.task_guide import format_flat_skill_markdown
+        from extensions.sop_converter.workflow_mode.generator import coarse_agent_skills
 
         skills_path = Path(opts.skills_dir)
         skills_path.mkdir(parents=True, exist_ok=True)
@@ -699,13 +715,14 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 c = workflow_graph.contracts.get(stage.id)
                 if c is not None:
                     stage_contracts[stage.name] = c
-        for skill in grouped_skills:
+        for skill in coarse_agent_skills(grouped_skills, workflow_graph):
             skill_file = skills_path / f"{skill.name}-skill.md"
             skill_file.write_text(
                 format_flat_skill_markdown(
                     skill,
                     components=components,
                     contract=stage_contracts.get(skill.name),
+                    tool_deps_index=tool_deps_index,
                 ),
                 encoding="utf-8",
             )

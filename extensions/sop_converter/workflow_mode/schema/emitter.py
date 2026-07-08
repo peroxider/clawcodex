@@ -184,8 +184,27 @@ def graph_to_engine_yaml_dict(
         stage.id: [_resolve_dep(d) for d in base_deps.get(stage.id, [])] for stage in graph.stages
     }
 
+    # Filter out empty stages: no mapped agent AND no contract output AND no skill match.
+    # These are placeholder stages (e.g. misidentified enum members) that should not
+    # be emitted to workflow.yaml or overview markdown.
+    skill_to_agent = agent_map.skill_to_agent
+    visible_stage_ids: set[int] = set()
+    for stage in graph.stages:
+        profile = agent_map.profile_for_stage(stage.id)
+        if profile and profile.mapped_agent and profile.mapping_confidence > 0:
+            visible_stage_ids.add(stage.id)
+            continue
+        if stage.name in skill_to_agent:
+            visible_stage_ids.add(stage.id)
+            continue
+        contract = graph.contracts.get(stage.id)
+        if contract and contract.output_files:
+            visible_stage_ids.add(stage.id)
+
     stages_out: list[dict[str, Any]] = []
     for stage in sorted(graph.stages, key=lambda s: s.id):
+        if stage.id not in visible_stage_ids:
+            continue
         stages_out.append(
             _agent_stage_dict(stage, graph, agent_map, rewritten_deps.get(stage.id, []))
         )

@@ -46,7 +46,25 @@ from clawcodex_ext.agent.tool_authoring.validators import validate_spec
 
 from .search_tags import generate_search_tags
 from .source_parser import SourceComponent, SourceOperation, ParamSpec
-from .type_schema import param_to_json_schema_property
+from .sdk_serialization import (
+    WRAPPER_COERCION_HELPERS,
+    WRAPPER_SERIALIZATION_HELPERS,
+    WRAPPER_TEAM_DATABASE_COERCION,
+    WRAPPER_MESSAGER_COERCION,
+)
+from .tool_dependencies import (
+    ToolOperationDeps,
+    build_tool_dependency_index,
+    enrich_input_schema_with_dependencies,
+    to_kebab_tool_name,
+)
+from .import_alias_resolver import ModuleImportIndex
+from .type_schema import (
+    get_model_class_info,
+    param_to_json_schema_property,
+    split_union,
+    type_root,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +185,24 @@ def _type_hint_to_json_type(type_hint: str | None) -> str:
     return _TYPE_MAP.get(cleaned, "string")
 
 
+def _is_loose_mapping_inputs_type_hint(type_hint: str | None) -> bool:
+    """True when ``inputs`` is typed as an open mapping (not a concrete model/str).
+
+    Applies generically to any SDK method whose ``inputs`` parameter is annotated
+    as ``Any``, ``object``, ``dict``, ``Mapping``, etc.  Explicit ``str`` or
+    Pydantic model types are excluded.
+    """
+    if not type_hint:
+        return False
+
+    cleaned = _strip_optional_union(type_hint.strip())
+    if cleaned in ("Any", "object", "dict", "Dict", "Mapping", "mapping", "MutableMapping"):
+        return True
+    return cleaned.startswith(
+        ("Dict[", "dict[", "Mapping[", "mapping[", "MutableMapping[")
+    )
+
+
 def _normalize_schema_default(default: Any, *, json_type: str) -> Any:
     """Coerce ast-unparsed Python literal defaults into JSON Schema values."""
     if isinstance(default, str) and default in _LITERAL_DEFAULT_MAP:
@@ -189,13 +225,16 @@ def _adjust_pipeline_execute_stage_schema(
 
     for key in ("config", "adapters", "run_id"):
         if key in properties:
-            properties[key]["description"] = properties[key].get("description") or (
-                "Optional; loads from run_dir/config.yaml when omitted"
-                if key == "config"
-                else (
-                    "Optional; defaults to empty AdapterBundle"
-                    if key == "adapters"
-                    else "Optional; defaults to run_dir directory name"
+            properties[key]["description"] = (
+                properties[key].get("description")
+                or (
+                    "Optional; loads from run_dir/config.yaml when omitted"
+                    if key == "config"
+                    else (
+                        "Optional; defaults to empty AdapterBundle"
+                        if key == "adapters"
+                        else "Optional; defaults to run_dir directory name"
+                    )
                 )
             )
             if key in required:
@@ -395,9 +434,7 @@ def _generate_get_instance_helper(init_params: list[ParamSpec] | None) -> str:
                 '                _team = os.environ.get("OPENJIUWEN_TEAM_NAME", "team")'
             )
             resolver_lines.append("                try:")
-            resolver_lines.append(
-                f'                    kwargs["{param.name}"] = _fn(team_name=_team)'
-            )
+            resolver_lines.append(f'                    kwargs["{param.name}"] = _fn(team_name=_team)')
             resolver_lines.append("                except TypeError:")
             resolver_lines.append("                    pass")
 
@@ -417,7 +454,7 @@ def _generate_get_instance_helper(init_params: list[ParamSpec] | None) -> str:
         f"{resolver_body}\n\n"
         "def _get_instance(class_name, module_name, **init_kwargs):\n"
         '    """Lazily create and cache a class instance keyed by constructor args."""\n'
-        "    cache_key = (class_name, tuple(sorted(init_kwargs.items())))\n"
+        "    cache_key = (class_name, json.dumps(_to_jsonable(init_kwargs), sort_keys=True, ensure_ascii=False))\n"
         "    if cache_key not in _instances:\n"
         "        module = importlib.import_module(module_name)\n"
         "        cls = getattr(module, class_name)\n"
@@ -532,6 +569,57 @@ def _collect_runtime_symbols(
 
 def _resolve_source_file(source_dir: str, module_name: str) -> Path:
     return Path(source_dir) / Path(*module_name.split(".")).with_suffix(".py")
+
+
+_BACKEND_IMPORT_RE = re.compile(
+    r"^\s*(?:from\s+backend(?:\.|\s)|import\s+backend(?:\.|\s|$))",
+    re.MULTILINE,
+)
+
+
+def _infer_extra_sys_path_entries(source_dir: str, module_name: str) -> list[str]:
+    """Return subproject roots required for ``from backend.*`` imports.
+
+    Some SDK apps (e.g. ``data_generation_platform``) use a top-level ``backend``
+    package relative to their own project directory, not the monorepo root that
+    ``pos convert`` passes as *source_dir*.  When the target module (or its
+    default-symbol imports) references ``backend``, inject that project root
+    into generated wrapper scripts *after* *_SOURCE_DIR* so ``AgentSDK.*`` still
+    resolves from the repo root while ``backend.*`` resolves from the subproject.
+    """
+    source_file = _resolve_source_file(source_dir, module_name)
+    if not source_file.is_file():
+        return []
+
+    try:
+        text = source_file.read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    if not _BACKEND_IMPORT_RE.search(text):
+        return []
+
+    root = Path(source_dir).resolve()
+    current = source_file.parent.resolve()
+    while True:
+        backend_dir = current / "backend"
+        if backend_dir.is_dir() and any(backend_dir.rglob("*.py")):
+            return [str(current)]
+        if current == root:
+            break
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    return []
+
+
+def _format_extra_sys_path_inserts(extra_sys_path_entries: list[str]) -> str:
+    """Render ``sys.path.insert`` lines for subproject roots (before *_SOURCE_DIR*)."""
+    if not extra_sys_path_entries:
+        return ""
+    lines = [f'sys.path.insert(0, r"{entry}")' for entry in extra_sys_path_entries]
+    return "\n".join(lines) + "\n"
 
 
 def _format_wrapper_imports(
@@ -718,9 +806,12 @@ import sys
 import json
 import importlib
 import asyncio
-{extra_imports}
-_SOURCE_DIR = r"{source_dir}"
+import dataclasses
+{serialization_helpers}
+{coercion_helpers}
+{extra_sys_path_inserts}_SOURCE_DIR = r"{source_dir}"
 sys.path.insert(0, _SOURCE_DIR)
+{extra_imports}{model_imports}
 {cli_prefix}
 
 _instances = {{}}
@@ -755,7 +846,7 @@ if __name__ == "__main__":
         sys.exit(1)
     try:
         result = fn(**args)
-        print(json.dumps(result, default=str, ensure_ascii=False))
+        print(_dumps_sdk_result(result))
     except Exception as exc:
         print(json.dumps({{"error": str(exc)}}, ensure_ascii=False), file=sys.stderr)
         sys.exit(1)
@@ -769,38 +860,225 @@ def _generate_pipeline_execute_stage_stub(op: SourceOperation) -> str:
         f"def {op.name}(stage, run_dir, run_id=None, config=None, adapters=None, "
         f"auto_approve_gates=False){f' -> {op.return_type}' if op.return_type else ''}:\n"
         f'    """{docstring}"""\n'
-        "    from pathlib import Path\n"
+        '    from pathlib import Path\n'
         '    module = importlib.import_module("researchclaw.pipeline.executor")\n'
-        "    from researchclaw.config import load_config, RCConfig\n"
-        "    from researchclaw.adapters import AdapterBundle\n"
-        "    from researchclaw.pipeline.stages import Stage\n"
-        "    run_path = Path(run_dir)\n"
-        "    if not run_id:\n"
-        "        run_id = run_path.name\n"
-        "    if config is None:\n"
+        '    from researchclaw.config import load_config, RCConfig\n'
+        '    from researchclaw.adapters import AdapterBundle\n'
+        '    from researchclaw.pipeline.stages import Stage\n'
+        '    run_path = Path(run_dir)\n'
+        '    if not run_id:\n'
+        '        run_id = run_path.name\n'
+        '    if config is None:\n'
         '        config = load_config(run_path / "config.yaml", project_root=run_path)\n'
-        "    elif isinstance(config, str):\n"
-        "        config = load_config(Path(config), project_root=run_path)\n"
-        "    elif isinstance(config, dict):\n"
-        "        config = RCConfig.from_dict(config)\n"
-        "    if adapters is None:\n"
-        "        adapters = AdapterBundle()\n"
-        "    elif isinstance(adapters, dict):\n"
-        "        adapters = AdapterBundle()\n"
-        "    if isinstance(stage, str):\n"
+        '    elif isinstance(config, str):\n'
+        '        config = load_config(Path(config), project_root=run_path)\n'
+        '    elif isinstance(config, dict):\n'
+        '        config = RCConfig.from_dict(config)\n'
+        '    if adapters is None:\n'
+        '        adapters = AdapterBundle()\n'
+        '    elif isinstance(adapters, dict):\n'
+        '        adapters = AdapterBundle()\n'
+        '    if isinstance(stage, str):\n'
         '        stage_key = stage.upper().replace("-", "_")\n'
-        "        stage = Stage[stage_key]\n"
-        "    if not isinstance(run_dir, Path):\n"
-        "        run_dir = Path(run_dir)\n"
-        "    return module.execute_stage(\n"
-        "        stage=stage,\n"
-        "        run_dir=run_dir,\n"
-        "        run_id=run_id,\n"
-        "        config=config,\n"
-        "        adapters=adapters,\n"
-        "        auto_approve_gates=bool(auto_approve_gates),\n"
-        "    )"
+        '        stage = Stage[stage_key]\n'
+        '    if not isinstance(run_dir, Path):\n'
+        '        run_dir = Path(run_dir)\n'
+        '    return module.execute_stage(\n'
+        '        stage=stage,\n'
+        '        run_dir=run_dir,\n'
+        '        run_id=run_id,\n'
+        '        config=config,\n'
+        '        adapters=adapters,\n'
+        '        auto_approve_gates=bool(auto_approve_gates),\n'
+        '    )'
     )
+
+
+def _model_coerce_expression(
+    param_name: str,
+    type_name: str,
+    source_dir: str,
+    module_path: str | None = None,
+) -> tuple[str | None, tuple[str, str] | None]:
+    """Build ``param if isinstance(param, Model) else Model(**param)`` for a model type.
+
+    Returns ``(expression, (module_path, class_name))`` when *type_name* resolves to a
+    Pydantic BaseModel or dataclass under *source_dir*.  Otherwise returns
+    ``(None, None)``.
+
+    If *module_path* is provided, the type is first resolved through that module's
+    import aliases so that names like ``ReActAgentConfig`` map to the class actually
+    imported by the wrapped function rather than whichever class happens to be
+    indexed first by name.
+    """
+    info: tuple[str, str] | None = None
+    if module_path:
+        try:
+            info = ModuleImportIndex(source_dir).resolve_import_path(
+                module_path, type_name
+            )
+        except Exception:
+            info = None
+    if info is None:
+        resolved = get_model_class_info(source_dir, type_name, module_path=module_path)
+        if resolved is None:
+            return None, None
+        module_path, class_name, _kind = resolved
+        info = module_path, class_name
+
+    class_name = info[1]
+    expr = f"_coerce_sdk_type({class_name}, {param_name})"
+    return expr, info
+
+
+def _coerce_param_expression(
+    param_name: str,
+    type_hint: str | None,
+    source_dir: str,
+    module_path: str | None = None,
+) -> tuple[str | None, set[tuple[str, str]]]:
+    """Return an expression that coerces JSON-decoded *param_name* to its SDK type.
+
+    The generated wrapper scripts receive all arguments as plain JSON values.  When a
+    parameter is annotated with a Pydantic BaseModel or dataclass, the SDK method
+    expects an instance, not a dict.  This helper produces a runtime expression that
+    converts ``dict -> Model`` (and ``list[dict] -> list[Model]``) while leaving
+    already-correct instances untouched.
+
+    Returns
+    -------
+    expression : str | None
+        A Python expression to use in place of *param_name*, or None when no coercion
+        is needed or possible.
+    imports : set[tuple[str, str]]
+        Set of ``(module_path, class_name)`` imports that must be added to the wrapper
+        script for the expression to compile.
+    """
+    if param_name == "inputs" and _is_loose_mapping_inputs_type_hint(type_hint):
+        return f"_normalize_mapping_inputs({param_name})", set()
+
+    if not type_hint:
+        return None, set()
+
+    cleaned = type_hint.strip()
+    if not cleaned or cleaned in ("Any", "object"):
+        return None, set()
+
+    # Check if type is optional by looking for None in the original hint.
+    has_none = "None" in cleaned or "NoneType" in cleaned
+    
+    # Strip Optional / Union wrappers, ignoring None.
+    all_parts = split_union(cleaned)
+    union_parts = [p for p in all_parts if p not in ("None", "NoneType")]
+
+    # Optional[T] with a single non-None member -> treat as T, then guard with None.
+    is_optional = has_none and len(union_parts) >= 1
+    inner_hint = union_parts[0] if len(union_parts) == 1 else cleaned
+
+    # Container types: list[Model], List[Model], Sequence[Model], Iterable[Model].
+    container_match = re.match(
+        r"^(?:list|List|Sequence|sequence|Iterable|iterable|Set|set|FrozenSet|frozenset)\[(.+)]$",
+        inner_hint.strip(),
+    )
+    if container_match:
+        element_hint = container_match.group(1).strip()
+        element_expr, element_imports = _coerce_param_expression(
+            "__item", element_hint, source_dir, module_path=module_path
+        )
+        if element_expr:
+            item_expr = element_expr.replace("__item", "__item")
+            # Use a list-comprehension guard: coerce each dict element.
+            if is_optional:
+                expr = f"[{item_expr} for __item in {param_name}] if {param_name} is not None else None"
+            else:
+                expr = f"[{item_expr} for __item in ({param_name} or [])]"
+            return expr, element_imports
+        return None, set()
+
+    # Plain model type.
+    type_name = type_root(inner_hint)
+    if not type_name or type_name in (
+        "str", "int", "float", "bool", "dict", "list", "tuple", "set",
+        "Dict", "Mapping", "Any",
+        "Path", "object", "None", "NoneType",
+    ):
+        return None, set()
+
+    # Special handling for ABC types that require factory functions:
+    # Messager and TeamDatabase cannot be instantiated directly via cls(**dict)
+    if type_name == "Messager":
+        expr = f"_coerce_messager({param_name}, team_name=team_name)"
+        if is_optional:
+            expr = f"None if {param_name} is None else ({expr})"
+        return expr, set()
+
+    if type_name == "TeamDatabase":
+        expr = f"_coerce_team_database({param_name})"
+        if is_optional:
+            expr = f"None if {param_name} is None else ({expr})"
+        return expr, set()
+
+    expr, import_info = _model_coerce_expression(
+        param_name, type_name, source_dir, module_path=module_path
+    )
+    if expr is None:
+        return None, set()
+
+    if is_optional:
+        expr = f"None if {param_name} is None else ({expr})"
+
+    imports = {import_info} if import_info else set()
+    return expr, imports
+
+
+def _build_coerced_kwargs(
+    params: list[ParamSpec],
+    source_dir: str,
+    module_path: str | None = None,
+) -> tuple[str, set[tuple[str, str]]]:
+    """Build ``name=value,`` kwargs with Pydantic/dataclass coercion.
+
+    Returns the kwargs block and any model imports required by coercion
+    expressions.
+    """
+    lines: list[str] = []
+    imports: set[tuple[str, str]] = set()
+    for p in params:
+        if p.name.startswith("*"):
+            continue
+        expr, param_imports = _coerce_param_expression(
+            p.name, p.type_hint, source_dir, module_path=module_path
+        )
+        if expr:
+            lines.append(f"        {p.name}={expr},\n")
+            imports.update(param_imports)
+        else:
+            lines.append(f"        {p.name}={p.name},\n")
+    return "".join(lines), imports
+
+
+def _build_coerced_pass_list(
+    params: list[ParamSpec],
+    source_dir: str,
+    module_path: str | None = None,
+) -> tuple[str, set[tuple[str, str]]]:
+    """Build ``name=value`` pass-through for _get_instance init args.
+
+    Class ``__init__`` parameters are exposed on the stub signature; this
+    produces the keyword arguments passed to ``_get_instance`` with coercion.
+    """
+    parts: list[str] = []
+    imports: set[tuple[str, str]] = set()
+    for p in _skip_variadic_params(params):
+        expr, param_imports = _coerce_param_expression(
+            p.name, p.type_hint, source_dir, module_path=module_path
+        )
+        if expr:
+            parts.append(f"{p.name}={expr}")
+            imports.update(param_imports)
+        else:
+            parts.append(f"{p.name}={p.name}")
+    return ", ".join(parts), imports
 
 
 def _generate_method_stub(
@@ -809,15 +1087,55 @@ def _generate_method_stub(
     is_class_method: bool,
     module_name: str,
     init_params: list[ParamSpec] | None = None,
-) -> str:
+    source_dir: str = "",
+) -> tuple[str, set[tuple[str, str]]]:
     """Generate a method stub for a single SourceOperation.
 
     Args:
-        op: The source operation.
+        op: The parsed source operation.
         is_class_method: True if this is a class method (needs _get_instance).
         module_name: Dotted Python module path.
         init_params: Required ``__init__`` parameters for the owning class.
+        source_dir: Absolute source root used to resolve Pydantic/dataclass
+            parameter types for runtime coercion.
+
+    Returns:
+        (body_lines, required_model_imports)
     """
+    imports: set[tuple[str, str]] = set()
+
+    if op.is_property:
+        return_type = f" -> {op.return_type}" if op.return_type else ""
+        docstring = op.description.replace('"', '\\"') if op.description else op.name
+        if is_class_method:
+            init_pass, init_imports = _build_coerced_pass_list(
+                init_params or [], source_dir, module_path=module_name
+            )
+            imports.update(init_imports)
+            init_kw_names = [p.name for p in _skip_variadic_params(init_params or [])]
+            if init_kw_names:
+                params_str = ", ".join(f"{name}=None" for name in init_kw_names)
+                get_instance_call = (
+                    f"_get_instance(\"{op.class_name}\", \"{module_name}\""
+                    + (f", {init_pass}" if init_pass else "")
+                    + ")"
+                )
+            else:
+                params_str = ""
+                get_instance_call = f"_get_instance(\"{op.class_name}\", \"{module_name}\")"
+            inner_call = f"{get_instance_call}.{op.name}"
+            return (
+                f"def {op.name}({params_str}){return_type}:\n"
+                f"    \"\"\"{docstring}\"\"\"\n"
+                f"    return {inner_call}"
+            ), imports
+        inner_call = f"getattr(importlib.import_module(\"{module_name}\"), \"{op.name}\")"
+        return (
+            f"def {op.name}(){return_type}:\n"
+            f"    \"\"\"{docstring}\"\"\"\n"
+            f"    return {inner_call}"
+        ), imports
+
     effective_params = (
         _merge_init_and_method_params(init_params or [], op.parameters)
         if is_class_method
@@ -830,53 +1148,74 @@ def _generate_method_stub(
 
     docstring = op.description.replace('"', '\\"') if op.description else op.name
 
-    call_kwargs = "".join(
-        f"        {p.name}={p.name},\n" for p in op.parameters if not p.name.startswith("*")
+    call_kwargs, call_imports = _build_coerced_kwargs(
+        op.parameters, source_dir, module_path=module_name
     )
+    imports.update(call_imports)
 
     if is_class_method:
-        init_kw_names = [p.name for p in _skip_variadic_params(init_params or [])]
-        get_instance_call = f'_get_instance("{op.class_name}", "{module_name}"'
-        init_pass = ", ".join(f"{name}={name}" for name in init_kw_names)
+        init_pass, init_imports = _build_coerced_pass_list(
+            init_params or [], source_dir, module_path=module_name
+        )
+        imports.update(init_imports)
+        get_instance_call = f"_get_instance(\"{op.class_name}\", \"{module_name}\""
         if init_pass:
             get_instance_call += f", {init_pass}"
         get_instance_call += ")"
         inner_call = f"{get_instance_call}.{op.name}(\n{call_kwargs}    )"
+    elif op.is_factory:
+        factory_params, factory_imports = _build_coerced_pass_list(
+            op.parameters, source_dir, module_path=module_name
+        )
+        imports.update(factory_imports)
+        get_instance_call = f"_get_instance(\"{op.name}\", \"{module_name}\""
+        if factory_params:
+            get_instance_call += f", {factory_params}"
+        get_instance_call += ")"
+        inner_call = get_instance_call
     else:
         inner_call = f"module.{op.name}(\n{call_kwargs}    )"
 
     if op.is_async_generator:
-        if is_class_method:
+        if is_class_method or op.is_factory:
             body_lines = (
                 f"def {op.name}({params_str}){return_type}:\n"
-                f'    """{docstring}"""\n'
+                f"    \"\"\"{docstring}\"\"\"\n"
                 f"    return _run_async_iter(lambda: {inner_call})"
             )
         else:
             body_lines = (
                 f"def {op.name}({params_str}){return_type}:\n"
-                f'    """{docstring}"""\n'
-                f'    module = importlib.import_module("{module_name}")\n'
+                f"    \"\"\"{docstring}\"\"\"\n"
+                f"    module = importlib.import_module(\"{module_name}\")\n"
                 f"    return _run_async_iter(lambda: {inner_call})"
             )
-        return body_lines
+        return body_lines, imports
 
     async_prefix = "asyncio.run(" if op.is_async else ""
     async_suffix = ")" if op.is_async else ""
 
     if is_class_method:
-        return (
+        body_lines = (
             f"def {op.name}({params_str}){return_type}:\n"
-            f'    """{docstring}"""\n'
+            f"    \"\"\"{docstring}\"\"\"\n"
             f"    return {async_prefix}{inner_call}{async_suffix}"
+        )
+    elif op.is_factory:
+        body_lines = (
+            f"def {op.name}({params_str}){return_type}:\n"
+            f"    \"\"\"{docstring}\"\"\"\n"
+            f"    instance = {async_prefix}{inner_call}{async_suffix}\n"
+            f"    return _serialize_factory_result(instance)"
         )
     else:
-        return (
+        body_lines = (
             f"def {op.name}({params_str}){return_type}:\n"
-            f'    """{docstring}"""\n'
-            f'    module = importlib.import_module("{module_name}")\n'
+            f"    \"\"\"{docstring}\"\"\"\n"
+            f"    module = importlib.import_module(\"{module_name}\")\n"
             f"    return {async_prefix}{inner_call}{async_suffix}"
         )
+    return body_lines, imports
 
 
 def _generate_wrapper_script(
@@ -939,9 +1278,16 @@ def _generate_wrapper_script(
 
     # Build body: helper(s) + method stubs
     body_parts: list[str] = []
+    model_imports: set[tuple[str, str]] = set()
 
-    if class_name:
-        body_parts.append(_generate_get_instance_helper(init_params))
+    has_factory_ops = any(op.is_factory for op in ops)
+    if class_name or has_factory_ops:
+        if has_factory_ops and not class_name:
+            factory_op = next(op for op in ops if op.is_factory)
+            factory_params = _skip_variadic_params(factory_op.parameters)
+            body_parts.append(_generate_get_instance_helper(factory_params))
+        else:
+            body_parts.append(_generate_get_instance_helper(init_params))
 
     # Sort operations by name for deterministic output
     for op in sorted(ops, key=lambda o: o.name):
@@ -952,31 +1298,66 @@ def _generate_wrapper_script(
         elif op.name == "execute_stage" and class_name is None and file_stem == "executor":
             body_parts.append(_generate_pipeline_execute_stage_stub(op))
         else:
-            body_parts.append(
-                _generate_method_stub(
-                    op,
-                    is_class_method=class_name is not None,
-                    module_name=module_name,
-                    init_params=init_params if class_name is not None else None,
-                )
+            stub_body, stub_imports = _generate_method_stub(
+                op,
+                is_class_method=class_name is not None,
+                module_name=module_name,
+                init_params=init_params if class_name is not None else None,
+                source_dir=source_dir,
             )
+            body_parts.append(stub_body)
+            model_imports.update(stub_imports)
 
     runtime_symbols = _collect_runtime_symbols(ops, init_params)
     import_map = _parse_import_map(source_file, module_name)
     extra_imports = _format_wrapper_imports(runtime_symbols, import_map, module_name)
+
+    # Pydantic/dataclass imports must load after sys.path is seeded.
+    if model_imports:
+        model_import_block = "\n".join(
+            sorted(
+                {
+                    f"from {module_path} import {class_name}"
+                    for module_path, class_name in model_imports
+                }
+            )
+        )
+        model_import_block = f"\n{model_import_block}\n"
+    else:
+        model_import_block = ""
+
     if extra_imports:
         extra_imports = f"\n{extra_imports}\n"
+
+    extra_sys_path_entries = _infer_extra_sys_path_entries(source_dir, module_name)
+    extra_sys_path_inserts = _format_extra_sys_path_inserts(extra_sys_path_entries)
+
+    body_text = "\n".join(body_parts)
+    extra_coercion = ""
+    if "_coerce_team_database" in body_text:
+        extra_coercion += "\n" + WRAPPER_TEAM_DATABASE_COERCION
+    if "_coerce_messager" in body_text:
+        extra_coercion += "\n" + WRAPPER_MESSAGER_COERCION
 
     content = _WRAPPER_SCRIPT_TEMPLATE.format(
         header_label=header_label,
         source_dir=source_dir,
         cli_prefix=cli_prefix_line,
+        extra_sys_path_inserts=extra_sys_path_inserts,
         extra_imports=extra_imports,
-        body="\n".join(body_parts),
+        model_imports=model_import_block,
+        serialization_helpers=WRAPPER_SERIALIZATION_HELPERS,
+        coercion_helpers=WRAPPER_COERCION_HELPERS + extra_coercion,
+        body=body_text,
         script_name=script_name,
     )
 
     script_path.write_text(content, encoding="utf-8")
+    try:
+        compile(content, str(script_path), "exec")
+    except SyntaxError as exc:
+        script_path.unlink(missing_ok=True)
+        raise RuntimeError(f"Generated wrapper failed syntax check: {script_path}: {exc}") from exc
     logger.info("Generated wrapper script: %s (%d methods)", script_path, len(ops))
     return script_path
 
@@ -1014,6 +1395,8 @@ def operation_to_spec(
     bundle_id: str | None = None,
     init_params: list[ParamSpec] | None = None,
     cli_subcommand: str | None = None,
+    tool_deps: ToolOperationDeps | None = None,
+    module_path: str | None = None,
 ) -> AgentToolSpec:
     """Convert a single SourceOperation into an AgentToolSpec.
 
@@ -1064,7 +1447,7 @@ def operation_to_spec(
     else:
         schema_params = (
             _merge_init_and_method_params(init_params or [], op.parameters)
-            if op.class_name
+            if op.class_name and not op.is_property
             else op.parameters
         )
         properties = {}
@@ -1081,6 +1464,7 @@ def operation_to_spec(
                 description=param.description,
                 source_dir=source_dir,
                 fallback_json_type=json_type,
+                module_path=module_path,
             )
             if param.default is not None:
                 prop["default"] = _normalize_schema_default(
@@ -1101,6 +1485,8 @@ def operation_to_spec(
     }
     if required:
         input_schema["required"] = required
+
+    input_schema = enrich_input_schema_with_dependencies(input_schema, tool_deps)
 
     # Build call_impl template — uses absolute script path.
     # {json_args} is a special placeholder resolved by _enrich_bridge_params()
@@ -1156,9 +1542,13 @@ def operation_to_spec(
     aliases = tuple(alias_list)
     tags = generate_search_tags(op, comp_name=comp_name)
 
+    # Docstring only — dependency edges live in input_schema.x-sop-dependencies
+    # and ORCHESTRATION_ROUTES.md, not in ToolSearch-visible description/tags.
+    description = op.description or op.name
+
     return AgentToolSpec(
         name=tool_name,
-        description=op.description or op.name,
+        description=description,
         input_schema=input_schema,
         call_type="bash",
         call_impl=call_impl,
@@ -1166,6 +1556,7 @@ def operation_to_spec(
         aliases=aliases,
         source="sop-converter",
         bundle_id=bundle_id,
+        stateful_wrapper=True,
     )
 
 
@@ -1266,6 +1657,7 @@ def register_component_tools(
     # ── Phase 3: create AgentToolSpec for each operation ──
 
     name_map: dict[str, str] = {}
+    dependency_index = build_tool_dependency_index(components, source_dir=source_dir_abs)
     specs: list[AgentToolSpec] = []
 
     for comp in components:
@@ -1274,11 +1666,18 @@ def register_component_tools(
             key = (op.class_name, module_path)
             script_path = script_paths[key]
 
-            init_params = comp.class_init_params.get(op.class_name, []) if op.class_name else None
+            init_params = (
+                comp.class_init_params.get(op.class_name, [])
+                if op.class_name
+                else None
+            )
             dispatch_map = cli_dispatch_by_module.get(module_path, {})
             cli_subcommand = (
-                dispatch_map.get(op.name) if _is_cli_handler_op(op, dispatch_map) else None
+                dispatch_map.get(op.name)
+                if _is_cli_handler_op(op, dispatch_map)
+                else None
             )
+            tool_deps = dependency_index.get(to_kebab_tool_name(comp.name, op))
             spec = operation_to_spec(
                 op,
                 source_dir=source_dir_abs,
@@ -1287,6 +1686,8 @@ def register_component_tools(
                 bundle_id=effective_bundle_id,
                 init_params=init_params,
                 cli_subcommand=cli_subcommand,
+                tool_deps=tool_deps,
+                module_path=module_path,
             )
 
             # Validate the spec

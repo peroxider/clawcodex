@@ -45,6 +45,82 @@ class TestBundleOverviewAgentDefinition(unittest.TestCase):
         self.assertEqual(agent.base_dir, str(bundle.resolve()))
 
 
+class TestApplySopStartupRegistersBundleAgents(unittest.TestCase):
+    def test_apply_sop_startup_registers_agents_and_skills(self) -> None:
+        import tempfile
+
+        from clawcodex_ext.agent.load_agents_dir import (
+            clear_agent_definitions_cache,
+            get_agent_definitions_with_overrides,
+        )
+        from clawcodex_ext.cli.dispatch import _apply_sop_startup
+        from src.skills.loader import get_all_skills, get_registered_skill
+
+        clear_agent_definitions_cache()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            bundle = ws / "JiuwenAgent_tool_test"
+            skill_dir = ws / "skills" / "JiuwenAgent_tool_test"
+            agents_dir = bundle / ".claude" / "agents"
+            skill_dir.mkdir(parents=True)
+            agents_dir.mkdir(parents=True)
+
+            (skill_dir / "core_merged-skill.md").write_text(
+                "---\n"
+                "name: core_merged-skill\n"
+                "description: core domain\n"
+                "user-invocable: true\n"
+                "---\n\n"
+                "# core\n",
+                encoding="utf-8",
+            )
+            (agents_dir / "core_merged-agent.md").write_text(
+                "---\n"
+                "name: core_merged-agent\n"
+                "description: Core domain agent\n"
+                "tools:\n"
+                "  - Skill\n"
+                "  - ToolSearch\n"
+                "---\n\n"
+                "Run core SDK tasks.\n",
+                encoding="utf-8",
+            )
+
+            ctx = MagicMock()
+            ctx.tool_registry = MagicMock()
+            ctx.options = MagicMock()
+            ctx.tool_context = MagicMock()
+            ctx.tool_context.bundle_context = None
+
+            overview = {
+                "name": "clawcodex-overview",
+                "description": "Overview",
+                "skills": ["core_merged-skill"],
+                "system_prompt_body": "",
+            }
+
+            _apply_sop_startup(
+                ctx,
+                overview,
+                bundle_path=bundle,
+                workspace=ws,
+                force_bundle=True,
+            )
+
+            self.assertEqual(ctx.options.agent_dir_override, bundle.resolve())
+            self.assertEqual(ctx.tool_context._agent_dir_override, bundle.resolve())
+
+            agent_types = {
+                a.agent_type
+                for a in get_agent_definitions_with_overrides(str(bundle.resolve()))
+            }
+            self.assertIn("core_merged-agent", agent_types)
+
+            get_all_skills(project_root=ws)
+            self.assertIsNotNone(get_registered_skill("core_merged-skill"))
+
+
 class TestStartupAgentToolFilter(unittest.TestCase):
     def setUp(self) -> None:
         self.all_tools = [

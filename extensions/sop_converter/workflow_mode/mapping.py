@@ -35,21 +35,48 @@ def extracted_stage_to_workflow_stage(
     )
 
 
+def _is_empty_stage(
+    node: ExtractedStage,
+    graph: WorkflowGraph,
+    agent_map: StageAgentMap | None,
+    skill_agent_map: dict[str, str],
+) -> bool:
+    """A stage is "empty" (should be skipped) when it has no real mapping.
+
+    Criteria (all must hold):
+    1. No mapped_agent in StageAgentMap (or profile absent).
+    2. mapping_confidence <= 0.
+    3. Stage name not present in skill_agent_map (no skill matched by name).
+    4. No contract with output_files (no I/O contract).
+    """
+    if agent_map is not None:
+        profile = agent_map.profile_for_stage(node.id)
+        if profile and profile.mapped_agent and profile.mapping_confidence > 0:
+            return False
+    if node.name in skill_agent_map:
+        return False
+    contract = graph.contracts.get(node.id)
+    if contract and contract.output_files:
+        return False
+    return True
+
+
 def build_workflow_stages(
     graph: WorkflowGraph,
     *,
     skill_agent_map: dict[str, str],
 ) -> list[WorkflowStage]:
     stage_by_id = {s.id: s for s in graph.stages}
-    return [
-        extracted_stage_to_workflow_stage(
-            node,
-            graph,
-            stage_by_id=stage_by_id,
-            skill_agent_map=skill_agent_map,
+    stages: list[WorkflowStage] = []
+    for node in sorted(graph.stages, key=lambda s: s.id):
+        if _is_empty_stage(node, graph, None, skill_agent_map):
+            continue
+        stages.append(
+            extracted_stage_to_workflow_stage(
+                node, graph, stage_by_id=stage_by_id, skill_agent_map=skill_agent_map,
+            )
         )
-        for node in sorted(graph.stages, key=lambda s: s.id)
-    ]
+    return stages
 
 
 def build_workflow_stages_with_map(
@@ -67,6 +94,8 @@ def build_workflow_stages_with_map(
 
     stages: list[WorkflowStage] = []
     for node in sorted(graph.stages, key=lambda s: s.id):
+        if _is_empty_stage(node, graph, agent_map, merged_map):
+            continue
         profile = agent_map.profile_for_stage(node.id)
         if profile and profile.mapped_agent:
             dep_ids = [t.from_stage for t in graph.transitions if t.to_stage == node.id]
@@ -88,10 +117,7 @@ def build_workflow_stages_with_map(
         else:
             stages.append(
                 extracted_stage_to_workflow_stage(
-                    node,
-                    graph,
-                    stage_by_id=stage_by_id,
-                    skill_agent_map=merged_map,
+                    node, graph, stage_by_id=stage_by_id, skill_agent_map=merged_map,
                 )
             )
     return stages
@@ -154,3 +180,4 @@ def sync_overview_component_agents(
             )
         )
     return synced
+
