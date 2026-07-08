@@ -7,7 +7,11 @@ from clawcodex_ext.utils.completers import (
     rank_message_history,
     rank_suggestions,
 )
-from clawcodex_ext.permissions.types import PermissionMode
+from clawcodex_ext.permissions.types import (
+    PermissionAskReply,
+    PermissionAskRequest,
+    PermissionMode,
+)
 from clawcodex_ext.repl.color_scheme import REPLPalette
 from src.config import get_selection_mode
 
@@ -791,7 +795,7 @@ class ClawcodexREPL:
             self.tool_context.allow_docs = True
             self.tool_context.permission_handler = lambda _tn, _msg, _sug: (True, False)
         else:
-            self.tool_context.permission_handler = self._handle_permission_request
+            self.tool_context.permission_handler = self._handle_permission_ask_request
 
         # Runtime permission controller — the single chokepoint for
         # Shift+Tab cycles and ``/permissions`` picks. The controller
@@ -810,7 +814,7 @@ class ClawcodexREPL:
 
         self._runtime_permission_controller = RuntimePermissionController(
             tool_context_factory=lambda: self.tool_context,
-            default_handler=self._handle_permission_request,
+            default_handler=self._handle_permission_ask_request,
             app_state_store=None,
             notify=self._notify_permission_mode_change,
         )
@@ -850,8 +854,9 @@ class ClawcodexREPL:
         # (e.g. subagents/tools). Serialize interactive prompts so we never
         # mount competing prompt_toolkit applications at once.
         self._permission_prompt_lock = threading.Lock()
-        # Session-level cache for permission decisions (tool_name -> allow/deny)
-        # so identical prompts in loops don't repeatedly interrupt the user.
+        # Reserved for compatibility with older extensions that inspect the
+        # field. Plain "allow this action" decisions are intentionally not
+        # cached; each permission prompt must represent the current action.
         self._permission_decision_cache: dict[str, bool] = {}
 
         # The currently mounted ``LiveStatus`` (if any). ``_safe_input``
@@ -1570,11 +1575,6 @@ class ClawcodexREPL:
             continue_without_caching is always False since we don't cache in REPL.
         """
         with self._permission_prompt_lock:
-            cache_key = tool_name.strip().lower()
-            cached = self._permission_decision_cache.get(cache_key)
-            if cached is not None:
-                return cached, False
-
             # Stop the Rich status spinner if running, so we can get clean input
             if self._current_status is not None:
                 try:
@@ -1652,26 +1652,20 @@ class ClawcodexREPL:
                         multi_select=False,
                     )
                     if result is None:
-                        self._permission_decision_cache[cache_key] = False
                         return False, False
                     idx = result if isinstance(result, int) else (result[0] if result else 0)
                     if can_enable_setting:
                         if idx == 0:
                             self._enable_permission_setting(setting_to_enable)
-                            self._permission_decision_cache[cache_key] = True
                             return True, False
                         elif idx == 1:
-                            self._permission_decision_cache[cache_key] = True
                             return True, False
                         else:
-                            self._permission_decision_cache[cache_key] = False
                             return False, False
                     else:
                         if idx == 0:
-                            self._permission_decision_cache[cache_key] = True
                             return True, False
                         else:
-                            self._permission_decision_cache[cache_key] = False
                             return False, False
 
                 self.console.print("[bold]Options:[/bold]")
@@ -1684,24 +1678,166 @@ class ClawcodexREPL:
             if can_enable_setting:
                 if choice in ("1", "e", "enable"):
                     self._enable_permission_setting(setting_to_enable)
-                    self._permission_decision_cache[cache_key] = True
                     return True, False
                 elif choice in ("2", "y", "yes", ""):
-                    self._permission_decision_cache[cache_key] = True
                     return True, False
                 elif choice in ("3", "n", "no"):
-                    self._permission_decision_cache[cache_key] = False
                     return False, False
             else:
                 if choice in ("1", "y", "yes", ""):
-                    self._permission_decision_cache[cache_key] = True
                     return True, False
                 elif choice in ("2", "n", "no"):
-                    self._permission_decision_cache[cache_key] = False
                     return False, False
 
             self.console.print("[dim]Invalid choice, defaulting to deny.[/dim]")
             return False, False
+
+    def _handle_permission_ask_request(
+        self,
+        request: PermissionAskRequest,
+    ) -> PermissionAskReply:
+        """Handle the structured permission request used by the registry."""
+        with self._permission_prompt_lock:
+            if self._current_status is not None:
+                try:
+                    self._current_status.stop()
+                except Exception:
+                    pass
+
+            self.console.print("")
+            self.console.print(f"[bold][warning]⚠ Permission Required[/warning][/bold]")
+            self.console.print(f"  {request.message}")
+            self.console.print("")
+
+            can_enable_setting = False
+            setting_to_enable: str | None = None
+            msg_lower = request.message.lower()
+            if "allow_docs" in msg_lower or "documentation files" in msg_lower:
+                if not self.tool_context.allow_docs:
+                    can_enable_setting = True
+                    setting_to_enable = "allow_docs"
+
+            session_label: str | None = None
+            if request.suggestions:
+                from clawcodex_ext.permissions.updates import session_option_label
+
+                session_label = session_option_label(
+                    request.suggestions,
+                    request.tool_name,
+                    request.tool_input,
+                )
+
+            option_actions: list[tuple[str, str, str]] = []
+            if can_enable_setting:
+                option_actions.append(
+                    ("e", f"Enable {setting_to_enable} and allow", "enable_setting")
+                )
+            option_actions.append(("y", "Yes, allow this action", "allow_once"))
+            if session_label:
+                option_actions.append(("s", f"Yes, {session_label}", "allow_session"))
+            option_actions.append(("n", "No, deny this action", "deny"))
+
+            options = [(key, desc) for key, desc, _action in option_actions]
+            action_by_key: dict[str, str] = {
+                key.lower(): action for key, _desc, action in option_actions
+            }
+            for idx, (_key, _desc, action) in enumerate(option_actions, start=1):
+                action_by_key[str(idx)] = action
+            action_by_key["yes"] = "allow_once"
+            action_by_key["no"] = "deny"
+            action_by_key[""] = "allow_once"
+            if can_enable_setting:
+                action_by_key["enable"] = "enable_setting"
+            if session_label:
+                action_by_key["session"] = "allow_session"
+
+            im_reply = getattr(self, "_im_reply_controller", None)
+            send_permission_prompt = getattr(im_reply, "send_permission_prompt", None)
+            im_origin = None
+            im_client = getattr(im_reply, "_client", None) if im_reply is not None else None
+            peek_origin = getattr(im_client, "peek_reply_origin", None)
+            if callable(peek_origin):
+                try:
+                    im_origin = peek_origin()
+                except Exception:
+                    im_origin = None
+
+            if im_origin and callable(send_permission_prompt):
+                choice = (
+                    self._wait_im_permission_choice(
+                        message=request.message,
+                        suggestion=None,
+                        options=options,
+                    )
+                    .strip()
+                    .lower()
+                )
+            else:
+                if callable(send_permission_prompt):
+                    try:
+                        send_permission_prompt(
+                            message=request.message,
+                            suggestion=None,
+                            options=options,
+                        )
+                    except Exception:
+                        pass
+
+                if get_selection_mode() == "arrow":
+                    opt_pairs = [(f"[{key}] {desc}", "") for key, desc in options]
+                    result = self._run_arrow_menu(
+                        opt_pairs,
+                        title="Permission Required",
+                        allow_other=False,
+                        multi_select=False,
+                    )
+                    if result is None:
+                        return PermissionAskReply(behavior="deny")
+                    idx = result if isinstance(result, int) else (result[0] if result else 0)
+                    if not 0 <= idx < len(option_actions):
+                        return PermissionAskReply(behavior="deny")
+                    action = option_actions[idx][2]
+                    return self._permission_reply_for_action(
+                        action,
+                        setting_to_enable,
+                        request.suggestions,
+                    )
+
+                self.console.print("[bold]Options:[/bold]")
+                for i, (key, desc) in enumerate(options, start=1):
+                    self.console.print(f"  {i}. [{key}] {desc}")
+                self.console.print("")
+
+                choice = self._safe_input("Select option> ").strip().lower()
+
+            action = action_by_key.get(choice)
+            if action is None:
+                self.console.print("[dim]Invalid choice, defaulting to deny.[/dim]")
+                return PermissionAskReply(behavior="deny")
+            return self._permission_reply_for_action(
+                action,
+                setting_to_enable,
+                request.suggestions,
+            )
+
+    def _permission_reply_for_action(
+        self,
+        action: str,
+        setting_to_enable: str | None,
+        suggestions: tuple,
+    ) -> PermissionAskReply:
+        if action == "enable_setting":
+            if setting_to_enable is None:
+                return PermissionAskReply(behavior="deny")
+            self._enable_permission_setting(setting_to_enable)
+            return PermissionAskReply(behavior="allow")
+        if action == "allow_once":
+            return PermissionAskReply(behavior="allow")
+        if action == "allow_session":
+            if not suggestions:
+                return PermissionAskReply(behavior="deny")
+            return PermissionAskReply(behavior="allow", chosen_updates=tuple(suggestions))
+        return PermissionAskReply(behavior="deny")
 
     def _wait_im_permission_choice(
         self,
@@ -3999,6 +4135,20 @@ class ClawcodexREPL:
         resumed = getattr(self, "_resume_session_id", None)
         if resumed and self.session.conversation.messages:
             self._replay_resume_history()
+
+        try:
+            from clawcodex_ext.debug.agent_debug import emit_agent_debug_marker
+
+            emit_agent_debug_marker(
+                "repl.ready",
+                {
+                    "session_id": _session_id_from_session(self.session),
+                    "surface": "repl",
+                    "stream": bool(self.stream),
+                },
+            )
+        except Exception:
+            pass
 
         # Phase B-2 wake: spin up a long-lived asyncio loop on the
         # main thread so the in-loop cron watcher can call app.exit()

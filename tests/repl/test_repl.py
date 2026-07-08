@@ -7,14 +7,20 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 import tempfile
 import json
+import io
 import os
 import threading
 import time
+from contextlib import redirect_stderr
 from rich.markdown import Markdown
 
 import src.config as config_module
 from src.repl import ClawcodexREPL
 from src.agent import Session, Conversation
+from clawcodex_ext.permissions.types import (
+    PermissionAskRequest,
+    PermissionUpdateSetMode,
+)
 from clawcodex_ext.providers.base import ChatMessage, ChatResponse
 
 from clawcodex_ext.utils.resume_hint import reset_resume_hint_for_test_only
@@ -158,6 +164,34 @@ class TestREPL(unittest.TestCase):
                     repl = ClawcodexREPL(provider_name="glm")
 
         self.assertEqual(repl.tool_context.session_id, expected_sid)
+
+    def test_run_emits_agent_debug_ready_marker(self):
+        expected_sid = "repl-ready-session"
+
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
+                mock_session_instance = Mock()
+                mock_session_instance.session_id = expected_sid
+                mock_session_instance.conversation.messages = []
+                mock_session.return_value = mock_session_instance
+
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
+                    mock_provider = Mock()
+                    mock_provider.model = "glm-4.5"
+                    mock_provider_class.return_value = mock_provider
+                    repl = ClawcodexREPL(provider_name="glm", stream=True)
+
+        stderr = io.StringIO()
+        with patch.dict(os.environ, {"CLAWCODEX_AGENT_DEBUG": "1"}, clear=False):
+            with patch.object(repl, "_print_startup_header"):
+                with patch.object(repl, "_run_main_loop", side_effect=KeyboardInterrupt):
+                    with self.assertRaises(KeyboardInterrupt):
+                        with redirect_stderr(stderr):
+                            repl.run()
+
+        marker = stderr.getvalue()
+        self.assertIn("CLAWCODEX_AGENT_DEBUG::repl.ready::", marker)
+        self.assertIn(expected_sid, marker)
 
     def test_startup_header_contains_logo_and_metadata(self):
         with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
@@ -1146,6 +1180,37 @@ class TestREPL(unittest.TestCase):
         self.assertIs(repl._engine_messages[0], resumed_session.conversation.messages[0])
         self.assertIs(repl._engine_messages[1], resumed_session.conversation.messages[1])
 
+    def test_ext_repl_uses_structured_permission_handler_by_default(self):
+        """The downstream REPL entrypoint must preserve permission suggestions."""
+        from clawcodex_ext.repl.app import ClawCodexExtREPL
+
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("src.providers.get_provider_class") as mock_provider_class:
+                mock_provider = Mock()
+                mock_provider.model = "glm-4.5"
+                mock_provider_class.return_value = mock_provider
+                session = Mock()
+                session.session_id = "ext-permission-session"
+                session.provider = "glm"
+                session.model = "glm-4.5"
+                session.conversation = Mock()
+                session.conversation.messages = []
+
+                repl = ClawCodexExtREPL(
+                    provider_name="glm",
+                    session=session,
+                    provider=mock_provider,
+                )
+
+        self.assertEqual(
+            repl.tool_context.permission_handler.__name__,
+            "_handle_permission_ask_request",
+        )
+        self.assertEqual(
+            repl.tool_context.default_permission_handler.__name__,
+            "_handle_permission_ask_request",
+        )
+
     def test_load_nonexistent_session(self):
         """Test loading a session that doesn't exist."""
         with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
@@ -1207,18 +1272,19 @@ class TestREPL(unittest.TestCase):
 
                     repl._safe_input = fake_input  # type: ignore[assignment]
 
-                    t1 = threading.Thread(
-                        target=repl._handle_permission_request,
-                        args=("Grep", "Claude wants to use Grep. Allow?", None),
-                    )
-                    t2 = threading.Thread(
-                        target=repl._handle_permission_request,
-                        args=("Read", "Claude wants to use Read. Allow?", None),
-                    )
-                    t1.start()
-                    t2.start()
-                    t1.join()
-                    t2.join()
+                    with patch("clawcodex_ext.repl.core.get_selection_mode", return_value="number"):
+                        t1 = threading.Thread(
+                            target=repl._handle_permission_request,
+                            args=("Grep", "Claude wants to use Grep. Allow?", None),
+                        )
+                        t2 = threading.Thread(
+                            target=repl._handle_permission_request,
+                            args=("Read", "Claude wants to use Read. Allow?", None),
+                        )
+                        t1.start()
+                        t2.start()
+                        t1.join()
+                        t2.join()
 
                     self.assertEqual(max_in_prompt, 1)
 
@@ -1253,6 +1319,106 @@ class TestREPL(unittest.TestCase):
             calls[0]["options"],
             [("y", "Yes, allow this action"), ("n", "No, deny this action")],
         )
+
+    def test_permission_prompt_plain_allow_is_not_cached_by_tool_name(self):
+        """Plain "allow this action" must not authorize later calls implicitly."""
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl._permission_prompt_lock = threading.Lock()
+        repl._permission_decision_cache = {}
+        repl._current_status = None
+        repl.console = Mock()
+        repl.tool_context = Mock(allow_docs=False)
+        repl._safe_input = Mock(side_effect=["1", "2"])
+        repl._im_reply_controller = None
+
+        with patch("clawcodex_ext.repl.core.get_selection_mode", return_value="number"):
+            first_allowed, first_cached = repl._handle_permission_request(
+                "Read",
+                "Claude wants to use Read for /private/etc/hosts. Allow?",
+                None,
+            )
+            second_allowed, second_cached = repl._handle_permission_request(
+                "Read",
+                "Claude wants to use Read for /private/etc/protocols. Allow?",
+                None,
+            )
+
+        self.assertTrue(first_allowed)
+        self.assertFalse(first_cached)
+        self.assertFalse(second_allowed)
+        self.assertFalse(second_cached)
+        self.assertEqual(repl._safe_input.call_count, 2)
+
+    def test_permission_ask_request_returns_chosen_session_updates(self):
+        """Session suggestion choices must reach the tool registry."""
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl._permission_prompt_lock = threading.Lock()
+        repl._permission_decision_cache = {}
+        repl._current_status = None
+        repl.console = Mock()
+        repl.tool_context = Mock(allow_docs=True)
+        repl._safe_input = Mock(return_value="2")
+        repl._im_reply_controller = None
+
+        update = PermissionUpdateSetMode(destination="session", mode="acceptEdits")
+        request = PermissionAskRequest(
+            tool_name="Write",
+            message="Claude wants to use Write. Allow?",
+            tool_input={"file_path": "/tmp/example.md", "content": "x"},
+            suggestions=(update,),
+        )
+
+        with patch("clawcodex_ext.repl.core.get_selection_mode", return_value="number"):
+            reply = repl._handle_permission_ask_request(request)
+
+        self.assertEqual(reply.behavior, "allow")
+        self.assertEqual(reply.chosen_updates, (update,))
+
+    def test_permission_ask_request_ignores_hidden_enable_alias(self):
+        """Typing hidden aliases must not allow options absent from the menu."""
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl._permission_prompt_lock = threading.Lock()
+        repl._permission_decision_cache = {}
+        repl._current_status = None
+        repl.console = Mock()
+        repl.tool_context = Mock(allow_docs=True)
+        repl._safe_input = Mock(return_value="enable")
+        repl._im_reply_controller = None
+
+        request = PermissionAskRequest(
+            tool_name="Bash",
+            message="Claude wants to use Bash. Allow?",
+            tool_input={"command": "pwd"},
+            suggestions=(),
+        )
+
+        with patch("clawcodex_ext.repl.core.get_selection_mode", return_value="number"):
+            reply = repl._handle_permission_ask_request(request)
+
+        self.assertEqual(reply.behavior, "deny")
+
+    def test_permission_ask_request_ignores_hidden_session_alias(self):
+        """The session alias only works when session updates are available."""
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl._permission_prompt_lock = threading.Lock()
+        repl._permission_decision_cache = {}
+        repl._current_status = None
+        repl.console = Mock()
+        repl.tool_context = Mock(allow_docs=True)
+        repl._safe_input = Mock(return_value="session")
+        repl._im_reply_controller = None
+
+        request = PermissionAskRequest(
+            tool_name="Bash",
+            message="Claude wants to use Bash. Allow?",
+            tool_input={"command": "pwd"},
+            suggestions=(),
+        )
+
+        with patch("clawcodex_ext.repl.core.get_selection_mode", return_value="number"):
+            reply = repl._handle_permission_ask_request(request)
+
+        self.assertEqual(reply.behavior, "deny")
 
     def test_permission_prompt_im_branch_uses_wechat_reply_choice(self):
         """1b: when the turn is IM-driven (peek_reply_origin non-None), the
@@ -1367,8 +1533,8 @@ class TestREPL(unittest.TestCase):
         repl3._direct_abort_controller = None
         self.assertFalse(repl3._interrupt_active_chat_from_im())
 
-    def test_permission_prompt_cached_per_tool(self):
-        """After first decision, same tool should not prompt again."""
+    def test_permission_prompt_plain_allow_prompts_each_time(self):
+        """Plain allow does not cache later prompts for the same tool."""
         with (
             patch(
                 "clawcodex_ext.repl.core.get_provider_config",
@@ -1398,20 +1564,21 @@ class TestREPL(unittest.TestCase):
 
                     repl._safe_input = fake_input  # type: ignore[assignment]
 
-                    first = repl._handle_permission_request(
-                        "Grep",
-                        "Claude wants to use Grep. Allow?",
-                        None,
-                    )
-                    second = repl._handle_permission_request(
-                        "Grep",
-                        "Claude wants to use Grep. Allow?",
-                        None,
-                    )
+                    with patch("clawcodex_ext.repl.core.get_selection_mode", return_value="number"):
+                        first = repl._handle_permission_request(
+                            "Grep",
+                            "Claude wants to use Grep. Allow?",
+                            None,
+                        )
+                        second = repl._handle_permission_request(
+                            "Grep",
+                            "Claude wants to use Grep. Allow?",
+                            None,
+                        )
 
                     self.assertEqual(first, (True, False))
                     self.assertEqual(second, (True, False))
-                    self.assertEqual(prompt_calls, 1)
+                    self.assertEqual(prompt_calls, 2)
 
     def test_ask_user_questions_other_branch_uses_safe_input(self):
         """Regression: the 'Other' follow-up must read through ``_safe_input``.

@@ -48,6 +48,7 @@ try:
     from prompt_toolkit.layout import Layout
     from prompt_toolkit.layout.containers import (
         ConditionalContainer,
+        Container,
         Float,
         FloatContainer,
         HSplit,
@@ -424,7 +425,7 @@ class LiveStatus:
                                 repl.tool_context.allow_docs = True
                             else:
                                 repl.tool_context.permission_handler = (
-                                    repl._handle_permission_request
+                                    repl._handle_permission_ask_request
                                 )
                                 repl.tool_context.allow_docs = False
                         self.update(f"[mode: {next_mode}]")

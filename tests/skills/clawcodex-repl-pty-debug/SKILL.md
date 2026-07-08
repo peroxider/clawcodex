@@ -1,311 +1,153 @@
 ---
 name: clawcodex-repl-pty-debug
-description: Use when an external agent needs to debug the real ClawCodex REPL by sending multi-turn inputs through a PTY and observing rendered output before deciding the next turn.
+description: Use when an external agent needs to debug real ClawCodex REPL terminal behavior, same-session multi-turn flows, slash-command rendering, permission prompts, live-provider boundaries, or nested ClawCodex PTY evidence.
 ---
 
 # ClawCodex REPL PTY Debugging
 
-Use this skill for behavior that only appears in the real interactive REPL:
-prompt rendering, slash commands, streaming output, ANSI redraws, and
-multi-turn user flows.
+Use this skill when the real terminal matters: prompt rendering, slash
+commands, streaming redraws, permission menus, live-provider boundaries, or
+multi-turn REPL state. PTY is high fidelity, not the default debug surface.
 
-## Decision Gate
+## First Decision
 
-Do not make PTY the default debugging surface. PTY is the high-fidelity layer
-for real terminal behavior and multi-turn observation, not the first stop for
-every ClawCodex issue.
+Start below PTY unless terminal behavior is the issue. Use `QueryRunner`,
+headless tests, `clawcodex -p --output-format stream-json`, or
+`CLAW_HEADLESS_BACKEND=stub` for lower-fidelity checks. Use PTY for real REPL
+state, rendered slash commands, permission menus, streaming redraws, or
+same-session behavior. Change code only for root cause with focused
+regression proof.
 
-Classify the issue before starting the controller:
+## Workflow
 
-| Issue class | First surface |
-| --- | --- |
-| Structured agent behavior, tool calls, final text | `QueryRunner` or headless tests |
-| CLI black-box behavior | `clawcodex -p --output-format stream-json` |
-| Event bridge without live provider | `CLAW_HEADLESS_BACKEND=stub` |
-| Real REPL, same-session multi-turn flow, slash-command rendering | PTY controller |
-| TUI layout, focus, keyboard, alternate screen | Textual tests or PTY/TUI harness |
+Run the lowest-fidelity proof that matches the issue class. When PTY is needed,
+drive one persistent controller session with labeled JSONL operations, use
+`text_file` for long prompts, then stop the child and inspect `result.json`,
+`clean.txt`, and only then `raw.log`. If the run creates files, independently
+verify them and clean only paths explicitly created by this run.
 
-Escalate to PTY only when the lower-fidelity surface cannot answer the question
-or when the user explicitly asks for real REPL output, same-session observation,
-or terminal-rendered behavior.
+## Adaptive Multi-turn
+
+Adaptive multi-turn runs must use the persistent `interactive` controller. Send
+one operation, read its JSON response, inspect `delta`, `kind`, `state`,
+`error_kind`, and `signals`, then choose the next `send`, `observe`, or `key`.
+Use the current response `delta`, `kind`, `state`, and `signals` for active
+prompt detection. `screen` is cumulative terminal state and may contain stale
+menus from earlier turns; use it only as context or when explicitly auditing a
+completed transcript.
+When the child creates files or state, independently inspect that filesystem or
+SQLite evidence before returning the next operation.
+After loading this skill, do not reread large repo files just to rediscover the workflow.
+
+Invoke skills with JSON input, for example
+`/tool Skill {"skill":"clawcodex-repl-pty-debug"}`. The shorthand
+`/tool Skill clawcodex-repl-pty-debug` is invalid because `/tool` parses the
+third field as JSON.
+
+After `/tool Skill {"skill":"..."}`, treat the returned prompt as already
+loaded guidance. Do not read `tests/skills`, `.claude/skills`, bundled scripts,
+or `clawcodex_ext/debug/repl_pty_session.py` merely to rediscover the workflow.
+Use the `skillRoot` path returned by `/tool Skill`; do not Glob/search for skill
+copies. Mirror directories are not authoritative.
+
+If the task already provides an exact helper command, run that command directly;
+do not `ls`, Glob, or read the skill directory merely to verify the helper
+exists. Treat any `ls`, `find`, Glob, Read, or Grep under `.agents/skills`,
+`.claude/skills`, `tests/skills`, bundled skill dirs, or helper implementation
+files as a failed no-discovery run when an exact helper command was already
+provided. No-discovery applies to the outer A agent's own tool calls. Checking
+only `adaptive-driver.jsonl` is insufficient.
+
+After outer A stops, prefer the host-side audit helper instead of ad hoc grep:
+`.agents/skills/clawcodex-repl-pty-debug/scripts/audit_outer_transcript.py --json <outer-clean.txt> [outer-result.json raw.log]`.
+Add `--require-adaptive-order` when the run must prove observe/read -> decision
+-> next send/key/observe ordering from the outer transcript.
+When reporting no-discovery, audit the outer transcript, outer `result.json`,
+outer `clean.txt`, outer `raw.log`, or the controlling agent tool log; if A used
+forbidden discovery, do not mark it passed.
+
+## Permission Mode
+
+Default child PTY starts use `--permission-mode bypassPermissions`. Every run plan must state whether permission prompts are in scope.
+
+Use the default command with `--permission-mode bypassPermissions` for PTY,
+skill loading, nested orchestration, file creation, or happy paths without
+permission UI. For `Permission Required`, approval keys, denial, sandbox
+policy, or prompt classification, override `start.cmd`, omit
+`--permission-mode`, and handle the menu with `key` or `raw`.
+
+Use `--permission-mode bypassPermissions` only when permission prompts are out of scope. Do not use `bypassPermissions` when permission prompts are in scope.
+
+## Live Provider Data Boundary
+
+Sandbox or filesystem approval is not live-provider data approval. An instruction such as "allow unsandboxed execution" is still insufficient for natural-language live-provider turns. Run that path only if the user explicitly allows sending workspace, skill, and prompt context to the external model provider; otherwise run fake/stub/local slash-command checks and mark the live-provider portion blocked by policy.
 
 ## Start The Controller
 
-Run:
+Preferred persistent session: `scripts/debug/repl_pty_session.py interactive`
+through the repo `uv` command. If the host has no persistent PTY session API,
+use `.agents/skills/clawcodex-repl-pty-debug/scripts/pty_jsonl_driver.py` with
+`--repo-root`, `--artifact-root`, and `--ops`.
 
-```bash
-env UV_SKIP_WHEEL_FILENAME_CHECK=1 uv --cache-dir /private/tmp/clawcodex-uv-cache run --extra dev --frozen python scripts/debug/repl_pty_session.py interactive
-```
+Use `pty_adaptive_driver.py` when a shell-only agent needs adaptive decisions
+without rewriting controller plumbing. If the Bash surface suppresses direct
+Python stdout/stderr or the agent needs a visible exit/artifact summary, use
+`scripts/pty_adaptive_driver.sh` with the same arguments.
+Decider files can `import decider_helpers` from the skill scripts directory.
+Prefer `has_current_permission_prompt(response)`, `has_current_text(response,
+...)`, `bash_exit_code(response)`, and `bash_succeeded(response)` over ad hoc
+checks against cumulative `screen`.
+Returned requests must use `"op"`, not `"action"`. Return `None` only when no
+more controller operations are needed; return `{"op":"observe","timeout":...}`
+when B needs more time. Do not stop and restart B between turns unless restart
+behavior is the explicit target. Do not stop B just because the final file
+exists. If a deliberate probe may fail before recovery, put `"allow_error":true`
+on that one request; the error remains in artifacts but does not fail the run if
+later turns recover. If required evidence is missing, send a repair prompt based
+on the missing evidence. Do not read helper implementation files unless the run has
+already been classified as a helper-layer failure and no-discovery failure.
+After any `key` or `raw` menu action, insert an `observe` settle step before a
+subsequent `send`, even if the key response already contains a tool result. A
+key response that is enough for stopping or reporting can still be terminal, but
+starting another REPL input immediately after menu teardown is a race-prone
+driver pattern.
+The helper writes `adaptive-driver.jsonl`; inspect it if the outer agent times
+out before `result.json` exists. If the wrapper exits nonzero, inspect
+`driver-error.json` first for `stage`, `error`, and `decider`, then use
+`adaptive-driver.jsonl` to see the last controller response and decider request.
+When A runs the shell wrapper around B, treat wrapper success as proven by
+`PTY_ADAPTIVE_DRIVER_EXIT=0`, a Bash tool result with `"exit_code": 0`, or B's
+`result.json` containing `"ok": true`; do not fail a good run only because one
+surface did not echo the expected marker.
 
-Keep the process running. Send one JSON command per line to stdin. Read one JSON
-response per line from stdout.
+Shell-visible wrapper: run
+`bash .agents/skills/clawcodex-repl-pty-debug/scripts/pty_adaptive_driver.sh
+--repo-root <repo> --artifact-dir <artifacts> --decider <decider.py>`.
 
-In Codex-style tool environments, start the controller as a persistent PTY
-session, not as a one-shot command. For example, use `exec_command` with
-`tty:true`, keep the returned `session_id`, and send later JSON operations with
-`write_stdin`. If the command exits before you can send `{"op":"start"}`,
-classify that as controller launch mechanics and restart with a persistent PTY;
-do not treat it as a REPL, provider, or ClawCodex failure.
+Do not import `scripts/debug/repl_pty_session.py` as an API, and do not use
+repeated one-shot shell commands to simulate a session.
+Multiline `send.text` and `send.text_file` are folded into one REPL input line;
+use `raw` when literal newlines are the behavior under test.
 
-Use this controller like a human at a terminal: observe what changed, decide the
-next input, then continue. Do not treat it as a brittle batch script unless the
-behavior is already deterministic.
+## References
 
-For an end-to-end file-creation run, prefer a unique artifact root so a failed
-preflight and a later successful run do not share one `result.json`:
-
-```bash
-env UV_SKIP_WHEEL_FILENAME_CHECK=1 uv --cache-dir /private/tmp/clawcodex-uv-cache run --extra dev --frozen python scripts/debug/repl_pty_session.py interactive --artifact-root /private/tmp/clawcodex-repl-pty-e2e-<run-id>
-```
-
-In agent-debug mode, the controller redirects child state paths such as
-`CLAWCODEX_HOME`, history, sessions, and telemetry into the artifact state
-directory. If setting `/goal <objective>` prints `attempt to write a readonly
-database`, the child is probably running through an older/custom harness that
-still points goal storage at the real `~/.clawcodex` database.
-
-## Sandbox And Live Provider Routing
-
-The fake child and local slash-command checks can run inside the normal sandbox.
-When testing a live provider, start the interactive controller outside the
-sandbox if the host environment supports an approval/escalation mechanism. The
-live provider request is made by the child REPL process; if the controller is
-started inside a network-restricted sandbox, DNS or outbound HTTPS can fail even
-when the user's machine and ClawCodex provider config are healthy.
-
-Before starting the controller, classify whether the user's requested acceptance
-requires a real model/provider request. Treat these as live-provider requests:
-natural-language prompts that should be answered by the configured model,
-active-goal continuation after `/goal <objective>`, "real API", "live provider",
-"credentials/network are available", or any test whose success depends on an
-assistant response rather than local slash-command output.
-
-If live-provider behavior is in scope, ask for the required escalation up front
-instead of first running the live REPL inside the network-restricted sandbox.
-The approval request should say that the child REPL will use configured provider
-credentials and outbound network. If approval is not granted, continue only with
-the local/fake/stub parts and report the live-provider portion as unverified or
-blocked by approval; do not classify the resulting missing live response as a
-ClawCodex, goal-runtime, or PTY-controller failure.
-
-Use this order:
-
-1. At intake, decide whether live-provider behavior is required and request
-   approval up front when it is.
-2. Run the fake child smoke test in the normal sandbox.
-3. Run a stub/headless smoke when the behavior does not require terminal
-   rendering.
-4. Use PTY with local slash commands to prove the controller, prompt, and
-   session loop.
-5. For the approved live-provider portion, start the interactive controller
-   outside the sandbox and drive the REPL with JSON operations as usual.
-
-Failure signature: local slash commands such as `/help`, `/tools`, and `/goal`
-work, but natural-language messages fail with `httpcore.ConnectError`,
-`nodename nor servname provided`, `APIConnectionError`, or `Connection error`.
-In that case, retest by starting the interactive controller outside the sandbox
-before blaming ClawCodex, the PTY controller, or provider credentials.
-
-## Start A REPL
-
-Send:
-
-```json
-{"op":"start"}
-```
-
-Wait for:
-
-```json
-{"ok":true,"event":"ready"}
-```
-
-If `ready` never appears, inspect the returned error and artifact directory.
-
-For coordinator-mode or real multi-agent validation, set the coordinator env on
-the child REPL through the JSON `start.env` field. Do not assume the external
-agent host inherited the user's shell environment:
-
-```json
-{
-  "op": "start",
-  "cmd": [".venv/bin/python3", "-P", "-m", "clawcodex_ext.cli.main", "--legacy-repl", "--stream", "--agent-debug", "--permission-mode", "bypassPermissions"],
-  "env": {"CLAUDE_CODE_COORDINATOR_MODE": "1"}
-}
-```
-
-Verify coordinator mode from the rendered banner
-`Coordinator Mode ACTIVE`, then prove real multi-agent execution from actual
-tool output such as `Agent (@worker ...)` or a worker result in `clean.txt` /
-`result.json`. Do not treat planner/executor/verifier wording, or a plain
-`/tools` listing, as proof that the model actually delegated.
-
-When the task is specifically to verify file creation in isolated disposable
-directories, and permission-prompt UI behavior is not under test, start the REPL
-in bypass mode instead of spending turns on permission menus:
-
-```json
-{"op":"start","cmd":[".venv/bin/python3","-P","-m","clawcodex_ext.cli.main","--legacy-repl","--stream","--agent-debug","--permission-mode","bypassPermissions"]}
-```
-
-Use bypass mode only with explicit temporary target paths and external cleanup.
-If permission UX is the behavior being tested, use the default start command.
-
-## Isolate First
-
-Before blaming the real provider or network, prove the selected layer. Start
-below PTY unless the issue is truly terminal-specific.
-
-For behavior that does not require terminal rendering, prefer the cheaper
-structured path with the stub backend:
-
-```bash
-CLAW_HEADLESS_BACKEND=stub clawcodex -p --output-format stream-json "Return a short stub response"
-```
-
-For behavior that does require terminal rendering, prove the PTY controller
-itself before using a live provider:
-
-```bash
-env UV_SKIP_WHEEL_FILENAME_CHECK=1 uv --cache-dir /private/tmp/clawcodex-uv-cache run --extra dev --frozen python scripts/debug/repl_pty_session.py run-script --timeout 5 --cmd .venv/bin/python3 tests/debug/fake_repl_child.py
-```
-
-Only use a live provider after stub or fake-child evidence shows the relevant
-event bridge, controller, and prompt loop are healthy.
-
-If the fake-child smoke itself fails before starting the controller because
-`uv` tries to resolve dependencies and DNS/package access is blocked, classify
-that as sandbox dependency resolution. Rerun the same smoke outside the network
-restricted sandbox before changing the PTY controller or ClawCodex.
-
-## Dynamic Debug Loop
-
-For each turn:
-
-1. Send the next user input with `{"op":"send","text":"..."}`.
-2. Read `delta` first; it is the new output since the previous command.
-3. Read `screen` when the whole visible transcript matters.
-4. If the REPL is still streaming/thinking, or a model response was just
-   rendered, send `{"op":"observe","timeout":2.0}` to confirm the prompt state.
-5. Decide the next input based on the observation.
-
-`send` submits a full line by calling the child terminal's `sendline()`. Use it
-for natural-language prompts, slash commands, and other inputs where pressing
-Enter is part of the action.
-
-For raw terminal controls, use `key` (alias: `raw`). It sends exactly the
-provided text with no trailing newline:
-
-```json
-{"op":"key","text":"1","timeout":1}
-{"op":"key","text":"\r","timeout":1}
-{"op":"key","text":"\u001b","timeout":1}
-```
-
-This matters for prompt-toolkit menus. A permission prompt's `[y]`/`[n]`
-letters are labels, not key bindings, in arrow-selection mode. The current item
-can be accepted with Enter (`{"op":"key","text":"\r"}`); prefer Enter when the
-highlighted item is `Yes, allow this action`. Quick-select digits, if you use
-them, must be sent as a single raw key (`{"op":"key","text":"1"}`), not as
-`{"op":"send","text":"1"}`. If a raw digit only echoes and no tool output
-follows, stop and classify the failure as permission-prompt handling instead of
-blindly retrying.
-
-Each observation includes `kind`, `state`, `error_kind`, and `signals`. Use
-`kind` to separate `input_echo`, `slash_command`, `assistant_output`,
-`permission_prompt`, `provider_error`, `network_error`, `ready`, `prompt`, and
-`stopped`. A permission menu is reported as `kind:"permission_prompt"` and
-`state:"awaiting_permission"`. Use `signals` as an audit trail for why that
-classification was chosen.
-
-The controller ignores the initial terminal echo when checking `expect`, but
-`expect` is still best for stable command output such as slash-command status.
-For assistant/model responses, prefer `send` followed by one or more `observe`
-turns so you do not confuse prompt echo, streaming spinners, provider errors,
-and final assistant text.
-
-For slash commands, keep `expect` tied to current stable output. Match casing:
-`/help` reports `Available Commands:`, `/tools` reports `Available tools:`, a
-fresh `/goal` reports `No goal is currently set.`, an active `/goal` summary
-reports `Tokens used:`, and `/cost` reports `Total units:`. A case-mismatched
-or stale `expect` creates a controller timeout even though the REPL printed the
-command output correctly.
-
-Use `/goal <objective>` carefully as a local slash-command proof. On the real
-REPL it can print `Goal active` and then immediately start an assistant turn;
-inside a network-restricted sandbox that follow-up provider turn can fail even
-though the slash command itself succeeded. For local controller proof, prefer
-read-only commands such as `/help`, `/tools`, and fresh `/goal`; for active-goal
-continuation behavior, run the controller where provider traffic is allowed and
-follow the command with `observe`.
-
-Example:
-
-```json
-{"op":"send","text":"/help","expect":"Available Commands:"}
-{"op":"send","text":"/tools","expect":"Available tools:"}
-{"op":"send","text":"/goal","expect":"No goal is currently set."}
-{"op":"send","text":"Return the token named goal pty ok using hyphens and uppercase.","timeout":3}
-{"op":"observe","timeout":10}
-{"op":"send","text":"/cost","expect":"Total units:"}
-```
-
-## Observe Without Sending
-
-Use:
-
-```json
-{"op":"observe","timeout":2.0}
-```
-
-This is useful after streaming output or when the previous command may still be
-printing.
-
-## Stop
-
-Send:
-
-```json
-{"op":"stop"}
-```
-
-This stops the child REPL and writes artifacts. The interactive controller keeps
-running so you can start another REPL in the same process.
-
-To end the controller loop too, send:
-
-```json
-{"op":"exit"}
-```
-
-The controller writes:
-
-```text
-raw.log
-clean.txt
-result.json
-```
-
-Read `result.json` to identify which step failed. Read `clean.txt` for the
-human-readable transcript. Read `raw.log` only for ANSI, cursor, or redraw bugs.
-For a quick artifact audit without dumping the whole transcript, summarize the
-JSON first:
-
-```bash
-jq '{ok,error,events:[.events[] | {event,ok,kind,state,error_kind,signals}]}' /path/to/result.json
-```
+Read only the reference needed now: `references/controller-protocol.md` for
+JSONL/controller details, `references/failure-classification.md` for fake/stub
+and error routing, `references/live-provider-and-goals.md` for provider/data
+boundaries, and `references/nested-skill-validation.md` for nested skill proof.
 
 ## Rules
 
-- Do not force all debugging through PTY. PTY is for real terminal behavior,
-  rendered REPL state, and same-session multi-turn observation.
-- Prefer headless `QueryRunner`, stream-json, or stub tests for pure structured
-  behavior, tool calls, final text, and event-bridge checks.
-- Avoid bare `python` in fake-child commands on this machine; use the repo
-  `.venv/bin/python3` created by `uv run`.
-- Do not use `subprocess.run(capture_output=True)` as a replacement.
-- Keep `--agent-debug` enabled so the REPL emits a stable readiness marker and
-  writes history under the debug state directory.
-- Use short timeouts while exploring. A timeout should return a structured JSON
-  error; inspect `delta`, `screen`, and artifacts before deciding the next turn.
 - Stop escalating fidelity once the current layer answers the question.
+- Treat slash-command success and live-provider success as separate checkpoints.
+- Use `key` or `raw` for prompt-toolkit menus; `send` always submits a full line.
+- After `key` or `raw`, follow with `observe` before any later `send`. Skip that
+  settle only when the key/raw response already contains the expected result and
+  the next operation is `stop` or no further controller operation is needed.
+- For denial probes, omit `--permission-mode bypassPermissions`, use `key` or
+  `raw` to deny, verify the requested file/state is absent, then choose the next
+  repair or allow turn from that evidence.
+- Keep `--agent-debug` enabled so state paths such as `CLAWCODEX_HOME`,
+  sessions, history, and telemetry stay under the artifact state directory.
+- Do not trust role wording as multi-agent proof; require actual tool markers or
+  artifact evidence.

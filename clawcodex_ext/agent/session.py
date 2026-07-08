@@ -15,6 +15,7 @@ to reconstruct the per-conversation Persistence record.
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from datetime import datetime
@@ -37,6 +38,9 @@ from .conversation import Conversation
 
 
 def _get_sessions_dir() -> Path:
+    override = str(os.environ.get("CLAWCODEX_SESSIONS_DIR", "")).strip()
+    if override:
+        return Path(override).expanduser()
     return Path.home() / ".clawcodex" / "sessions"
 
 

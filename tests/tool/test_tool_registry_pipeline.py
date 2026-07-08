@@ -204,6 +204,125 @@ class TestRegistryDispatch(unittest.TestCase):
         self.assertEqual(captured["tool_name"], "NeedApproval")
         self.assertEqual(captured["message"], "confirm?")
 
+    def test_dispatch_plain_allow_temporarily_honors_directory_grant(self) -> None:
+        from src.permissions.types import PermissionAskDecision, PermissionUpdateAddDirectories
+
+        workspace = Path(self.tmp.name) / "workspace"
+        workspace.mkdir()
+        outside_dir = Path(self.tmp.name) / "outside"
+        outside_dir.mkdir()
+        outside_file = outside_dir / "allowed-once.txt"
+        outside_file.write_text("allowed once", encoding="utf-8")
+        self.ctx = ToolContext(workspace_root=workspace)
+
+        def _ask(inp: dict, ctx: ToolContext):
+            return PermissionAskDecision(
+                message="confirm?",
+                suggestions=(
+                    PermissionUpdateAddDirectories(
+                        destination="session",
+                        directories=(str(outside_dir),),
+                    ),
+                ),
+            )
+
+        def _read_once(inp: dict, ctx: ToolContext) -> ToolResult:
+            path = ctx.ensure_readable_path(inp["file_path"])
+            return ToolResult(
+                name="NeedsRead",
+                output={"content": path.read_text(encoding="utf-8")},
+            )
+
+        def legacy_handler(
+            tool_name: str, message: str, suggestion: str | None
+        ) -> tuple[bool, bool]:
+            return True, False
+
+        tool = build_tool(
+            name="NeedsRead",
+            input_schema={
+                "type": "object",
+                "properties": {"file_path": {"type": "string"}},
+                "required": ["file_path"],
+            },
+            call=_read_once,
+            check_permissions=_ask,
+        )
+        self.ctx.permission_context = ToolPermissionContext(mode="default")
+        self.ctx.permission_handler = legacy_handler
+
+        result = ToolRegistry([tool]).dispatch(
+            ToolCall(name="NeedsRead", input={"file_path": str(outside_file)}),
+            self.ctx,
+        )
+
+        self.assertFalse(result.is_error)
+        self.assertEqual(result.output["content"], "allowed once")
+        self.assertNotIn(
+            str(outside_dir),
+            self.ctx.permission_context.additional_working_directories,
+        )
+
+    def test_dispatch_chosen_directory_update_expands_allowed_roots(self) -> None:
+        from src.permissions.types import (
+            PermissionAskDecision,
+            PermissionAskReply,
+            PermissionAskRequest,
+            PermissionUpdateAddDirectories,
+        )
+
+        workspace = Path(self.tmp.name) / "workspace"
+        workspace.mkdir()
+        outside_dir = Path(self.tmp.name) / "outside"
+        outside_dir.mkdir()
+        outside_file = outside_dir / "allowed-session.txt"
+        outside_file.write_text("allowed session", encoding="utf-8")
+        self.ctx = ToolContext(workspace_root=workspace)
+
+        update = PermissionUpdateAddDirectories(
+            destination="session",
+            directories=(str(outside_dir),),
+        )
+
+        def _ask(inp: dict, ctx: ToolContext):
+            return PermissionAskDecision(message="confirm?", suggestions=(update,))
+
+        def _read_once(inp: dict, ctx: ToolContext) -> ToolResult:
+            path = ctx.ensure_readable_path(inp["file_path"])
+            return ToolResult(
+                name="NeedsRead",
+                output={"content": path.read_text(encoding="utf-8")},
+            )
+
+        def handler(request: PermissionAskRequest) -> PermissionAskReply:
+            return PermissionAskReply(behavior="allow", chosen_updates=request.suggestions)
+
+        tool = build_tool(
+            name="NeedsRead",
+            input_schema={
+                "type": "object",
+                "properties": {"file_path": {"type": "string"}},
+                "required": ["file_path"],
+            },
+            call=_read_once,
+            check_permissions=_ask,
+        )
+        self.ctx.permission_context = ToolPermissionContext(mode="default")
+        self.ctx.permission_handler = handler
+
+        result = ToolRegistry([tool]).dispatch(
+            ToolCall(name="NeedsRead", input={"file_path": str(outside_file)}),
+            self.ctx,
+        )
+
+        self.assertFalse(result.is_error)
+        self.assertEqual(result.output["content"], "allowed session")
+        self.assertIn(
+            str(outside_dir),
+            self.ctx.permission_context.additional_working_directories,
+        )
+        self.assertEqual(self.ctx.ensure_readable_path(outside_file), outside_file.resolve())
+
     def test_dispatch_accepts_new_style_permission_handler(self) -> None:
         from src.permissions.types import (
             PermissionAskDecision,

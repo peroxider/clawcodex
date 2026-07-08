@@ -98,6 +98,22 @@ def test_session_storage_honors_agent_debug_sessions_dir(tmp_path: Path, monkeyp
     assert storage.sessions_dir == sessions_dir
 
 
+def test_legacy_session_save_honors_agent_debug_sessions_dir(tmp_path: Path, monkeypatch) -> None:
+    from clawcodex_ext.agent.session import Session
+
+    sessions_dir = tmp_path / "state" / "sessions"
+    home_dir = tmp_path / "home"
+    monkeypatch.setenv("CLAWCODEX_SESSIONS_DIR", str(sessions_dir))
+    monkeypatch.setenv("HOME", str(home_dir))
+
+    session = Session(session_id="debug-save-session", provider="stub", model="stub")
+
+    session.save()
+
+    assert (sessions_dir / "debug-save-session" / "transcript.jsonl").exists()
+    assert not (home_dir / ".clawcodex" / "sessions" / "debug-save-session").exists()
+
+
 def test_emit_agent_debug_marker_is_silent_when_disabled() -> None:
     stream = io.StringIO()
 

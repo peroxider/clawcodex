@@ -6,13 +6,14 @@ import argparse
 import json
 import os
 import re
+import select
 import sys
 import tempfile
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence, TextIO
+from typing import Callable, Iterable, Mapping, Sequence, TextIO
 
 
 ANSI_RE = re.compile(r"(?:\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)|\x1b[@-_])")
@@ -35,6 +36,17 @@ NETWORK_ERROR_RE = re.compile(
 STREAMING_RE = re.compile(
     r"(Thinking|Streaming|Waiting for model|[\u2800-\u28ff])",
     re.IGNORECASE,
+)
+CPR_WARNING_RE = re.compile(
+    r"WARNING:\s+your terminal doesn't support cursor position requests \(CPR\)\.?",
+    re.IGNORECASE,
+)
+THINKING_STATUS_RE = re.compile(
+    r"[\u2800-\u28ff]?\s*Thinking[^\r\n]*",
+    re.IGNORECASE,
+)
+STATUS_TOOLBAR_RE = re.compile(
+    r".*\s·\s.*\s·\s.*\bmode:\s*.*\btokens:\s*\d+(?:\.\d+)?[kKmM]?\s+in\s*/\s*\d+(?:\.\d+)?[kKmM]?\s+out.*"
 )
 PERMISSION_PROMPT_RE = re.compile(
     r"Permission Required.*?(Allow\?|allow this action|Enter select|quick select)",
@@ -87,8 +99,30 @@ def strip_ansi(text: str) -> str:
     return ANSI_RE.sub("", text)
 
 
-def _compact_for_expect(text: str) -> str:
+def clean_repl_text(text: str) -> str:
+    """Return transcript text intended for assertions and human review.
+
+    ``raw.log`` remains the byte-faithful terminal record. This cleaned surface
+    removes redraw/status noise that otherwise overwhelms result JSON and
+    `clean.txt` while preserving assistant, command, and tool output.
+    """
+
     text = strip_ansi(text)
+    cleaned_lines: list[str] = []
+    for raw_line in text.replace("\r", "\n").split("\n"):
+        line = CPR_WARNING_RE.sub("", raw_line)
+        line = THINKING_STATUS_RE.sub("", line)
+        line = re.sub(r"[\u2800-\u28ff]", "", line)
+        if STATUS_TOOLBAR_RE.match(line.strip()):
+            continue
+        if not line.strip() and raw_line.strip():
+            continue
+        cleaned_lines.append(line)
+    return "\n".join(cleaned_lines)
+
+
+def _compact_for_expect(text: str) -> str:
+    text = clean_repl_text(text)
     text = re.sub(r"[\u2800-\u28ff]", "", text)
     text = re.sub(r"Thinking[^\r\n]*", "", text)
     text = text.replace("❯", "")
@@ -150,6 +184,23 @@ def _without_initial_terminal_echo(delta: str, sent_text: str | None) -> str:
             continue
         if _line_is_terminal_echo(line, sent_text):
             return "\n".join(lines[index + 1 :])
+        compact_sent = re.sub(r"\s+", "", sent_text)
+        compact_echo = ""
+        for echo_end in range(index, len(lines)):
+            candidate = strip_ansi(lines[echo_end]).strip()
+            if echo_end == index and candidate.startswith("❯"):
+                candidate = candidate[1:].strip()
+            if echo_end == index and candidate.startswith(">"):
+                candidate = candidate[1:].strip()
+            if not candidate:
+                continue
+            compact_echo += re.sub(r"\s+", "", candidate)
+            if not compact_sent.startswith(compact_echo):
+                return delta
+            if compact_echo == compact_sent:
+                return "\n".join(lines[echo_end + 1 :])
+        if compact_echo and compact_sent.startswith(compact_echo):
+            return ""
         return delta
     return ""
 
@@ -168,6 +219,21 @@ def _detect_rendered_error(text: str) -> tuple[str, str] | None:
         candidate = line.strip()
         if not candidate:
             continue
+        error_like = candidate.lower().startswith(
+            (
+                "query error:",
+                "providererror:",
+                "networkerror:",
+                "authenticationerror:",
+                "ratelimiterror:",
+                "api error:",
+                "openai.",
+                "httpcore.",
+                "litellm.",
+            )
+        )
+        if not error_like and candidate.lower() != "connection error.":
+            continue
         if NETWORK_ERROR_RE.search(candidate):
             return "network_error", candidate
         if PROVIDER_ERROR_RE.search(candidate):
@@ -185,7 +251,7 @@ def _has_permission_prompt(text: str) -> bool:
     # delta that also contains the approved tool result and a fresh prompt.
     # Classify only an active permission prompt as awaiting input.
     tail = clean[matches[-1].end() :]
-    if "Tool result:" in tail or "Tool error:" in tail or "Goodbye!" in tail:
+    if "Tool result:" in tail or "Tool error:" in tail or "⎿" in tail or "Goodbye!" in tail:
         return False
     return True
 
@@ -212,6 +278,8 @@ def _classify_observation(
         signals.append("prompt")
 
     if event == "ready":
+        if "ready_marker" not in signals and "prompt" in signals:
+            signals.append("prompt_ready_fallback")
         return ObservationClassification("ready", "ready", tuple(signals or ["ready_marker"]))
     if event == "stopped":
         return ObservationClassification("stopped", "stopped", tuple(signals))
@@ -273,6 +341,8 @@ def default_repl_command() -> list[str]:
         "--legacy-repl",
         "--stream",
         "--agent-debug",
+        "--permission-mode",
+        "bypassPermissions",
     ]
 
 
@@ -292,6 +362,16 @@ def build_goal_script(*, goal: str, prompt: str, expect_response: str) -> list[S
     ]
 
 
+def build_file_creation_prompt(*, target_path: str, task: str) -> str:
+    return (
+        f"{task}\n\n"
+        f"create or overwrite the file at `{target_path}`. "
+        "Use the available file-writing tool or shell command to actually create the file; "
+        "do not only print code in the chat response. "
+        "After writing, verify the file exists and briefly report the path."
+    )
+
+
 def write_artifacts(
     *,
     artifact_dir: Path,
@@ -307,7 +387,7 @@ def write_artifacts(
     result_json = artifact_dir / "result.json"
 
     raw_log.write_text(raw_text, encoding="utf-8")
-    clean_transcript.write_text(strip_ansi(raw_text), encoding="utf-8")
+    clean_transcript.write_text(clean_repl_text(raw_text), encoding="utf-8")
     result_json.write_text(
         json.dumps(
             {
@@ -384,19 +464,72 @@ class ReplPtySession:
         expect: str | None = None,
         timeout: float | None = None,
     ) -> Observation:
-        self._require_child().sendline(text)
+        before_len = len(self.raw_text)
+        self._write_child_input(text, newline=True, timeout=timeout)
         if expect:
-            return self.expect(
+            return self._expect_exact(
                 expect,
                 timeout=timeout,
                 event="observed",
                 ignored_initial_echo=text,
+                before_len=before_len,
             )
-        return self._observe(timeout=timeout, ignored_initial_echo=text)
+        return self._observe(timeout=timeout, ignored_initial_echo=text, before_len=before_len)
 
     def key(self, text: str, *, timeout: float | None = None) -> Observation:
-        self._require_child().send(text)
-        return self._observe(timeout=timeout, ignored_initial_echo=text)
+        before_len = len(self.raw_text)
+        self._write_child_input(text, newline=False, timeout=timeout)
+        return self._observe(timeout=timeout, ignored_initial_echo=text, before_len=before_len)
+
+    def _write_child_input(
+        self,
+        text: str,
+        *,
+        newline: bool,
+        timeout: float | None,
+    ) -> None:
+        child = self._require_child()
+        line_suffix = getattr(child, "linesep", "\n") if newline else ""
+        payload_text = text + (line_suffix if isinstance(line_suffix, str) else "\n")
+        encoding = getattr(child, "encoding", None) or "utf-8"
+        payload = payload_text.encode(encoding, errors="surrogateescape")
+        total_timeout = self.timeout if timeout is None else timeout
+        deadline = time.monotonic() + total_timeout
+        offset = 0
+        chunk_size = 512
+        fd = child.child_fd
+        restore_blocking: bool | None = None
+        try:
+            try:
+                restore_blocking = os.get_blocking(fd)
+                os.set_blocking(fd, False)
+            except (AttributeError, OSError):
+                restore_blocking = None
+            while offset < len(payload):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(f"timed out writing {len(payload)} bytes to child PTY")
+                read_fds = [fd] if hasattr(child, "read_nonblocking") else []
+                readable, ready, _ = select.select(read_fds, [fd], [], min(0.2, remaining))
+                if readable:
+                    self._drain_available(max_wait=0.01)
+                if not ready:
+                    continue
+                try:
+                    written = os.write(fd, payload[offset : offset + chunk_size])
+                except BlockingIOError:
+                    continue
+                if written == 0:
+                    raise OSError("child PTY write returned 0 bytes")
+                offset += written
+            if hasattr(child, "read_nonblocking"):
+                self._drain_available(max_wait=0.05)
+        finally:
+            if restore_blocking is not None:
+                try:
+                    os.set_blocking(fd, restore_blocking)
+                except OSError:
+                    pass
 
     def expect(
         self,
@@ -411,19 +544,22 @@ class ReplPtySession:
             timeout=timeout,
             event=event,
             ignored_initial_echo=ignored_initial_echo,
+            before_len=None,
         )
 
     def observe(self, *, timeout: float | None = None) -> Observation:
-        return self._observe(timeout=timeout, ignored_initial_echo=None)
+        return self._observe(timeout=timeout, ignored_initial_echo=None, before_len=None)
 
     def _observe(
         self,
         *,
         timeout: float | None,
         ignored_initial_echo: str | None,
+        before_len: int | None,
     ) -> Observation:
         child = self._require_child()
-        before_len = len(self.raw_text)
+        if before_len is None:
+            before_len = len(self.raw_text)
         total_timeout = self.timeout if timeout is None else timeout
         deadline = time.monotonic() + total_timeout
         idle_deadline: float | None = None
@@ -468,7 +604,7 @@ class ReplPtySession:
         child = self._child
         if child is not None and child.isalive():
             try:
-                child.sendline("/exit")
+                self._write_child_input("/exit", newline=True, timeout=min(2.0, self.timeout))
                 child.expect_exact("Goodbye!", timeout=2)
                 self._collect(str(child.before))
                 self._collect(str(child.after))
@@ -507,9 +643,11 @@ class ReplPtySession:
         timeout: float | None,
         event: str,
         ignored_initial_echo: str | None,
+        before_len: int | None = None,
     ) -> Observation:
         child = self._require_child()
-        before_len = len(self.raw_text)
+        if before_len is None:
+            before_len = len(self.raw_text)
         deadline = time.monotonic() + (self.timeout if timeout is None else timeout)
         while time.monotonic() < deadline:
             try:
@@ -578,11 +716,19 @@ class ReplPtySession:
             return self._observation(True, event, before_len)
         except Exception as exc:
             self._collect(str(getattr(child, "before", "")))
+            if event == "ready" and self._has_prompt_ready(self.raw_text[before_len:]):
+                self._drain_available()
+                return self._observation(True, event, before_len)
             return self._observation(False, "error", before_len, f"{type(exc).__name__}: {exc}")
 
     def _collect(self, text: str) -> None:
         if text:
             self._raw_chunks.append(text)
+
+    @staticmethod
+    def _has_prompt_ready(text: str) -> bool:
+        clean = strip_ansi(text)
+        return "❯" in clean or bool(re.search(r"(^|\n)\s*[>❯]\s*$", clean))
 
     def _drain_available(self, *, max_wait: float = 0.2) -> None:
         child = self._require_child()
@@ -622,8 +768,8 @@ class ReplPtySession:
         obs = Observation(
             ok=final_ok,
             event=final_event,
-            delta=strip_ansi(delta),
-            screen=self.screen,
+            delta=clean_repl_text(delta),
+            screen=clean_repl_text(self.raw_text),
             artifact_dir=str(self.artifact_dir),
             step=self._step,
             error=final_error,
@@ -639,6 +785,122 @@ class ReplPtySession:
 def _write_json(stdout: TextIO, payload: Mapping[str, object]) -> None:
     stdout.write(json.dumps(dict(payload), ensure_ascii=False, sort_keys=True) + "\n")
     stdout.flush()
+
+
+def _request_echo_metadata(
+    request: Mapping[str, object],
+    *,
+    op_override: str | None = None,
+) -> dict[str, object]:
+    metadata: dict[str, object] = {}
+    op = op_override or request.get("op")
+    if isinstance(op, str) and op:
+        metadata["op"] = op
+    label = request.get("label")
+    if isinstance(label, str) and label.strip():
+        metadata["label"] = label.strip()
+    if op == "send":
+        metadata["input_source"] = (
+            "text_file" if isinstance(request.get("text_file"), str) else "text"
+        )
+    elif op in {"key", "raw"}:
+        metadata["input_source"] = "raw"
+    if request.get("allow_error") is True:
+        metadata["allow_error"] = True
+    return metadata
+
+
+def _annotate_last_event(
+    session: ReplPtySession,
+    request: Mapping[str, object],
+    *,
+    op_override: str | None = None,
+) -> None:
+    if not session._events:
+        return
+    session._events[-1].update(_request_echo_metadata(request, op_override=op_override))
+
+
+def _max_output_chars_from_request(request: Mapping[str, object]) -> int | None:
+    value = request.get("max_output_chars")
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int) and value >= 0:
+        return value
+    return None
+
+
+def _request_allows_error(request: Mapping[str, object]) -> bool:
+    return request.get("allow_error") is True
+
+
+def _record_observation_result(
+    *,
+    request: Mapping[str, object],
+    obs: Observation,
+    session_ok: bool,
+    session_error: str | None,
+    controller_ok: bool,
+) -> tuple[bool, str | None, bool]:
+    if obs.ok or _request_allows_error(request):
+        return session_ok, session_error, controller_ok
+    return False, obs.error or session_error, False
+
+
+def _truncate_output_text(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    if max_chars <= 1:
+        head = text[:max_chars]
+        tail = ""
+    else:
+        head_chars = (max_chars + 1) // 2
+        tail_chars = max_chars - head_chars
+        head = text[:head_chars]
+        tail = text[-tail_chars:] if tail_chars else ""
+    omitted = len(text) - max_chars
+    return (
+        head
+        + f"\n...[truncated {omitted} chars; full transcript in artifacts]"
+        + (f"\n{tail}" if tail else "")
+    )
+
+
+def _observation_payload(
+    obs: Observation,
+    request: Mapping[str, object],
+    *,
+    op_override: str | None = None,
+) -> Mapping[str, object]:
+    payload = asdict(obs)
+    payload.update(_request_echo_metadata(request, op_override=op_override))
+    max_chars = _max_output_chars_from_request(request)
+    if max_chars is None:
+        return payload
+    truncated_fields: dict[str, int] = {}
+    for field in ("delta", "screen"):
+        value = payload.get(field)
+        if isinstance(value, str) and len(value) > max_chars:
+            truncated_fields[field] = len(value)
+            payload[field] = _truncate_output_text(value, max_chars)
+    if truncated_fields:
+        payload["truncated_fields"] = truncated_fields
+    return payload
+
+
+def _fold_repl_input_text(text: str) -> str:
+    return re.sub(r"\s*\r?\n\s*", " ", text).strip()
+
+
+def _send_text_from_request(request: Mapping[str, object]) -> str | None:
+    text = request.get("text")
+    if isinstance(text, str):
+        return _fold_repl_input_text(text)
+    text_file = request.get("text_file")
+    if isinstance(text_file, str):
+        file_text = Path(text_file).read_text(encoding="utf-8")
+        return _fold_repl_input_text(file_text)
+    return None
 
 
 def run_script(
@@ -676,144 +938,297 @@ def run_interactive_jsonl(
     timeout: float,
 ) -> int:
     session: ReplPtySession | None = None
-    ok = True
-    error = None
-    for raw_line in stdin:
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            request = json.loads(line)
-            op = request.get("op")
-            if op == "start":
-                command = request.get("cmd") or default_repl_command()
-                if not isinstance(command, list) or not all(isinstance(x, str) for x in command):
+    controller_ok = True
+    session_ok = True
+    session_error = None
+    start_count = 0
+    try:
+        for raw_line in stdin:
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                request = json.loads(line)
+                op = request.get("op")
+                if op == "start":
+                    command = request.get("cmd") or default_repl_command()
+                    if not isinstance(command, list) or not all(
+                        isinstance(x, str) for x in command
+                    ):
+                        _write_json(
+                            stdout,
+                            {
+                                "error": "start.cmd must be a list of strings",
+                                "event": "error",
+                                "ok": False,
+                            },
+                        )
+                        controller_ok = False
+                        continue
+                    if session is not None:
+                        obs = session.stop()
+                        _annotate_last_event(session, request, op_override="auto_stop")
+                        _write_json(
+                            stdout,
+                            _observation_payload(obs, request, op_override="auto_stop"),
+                        )
+                        session.write_artifacts(ok=session_ok, error=session_error)
+                        session = None
+                    env = request.get("env")
+                    current_artifact_dir = artifact_dir
+                    if start_count > 0:
+                        current_artifact_dir = artifact_dir / f"session-{start_count + 1}"
+                    start_count += 1
+                    session_ok = True
+                    session_error = None
+                    session = ReplPtySession(
+                        command=command,
+                        artifact_dir=current_artifact_dir,
+                        env=env if isinstance(env, dict) else None,
+                        timeout=float(request.get("timeout", timeout)),
+                    )
+                    obs = session.start()
+                    _annotate_last_event(session, request)
+                    _write_json(stdout, _observation_payload(obs, request))
+                    session_ok, session_error, controller_ok = _record_observation_result(
+                        request=request,
+                        obs=obs,
+                        session_ok=session_ok,
+                        session_error=session_error,
+                        controller_ok=controller_ok,
+                    )
+                    continue
+                if op in {"exit", "quit"}:
+                    if session is not None:
+                        obs = session.stop()
+                        _annotate_last_event(session, request, op_override="stop")
+                        _write_json(stdout, _observation_payload(obs, request))
+                        session.write_artifacts(ok=session_ok, error=session_error)
+                        session = None
                     _write_json(
                         stdout,
                         {
-                            "error": "start.cmd must be a list of strings",
+                            "event": "controller_exit",
+                            "ok": True,
+                        },
+                    )
+                    return 0 if controller_ok else 1
+                if session is None:
+                    _write_json(
+                        stdout,
+                        {
+                            "error": "session has not been started",
                             "event": "error",
                             "ok": False,
                         },
                     )
-                    ok = False
+                    controller_ok = False
                     continue
-                env = request.get("env")
-                session = ReplPtySession(
-                    command=command,
-                    artifact_dir=artifact_dir,
-                    env=env if isinstance(env, dict) else None,
-                    timeout=float(request.get("timeout", timeout)),
-                )
-                obs = session.start()
-                _write_json(stdout, asdict(obs))
-                ok = ok and obs.ok
-                error = obs.error or error
-                continue
-            if op in {"exit", "quit"}:
-                if session is not None:
+                if op == "send":
+                    text = _send_text_from_request(request)
+                    if text is None:
+                        _write_json(
+                            stdout,
+                            {
+                                "error": (
+                                    "send.text must be a string, "
+                                    "or send.text_file must be a path string"
+                                ),
+                                "event": "error",
+                                "ok": False,
+                            },
+                        )
+                        session_ok = False
+                        controller_ok = False
+                        continue
+                    expect = request.get("expect")
+                    obs = session.send(
+                        text,
+                        expect=expect if isinstance(expect, str) else None,
+                        timeout=float(request.get("timeout", timeout)),
+                    )
+                    _annotate_last_event(session, request)
+                    _write_json(stdout, _observation_payload(obs, request))
+                    session_ok, session_error, controller_ok = _record_observation_result(
+                        request=request,
+                        obs=obs,
+                        session_ok=session_ok,
+                        session_error=session_error,
+                        controller_ok=controller_ok,
+                    )
+                    continue
+                if op in {"key", "raw"}:
+                    text = request.get("text")
+                    if not isinstance(text, str):
+                        _write_json(
+                            stdout,
+                            {
+                                "error": f"{op}.text must be a string",
+                                "event": "error",
+                                "ok": False,
+                            },
+                        )
+                        session_ok = False
+                        controller_ok = False
+                        continue
+                    obs = session.key(
+                        text,
+                        timeout=float(request.get("timeout", timeout)),
+                    )
+                    _annotate_last_event(session, request)
+                    _write_json(stdout, _observation_payload(obs, request))
+                    session_ok, session_error, controller_ok = _record_observation_result(
+                        request=request,
+                        obs=obs,
+                        session_ok=session_ok,
+                        session_error=session_error,
+                        controller_ok=controller_ok,
+                    )
+                    continue
+                if op == "observe":
+                    obs = session.observe(timeout=float(request.get("timeout", timeout)))
+                    _annotate_last_event(session, request)
+                    _write_json(stdout, _observation_payload(obs, request))
+                    session_ok, session_error, controller_ok = _record_observation_result(
+                        request=request,
+                        obs=obs,
+                        session_ok=session_ok,
+                        session_error=session_error,
+                        controller_ok=controller_ok,
+                    )
+                    continue
+                if op == "stop":
                     obs = session.stop()
-                    _write_json(stdout, asdict(obs))
-                    session.write_artifacts(ok=ok, error=error)
+                    _annotate_last_event(session, request)
+                    _write_json(stdout, _observation_payload(obs, request))
+                    session_ok, session_error, controller_ok = _record_observation_result(
+                        request=request,
+                        obs=obs,
+                        session_ok=session_ok,
+                        session_error=session_error,
+                        controller_ok=controller_ok,
+                    )
+                    session.write_artifacts(ok=session_ok, error=session_error)
                     session = None
+                    continue
                 _write_json(
                     stdout,
                     {
-                        "event": "controller_exit",
-                        "ok": True,
-                    },
-                )
-                return 0 if ok else 1
-            if session is None:
-                _write_json(
-                    stdout,
-                    {
-                        "error": "session has not been started",
+                        "error": f"unknown op: {op!r}",
                         "event": "error",
                         "ok": False,
                     },
                 )
-                ok = False
-                continue
-            if op == "send":
-                text = request.get("text")
-                if not isinstance(text, str):
-                    _write_json(
-                        stdout,
-                        {
-                            "error": "send.text must be a string",
-                            "event": "error",
-                            "ok": False,
-                        },
-                    )
-                    ok = False
-                    continue
-                expect = request.get("expect")
-                obs = session.send(
-                    text,
-                    expect=expect if isinstance(expect, str) else None,
-                    timeout=float(request.get("timeout", timeout)),
+                controller_ok = False
+            except Exception as exc:
+                _write_json(
+                    stdout,
+                    {
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "event": "error",
+                        "ok": False,
+                    },
                 )
-                _write_json(stdout, asdict(obs))
-                ok = ok and obs.ok
-                error = obs.error or error
-                continue
-            if op in {"key", "raw"}:
-                text = request.get("text")
-                if not isinstance(text, str):
-                    _write_json(
-                        stdout,
-                        {
-                            "error": f"{op}.text must be a string",
-                            "event": "error",
-                            "ok": False,
-                        },
-                    )
-                    ok = False
-                    continue
-                obs = session.key(
-                    text,
-                    timeout=float(request.get("timeout", timeout)),
-                )
-                _write_json(stdout, asdict(obs))
-                ok = ok and obs.ok
-                error = obs.error or error
-                continue
-            if op == "observe":
-                obs = session.observe(timeout=float(request.get("timeout", timeout)))
-                _write_json(stdout, asdict(obs))
-                ok = ok and obs.ok
-                error = obs.error or error
-                continue
-            if op == "stop":
+                controller_ok = False
+    except KeyboardInterrupt:
+        controller_ok = False
+        error = "KeyboardInterrupt"
+        _write_json(stdout, {"error": error, "event": "error", "ok": False})
+        if session is not None:
+            try:
+                cleanup_request = {
+                    "op": "interrupt_stop",
+                    "label": "cleanup after KeyboardInterrupt",
+                }
                 obs = session.stop()
-                _write_json(stdout, asdict(obs))
-                session.write_artifacts(ok=ok, error=error)
-                session = None
-                continue
-            _write_json(
-                stdout,
-                {
-                    "error": f"unknown op: {op!r}",
-                    "event": "error",
-                    "ok": False,
-                },
-            )
-            ok = False
-        except Exception as exc:
-            _write_json(
-                stdout,
-                {
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "event": "error",
-                    "ok": False,
-                },
-            )
-            ok = False
+                _annotate_last_event(
+                    session,
+                    cleanup_request,
+                    op_override="interrupt_stop",
+                )
+                _write_json(
+                    stdout,
+                    _observation_payload(
+                        obs,
+                        cleanup_request,
+                        op_override="interrupt_stop",
+                    ),
+                )
+            except Exception as exc:
+                _write_json(
+                    stdout,
+                    {
+                        "error": (
+                            f"cleanup failed after KeyboardInterrupt: {type(exc).__name__}: {exc}"
+                        ),
+                        "event": "error",
+                        "ok": False,
+                    },
+                )
+            session.write_artifacts(ok=False, error=error)
+        return 130
     if session is not None:
         session.stop()
-        session.write_artifacts(ok=ok, error=error)
-    return 0 if ok else 1
+        session.write_artifacts(ok=session_ok, error=session_error)
+    return 0 if controller_ok else 1
+
+
+def run_adaptive_jsonl(
+    *,
+    first_request: Mapping[str, object],
+    decide_next: Callable[[dict[str, object]], Mapping[str, object] | None],
+    stdout: TextIO,
+    artifact_dir: Path,
+    timeout: float,
+    max_turns: int = 100,
+) -> int:
+    """Run the JSONL controller with each next op chosen from the last response."""
+
+    pending: list[dict[str, object]] = [dict(first_request)]
+    queued_count = 1
+
+    class AdaptiveStdin:
+        def __iter__(self) -> "AdaptiveStdin":
+            return self
+
+        def __next__(self) -> str:
+            if not pending:
+                raise StopIteration
+            return json.dumps(pending.pop(0), ensure_ascii=False) + "\n"
+
+    class AdaptiveStdout:
+        def __init__(self) -> None:
+            self._buffer = ""
+
+        def write(self, text: str) -> int:
+            nonlocal queued_count
+            stdout.write(text)
+            self._buffer += text
+            while "\n" in self._buffer:
+                line, self._buffer = self._buffer.split("\n", 1)
+                if not line.strip():
+                    continue
+                payload = json.loads(line)
+                if not isinstance(payload, dict):
+                    continue
+                request = decide_next(payload)
+                if request is None:
+                    continue
+                queued_count += 1
+                if queued_count > max_turns:
+                    raise RuntimeError("adaptive JSONL controller exceeded max_turns")
+                pending.append(dict(request))
+            return len(text)
+
+        def flush(self) -> None:
+            stdout.flush()
+
+    return run_interactive_jsonl(
+        stdin=AdaptiveStdin(),
+        stdout=AdaptiveStdout(),
+        artifact_dir=artifact_dir,
+        timeout=timeout,
+    )
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
