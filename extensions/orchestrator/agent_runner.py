@@ -489,7 +489,7 @@ class AgentRunner:
         event: ToolCallEvent,
         session_context: dict[str, Any],
     ) -> None:
-        """Persist a per-tool decision row to events.ndjson (F-45).
+        """Persist a per-tool decision row to events.ndjson (F-45 / F-46.0).
 
         Writes one NDJSON line to
         ``{workspace}/.reports/{run_id}.events.ndjson``, co-located with the
@@ -498,7 +498,17 @@ class AgentRunner:
         write the same row shape; only the ``permission_mode`` column value
         varies.  Failures are logged and swallowed: the audit log must never
         block the agent run.
+
+        F-46.0: writing is gated by ``session_context["audit_log"]``:
+        ``none`` skips all rows, ``minimal`` only records denied decisions,
+        and ``full`` records every tool call.
         """
+        audit_log = session_context.get("audit_log", "full")
+        if audit_log == "none":
+            return
+        if audit_log == "minimal" and event._approved is not False:
+            # minimal = record only denied decisions.
+            return
         try:
             run_id = session_context.get("run_id") or "unknown"
             workspace_path = session_context.get("workspace_path")
@@ -949,15 +959,22 @@ class AgentRunner:
             # {workspace}/.reports/{run_id}.events.ndjson.
             "run_id": session.run_id,
             "permission_mode": self.agent_config.permission_mode,
+            # F-46.0: audit_log level drives per-tool NDJSON filtering.
+            "audit_log": self.agent_config.audit_log,
         }
-        # F-45: stash the NDJSON path co-located with the RunReport
+        # F-45/F-46.0: stash the NDJSON path co-located with the RunReport
         # under ``{workspace}/.reports/<run_id>.events.ndjson`` so that
         # report_writer.write() can dual-write it to the persistent layer
         # (Sub-C).  Resolved here (not in the property) so the path is
-        # concrete before the first event is appended.
-        session.tool_events_path = str(
-            workspace.path / ".reports" / f"{session.run_id or 'unknown'}.events.ndjson"
-        )
+        # concrete before the first event is appended.  When audit_log is
+        # "none" we deliberately leave the path unset so report_writer skips
+        # both the copy and the markdown line.
+        if self.agent_config.audit_log != "none":
+            session.tool_events_path = str(
+                workspace.path / ".reports" / f"{session.run_id or 'unknown'}.events.ndjson"
+            )
+        else:
+            session.tool_events_path = None
         session.debug_log_path = str(
             workspace.path
             / ".orchestrator_control"

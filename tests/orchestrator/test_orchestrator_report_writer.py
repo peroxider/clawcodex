@@ -509,6 +509,26 @@ class TestWriteToolEvents(unittest.TestCase):
         )
         self.assertFalse(persistent_events.exists())
 
+    def test_none_tool_events_path_skips_copy_and_markdown_line(self) -> None:
+        # F-46.0: when audit_log is "none" the runner never sets
+        # tool_events_path; report_writer must skip both copy and mention.
+        result = write(
+            run_id="r1",
+            workspace_path=self.workspace,
+            tracker="t",
+            owner="o",
+            repo="r",
+            issue=SimpleNamespace(id="1", identifier="x", title="t"),
+            status="completed",
+            tool_events_path=None,
+        )
+        persistent_events = (
+            self.home / ".clawcodex" / "reports" / "t" / "o" / "r" / "1" / "r1.events.ndjson"
+        )
+        self.assertFalse(persistent_events.exists())
+        md = Path(result.workspace_markdown_path).read_text()
+        self.assertNotIn("Tool events:", md)
+
 
 # ---------------------------------------------------------------------------
 # Idempotency / overwrite

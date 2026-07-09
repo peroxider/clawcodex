@@ -351,6 +351,56 @@ def _resolve_orchestrator_permission_mode(
     return normalized
 
 
+_VALID_AUDIT_LOG_LEVELS = {"none", "minimal", "full"}
+
+
+def _resolve_audit_log(raw_value: Any) -> str:
+    """Canonicalize audit_log level."""
+    raw = str(raw_value).strip().lower() if raw_value else "minimal"
+    if raw in _VALID_AUDIT_LOG_LEVELS:
+        return raw
+    logger.warning(
+        "audit_log=%r is not one of %s; falling back to 'minimal'",
+        raw_value,
+        sorted(_VALID_AUDIT_LOG_LEVELS),
+    )
+    return "minimal"
+
+
+def permission_mode_to_triple(
+    permission_mode: str,
+    *,
+    interactive: bool | None = None,
+    default_decision: str | None = None,
+    audit_log: str | None = None,
+) -> dict[str, Any]:
+    """Translate legacy permission_mode enum into three orthogonal fields.
+
+    Explicit overrides take precedence; missing values are inferred from the
+    legacy mode. F-46.0 only wires ``audit_log``; ``interactive`` and
+    ``default_decision`` are reserved for F-46.1+.
+    """
+    mode = str(permission_mode).strip() if permission_mode else "default"
+    mapping: dict[str, dict[str, Any]] = {
+        "default": {"interactive": True, "default_decision": "ask", "audit_log": "minimal"},
+        "plan": {"interactive": True, "default_decision": "ask", "audit_log": "minimal"},
+        "acceptEdits": {"interactive": True, "default_decision": "allow", "audit_log": "minimal"},
+        "bypassPermissions": {"interactive": False, "default_decision": "allow", "audit_log": "minimal"},
+        "dontAsk": {"interactive": False, "default_decision": "deny", "audit_log": "minimal"},
+        "auto": {"interactive": False, "default_decision": "allow", "audit_log": "minimal"},
+        "bubble": {"interactive": True, "default_decision": "ask", "audit_log": "minimal"},
+    }
+    defaults = mapping.get(mode, mapping["default"])
+    result = {
+        "interactive": interactive if interactive is not None else defaults["interactive"],
+        "default_decision": default_decision if default_decision is not None else defaults["default_decision"],
+        "audit_log": audit_log if audit_log is not None else defaults["audit_log"],
+    }
+    if result["default_decision"] not in {"allow", "deny", "ask"}:
+        result["default_decision"] = defaults["default_decision"]
+    return result
+
+
 def _default_tmp_workspace() -> str:
     return os.path.join(os.environ.get("TMPDIR", "/tmp"), "symphony_workspaces")
 
@@ -505,6 +555,10 @@ class AgentConfig:
     # NEW: ClawCodex-specific fields
     provider: str = "anthropic"
     permission_mode: str = "dontAsk"
+    # F-46.0: per-tool decision audit log level. "none" disables the NDJSON
+    # audit trail; "minimal" records only denied decisions; "full" records
+    # every tool call. Defaults to "minimal" to save disk.
+    audit_log: str = "minimal"
     test_command: str = ""
     build_command: str = ""
     lint_command: str = ""
@@ -996,6 +1050,8 @@ class WorkflowConfig:
                 agent_raw.get("permission_mode"),
                 is_orchestrator=bool(tracker_raw),
             ),
+            # F-46.0: orthogonal audit_log level, independent of permission_mode.
+            audit_log=_resolve_audit_log(agent_raw.get("audit_log")),
             test_command=_resolve_env_value(agent_raw.get("test_command")) or "",
             build_command=_resolve_env_value(agent_raw.get("build_command")) or "",
             lint_command=_resolve_env_value(agent_raw.get("lint_command")) or "",

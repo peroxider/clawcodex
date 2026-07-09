@@ -319,7 +319,9 @@ class TestAgentRunnerWiresAuditBypass(unittest.TestCase):
                 issue=Issue(id="1", identifier="ISSUE-1", title="audit"),
                 workspace=workspace,
             )
-            runner = AgentRunner(AgentConfig(max_turns=1), SandboxConfig())
+            runner = AgentRunner(
+                AgentConfig(max_turns=1, audit_log="full"), SandboxConfig()
+            )
 
             with patch(
                 "extensions.orchestrator.agent_runner.QueryRunner",
@@ -591,7 +593,7 @@ class TestFourPermissionModes(unittest.TestCase):
             )
             row = json.loads(log_path.read_text(encoding="utf-8").strip().splitlines()[0])
             self.assertEqual(row["permission_mode"], mode)
-            # 8-field invariant across modes.
+            # 8-field invariant across modes (plus optional tool_use_id).
             self.assertEqual(
                 set(row.keys()),
                 {
@@ -603,6 +605,7 @@ class TestFourPermissionModes(unittest.TestCase):
                     "permission_mode",
                     "turn",
                     "session_run_id",
+                    "tool_use_id",
                 },
             )
 
@@ -640,6 +643,121 @@ class TestWorkspaceConfigDefaults(unittest.TestCase):
             }
         )
         self.assertEqual(wf.agent.permission_mode, "bypassPermissions")
+
+
+# ---------------------------------------------------------------------------
+# F-46.0: audit_log schema + runtime gating
+# ---------------------------------------------------------------------------
+
+
+class TestAuditLogSchema(unittest.TestCase):
+    def test_default_audit_log_is_minimal(self) -> None:
+        wf = WorkflowConfig.from_dict({"tracker": {"kind": "local"}})
+        self.assertEqual(wf.agent.audit_log, "minimal")
+
+    def test_audit_log_canonicalizes_case(self) -> None:
+        wf = WorkflowConfig.from_dict(
+            {
+                "tracker": {"kind": "local"},
+                "agent": {"audit_log": "FULL"},
+            }
+        )
+        self.assertEqual(wf.agent.audit_log, "full")
+
+    def test_invalid_audit_log_falls_back_to_minimal(self) -> None:
+        wf = WorkflowConfig.from_dict(
+            {
+                "tracker": {"kind": "local"},
+                "agent": {"audit_log": "verbose"},
+            }
+        )
+        self.assertEqual(wf.agent.audit_log, "minimal")
+
+    def test_explicit_audit_log_overrides_permission_mode_default(self) -> None:
+        wf = WorkflowConfig.from_dict(
+            {
+                "tracker": {"kind": "local"},
+                "agent": {"permission_mode": "bypassPermissions", "audit_log": "none"},
+            }
+        )
+        self.assertEqual(wf.agent.permission_mode, "bypassPermissions")
+        self.assertEqual(wf.agent.audit_log, "none")
+
+
+class TestAppendToolEventLogAuditLevels(unittest.TestCase):
+    def setUp(self) -> None:
+        self._home = TemporaryDirectory()
+        self._old_home = os.environ.get("HOME")
+        os.environ["HOME"] = self._home.name
+
+    def tearDown(self) -> None:
+        if self._old_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = self._old_home
+        self._home.cleanup()
+
+    def test_full_writes_approved_and_denied(self) -> None:
+        with TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "ws"
+            workspace.mkdir()
+            runner = AgentRunner(AgentConfig(audit_log="full"), SandboxConfig())
+            ctx = {
+                "run_id": "run-full",
+                "workspace_path": str(workspace),
+                "permission_mode": "bypassPermissions",
+                "audit_log": "full",
+                "turn": 0,
+            }
+            runner._append_tool_event_log(_tc_event(approved=True), ctx)
+            runner._append_tool_event_log(
+                _tc_event(approved=False, deny_reason="policy"), ctx
+            )
+            log_path = workspace / ".reports" / "run-full.events.ndjson"
+            lines = log_path.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(lines), 2)
+            self.assertTrue(json.loads(lines[0])["approved"])
+            self.assertFalse(json.loads(lines[1])["approved"])
+
+    def test_minimal_only_writes_denied(self) -> None:
+        with TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "ws"
+            workspace.mkdir()
+            runner = AgentRunner(AgentConfig(audit_log="minimal"), SandboxConfig())
+            ctx = {
+                "run_id": "run-min",
+                "workspace_path": str(workspace),
+                "permission_mode": "bypassPermissions",
+                "audit_log": "minimal",
+                "turn": 0,
+            }
+            runner._append_tool_event_log(_tc_event(approved=True), ctx)
+            runner._append_tool_event_log(
+                _tc_event(approved=False, deny_reason="policy"), ctx
+            )
+            log_path = workspace / ".reports" / "run-min.events.ndjson"
+            lines = log_path.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(lines), 1)
+            self.assertFalse(json.loads(lines[0])["approved"])
+
+    def test_none_writes_nothing(self) -> None:
+        with TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "ws"
+            workspace.mkdir()
+            runner = AgentRunner(AgentConfig(audit_log="none"), SandboxConfig())
+            ctx = {
+                "run_id": "run-none",
+                "workspace_path": str(workspace),
+                "permission_mode": "bypassPermissions",
+                "audit_log": "none",
+                "turn": 0,
+            }
+            runner._append_tool_event_log(_tc_event(approved=True), ctx)
+            runner._append_tool_event_log(
+                _tc_event(approved=False, deny_reason="policy"), ctx
+            )
+            log_path = workspace / ".reports" / "run-none.events.ndjson"
+            self.assertFalse(log_path.exists())
 
 
 if __name__ == "__main__":
