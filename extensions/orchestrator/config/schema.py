@@ -112,6 +112,28 @@ def _normalize_workspace_strategy(value: Any) -> str:
     return strategy
 
 
+def _parse_repro_first_config(raw: Any) -> "ReproFirstConfig":
+    """Build a ``ReproFirstConfig`` from the ``agent.repro_first`` YAML
+    section. Tolerant of a missing/malformed section (all defaults,
+    gate disabled)."""
+    if not isinstance(raw, dict):
+        return ReproFirstConfig()
+
+    def _int(key: str, default: int) -> int:
+        try:
+            value = int(raw.get(key, default))
+        except (TypeError, ValueError):
+            return default
+        return value if value > 0 else default
+
+    return ReproFirstConfig(
+        enabled=bool(raw.get("enabled", False)),
+        timeout_ms=_int("timeout_ms", 900_000),
+        command_timeout_ms=_int("command_timeout_ms", 300_000),
+        labels=_normalize_string_list(raw.get("labels"), default=[]),
+    )
+
+
 def _parse_modes_config(raw: dict[str, Any]) -> "ModesConfig":
     """Build a ``ModesConfig`` from the parsed ``modes`` YAML section.
 
@@ -450,6 +472,27 @@ class VerificationConfig:
 
 
 @dataclass
+class ReproFirstConfig:
+    """Repro-first gate: reproduce the bug before the fix stage may run.
+
+    When enabled, each new issue first gets a reproduction-only agent
+    pass that must produce an executable check (non-zero exit while the
+    bug exists). Issues whose described behavior cannot be demonstrated
+    are failed with a "cannot reproduce" report back on the tracker
+    instead of an unverifiable fix MR.
+    """
+
+    enabled: bool = False
+    # Wall-clock budget for the reproduction agent pass.
+    timeout_ms: int = 900_000
+    # Budget for executing the reproduction command itself.
+    command_timeout_ms: int = 300_000
+    # When non-empty, only issues carrying at least one of these labels
+    # go through the gate (e.g. ["bug"]); empty means every issue.
+    labels: list[str] = field(default_factory=list)
+
+
+@dataclass
 class AgentConfig:
     max_concurrent_agents: int = 10
     max_turns: int = 600
@@ -466,6 +509,7 @@ class AgentConfig:
     build_command: str = ""
     lint_command: str = ""
     verification: VerificationConfig = field(default_factory=VerificationConfig)
+    repro_first: ReproFirstConfig = field(default_factory=ReproFirstConfig)
     # F-39 Sub-F: rate limit on operator-driven retries. When an
     # issue's `IssueRecord.retry_count` reaches this value, the
     # orchestrator refuses to honor further `agent:retry` labels /
@@ -962,6 +1006,7 @@ class WorkflowConfig:
                     _resolve_env_value(verification_raw.get("fallback_test_command")) or ""
                 ),
             ),
+            repro_first=_parse_repro_first_config(agent_raw.get("repro_first") or {}),
             # F-39 Sub-F
             max_retries_per_issue=agent_raw.get("max_retries_per_issue", 3),
             allow_anyone_to_retry=bool(agent_raw.get("allow_anyone_to_retry", False)),
