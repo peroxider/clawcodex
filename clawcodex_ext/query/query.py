@@ -97,6 +97,12 @@ logger = logging.getLogger(__name__)
 
 ESCALATED_MAX_TOKENS = 64_000
 MAX_OUTPUT_TOKENS_RECOVERY_LIMIT = 3
+MAX_CONTINUATION_NUDGES = 2
+CONTINUATION_NUDGE_MESSAGE = (
+    "Your previous response ended without any visible text or a tool call. "
+    "The task may still be in progress. Continue from the latest tool result. "
+    "If the user's request is complete, briefly summarize the completed work."
+)
 PROMPT_TOO_LONG_ERROR_MESSAGE = (
     "Your conversation is too long. Please use /compact to reduce context size, "
     "or start a new conversation."
@@ -181,6 +187,20 @@ def _create_user_message(content: str, *, is_meta: bool = False) -> UserMessage:
         content=content,
         isMeta=is_meta,
     )
+
+
+def _assistant_response_is_empty(messages: list[AssistantMessage]) -> bool:
+    """Return whether a model turn contains no visible output or tool block."""
+    if not messages:
+        return True
+    for message in messages:
+        content = message.content
+        if isinstance(content, str):
+            if content.strip():
+                return False
+        elif content:
+            return False
+    return True
 
 
 def _create_assistant_api_error_message(
@@ -1768,6 +1788,32 @@ async def query(
 
         if not needs_follow_up:
             last_message = assistant_messages[-1] if assistant_messages else None
+
+            # Some providers occasionally emit an empty end_turn directly
+            # after a successful tool result. Do not misclassify that as
+            # task completion: ask the model to resume, with a strict cap.
+            if (
+                state.transition is not None
+                and state.transition.reason in {"next_turn", "continuation_nudge"}
+                and _assistant_response_is_empty(assistant_messages)
+                and state.continuation_nudge_count < MAX_CONTINUATION_NUDGES
+            ):
+                nudge = _create_user_message(CONTINUATION_NUDGE_MESSAGE, is_meta=True)
+                yield nudge
+                _goal_finish_turn("stop")
+                state = QueryState(
+                    messages=[*messages, *assistant_messages, nudge],
+                    tool_use_context=tool_use_context,
+                    auto_compact_tracking=state.auto_compact_tracking,
+                    max_output_tokens_recovery_count=0,
+                    has_attempted_reactive_compact=False,
+                    max_output_tokens_override=None,
+                    stop_hook_active=state.stop_hook_active,
+                    continuation_nudge_count=state.continuation_nudge_count + 1,
+                    pending_tool_use_summary=state.pending_tool_use_summary,
+                    transition=Transition(reason="continuation_nudge"),
+                )
+                continue
 
             # P102-B: 使用恢复策略注册表处理 withheld 错误
             error_type = None

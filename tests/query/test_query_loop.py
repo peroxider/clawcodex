@@ -133,6 +133,120 @@ class TestQueryLoopSingleTurn(unittest.TestCase):
         ]
         self.assertGreaterEqual(len(tool_results), 1)
 
+    def test_empty_end_turn_after_tool_is_nudged_to_continue(self):
+        provider = MagicMock()
+        provider.chat_stream_response.side_effect = NotImplementedError()
+        provider.chat.side_effect = [
+            ChatResponse(
+                content="I'll create the file.",
+                model="test",
+                usage={},
+                finish_reason="tool_use",
+                tool_uses=[
+                    {
+                        "id": "toolu_empty_recovery",
+                        "name": "Write",
+                        "input": {
+                            "file_path": str(self.workspace / "recovered.txt"),
+                            "content": "hello",
+                        },
+                    }
+                ],
+            ),
+            ChatResponse(
+                content="",
+                model="test",
+                usage={},
+                finish_reason="end_turn",
+                tool_uses=None,
+            ),
+            ChatResponse(
+                content="File created and verified.",
+                model="test",
+                usage={},
+                finish_reason="end_turn",
+                tool_uses=None,
+            ),
+        ]
+        params = QueryParams(
+            messages=[UserMessage(content="Create recovered.txt")],
+            system_prompt="You are helpful.",
+            tools=self.registry.list_tools(),
+            tool_registry=self.registry,
+            tool_use_context=self.context,
+            provider=provider,
+            abort_controller=self.abort,
+            max_turns=10,
+        )
+        collected = []
+
+        async def run():
+            async for msg in query(params):
+                collected.append(msg)
+
+        _run(run())
+
+        self.assertEqual(provider.chat.call_count, 3)
+        self.assertEqual(
+            len([m for m in collected if isinstance(m, UserMessage) and m.isMeta]),
+            1,
+        )
+
+    def test_empty_end_turn_nudges_are_bounded(self):
+        provider = MagicMock()
+        provider.chat_stream_response.side_effect = NotImplementedError()
+        provider.chat.side_effect = [
+            ChatResponse(
+                content="Working.",
+                model="test",
+                usage={},
+                finish_reason="tool_use",
+                tool_uses=[
+                    {
+                        "id": "toolu_bounded_recovery",
+                        "name": "Write",
+                        "input": {
+                            "file_path": str(self.workspace / "bounded.txt"),
+                            "content": "hello",
+                        },
+                    }
+                ],
+            ),
+            *[
+                ChatResponse(
+                    content="",
+                    model="test",
+                    usage={},
+                    finish_reason="end_turn",
+                    tool_uses=None,
+                )
+                for _ in range(3)
+            ],
+        ]
+        params = QueryParams(
+            messages=[UserMessage(content="Create bounded.txt")],
+            system_prompt="You are helpful.",
+            tools=self.registry.list_tools(),
+            tool_registry=self.registry,
+            tool_use_context=self.context,
+            provider=provider,
+            abort_controller=self.abort,
+            max_turns=10,
+        )
+        collected = []
+
+        async def run():
+            async for msg in query(params):
+                collected.append(msg)
+
+        _run(run())
+
+        self.assertEqual(provider.chat.call_count, 4)
+        self.assertEqual(
+            len([m for m in collected if isinstance(m, UserMessage) and m.isMeta]),
+            2,
+        )
+
     def test_multi_turn_replays_reasoning_content_for_followup(self):
         provider = MagicMock()
         provider.chat_stream_response.side_effect = NotImplementedError()
