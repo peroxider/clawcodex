@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from clawcodex_ext.away_summary.fingerprint import is_away_summary_message
+from clawcodex_ext.types.messages import NO_CONTENT_MESSAGE
 
 
 AWAY_SUMMARY_INSTRUCTIONS = """You are writing a short session recap for a user who stepped away from an interactive coding session.
@@ -19,11 +20,14 @@ Focus on:
 
 {language_instruction}
 
-Do not include hidden reasoning. Do not mention that you are an AI. Keep it brief."""
+Rules:
+- The recap MUST be written in the language specified above. Do not switch languages mid-recap.
+- Do not include hidden reasoning. Do not mention that you are an AI. Keep it brief.
+- Return only the recap."""
 
 _LANGUAGE_INSTRUCTION_MAP: dict[str, str] = {
-    "Chinese": "Write the recap in natural Simplified Chinese.",
-    "English": "Write the recap in natural English.",
+    "Chinese": "MUST write the recap in natural Simplified Chinese.",
+    "English": "MUST write the recap in natural English.",
 }
 
 
@@ -59,28 +63,63 @@ def infer_response_language(
 
     Priority:
     1. Explicit override (e.g. from config ``response_language``).
-    2. CJK character frequency in recent user messages.
+    2. CJK character frequency in recent user and assistant messages.
+       User messages are the primary signal, but assistant messages are
+       used as a fallback when user turns are short or dominated by
+       English identifiers/paths (common in coding sessions).
     3. Default to English.
     """
     if explicit and explicit in {"Chinese", "English"}:
         return explicit
 
-    samples: list[str] = []
+    user_samples: list[str] = []
+    assistant_samples: list[str] = []
     for msg in reversed(getattr(conversation, "messages", []) or []):
         role = getattr(msg, "role", "")
+        text = _content_to_text(getattr(msg, "content", "")).strip()
+        if not text:
+            continue
         if role == "user":
-            text = _content_to_text(getattr(msg, "content", ""))
-            if text.strip():
-                samples.append(text.strip())
-        if len(samples) >= 6:
+            user_samples.append(text)
+        elif role == "assistant":
+            assistant_samples.append(text)
+        if len(user_samples) >= 6 and len(assistant_samples) >= 6:
             break
 
+    user_lang = _detect_language(user_samples)
+    assistant_lang = _detect_language(assistant_samples)
+
+    # If either side is clearly Chinese, prefer Chinese. This avoids false
+    # negatives when user turns are dominated by English identifiers/paths
+    # but the assistant has already been replying in Chinese.
+    if user_lang == "Chinese" or assistant_lang == "Chinese":
+        return "Chinese"
+
+    # Only fall back to English when both sides are clearly English.
+    if user_lang == "English" and assistant_lang == "English":
+        return "English"
+
+    # If one side is ambiguous, trust the side with a clear signal.
+    if user_lang is not None:
+        return user_lang
+    if assistant_lang is not None:
+        return assistant_lang
+
+    return "English"
+
+
+def _detect_language(samples: list[str]) -> str | None:
+    """Return 'Chinese' or 'English' if the samples are clearly in one language."""
+    if not samples:
+        return None
     text = "\n".join(samples)
     cjk = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
     latin = sum(1 for ch in text if "a" <= ch.lower() <= "z")
     if cjk >= 3 and cjk >= latin * 0.25:
         return "Chinese"
-    return "English"
+    if latin > 0 and cjk / max(latin, 1) < 0.25:
+        return "English"
+    return None
 
 
 def _serialize_transcript(conversation: Any) -> str:
@@ -123,13 +162,15 @@ def _estimate_tokens(text: str) -> int:
 
 def _content_to_text(content: Any) -> str:
     if isinstance(content, str):
-        return content
+        return "" if content.strip() == NO_CONTENT_MESSAGE else content
     if isinstance(content, list):
         parts: list[str] = []
         for item in content:
             text = getattr(item, "text", None)
             if text is not None:
-                parts.append(str(text))
+                value = str(text)
+                if value.strip() != NO_CONTENT_MESSAGE:
+                    parts.append(value)
                 continue
             kind = getattr(item, "type", None)
             if kind == "tool_use":
@@ -139,7 +180,9 @@ def _content_to_text(content: Any) -> str:
                 continue
             if isinstance(item, dict):
                 if item.get("type") in (None, "text"):
-                    parts.append(str(item.get("text") or item.get("content") or ""))
+                    value = str(item.get("text") or item.get("content") or "")
+                    if value.strip() != NO_CONTENT_MESSAGE:
+                        parts.append(value)
                 elif item.get("type") == "tool_use":
                     parts.append(f"[tool_use {item.get('name') or ''}]")
                 elif item.get("type") == "tool_result":

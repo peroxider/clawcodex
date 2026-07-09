@@ -2098,14 +2098,46 @@ class TestREPLResumeReplay(unittest.TestCase):
             f"{assistant_lines}",
         )
 
-        # Verify the tool-use header was deferred (printed as part of the
-        # flush at end) — it should contain the tool name.
+        # Both tool-use headers should be rendered.
         tool_headers = [ln for ln in printed_lines if "●" in ln]
         self.assertEqual(
             len(tool_headers),
             2,
             f"Expected 2 tool-use headers, got {len(tool_headers)}",
         )
+
+    def test_replay_unmatched_tool_call_stays_before_later_recap(self):
+        """An unmatched persisted tool call must not move past a later recap."""
+        from clawcodex_ext.away_summary.messages import create_away_summary_message
+        from clawcodex_ext.types.content_blocks import ToolUseBlock
+        from clawcodex_ext.types.messages import AssistantMessage, UserMessage
+
+        repl = self._make_repl()
+        recap = create_away_summary_message(
+            "finished editing",
+            trigger="auto",
+            fingerprint="fp",
+            message_count=2,
+        )
+        repl.session.conversation.messages = [
+            UserMessage(content="edit the file"),
+            AssistantMessage(
+                content=[ToolUseBlock(id="call-1", name="Edit", input={"path": "a.md"})]
+            ),
+            recap,
+        ]
+        repl.console.print = Mock()
+
+        repl._replay_resume_history()
+
+        printed = [
+            getattr(call.args[0], "markup", str(call.args[0]))
+            for call in repl.console.print.call_args_list
+            if call.args
+        ]
+        tool_index = next(i for i, line in enumerate(printed) if "Edit" in line)
+        recap_index = next(i for i, line in enumerate(printed) if "Recapitulate" in line)
+        self.assertLess(tool_index, recap_index)
 
     def test_replay_string_content_no_duplicate_label(self):
         """Assistant messages with string content must not produce a

@@ -3789,9 +3789,6 @@ class ClawcodexREPL:
         # Build a tool_use_id → (name, input) map so we can show
         # the right header above each ToolResultBlock.
         tool_use_map: dict[str, tuple[str, dict]] = {}
-        # Track pending tool-use headers that haven't been printed yet
-        # (deferred until the matching result arrives, same as live chat).
-        pending_tool_use_prints: dict[str, str] = {}
         tool_block_needs_leading_space = False
 
         for msg in self.session.conversation.messages:
@@ -3825,12 +3822,6 @@ class ClawcodexREPL:
                 if isinstance(content, list):
                     for block in content:
                         if isinstance(block, ToolResultBlock):
-                            # Print the deferred ● ToolName(args) header
-                            header = pending_tool_use_prints.pop(block.tool_use_id, None)
-                            if header is not None:
-                                if tool_block_needs_leading_space:
-                                    self.console.print()
-                                self.console.print(header)
                             # Print result line
                             if block.is_error:
                                 err_text = (
@@ -3910,10 +3901,16 @@ class ClawcodexREPL:
                                 call_args = f"[dim]([/dim]{escape(summary)}[dim])[/dim]"
                             else:
                                 call_args = ""
-                            pending_tool_use_prints[block.id] = (
+                            # Some persisted transcripts have no matching
+                            # ToolResultBlock. Print the call at its original
+                            # position so a later recap cannot overtake it.
+                            if tool_block_needs_leading_space:
+                                self.console.print()
+                            self.console.print(
                                 f"[success]●[/success] [bold][info]{block.name}[/info][/bold]"
                                 + (f" {call_args}" if call_args else "")
                             )
+                            tool_block_needs_leading_space = True
                         elif isinstance(block, ThinkingBlock):
                             # Replay thinking blocks matching live-chat behaviour:
                             # visible → print directly; hidden → stash for Ctrl+O.
@@ -3936,13 +3933,6 @@ class ClawcodexREPL:
                 elif isinstance(content, str) and content:
                     self.console.print(Markdown(content))
                 continue
-
-        # Flush any tool-use headers that never received a result
-        for header in pending_tool_use_prints.values():
-            if tool_block_needs_leading_space:
-                self.console.print()
-            self.console.print(header)
-            tool_block_needs_leading_space = True
 
         self.console.print("\n[dim]─── end of history ───[/dim]")
 

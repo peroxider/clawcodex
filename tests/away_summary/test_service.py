@@ -7,6 +7,10 @@ from src.types.messages import Message, normalize_messages_for_api
 
 from clawcodex_ext.away_summary.config import AwaySummaryConfig
 from clawcodex_ext.away_summary.fingerprint import last_away_summary_fingerprint
+from clawcodex_ext.away_summary.prompt import (
+    build_summary_messages,
+    infer_response_language,
+)
 from clawcodex_ext.away_summary.service import AwaySummaryService
 
 
@@ -146,3 +150,56 @@ def test_fallback_summary_flattens_content_blocks() -> None:
     assert "Started with: 你好" in result.summary
     assert "TextBlock(" not in result.summary
     assert "type='text'" not in result.summary
+
+
+def test_infer_language_from_chinese_user_message() -> None:
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="请实现一个递归函数"),
+        Message(role="assistant", content="好的，以下是递归函数的实现。"),
+    ]
+    assert infer_response_language(conv) == "Chinese"
+
+
+def test_infer_language_falls_back_to_assistant_when_user_is_code_heavy() -> None:
+    """User turns dominated by English identifiers should not drown out Chinese intent."""
+    conv = Conversation()
+    conv.messages = [
+        Message(
+            role="user",
+            content="clawcodex_ext/away_summary/prompt.py 的 infer_response_language 改成中文",
+        ),
+        Message(role="assistant", content="已修改。现在函数会正确检测中文。"),
+    ]
+    assert infer_response_language(conv) == "Chinese"
+
+
+def test_infer_language_english_conversation() -> None:
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="fix bug in test_service.py"),
+        Message(role="assistant", content="Fixed the bug in test_service.py."),
+    ]
+    assert infer_response_language(conv) == "English"
+
+
+def test_infer_language_explicit_override() -> None:
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="fix bug in test_service.py"),
+        Message(role="assistant", content="Fixed the bug in test_service.py."),
+    ]
+    assert infer_response_language(conv, explicit="Chinese") == "Chinese"
+    assert infer_response_language(conv, explicit="English") == "English"
+
+
+def test_summary_prompt_includes_must_language_instruction() -> None:
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="请帮我修改代码"),
+        Message(role="assistant", content="好的，我来帮你。"),
+    ]
+    prompt = build_summary_messages(conv, max_input_tokens=4_000)[0]["content"]
+    assert "MUST write the recap in natural Simplified Chinese" in prompt
+    assert "MUST be written in the language specified above" in prompt
+    assert "Do not switch languages mid-recap" in prompt
