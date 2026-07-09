@@ -18,7 +18,10 @@ def test_summary_prompt_omits_no_content_placeholder_but_keeps_tool_call() -> No
         ),
     ]
 
-    prompt = build_summary_messages(conversation, max_input_tokens=4_000)[0]["content"]
+    messages = build_summary_messages(conversation, max_input_tokens=4_000)
+    prompt = "\n".join(m["content"] for m in messages)
 
     assert "[No content]" not in prompt
     assert "tool_use Edit" in prompt
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"

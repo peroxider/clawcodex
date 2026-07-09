@@ -2139,6 +2139,82 @@ class TestREPLResumeReplay(unittest.TestCase):
         recap_index = next(i for i, line in enumerate(printed) if "Recapitulate" in line)
         self.assertLess(tool_index, recap_index)
 
+    def test_replay_tool_results_and_suppresses_whitespace_assistant_labels(self):
+        """Persisted tool results render without empty Assistant headings."""
+        from clawcodex_ext.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
+        from clawcodex_ext.types.messages import AssistantMessage, UserMessage
+
+        repl = self._make_repl()
+        repl.session.conversation.messages = [
+            AssistantMessage(
+                content=[
+                    TextBlock(text="\n\n"),
+                    ToolUseBlock(
+                        id="call-edit",
+                        name="Edit",
+                        input={"file_path": "a.md"},
+                    ),
+                ]
+            ),
+            UserMessage(
+                content=[
+                    ToolResultBlock(
+                        tool_use_id="call-edit",
+                        content="old_string not found in file",
+                        is_error=True,
+                    )
+                ]
+            ),
+            AssistantMessage(
+                content=[
+                    TextBlock(text="\n"),
+                    ToolUseBlock(
+                        id="call-grep",
+                        name="Grep",
+                        input={"pattern": "中间件", "path": "a.md"},
+                    ),
+                ]
+            ),
+            UserMessage(
+                content=[
+                    ToolResultBlock(
+                        tool_use_id="call-grep",
+                        content='{"mode":"content","numLines":1}',
+                    )
+                ]
+            ),
+        ]
+        repl.console.print = Mock()
+
+        repl._replay_resume_history()
+
+        printed = [
+            getattr(call.args[0], "markup", str(call.args[0]))
+            for call in repl.console.print.call_args_list
+            if call.args
+        ]
+        self.assertFalse(any("Assistant" in line for line in printed))
+        self.assertTrue(any("old_string not found in file" in line for line in printed))
+        self.assertTrue(any("Found 1 line" in line for line in printed))
+
+    def test_engine_tool_result_is_recorded_for_resume(self):
+        from clawcodex_ext.types.content_blocks import ToolResultBlock
+        from clawcodex_ext.types.messages import UserMessage
+
+        repl = self._make_repl()
+        repl.session.conversation = Conversation()
+        result = UserMessage(
+            content=[
+                ToolResultBlock(
+                    tool_use_id="call-1",
+                    content="Unchanged since last read",
+                )
+            ]
+        )
+
+        self.assertTrue(repl._record_tool_result_message(result))
+        self.assertEqual(repl.session.conversation.messages, [result])
+
     def test_replay_string_content_no_duplicate_label(self):
         """Assistant messages with string content must not produce a
         duplicate 'Assistant' label (bug: the unconditional print at the

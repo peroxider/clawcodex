@@ -2961,6 +2961,16 @@ class ClawcodexREPL:
         remaining = len(lines) - self._MAX_PREVIEW_LINES
         return f"{preview}\n… +{remaining} lines"
 
+    def _record_tool_result_message(self, message: Any) -> bool:
+        """Keep an engine-emitted tool result in the persisted conversation."""
+        content = getattr(message, "content", None)
+        if not isinstance(content, list) or not any(
+            isinstance(block, ToolResultBlock) for block in content
+        ):
+            return False
+        self.session.conversation.add_existing_message(message)
+        return True
+
     def _available_agents(self) -> list[Any]:
         """Return the list of agent definitions that can be invoked via ``@agent-...``.
 
@@ -3875,7 +3885,9 @@ class ClawcodexREPL:
                 _has_text = False
                 if isinstance(content, list):
                     _has_text = any(
-                        isinstance(b, TextBlock) and b.text and b.text != "[No content]"
+                        isinstance(b, TextBlock)
+                        and bool((b.text or "").strip())
+                        and b.text != "[No content]"
                         for b in content
                     )
                 elif isinstance(content, str):
@@ -3884,7 +3896,7 @@ class ClawcodexREPL:
                     self.console.print(f"\n[bold]{_agent_label}[/bold]")
                 if isinstance(content, list):
                     for block in content:
-                        if isinstance(block, TextBlock) and block.text:
+                        if isinstance(block, TextBlock) and (block.text or "").strip():
                             # Suppress NO_CONTENT_MESSAGE placeholder that
                             # create_assistant_message injects for empty
                             # responses — matches live-chat behaviour where
@@ -6003,6 +6015,12 @@ class ClawcodexREPL:
                     if isinstance(msg, UserMessage):
                         content = msg.content
                         if isinstance(content, list):
+                            # The engine yields tool results as UserMessages.
+                            # Preserve them in the session conversation as
+                            # well as rendering them; save_transcript() writes
+                            # from this conversation, so omitting this append
+                            # made every result disappear after --resume.
+                            self._record_tool_result_message(msg)
                             for block in content:
                                 if isinstance(block, ToolResultBlock):
                                     # Suppress per-call ``⎿ ...`` result

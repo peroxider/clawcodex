@@ -44,14 +44,17 @@ def build_summary_messages(
     transcript = _truncate_transcript(transcript, max_input_tokens=max_input_tokens)
     return [
         {
+            "role": "system",
+            "content": AWAY_SUMMARY_INSTRUCTIONS.format(language_instruction=lang_instruction),
+        },
+        {
             "role": "user",
             "content": (
-                f"{AWAY_SUMMARY_INSTRUCTIONS.format(language_instruction=lang_instruction)}\n\n"
-                "Session transcript:\n"
-                f"{transcript}\n\n"
+                "Write a concise session recap based on the transcript below.\n\n"
+                f"Session transcript:\n{transcript}\n\n"
                 "Return only the recap."
             ),
-        }
+        },
     ]
 
 
