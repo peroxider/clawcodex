@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -19,8 +21,21 @@ from clawcodex_ext.utils.git import (
 from .config.schema import AgentConfig, HooksConfig
 from . import report_writer
 from .issue import Issue
+from .prompt_builder import resolve_python_executable
 from .tracker import PullRequestRef, TrackerAdapter
 from .workspace import Workspace
+
+logger = logging.getLogger(__name__)
+
+_OUTPUT_TAIL_CHARS = 4_000
+
+
+def _tail(output: str) -> str:
+    """Last chunk of a command's output — enough context for a report
+    without persisting megabytes of test logs."""
+    if len(output) <= _OUTPUT_TAIL_CHARS:
+        return output
+    return f"…(truncated)…\n{output[-_OUTPUT_TAIL_CHARS:]}"
 
 
 @dataclass(frozen=True)
@@ -466,6 +481,7 @@ class GitSyncService:
 
     async def _run_pre_push_verification(self, repo_root: str, session: Any) -> None:
         outputs: list[str] = []
+        verification_status = "passed"
         for label, command in (
             ("test", self._agent_config.test_command),
             ("build", self._agent_config.build_command),
@@ -482,6 +498,19 @@ class GitSyncService:
             except VerificationFailed as exc:
                 raise VerificationFailed(f"{label} verification failed", exc.output) from exc
             outputs.append(f"## {label}\n{output}".strip())
+        # Regression guard (defect R1): with no test_command configured the
+        # loop above runs nothing and verification used to pass vacuously.
+        # Fall back to an auto-detected test run compared against the
+        # pre-change baseline so net-new failures block the push.
+        if (
+            not self._agent_config.test_command
+            and self._agent_config.verification.regression_guard
+        ):
+            verification_status, guard_output = await self._run_regression_guard(
+                repo_root, session
+            )
+            if guard_output:
+                outputs.append(f"## regression_guard\n{guard_output}".strip())
         hook_command = self._hooks_config.pre_push
         if hook_command:
             before = await asyncio.to_thread(self._status_snapshot, repo_root)
@@ -500,8 +529,178 @@ class GitSyncService:
                     output,
                 )
             outputs.append(f"## pre_push\n{output}".strip())
-        setattr(session, "verification_status", "passed")
+        setattr(session, "verification_status", verification_status)
         setattr(session, "verification_output", "\n\n".join(outputs))
+
+    # ------------------------------------------------------------------
+    # Regression guard (defect R1)
+    # ------------------------------------------------------------------
+
+    # Short-summary lines emitted by ``pytest -q``:
+    #   FAILED tests/test_x.py::test_y[case] - AssertionError: ...
+    #   ERROR tests/test_z.py - ImportError: ...
+    _PYTEST_FAILURE_RE = re.compile(r"^(?:FAILED|ERROR)\s+(\S+)", re.MULTILINE)
+
+    async def _run_regression_guard(
+        self, repo_root: str, session: Any
+    ) -> tuple[str, str]:
+        """Run the fallback test suite and gate on **net-new** failures.
+
+        Returns ``(verification_status, output_note)``. Statuses:
+
+        - ``passed`` — suite is green after the change.
+        - ``passed_preexisting_failures`` — suite is red, but every
+          failure already fails at the session's start commit; the
+          change introduced nothing new. Running the *same command in
+          the same environment* on both sides is what makes the
+          comparison honest — environment quirks fail identically on
+          both sides and cancel out.
+        - ``skipped_no_tests`` — no test suite detected (or the runner
+          itself is unavailable). Deliberately NOT reported as
+          ``passed``: reviewers see that nothing was verified.
+
+        Raises :class:`VerificationFailed` when the change introduces
+        failures that the baseline does not have.
+        """
+        command = self._detect_fallback_test_command(repo_root)
+        if not command:
+            logger.info("regression guard: no test suite detected in %s", repo_root)
+            return (
+                "skipped_no_tests",
+                "no test suite detected — verification did not run",
+            )
+        timeout_ms = self._agent_config.verification.timeout_ms
+        after_rc, after_output = await self._run_shell_result(command, repo_root, timeout_ms)
+        if after_rc == 0:
+            return ("passed", f"$ {command}\n{_tail(after_output)}")
+        if self._looks_like_missing_runner(after_rc, after_output):
+            logger.info(
+                "regression guard: test runner unavailable (rc=%s) in %s",
+                after_rc,
+                repo_root,
+            )
+            return (
+                "skipped_no_tests",
+                f"test runner unavailable (rc={after_rc}) — verification did not run",
+            )
+        after_failures = set(self._PYTEST_FAILURE_RE.findall(after_output))
+        baseline_failures = await self._baseline_failures(repo_root, session, command)
+        if baseline_failures is not None and after_failures:
+            net_new = sorted(after_failures - baseline_failures)
+            if not net_new:
+                note = (
+                    f"$ {command}\n"
+                    f"{len(after_failures)} failing test(s), all of which already "
+                    f"fail at the session start commit — no regression introduced.\n"
+                    f"{_tail(after_output)}"
+                )
+                return ("passed_preexisting_failures", note)
+            listed = "\n".join(f"- {item}" for item in net_new[:50])
+            raise VerificationFailed(
+                f"regression guard: {len(net_new)} net-new failing test(s) "
+                f"introduced by this change",
+                f"$ {command}\n\nNet-new failures:\n{listed}\n\n{_tail(after_output)}",
+            )
+        # No baseline to compare against (missing start sha, worktree
+        # failure, or the failure list could not be parsed). Be
+        # conservative: a red suite blocks the push.
+        raise VerificationFailed(
+            f"regression guard: test suite failed (rc={after_rc}) and no "
+            f"baseline was available for comparison",
+            f"$ {command}\n{_tail(after_output)}",
+        )
+
+    def _detect_fallback_test_command(self, repo_root: str) -> str:
+        """Pick the fallback test command for the workspace.
+
+        Explicit ``verification.fallback_test_command`` wins. Otherwise
+        detect a pytest suite (``pytest.ini`` / ``tests|test`` directory
+        containing ``test_*.py`` / ``*_test.py``). Returns ``""`` when
+        nothing is detected.
+        """
+        explicit = self._agent_config.verification.fallback_test_command
+        if explicit:
+            return explicit
+        root = Path(repo_root)
+        has_pytest_marker = (root / "pytest.ini").is_file()
+        if not has_pytest_marker:
+            for tests_dir in ("tests", "test"):
+                candidate = root / tests_dir
+                if not candidate.is_dir():
+                    continue
+                try:
+                    has_pytest_marker = any(candidate.rglob("test_*.py")) or any(
+                        candidate.rglob("*_test.py")
+                    )
+                except OSError:
+                    has_pytest_marker = False
+                if has_pytest_marker:
+                    break
+        if not has_pytest_marker:
+            return ""
+        python = resolve_python_executable(
+            workspace_path=root,
+            agent_cfg=self._agent_config,
+            workspace_cfg=None,
+        )
+        interpreter = python or "python3"
+        return f'"{interpreter}" -m pytest -q --color=no -p no:cacheprovider'
+
+    @staticmethod
+    def _looks_like_missing_runner(rc: int, output: str) -> bool:
+        """True when the failure means "pytest isn't usable here", not
+        "tests failed" — rc 127 (command not found), rc 5 (no tests
+        collected) or the interpreter reporting the module is absent."""
+        if rc in (5, 127):
+            return True
+        lowered = output.lower()
+        return "no module named pytest" in lowered or "not recognized as" in lowered
+
+    async def _baseline_failures(
+        self, repo_root: str, session: Any, command: str
+    ) -> set[str] | None:
+        """Run ``command`` against the session's start commit in a
+        temporary worktree and return its failing-test set.
+
+        ``None`` means "baseline unavailable" (no start sha recorded, or
+        the worktree could not be created) — the caller must then treat
+        every current failure as blocking.
+        """
+        start_sha = getattr(session, "start_commit_sha", None)
+        if not start_sha:
+            return None
+        tmp_dir = tempfile.mkdtemp(prefix="clawcodex-baseline-")
+        added = False
+        try:
+            _, err, rc = await asyncio.to_thread(
+                _run_git,
+                ["worktree", "add", "--detach", tmp_dir, str(start_sha)],
+                repo_root,
+            )
+            if rc != 0:
+                logger.warning("regression guard: baseline worktree failed: %s", err)
+                return None
+            added = True
+            baseline_rc, baseline_output = await self._run_shell_result(
+                command,
+                tmp_dir,
+                self._agent_config.verification.timeout_ms,
+            )
+            if baseline_rc == 0:
+                return set()
+            return set(self._PYTEST_FAILURE_RE.findall(baseline_output))
+        except VerificationFailed:
+            # Baseline run timed out — treat as unavailable rather than
+            # letting a slow baseline mask the after-run result.
+            logger.warning("regression guard: baseline run timed out")
+            return None
+        finally:
+            if added:
+                await asyncio.to_thread(
+                    _run_git,
+                    ["worktree", "remove", "--force", tmp_dir],
+                    repo_root,
+                )
 
     async def _run_post_sync_hook(self, repo_root: str, session: Any) -> None:
         command = self._hooks_config.post_sync
@@ -521,6 +720,20 @@ class GitSyncService:
         setattr(session, "post_sync_output", output)
 
     async def _run_shell(self, command: str, repo_root: str, timeout_ms: int) -> str:
+        rc, output = await self._run_shell_result(command, repo_root, timeout_ms)
+        if rc != 0:
+            raise VerificationFailed(
+                f"command failed with exit code {rc}: {command}",
+                output,
+            )
+        return output
+
+    async def _run_shell_result(
+        self, command: str, repo_root: str, timeout_ms: int
+    ) -> tuple[int, str]:
+        """Like ``_run_shell`` but reports a non-zero exit code instead of
+        raising, so callers that need to interpret the code (the
+        regression guard) can. A timeout still raises."""
         try:
             proc = await asyncio.create_subprocess_shell(
                 command,
@@ -540,12 +753,7 @@ class GitSyncService:
         output = "\n".join(
             part.decode("utf-8", errors="replace").strip() for part in (stdout, stderr) if part
         ).strip()
-        if proc.returncode != 0:
-            raise VerificationFailed(
-                f"command failed with exit code {proc.returncode}: {command}",
-                output,
-            )
-        return output
+        return proc.returncode or 0, output
 
     def _status_snapshot(self, repo_root: str) -> str:
         return "\n".join(sorted(s.path for s in get_file_status(repo_root)))

@@ -15,6 +15,7 @@ from jinja2 import Environment, StrictUndefined, TemplateError
 
 from clawcodex_ext.agent.agent_definitions import task_v2_guidelines
 
+from .premise_check import build_premise_block, check_issue_premise
 from .rules_learner import RuleEngine
 from .tracker import PullRequestFeedback, PullRequestRef
 from .workflow_store import get_workflow_store
@@ -232,6 +233,19 @@ class PromptBuilder:
                 "\n"
                 f"{rendered}"
             )
+
+        # Premise check (defect R3): when the issue references files that
+        # do not exist in the workspace, warn the agent up front and hand
+        # it the honest-exit protocol, so "fabricate the missing file" is
+        # no longer the path of least resistance.
+        if ws_path:
+            try:
+                missing_paths = check_issue_premise(issue_dict, ws_path)
+            except Exception:  # premise checking must never break prompts
+                logger.debug('premise check failed', exc_info=True)
+                missing_paths = []
+            if missing_paths:
+                rendered = f'{rendered}\n\n{build_premise_block(missing_paths)}'
 
         if previous_run_ids:
             sessions_home = Path.home() / ".clawcodex" / "sessions"
