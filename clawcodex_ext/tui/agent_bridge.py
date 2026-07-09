@@ -30,6 +30,10 @@ from typing import Any, Callable
 
 from src.agent import Session
 from src.tool_system.renderers import AgentLoopResult, ToolEvent
+from clawcodex_ext.diagnostics.freeze_config import (
+    DEFAULT_FREEZE_SETTINGS,
+    resolve_freeze_settings,
+)
 from clawcodex_ext.query.agent_loop_compat import (
     build_effective_system_prompt,
     run_query_as_agent_loop,
@@ -51,20 +55,19 @@ from .messages import (
 from .state import AppState
 
 
-# F-108 P108-A — modal timeout for permission / AskUserQuestion prompts.
-# When the UI side fails to respond within this many seconds the worker
-# thread auto-resolves the prompt (auto-deny for permissions, empty
-# answers for AskUser) so a stuck modal can no longer hang the agent
-# loop indefinitely. See F-108 §十八 risks #2 #3 and design decision #1
-# (30 s is well below any plausible modal render time but long enough
-# for the user to react).
-#
-# Set to ``0`` to disable the timeout and fall back to the legacy
-# unbounded ``done.wait()`` (F-108 §十八 design decision #5).
-#
-# TODO(F-108 P108-E): plumb this through ``AgentConfig.freeze.permission_timeout_s``
-# so the value is configurable per-run instead of being hard-coded.
-_PERMISSION_TIMEOUT_S = 30.0
+def _resolve_permission_timeout_s() -> float:
+    """Layer-0 modal deadline (F-108 P108-A / P108-E).
+
+    Resolved honouring ``FreezeSettings.permission_timeout_s`` →
+    ``$CLAWCODEX_PERMISSION_TIMEOUT`` → the dataclass default
+    (30 s). ``0`` disables the timeout entirely (legacy unbounded
+    ``done.wait()``). Kept as a function so the bridge re-resolves
+    on every prompt (cheap; settings can change between runs).
+    """
+    try:
+        return float(resolve_freeze_settings().permission_timeout_s)
+    except Exception:
+        return DEFAULT_FREEZE_SETTINGS.permission_timeout_s
 
 
 class AgentBridge:
@@ -772,7 +775,7 @@ class AgentBridge:
         # worker thread indefinitely (risk #2). After the timeout we
         # fall back to the safest default — deny without remembering —
         # which mirrors the legacy ESC behaviour.
-        timeout_s = _PERMISSION_TIMEOUT_S
+        timeout_s = _resolve_permission_timeout_s()
         if timeout_s > 0:
             done.wait(timeout=timeout_s)
             if not done.is_set():
@@ -827,7 +830,7 @@ class AgentBridge:
         # cannot hang the worker thread indefinitely (risk #3). After
         # the timeout we return ``{}`` (parity with the Esc-cancel path)
         # so the agent loop can recover without a real answer.
-        timeout_s = _PERMISSION_TIMEOUT_S
+        timeout_s = _resolve_permission_timeout_s()
         if timeout_s > 0:
             done.wait(timeout=timeout_s)
             if not done.is_set():

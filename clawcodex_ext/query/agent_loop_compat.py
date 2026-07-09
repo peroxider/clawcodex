@@ -21,6 +21,7 @@ prompt before calling the adapter — ``query()`` expects it pre-built.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -28,6 +29,10 @@ from clawcodex_ext.tool_system.context import ToolContext
 from clawcodex_ext.tool_system.registry import ToolRegistry
 from clawcodex_ext.tool_system import get_team_aware_tool_list
 from clawcodex_ext.agent.agent_tool_utils import filter_tools_for_startup_agent
+from clawcodex_ext.diagnostics.freeze_config import (
+    DEFAULT_FREEZE_SETTINGS,
+    resolve_freeze_settings,
+)
 from clawcodex_ext.providers.base import BaseProvider
 from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
 from clawcodex_ext.types.messages import (
@@ -55,6 +60,24 @@ from src.tool_system.renderers import (
     summarize_tool_use,
     summarize_tool_result,
 )
+
+
+def _heartbeat_freeze_detector() -> None:
+    """Bump the global FreezeDetector heartbeat.
+
+    Cheap; touches a mutex + monotonic read. Empty when the
+    detector is disabled (no singleton). Called from every turn
+    boundary and tool event in :func:`run_query_as_agent_loop` so a
+    healthy agent loop keeps the Layer-1 watchdog silent.
+    """
+    try:
+        from clawcodex_ext.diagnostics import FreezeDetector
+
+        det = FreezeDetector._INSTANCE  # noqa: SLF001
+        if det is not None:
+            det.heartbeat()
+    except Exception:
+        pass
 
 
 def build_effective_system_prompt(style_prompt: str, tool_context: ToolContext) -> str:
@@ -226,114 +249,150 @@ async def run_query_as_agent_loop(
     while True:
         holder = TerminalHolder()
         params = _make_params(next_messages)
-        async for msg in query(params, terminal_holder=holder):
-            if isinstance(msg, StreamEvent):
-                continue
+        # F-108 P108-F + P108-D — heartbeat Layer-1 at every turn boundary
+        # so the watchdog's ``check()`` never trips on a healthy loop.
+        # Falls through silently when ``CLAWCODEX_FREEZE_DIAG`` is unset.
+        _heartbeat_freeze_detector()
 
-            _persist_is_api_error = bool(getattr(msg, "isApiErrorMessage", False))
-            _persist_is_meta = bool(getattr(msg, "isMeta", False))
-            if not _persist_is_api_error and not _persist_is_meta:
-                conversation_messages.append(msg)
+        # F-108 P108-F — wrap each turn with ``turn_timeout_s``.
+        # ``0`` disables. The coroutine drains the inner loop body;
+        # ``asyncio.wait_for`` cancels it cleanly on expiry, and the
+        # abort controller takes care of in-flight HTTP / tool calls.
+        try:
+            turn_timeout_s = float(resolve_freeze_settings().turn_timeout_s)
+        except Exception:
+            turn_timeout_s = DEFAULT_FREEZE_SETTINGS.turn_timeout_s
 
-            # Persist every real Message to the main transcript. Filter
-            # matches the legacy ``on_message`` gates (skip isApiError,
-            # skip isMeta) so the on-disk shape mirrors what the legacy
-            # Conversation would have held.
-            if main_transcript is not None and not _persist_is_api_error and not _persist_is_meta:
-                try:
-                    main_transcript.append(msg)
-                except OSError:
-                    logging.getLogger(__name__).exception(
-                        "main transcript append failed; further appends will be skipped"
-                    )
+        async def _drain_turn() -> None:
+            async for msg in query(params, terminal_holder=holder):
+                if isinstance(msg, StreamEvent):
+                    continue
+
+                _persist_is_api_error = bool(getattr(msg, "isApiErrorMessage", False))
+                _persist_is_meta = bool(getattr(msg, "isMeta", False))
+                if not _persist_is_api_error and not _persist_is_meta:
+                    conversation_messages.append(msg)
+
+                # Persist every real Message to the main transcript. Filter
+                # matches the legacy ``on_message`` gates (skip isApiError,
+                # skip isMeta) so the on-disk shape mirrors what the legacy
+                # Conversation would have held.
+                if main_transcript is not None and not _persist_is_api_error and not _persist_is_meta:
                     try:
-                        main_transcript.close()
+                        main_transcript.append(msg)
                     except OSError:
-                        pass
-                    main_transcript = None
+                        logging.getLogger(__name__).exception(
+                            "main transcript append failed; further appends will be skipped"
+                        )
+                        try:
+                            main_transcript.close()
+                        except OSError:
+                            pass
+                        main_transcript = None
 
-            # Bridge cancel_signal: if it fires mid-stream, propagate to
-            # the loop's abort_controller. The loop checks signal.aborted
-            # at iteration boundaries so the next check will exit.
-            if cancel_signal is not None and cancel_signal.aborted:
-                if not abort_controller.signal.aborted:
-                    abort_controller.abort(cancel_signal.reason or "user_interrupt")
+                # Bridge cancel_signal: if it fires mid-stream, propagate to
+                # the loop's abort_controller. The loop checks signal.aborted
+                # at iteration boundaries so the next check will exit.
+                if cancel_signal is not None and cancel_signal.aborted:
+                    if not abort_controller.signal.aborted:
+                        abort_controller.abort(cancel_signal.reason or "user_interrupt")
 
-            if isinstance(msg, AssistantMessage):
-                # Critic S1 fix: skip persisting API-error messages and
-                # meta messages. The legacy run_agent_loop never added
-                # these to the user's Conversation — letting them through
-                # poisons multi-prompt sessions (the model sees prior
-                # error text as its own past output, and PTL errors
-                # persisted as assistant messages fertilize a PTL death
-                # spiral on the next turn).
-                _is_api_error = bool(getattr(msg, "isApiErrorMessage", False))
-                _is_meta = bool(getattr(msg, "isMeta", False))
-                if on_message is not None and not _is_api_error and not _is_meta:
-                    on_message(msg)
-                if _is_api_error:
-                    # Don't count error turns or surface their text as the
-                    # "response" — those are exit signals, not output.
-                    continue
-                num_turns += 1
-                # Sum usage across turns.
-                mu = getattr(msg, "usage", None) or {}
-                usage["input_tokens"] += mu.get("input_tokens", 0)
-                usage["output_tokens"] += mu.get("output_tokens", 0)
-                # Capture text content and tool_use events.
-                text_parts: list[str] = []
-                content = msg.content
-                if isinstance(content, str):
-                    text_parts.append(content)
-                else:
-                    for block in content:
-                        if isinstance(block, TextBlock):
-                            text_parts.append(block.text)
-                        elif isinstance(block, ToolUseBlock) and on_event is not None:
-                            on_event(
-                                ToolEvent(
-                                    kind="tool_use",
-                                    tool_name=block.name,
-                                    tool_input=block.input,
-                                    tool_use_id=block.id,
-                                )
-                            )
-                if text_parts:
-                    last_assistant_text = " ".join(text_parts).strip()
-                    # NB: do NOT fire on_text_chunk here. It was already
-                    # fired LIVE by the provider's chat_stream_response
-                    # via QueryParams.on_text_chunk threading. Firing
-                    # again would duplicate the entire response into the
-                    # caller's stream.
-                continue
-
-            if isinstance(msg, UserMessage):
-                # Tool result(s) arrive as UserMessages with ToolResultBlock
-                # content. Persist the full message (so the next turn's
-                # API call can pair tool_use IDs to their results) AND
-                # dispatch tool_result events. Skip meta (interruption /
-                # cancellation synthesized by query.py) — those are loop
-                # bookkeeping, not real user turns.
-                if bool(getattr(msg, "isMeta", False)):
-                    continue
-                content = msg.content
-                if isinstance(content, list):
-                    has_tool_result = any(isinstance(block, ToolResultBlock) for block in content)
-                    if has_tool_result and on_message is not None:
+                if isinstance(msg, AssistantMessage):
+                    # Critic S1 fix: skip persisting API-error messages and
+                    # meta messages. The legacy run_agent_loop never added
+                    # these to the user's Conversation — letting them through
+                    # poisons multi-prompt sessions (the model sees prior
+                    # error text as its own past output, and PTL errors
+                    # persisted as assistant messages fertilize a PTL death
+                    # spiral on the next turn).
+                    _is_api_error = bool(getattr(msg, "isApiErrorMessage", False))
+                    _is_meta = bool(getattr(msg, "isMeta", False))
+                    if on_message is not None and not _is_api_error and not _is_meta:
                         on_message(msg)
-                    if on_event is not None:
+                    if _is_api_error:
+                        # Don't count error turns or surface their text as the
+                        # "response" — those are exit signals, not output.
+                        continue
+                    num_turns += 1
+                    # Sum usage across turns.
+                    mu = getattr(msg, "usage", None) or {}
+                    usage["input_tokens"] += mu.get("input_tokens", 0)
+                    usage["output_tokens"] += mu.get("output_tokens", 0)
+                    # Capture text content and tool_use events.
+                    text_parts: list[str] = []
+                    content = msg.content
+                    if isinstance(content, str):
+                        text_parts.append(content)
+                    else:
                         for block in content:
-                            if isinstance(block, ToolResultBlock):
+                            if isinstance(block, TextBlock):
+                                text_parts.append(block.text)
+                            elif isinstance(block, ToolUseBlock) and on_event is not None:
                                 on_event(
                                     ToolEvent(
-                                        kind="tool_result",
-                                        tool_name="",
-                                        tool_use_id=block.tool_use_id,
-                                        tool_output=block.content,
-                                        is_error=bool(block.is_error),
-                                        error=str(block.content) if block.is_error else None,
+                                        kind="tool_use",
+                                        tool_name=block.name,
+                                        tool_input=block.input,
+                                        tool_use_id=block.id,
                                     )
                                 )
+                    if text_parts:
+                        last_assistant_text = " ".join(text_parts).strip()
+                        # NB: do NOT fire on_text_chunk here. It was already
+                        # fired LIVE by the provider's chat_stream_response
+                        # via QueryParams.on_text_chunk threading. Firing
+                        # again would duplicate the entire response into the
+                        # caller's stream.
+                    continue
+
+                if isinstance(msg, UserMessage):
+                    # Tool result(s) arrive as UserMessages with ToolResultBlock
+                    # content. Persist the full message (so the next turn's
+                    # API call can pair tool_use IDs to their results) AND
+                    # dispatch tool_result events. Skip meta (interruption /
+                    # cancellation synthesized by query.py) — those are loop
+                    # bookkeeping, not real user turns.
+                    if bool(getattr(msg, "isMeta", False)):
+                        continue
+                    content = msg.content
+                    if isinstance(content, list):
+                        has_tool_result = any(isinstance(block, ToolResultBlock) for block in content)
+                        if has_tool_result and on_message is not None:
+                            on_message(msg)
+                        if on_event is not None:
+                            for block in content:
+                                if isinstance(block, ToolResultBlock):
+                                    on_event(
+                                        ToolEvent(
+                                            kind="tool_result",
+                                            tool_name="",
+                                            tool_use_id=block.tool_use_id,
+                                            tool_output=block.content,
+                                            is_error=bool(block.is_error),
+                                            error=str(block.content) if block.is_error else None,
+                                        )
+                                    )
+
+        try:
+            if turn_timeout_s > 0:
+                await asyncio.wait_for(_drain_turn(), timeout=turn_timeout_s)
+            else:
+                await _drain_turn()
+        except asyncio.TimeoutError:
+            logging.getLogger(__name__).warning(
+                "turn timeout after %.1fs; aborting agent loop",
+                turn_timeout_s,
+            )
+            try:
+                abort_controller.abort(f"turn_timeout:{turn_timeout_s}s")
+            except Exception:
+                pass
+            break
+        except Exception:
+            # Let the legacy ``holder.value is None`` check below
+            # decide whether to loop again — non-timeout exceptions
+            # surface through the canonical terminal path.
+            raise
 
         if holder.value is None or getattr(holder.value, "reason", None) != "completed":
             break

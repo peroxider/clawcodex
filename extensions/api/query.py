@@ -16,6 +16,11 @@ from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from .debug_log import append_debug_event
 
+# F-108 P108-C — per-tool gap watchdog. Imported at module load to
+# keep ``QueryConfig`` construction cheap; the actual ``ToolGapWatchdog``
+# is built inside ``stream`` so we can plumb the user's QConfig knobs.
+from clawcodex_ext.tool_system.tool_timeout import ToolGapWatchdog
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -103,6 +108,25 @@ class QueryConfig:
     # is what guarantees "clear diagnosis within 30 s of a hang"
     # without any false-kill risk. 0 disables.
     stall_warn_s: float = 30.0
+    # F-108 P108-C — per-tool budget policy. When > 0 the agent loop
+    # aborts any tool call whose tool_use → tool_result gap exceeds
+    # the resolved budget (see ``tool_timeout.resolve_tool_timeout``).
+    # Per-tool overrides via ``tool_timeout_overrides`` take priority.
+    # Set to 0 to disable the gap-watchdog entirely.
+    tool_timeout_s: float = 120.0
+    tool_timeout_overrides: dict[str, float] | None = None
+    # F-108 P108-F — outer agent-loop wall-clock budget. The runner
+    # enforces this in the polling loop (mirrors ``timeout_s``) — when
+    # the run outlives the budget it yields
+    # ``SessionComplete(reason="exit_code=124")`` and signals the
+    # abort controller. Set to 0 to disable.
+    #
+    # Defaults: ``timeout_s`` already enforces a 1800 s budget; this
+    # second-tier value matches ``FreezeSettings.agent_loop_timeout_s``
+    # (600 s) so either layer hitting the budget surfaces as
+    # ``exit_code=124``. The narrower 600 s lets long plugin installs
+    # (which the agent really shouldn't run inline) abort early.
+    agent_loop_timeout_s: float = 600.0
 
 
 @dataclass
@@ -208,6 +232,13 @@ class QueryRunner:
         last_event_at = time.monotonic()
         tool_names_by_id: dict[str, str] = {}
 
+        # F-108 P108-C — tool-gap watchdog. Constructed lazily on
+        # the first tool event (so we can plumb the abort_controller
+        # that the headless session owns). ``tool_watchdog_state``
+        # holds the watchdog + the bookkeeping flags the polling
+        # loop checks per tick.
+        tool_watchdog_state: dict[str, Any] = {"wd": None, "tripped": False, "last_trip": None}
+
         def on_event(tool_event: Any) -> None:
             nonlocal tool_event_count, last_event_at
             try:
@@ -232,6 +263,15 @@ class QueryRunner:
                     is_error=is_error,
                     error=str(error)[:500] if error is not None and is_error else None,
                 )
+                # F-108 P108-C — feed the gap-watchdog from the headless
+                # ``on_event`` channel so the trip fires at the moment
+                # the event arrives, not at the polling-loop tick.
+                wd = tool_watchdog_state.get("wd")
+                if wd is not None and tool_use_id:
+                    if kind == "tool_use":
+                        wd.observe_tool_use(str(tool_use_id), str(tool_name or ""))
+                    elif kind in ("tool_result", "tool_error"):
+                        wd.observe_tool_result(str(tool_use_id))
                 event_queue.put(tool_event)
             except Exception:
                 pass
@@ -245,6 +285,64 @@ class QueryRunner:
         # ``issue stop`` task.cancel()). Without it a timed-out run kept
         # spawning workers for minutes — observed live on 2026-07-02.
         abort_controller = make_abort_controller()
+
+        # F-108 P108-C — build the gap watchdog now that the abort
+        # controller exists. ``tool_watchdog_state`` captures the
+        # watchdog handle + a trip flag so the polling loop can react.
+        def _build_tool_watchdog() -> Any:
+            try:
+                from clawcodex_ext.diagnostics.freeze_config import (
+                    FreezeSettings,
+                    resolve_freeze_settings,
+                )
+
+                settings = FreezeSettings(
+                    agent_loop_timeout_s=float(self.config.agent_loop_timeout_s),
+                    tool_timeout_s=float(self.config.tool_timeout_s),
+                )
+                real_settings = resolve_freeze_settings()
+                for name in (
+                    "turn_timeout_s",
+                    "permission_timeout_s",
+                    "threshold_s",
+                    "dump_dir",
+                ):
+                    if getattr(settings, name, None) in (None, 0.0):
+                        setattr(settings, name, getattr(real_settings, name))
+            except Exception:
+                settings = None  # type: ignore[assignment]
+
+            def _on_trip(res: Any, elapsed_s: float, tool_use_id: str) -> None:
+                tool_watchdog_state["tripped"] = True
+                tool_watchdog_state["last_trip"] = {
+                    "tool_name": res.tool_name,
+                    "timeout_s": res.timeout_s,
+                    "elapsed_s": round(elapsed_s, 3),
+                    "tool_use_id": tool_use_id,
+                }
+                append_debug_event(
+                    debug_log_path,
+                    "query_runner.tool_timeout",
+                    run_id=self.config.run_id,
+                    tool=res.tool_name,
+                    tool_use_id=tool_use_id,
+                    timeout_s=res.timeout_s,
+                    elapsed_s=round(elapsed_s, 3),
+                    reason=f"tool_timeout:{res.tool_name}",
+                )
+
+            try:
+                return ToolGapWatchdog(
+                    abort_controller=abort_controller,
+                    settings=settings,  # type: ignore[arg-type]
+                    explicit_overrides=self.config.tool_timeout_overrides,
+                    on_trip=_on_trip,
+                    logger=logger,
+                )
+            except Exception:
+                return None
+
+        tool_watchdog_state["wd"] = _build_tool_watchdog()
         session_opts = HeadlessSessionOptions(
             prompt=self.config.prompt,
             workspace_root=Path(self.config.workspace),
@@ -337,11 +435,36 @@ class QueryRunner:
                                 yield event
                         break
                     now = time.monotonic()
+                    # F-108 P108-C — tick the tool-gap watchdog. Trip
+                    # is callback-driven (sets ``tool_watchdog_state``
+                    # + signals abort), so the loop just needs to
+                    # honour the tripped flag once the headless
+                    # session has had a chance to unwind.
+                    wd = tool_watchdog_state.get("wd")
+                    if wd is not None:
+                        try:
+                            wd.tick(now=now)
+                        except Exception:
+                            pass
                     # F-108 P108-B: budget enforcement inside the polling
                     # loop. Conventional GNU ``timeout`` exit code (124)
                     # distinguishes "wall-clock budget exhausted" from
                     # other non-zero exits.
                     if timeout_s > 0 and (now - loop_started_at) >= timeout_s:
+                        timed_out = True
+                        break
+                    # F-108 P108-F — outer agent-loop budget
+                    # (``agent_loop_timeout_s``). Surfaces as
+                    # ``exit_code=124`` so callers can tell "outer
+                    # budget" from "stall" (125) and "tool timeout"
+                    # (126). The narrower 600 s default lets long
+                    # plugin installs abort before the 1800 s
+                    # ``timeout_s`` retroactively kicks in.
+                    agent_loop_budget = self.config.agent_loop_timeout_s
+                    if (
+                        agent_loop_budget > 0
+                        and (now - loop_started_at) >= agent_loop_budget
+                    ):
                         timed_out = True
                         break
                     # F-108 P108-C: stream-stall watchdog. "Activity" is
@@ -452,6 +575,23 @@ class QueryRunner:
                 stdout_len=len(stdout.getvalue()),
             )
             exit_code = 124
+        elif tool_watchdog_state.get("tripped"):
+            # F-108 P108-G — tool-level auto-recovery. The
+            # ``tool_watchdog_state['last_trip']`` payload is the
+            # most-recent trip so postmortem tooling can attribute
+            # the run outcome to a specific tool call. 126 is
+            # distinct from 124 / 125.
+            last_trip = tool_watchdog_state.get("last_trip") or {}
+            append_debug_event(
+                debug_log_path,
+                "query_runner.tool_timeout_final",
+                run_id=self.config.run_id,
+                tool=last_trip.get("tool_name"),
+                tool_use_id=last_trip.get("tool_use_id"),
+                timeout_s=last_trip.get("timeout_s"),
+                elapsed_s=last_trip.get("elapsed_s"),
+            )
+            exit_code = 126
         elif stalled:
             # Distinct from 124 so downstream can tell "budget spent
             # while working" from "provider went silent". The finally
