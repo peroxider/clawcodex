@@ -315,6 +315,7 @@ class AgentMarkdownWriter:
         self,
         agent_def: dict[str, Any],
         output_dir: Path,
+        bundle: str | Path | None = None,
     ) -> Path:
         """生成 ``.claude/agents/<name>.md``。
 
@@ -325,6 +326,10 @@ class AgentMarkdownWriter:
             ``tools``, ``skills``, ``when_to_use``。
         output_dir : Path
             输出根目录（函数会在其中创建 ``.claude/agents/``）。
+        bundle : str | Path | None
+            Optional bundle directory. When provided, the generated domain
+            agent body includes the F-55 lifecycle prompt block if the bundle
+            contains ``.clawcodex/tool-dependencies.yaml``.
 
         Returns
         -------
@@ -367,6 +372,7 @@ class AgentMarkdownWriter:
                 agent_type=name,
                 description=agent_def.get("description", ""),
                 skill_name=skill_name,
+                bundle=bundle,
             )
             # Replace markdown body after closing frontmatter fence.
             parts = content.split("---", 2)
@@ -383,6 +389,7 @@ class AgentMarkdownWriter:
         self,
         skills: list[dict[str, Any]],
         output_dir: Path,
+        bundle: str | Path | None = None,
     ) -> list[Path]:
         """生成 ``.atomcode/skills/<name>/SKILL.md`` 和参考源码片段。
 
@@ -393,6 +400,10 @@ class AgentMarkdownWriter:
             可选 ``allowed_tools``, ``parameters``, ``source_code``。
         output_dir : Path
             输出根目录。
+        bundle : str | Path | None
+            Optional bundle directory. Reserved for future lifecycle-aware
+            skill rendering; currently the caller is expected to put the
+            rendered task guide into ``skill["task_guide"]``.
 
         Returns
         -------

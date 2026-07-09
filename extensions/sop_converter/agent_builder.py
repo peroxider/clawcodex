@@ -108,6 +108,7 @@ class AgentBuilder:
                     spec,
                     mapping_rules=self._mapping_rules,
                     source_components=self._source_components,
+                    bundle=self._output_dir,
                 )
                 skill_files.append(path)
             except Exception as exc:
@@ -151,26 +152,58 @@ class AgentBuilder:
             "tools": domain_tools,
             "skills": [s.name for s in self._skills],
         }
-        agent_path = writer.write_agent(agent_def, self._output_dir)
+        agent_path = writer.write_agent(agent_def, self._output_dir, bundle=self._output_dir)
         md_files.append(agent_path)
 
         # Write skills
+        lifecycle_graph = None
+        if self._source_components:
+            try:
+                from extensions.sop_converter.dependency.models import (
+                    ToolDependencyGraph,
+                )
+
+                lifecycle_graph = ToolDependencyGraph.detect_from_components(
+                    self._source_components
+                )
+            except Exception:
+                lifecycle_graph = None
+
         skill_dicts = []
         for spec in self._skills:
             guide = ""
+            allowed_tools = list(spec.allowed_tools)
+            if lifecycle_graph is not None:
+                try:
+                    from extensions.sop_converter.composite_tools.builtin import (
+                        lifecycle_tools_for_skill,
+                    )
+
+                    extras = lifecycle_tools_for_skill(
+                        allowed_tools,
+                        lifecycle_graph,
+                        {"invoke_existing_agent": "invoke-existing-agent"},
+                    )
+                    for tool_name in extras:
+                        if tool_name not in allowed_tools:
+                            allowed_tools.insert(0, tool_name)
+                except Exception:
+                    pass
             if self._source_components:
-                guide = generate_task_guide_markdown(spec, self._source_components)
+                guide = generate_task_guide_markdown(
+                    spec, self._source_components, bundle=self._output_dir
+                )
             skill_dicts.append(
                 {
                     "name": spec.name,
                     "description": spec.description,
-                    "allowed_tools": spec.allowed_tools,
+                    "allowed_tools": allowed_tools,
                     "parameters": [],
                     "source_code": "",
                     "task_guide": guide,
                 }
             )
-        skill_paths = writer.write_skills(skill_dicts, self._output_dir)
+        skill_paths = writer.write_skills(skill_dicts, self._output_dir, bundle=self._output_dir)
         md_files.extend(skill_paths)
 
         # Build overview from grouped skills (not raw source_components).
@@ -205,6 +238,7 @@ def _write_skill_file(
     *,
     mapping_rules: list[MappingRule] | None = None,
     source_components: list[SourceComponent] | None = None,
+    bundle: str | Path | None = None,
 ) -> Path:
     """Write a SKILL.md file from a SkillSpec."""
     rules = mapping_rules or []
@@ -241,7 +275,7 @@ def _write_skill_file(
         tool_count=len(spec.allowed_tools),
     )
     if source_components:
-        body = append_task_guide_to_skill_body(body, spec, source_components)
+        body = append_task_guide_to_skill_body(body, spec, source_components, bundle=bundle)
 
     content = "\n".join(frontmatter_lines) + "\n\n" + body
     skill_file.write_text(content, encoding="utf-8")

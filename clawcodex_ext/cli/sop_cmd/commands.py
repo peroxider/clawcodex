@@ -418,6 +418,31 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 )
                 if composite_registered:
                     print(f"   Registered composite tools: {len(composite_registered)}")
+                # F-55: auto-promote lifecycle recovery composite tools into
+                # skills whose allowed_tools intersect the agent_lifecycle group.
+                try:
+                    from extensions.sop_converter.composite_tools.builtin import (
+                        lifecycle_tools_for_skill,
+                    )
+                    from extensions.sop_converter.dependency.models import (
+                        ToolDependencyGraph,
+                    )
+
+                    lifecycle_graph = ToolDependencyGraph.detect_from_components(components)
+                    for skill in grouped_skills:
+                        extras = lifecycle_tools_for_skill(
+                            skill.allowed_tools,
+                            lifecycle_graph,
+                            composite_registered,
+                        )
+                        for tool_name in extras:
+                            if tool_name not in skill.allowed_tools:
+                                skill.allowed_tools.insert(0, tool_name)
+                except Exception as exc:
+                    print(
+                        f"   Warning: lifecycle tool promotion failed: {exc}",
+                        file=sys.stderr,
+                    )
                 for skill in grouped_skills:
                     if skill.name in ("agent_teams-skill", "agent_teams"):
                         for tool_name in composite_registered:
@@ -665,7 +690,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 "tools": skill.allowed_tools,
                 "skills": [skill_name],
             }
-            writer.write_agent(agent_def, out_path)
+            writer.write_agent(agent_def, out_path, bundle=out_path)
 
         # Overview agent — always generated when there are 2+ agents
         if len(overview_info) > 1:
@@ -723,6 +748,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                     components=components,
                     contract=stage_contracts.get(skill.name),
                     tool_deps_index=tool_deps_index,
+                    bundle=out_path,
                 ),
                 encoding="utf-8",
             )
@@ -920,7 +946,7 @@ def _write_output_files(
         "tools": result.get("tools", []),
         "skills": skill_names,
     }
-    agent_path = writer.write_agent(agent_def, base)
+    agent_path = writer.write_agent(agent_def, base, bundle=base)
     print(f"   Agent: {agent_path}")
 
     # --- .atomcode/skills/<name>/SKILL.md — loadable by skill system ---
@@ -936,7 +962,7 @@ def _write_output_files(
             }
         )
     if skills_for_writer:
-        skill_paths = writer.write_skills(skills_for_writer, base)
+        skill_paths = writer.write_skills(skills_for_writer, base, bundle=base)
         for sp in skill_paths:
             print(f"   Skill: {sp}")
 

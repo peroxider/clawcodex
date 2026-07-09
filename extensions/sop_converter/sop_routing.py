@@ -218,6 +218,7 @@ def refresh_domain_agent_sop_prompts(agent_definitions: list[Any]) -> list[Any]:
             description=getattr(agent, "when_to_use", "") or "",
             skill_name=skill_name,
             sdk_source_dir=sdk_source_dir,
+            bundle=bundle.bundle_path if bundle is not None else None,
         )
         tools = sorted(POS_SOP_DOMAIN_AGENT_TOOLS)
         refreshed.append(

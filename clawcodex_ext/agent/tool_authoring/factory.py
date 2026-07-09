@@ -76,7 +76,7 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
                 call_impl = spec.call_impl
                 if call_impl.startswith("python ") or call_impl.startswith("python3 "):
                     call_impl = f"{sys.executable} {call_impl.split(' ', 1)[1]}"
-                output = execute_bash(call_impl, enriched)
+                output = execute_bash(call_impl, enriched, context=_context)
                 if "{json_args}" in spec.call_impl:
                     output = parse_sop_wrapper_stdout(output)
             elif spec.call_type == "http":

@@ -36,12 +36,17 @@ def execute_bash(
     params: dict[str, Any],
     *,
     timeout_sec: float | None = None,
+    context: Any | None = None,
 ) -> str:
     """Execute a bash command from a validated template.
 
     Args:
         command_template: A format-string command, e.g. ``"glab project view {project_id}"``.
         params: Mapping of placeholder names to resolved values.
+        context: Optional tool context. When provided and a bundle context is
+            attached, ``CLAWCODEX_BUNDLE_PATH`` is injected into the subprocess
+            environment so wrapper scripts can locate bundle-local artifacts
+            regardless of the current working directory.
 
     Returns:
         stdout from the subprocess.
@@ -59,6 +64,15 @@ def execute_bash(
     if timeout_sec is None:
         timeout_sec = resolve_agent_tool_bash_timeout_sec()
 
+    env: dict[str, str] | None = None
+    if context is not None:
+        bundle = getattr(context, "bundle_context", None)
+        if bundle is not None:
+            bundle_path = getattr(bundle, "bundle_path", None)
+            if bundle_path is not None:
+                env = dict(os.environ)
+                env["CLAWCODEX_BUNDLE_PATH"] = str(bundle_path)
+
     try:
         result = subprocess.run(
             command,
@@ -68,6 +82,7 @@ def execute_bash(
             encoding="utf-8",
             errors="replace",
             timeout=timeout_sec,
+            env=env,
         )
     except subprocess.TimeoutExpired as exc:
         raise BashCallError(f"Command timed out after {int(timeout_sec)}s: {command[:80]}") from exc

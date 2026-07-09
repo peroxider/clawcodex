@@ -14,6 +14,7 @@ Available builtins
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from .models import CompositeStage, CompositeToolSpec
 
@@ -210,7 +211,45 @@ def _shell_quote(s: str) -> str:
     return "'" + s.replace("'", "'\\''") + "'"
 
 
-def _invoke_existing_agent(*, bundle_dir: Path | None = None) -> CompositeToolSpec:
+def lifecycle_tools_for_skill(
+    skill_allowed_tools: list[str],
+    graph: Any,
+    composite_name_map: dict[str, str],
+    intent_group_name: str = "agent_lifecycle",
+) -> list[str]:
+    """Return composite recovery tools that should be prepended to *skill*.
+
+    If any of the skill's allowed tools intersect the tools listed in the
+    named intent group (after normalizing graph keys to kebab-case), the
+    matching lifecycle recovery composite tools are returned.
+    """
+    if graph is None:
+        return []
+
+    get_intent_group = getattr(graph, "get_intent_group", None)
+    if not callable(get_intent_group):
+        return []
+    group = get_intent_group(intent_group_name)
+    if group is None:
+        return []
+
+    def _norm(key: str) -> str:
+        return key.replace(".", "-").replace("_", "-").lower()
+
+    group_tools = {_norm(t) for t in getattr(group, "tools", []) if isinstance(t, str)}
+    if not any(t in group_tools for t in skill_allowed_tools):
+        return []
+
+    recovery_map: dict[str, list[str]] = {
+        "agent_lifecycle": ["invoke_existing_agent"],
+    }
+    result: list[str] = []
+    for spec_name in recovery_map.get(intent_group_name, []):
+        registered = composite_name_map.get(spec_name)
+        if registered and registered not in result:
+            result.append(registered)
+    return result
+
     """Invoke a previously-created SOP agent by ``agent_id``.
 
     The tool looks up the agent in the bundle-local (or home-fallback)
