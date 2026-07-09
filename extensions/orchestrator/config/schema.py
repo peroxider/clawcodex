@@ -435,6 +435,18 @@ class WorkerConfig:
 @dataclass
 class VerificationConfig:
     timeout_ms: int = 600_000
+    # Regression guard (defect R1): when ``agent.test_command`` is empty,
+    # verification used to pass vacuously — an agent could break hundreds
+    # of existing tests and still ship a "completed" MR. With the guard
+    # enabled, git-sync falls back to an auto-detected test run (pytest
+    # today) and compares failures against the pre-change baseline; only
+    # net-new failures block the push. Repos with no detectable test
+    # suite record ``verification_status=skipped_no_tests`` instead of
+    # pretending to have passed.
+    regression_guard: bool = True
+    # Explicit fallback command (overrides auto-detection). Runs from the
+    # workspace root; non-zero exit = failing tests.
+    fallback_test_command: str = ''
 
 
 @dataclass
@@ -943,7 +955,13 @@ class WorkflowConfig:
             test_command=_resolve_env_value(agent_raw.get("test_command")) or "",
             build_command=_resolve_env_value(agent_raw.get("build_command")) or "",
             lint_command=_resolve_env_value(agent_raw.get("lint_command")) or "",
-            verification=VerificationConfig(timeout_ms=verification_raw.get("timeout_ms", 600_000)),
+            verification=VerificationConfig(
+                timeout_ms=verification_raw.get("timeout_ms", 600_000),
+                regression_guard=bool(verification_raw.get("regression_guard", True)),
+                fallback_test_command=(
+                    _resolve_env_value(verification_raw.get("fallback_test_command")) or ""
+                ),
+            ),
             # F-39 Sub-F
             max_retries_per_issue=agent_raw.get("max_retries_per_issue", 3),
             allow_anyone_to_retry=bool(agent_raw.get("allow_anyone_to_retry", False)),

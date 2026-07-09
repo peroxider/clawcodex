@@ -36,6 +36,7 @@ from .modes.coordinator import CoordinatorModeRunner
 from .modes.debate import DebateModeRunner
 from .modes.pipeline import PipelineModeRunner
 from .modes.single import SingleModeRunner
+from .premise_check import format_cannot_proceed_comment, read_cannot_proceed
 from .prompt_builder import PromptBuilder
 from .review_feedback import ReviewFeedbackService, ReviewFollowup
 from .rules_learner import BatchedLLMJudge, RuleEngine, RuleStore
@@ -2548,6 +2549,45 @@ class Orchestrator:
                         "loop_detected",
                         "max_turns_exceeded",
                     ):
+                        # Honest-exit channel (defect R3): the agent declared
+                        # the issue premise unfulfillable (e.g. it references
+                        # a file that does not exist). Report the finding back
+                        # to the issue and mark FAILED instead of falling
+                        # through to git_sync — which would either open an MR
+                        # around a fabricated fix or an empty branch.
+                        _cannot = read_cannot_proceed(getattr(session.workspace, 'path', None))
+                        if _cannot is not None:
+                            _reason = str(_cannot.get('reason', 'cannot_proceed'))
+                            session.status = 'failed'
+                            session.session_end_reason = 'premise_not_met'
+                            session.session_end_summary = str(_cannot.get('details', ''))[:500]
+                            logger.warning(
+                                'Issue %s: agent declared cannot_proceed (%s) — '
+                                'marking FAILED without creating a PR',
+                                session.issue.id,
+                                _reason,
+                            )
+                            self._registry.mark_failed_with_reason(
+                                session.issue.id or '',
+                                f'premise_not_met ({_reason}): agent declared the issue '
+                                'cannot honestly be completed; no PR created.',
+                            )
+                            try:
+                                await self.tracker.create_comment(
+                                    session.issue.id or '',
+                                    format_cannot_proceed_comment(session.issue, _cannot),
+                                )
+                            except Exception:
+                                logger.warning(
+                                    'Issue %s: failed to post cannot_proceed comment',
+                                    session.issue.id,
+                                    exc_info=True,
+                                )
+                            await self._sync_tracker_issue_state(session.issue.id or '', 'failed')
+                            self.status_dashboard.on_session_complete(session.issue.id or '')
+                            self._state.completed.add(session.issue.id or '')
+                            self._state.failed.add(session.issue.id or '')
+                            return
                         # Safety net: verify workspace has actual changes before git_sync.
                         # If agent reported "completed" but workspace is clean (no uncommitted
                         # changes, no HEAD change), mark as failed to avoid empty PRs.

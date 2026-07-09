@@ -242,7 +242,10 @@ class TestGitSyncService(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Pull request: https://example.test/pr/9", tracker.updated_comments[0][2])
             self.assertEqual(len(tracker.pr_updates), 1)
             assert tracker.pr_updates[0][2] is not None
-            self.assertIn("Verification: `passed`", tracker.pr_updates[0][2])
+            # The seed repo has no test suite: with the regression guard in
+            # place an empty test_command is no longer a vacuous "passed" —
+            # the PR body now says so explicitly.
+            self.assertIn("Verification: `skipped_no_tests`", tracker.pr_updates[0][2])
             self.assertIn("Report: `", tracker.pr_updates[0][2])
 
     async def test_followup_sync_reuses_existing_pr_and_uses_fix_commit(self) -> None:
