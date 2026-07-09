@@ -40,6 +40,7 @@ from clawcodex_ext.command_system.statusline import STATUSLINE_COMMAND
 from clawcodex_ext.command_system.security_review import SECURITY_REVIEW_COMMAND
 from clawcodex_ext.command_system.proactive_command import PROACTIVE_COMMAND
 from clawcodex_ext.command_system.btw_command import BTW_COMMAND
+from clawcodex_ext.command_system.monitor_command import MONITOR_COMMAND
 # F-120 Agent Dashboard — ``/dashboard`` cross-system read-only view.
 from clawcodex_ext.command_system.dashboard_command import DASHBOARD_COMMAND
 
@@ -1540,6 +1541,7 @@ def get_builtin_commands() -> list[Command]:
         EXIT_COMMAND,
         HELP_COMMAND,
         INIT_COMMAND,
+        MONITOR_COMMAND,
         SKILLS_COMMAND,
         TELEMETRY_COMMAND,
         # Upstream interactive/prompt commands (b24b8cb)

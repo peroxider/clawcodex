@@ -90,6 +90,15 @@ def ensure_eager_extensions_installed() -> None:
 
     _init_provider_extensions()
 
+    # F-88 Monitor — install runtime hooks (TUI keybinding, stall watchdog
+    # exemption) after upstream modules are fully loaded.
+    try:
+        from clawcodex_ext.services.monitor.install import install_monitor_extensions
+
+        install_monitor_extensions()
+    except Exception:  # noqa: BLE001 — never break agent init
+        pass
+
 
 # ---------------------------------------------------------------------------
 # Nested-transcript lazy initializer (unchanged semantics)

@@ -74,6 +74,7 @@ from .screens.idle_return import IdleReturnScreen
 from .screens.mcp_dialogs import McpListScreen, McpServer
 from .screens.message_selector import MessageSelectorScreen, TranscriptMessage
 from .screens.model_picker import ModelPickerScreen
+from .screens.monitor_panel import MonitorPanel
 from .screens.permission_mode_picker import PermissionModePickerScreen
 from .screens.repl import REPLScreen
 from .screens.resume_conversation import ResumeConversation
@@ -145,6 +146,7 @@ class ClawCodexTUI(App):
         ("ctrl+b", "agent_background", "Background agent"),
         ("ctrl+t", "toggle_thinking", "Toggle thinking"),
         ("shift+tab", "cycle_permission_mode", "Cycle permission mode"),
+        ("shift+down", "monitor_panel", "Monitor"),
     ]
 
     def __init__(
@@ -583,6 +585,12 @@ class ClawCodexTUI(App):
         if self._runtime_permission_controller is None:
             return
         self._runtime_permission_controller.cycle()
+
+    def action_monitor_panel(self) -> None:
+        """Shift+Down: open the F-88 monitor task panel."""
+        if self.tool_context is None:
+            return
+        self.push_screen(MonitorPanel(self.tool_context))
 
     def _post_permission_mode_changed(self, mode: str) -> None:
         """Notify hook for the runtime permission controller.

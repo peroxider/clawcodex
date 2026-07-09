@@ -749,6 +749,23 @@ class TestStage5ExtToolSystem:
         assert callable(make_create_agent_tool)
         assert ProgressReportTool is not None
 
+    def test_monitor_tool_import(self):
+        """F-88 Monitor tool and controller import without side effects."""
+        from clawcodex_ext.services.monitor import (
+            MonitorController,
+            StallWatchdogExemptor,
+            TextTailFollower,
+            normalize_watch_command,
+        )
+        from clawcodex_ext.tool_system.tools.monitor import MonitorTool
+
+        assert MonitorController is not None
+        assert StallWatchdogExemptor is not None
+        assert TextTailFollower is not None
+        assert callable(normalize_watch_command)
+        assert MonitorTool is not None
+        assert MonitorTool.name == "Monitor"
+
 
 class TestStage5ExtContextSystem:
     """Context system 扩展测试。"""

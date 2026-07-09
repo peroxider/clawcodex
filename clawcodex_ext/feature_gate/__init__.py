@@ -204,6 +204,11 @@ _DEFAULT_FLAGS: list[FeatureFlag] = [
         description="Enable proactive tick-driven autonomous mode (F-89)",
     ),
     FeatureFlag(
+        name="MONITOR_TOOL",
+        default=False,
+        description="Enable the F-88 Monitor tool and /monitor slash command",
+    ),
+    FeatureFlag(
         name="logical_kanban",
         default=False,
         description=(

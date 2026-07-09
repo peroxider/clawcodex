@@ -28,6 +28,7 @@ from .mcp import MCPTool
 from .notebook_edit import NotebookEditTool
 from .mcp_resources import ListMcpResourcesTool, ReadMcpResourceTool
 from .misc import ClipboardReadTool, ClipboardWriteTool, StatusTool
+from .monitor import MonitorTool
 from .plan_mode import EnterPlanModeTool, ExitPlanModeTool
 from .read import ReadTool
 from .remote_trigger import RemoteTriggerTool
@@ -80,6 +81,7 @@ ALL_STATIC_TOOLS: list[Tool] = [
     LSPTool,
     ListMcpResourcesTool,
     MCPTool,
+    MonitorTool,
     NotebookEditTool,
     ReadMcpResourceTool,
     ReadTool,
@@ -133,6 +135,7 @@ __all__ = [
     "LSPTool",
     "ListMcpResourcesTool",
     "MCPTool",
+    "MonitorTool",
     "NotebookEditTool",
     "ReadMcpResourceTool",
     "ReadTool",

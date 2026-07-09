@@ -18,7 +18,10 @@ from __future__ import annotations
 import os
 import subprocess
 from dataclasses import dataclass, field
-from typing import IO, Any, Literal, TYPE_CHECKING
+from typing import IO, Any, Literal, TYPE_CHECKING, TypeAlias
+
+# F-88: task kind discriminator mirroring CCB LocalShellTask.tsx.
+TaskKind: TypeAlias = Literal['shell', 'monitor']
 
 from clawcodex_ext.tasks_core import TaskStateBase
 
@@ -58,6 +61,12 @@ class LocalShellTaskState(TaskStateBase):
     proc: subprocess.Popen | None = field(default=None, repr=False, compare=False)
     handle: IO[bytes] | None = field(default=None, repr=False, compare=False)
 
+    # F-88 Monitor fields (all have defaults so existing callers keep working).
+    kind: TaskKind = 'shell'           # 'shell' = normal background bash; 'monitor' = long-running monitor
+    interval_sec: int | None = None    # watch interval when kind == 'monitor'
+    tail_buffer_size: int = 200_000    # TUI tail buffer size (bytes)
+    auto_refresh: bool = False         # TUI auto-refresh flag
+
     def derived_status(self) -> Literal['running', 'completed', 'failed']:
         """Compute the legacy three-value status string used by the bash
         background reader. Independent of ``self.status`` (which uses the
@@ -85,6 +94,8 @@ class LocalShellTaskState(TaskStateBase):
             '_handle': self.handle,
             'exit_code': self.exit_code,
             'finished_at': self.finished_at,
+            'kind': self.kind,
+            'interval_sec': self.interval_sec,
         }
 
 
@@ -136,4 +147,5 @@ __all__ = [
     'LocalShellTaskState',
     'LocalShellTask',
     'is_local_shell_task',
+    'TaskKind',
 ]

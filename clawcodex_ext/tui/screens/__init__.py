@@ -29,6 +29,7 @@ _NAME_TO_MODULE = {
     "McpToolListScreen": "mcp_dialogs",
     "MessageSelectorScreen": "message_selector",
     "ModelPickerScreen": "model_picker",
+    "MonitorPanel": "monitor_panel",
     "PermissionModal": "permission_modal",
     "PermissionModePickerScreen": "permission_mode_picker",
     "REPLScreen": "repl",
