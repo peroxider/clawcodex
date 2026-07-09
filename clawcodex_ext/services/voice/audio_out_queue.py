@@ -112,6 +112,31 @@ class AudioOutQueue:
             except asyncio.QueueFull:
                 logger.debug("AudioOutQueue still full after drop — frame skipped")
 
+    def clear(self) -> int:
+        """Drop every buffered frame without changing the closed state.
+
+        Used by the full-duplex dialogue interrupt path (F-65 P65-C): the
+        user barges in mid-playback, we cancel the response on the
+        server side AND discard whatever PCM frames haven't been written
+        to the device yet — otherwise the speaker would play a 200ms
+        tail of the interrupted reply and undercut the barge-in.
+
+        Returns the number of frames dropped (for logging / metrics).
+        Idempotent: clearing an empty or already-closed queue is safe
+        and returns 0 — we deliberately don't reopen a closed queue
+        because the producer (TTS task) is dead at that point.
+        """
+        dropped = 0
+        while True:
+            try:
+                self._q.get_nowait()
+                dropped += 1
+            except asyncio.QueueEmpty:
+                break
+        if dropped:
+            logger.debug("AudioOutQueue.clear() dropped %d frames", dropped)
+        return dropped
+
     async def close(self) -> None:
         """Signal end-of-stream and wake the consumer.
 

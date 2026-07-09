@@ -1,4 +1,4 @@
-"""Voice subsystem — F-64 Voice Mode.
+"""Voice subsystem — F-64 Voice Mode + F-65 Voice Dialogue.
 
 Provides speech-to-text and voice activity detection, plus the
 push-to-talk recording controller and STT provider registry. P64-E
@@ -21,6 +21,12 @@ Layering (F-64):
 * :mod:`audio_player` — PyAudio / SoX / ffplay PCM player (P64-E8).
 * :mod:`audio_recorder` — cross-platform PCM capture (P64-B).
 * :mod:`push_to_talk` — recording session orchestrator (P64-B).
+
+Layering (F-65 P65-A/B/C/D):
+* :mod:`dialogue` — FullDuplexDialogueProvider ABC (new).
+* :mod:`minimax_realtime_dialogue` — MiniMax Realtime full-duplex adapter.
+* :mod:`interrupt` — energy-based VAD for barge-in.
+* :mod:`dialogue_session` — DialogueSessionManager state machine.
 """
 
 from __future__ import annotations
@@ -79,14 +85,18 @@ from .gemini_tts import (
     GeminiTTSProvider,
 )
 from .provider_registry import (
+    DIALOGUE_REGISTRY,
+    DialogueProviderFactory,
     STT_REGISTRY,
     STTProviderFactory,
     TTS_REGISTRY,
     TTSProviderFactory,
     get_stt_provider,
     get_tts_provider,
+    list_dialogue_providers,
     list_stt_providers,
     list_tts_providers,
+    register_dialogue_provider,
     register_stt_provider,
     register_tts_provider,
 )
@@ -98,15 +108,30 @@ from .push_to_talk import (
 from .stt import STTConfig, STTProvider, STTResult
 from .voice_mode_enabled import (
     VOICE_PROVIDERS,
-    VoiceProvider,
+    DIALOGUE_PROVIDERS,
+    DialogueProvider,
+    get_dialogue_provider as get_dialogue_provider_settings,
     get_voice_provider,
+    has_dialogue_auth,
     has_voice_auth,
+    is_dialogue_available,
+    is_dialogue_enabled,
+    is_dialogue_feature_enabled,
     is_voice_available,
     is_voice_disabled_by_kill_switch,
     is_voice_enabled,
     is_voice_feature_enabled,
     is_voice_mode_enabled,
 )
+
+# F-65 dialogue modules — dialogue.py / interrupt.py / dialogue_session
+# .py / minimax_realtime_dialogue.py — are deliberately NOT imported
+# here. They live behind a ``__getattr__`` lazy resolver below to keep
+# REPL cold-start unaffected: a typical F-64-only install never
+# touches ``/dialogue`` and shouldn't pay the import cost (Stage-6
+# perf invariant). The provider factory function (``get_dialogue_provider``)
+# is the canonical entry point used by the ``/dialogue`` command and
+# resolves the dialogue modules on demand.
 
 __all__ = [
     # Detection + STT base
@@ -116,7 +141,7 @@ __all__ = [
     "VoiceActivityConfig",
     "VoiceActivityDetector",
     "VoiceActivityState",
-    # Voice-mode gating
+    # Voice-mode gating (F-64)
     "VOICE_PROVIDERS",
     "VoiceProvider",
     "get_voice_provider",
@@ -126,17 +151,29 @@ __all__ = [
     "is_voice_enabled",
     "is_voice_feature_enabled",
     "is_voice_mode_enabled",
-    # Provider registries (STT + TTS)
+    # Dialogue-mode gating (F-65)
+    "DIALOGUE_PROVIDERS",
+    "DialogueProvider",
+    "get_dialogue_provider_settings",
+    "has_dialogue_auth",
+    "is_dialogue_available",
+    "is_dialogue_enabled",
+    "is_dialogue_feature_enabled",
+    # Provider registries (STT + TTS + Dialogue)
     "STT_REGISTRY",
     "STTProviderFactory",
     "TTS_REGISTRY",
     "TTSProviderFactory",
+    "DIALOGUE_REGISTRY",
+    "DialogueProviderFactory",
     "get_stt_provider",
     "get_tts_provider",
     "list_stt_providers",
     "list_tts_providers",
     "register_stt_provider",
     "register_tts_provider",
+    "register_dialogue_provider",
+    "list_dialogue_providers",
     # Anthropic STT backend
     "ANTHROPIC_VOICE_ENDPOINT",
     "AnthropicSTTProvider",
@@ -189,3 +226,60 @@ __all__ = [
     "VoiceSessionResult",
     "VoiceSessionState",
 ]
+
+
+def __getattr__(name: str):
+    """Lazy attribute resolution for F-65 dialogue types.
+
+    ``dialogue`` / ``interrupt`` / ``dialogue_session`` /
+    ``minimax_realtime_dialogue`` aren't imported at module scope — that
+    would force the (potentially unused) ``websockets`` import at REPL
+    boot. They're pulled in on first attribute access via this hook.
+    Keeping the resolver here means ``from clawcodex_ext.services.
+    voice import FullDuplexDialogueProvider`` Just Works without
+    changing import semantics for the F-64 surface.
+    """
+    if name in (
+        "DialogueConfig",
+        "DialogueEvent",
+        "FullDuplexDialogueProvider",
+        "DialogueState",
+        "DialogueModality",
+    ):
+        from . import dialogue as _dialogue_mod
+
+        return getattr(_dialogue_mod, name)
+    if name in (
+        "InterruptConfig",
+        "InterruptDecision",
+        "InterruptDetector",
+    ):
+        from . import interrupt as _interrupt_mod
+
+        return getattr(_interrupt_mod, name)
+    if name in (
+        "DialogueSessionManager",
+        "DialogueSessionState",
+        "DialogueSessionCallbacks",
+        "DialogueSessionOptions",
+    ):
+        from . import dialogue_session as _session_mod
+
+        return getattr(_session_mod, name)
+    if name in (
+        "MINIMAX_REALTIME_CREDENTIALS_PATH",
+        "MINIMAX_REALTIME_ENDPOINTS",
+        "MiniMaxCredentialsError",
+        "MiniMaxRealtimeDialogueProvider",
+    ):
+        from . import minimax_realtime_dialogue as _minimax_mod
+
+        return getattr(_minimax_mod, name)
+    if name == "get_dialogue_provider":
+        # The registry helper (factory) is the one used by /dialogue.
+        # The settings-backed getter is exposed as
+        # ``get_dialogue_provider_settings`` to avoid ambiguity.
+        from .provider_registry import get_dialogue_provider as _factory
+
+        return _factory
+    raise AttributeError(f"module 'clawcodex_ext.services.voice' has no attribute {name!r}")

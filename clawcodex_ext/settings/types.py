@@ -20,6 +20,21 @@ _PERMISSIONS_KNOWN_SUBKEYS: frozenset[str] = frozenset(
     }
 )
 
+# F-108 P108-E — keys covered by ``FreezeSettings``. Unknown
+# ``freeze.*`` sub-keys flow into ``FreezeSettings.additional`` (forward-
+# compat bag) so the on-disk JSON can carry schema additions without a
+# code change.
+_FREEZE_KNOWN_SUBKEYS: frozenset[str] = frozenset(
+    {
+        "agent_loop_timeout_s",
+        "turn_timeout_s",
+        "tool_timeout_s",
+        "permission_timeout_s",
+        "threshold_s",
+        "dump_dir",
+    }
+)
+
 
 @dataclass
 class PermissionsConfig:
@@ -133,12 +148,110 @@ class SpinnerVerbsSettings:
 
 
 @dataclass
+class FreezeSettings:
+    """Layer-2/Layer-1 freeze-detection timeouts (F-108 §十八 P108-E).
+
+    Each knob is the wall-clock budget (in seconds) for an outer /
+    middle / inner watchdog. ``0`` disables that layer and lets the
+    underlying loop run indefinitely (F-108 §十八 design decision #5).
+
+    Resolution order (handled by :mod:`clawcodex_ext.diagnostics.freeze_config`):
+
+    1. ``freez_settings.<key>`` (this dataclass)
+    2. ``CLAWCODEX_<KEY>`` environment variable (with ``timeout_s`` →
+       no suffix; ``threshold_s`` → ``CLAWCODEX_FREEZE_THRESHOLD``,
+       see the mapping in ``freeze_config.env_var_for``).
+    3. Built-in default (the dataclass default itself).
+
+    The TUI/agent_bridge honors ``permission_timeout_s`` for modal
+    auto-deny (risk #2 #3 in F-108 §十八). The headless / API runner
+    honors ``agent_loop_timeout_s``. The query loop layer-2 stack
+    uses ``turn_timeout_s`` and ``tool_timeout_s``. The freeze
+    watchdog uses ``threshold_s`` (staggered below the
+    ``stream_idle_timeout`` to avoid double-killing).
+
+    F-108 §十八 design decisions:
+
+    * 30 s for permission modal — below plausible render time but
+      long enough for the user to react.
+    * 600 s for the agent loop outer budget — covers long planning
+      tasks.
+    * 60 s for the freeze threshold — staggered below the 90 s
+      ``StreamWatchdog`` so the two detectors act at different
+      moments and never race.
+    """
+
+    agent_loop_timeout_s: float = 600.0
+    turn_timeout_s: float = 300.0
+    tool_timeout_s: float = 120.0
+    permission_timeout_s: float = 30.0
+    # ``threshold_s`` is the wall-clock gap before the watchdog
+    # declares the agent loop frozen. It MUST be < turn_timeout_s so
+    # the threshold trips first and dumps a stack before the layer-2
+    # budget fires.
+    threshold_s: float = 60.0
+    # Diagnostic dump directory. When unset, defaults to the OS temp
+    # dir + ``clawcodex-freeze`` (see ``freeze_config.dump_path``).
+    dump_dir: str | None = None
+
+
+@dataclass
 class CompactSettings:
     """Compaction settings."""
 
     auto_compact: bool = True
     threshold_tokens: int = 100_000
     max_compact_retries: int = 3
+
+
+@dataclass
+class FreezeSettings:
+    """Layer-2/Layer-1 freeze-detection timeouts (F-108 P108-E).
+
+    Each knob is the wall-clock budget (in seconds) for an outer /
+    middle / inner watchdog. ``0`` disables that layer and lets the
+    underlying loop run indefinitely (F-108 design decision #5).
+
+    Resolution order (handled by
+    :mod:`clawcodex_ext.diagnostics.freeze_config`):
+
+    1. ``freeze.<key>`` (this dataclass)
+    2. ``CLAWCODEX_<KEY>`` environment variable (``agent_loop_timeout_s``
+       -> ``CLAWCODEX_AGENT_LOOP_TIMEOUT``, ``threshold_s`` ->
+       ``CLAWCODEX_FREEZE_THRESHOLD``, etc; see
+       ``freeze_config.ENV_VAR_FOR``).
+    3. Built-in default (the dataclass default itself).
+
+    The TUI/agent_bridge honours ``permission_timeout_s`` for modal
+    auto-deny (risks #2 #3 in F-108). The headless / API runner
+    honours ``agent_loop_timeout_s``. The query loop layer-2 stack
+    uses ``turn_timeout_s`` and ``tool_timeout_s``. The freeze
+    watchdog uses ``threshold_s`` (staggered below the
+    ``stream_idle_timeout`` so the two detectors don't double-fire).
+
+    F-108 design decisions:
+
+    * 30 s for permission modal — below plausible render time
+      but long enough for the user to react.
+    * 600 s for the agent loop outer budget — covers long planning
+      tasks.
+    * 60 s for the freeze threshold — staggered below the 90 s
+      ``StreamWatchdog`` so the two detectors act at different
+      moments.
+    """
+
+    agent_loop_timeout_s: float = 600.0
+    turn_timeout_s: float = 300.0
+    tool_timeout_s: float = 120.0
+    permission_timeout_s: float = 30.0
+    # ``threshold_s`` is the wall-clock gap before the watchdog
+    # declares the agent loop frozen. It MUST be < turn_timeout_s so
+    # the threshold trips first and dumps a stack before the layer-2
+    # budget fires.
+    threshold_s: float = 60.0
+    # Diagnostic dump directory. When unset, defaults to the OS temp
+    # dir + ``clawcodex-freeze`` (see ``freeze_config.dump_path``).
+    dump_dir: str | None = None
 
 
 @dataclass
@@ -235,6 +348,12 @@ class SettingsSchema:
     # Compact
     compact: CompactSettings = field(default_factory=CompactSettings)
 
+    # F-108 P108-E — freeze / layer-1 / layer-2 budgets. Declared as a
+    # structured block (mirrors ``compact``) so per-knob reset / env-var
+    # resolution stays inside the dataclass — ``from_dict`` reads it back
+    # automatically when the on-disk JSON matches the dataclass shape.
+    freeze: FreezeSettings = field(default_factory=FreezeSettings)
+
     # Hooks
     hooks: HookSettings = field(default_factory=HookSettings)
 
@@ -315,6 +434,19 @@ class SettingsSchema:
     tts_voice: str = ""
     tts_silent_text_output: bool = False
 
+    # ── F-65 P65-D Voice Dialogue (full-duplex) ─────────────────────────
+    # Decoupled from the F-64 voice_* / tts_* knobs so the two voice modes
+    # can ship independently: a F-64 user can keep their STT setup while
+    # ignoring dialogue, and vice versa. Defaults match the F-65 plan
+    # ("minimax" primary backend, text-modality for the first iteration so
+    # the caller routes through its own LLM before TTS — easier to debug
+    # than the audio modality in MVP).
+    dialogue_provider: str = ""  # "" | "minimax" | "openai-realtime"
+    dialogue_enabled: bool = False
+    dialogue_voice: str = ""  # backend-specific TTS voice id
+    dialogue_modality: str = "text"  # "text" | "audio" — output modality
+    dialogue_interim_results: bool = True  # forward to provider
+
     # Extra raw fields for forward compatibility
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -361,6 +493,8 @@ class SettingsSchema:
             known["spinner_verbs"] = SpinnerVerbsSettings(**known["spinner_verbs"])
         if "compact" in known and isinstance(known["compact"], dict):
             known["compact"] = CompactSettings(**known["compact"])
+        if "freeze" in known and isinstance(known["freeze"], dict):
+            known["freeze"] = FreezeSettings(**known["freeze"])
         if "hooks" in known and isinstance(known["hooks"], dict):
             known["hooks"] = HookSettings(**known["hooks"])
         if "tools" in known and isinstance(known["tools"], dict):

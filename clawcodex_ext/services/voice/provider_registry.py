@@ -1,15 +1,15 @@
-"""STT + TTS provider registries — F-64 P64-A / P64-E7.
+"""STT + TTS + Dialogue provider registries — F-64 / F-65.
 
-Two parallel registries that map provider names to *factory* callables
-producing :class:`STTProvider` / :class:`TTSProvider` instances. The
-factory pattern lets us defer heavy imports (``websockets`` for
-Anthropic/MiniMax, ``doubaoime-asr`` for doubao, ``google-genai`` for
-Gemini — all optional) until the user actually starts a recording or
-synthesis, rather than at REPL boot.
+Three parallel registries that map provider names to *factory* callables
+producing :class:`STTProvider` / :class:`TTSProvider` /
+:class:`FullDuplexDialogueProvider` instances. The factory pattern lets us
+defer heavy imports (``websockets`` for Anthropic/MiniMax, ``doubaoime-asr``
+for doubao, ``google-genai`` for Gemini — all optional) until the user
+actually starts a recording or synthesis, rather than at REPL boot.
 
 This lives in the patch layer (``clawcodex_ext``) so third-party
-extensions in ``extensions/`` could register additional STT/TTS backends
-via the same entry points without touching upstream.
+extensions in ``extensions/`` could register additional STT/TTS/dialogue
+backends via the same entry points without touching upstream.
 """
 
 from __future__ import annotations
@@ -22,14 +22,19 @@ from .tts import TTSProvider
 __all__ = [
     "STTProviderFactory",
     "TTSProviderFactory",
+    "DialogueProviderFactory",
     "register_stt_provider",
     "register_tts_provider",
+    "register_dialogue_provider",
     "get_stt_provider",
     "get_tts_provider",
+    "get_dialogue_provider",
     "list_stt_providers",
     "list_tts_providers",
+    "list_dialogue_providers",
     "STT_REGISTRY",
     "TTS_REGISTRY",
+    "DIALOGUE_REGISTRY",
 ]
 
 
@@ -41,8 +46,22 @@ class TTSProviderFactory(Protocol):
     def __call__(self) -> TTSProvider: ...
 
 
+class DialogueProviderFactory(Protocol):
+    """Factory returning a fresh full-duplex dialogue provider.
+
+    Mirrors the STT/TTS factory signatures: a no-arg callable that
+    constructs a brand-new instance. ``FullDuplexDialogueProvider`` is
+    stateful (one WebSocket per session) so the registry helper
+    :func:`get_dialogue_provider` constructs a new instance per call —
+    callers own its lifecycle via ``start`` / ``stop`` / ``close``.
+    """
+
+    def __call__(self) -> "FullDuplexDialogueProvider": ...  # type: ignore[name-defined]  # noqa: F821
+
+
 STT_REGISTRY: dict[str, STTProviderFactory] = {}
 TTS_REGISTRY: dict[str, TTSProviderFactory] = {}
+DIALOGUE_REGISTRY: dict[str, DialogueProviderFactory] = {}
 
 
 def register_stt_provider(name: str, factory: STTProviderFactory) -> None:
@@ -51,6 +70,10 @@ def register_stt_provider(name: str, factory: STTProviderFactory) -> None:
 
 def register_tts_provider(name: str, factory: TTSProviderFactory) -> None:
     TTS_REGISTRY[name.lower()] = factory
+
+
+def register_dialogue_provider(name: str, factory: DialogueProviderFactory) -> None:
+    DIALOGUE_REGISTRY[name.lower()] = factory
 
 
 def get_stt_provider(name: str) -> STTProvider:
@@ -67,12 +90,38 @@ def get_tts_provider(name: str) -> TTSProvider:
     return factory()
 
 
+def get_dialogue_provider(name: str) -> "FullDuplexDialogueProvider":  # type: ignore[name-defined]  # noqa: F821
+    """Construct (not reuse) a full-duplex dialogue provider.
+
+    Unlike STT/TTS providers which are typically stateless wrappers, the
+    F-65 dialogue provider is *session-scoped* (a live WebSocket + pump
+    tasks per session). Returning a fresh instance per call sidesteps
+    any cross-session state leak; the caller (``DialogueSessionManager``
+    in P65-B) owns it for the duration of one session.
+    """
+    # Local import: ABC lives in dialogue.py which imports ``websockets``
+    # not at module scope, but keeping the import local makes the
+    # dependency graph explicit at the only call site that materialises
+    # the type. Anything that uses STT/TTS paths never touches
+    # ``dialogue.py`` so the cold-start cost stays zero (F-64 STG-6 perf).
+    from .dialogue import FullDuplexDialogueProvider
+
+    factory = DIALOGUE_REGISTRY.get(name.lower())
+    if factory is None:
+        raise KeyError(f"Dialogue provider not registered: {name!r}")
+    return factory()
+
+
 def list_stt_providers() -> list[str]:
     return sorted(STT_REGISTRY)
 
 
 def list_tts_providers() -> list[str]:
     return sorted(TTS_REGISTRY)
+
+
+def list_dialogue_providers() -> list[str]:
+    return sorted(DIALOGUE_REGISTRY)
 
 
 def _register_builtins() -> None:
@@ -115,6 +164,21 @@ def _register_builtins() -> None:
     register_tts_provider("openai", _openai_tts_factory)
     register_tts_provider("minimax", _minimax_tts_factory)
     register_tts_provider("gemini", _gemini_tts_factory)
+
+    # F-65 P65-A: full-duplex dialogue factories. Local-import the
+    # provider class inside the factory so REPL cold-start doesn't pay
+    # for the websockets import unless the user actually starts a
+    # dialogue session. Matches the F-64 STT/TTS lazy-load pattern.
+    def _minimax_dialogue_factory() -> "FullDuplexDialogueProvider":  # type: ignore[name-defined]  # noqa: F821
+        from .minimax_realtime_dialogue import MiniMaxRealtimeDialogueProvider
+
+        return MiniMaxRealtimeDialogueProvider()
+
+    register_dialogue_provider("minimax", _minimax_dialogue_factory)
+    # ``openai-realtime`` is reserved for the P65-E reference adapter;
+    # registering here would require pulling OpenAI-specific deps at
+    # import time. Left as a future entry; ``/dialogue openai-realtime``
+    # will surface "provider not registered" until that ships.
 
 
 _register_builtins()

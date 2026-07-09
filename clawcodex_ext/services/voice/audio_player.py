@@ -279,8 +279,45 @@ class AudioPlayer:
             pa.terminate()
 
     async def stop(self) -> None:
-        """Cancel the drain task and release the queue."""
+        """Cancel the drain task and release the queue.
+
+        Original behaviour preserved: this is the path used by the
+        TTS-driven agent reply flow at the end of a synthesis. Closes
+        the queue (so any further ``push`` is a no-op) and cancels the
+        drain task.
+
+        For F-65 P65-C full-duplex barge-in we instead want
+        :meth:`stop_nowait` — cancel without closing the queue so the
+        same player can be reused for the next turn.
+        """
         await self._queue.close()
+        await self._cancel_task()
+
+    async def stop_nowait(self) -> None:
+        """Cancel the drain task immediately, keep the queue alive.
+
+        Used by the F-65 P65-C interrupt path: the user barges in while
+        the agent is still speaking. The provider will send more
+        :class:`TTSChunk` frames on the next response turn, so we only
+        stop *this* one without closing the underlying
+        :class:`AudioOutQueue`. Callers that want to discard the in-flight
+        frames too should also call :meth:`AudioOutQueue.clear`.
+        """
+        await self._cancel_task()
+
+    async def stop_and_close(self) -> None:
+        """Cancel the drain task, close the queue, and release the device.
+
+        Equivalent to the old combined ``stop()`` for code paths that
+        do want full teardown at session end (F-65 dialogue session
+        ``close()``). :meth:`stop` keeps its original semantic so the
+        F-64 P64-E8 agent-reply integration is unchanged.
+        """
+        await self._queue.close()
+        await self._cancel_task()
+
+    async def _cancel_task(self) -> None:
+        """Cancel ``self._task`` if one is in flight. Idempotent."""
         if self._task is not None and not self._task.done():
             self._task.cancel()
             try:

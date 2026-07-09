@@ -35,10 +35,13 @@ from clawcodex_ext.command_system.export_command import EXPORT_COMMAND
 from clawcodex_ext.command_system.output_style_command import OUTPUT_STYLE_COMMAND
 from clawcodex_ext.command_system.voice_command import VOICE_COMMAND
 from clawcodex_ext.command_system.tts_command import TTS_COMMAND
+from clawcodex_ext.command_system.dialogue_command import DIALOGUE_COMMAND
 from clawcodex_ext.command_system.statusline import STATUSLINE_COMMAND
 from clawcodex_ext.command_system.security_review import SECURITY_REVIEW_COMMAND
 from clawcodex_ext.command_system.proactive_command import PROACTIVE_COMMAND
 from clawcodex_ext.command_system.btw_command import BTW_COMMAND
+# F-120 Agent Dashboard — ``/dashboard`` cross-system read-only view.
+from clawcodex_ext.command_system.dashboard_command import DASHBOARD_COMMAND
 
 # Upstream 0573f4c new slash commands. The implementations live in
 # src/command_system/ (real upstream modules, not facades); their Command
@@ -1550,6 +1553,8 @@ def get_builtin_commands() -> list[Command]:
         PROACTIVE_COMMAND,
         RESUME_COMMAND,
         BTW_COMMAND,
+        # F-120 Agent Dashboard — cross-system read-only view.
+        DASHBOARD_COMMAND,
         # Upstream 0573f4c new slash commands
         DOCTOR_COMMAND,
         DIFF_COMMAND,
@@ -1567,6 +1572,8 @@ def get_builtin_commands() -> list[Command]:
         VOICE_COMMAND,
         # F-64 P64-E TTS — /tts toggle + TTS backend selection + 试听.
         TTS_COMMAND,
+        # F-65 Voice Dialogue — /dialogue full-duplex mode.
+        DIALOGUE_COMMAND,
     ]
     try:
         from clawcodex_ext.goal.command import GOAL_COMMAND

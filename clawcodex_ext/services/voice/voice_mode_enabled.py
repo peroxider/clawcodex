@@ -1,4 +1,4 @@
-"""Voice-mode gating logic — F-64 P64-A.
+"""Voice-mode gating logic — F-64 P64-A + F-65 P65-D.
 
 Mirrors TS ``src/voice/voiceModeEnabled.ts``: a three-layer gate that
 decides whether voice input is available and which STT backend to use.
@@ -7,12 +7,18 @@ Layers
 ------
 1. **Feature flag** — ``FEATURE_VOICE_MODE`` env var (``"1"`` / ``"true"``).
    Off by default; the project ships the stack but the user must opt in.
+   F-65 P65-D adds an independent ``FEATURE_DIALOGUE_MODE`` so the two
+   paths (half-duplex PTT and full-duplex dialogue) can be released
+   separately.
 2. **Kill-switch** — ``CLAWCODEX_VOICE_DISABLED`` env var. Default unset =
    not disabled. A negative gate like TS ``tengu_amber_quartz_disabled``:
    the *absence* of the env var means "available".
 3. **Auth (Anthropic backend only)** — Anthropic STT requires an OAuth
    token (claude.ai subscription), not an API key. The doubao backend
    uses an independent credential file and skips this check.
+   MiniMax Realtime (the F-65 main path) uses an API key + group_id, so
+   it's treated like doubao: presence of either env var or the
+   credentials file is enough.
 
 Read-side
 ---------
@@ -24,6 +30,14 @@ Read-side
   ``"anthropic"`` when unset (so a fresh install has a defined default).
 * :func:`is_voice_enabled` — The master on/off switch written by ``/voice``.
 
+F-65 P65-D additions (gated independently from F-64 so existing F-64
+installations keep working unchanged):
+* :func:`is_dialogue_feature_enabled` — independent flag.
+* :func:`has_dialogue_auth` — MiniMax credentials present.
+* :func:`is_dialogue_available` — flag ∧ ¬kill-switch.
+* :func:`is_dialogue_enabled` — master switch (``settings.dialogue_enabled``).
+* :func:`get_dialogue_provider` — backend choice, default ``"minimax"``.
+
 The settings reads go through ``get_settings()`` (cached) and are
 invalidated by ``set_voice_provider`` / ``set_voice_enabled`` so the gate
 reflects mid-session changes immediately.
@@ -32,9 +46,11 @@ reflects mid-session changes immediately.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Literal
 
 __all__ = [
+    # F-64
     "VoiceProvider",
     "VOICE_PROVIDERS",
     "is_voice_feature_enabled",
@@ -44,10 +60,32 @@ __all__ = [
     "is_voice_available",
     "is_voice_enabled",
     "get_voice_provider",
+    # F-65 P65-D
+    "DialogueProvider",
+    "DIALOGUE_PROVIDERS",
+    "is_dialogue_feature_enabled",
+    "has_dialogue_auth",
+    "is_dialogue_available",
+    "is_dialogue_enabled",
+    "get_dialogue_provider",
 ]
 
 VoiceProvider = Literal["anthropic", "doubao"]
 VOICE_PROVIDERS: tuple[str, ...] = ("anthropic", "doubao")
+
+# F-65 P65-D dialogue providers. Mirrored on VOICE_PROVIDERS so the
+# registry/CLI surface is symmetric. Today only ``"minimax"`` is wired
+# (MiniMaxRealtimeDialogueProvider); ``"openai-realtime"`` is reserved
+# for the P65-E reference adapter.
+DialogueProvider = Literal["minimax", "openai-realtime"]
+DIALOGUE_PROVIDERS: tuple[str, ...] = ("minimax", "openai-realtime")
+
+# Credentials file location for the MiniMax Realtime dialogue backend
+# (same convention as F-64 ``minimax_stt``: ``~/.clawcodex/tts/minimax/
+# credentials.json``). Used by :func:`has_dialogue_auth` to short-circuit
+# the ``MINIMAX_API_KEY`` env probe and surface a hint when neither is
+# configured.
+MINIMAX_REALTIME_CREDENTIALS_PATH = Path("~/.clawcodex/tts/minimax/credentials.json")
 
 
 def is_voice_feature_enabled() -> bool:
@@ -165,3 +203,87 @@ def get_voice_provider() -> VoiceProvider:
     if raw in VOICE_PROVIDERS:
         return raw  # type: ignore[return-value]
     return "anthropic"
+
+
+# ── F-65 P65-D: full-duplex dialogue gating ────────────────────────────────
+
+
+def is_dialogue_feature_enabled() -> bool:
+    """Layer 1 — F-65 dialog feature flag ``FEATURE_DIALOGUE_MODE``.
+
+    Independent from ``FEATURE_VOICE_MODE`` so the F-64 STT path can ship
+    without dragging in full-duplex dependencies (and vice versa).
+    Same truthy grammar: ``"1"`` / ``"true"`` / ``"yes"`` / ``"on"``.
+    """
+    raw = os.environ.get("FEATURE_DIALOGUE_MODE", "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def has_dialogue_auth() -> bool:
+    """Layer 3 — MiniMax Realtime credentials probe.
+
+    The MiniMax backend (current P65-A only adapter) uses API key + group_id,
+    not OAuth. We probe ``MINIMAX_API_KEY`` first, then fall back to the
+    credentials file's ``api_key`` field — the same file the F-64
+    :class:`MiniMaxSTTProvider` reads, so the user configures one file
+    for both voice paths.
+    """
+    if os.environ.get("MINIMAX_API_KEY"):
+        return True
+    try:
+        import json
+
+        path = MINIMAX_REALTIME_CREDENTIALS_PATH.expanduser()
+        if not path.is_file():
+            return False
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    return isinstance(data, dict) and bool(data.get("api_key"))
+
+
+def is_dialogue_available() -> bool:
+    """Provider-agnostic gate for F-65 full-duplex dialogue: flag ∧ ¬kill-switch.
+
+    Same shape as :func:`is_voice_available` so the half- and full-duplex
+    surfaces roll out symmetrically. The dialogue backend enforces its
+    own auth at connection time, mirroring F-64's ``provider_registry``.
+    """
+    if not is_dialogue_feature_enabled():
+        return False
+    return not is_voice_disabled_by_kill_switch()
+
+
+def is_dialogue_enabled() -> bool:
+    """Master on/off switch (``settings.dialogue_enabled``).
+
+    Written by ``/dialogue`` (no-arg toggle). When false the dialogue
+    session refuses to start regardless of provider configuration.
+    Decoupled from :func:`get_dialogue_provider` for the same reason
+    the F-64 voice_provider / voice_enabled pair is split: the user can
+    set up a backend in advance and then just toggle the switch on.
+    """
+    try:
+        from src.settings.settings import get_settings
+
+        return bool(getattr(get_settings(), "dialogue_enabled", False))
+    except Exception:
+        return False
+
+
+def get_dialogue_provider() -> DialogueProvider:
+    """The persisted F-65 dialogue backend, defaulting to ``"minimax"``.
+
+    Reads ``settings.dialogue_provider``; empty / unrecognised values
+    fall back to ``"minimax"`` so a fresh install has a defined default
+    (the only currently-implemented adapter).
+    """
+    try:
+        from src.settings.settings import get_settings
+
+        raw = (getattr(get_settings(), "dialogue_provider", "") or "").strip().lower()
+    except Exception:
+        raw = ""
+    if raw in DIALOGUE_PROVIDERS:
+        return raw  # type: ignore[return-value]
+    return "minimax"

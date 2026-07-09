@@ -63,7 +63,9 @@ _HELP = (
     "- /voice doubao       Enable with Doubao ASR (requires credentials file)\n"
     "- /voice off          Disable voice mode\n"
     "- /voice status       Show current state and availability\n"
-    "- /voice help         Show this help"
+    "- /voice help         Show this help\n\n"
+    "Tip: for full-duplex voice dialogue (simultaneous speech in + out "
+    "with barge-in), see /dialogue (F-65)."
 )
 
 
@@ -73,6 +75,10 @@ def _status_text() -> str:
     Surfaces all three F-64 gate layers so the user can see *why* voice
     is unavailable (feature flag off / kill-switch set / OAuth missing)
     without having to read source or check env vars by hand.
+
+    Also surfaces the F-65 dialogue status line so a F-64 user
+    encountering the half-duplex code path discovers the full-duplex
+    sibling without reading the docs.
     """
     enabled = is_voice_enabled()
     provider = get_voice_provider()
@@ -96,6 +102,29 @@ def _status_text() -> str:
         lines.append("Tip: run /login to obtain an Anthropic OAuth token for STT.")
     if provider == "doubao":
         lines.append("Tip: configure ~/.clawcodex/tts/doubao/credentials.json for Doubao ASR.")
+    # F-65 cross-reference. The dialogue status block is a single
+    # line — enough to make the user aware that the full-duplex path
+    # exists without duplicating the F-65 status command's output.
+    try:
+        from clawcodex_ext.services.voice.voice_mode_enabled import (
+            is_dialogue_enabled,
+            is_dialogue_feature_enabled,
+            has_dialogue_auth,
+        )
+
+        dia_state = (
+            "on"
+            if (is_dialogue_enabled() and has_dialogue_auth())
+            else "off"
+            if is_dialogue_enabled()
+            else "available — enable with /dialogue"
+            if (is_dialogue_feature_enabled() and has_dialogue_auth())
+            else "configured (provider unconfigured)"
+        )
+        lines.append("")
+        lines.append(f"Full-duplex dialogue (/dialogue): {dia_state}")
+    except Exception:
+        pass
     return "\n".join(lines)
 
 

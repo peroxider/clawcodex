@@ -673,3 +673,73 @@ def set_tts_voice(value: Optional[str]) -> None:
     cfg['settings'] = section
     mgr.save_global(cfg)
     invalidate_settings_cache()
+
+
+# ── F-65 P65-D: dialogue setters ───────────────────────────────────────────
+
+
+def set_dialogue_provider(value: Optional[str]) -> None:
+    """Persist the F-65 dialogue backend choice (``"minimax"`` | None)."""
+    from src.settings.settings import invalidate_settings_cache
+
+    normalized = (value or '').strip().lower()
+    if normalized not in ('minimax', 'openai-realtime'):
+        normalized = ''
+    mgr = _get_default_manager()
+    cfg = mgr.load_global()
+    section = cfg.get('settings')
+    if not isinstance(section, dict):
+        section = {}
+    section['dialogue_provider'] = normalized
+    cfg['settings'] = section
+    mgr.save_global(cfg)
+    invalidate_settings_cache()
+
+
+def set_dialogue_enabled(enabled: bool) -> None:
+    """Persist the F-65 full-duplex dialogue master switch."""
+    from src.settings.settings import invalidate_settings_cache
+
+    mgr = _get_default_manager()
+    cfg = mgr.load_global()
+    section = cfg.get('settings')
+    if not isinstance(section, dict):
+        section = {}
+    section['dialogue_enabled'] = bool(enabled)
+    cfg['settings'] = section
+    mgr.save_global(cfg)
+    invalidate_settings_cache()
+
+
+def set_dialogue_voice(value: Optional[str]) -> None:
+    """Persist the F-65 dialogue TTS voice id (``settings.dialogue_voice``)."""
+    from src.settings.settings import invalidate_settings_cache
+
+    normalized = (value or '').strip()
+    mgr = _get_default_manager()
+    cfg = mgr.load_global()
+    section = cfg.get('settings')
+    if not isinstance(section, dict):
+        section = {}
+    section['dialogue_voice'] = normalized
+    cfg['settings'] = section
+    mgr.save_global(cfg)
+    invalidate_settings_cache()
+
+
+def set_dialogue_modality(value: Optional[str]) -> None:
+    """Persist the F-65 output modality (``"text"`` | ``"audio"``)."""
+    from src.settings.settings import invalidate_settings_cache
+
+    normalized = (value or '').strip().lower()
+    if normalized not in ('text', 'audio'):
+        normalized = 'text'
+    mgr = _get_default_manager()
+    cfg = mgr.load_global()
+    section = cfg.get('settings')
+    if not isinstance(section, dict):
+        section = {}
+    section['dialogue_modality'] = normalized
+    cfg['settings'] = section
+    mgr.save_global(cfg)
+    invalidate_settings_cache()
