@@ -143,6 +143,6 @@ def test_fallback_summary_flattens_content_blocks() -> None:
     ).generate(trigger="auto")
 
     assert result.generated is True
-    assert "Last assistant response: 你好！看起来我们刚打过招呼。" in result.summary
+    assert "Started with: 你好" in result.summary
     assert "TextBlock(" not in result.summary
     assert "type='text'" not in result.summary

@@ -110,7 +110,11 @@ class AwaySummaryService:
             raise _last_exc  # type: ignore[misc] — re-raise so the controller logs it
         summary = str(getattr(response, "content", "") or "").strip()
         if not summary:
-            summary = _fallback_summary(self.conversation)
+            reasoning = str(getattr(response, "reasoning_content", "") or "").strip()
+            if reasoning:
+                summary = reasoning
+            else:
+                summary = _fallback_summary(self.conversation)
 
         summary_message = create_away_summary_message(
             summary,
@@ -152,24 +156,121 @@ class AwaySummaryService:
 
 
 def _fallback_summary(conversation: Any) -> str:
+    """Build a readable summary from conversation history without calling the LLM.
+
+    Scans messages to extract user intents, files touched, and key actions,
+    producing a structured recap that does not look like raw internal metadata.
+    """
     messages = list(getattr(conversation, "messages", []) or [])
-    last_user = ""
-    last_assistant = ""
-    for msg in reversed(messages):
+
+    # Collect rich information from each turn.
+    user_requests: list[str] = []
+    files_touched: set[str] = set()
+    tool_actions: list[str] = []
+    last_msgs: list[str] = []
+
+    for msg in messages:
         role = getattr(msg, "role", "")
-        content = _flatten_content(getattr(msg, "content", ""))
-        if role == "user" and not last_user:
-            last_user = content[:180]
-        elif role == "assistant" and not last_assistant:
-            last_assistant = content[:180]
-        if last_user and last_assistant:
-            break
-    parts = [f"Conversation has {len(messages)} messages."]
-    if last_user:
-        parts.append(f"Last user request: {last_user}")
-    if last_assistant:
-        parts.append(f"Last assistant response: {last_assistant}")
+        content = getattr(msg, "content", "")
+        if role == "user":
+            text = _flatten_content(content)
+            text = text[:300].rstrip()
+            if text:
+                user_requests.append(text)
+                last_msgs.append(f"User: {text}")
+        elif role == "assistant":
+            actions, fnames = _extract_actions_and_files(content)
+            tool_actions.extend(actions)
+            files_touched.update(fnames)
+            text = _flatten_content(content)[:300].rstrip()
+            if text and not text.startswith("[tool:"):
+                last_msgs.append(f"Assistant: {text}")
+
+    parts: list[str] = []
+
+    # Summarise the conversation scope.
+    if not user_requests:
+        parts.append(f"This session has {len(messages)} messages.")
+    else:
+        first = user_requests[0][:200]
+        parts.append(f"This session has {len(messages)} messages across {len(user_requests)} user requests.")
+        parts.append(f"Started with: {first}")
+
+    # What files were touched.
+    if files_touched:
+        file_list = sorted(files_touched, key=lambda p: (p.count("/"), p))[:12]
+        if len(file_list) <= 6:
+            parts.append("Files mentioned: " + ", ".join(file_list))
+        else:
+            parts.append("Files mentioned: " + ", ".join(sorted(files_touched)[:6]) + " … and more")
+
+    # What tool actions were taken.
+    if tool_actions:
+        unique_actions = _dedup_ordered(tool_actions)
+        parts.append("Actions taken: " + ", ".join(unique_actions[:6]))
+
+    # Last user request (useful for context).
+    if user_requests:
+        last_req = user_requests[-1][:240]
+        if last_req not in parts[-1]:
+            parts.append(f"Latest task: {last_req}")
+
     return "\n".join(parts)
+
+
+def _extract_actions_and_files(
+    content: Any,
+) -> tuple[list[str], set[str]]:
+    """Return (action_labels, file_paths) from an assistant message content."""
+    actions: list[str] = []
+    files: set[str] = set()
+
+    if isinstance(content, list):
+        for block in content:
+            kind = getattr(block, "type", None)
+            if kind == "tool_use":
+                name = str(getattr(block, "name", "") or "")
+                inp = getattr(block, "input", {}) or {}
+                file_path = _find_file_path(inp)
+                label = name if not file_path else f"{name}({file_path})"
+                actions.append(label)
+                if file_path:
+                    files.add(file_path)
+            elif isinstance(block, dict):
+                if block.get("type") == "tool_use":
+                    name = str(block.get("name", ""))
+                    inp = block.get("input", {}) or {}
+                    file_path = _find_file_path(inp)
+                    label = name if not file_path else f"{name}({file_path})"
+                    actions.append(label)
+                    if file_path:
+                        files.add(file_path)
+    return actions, files
+
+
+def _find_file_path(inp: dict[str, Any]) -> str:
+    """Extract a file path from a tool call input dict."""
+    for key in ("file_path", "path", "target", "file"):
+        val = inp.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    # Some tool calls embed path in the first positional argument.
+    for key in ("argument", "content", "text"):
+        val = inp.get(key)
+        if isinstance(val, str) and ("." in val or "/" in val):
+            return val.strip()[:120]
+    return ""
+
+
+def _dedup_ordered(items: list[str]) -> list[str]:
+    """Remove duplicates while preserving order."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
 
 
 def _flatten_content(content: Any) -> str:
