@@ -6,7 +6,11 @@ import pytest
 
 from extensions.daemon.errors import UnknownWorkerKindError
 from extensions.daemon.worker_registry import WorkerRegistry
-from extensions.daemon.workers import build_cron_worker, build_remote_control_worker
+from extensions.daemon.workers import (
+    build_cron_worker,
+    build_remote_control_worker,
+    build_task_server_worker,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -14,6 +18,7 @@ def _reset_registry():
     WorkerRegistry.reset()
     # Re-register built-in workers (same as ``extensions.daemon.workers``).
     WorkerRegistry.register("remoteControl", build_remote_control_worker)
+    WorkerRegistry.register("task_server", build_task_server_worker)
     WorkerRegistry.register("cron", build_cron_worker)
     yield
     WorkerRegistry.reset()
@@ -22,6 +27,7 @@ def _reset_registry():
 def test_known_kinds_contains_builtins():
     kinds = WorkerRegistry.known_kinds()
     assert "remoteControl" in kinds
+    assert "task_server" in kinds
     assert "cron" in kinds
 
 
@@ -87,6 +93,29 @@ def test_remote_control_factory_returns_worker():
     worker = WorkerRegistry.create("remoteControl")
     assert isinstance(worker, RemoteControlWorker)
     assert worker.kind == "remoteControl"
+
+
+def test_task_server_factory_returns_worker():
+    from extensions.daemon.workers import TaskServerWorker
+
+    worker = WorkerRegistry.create("task_server")
+    assert isinstance(worker, TaskServerWorker)
+    assert worker.kind == "task_server"
+
+
+def test_task_server_health_check():
+    worker = WorkerRegistry.create("task_server")
+    # Before run(), health_check returns None (not started).
+    assert worker.health_check() is None
+
+
+def test_remote_control_is_task_server_compat():
+    """remoteControl 现在是 TaskServerWorker 的子类，保持向后兼容。"""
+    from extensions.daemon.workers import RemoteControlWorker, TaskServerWorker
+
+    rc = WorkerRegistry.create("remoteControl")
+    ts = WorkerRegistry.create("task_server")
+    assert isinstance(rc, TaskServerWorker)
 
 
 def test_cron_factory_returns_worker():

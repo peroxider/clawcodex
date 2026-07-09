@@ -76,8 +76,7 @@ def ensure_eager_extensions_installed() -> None:
         pass
 
     # F-84 P84-H — register ``daemon`` subcommand behind the
-    # DAEMON + BRIDGE_MODE double feature gate. No-op when either
-    # flag is disabled.
+    # DAEMON feature gate. No-op when the flag is disabled.
     try:
         from clawcodex_ext.daemon import install_daemon_gate
 

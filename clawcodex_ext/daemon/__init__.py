@@ -48,11 +48,10 @@ def install_daemon_gate() -> None:
         return
 
     reg = get_registry()
-    if not (reg.is_enabled("DAEMON") and reg.is_enabled("BRIDGE_MODE")):
+    if not reg.is_enabled("DAEMON"):
         logger.debug(
-            "install_daemon_gate: skipping (DAEMON=%s BRIDGE_MODE=%s)",
+            "install_daemon_gate: skipping (DAEMON=%s)",
             reg.is_enabled("DAEMON"),
-            reg.is_enabled("BRIDGE_MODE"),
         )
         return
 
@@ -65,7 +64,7 @@ def install_daemon_gate() -> None:
         return run_daemon(args)
 
     logger.info(
-        "install_daemon_gate: registered 'daemon' subcommand (DAEMON + BRIDGE_MODE both enabled)"
+        "install_daemon_gate: registered 'daemon' subcommand (DAEMON enabled)"
     )
 
 
