@@ -14,6 +14,11 @@ from .bash import BashTool
 from .brief import BriefTool
 from .config import ConfigTool
 from .cron import CronCreateTool, CronDeleteTool, CronListTool
+# F-120 Agent Dashboard — read-only observability tools.
+from extensions.agent_dashboard.tools import (
+    DashboardGetTool,
+    DashboardListTool,
+)
 from .edit import EditTool
 from .execute import ExecuteTool
 from .glob import GlobTool
@@ -62,6 +67,8 @@ ALL_STATIC_TOOLS: list[Tool] = [
     CronCreateTool,
     CronDeleteTool,
     CronListTool,
+    DashboardGetTool,
+    DashboardListTool,
     EditTool,
     EnterPlanModeTool,
     EnterWorktreeTool,
@@ -113,6 +120,8 @@ __all__ = [
     "CronCreateTool",
     "CronDeleteTool",
     "CronListTool",
+    "DashboardGetTool",
+    "DashboardListTool",
     "EditTool",
     "EnterPlanModeTool",
     "EnterWorktreeTool",

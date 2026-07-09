@@ -16,6 +16,14 @@ See: docs/UPSTREAM_SYNC_DESIGN-decoupling.md Section 4.2
 """
 
 from .agent_protocol import AgentLoopProtocol, AgentLoopResultProtocol
+from .dashboard_entry import (
+    DASHBOARD_STATUSES,
+    DashboardEntry,
+    DashboardSink,
+    DashboardSource,
+    filter_entries,
+    normalize_source_name,
+)
 from .tool_protocol import (
     ToolContextProtocol,
     ToolPermissionContextProtocol,
@@ -44,6 +52,10 @@ __all__ = [
     "AgentLoopProtocol",
     "AgentLoopResultProtocol",
     "ContextBuilderProtocol",
+    "DASHBOARD_STATUSES",
+    "DashboardEntry",
+    "DashboardSink",
+    "DashboardSource",
     "HeadlessOptionsProtocol",
     "HeadlessRunnerProtocol",
     "HeadlessSessionOptions",
@@ -56,6 +68,8 @@ __all__ = [
     "ToolSystemProtocol",
     "dependency_available",
     "env_switch",
+    "filter_entries",
     "is_provider_adapter",
+    "normalize_source_name",
     "run_headless_session",
 ]

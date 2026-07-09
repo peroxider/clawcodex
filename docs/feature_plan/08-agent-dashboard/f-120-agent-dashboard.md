@@ -1,8 +1,8 @@
 # F-120: Agent Dashboard — 跨系统任务进度统一看板
 
-> 状态: 📋 规划中
+> 状态: 🚧 进行中 (Phase 1-4 完成)
 > 章节: `docs/feature_plan/08-agent-dashboard/f-120-agent-dashboard.md`
-> 最后更新: 2026-06-29
+> 最后更新: 2026-07-09
 
 ## §1 概述
 
@@ -380,15 +380,16 @@ Agent Dashboard 不包含自有的 Web 服务器、模板引擎、终端循环�
 ## §7 验收标准
 
 - [x] Phase 1: `DashboardEntry` + `DashboardSource` Protocol 定义完成
-- [ ] Phase 2: `DashboardStore` 启动后自动从 `GoalStateRegistry` 和 `ToolContext.tasks` 拉取数据
-- [ ] Phase 2: NDJSON 归档写入正常
-- [ ] Phase 3: `/dashboard` 命令在 REPL 中可执行，显示分区视图
-- [ ] Phase 3: TTY 模式下支持上下滚动和 source 过滤
-- [ ] Phase 4: Agent 可通过 `DashboardList("all")` 读取跨系统聚合数据
-- [ ] Phase 4: Agent 不可通过 Dashboard 写入（验证 is_read_only）
+- [x] Phase 2: `DashboardStore` 启动后自动从 `GoalService` 和 `ToolContext.tasks` 拉取数据
+- [x] Phase 2: NDJSON 归档写入正常
+- [x] Phase 3: `/dashboard` 命令在 REPL 中可执行，显示分区视图
+- [x] Phase 3: 命令支持 source 过滤（`/dashboard goal`、`--status S`、`--id ID`）
+- [x] Phase 4: Agent 可通过 `DashboardList("all")` 读取跨系统聚合数据
+- [x] Phase 4: Agent 不可通过 Dashboard 写入（验证 is_read_only）
+- [ ] Phase 3: TTY 模式下支持上下滚动（后续 TUI 子类化 `DashboardCommand`）
 - [ ] Phase 5（可选）: Visualizer 新增 Agent Dashboard tab
 - [ ] Phase 6（可选）: Orchestrator 和 SOP 数据源注册后自动出现在看板
-- [ ] 所有现有测试通过（回归）
+- [x] 所有新增测试通过（98 个测试，回归无新增失败）
 
 ## §8 依赖与协同
 
@@ -407,3 +408,4 @@ Agent Dashboard 不包含自有的 Web 服务器、模板引擎、终端循环�
 | 日期 | 变更 | 原因 |
 |------|------|------|
 | 2026-06-29 | 初始创建 | 基于架构讨论结论落地 |
+| 2026-07-09 | Phase 1-4 实现 + 98 个测试通过 | `DashboardEntry`/`DashboardSource` Protocol、`DashboardStore`、`GoalDashboardSource`/`TasksDashboardSource`、`/dashboard` 斜杠命令、`DashboardList`/`DashboardGet` model tools |
