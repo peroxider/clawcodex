@@ -250,6 +250,8 @@ def lifecycle_tools_for_skill(
             result.append(registered)
     return result
 
+
+def _invoke_existing_agent(*, bundle_dir: Path | None = None) -> CompositeToolSpec:
     """Invoke a previously-created SOP agent by ``agent_id``.
 
     The tool looks up the agent in the bundle-local (or home-fallback)
