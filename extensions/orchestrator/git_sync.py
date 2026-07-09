@@ -511,6 +511,25 @@ class GitSyncService:
             )
             if guard_output:
                 outputs.append(f"## regression_guard\n{guard_output}".strip())
+        # Repro-first gate follow-through: the reproduction command that
+        # demonstrated the bug (non-zero exit before the fix) must have
+        # turned green. A still-failing reproduction blocks the push: the
+        # fix did not fix the observed behavior.
+        repro_command = getattr(session, "repro_command", None)
+        if repro_command:
+            try:
+                output = await self._run_shell(
+                    repro_command,
+                    repo_root,
+                    self._agent_config.verification.timeout_ms,
+                )
+            except VerificationFailed as exc:
+                raise VerificationFailed(
+                    "repro verification failed: the reproduction command "
+                    "still exits non-zero after the fix",
+                    exc.output,
+                ) from exc
+            outputs.append(f"## repro\n$ {repro_command}\n{output}".strip())
         hook_command = self._hooks_config.pre_push
         if hook_command:
             before = await asyncio.to_thread(self._status_snapshot, repo_root)
