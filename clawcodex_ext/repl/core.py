@@ -4357,8 +4357,7 @@ class ClawcodexREPL:
                     self.session.save()
                 except Exception:
                     pass
-                self.console.print("\n[warning]Interrupted. Type /exit to quit.[/warning]")
-                self._print_resume_hint()
+                self.console.print("\n[warning]Interrupted. Type /exit or press Ctrl+D to quit.[/warning]")
                 continue
             except EOFError:
                 try:
