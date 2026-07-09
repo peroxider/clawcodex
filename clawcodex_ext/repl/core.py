@@ -1952,6 +1952,20 @@ class ClawcodexREPL:
         except Exception:
             pass
 
+        # F-53: auto-expose non-core tools as /<tool-name> slash commands.
+        # The runtime ``tool_registry`` is captured lazily at invocation
+        # time via ``context.tool_registry`` (set by
+        # ``attach_downstream_context`` below), so we only need a
+        # schema snapshot at registration time. The default registry
+        # gives us that without paying for the SOP tool bridge.
+        try:
+            from clawcodex_ext.cli.tool_cmd import register_tool_commands
+
+            register_tool_commands(self.command_registry)
+            register_tool_commands(None)  # also register in global registry
+        except Exception:
+            pass
+
         # Create cost tracker and history
         self.cost_tracker = CostTracker()
         self.history_log = HistoryLog()

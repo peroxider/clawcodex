@@ -515,6 +515,18 @@ class ClawCodexExtREPL(ClawcodexREPL):
         register_intent_forecast_commands(self.command_registry)
         register_intent_forecast_commands(None)
 
+        # F-53: auto-expose non-core tools as /<tool-name> slash commands
+        # in the REPL command registry. Schemas are captured at
+        # registration; the actual tool lookup is deferred to
+        # invocation time via ``context.tool_registry``.
+        try:
+            from clawcodex_ext.cli.tool_cmd import register_tool_commands
+
+            register_tool_commands(self.command_registry)
+            register_tool_commands(None)  # global registry mirror
+        except Exception:
+            pass
+
         try:
             from extensions.skills_ext import init_skills_ext
 

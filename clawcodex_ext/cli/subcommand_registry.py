@@ -90,3 +90,11 @@ def load_builtin_subcommands() -> None:
     # ``@register('diag')`` decorator fires; the handler is looked up
     # by name in the sieve above.
     from clawcodex_ext.cli import diag_cmd as _diag_cmd  # noqa: F401  # noqa: F401
+
+    # F-53: ``clawcodex-dev tool <name> [--args]`` subcommand that
+    # auto-dispatches to any discoverable tool. Idempotent: a single
+    # subcommand name is registered (``tool``) — per-tool name routing
+    # happens inside the handler to keep the sieve deterministic.
+    from clawcodex_ext.cli.tool_cmd.hooks import install_tool_subcommand
+
+    install_tool_subcommand()

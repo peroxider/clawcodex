@@ -1232,6 +1232,16 @@ class ClawCodexTUI(App):
             from src.history import HistoryLog
 
             register_builtin_commands(None)
+            # F-53: also register dynamic tool commands in the global
+            # registry so ``execute_command_sync`` (which looks at the
+            # global registry, not the TUI's private one) can route
+            # ``/<tool-name>`` slash commands.
+            try:
+                from clawcodex_ext.cli.tool_cmd import register_tool_commands
+
+                register_tool_commands(None, tool_registry=self.tool_registry)
+            except Exception:
+                pass
             self._command_context = create_command_context(
                 workspace_root=self.workspace_root,
                 conversation=self.session.conversation,

@@ -183,6 +183,16 @@ def build_command_suggestions(
         register_away_summary_commands(private_reg)
         register_intent_forecast_commands(private_reg)
         register_runtime_commands(private_reg)
+
+        # F-53: auto-expose non-core tools as /<tool-name> slash commands
+        # in the TUI command registry. Mirrors the REPL wiring in
+        # ``clawcodex_ext/repl/app.py`` / ``clawcodex_ext/repl/core.py``.
+        try:
+            from clawcodex_ext.cli.tool_cmd import register_tool_commands
+
+            register_tool_commands(private_reg)
+        except Exception:
+            pass
         for cmd in private_reg.list_commands(include_disabled=True):
             if getattr(cmd, "is_hidden", False):
                 continue
