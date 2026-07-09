@@ -264,6 +264,7 @@ async def run_query_as_agent_loop(
             turn_timeout_s = DEFAULT_FREEZE_SETTINGS.turn_timeout_s
 
         async def _drain_turn() -> None:
+            nonlocal main_transcript, num_turns, last_assistant_text
             async for msg in query(params, terminal_holder=holder):
                 if isinstance(msg, StreamEvent):
                     continue

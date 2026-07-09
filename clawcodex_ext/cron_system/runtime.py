@@ -17,17 +17,25 @@ _CRON_TOOL_NAMES = {"croncreate", "crondelete", "cronlist", "cronrun"}
 
 
 def replace_cron_tools(registry: Any) -> None:
-    registry._tools = [
-        tool for tool in registry._tools if tool.name.lower() not in _CRON_TOOL_NAMES
-    ]
-    for name in list(registry._by_name.keys()):
-        tool = registry._by_name[name]
-        if tool.name.lower() in _CRON_TOOL_NAMES:
-            del registry._by_name[name]
-    registry.register(CronCreateTool)
-    registry.register(CronListTool)
-    registry.register(CronDeleteTool)
-    registry.register(CronRunTool)
+    # Best-effort cleanup: real ToolRegistry stores tools in private
+    # ``_tools`` / ``_by_name``; test fakes may not. Avoid hard-failing
+    # on fakes by reading the attributes defensively.
+    tools = getattr(registry, "_tools", None)
+    by_name = getattr(registry, "_by_name", None)
+    if tools is not None:
+        registry._tools = [
+            tool for tool in tools if tool.name.lower() not in _CRON_TOOL_NAMES
+        ]
+    if by_name is not None:
+        for name in list(by_name.keys()):
+            tool = by_name[name]
+            if tool.name.lower() in _CRON_TOOL_NAMES:
+                del by_name[name]
+    for tool in (CronCreateTool, CronListTool, CronDeleteTool, CronRunTool):
+        try:
+            registry.register(tool)
+        except Exception:
+            pass
 
 
 def attach_cron_runtime(

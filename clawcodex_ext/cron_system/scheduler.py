@@ -350,6 +350,8 @@ class CronScheduler:
         if prev and prev not in (signal.SIG_DFL, signal.SIG_IGN, None):
             try:
                 prev(signum, frame)
+            except (KeyboardInterrupt, SystemExit):
+                raise
             except Exception:  # pragma: no cover
                 pass
 

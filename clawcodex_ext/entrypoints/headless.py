@@ -63,6 +63,8 @@ from clawcodex_ext.command_system.engine import CommandEngine, create_command_co
 from clawcodex_ext.command_system.input_processing import parse_user_input
 from clawcodex_ext.command_system.registry import CommandRegistry, get_command_registry
 from clawcodex_ext.command_system.types import LocalCommand
+from clawcodex_ext.cron_system.runtime import attach_cron_runtime, replace_cron_tools
+from clawcodex_ext.cron_system.runs import claim_cron_run, finalize_cron_run
 from clawcodex_ext.query.agent_loop_compat import (
     build_effective_system_prompt,
     run_query_as_agent_loop,
@@ -315,6 +317,7 @@ def run_headless(options: HeadlessOptions) -> int:
     _run_resume_checks(options, session, provider_name, provider, stderr)
 
     tool_registry = build_default_registry(provider=provider)
+    replace_cron_tools(tool_registry)
     if options.allowed_tools:
         allow = {name.lower() for name in options.allowed_tools}
         _filter_registry(tool_registry, keep=lambda n: n.lower() in allow)
@@ -403,6 +406,9 @@ def run_headless(options: HeadlessOptions) -> int:
     # precedence so callers like QueryRunner can abort a runaway session
     # from OUTSIDE the executor thread (timeout / stop command).
     abort_controller = options.abort_controller or AbortController()
+    # Shared mutable flag used both by the cron scheduler (via is_loading)
+    # and the SIGINT handler to distinguish idle from in-flight states.
+    in_agent_loop = _InAgentLoopFlag()
     # C1: load persisted permission rules (settings files) at startup so
     # "always allow" rules saved in interactive sessions auto-allow here
     # too. Setup warnings intentionally unsurfaced until phase C6.
@@ -465,6 +471,15 @@ def run_headless(options: HeadlessOptions) -> int:
         tool_context.permission_handler = _auto_deny_permission_handler(stderr)
     # AskUserQuestion has no terminal to read from in headless mode.
     tool_context.ask_user = _noop_ask_user
+
+    # F-22: wire persistent cron scheduler to the headless tool context.
+    # is_loading polls the in-agent-loop flag so cron fires are deferred
+    # while a query is in flight (busy gate), matching REPL/TUI behavior.
+    attach_cron_runtime(
+        tool_context,
+        autostart=True,
+        is_loading=lambda: in_agent_loop.value,
+    )
 
     # F-125 C9 / R9: seed ``read_file_fingerprints`` from the resumed
     # conversation's historical Read tool_use blocks. Without this,
@@ -544,22 +559,54 @@ def run_headless(options: HeadlessOptions) -> int:
     # single chokepoint that catches whatever the handler raises.
     # ``restore_sigint`` runs in the ``finally`` so we don't leak global
     # signal state to embedders.
-    in_agent_loop = _InAgentLoopFlag()
     restore_sigint = _install_sigint_handler(abort_controller, in_agent_loop, stderr)
     try:
-        # Cancellation is caught at the for-loop level (not per-iteration)
-        # so that a SIGINT landing on ANY cancellation point unwinds to one
-        # place that emits the cancelled ResultEvent: the iterator step
-        # (``StreamJsonReader``'s blocking stdin read in idle mode), the
-        # agent loop itself, or the post-success accounting between them.
-        # The inner per-iteration ``except Exception`` keeps per-turn
-        # tool/provider error handling local — it must NOT catch
-        # ``AbortError``/``KeyboardInterrupt`` (Python catches them via
-        # ``Exception`` only when they inherit from it; ``AbortError`` does
-        # but ``KeyboardInterrupt`` does not, so we exclude AbortError
-        # explicitly).
+        # F-22: track active cron tasks for run claim/finalize lifecycle.
+        active_tasks: dict[str, str] = {}
+
+        def _run_cron_prompt(prompt: str, task_id: str, run_id: str) -> bool:
+            """Execute a single drained cron prompt and finalize its run."""
+            _claim_cron_task(workspace_root, active_tasks, task_id)
+            session.conversation.add_user_message(prompt)
+            try:
+                result = _run_one_agent_loop(
+                    session=session,
+                    provider=provider,
+                    tool_registry=tool_registry,
+                    tool_context=tool_context,
+                    abort_controller=abort_controller,
+                    options=options,
+                    writer=writer,
+                    aggregate_tool_events=aggregate_tool_events,
+                    in_agent_loop=in_agent_loop,
+                )
+            except AbortError:
+                _finalize_cron_task(
+                    workspace_root, active_tasks, task_id, "cancelled"
+                )
+                raise
+            except Exception as exc:
+                _finalize_cron_task(
+                    workspace_root,
+                    active_tasks,
+                    task_id,
+                    "failed",
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+                return False
+            if writer is not None:
+                writer.write(AssistantEvent(text=result.response_text))
+            _finalize_cron_task(
+                workspace_root, active_tasks, task_id, "completed"
+            )
+            return True
+
         try:
             for user_msg in inputs:
+                # F-22: drain any cron prompts that fired while waiting for
+                # the next input and run them before the user prompt.
+                _process_cron_outbox(tool_context, active_tasks, _run_cron_prompt)
+
                 # F-89: expand @agent-name mentions before sending to LLM.
                 text = user_msg.text
                 try:
@@ -743,119 +790,18 @@ def run_headless(options: HeadlessOptions) -> int:
 
                 session.conversation.add_user_message(text)
 
-                on_event = _build_event_bridge(writer, aggregate_tool_events)
-                # F-37: if an external on_event callback was provided
-                # (orchestrator's QueryRunner wires this), call it
-                # alongside the internal bridge so tool events reach
-                # the orchestrator's event stream and tool_count.
-                _on_event = on_event
-                _ext_cb = options.on_event
-                if _ext_cb is not None:
-                    _internal_on_event = _on_event
-
-                    def on_event(event: ToolEvent) -> None:
-                        _internal_on_event(event)
-                        try:
-                            _ext_cb(event)
-                        except Exception:
-                            pass
-
-                on_text_chunk = None
-                if writer is not None and options.include_partial_messages:
-
-                    def _emit_partial(chunk: str) -> None:
-                        writer.write(PartialTextEvent(text=chunk))
-
-                    on_text_chunk = _emit_partial
-
                 try:
-                    in_agent_loop.value = True
-                    try:
-                        # Ch5/F.2 cutover: route headless through the
-                        # canonical query() loop via the F.1 adapter.
-                        # Headless is single-shot per prompt and starts
-                        # its own event loop, so ``asyncio.run`` is the
-                        # right pattern. Pre-build the effective system
-                        # prompt (CLAUDE.md + git status + style) so the
-                        # cold-start context reaches query() unchanged
-                        # — the legacy run_agent_loop did this inside
-                        # the loop; the adapter doesn't.
-                        import asyncio as _asyncio
-                        from src.outputStyles import resolve_output_style
-
-                        _style_prompt = resolve_output_style(
-                            getattr(tool_context, "output_style_name", None),
-                            getattr(tool_context, "output_style_dir", None),
-                        ).prompt
-                        effective_system_prompt = build_effective_system_prompt(
-                            _style_prompt,
-                            tool_context,
-                        )
-                        if options.append_system_prompt:
-                            effective_system_prompt = (
-                                f"{effective_system_prompt}\n\n{options.append_system_prompt}"
-                            )
-
-                        def _persist(msg: Any) -> None:
-                            # BLOCKING #2 fix: persist FULL message
-                            # (including tool_use/tool_result blocks)
-                            # so the next turn can pair tool_use IDs to
-                            # results. Plain add_assistant_message
-                            # loses the structure.
-                            # Critic S3: log + re-raise on failure
-                            # rather than swallow; a persist error
-                            # means the conversation is corrupted and
-                            # the next API call will reject it. Better
-                            # to surface now than to debug a 400 later.
-                            try:
-                                session.conversation.add_message(msg.role, msg.content)
-                            except Exception:
-                                import logging
-
-                                logging.getLogger(__name__).exception(
-                                    "Failed to persist message into conversation: role=%s",
-                                    getattr(msg, "role", "?"),
-                                )
-                                raise
-
-                        compat_result = _asyncio.run(
-                            run_query_as_agent_loop(
-                                initial_messages=list(session.conversation.messages),
-                                provider=provider,
-                                tool_registry=tool_registry,
-                                tool_context=tool_context,
-                                system_prompt=effective_system_prompt,
-                                max_turns=options.max_turns,
-                                on_event=on_event,
-                                on_text_chunk=on_text_chunk,
-                                on_message=_persist,
-                                # Critic C2: pass the OWNING controller so
-                                # the provider's chat_stream_response listens
-                                # on the same signal the SIGINT handler trips.
-                                # Passing only ``cancel_signal=signal`` would
-                                # force the adapter to mint a fresh controller
-                                # and break the mid-stream tear-down path.
-                                abort_controller=abort_controller,
-                            )
-                        )
-                        # Re-wrap into legacy AgentLoopResult shape so
-                        # downstream usage/num_turns/response_text code
-                        # stays untouched. ``usage if num_turns > 0
-                        # else None`` preserves the dict|None contract.
-                        result = AgentLoopResult(
-                            response_text=compat_result.response_text,
-                            usage=(compat_result.usage if compat_result.num_turns > 0 else None),
-                            num_turns=compat_result.num_turns,
-                        )
-                    finally:
-                        # Flip BEFORE the outer except block can run so a
-                        # SIGINT landing between ``run_agent_loop`` returning
-                        # and the next iterator step is correctly classified
-                        # as idle. (``AbortError`` is a subclass of
-                        # ``Exception`` and would otherwise be re-raised
-                        # through this finally too — so we set the flag
-                        # back to False regardless of how we leave.)
-                        in_agent_loop.value = False
+                    result = _run_one_agent_loop(
+                        session=session,
+                        provider=provider,
+                        tool_registry=tool_registry,
+                        tool_context=tool_context,
+                        abort_controller=abort_controller,
+                        options=options,
+                        writer=writer,
+                        aggregate_tool_events=aggregate_tool_events,
+                        in_agent_loop=in_agent_loop,
+                    )
                 except AbortError:
                     # Re-raise to the outer ``except`` so the cancelled
                     # ResultEvent is emitted in exactly one place.
@@ -897,6 +843,12 @@ def run_headless(options: HeadlessOptions) -> int:
                 if writer is not None:
                     writer.write(AssistantEvent(text=result.response_text))
                 aggregate_text.append(result.response_text)
+                # F-22: drain cron prompts that fired while the agent was
+                # busy with the user turn and run them before the next input.
+                _process_cron_outbox(tool_context, active_tasks, _run_cron_prompt)
+            # F-22: one last drain after the input stream ends so cron
+            # prompts that fired during the final turn are not dropped.
+            _process_cron_outbox(tool_context, active_tasks, _run_cron_prompt)
         except (AbortError, KeyboardInterrupt) as exc:
             # Cancellation from ANY point in the loop body lands here:
             # * ``AbortError`` from a cooperative unwind inside
@@ -936,6 +888,15 @@ def run_headless(options: HeadlessOptions) -> int:
                 )
     finally:
         restore_sigint()
+        # F-22: stop the cron scheduler background thread. The scheduler
+        # registers its own atexit hooks, but explicit stop prevents the
+        # thread from outliving the headless run in long-lived embedders.
+        scheduler = getattr(tool_context, "cron_scheduler", None)
+        if scheduler is not None:
+            try:
+                scheduler.stop()
+            except Exception:
+                pass
         # F-125 Phase 2: persist accumulated transcript at end-of-run so
         # the next ``--resume <sid>`` sees the messages we just generated.
         # Without this, headless resume is "load history, run once,
@@ -1435,6 +1396,230 @@ def _build_event_bridge(writer: StreamJsonWriter | None, sink: list[dict]):
                 )
 
     return on_event
+
+
+def _run_one_agent_loop(
+    session: Session,
+    provider: Any,
+    tool_registry: Any,
+    tool_context: ToolContext,
+    abort_controller: AbortController,
+    options: HeadlessOptions,
+    writer: StreamJsonWriter | None,
+    aggregate_tool_events: list[dict],
+    in_agent_loop: _InAgentLoopFlag,
+    *,
+    on_text_chunk: Callable[[str], None] | None = None,
+) -> AgentLoopResult:
+    """Run the current conversation through the canonical query() loop once.
+
+    The caller must have already appended the user/cron message to
+    ``session.conversation``. This helper wraps the asyncio adapter,
+    handles event bridging, and re-wraps the result into the legacy
+    ``AgentLoopResult`` shape.
+    """
+    on_event = _build_event_bridge(writer, aggregate_tool_events)
+    _ext_cb = options.on_event
+    if _ext_cb is not None:
+        _internal_on_event = on_event
+
+        def on_event(event: ToolEvent) -> None:  # type: ignore[misc]
+            _internal_on_event(event)
+            try:
+                _ext_cb(event)
+            except Exception:
+                pass
+
+    if (
+        on_text_chunk is None
+        and writer is not None
+        and options.include_partial_messages
+    ):
+
+        def _emit_partial(chunk: str) -> None:
+            writer.write(PartialTextEvent(text=chunk))
+
+        on_text_chunk = _emit_partial
+
+    import asyncio as _asyncio
+    from src.outputStyles import resolve_output_style
+
+    _style_prompt = resolve_output_style(
+        getattr(tool_context, "output_style_name", None),
+        getattr(tool_context, "output_style_dir", None),
+    ).prompt
+    effective_system_prompt = build_effective_system_prompt(
+        _style_prompt,
+        tool_context,
+    )
+    if options.append_system_prompt:
+        effective_system_prompt = (
+            f"{effective_system_prompt}\n\n{options.append_system_prompt}"
+        )
+
+    def _persist(msg: Any) -> None:
+        try:
+            session.conversation.add_message(msg.role, msg.content)
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "Failed to persist message into conversation: role=%s",
+                getattr(msg, "role", "?"),
+            )
+            raise
+
+    in_agent_loop.value = True
+    try:
+        compat_result = _asyncio.run(
+            run_query_as_agent_loop(
+                initial_messages=list(session.conversation.messages),
+                provider=provider,
+                tool_registry=tool_registry,
+                tool_context=tool_context,
+                system_prompt=effective_system_prompt,
+                max_turns=options.max_turns,
+                on_event=on_event,
+                on_text_chunk=on_text_chunk,
+                on_message=_persist,
+                abort_controller=abort_controller,
+            )
+        )
+    finally:
+        in_agent_loop.value = False
+
+    return AgentLoopResult(
+        response_text=compat_result.response_text,
+        usage=(compat_result.usage if compat_result.num_turns > 0 else None),
+        num_turns=compat_result.num_turns,
+    )
+
+
+def _wrap_cron_prompt(prompt: str, *, task_id: str = "") -> str:
+    """Wrap a cron prompt with context so the LLM knows it's automated."""
+    from datetime import datetime
+
+    now = datetime.now()
+    time_str = now.strftime("%b %d %-I:%M%p").lower()
+    header = f"✻ Running scheduled task ({time_str})"
+    if task_id:
+        header += f" · {task_id}"
+    return (
+        f"{header}\n\n"
+        "This prompt was generated automatically from a scheduled task.\n\n"
+        f"{prompt}"
+    )
+
+
+def _drain_cron_outbox(
+    tool_context: ToolContext,
+    active_tasks: dict[str, str],
+) -> list[tuple[str, str, str]]:
+    """Drain cron_prompt events from ``tool_context.outbox``.
+
+    Returns runnable prompts as ``(wrapped_prompt, task_id, run_id)``.
+    Duplicate active tasks are discarded and their runs finalized as
+    ``cancelled`` (accumulation guard).
+    """
+    outbox = getattr(tool_context, "outbox", None)
+    if not outbox:
+        return []
+    drained: list[tuple[str, str, str]] = []
+    while outbox:
+        entry = outbox.pop(0)
+        etype = entry.get("type", "") if hasattr(entry, "get") else getattr(entry, "type", "")
+        if etype != "cron_prompt":
+            continue
+        prompt = (
+            (entry.get("prompt") or "").strip()
+            if hasattr(entry, "get")
+            else str(getattr(entry, "prompt", "")).strip()
+        )
+        task_id = (
+            entry.get("task_id", "")
+            if hasattr(entry, "get")
+            else getattr(entry, "task_id", "")
+        )
+        run_id = (
+            entry.get("run_id", "")
+            if hasattr(entry, "get")
+            else getattr(entry, "run_id", "")
+        )
+        if task_id and task_id in active_tasks:
+            try:
+                finalize_cron_run(tool_context.workspace_root, run_id, "cancelled")
+            except Exception:
+                pass
+            continue
+        if prompt:
+            if task_id and run_id:
+                active_tasks[task_id] = run_id
+            drained.append((_wrap_cron_prompt(prompt, task_id=task_id), str(task_id), str(run_id)))
+    return drained
+
+
+def _extract_cron_task_id(user_input: str) -> str | None:
+    first_line = user_input.split("\n", 1)[0]
+    if not first_line.startswith("✻ Running scheduled task"):
+        return None
+    sep = " · "
+    idx = first_line.find(sep)
+    if idx == -1:
+        return None
+    task_id = first_line[idx + len(sep) :].strip()
+    return task_id if task_id else None
+
+
+def _claim_cron_task(
+    workspace_root: Path,
+    active_tasks: dict[str, str],
+    task_id: str,
+) -> str | None:
+    run_id = active_tasks.get(task_id)
+    if not run_id:
+        return None
+    try:
+        claimed = claim_cron_run(workspace_root, run_id)
+    except Exception:
+        return run_id
+    return claimed.id if claimed is not None else run_id
+
+
+def _finalize_cron_task(
+    workspace_root: Path,
+    active_tasks: dict[str, str],
+    task_id: str,
+    status: str = "completed",
+    *,
+    error: str | None = None,
+) -> None:
+    run_id = active_tasks.pop(task_id, None)
+    if not run_id:
+        return
+    try:
+        finalize_cron_run(workspace_root, run_id, status, error=error)  # type: ignore[arg-type]
+    except Exception:
+        pass
+
+
+def _process_cron_outbox(
+    tool_context: ToolContext,
+    active_tasks: dict[str, str],
+    run_prompt: Callable[[str, str, str], bool],
+    *,
+    max_iterations: int = 10,
+) -> None:
+    """Drain and execute cron prompts until the outbox is empty.
+
+    Bounded loop prevents runaway scheduling storms if a recurring task
+    fires faster than it can be finalized.
+    """
+    for _ in range(max_iterations):
+        prompts = _drain_cron_outbox(tool_context, active_tasks)
+        if not prompts:
+            break
+        for prompt, task_id, run_id in prompts:
+            run_prompt(prompt, task_id, run_id)
 
 
 def _jsonable(value):
