@@ -24,6 +24,14 @@ from .dashboard_entry import (
     filter_entries,
     normalize_source_name,
 )
+from .task_protocol import (
+    RemoteTaskWorker,
+    TaskExecutor,
+    TaskRequest,
+    TaskResult,
+    TaskTransportClient,
+    TaskTransportServer,
+)
 from .tool_protocol import (
     ToolContextProtocol,
     ToolPermissionContextProtocol,
