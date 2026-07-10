@@ -1,8 +1,8 @@
 # F-108: Freeze Detection & Auto-Recovery
 
-> 状态: 📋 规划中
+> 状态: 🟡 基本实现完成（入口集成已补齐，待收尾）
 > 章节: docs/feature_plan/03-agent-core/f-108-freeze-detection.md
-> 最后更新: 2026-06-24
+> 最后更新: 2026-07-10
 
 ## §1 设计规划
 
@@ -39,16 +39,16 @@ Layer 0: 快速修复 — P108-A: done.wait(timeout=30) → auto-deny
 
 ### 1.4 子特性分解
 
-| # | 子特性 | 改动文件 | 改动量 | 风险 | 工时 |
-|:-:|--------|----------|:------:|:----:|:----:|
-| A | Permission/AskUser done.wait(30) → auto-deny | agent_bridge.py | ~20 行 | 低 | 0.5d |
-| B | headless query future asyncio.wait_for(300) | extensions/api/query.py | ~10 行 | 低 | 0.5d |
-| C | Tool 执行 asyncio.wait_for(120) | tool_system/ | ~50 行 | 中 | 1d |
-| D | FreezeDetector 冻结检测 + thread stack dump | claws/diagnostics/freeze_detector.py | ~200 行 | 低 | 1.5d |
-| E | 超时配置 schema 扩展 | schema.py + settings/ | ~80 行 | 低 | 1d |
-| F | Agent loop / turn / tool 三层硬超时 | query.py + _call_model_sync | ~150 行 | 中 | 1.5d |
-| G | 自动恢复策略 | agent_bridge.py + query.py | ~100 行 | 中 | 1.5d |
-| H | freeze-report CLI 子命令 | 新建 CLI 命令 | ~150 行 | 低 | 1d |
+| # | 子特性 | 改动文件 | 改动量 | 风险 | 工时 | 状态 |
+|:-:|--------|----------|:------:|:----:|:----:|:----:|
+| A | Permission/AskUser done.wait(30) → auto-deny | `clawcodex_ext/tui/agent_bridge.py` | ~20 行 | 低 | 0.5d | ✅ 已完成 |
+| B | headless query future asyncio.wait_for(300) | `extensions/api/query.py` | ~10 行 | 低 | 0.5d | ⚠️ 实现偏离（见 §2） |
+| C | Tool 执行 asyncio.wait_for(120) | `clawcodex_ext/tool_system/tool_timeout.py` | ~50 行 | 中 | 1d | ⚠️ 实现偏离（见 §2） |
+| D | FreezeDetector 冻结检测 + thread stack dump | `clawcodex_ext/diagnostics/freeze_detector.py` | ~200 行 | 低 | 1.5d | ✅ 已完成 |
+| E | 超时配置 schema 扩展 | `clawcodex_ext/settings/types.py` + `clawcodex_ext/diagnostics/freeze_config.py` | ~80 行 | 低 | 1d | ✅ 已完成 |
+| F | Agent loop / turn / tool 三层硬超时 | `clawcodex_ext/query/agent_loop_compat.py` + `extensions/api/query.py` | ~150 行 | 中 | 1.5d | ✅ 已完成 |
+| G | 自动恢复策略 | `clawcodex_ext/diagnostics/recovery.py` + AbortController 集成 | ~100 行 | 中 | 1.5d | ✅ 已完成 |
+| H | freeze-report CLI 子命令 | `clawcodex_ext/cli/diag_cmd.py` | ~150 行 | 低 | 1d | ✅ 已完成 |
 
 **预计总工时**: 7 天
 
@@ -220,7 +220,21 @@ Phase 6 (1d): [H] freeze-report CLI
 
 ## §2 进度跟踪
 
-尚未开始实现。
+- 2026-06-24: 初始规划完成，子特性 A~H 设计定稿。
+- 2026-07-10: 核心实现落地：
+  - P108-A/D/E/F/G/H 已完整实现并通过单元测试。
+  - P108-B/C 的实现方式与原始设计存在偏差（详见 §1.5），功能等效但验收形式不同。
+  - `clawcodex_ext/settings/types.py` 中重复的 `FreezeSettings` 定义已清理。
+  - `FreezeDetector` 入口集成已补齐：`clawcodex_ext/init.py`（CLI/TUI/REPL/headless via dispatch）、`clawcodex_ext/entrypoints/headless.py`（direct headless / orchestrator agent runner）、`extensions/orchestrator/cli/server.py`（orchestrator daemon）。
+- 待收尾：
+  - 确认 P108-B/C 的当前实现是否可接受，或按原设计重写为直接 wrap future/tool exec。
+  - 更新 `ROADMAP.md` / `PROGRESS.legacy.md` 中的 F-108 状态。
+
+## §3 已知偏差
+
+1. **P108-B（headless future 超时）**：未在 `future` 上直接使用 `asyncio.wait_for`，而是在 `extensions/api/query.py:QueryRunner.stream` 的 polling loop 中通过 `timeout_s` / `agent_loop_timeout_s` 预算检查实现。超时返回 `SessionComplete(reason="exit_code=124")` 而非设计中的 `reason="timeout"`。
+2. **P108-C（tool 超时）**：未在 `execute_tool` 上直接使用 `asyncio.wait_for`，而是通过 `ToolGapWatchdog` 观察 `tool_use` → `tool_result` 间隙，超限时触发 `AbortController`。最终返回 `SessionComplete(reason="exit_code=126")` 而非设计中的 `ToolResult(is_error=True, error="...timed out")`。
+3. **P108-D 入口集成**：此前 `FreezeDetector` 已实现但无任何入口点调用 `maybe_start_from_env()`，导致 `CLAWCODEX_FREEZE_DIAG=1` 不会生效。2026-07-10 已补齐。
 
 ## §4 变更记录
 

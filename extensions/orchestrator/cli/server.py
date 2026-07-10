@@ -1062,6 +1062,18 @@ def _run_orchestrator(
     import asyncio
     import logging
 
+    # F-108 P108-D: start the opt-in freeze-detection watchdog when the
+    # env var is set. The orchestrator daemon is long-running and spawns
+    # agent loops in subprocesses/threads; a hung worker can deadlock the
+    # parent. Layer-1 dumps thread stacks so postmortem analysis can
+    # attribute the hang even when the agent loop itself is unresponsive.
+    try:
+        from clawcodex_ext.diagnostics import FreezeDetector
+
+        FreezeDetector.maybe_start_from_env()
+    except Exception:
+        pass
+
     from extensions.orchestrator.tracker import TrackerConfigError, validate_tracker_config
     from extensions.orchestrator.workflow import WorkflowLoader, WorkflowParseError
 

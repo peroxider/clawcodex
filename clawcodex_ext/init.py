@@ -256,6 +256,21 @@ def init() -> None:
         _logger.debug("init: telemetry shutdown flush install failed: %s", exc)
     profile_checkpoint("init_after_telemetry_shutdown_flush")
 
+    # F-108 P108-D: opt-in freeze-detection watchdog. ``maybe_start_from_env``
+    # is a no-op when ``CLAWCODEX_FREEZE_DIAG`` is unset, so this adds no
+    # overhead to normal runs. When the env var is set it spawns the daemon
+    # thread that dumps thread stacks after ``threshold_s`` of silence.
+    # Wired here so every entry point that calls the canonical ``init()``
+    # (CLI, TUI, REPL, headless via dispatch) gets the watchdog for free.
+    _logger.info("init: enabling freeze-detection watchdog if requested")
+    try:
+        from clawcodex_ext.diagnostics import FreezeDetector
+
+        FreezeDetector.maybe_start_from_env()
+    except Exception as exc:  # noqa: BLE001
+        _logger.debug("init: freeze-detection watchdog setup failed: %s", exc)
+    profile_checkpoint("init_after_freeze_detector")
+
     profile_checkpoint("init_function_end")
 
 

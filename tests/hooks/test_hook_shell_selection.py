@@ -50,21 +50,25 @@ class TestShellInvocationConstants:
 
 
 class TestBuildPowerShellArgs:
-    def test_exact_argv_matches_ts(self) -> None:
-        # Matches typescript/src/utils/shell/powershellProvider.ts:11-13 exactly.
+    def test_exact_argv_matches_resolver(self) -> None:
+        # build_powershell_args now prefixes a UTF-8 encoding prelude to avoid
+        # codepage crashes on non-ASCII output. The trailing command must still
+        # be present verbatim after the prelude.
         args = build_powershell_args("Write-Host hi")
-        assert args == ["-NoProfile", "-NonInteractive", "-Command", "Write-Host hi"]
+        assert args[:3] == ["-NoProfile", "-NonInteractive", "-Command"]
+        assert args[-1].endswith("Write-Host hi")
+        assert "[Console]::OutputEncoding" in args[-1]
 
-    def test_preserves_command_string_verbatim(self) -> None:
-        # No quoting / escaping — pwsh's -Command consumes the literal string.
+    def test_preserves_command_string_after_prelude(self) -> None:
         cmd = "Get-Content 'a b'; echo \"$x\""
         args = build_powershell_args(cmd)
-        assert args[-1] == cmd
         assert args[:3] == ["-NoProfile", "-NonInteractive", "-Command"]
+        assert args[-1].endswith(cmd)
 
     def test_empty_command_is_still_legal_argv(self) -> None:
-        # No validation here — the executor's path-missing check fires first.
-        assert build_powershell_args("") == ["-NoProfile", "-NonInteractive", "-Command", ""]
+        args = build_powershell_args("")
+        assert args[:3] == ["-NoProfile", "-NonInteractive", "-Command"]
+        assert isinstance(args[-1], str)
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +84,7 @@ class TestFindPowerShellPath:
             calls.append(name)
             return "/usr/local/bin/pwsh" if name == "pwsh" else None
 
-        monkeypatch.setattr("src.hooks.shell_invocation.shutil.which", fake_which)
+        monkeypatch.setattr("clawcodex_ext.utils.shell_resolver.shutil.which", fake_which)
         assert find_powershell_path() == "/usr/local/bin/pwsh"
         # Doesn't bother checking "powershell" if "pwsh" hits.
         assert calls == ["pwsh"]
@@ -89,11 +93,11 @@ class TestFindPowerShellPath:
         def fake_which(name: str) -> str | None:
             return r"C:\Windows\System32\powershell.exe" if name == "powershell" else None
 
-        monkeypatch.setattr("src.hooks.shell_invocation.shutil.which", fake_which)
+        monkeypatch.setattr("clawcodex_ext.utils.shell_resolver.shutil.which", fake_which)
         assert find_powershell_path() == r"C:\Windows\System32\powershell.exe"
 
     def test_returns_none_when_neither_found(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("src.hooks.shell_invocation.shutil.which", lambda _name: None)
+        monkeypatch.setattr("clawcodex_ext.utils.shell_resolver.shutil.which", lambda _name: None)
         assert find_powershell_path() is None
 
 
@@ -310,7 +314,7 @@ class TestExecutorPowerShellPath:
         monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
         monkeypatch.setattr(asyncio, "create_subprocess_shell", fake_shell)
         monkeypatch.setattr(
-            "src.hooks.shell_invocation.shutil.which",
+            "clawcodex_ext.utils.shell_resolver.shutil.which",
             lambda name: "/usr/local/bin/pwsh" if name == "pwsh" else None,
         )
 
@@ -318,12 +322,14 @@ class TestExecutorPowerShellPath:
         result = await _execute_command_hook(hook, {"hook_event": "PreToolUse"})
 
         assert captured["prog"] == "/usr/local/bin/pwsh"
-        assert captured["args"] == [
+        assert captured["args"][:3] == [
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            "Write-Host hi",
         ]
+        # The command is now wrapped in a UTF-8 encoding prelude; ensure the
+        # original command string is present at the end of the -Command arg.
+        assert captured["args"][3].endswith("Write-Host hi")
         assert "fallback_called" not in captured
         assert result.exit_code == 0
 
@@ -333,7 +339,7 @@ class TestExecutorPowerShellPath:
             return _StubProcess()
 
         monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
-        monkeypatch.setattr("src.hooks.shell_invocation.shutil.which", lambda _name: None)
+        monkeypatch.setattr("clawcodex_ext.utils.shell_resolver.shutil.which", lambda _name: None)
 
         hook = HookConfig(type="command", command="Write-Host hi", shell="powershell")
         result = await _execute_command_hook(hook, {"hook_event": "PreToolUse"})
@@ -348,7 +354,7 @@ class TestExecutorPowerShellPath:
     async def test_blocking_error_preserves_command_in_message(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr("src.hooks.shell_invocation.shutil.which", lambda _name: None)
+        monkeypatch.setattr("clawcodex_ext.utils.shell_resolver.shutil.which", lambda _name: None)
         hook = HookConfig(type="command", command="DoSomethingPS", shell="powershell")
         result = await _execute_command_hook(hook, {"hook_event": "PreToolUse"})
         assert "DoSomethingPS" in (result.blocking_error or "")

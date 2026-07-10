@@ -205,56 +205,6 @@ class CompactSettings:
 
 
 @dataclass
-class FreezeSettings:
-    """Layer-2/Layer-1 freeze-detection timeouts (F-108 P108-E).
-
-    Each knob is the wall-clock budget (in seconds) for an outer /
-    middle / inner watchdog. ``0`` disables that layer and lets the
-    underlying loop run indefinitely (F-108 design decision #5).
-
-    Resolution order (handled by
-    :mod:`clawcodex_ext.diagnostics.freeze_config`):
-
-    1. ``freeze.<key>`` (this dataclass)
-    2. ``CLAWCODEX_<KEY>`` environment variable (``agent_loop_timeout_s``
-       -> ``CLAWCODEX_AGENT_LOOP_TIMEOUT``, ``threshold_s`` ->
-       ``CLAWCODEX_FREEZE_THRESHOLD``, etc; see
-       ``freeze_config.ENV_VAR_FOR``).
-    3. Built-in default (the dataclass default itself).
-
-    The TUI/agent_bridge honours ``permission_timeout_s`` for modal
-    auto-deny (risks #2 #3 in F-108). The headless / API runner
-    honours ``agent_loop_timeout_s``. The query loop layer-2 stack
-    uses ``turn_timeout_s`` and ``tool_timeout_s``. The freeze
-    watchdog uses ``threshold_s`` (staggered below the
-    ``stream_idle_timeout`` so the two detectors don't double-fire).
-
-    F-108 design decisions:
-
-    * 30 s for permission modal — below plausible render time
-      but long enough for the user to react.
-    * 600 s for the agent loop outer budget — covers long planning
-      tasks.
-    * 60 s for the freeze threshold — staggered below the 90 s
-      ``StreamWatchdog`` so the two detectors act at different
-      moments.
-    """
-
-    agent_loop_timeout_s: float = 600.0
-    turn_timeout_s: float = 300.0
-    tool_timeout_s: float = 120.0
-    permission_timeout_s: float = 30.0
-    # ``threshold_s`` is the wall-clock gap before the watchdog
-    # declares the agent loop frozen. It MUST be < turn_timeout_s so
-    # the threshold trips first and dumps a stack before the layer-2
-    # budget fires.
-    threshold_s: float = 60.0
-    # Diagnostic dump directory. When unset, defaults to the OS temp
-    # dir + ``clawcodex-freeze`` (see ``freeze_config.dump_path``).
-    dump_dir: str | None = None
-
-
-@dataclass
 class HookSettings:
     """Hook configuration."""
 

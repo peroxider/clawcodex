@@ -9,7 +9,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from clawcodex_ext.diagnostics import (
     DEFAULT_FREEZE_CHECK_INTERVAL_S,
@@ -282,6 +282,57 @@ class TestDetectorImportSurface(unittest.TestCase):
             self.assertTrue(
                 hasattr(diag, name), f"diagnostics missing re-export {name!r}"
             )
+
+
+class TestEntrypointIntegration(unittest.TestCase):
+    """F-108 P108-D entrypoint wiring: key long-running entry points call
+    ``FreezeDetector.maybe_start_from_env()`` early enough that the env
+    var can enable the watchdog.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        os.environ.pop("CLAWCODEX_FREEZE_DIAG", None)
+        from clawcodex_ext.diagnostics import FreezeDetector
+
+        FreezeDetector._INSTANCE = None  # noqa: SLF001
+
+    def tearDown(self):
+        os.environ.pop("CLAWCODEX_FREEZE_DIAG", None)
+        from clawcodex_ext.diagnostics import FreezeDetector
+
+        inst = getattr(FreezeDetector, "_INSTANCE", None)
+        if inst is not None:
+            try:
+                inst.stop()
+            except Exception:
+                pass
+        FreezeDetector._INSTANCE = None  # noqa: SLF001
+
+    def test_headless_entrypoint_calls_freeze_detector(self):
+        """``clawcodex_ext.entrypoints.headless.run_headless`` adopts the
+        watchdog before doing real work."""
+        from clawcodex_ext.entrypoints.headless import HeadlessOptions, run_headless
+
+        with patch("clawcodex_ext.diagnostics.FreezeDetector") as mock_cls:
+            # Invalid output format causes an early exit, but the freeze
+            # detector adoption runs first.
+            with self.assertRaises(SystemExit):
+                run_headless(HeadlessOptions(output_format="bad-format"))
+            mock_cls.maybe_start_from_env.assert_called_once()
+
+    def test_orchestrator_entrypoint_calls_freeze_detector(self):
+        """``extensions.orchestrator.cli.server._run_orchestrator`` adopts
+        the watchdog before loading the workflow."""
+        from extensions.orchestrator.cli.server import _run_orchestrator
+
+        with patch("clawcodex_ext.diagnostics.FreezeDetector") as mock_cls:
+            # workflow_path=None causes an early error return; the freeze
+            # detector adoption runs first.
+            rc = _run_orchestrator(workflow_path=None)
+            self.assertEqual(rc, 2)
+            mock_cls.maybe_start_from_env.assert_called_once()
 
 
 if __name__ == "__main__":

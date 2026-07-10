@@ -121,7 +121,7 @@ class TestInitDoesNotApplyUnsafeEnv(unittest.TestCase):
 
         with (
             mock.patch(
-                "src.permissions.trust_boundary._load_config_env",
+                "clawcodex_ext.permissions.trust_boundary._load_global_config_env",
                 return_value=config_env,
             ),
             mock.patch.object(init_module, "setup_graceful_shutdown"),
@@ -215,6 +215,61 @@ class TestRunPreActionSetsTrustAccepted(unittest.TestCase):
             args = types.SimpleNamespace(print=False)
             init_module.run_pre_action(args)
         self.assertTrue(get_session_trust_accepted())
+
+
+class TestFreezeDetectorWiring(unittest.TestCase):
+    """F-108 P108-D: ``init()`` must adopt the freeze watchdog when
+    ``CLAWCODEX_FREEZE_DIAG=1`` is set."""
+
+    def _reset_freeze_singleton(self) -> None:
+        from clawcodex_ext.diagnostics import FreezeDetector
+
+        inst = getattr(FreezeDetector, "_INSTANCE", None)
+        if inst is not None:
+            try:
+                inst.stop()
+            except Exception:
+                pass
+        FreezeDetector._INSTANCE = None  # noqa: SLF001
+
+    def test_init_adopts_freeze_detector_from_env(self) -> None:
+        from clawcodex_ext.diagnostics import FreezeDetector
+
+        self._reset_freeze_singleton()
+        with (
+            mock.patch.object(init_module, "apply_safe_config_environment_variables"),
+            mock.patch.object(init_module, "setup_graceful_shutdown"),
+            mock.patch.object(init_module, "start_api_preconnect"),
+            mock.patch("clawcodex_ext.ensure_nested_transcript_initialized"),
+            mock.patch("clawcodex_ext.ensure_eager_extensions_installed"),
+            mock.patch("telemetry.hooks.install_exception_hooks"),
+            mock.patch("clawcodex_ext.telemetry_lifecycle.install_telemetry_shutdown_flush"),
+            mock.patch.dict(os.environ, {"CLAWCODEX_FREEZE_DIAG": "1"}),
+        ):
+            init_module.init()
+            self.assertIsNotNone(FreezeDetector._INSTANCE)
+            self.assertTrue(
+                FreezeDetector._INSTANCE._watchdog is not None  # noqa: SLF001
+                and FreezeDetector._INSTANCE._watchdog.is_alive()  # noqa: SLF001
+            )
+            FreezeDetector._INSTANCE.stop()
+
+    def test_init_skips_freeze_detector_when_env_unset(self) -> None:
+        from clawcodex_ext.diagnostics import FreezeDetector
+
+        self._reset_freeze_singleton()
+        with (
+            mock.patch.object(init_module, "apply_safe_config_environment_variables"),
+            mock.patch.object(init_module, "setup_graceful_shutdown"),
+            mock.patch.object(init_module, "start_api_preconnect"),
+            mock.patch("clawcodex_ext.ensure_nested_transcript_initialized"),
+            mock.patch("clawcodex_ext.ensure_eager_extensions_installed"),
+            mock.patch("telemetry.hooks.install_exception_hooks"),
+            mock.patch("clawcodex_ext.telemetry_lifecycle.install_telemetry_shutdown_flush"),
+        ):
+            os.environ.pop("CLAWCODEX_FREEZE_DIAG", None)
+            init_module.init()
+            self.assertIsNone(FreezeDetector._INSTANCE)
 
 
 if __name__ == "__main__":

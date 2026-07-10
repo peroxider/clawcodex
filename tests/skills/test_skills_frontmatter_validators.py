@@ -21,6 +21,10 @@ from src.skills.frontmatter import parse_frontmatter
 from src.skills.loader import (
     EFFORT_LEVELS,
     FRONTMATTER_SHELLS,
+    load_skills_from_skills_dir,
+    parse_skill_frontmatter_fields,
+)
+from clawcodex_ext.skills.loader import (
     _coerce_allowed_tools,
     _coerce_description,
     _coerce_effort,
@@ -28,8 +32,6 @@ from src.skills.loader import (
     _coerce_model,
     _coerce_shell,
     _extract_description_from_markdown,
-    load_skills_from_skills_dir,
-    parse_skill_frontmatter_fields,
 )
 
 
@@ -160,17 +162,17 @@ class TestModelCoercion(unittest.TestCase):
         self.assertEqual(_coerce_model("sonnet"), "sonnet")
 
     def test_canonical_name_kept_silently(self) -> None:
-        with self.assertLogs("src.skills.loader", level="WARNING") as cm:
+        with self.assertLogs("clawcodex_ext.skills.loader", level="WARNING") as cm:
             # Have to log _something_ for the assertLogs context to pass; emit
             # a sentinel so an unrelated absence of warnings doesn't fail.
-            logging.getLogger("src.skills.loader").warning("sentinel")
+            logging.getLogger("clawcodex_ext.skills.loader").warning("sentinel")
             self.assertEqual(_coerce_model("claude-opus-4-5"), "claude-opus-4-5")
         # only the sentinel; the valid-canonical model should not warn.
         warnings = [r for r in cm.records if "sentinel" not in r.message]
         self.assertEqual(warnings, [])
 
     def test_unknown_model_warns(self) -> None:
-        with self.assertLogs("src.skills.loader", level="WARNING") as cm:
+        with self.assertLogs("clawcodex_ext.skills.loader", level="WARNING") as cm:
             out = _coerce_model("totally-bogus")
         self.assertEqual(out, "totally-bogus")  # kept; user might know best
         self.assertTrue(any("not a recognized" in r.message for r in cm.records))
@@ -190,7 +192,7 @@ class TestEffortCoercion(unittest.TestCase):
         self.assertEqual(_coerce_effort("7"), "7")
 
     def test_invalid_warns_and_drops(self) -> None:
-        with self.assertLogs("src.skills.loader", level="WARNING") as cm:
+        with self.assertLogs("clawcodex_ext.skills.loader", level="WARNING") as cm:
             out = _coerce_effort("insane")
         self.assertIsNone(out)
         self.assertTrue(any("not a valid level" in r.message for r in cm.records))
@@ -209,7 +211,7 @@ class TestShellCoercion(unittest.TestCase):
         self.assertEqual(_coerce_shell("powershell"), "powershell")
 
     def test_invalid_warns_and_returns_none(self) -> None:
-        with self.assertLogs("src.skills.loader", level="WARNING") as cm:
+        with self.assertLogs("clawcodex_ext.skills.loader", level="WARNING") as cm:
             out = _coerce_shell("zsh")
         self.assertIsNone(out)
         self.assertTrue(any("not recognized" in r.message for r in cm.records))

@@ -162,6 +162,20 @@ class HeadlessOptions:
 def run_headless(options: HeadlessOptions) -> int:
     """Run one or more prompts in headless mode. Returns the exit code."""
 
+    # F-108 P108-D: start the opt-in freeze-detection watchdog when the
+    # env var is set. Headless runs are the primary failure mode F-108
+    # targets (provider streams that stop emitting chunks, tools that
+    # hang forever). Placed at the top of the entry point so direct API
+    # callers (e.g. ``extensions.api.query.QueryRunner`` via
+    # ``run_headless_session``) also benefit without depending on the
+    # CLI bootstrap path that calls ``init()``.
+    try:
+        from clawcodex_ext.diagnostics import FreezeDetector
+
+        FreezeDetector.maybe_start_from_env()
+    except Exception:
+        pass
+
     if options.output_format not in OUTPUT_FORMATS:
         cli_error(f"error: --output-format must be one of {', '.join(OUTPUT_FORMATS)}", 2)
     if options.input_format not in INPUT_FORMATS:
