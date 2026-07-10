@@ -1,6 +1,6 @@
 # F-107: PowerShell 支持增强
 
-> 状态: ✅ 已完成
+> 状态: ✅ 核心已完成（含已知待完善项）
 > 章节: docs/feature_plan/03-agent-core/f-107-powershell.md
 > 最后更新: 2026-07-10
 
@@ -57,6 +57,7 @@
 1. `destructive_warnings.py` 当前只有 POSIX 正则，未针对 PowerShell cmdlet 提供额外提示（安全分析 `PWSHSafetyLevel.destructive` 已覆盖破坏性判定，此处为可选增强）。
 2. PowerShell 搜索/只读/语义/安全分析的细粒度单元测试尚不完整，建议后续补充。
 3. 在 POSIX 环境且 `pwsh` 不在 PATH 时，显式 `shell="powershell"` 会降级为 bash 并输出 warning；Windows 真机验证仍是最终验收步骤。
+4. `tests/skills/test_skills_shell_exec.py` 曾因 `_skill_registry` 随技能系统重构迁移到 `clawcodex_ext.skills.loader` 而导入失败，已修复。
 
 ## §3 实施细节
 

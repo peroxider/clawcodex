@@ -301,7 +301,7 @@ def test_mcp_skill_through_skilltool_never_calls_bash(tmp_path: Path, isolated_h
     through SkillTool, and asserts BashTool.call was never invoked.
     """
     from src.skills.bundled_skills import skill_from_mcp_tool
-    from src.skills.loader import _skill_registry
+    from clawcodex_ext.skills.loader import _skill_registry
 
     # MCP-loaded skills go through `get_prompt_for_command` callable
     # rather than the markdown renderer, so for the security-boundary
