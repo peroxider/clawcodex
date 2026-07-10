@@ -228,19 +228,23 @@ def help_command_call(args: str, context: CommandContext) -> LocalCommandResult:
 
 def skills_command_call(args: str, context: CommandContext) -> LocalCommandResult:
     """
-    Handle /skills command - list available skills.
+    Handle /skills command - list available skills or search/rebuild the index.
 
-    Args:
-        args: Command arguments
-        context: Command context
-
-    Returns:
-        LocalCommandResult
+    Subcommands:
+        /skills                    — list all skills
+        /skills search <query>     — search skills by TF-IDF
+        /skills inspect <name>     — show token breakdown for a skill
+        /skills rebuild            — force-rebuild the search index
+        /skills stats              — show index statistics
     """
+    args = args.strip()
+
+    if args:
+        return _skills_subcommand(args, context)
+
     try:
         from src.skills.loader import get_all_skills
 
-        # Pass project_root to find skills in project directories
         skills = get_all_skills(project_root=context.cwd or context.workspace_root)
     except Exception:
         skills = []
@@ -251,6 +255,8 @@ def skills_command_call(args: str, context: CommandContext) -> LocalCommandResul
             value="No skills available. Add skills to ~/.clawcodex/skills/ or ./.clawcodex/skills/.",
         )
 
+    searcher_section = _try_get_search_stats()
+
     lines = ["Available skills:", ""]
     for skill in skills:
         lines.append(f"  {skill.name}")
@@ -259,10 +265,175 @@ def skills_command_call(args: str, context: CommandContext) -> LocalCommandResul
             lines.append(f"      When to use: {skill.when_to_use}")
         lines.append("")
 
+    lines.extend(searcher_section)
+
     return LocalCommandResult(
         type="text",
         value="\n".join(lines),
     )
+
+
+def _skills_subcommand(args: str, context: CommandContext) -> LocalCommandResult:
+    """Dispatch /skills subcommands: search, inspect, rebuild, stats."""
+    parts = args.split(maxsplit=1)
+    sub = parts[0].lower()
+    rest = parts[1] if len(parts) > 1 else ""
+
+    if sub == "search":
+        return _skills_search(rest, context)
+    if sub == "inspect":
+        return _skills_inspect(rest)
+    if sub == "rebuild":
+        return _skills_rebuild()
+    if sub == "stats":
+        return _skills_stats()
+    return LocalCommandResult(
+        type="text",
+        value=f"Unknown subcommand: {sub}. Valid: search, inspect, rebuild, stats",
+    )
+
+
+def _skills_search(query: str, context: CommandContext) -> LocalCommandResult:
+    if not query:
+        return LocalCommandResult(type="text", value="Usage: /skills search <query>")
+
+    import asyncio
+
+    searcher = _get_skills_searcher()
+    try:
+        results = asyncio.run(searcher.search(query))
+    except Exception as e:
+        return LocalCommandResult(type="text", value=f"Search failed: {e}")
+
+    if not results:
+        return LocalCommandResult(type="text", value=f"No matching skills for: {query}")
+
+    lines = [f'Search results for "{query}":', ""]
+    for i, r in enumerate(results, 1):
+        doc = r.document
+        lines.append(f"{i}. {doc.name}  (score: {r.score:.3f}, source: {doc.source})")
+        if doc.description:
+            lines.append(f"   {doc.description}")
+        if r.reason:
+            lines.append(f"   {r.reason}")
+        lines.append("")
+
+    return LocalCommandResult(type="text", value="\n".join(lines))
+
+
+def _skills_inspect(name: str) -> LocalCommandResult:
+    if not name:
+        return LocalCommandResult(type="text", value="Usage: /skills inspect <name>")
+
+    import asyncio
+
+    searcher = _get_skills_searcher()
+    try:
+        asyncio.run(searcher.ensure_index())
+    except Exception as e:
+        return LocalCommandResult(type="text", value=f"Cannot inspect: {e}")
+
+    result = searcher.inspect(name)
+    if result is None:
+        return LocalCommandResult(type="text", value=f"Skill not found in index: {name}")
+
+    lines = [
+        f"Inspect: {result.name}",
+        f"  Source: {result.source}",
+        f"  Total tokens: {result.token_count}",
+        "",
+        "  Per-field breakdown:",
+    ]
+    for field_name, field_info in result.fields.items():
+        lines.append(f"    {field_name}: {field_info.token_count} tokens")
+        if field_info.token_sample:
+            sample = ", ".join(field_info.token_sample[:10])
+            lines.append(f"      sample: {sample}")
+
+    return LocalCommandResult(type="text", value="\n".join(lines))
+
+
+def _skills_rebuild() -> LocalCommandResult:
+    import asyncio
+
+    searcher = _get_skills_searcher()
+    try:
+        asyncio.run(searcher.refresh())
+        stats = searcher.stats()
+        if stats:
+            return LocalCommandResult(
+                type="text",
+                value=f"Index rebuilt: {stats.total_docs} docs, {stats.total_terms} terms",
+            )
+        return LocalCommandResult(type="text", value="Index rebuilt successfully.")
+    except Exception as e:
+        return LocalCommandResult(type="text", value=f"Rebuild failed: {e}")
+
+
+def _skills_stats() -> LocalCommandResult:
+    import asyncio
+
+    searcher = _get_skills_searcher()
+    try:
+        asyncio.run(searcher.ensure_index())
+    except Exception:
+        return LocalCommandResult(type="text", value="Index not loaded (feature flag may be off).")
+
+    stats = searcher.stats()
+    if stats is None:
+        return LocalCommandResult(type="text", value="Index not loaded.")
+
+    pinned = searcher.get_pinned()
+    lines = [
+        "Skill Search Index Stats",
+        "=======================",
+        f"  Documents:     {stats.total_docs}",
+        f"  Unique terms:  {stats.total_terms}",
+        f"  Inverted size: {stats.total_inverted_entries} entries",
+        f"  Approx memory: {stats.approximate_bytes} bytes",
+        f"  Pinned skills: {len(pinned)}",
+    ]
+    if pinned:
+        lines.append(f"    {', '.join(pinned)}")
+
+    return LocalCommandResult(type="text", value="\n".join(lines))
+
+
+def _try_get_search_stats() -> list[str]:
+    """Return a summary line about the search index, or empty list."""
+    try:
+        searcher = _get_skills_searcher()
+        stats = searcher.stats()
+        if stats is not None:
+            return [
+                "",
+                f"Search index: {stats.total_docs} docs indexed.",
+                "Use /skills search <query> to find relevant skills.",
+            ]
+    except Exception:
+        pass
+    return []
+
+
+def _get_skills_searcher():
+    """Lazily create and cache a SkillSearcher singleton for the command system."""
+    from extensions.skills_ext.registry_ext import get_default_registry
+
+    from clawcodex_ext.services.skill_search.config import SkillSearchConfig
+    from clawcodex_ext.services.skill_search.searcher import SkillSearcher
+    from clawcodex_ext.services.skill_search.tokenizer import create_default_tokenizer
+
+    searcher: SkillSearcher | None = getattr(_get_skills_searcher, "_instance", None)
+    if searcher is None:
+        config = SkillSearchConfig.from_feature_gate()
+        registry = get_default_registry()
+        tokenizer = create_default_tokenizer(cjk_word_tokenizer=None)
+        searcher = SkillSearcher(registry, config=config, tokenizer=tokenizer)
+        _get_skills_searcher._instance = searcher  # type: ignore[attr-defined]
+        # Start watcher for incremental index updates (P92-E).
+        if config.enabled:
+            searcher.create_watcher().start()
+    return searcher
 
 
 def exit_command_call(args: str, context: CommandContext) -> LocalCommandResult:
@@ -1450,8 +1621,8 @@ INIT_COMMAND = PromptCommand(
 
 SKILLS_COMMAND = LocalCommand(
     name="skills",
-    description="List available skills",
-    argument_hint="",
+    description="List available skills or search/reload the skill index",
+    argument_hint="[search <query> | inspect <name> | rebuild | stats]",
     supports_non_interactive=True,
 )
 

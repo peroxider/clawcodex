@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Sequence
 
 if TYPE_CHECKING:
-    from ..skills.loader import get_all_skills as upstream_get_all_skills
-    from ..skills.model import Skill
+    from clawcodex_ext.skills.loader import get_all_skills as upstream_get_all_skills
+    from clawcodex_ext.skills.model import Skill
     from .agent_config import AgentSkillConfig
     from .bundles import SKILL_BUNDLES
 
@@ -117,7 +117,7 @@ class SkillRegistryExt:
         user_skills_dir: str | Path | None,
     ) -> list[Skill]:
         """Load skills from clawcodex-specific paths."""
-        from ..skills.loader import load_skills_from_skills_dir
+        from clawcodex_ext.skills.loader import load_skills_from_skills_dir
 
         skills: list[Skill] = []
 
