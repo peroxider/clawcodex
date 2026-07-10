@@ -46,7 +46,6 @@ docs/feature_plan/
 |----------|------|:----:|---------|
 | F-10 | ExecuteExtraTool 延迟工具系统 | 📋 | [f-10-extratool.md](03-agent-core/f-10-extratool.md) |
 | F-107 | PowerShell 支持增强 | 📋 | [f-107-powershell.md](03-agent-core/f-107-powershell.md) |
-| F-108 | Freeze Detection & Auto-Recovery | ✅ | [f-108-freeze-detection.md](03-agent-core/f-108-freeze-detection.md) |
 | F-119 | System Prompt 段落拼装与自迭代基础设施 | 📋 | [f-119-prompt-assembly.md](03-agent-core/f-119-prompt-assembly.md) |
 
 ### CLI 与配置系统
@@ -122,3 +121,4 @@ docs/feature_plan/
 | 2026-07-04 | 删除 F-89/F-93/F-97/F-123 已完成特性规划文档;同步 master 状态 11 处(F-66 🚧、F-72/F-84/F-87 🔄、F-102 ✅、F-110-F-116 🟡、F-94 🚧);补登 F-125;新增 08-agent-dashboard 章节收录 F-120 | 全量复核 49 个 F-Number 文档 vs 代码层,识别 4 个 ✅ 完全实现特性 + 11 处文档/master 状态不一致 + 1 处遗漏章节 |
 | 2026-07-07 | 删除 F-102 已完成特性规划文档(代码确认 P102-A~E 全部落地, 3 新建+9 修改文件, 稳定性门禁通过) | 代码确认特性已全部实现，移除已完成的规范文档 |
 | 2026-07-07 | 删除 F-89 @agent-name 和 F-100 Dreaming 已完成特性规划文档 | 代码确认五入口统一 + Phase B 30min TTL 增强已全部落地；F-89 9 测试用例/F-100 109 单测+6 E2E 全绿 |
+| 2026-07-10 | 删除 F-108 已完成特性规划文档 | F-108 P108-A~H 四层方案全部实现，单元测试与稳定性门禁通过，verification agent 复核 PASS |
