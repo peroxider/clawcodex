@@ -373,6 +373,7 @@ async def run_agent(params: RunAgentParams) -> AsyncGenerator[Message, None]:
         tool_registry=params.tool_registry,
         tool_use_context=subagent_context,
         provider=params.provider,
+        model=params.model,
         abort_controller=abort_controller,
         query_source=effective_query_source,
         max_turns=max_turns,

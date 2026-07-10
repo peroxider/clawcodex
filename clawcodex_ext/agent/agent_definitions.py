@@ -39,6 +39,10 @@ class AgentDefinition:
     source: AgentSource = "built-in"
     base_dir: str = "built-in"
     model: str | None = None  # None → inherit parent, 'inherit' → force inherit
+    # Provider name (e.g. "anthropic", "openai", "deepseek") for this agent.
+    # None → inherit parent's provider. When set, the agent tool builds a fresh
+    # provider instance for this sub-agent.
+    provider: str | None = None
     permission_mode: PermissionMode | None = None
     max_turns: int | None = None
     background: bool = False

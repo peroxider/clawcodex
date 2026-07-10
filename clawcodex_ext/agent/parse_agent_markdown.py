@@ -9,6 +9,7 @@ Field mapping (frontmatter → AgentDefinition):
     disallowed-tools        → disallowed_tools
     disallowedTools         → disallowed_tools (camelCase alias)
     model                   → model        ('inherit' kept as a literal)
+    provider                → provider     (provider name, e.g. "anthropic", "openai", "deepseek")
     permission-mode         → permission_mode
     permissionMode          → permission_mode (camelCase alias)
     max-turns               → max_turns
@@ -181,6 +182,9 @@ def parse_agent_from_markdown(
     disallowed_tools = parse_string_list(disallowed_raw) if disallowed_raw is not None else None
 
     model = _parse_model(_first(frontmatter, "model"))
+    provider = _first(frontmatter, "provider")
+    if provider is not None and not isinstance(provider, str):
+        provider = str(provider).strip() or None
     permission_mode = parse_permission_mode(
         _first(frontmatter, "permission-mode", "permissionMode")
     )
@@ -213,6 +217,7 @@ def parse_agent_from_markdown(
         source=source,
         base_dir=base_dir,
         model=model,
+        provider=provider,
         permission_mode=permission_mode,
         max_turns=max_turns,
         background=background,

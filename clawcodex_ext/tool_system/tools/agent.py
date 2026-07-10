@@ -213,7 +213,15 @@ AGENT_INPUT_SCHEMA: dict[str, Any] = {
                 "the agent definition's model frontmatter. If omitted, uses the "
                 "agent definition's model, or inherits from the parent."
             ),
-            "enum": ["sonnet", "opus", "haiku"],
+        },
+        "provider": {
+            "type": "string",
+            "description": (
+                "Optional provider override for this agent (e.g. \"anthropic\", "
+                "\"openai\", \"deepseek\", \"gemini\"). Takes precedence over "
+                "the agent definition's provider frontmatter. When set, the "
+                "sub-agent uses its own provider instance independent of the parent."
+            ),
         },
         "run_in_background": {
             "type": "boolean",
@@ -433,6 +441,40 @@ def make_agent_tool(
             if agent_def is None:
                 raise ToolInputError("No agent definitions available")
 
+        # --- Resolve provider and model overrides ---
+        #
+        # Priority for model: tool_input > agent_def.model > None (inherit parent).
+        # Tool input model from the LLM is a raw model name (e.g. "claude-sonnet-4-6").
+        # Agent definition model can be a concrete name, "inherit", or None.
+        if not model:
+            agent_model = getattr(agent_def, "model", None)
+            if agent_model and agent_model.lower() != "inherit":
+                model = agent_model
+
+        # Priority for provider name: tool_input > agent_def.provider > None (inherit parent).
+        provider_name = tool_input.get("provider") or getattr(agent_def, "provider", None) or None
+
+        # When a different provider is specified, build a fresh provider instance.
+        # Keep the closure's ``provider`` as the default (the parent's provider).
+        effective_provider = provider
+        if provider_name:
+            try:
+                from clawcodex_ext.providers.runtime import build_provider_from_config
+
+                effective_provider = build_provider_from_config(provider_name, model=model)
+                logger.info(
+                    "Sub-agent using different provider: %s (model=%s)",
+                    provider_name,
+                    model or "(inherit)",
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to build provider '%s' for sub-agent; falling back to parent provider: %s",
+                    provider_name,
+                    exc,
+                )
+                effective_provider = provider
+
         # Resolve available tools. ``registry`` is a closure variable from
         # ``make_agent_tool`` — NEVER assign to that name inside this
         # function (an assignment anywhere in the body makes it local for
@@ -612,7 +654,7 @@ def make_agent_tool(
             prompt=fork_prompt,
             available_tools=available_tools,
             tool_registry=effective_registry,
-            provider=provider,
+            provider=effective_provider,
             model=model,
             agent_id=agent_id,
             is_async=is_async,

@@ -141,6 +141,11 @@ class QueryParams:
     tool_use_context: ToolContext
     provider: BaseProvider
     abort_controller: AbortController
+    # Per-request model override. When set, this model is used instead of the
+    # provider's default model. Passed through to ``call_kwargs`` so providers
+    # that support per-call model switching (e.g. ``_get_model(**kwargs)``) can
+    # pick it up.
+    model: str | None = None
     query_source: str = "repl_main_thread"
     max_output_tokens_override: int | None = None
     max_turns: int | None = None
@@ -390,6 +395,7 @@ async def _call_model_sync(
     messages: list[Message],
     system_prompt: str,
     tools: Tools,
+    model: str | None = None,
     max_output_tokens_override: int | None = None,
     abort_signal: Any = None,
     on_text_chunk: Callable[[str], None] | None = None,
@@ -540,6 +546,12 @@ async def _call_model_sync(
         tool_schemas.append(build_client_advisor_tool_schema())
 
     call_kwargs: dict[str, Any] = {"tools": tool_schemas}
+
+    # Per-request model override. When ``model`` is set, pass it through
+    # so the provider's ``_get_model(**kwargs)`` picks it up instead of the
+    # provider's default model.
+    if model:
+        call_kwargs["model"] = model
 
     if advisor_mode == ADVISOR_MODE_SERVER_SIDE:
         # Opt into the server-side advisor tool. ``betas`` lives outside
@@ -1693,6 +1705,7 @@ async def query(
                     messages=messages,
                     system_prompt=current_system_prompt,
                     tools=effective_tools,
+                    model=params.model,
                     max_output_tokens_override=max_output_tokens_override,
                     abort_signal=params.abort_controller.signal,
                     on_text_chunk=params.on_text_chunk,
@@ -1702,7 +1715,7 @@ async def query(
             returned_assistants, returned_tool_blocks = await with_retry(
                 _call_model_attempt,
                 RetryOptions(
-                    model=getattr(params.provider, "model", "") or "",
+                    model=params.model or getattr(params.provider, "model", "") or "",
                     signal=params.abort_controller.signal,
                     query_source=params.query_source,
                 ),
