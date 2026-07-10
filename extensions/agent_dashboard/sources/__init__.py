@@ -11,9 +11,14 @@ register themselves against the default registry on import.
 from __future__ import annotations
 
 from .goal_source import GoalDashboardSource
+from .orchestrator_source import OrchestratorDashboardSource
+from .sop_source import SOPDashboardSource, register_sop_dashboard_source
 from .tasks_source import TasksDashboardSource
 
 __all__ = [
     "GoalDashboardSource",
+    "OrchestratorDashboardSource",
+    "SOPDashboardSource",
     "TasksDashboardSource",
+    "register_sop_dashboard_source",
 ]

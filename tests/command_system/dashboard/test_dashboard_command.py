@@ -23,8 +23,9 @@ from clawcodex_ext.command_system.dashboard_command import (
 )
 from clawcodex_ext.command_system.types import (
     CommandContext,
-    LocalCommand,
-    LocalCommandResult,
+    CommandType,
+    InteractiveCommand,
+    InteractiveOutcome,
 )
 
 
@@ -84,18 +85,18 @@ def _reset_default_store() -> None:
 
 
 def test_dashboard_command_is_registered_with_call_impl() -> None:
-    assert isinstance(DASHBOARD_COMMAND, LocalCommand)
+    assert isinstance(DASHBOARD_COMMAND, InteractiveCommand)
     assert DASHBOARD_COMMAND.name == "dashboard"
     assert "dash" in DASHBOARD_COMMAND.aliases
-    assert DASHBOARD_COMMAND._call_impl is not None
 
 
 @pytest.mark.asyncio
-async def test_dashboard_command_call_returns_text(ctx: CommandContext) -> None:
-    res = await DASHBOARD_COMMAND.call("", ctx)
-    assert isinstance(res, LocalCommandResult)
-    assert res.type == "text"
-    assert "Dashboard" in res.value
+async def test_dashboard_command_run_returns_interactive_outcome(ctx: CommandContext) -> None:
+    result = await DASHBOARD_COMMAND.run("", ctx)
+    assert isinstance(result, InteractiveOutcome)
+    assert "Dashboard" in (result.message or "")
+    # A populated snapshot is long enough to be scrollable.
+    assert result.scrollable is True
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +204,34 @@ def test_dashboard_command_call_source_flag_takes_priority(ctx: CommandContext) 
     # --source wins over positional, so only task should appear.
     assert "■ task" in res.value
     assert "■ goal" not in res.value
+
+
+@pytest.mark.asyncio
+async def test_dashboard_command_run_with_no_args_returns_all(ctx: CommandContext) -> None:
+    result = await DASHBOARD_COMMAND.run("", ctx)
+    assert isinstance(result, InteractiveOutcome)
+    assert "■ goal" in (result.message or "")
+    assert "■ task" in (result.message or "")
+
+
+@pytest.mark.asyncio
+async def test_dashboard_command_run_scrollable_when_long(ctx: CommandContext) -> None:
+    result = await DASHBOARD_COMMAND.run("", ctx)
+    assert isinstance(result, InteractiveOutcome)
+    assert result.scrollable is True
+
+
+@pytest.mark.asyncio
+async def test_dashboard_command_run_not_scrollable_when_empty(
+    tmp_path: Path,
+) -> None:
+    from extensions.agent_dashboard import get_default_store
+
+    get_default_store().registry.clear()
+    ctx = CommandContext(workspace_root=tmp_path, cwd=tmp_path)
+    result = await DASHBOARD_COMMAND.run("", ctx)
+    assert isinstance(result, InteractiveOutcome)
+    assert result.scrollable is False
 
 
 def test_dashboard_command_call_uses_fallback_store_when_no_app_state(

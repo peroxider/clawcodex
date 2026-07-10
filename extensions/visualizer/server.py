@@ -20,8 +20,15 @@ from .builders.export_builder import ExportBuilder
 from .builders.stats_builder import StatsBuilder
 from .builders.timeline_builder import TimelineBuilder
 from .import_router import create_import_router
-from .models.viz_models import ExportFormat, ImportStatus, SessionVizData, ShareLink, WorkspaceInfo
-from .ws import create_orch_ws_router, create_ws_router
+from .models.viz_models import (
+    DashboardEntryViz,
+    ExportFormat,
+    ImportStatus,
+    SessionVizData,
+    ShareLink,
+    WorkspaceInfo,
+)
+from .ws import create_dashboard_ws_router, create_orch_ws_router, create_ws_router
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +60,15 @@ class _AppState:
         self.import_tasks: dict[str, ImportStatus] = {}
         self._shares_path = Path.home() / ".clawcodex" / "viz_shares.json"
         self._load_share_links()
+        # F-120: shared dashboard store. Tests can override by setting
+        # ``app.state.viz.dashboard_store`` after ``create_app`` returns.
+        try:
+            from extensions.agent_dashboard import get_default_store
+
+            self.dashboard_store = get_default_store()
+        except Exception:
+            logger.debug("Failed to load default dashboard store", exc_info=True)
+            self.dashboard_store = None
 
     def _load_share_links(self) -> None:
         import time
@@ -132,6 +148,7 @@ def create_app(
     )
     app.include_router(create_ws_router(), prefix="/api/viz")
     app.include_router(create_orch_ws_router(), prefix="/api/viz")
+    app.include_router(create_dashboard_ws_router(), prefix="/api/viz")
     if allow_import:
         app.include_router(create_import_router(), prefix="/api/viz")
 
@@ -143,6 +160,33 @@ def create_app(
     )
     if static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    @app.get("/api/dashboard/snapshot", response_model=list[DashboardEntryViz], tags=["dashboard"])
+    async def dashboard_snapshot(
+        source: str | None = None,
+        status: str | None = None,
+    ):
+        """Return the current cross-system dashboard snapshot (F-120)."""
+        store = getattr(app.state.viz, "dashboard_store", None)
+        if store is None:
+            return []
+        filters: dict[str, Any] = {}
+        if source:
+            filters["source"] = source
+        if status:
+            filters["status"] = status
+        entries = store.snapshot(filters=filters) if filters else store.snapshot()
+        return [DashboardEntryViz(**entry.to_dict()) for entry in entries]
+
+    @app.get("/viz/dashboard", response_class=HTMLResponse, tags=["frontend"])
+    async def agent_dashboard(request: Request):
+        if app.state.templates is None:
+            return HTMLResponse("<h1>Templates not found</h1>", status_code=500)
+        return app.state.templates.TemplateResponse(
+            request,
+            "agent_dashboard_tab.html",
+            {"request": request, "page_title": "Agent Dashboard"},
+        )
 
     @app.get("/api/viz/health", tags=["health"])
     async def health():

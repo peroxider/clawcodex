@@ -426,3 +426,24 @@ class ImportStatus(BaseModel):
     progress: int = 0  # 0-100
     result: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
+
+
+class DashboardEntryViz(BaseModel):
+    """F-120: single entry returned by the Agent Dashboard snapshot API.
+
+    Mirrors :class:`extensions.capabilities.dashboard_entry.DashboardEntry`
+    as a Pydantic model so FastAPI can use it as a ``response_model``.
+    """
+
+    id: str
+    source: str
+    title: str
+    status: str = "pending"
+    detail: str = ""
+    source_session_id: str | None = None
+    progress_pct: float | None = None
+    parent_id: str | None = None
+    order: int = 0
+    tags: list[str] = Field(default_factory=list)
+    owner: str | None = None
+    updated_at_ms: int = 0

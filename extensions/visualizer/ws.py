@@ -1,7 +1,9 @@
-"""WebSocket live tail for session events (F-92-B).
+"""WebSocket live tail for session events (F-92-B) + Agent Dashboard (F-120).
 
 Provides real-time push of new TimelineBar entries as a session runs.
 Connect to ``/api/viz/ws/sessions/{session_id}``.
+
+Also exposes ``/api/viz/ws/dashboard/live`` for the F-120 Agent Dashboard.
 """
 
 from __future__ import annotations
@@ -12,12 +14,12 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from .builders.operation_categorizer import OperationCategorizer
-from .models.viz_models import BarType, TimelineBar
+from .models.viz_models import BarType, DashboardEntryViz, TimelineBar
 
 logger = logging.getLogger(__name__)
 
@@ -504,5 +506,158 @@ def create_orch_ws_router() -> APIRouter:
             if not tail.connections:
                 tail.stop()
                 _active_orch_tails.pop(run_id, None)
+
+    return router
+
+
+# ---------------------------------------------------------------------------
+# F-120: Agent Dashboard live snapshot push
+# ---------------------------------------------------------------------------
+
+
+class DashboardLiveTail:
+    """Push dashboard snapshot updates to WebSocket clients.
+
+    Registers a sink on ``DashboardStore.subscribe`` and forwards any
+    changed merged snapshot to all connected clients. The sink may be
+    invoked from a background thread (the store is thread-safe), so we
+    use ``asyncio.run_coroutine_threadsafe`` to get back onto the event
+    loop that created the tail.
+    """
+
+    def __init__(self, store: Any) -> None:
+        self.store: Any = store
+        self.connections: list[WebSocket] = []
+        self._loop = asyncio.get_running_loop()
+        self._unsubscribe: Callable[[], None] | None = None
+        # True while we are explicitly pushing the current snapshot to a
+        # new client; suppresses the store's own change notification so we
+        # don't double-send the same snapshot back through the WebSocket.
+        self._sending_snapshot = False
+        if store is not None:
+            try:
+                self._unsubscribe = store.subscribe(self._on_change)
+            except Exception:
+                logger.debug("Dashboard WS failed to subscribe to store", exc_info=True)
+
+    def _on_change(self, entries: list[Any]) -> None:
+        if self._sending_snapshot:
+            return
+        payload = self._snapshot_payload(entries, time.time())
+        asyncio.run_coroutine_threadsafe(self.broadcast(payload), self._loop)
+
+    @staticmethod
+    def _snapshot_payload(entries: list[Any], emit_ts: float) -> dict[str, Any]:
+        serialised: list[dict[str, Any]] = []
+        for entry in entries:
+            if hasattr(entry, "to_dict"):
+                serialised.append(entry.to_dict())
+            else:
+                serialised.append(dict(entry))
+        return {
+            "type": "dashboard_snapshot",
+            "entries": serialised,
+            "timestamp": emit_ts,
+        }
+
+    async def add_connection(self, ws: WebSocket) -> None:
+        await ws.accept()
+        self.connections.append(ws)
+        logger.debug(
+            "Dashboard WS client connected (%d clients)",
+            len(self.connections),
+        )
+
+    def remove_connection(self, ws: WebSocket) -> None:
+        if ws in self.connections:
+            self.connections.remove(ws)
+        logger.debug(
+            "Dashboard WS client disconnected (%d remaining)",
+            len(self.connections),
+        )
+
+    async def broadcast(self, event: dict[str, Any]) -> None:
+        payload = json.dumps(event, default=str)
+        dead: list[WebSocket] = []
+        for ws in self.connections:
+            try:
+                await ws.send_text(payload)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.remove_connection(ws)
+
+    async def send_current_snapshot(self, ws: WebSocket) -> None:
+        """Send the latest merged snapshot to a single client."""
+        if self.store is None:
+            return
+        try:
+            self._sending_snapshot = True
+            entries = self.store.snapshot()
+        except Exception:
+            logger.debug("Dashboard WS snapshot failed", exc_info=True)
+            return
+        finally:
+            self._sending_snapshot = False
+        payload = self._snapshot_payload(entries, time.time())
+        try:
+            await ws.send_text(json.dumps(payload, default=str))
+        except Exception:
+            self.remove_connection(ws)
+
+    def stop(self) -> None:
+        if self._unsubscribe is not None:
+            try:
+                self._unsubscribe()
+            except Exception:
+                logger.debug("Dashboard WS unsubscribe failed", exc_info=True)
+            self._unsubscribe = None
+
+
+_active_dashboard_tails: dict[int, DashboardLiveTail] = {}
+
+
+def create_dashboard_ws_router() -> APIRouter:
+    """Create the WebSocket router for live dashboard snapshots (F-120)."""
+    router = APIRouter()
+
+    @router.websocket("/ws/dashboard/live")
+    async def ws_dashboard_live(websocket: WebSocket) -> None:
+        """WebSocket endpoint that pushes the dashboard snapshot on change."""
+        from .server import _AppState
+
+        app = websocket.app
+        state: _AppState = app.state.viz
+        store = getattr(state, "dashboard_store", None)
+
+        tail_key = id(store) if store is not None else 0
+        if tail_key not in _active_dashboard_tails:
+            tail = DashboardLiveTail(store)
+            _active_dashboard_tails[tail_key] = tail
+        else:
+            tail = _active_dashboard_tails[tail_key]
+
+        await tail.add_connection(websocket)
+        await tail.send_current_snapshot(websocket)
+        try:
+            while True:
+                try:
+                    data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                    if data == "ping":
+                        await websocket.send_text("pong")
+                except asyncio.TimeoutError:
+                    try:
+                        await websocket.send_text(
+                            json.dumps({"type": "heartbeat", "timestamp": time.time()})
+                        )
+                    except Exception:
+                        break
+        except WebSocketDisconnect:
+            pass
+        finally:
+            tail.remove_connection(websocket)
+            if not tail.connections:
+                tail.stop()
+                _active_dashboard_tails.pop(tail_key, None)
 
     return router

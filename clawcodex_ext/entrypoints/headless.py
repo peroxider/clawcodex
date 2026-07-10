@@ -716,6 +716,48 @@ def run_headless(options: HeadlessOptions) -> int:
                             exit_code = 1
                             break
 
+                        # F-120: ``/dashboard`` is an InteractiveCommand, but
+                        # it has no UI dependencies (pure read-only text
+                        # rendering). ``execute_command_sync`` would reject it,
+                        # so we special-case it here and emit the rendered
+                        # snapshot synchronously. Scrollable mode is dropped in
+                        # headless.
+                        if (
+                            parsed.command_name.lower() in ("dashboard", "dash")
+                            and cmd is not None
+                            and getattr(cmd, "command_type", None)
+                            and cmd.command_type.value == "interactive"
+                        ):
+                            dash_text, dash_err = _run_dashboard_headless(
+                                args=parsed.command_args or "",
+                                workspace_root=workspace_root,
+                                tool_context=tool_context,
+                                cwd=workspace_root,
+                            )
+                            if dash_err is not None:
+                                if writer is not None:
+                                    writer.write(
+                                        ResultEvent(
+                                            subtype="error",
+                                            session_id=session.session_id,
+                                            num_turns=0,
+                                            result="",
+                                            duration_ms=0,
+                                            is_error=True,
+                                            error=dash_err,
+                                        )
+                                    )
+                                else:
+                                    print(f"error: {dash_err}", file=stderr)
+                                exit_code = 1
+                                break
+                            if dash_text:
+                                if writer is not None:
+                                    writer.write(AssistantEvent(text=dash_text))
+                                else:
+                                    aggregate_text.append(dash_text)
+                            _skip_agent_loop = True
+
                         # F-122-G: ``/btw`` is an InteractiveCommand, but it
                         # has no UI dependencies (pure read-only single-turn
                         # query). ``execute_command_sync`` would reject it as
@@ -724,7 +766,7 @@ def run_headless(options: HeadlessOptions) -> int:
                         # synchronously. Scrollable mode is dropped — there is
                         # no TTY viewer in headless, so the flat text is the
                         # final answer.
-                        if (
+                        elif (
                             parsed.command_name.lower() == "btw"
                             and cmd is not None
                             and getattr(cmd, "command_type", None)
@@ -1291,6 +1333,44 @@ def _noop_ask_user(questions):  # type: ignore[override]
         if isinstance(q, dict) and isinstance(q.get("question"), str):
             answers[q["question"]] = ""
     return answers
+
+
+# ---------------------------------------------------------------------------
+# F-120: /dashboard in headless / --print mode
+# ---------------------------------------------------------------------------
+# /dashboard is an ``InteractiveCommand`` so the REPL can render long snapshots
+# in a keyboard-scrolled viewer. It does not need a UI surface, so in headless
+# mode we run it synchronously and emit the flat text. Scrollable mode is
+# dropped — there is no TTY viewer in headless.
+
+
+def _run_dashboard_headless(
+    *,
+    args: str,
+    workspace_root: Path,
+    tool_context: Any,
+    cwd: Path,
+) -> "tuple[str | None, str | None]":
+    """Run ``/dashboard`` synchronously in headless mode and return ``(text, error)``."""
+    import asyncio
+
+    from clawcodex_ext.command_system.dashboard_command import DashboardCommand
+    from clawcodex_ext.command_system.engine import create_command_context
+
+    ctx = create_command_context(
+        workspace_root=workspace_root,
+        tool_context=tool_context,
+        tool_registry=getattr(tool_context, "tool_registry", None),
+        cwd=cwd,
+    )
+    try:
+        outcome = asyncio.run(DashboardCommand().run(args, ctx))
+    except Exception as exc:  # noqa: BLE001 — surface any failure cleanly
+        return (None, f"Dashboard failed: {exc}")
+
+    if outcome is None or getattr(outcome, "display", None) == "skip":
+        return ("", None)
+    return (outcome.message or "", None)
 
 
 # ---------------------------------------------------------------------------

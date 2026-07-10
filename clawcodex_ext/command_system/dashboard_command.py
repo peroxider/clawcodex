@@ -15,9 +15,9 @@ Command forms:
 
 Output is a multi-line Rich markup block (icons + per-source
 sections) — see ``_format_snapshot`` for the rendering. The
-existing command engine forwards ``LocalCommandResult.value`` as
-plain text into the message stream, and downstream surfaces
-(REPL/TUI) interpret the markup.
+command engine forwards the text via :class:`InteractiveOutcome`;
+downstream surfaces (REPL/TUI) interpret the markup. In the REPL,
+long snapshots are rendered in a keyboard-scrolled viewer.
 
 Design notes:
 
@@ -33,10 +33,10 @@ Design notes:
   * The Rich markup is intentionally conservative — bold + dim +
     colour — so it degrades gracefully when the consumer is a
     plain-text terminal.
-  * The command is registered as a :class:`LocalCommand` (not
-    :class:`InteractiveCommand`) because it does not need a UI
-    host. TTY scrolling/filtering is a follow-up (Phase 3 §4.1
-    of the F-120 plan says "interactive (only TTY mode)").
+  * The command is registered as an :class:`InteractiveCommand`
+    so the REPL can route long snapshots through its
+    keyboard-scrolled viewer (F-122-F). Headless / non-interactive
+    surfaces degrade to a flat text print.
 """
 
 from __future__ import annotations
@@ -59,11 +59,22 @@ from extensions.capabilities.dashboard_entry import (
     normalize_source_name,
 )
 
-from .types import CommandAvailability, CommandContext, LocalCommand, LocalCommandResult
+from .types import (
+    CommandAvailability,
+    CommandContext,
+    InteractiveCommand,
+    InteractiveOutcome,
+    LocalCommandResult,
+)
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["DASHBOARD_COMMAND", "DashboardCommand", "dashboard_command_call"]
+
+# F-122-F: when the formatted snapshot exceeds this many lines we mark the
+# InteractiveOutcome as scrollable so the REPL enters its keyboard-scrolled
+# view. Below the threshold a flat print is friendlier.
+_SCROLLABLE_LINE_THRESHOLD = 8
 
 
 _STATUS_ICON: dict[str, str] = {
@@ -298,19 +309,44 @@ def dashboard_command_call(args: str, context: CommandContext) -> LocalCommandRe
     return LocalCommandResult(type="text", value=text)
 
 
-# The Command object wired into the builtin registry. We attach the
-# handler via ``set_call`` (the only sanctioned way to bind a call
-# implementation to a frozen :class:`LocalCommand` — see
-# ``LocalCommand.set_call``). The class hierarchy leaves room for a
-# future TUI subclass to override the rendering without touching
-# the registry wiring; today a plain :class:`LocalCommand` instance
-# is enough.
-DASHBOARD_COMMAND: LocalCommand = LocalCommand(
+def _should_render_scrollable(message: str) -> bool:
+    """Decide whether the dashboard snapshot should be rendered scrollable.
+
+    Conservative heuristic: if the formatted body exceeds the threshold line
+    count, suggest scrollable mode. The REPL re-checks against the live
+    terminal height, so this is just the suggestion.
+    """
+    if not message:
+        return False
+    body = message.strip()
+    line_count = body.count("\n") + 1 if body else 0
+    return line_count > _SCROLLABLE_LINE_THRESHOLD
+
+
+class DashboardCommand(InteractiveCommand):
+    """``/dashboard`` — cross-system task progress dashboard (read-only).
+
+    Implemented as an :class:`InteractiveCommand` so the REPL can route long
+    snapshots through its keyboard-scrolled viewer (F-122-F). On headless or
+    non-interactive surfaces the command degrades to a flat text print; it
+    never calls ``ctx.ui``.
+    """
+
+    async def run(self, args: str, context: CommandContext) -> InteractiveOutcome:
+        result = dashboard_command_call(args, context)
+        if result.type == "skip":
+            return InteractiveOutcome.skip()
+        return InteractiveOutcome(
+            message=result.value,
+            display=result.display_text or "system",
+            scrollable=_should_render_scrollable(result.value),
+        )
+
+
+DASHBOARD_COMMAND: DashboardCommand = DashboardCommand(
     name="dashboard",
     description="Show the cross-system task progress dashboard.",
     argument_hint="[goal|task|orchestrator|sop] [--status S] [--id ID]",
     aliases=["dash"],
     availability=CommandAvailability.CONSOLE,
 )
-# Wire the sync function into the frozen dataclass.
-DASHBOARD_COMMAND.set_call(dashboard_command_call)

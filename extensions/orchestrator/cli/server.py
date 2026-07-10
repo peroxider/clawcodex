@@ -1139,6 +1139,21 @@ def _run_orchestrator(
 
     subsystem = OrchestrationSubsystem(config, workflow_yaml_path=workflow_yaml_path)
 
+    # F-120: wire the orchestrator into the process-wide dashboard store.
+    # The provider reads subsystem._orchestrator which is constructed inside
+    # subsystem.run(); until then the source returns an empty snapshot.
+    try:
+        from extensions.agent_dashboard import register_dashboard_source
+        from extensions.agent_dashboard.sources.orchestrator_source import OrchestratorDashboardSource
+
+        register_dashboard_source(
+            OrchestratorDashboardSource(
+                orchestrator_provider=lambda: getattr(subsystem, "_orchestrator", None),
+            )
+        )
+    except Exception:
+        logger.debug("Failed to register orchestrator dashboard source", exc_info=True)
+
     # F-?? Fix 2: write the real daemon PID to <workspace>/daemon.pid
     # so external tools (cron monitor, stop scripts) can locate the
     # running daemon.  The previous shell-wrapper pattern
