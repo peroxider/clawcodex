@@ -155,27 +155,16 @@ class WorkflowOrchestrator:
                 )
                 from_stage = last_completed + 1
 
-                # 恢复 stage_results 到引擎状态，
-                # 否则 _dependencies_satisfied() 会因为
-                # get_stage_result() 返回 None 而跳过后续 stage。
-                from .workflow_engine.workflow_state import StageResult, StageStatus
-
-                for sid, sr_data in checkpoint.stage_results.items():
-                    status_str = sr_data.get("status", "completed")
-                    try:
-                        status = StageStatus(status_str)
-                    except ValueError:
-                        status = StageStatus.COMPLETED
-                    self._engine.state.stage_results[sid] = StageResult(
-                        stage_id=sid,
-                        status=status,
-                        outputs=sr_data.get("outputs", []),
-                        error=sr_data.get("error"),
-                        cost_usd=sr_data.get("cost_usd", 0.0),
-                        duration_seconds=sr_data.get("duration_seconds", 0.0),
-                        timestamp=sr_data.get("timestamp", ""),
-                    )
-                    self._engine.state.stage_statuses[sid] = status
+                # 使用 CheckpointManager.restore_state 完整恢复 WorkflowState
+                restored_state = self._checkpoint_mgr.restore_state(checkpoint)
+                self._engine.state = restored_state
+                self._engine.cost_tracker.load_state(
+                    total_usd=checkpoint.cost_accumulated_usd,
+                    stage_usd=0.0,
+                )
+                # 回填决策历史
+                if restored_state.decision_history is not None:
+                    self._engine._decision_handler._history = restored_state.decision_history
 
         result = await self._engine.execute(from_stage=from_stage)
 
@@ -266,11 +255,8 @@ class WorkflowOrchestrator:
             workflow_version=self._schema.version,
         )
         self._engine._dag_order = []
-        self._engine._decision_count = {}
-        self._engine.cost_tracker._total_usd = 0.0
-        self._engine.cost_tracker._stage_usd = 0.0
-        self._engine.cost_tracker._warned_total = False
-        self._engine.cost_tracker._warned_stage = False
+        self._engine._decision_handler.reset()
+        self._engine.cost_tracker.load_state(total_usd=0.0, stage_usd=0.0)
 
     async def shutdown(self) -> None:
         """优雅关闭。"""

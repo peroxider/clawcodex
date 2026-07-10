@@ -233,7 +233,6 @@ class DeclarativeWorkflowEngine:
 
         # 检查点系统 (F-115)
         self._checkpoint_manager: CheckpointManager | None = None
-        self._decision_count: dict[int, int] = {}  # 决策循环检测
 
         # GATE/DECISION 处理器 (F-112, F-113)
         self._gate_handler = GateHandler(
@@ -241,6 +240,7 @@ class DeclarativeWorkflowEngine:
             llm_client=self.config.llm_client,
         )
         self._decision_handler = DecisionHandler()
+        self._decision_count: dict[int, int] = {}  # 保留兼容；实际计数由 DecisionHandler.history 维护
 
     def set_stage_runner(self, runner: Any) -> None:
         """注入 StageRunner 适配器 (F-111)。"""
@@ -276,7 +276,7 @@ class DeclarativeWorkflowEngine:
         try:
             self._checkpoint_manager.save(
                 self.state,
-                decision_history=list(self._decision_count.items()),
+                decision_history=self._decision_handler.history.to_dict(),
             )
         except Exception:
             logger.debug("Failed to save checkpoint at stage %s", current_stage_id, exc_info=True)

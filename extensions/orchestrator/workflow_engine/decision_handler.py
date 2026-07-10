@@ -56,10 +56,40 @@ class DecisionHistory:
 
     def to_dict(self) -> list[dict[str, Any]]:
         return [
-            {"stage": r.stage_id, "outcome": r.outcome, "timestamp": r.timestamp}
+            {
+                "stage": r.stage_id,
+                "outcome": r.outcome,
+                "timestamp": r.timestamp,
+                "next_stage": r.next_stage,
+            }
             for r in self.records
         ]
 
+    @classmethod
+    def from_dict_list(cls, records: list[dict[str, Any]]) -> "DecisionHistory":
+        """从检查点记录列表重建决策历史。"""
+        history = cls()
+        for r in records:
+            history.records.append(
+                DecisionRecord(
+                    stage_id=int(r.get("stage", 0)),
+                    outcome=r.get("outcome", ""),
+                    timestamp=r.get("timestamp", ""),
+                    next_stage=r.get("next_stage"),
+                )
+            )
+        return history
+
+    def count_by_stage(self, stage_id: int) -> int:
+        """统计指定阶段的所有决策记录数。"""
+        return sum(1 for r in self.records if r.stage_id == stage_id)
+
+    def counts(self) -> dict[int, int]:
+        """返回每个 stage_id 的决策次数映射。"""
+        counts: dict[int, int] = {}
+        for r in self.records:
+            counts[r.stage_id] = counts.get(r.stage_id, 0) + 1
+        return counts
 
 @dataclass
 class DecisionResult:

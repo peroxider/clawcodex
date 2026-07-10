@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
+from .checkpoint import ArtifactResolver
 from .validators import ContractValidator
 from .workflow_state import StageNode, WorkflowState
 
@@ -429,7 +430,16 @@ class StageRunner:
             for v in stage_node.validators:
                 parts.append(f"- {v.get('type', 'unknown')}: {v}")
 
-        return "\n".join(parts)
+        prompt = "\n".join(parts)
+
+        # 解析跨阶段产物引用
+        prompt = ArtifactResolver.resolve(
+            prompt,
+            state=state,
+            workspace_dir=str(self._workspace_dir) if self._workspace_dir else "",
+        )
+
+        return prompt
 
     def _render_base_prompt(self, state: WorkflowState) -> str:
         """通过 PromptBuilder.render 获取 WORKFLOW.md 基础 prompt。

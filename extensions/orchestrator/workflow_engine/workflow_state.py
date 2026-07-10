@@ -110,6 +110,7 @@ class WorkflowState:
     metadata: dict[str, Any] = field(default_factory=dict)
     rollback_events: list[dict[str, Any]] = field(default_factory=list)
     issue_context: dict[str, Any] | None = None  # 来自 Orchestrator 的 issue 上下文
+    decision_history: Any = field(default=None)  # DecisionHistory 实例，由检查点恢复时注入
 
     def is_stage_completed(self, stage_id: int) -> bool:
         return stage_id in self.completed_stages

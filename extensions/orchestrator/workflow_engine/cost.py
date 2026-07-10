@@ -83,3 +83,16 @@ class CostTracker:
     @property
     def stage_usd(self) -> float:
         return self._stage_usd
+
+    def load_state(
+        self,
+        total_usd: float,
+        stage_usd: float = 0.0,
+        warned_total: bool = False,
+        warned_stage: bool = False,
+    ) -> None:
+        """从外部状态加载成本累计值（用于检查点恢复）。"""
+        self._total_usd = float(total_usd)
+        self._stage_usd = float(stage_usd)
+        self._warned_total = bool(warned_total)
+        self._warned_stage = bool(warned_stage)
