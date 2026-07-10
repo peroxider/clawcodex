@@ -217,7 +217,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR-F-112 | GATE 门禁处理器 | 3 种审批模式：manual（ClarificationQueue F-39 暂停工作流）/ auto（ValidatorSpec 全通过）/ threshold（LLM-as-judge 评分达标）；复用 F-44 人工检视闸门扩展为 `workflow gate --approve/--reject`；GATE_PENDING 工作流级状态；rollback 恢复 | 用户可在工作流任意阶段插入人工/自动/阈值门禁，工作流级 rollback 恢复阶段状态 | 📋 规划中 → F-112（依赖 F-110 + F-39） | `extensions/orchestrator/workflow_engine/{gate_handler,gate_modes,gate_rollback}.py` |
 | AR-F-113 | DECISION 决策处理器 | 多结果分支（proceed/pivot/refine）+ 回环次数检查 + 收敛检测（识别退化循环）+ 阶段目录快照 + 版本化回滚 | 工作流可在 DECISION 节点按 outcome 路由，回环次数超限/退化自动回滚 | 📋 规划中 → F-113 | `extensions/orchestrator/workflow_engine/{decision_handler,decision_history,rollback}.py` |
 | AR-F-114 | 阶段契约验证器 | 7 种内置 Validator：file_exists / file_size / regex / json_schema / line_count / llm_judge / custom（subprocess + exit code）；`ContractValidator` + 注册表 | 工作流可机器可验证阶段输出 DoD（文件存在、大小、行数、JSON schema、LLM 评分） | 📋 规划中 → F-114 | `extensions/orchestrator/workflow_engine/validators/{builtin,llm_judge,custom}.py` |
-| AR-F-115 | 检查点与恢复 | 工作流级检查点 JSON 持久化（workflow_name/version/current_stage/completed_stages/stage_results/decision_history/cost_accumulated_usd/started_at/last_checkpoint）；复用 ARC 原子写入（temp file + rename）+ SessionStorage（F-49）+ State Journal Writer（F-91~F-96） | 用户可在任意阶段中断后从检查点恢复执行，断电不丢成本/阶段状态 | 📋 规划中 → F-115 | `extensions/orchestrator/workflow_engine/{checkpoint,resume,artifact_resolver}.py` |
+| AR-F-115 | 检查点与恢复 | 工作流级检查点 JSON 持久化（workflow_name/version/current_stage/completed_stages/stage_results/decision_history/cost_accumulated_usd/started_at/last_checkpoint）；原子写入（temp file + rename）；`WorkflowOrchestrator` 自动检测、恢复与清理检查点；`ArtifactResolver` 跨阶段产物路径解析；复用 `SessionStorage`（F-49）+ `StateJournalWriter`（F-96-A） | 用户可在任意阶段中断后从检查点恢复执行，断电/崩溃不丢阶段状态与成本累计；工作流成功后自动清理检查点 | 🚧 进行中 → F-115（核心代码已落地，待补齐测试与恢复完备性） | `extensions/orchestrator/workflow_engine/checkpoint.py`（已合并 `WorkflowResumer` / `ArtifactResolver`）、`engine.py`、`workflow_orchestrator.py` |
 | AR-F-116 | 工作流可观测性集成 | State Journal NDJSON（workflow_stage_start/workflow_gate_request/workflow_decision/workflow_complete）+ Gantt 图（阶段执行时间）+ Tool-call NDJSON 审计（F-45）+ WorkflowProgressSink 阶段完成百分比（F-40）+ 每阶段 ProgressReportTool 触发（F-20） | 用户可在 Visualizer 看到工作流甘特图、决策/门禁历史、阶段完成百分比；与单 session 可视化复用同一 NDJSON 格式 | 📋 规划中 → F-116（依赖 F-110 + F-91~F-96 + F-45 + F-40） | `extensions/orchestrator/workflow_engine/{observability,progress,audit}.py` |
 
 ### 3.2 IR-4 业务 Agent 与远程值守（→ FEATURE_PLAN §2.9（F-18）、§4.2 F-50 SOP 固化、§4.3 F-52 SDK→Tool）
@@ -635,7 +635,7 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | F-112 | GATE 门禁处理器 | Orchestrator | 📋 | AR-F-112 | §3.4 SR-3.4 |
 | F-113 | DECISION 决策处理器 | Orchestrator | 📋 | AR-F-113 | §3.4 SR-3.4 |
 | F-114 | 阶段契约验证器 | Orchestrator | 📋 | AR-F-114 | §3.4 SR-3.4 |
-| F-115 | 检查点与恢复 | Orchestrator | 📋 | AR-F-115 | §3.4 SR-3.4 |
+| F-115 | 检查点与恢复 | Orchestrator | 🚧 | AR-F-115 | §3.4 SR-3.4 |
 | F-116 | 工作流可观测性集成 | Orchestrator | 📋 | AR-F-116 | §3.4 SR-3.4 |
 | F-118 | 动态任务分解引擎 | Orchestrator | 🔭 | AR-F-118 | §3.1 SR-3.1 |
 | F-119 | System Prompt 段落拼装与自迭代 | Agent Core | 📋 | AR-F-119 | §2.1 SR-1.1 |
@@ -645,7 +645,7 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | F-124 | Issue Clarifier 描述澄清 | Agent 新增规划 | 📋 | — | §3.1 |
 | F-125 | Headless 无头模式多轮交互 | Agent 新增规划 | 🟡 | — | §2.1 |
 
-**统计**：31 个 F-N 中，🟡 进行中 13 / 📋 规划中 15 / 🔭 探索中 1 / ⏳ 待开始 1 / ✅ 已完成 0（已从路线图中移除）
+**统计**：31 个 F-N 中，🟡 进行中 14 / 📋 规划中 14 / 🔭 探索中 1 / ⏳ 待开始 1 / ✅ 已完成 0（已从路线图中移除）
 
 ### B.2 v4.4 → v4.5 主要变更摘要（ROADMAP 精简）
 
