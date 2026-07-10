@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest import mock
 
+from clawcodex_ext.utils.shell_resolver import resolve_shell
 from src.tool_system.context import ToolContext
 from src.tool_system.tools.bash.bash_tool import _BashRunResult, _bash_call
 
@@ -57,3 +58,15 @@ def test_bash_call_explicit_bash_still_uses_bash(tmp_path: Path) -> None:
     assert argv[:2] == ["bash", "-lc"]
     assert "pwd >" in argv[-1]
     assert result.output["stdout"] == "ok\n"
+
+
+def test_resolve_shell_powershell_fallback_on_posix() -> None:
+    """Explicit shell='powershell' on POSIX without pwsh falls back to bash."""
+    with mock.patch(
+        "clawcodex_ext.utils.shell_resolver.find_powershell_path",
+        return_value=None,
+    ):
+        kind, factory = resolve_shell("powershell")
+
+    assert kind == "bash"
+    assert factory("echo ok") == ["bash", "-lc", "echo ok"]
