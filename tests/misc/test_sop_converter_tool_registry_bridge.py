@@ -209,6 +209,11 @@ class TestTypeHintToJsonType(unittest.TestCase):
     def test_unknown_type_falls_back_to_string(self) -> None:
         self.assertEqual(_type_hint_to_json_type("MyCustomType"), "string")
 
+    def test_uuid_types_map_to_string(self) -> None:
+        for hint in ["UUID", "UUID4", "Optional[UUID]", "UUID | None"]:
+            with self.subTest(hint=hint):
+                self.assertEqual(_type_hint_to_json_type(hint), "string")
+
     def test_optional_typing_reduces_first(self) -> None:
         self.assertEqual(
             _type_hint_to_json_type("Optional[int]"),
@@ -1848,7 +1853,10 @@ class TestCliHandlerBridge(unittest.TestCase):
         self.assertIn("project", spec.input_schema["properties"]["args"]["description"])
 
 
-from extensions.sop_converter.sdk_serialization import normalize_mapping_inputs
+from extensions.sop_converter.sdk_serialization import (
+    coerce_mapping_value,
+    normalize_mapping_inputs,
+)
 
 
 class TestMappingInputsCoercion(unittest.TestCase):
@@ -1864,6 +1872,20 @@ class TestMappingInputsCoercion(unittest.TestCase):
     def test_normalize_mapping_inputs_dict_passthrough(self) -> None:
         payload = {"query": "hello"}
         self.assertIs(normalize_mapping_inputs(payload), payload)
+
+    def test_coerce_mapping_value_dict_passthrough(self) -> None:
+        payload = {"subject": "hi", "body": "there"}
+        self.assertIs(coerce_mapping_value(payload), payload)
+
+    def test_coerce_mapping_value_json_string(self) -> None:
+        self.assertEqual(
+            coerce_mapping_value('{"subject": "hi", "body": "there"}'),
+            {"subject": "hi", "body": "there"},
+        )
+
+    def test_coerce_mapping_value_rejects_plain_string(self) -> None:
+        with self.assertRaises(TypeError):
+            coerce_mapping_value("plain email body")
 
     def test_coerce_inputs_any_uses_wrapper_helper(self) -> None:
         expr, imports = _coerce_param_expression("inputs", "Any", "/tmp/sdk")
@@ -1886,6 +1908,52 @@ class TestMappingInputsCoercion(unittest.TestCase):
         expr, imports = _coerce_param_expression("payload", "Any", "/tmp/sdk")
         self.assertIsNone(expr)
         self.assertEqual(imports, set())
+
+    def test_coerce_dict_param_uses_mapping_helper(self) -> None:
+        expr, imports = _coerce_param_expression("content", "dict", "/tmp/sdk")
+        self.assertEqual(expr, "_coerce_mapping_value(content)")
+        self.assertEqual(imports, set())
+
+    def test_coerce_optional_dict_param_uses_mapping_helper(self) -> None:
+        expr, imports = _coerce_param_expression(
+            "smtp_config", "dict | None", "/tmp/sdk"
+        )
+        self.assertEqual(
+            expr, "None if smtp_config is None else (_coerce_mapping_value(smtp_config))"
+        )
+        self.assertEqual(imports, set())
+
+    def test_generated_stub_includes_coerce_mapping_for_dict_param(self) -> None:
+        op = _make_op(
+            "send_email",
+            parameters=[
+                _make_param("to_email", "str"),
+                _make_param("content", "dict"),
+            ],
+        )
+        body, _imports = _generate_method_stub(
+            op,
+            is_class_method=False,
+            module_name="smtp_email_sender.scripts.send_email",
+            source_dir="/tmp/sdk",
+        )
+        self.assertIn("_coerce_mapping_value(content)", body)
+
+    def test_operation_to_spec_dict_param_is_object_schema(self) -> None:
+        op = _make_op(
+            "send_email",
+            parameters=[
+                _make_param("to_email", "str"),
+                _make_param("content", "dict", description="邮件内容配置字典"),
+            ],
+        )
+        spec = operation_to_spec(
+            op,
+            source_dir="/tmp/sdk",
+            script_path="/tmp/wrapper.py",
+            comp_name="smtp_email_sender.scripts",
+        )
+        self.assertEqual(spec.input_schema["properties"]["content"]["type"], "object")
 
     def test_generated_stub_includes_normalize_helper(self) -> None:
         op = _make_op(
@@ -1923,6 +1991,14 @@ class TestWrapperHelpersCompile(unittest.TestCase):
             handle.write(code)
             path = handle.name
         py_compile.compile(path, doraise=True)
+
+        namespace: dict = {}
+        exec(code, namespace)
+        coerce = namespace["_coerce_mapping_value"]
+        self.assertEqual(
+            coerce('{"subject": "hi", "body": "there"}'),
+            {"subject": "hi", "body": "there"},
+        )
 
     def test_model_coerce_uses_coerce_sdk_type(self) -> None:
         sdk_root = Path("D:/projects/JiuwenAgent")
@@ -2024,6 +2100,211 @@ class TestPipelineExecuteStageSchema(unittest.TestCase):
         self.assertEqual(props["adapters"]["type"], "object")
         self.assertEqual(props["auto_approve_gates"]["default"], False)
         self.assertEqual(spec.input_schema["required"], ["stage", "run_dir"])
+
+
+class TestInteractiveInputDetection(unittest.TestCase):
+    def test_source_operation_with_getpass_detection(self) -> None:
+        from extensions.sop_converter.source_parser import detect_interactive_input, _InteractiveInputDetector
+        import ast
+
+        source = """
+def login():
+    import getpass
+    api_key = getpass.getpass("Enter API Key: ")
+    return api_key
+"""
+        tree = ast.parse(source)
+        func_def = tree.body[0]
+        has_input, prompts = detect_interactive_input(func_def)
+        self.assertTrue(has_input)
+        self.assertEqual(prompts, ["Enter API Key: "])
+
+    def test_source_operation_with_input_detection(self) -> None:
+        from extensions.sop_converter.source_parser import detect_interactive_input
+        import ast
+
+        source = """
+def get_name():
+    name = input("What is your name? ")
+    return name
+"""
+        tree = ast.parse(source)
+        func_def = tree.body[0]
+        has_input, prompts = detect_interactive_input(func_def)
+        self.assertTrue(has_input)
+        self.assertEqual(prompts, ["What is your name? "])
+
+    def test_source_operation_with_sys_stdin_readline_detection(self) -> None:
+        from extensions.sop_converter.source_parser import detect_interactive_input
+        import ast
+
+        source = """
+import sys
+
+def read_input():
+    line = sys.stdin.readline()
+    return line
+"""
+        tree = ast.parse(source)
+        func_def = tree.body[1]
+        has_input, prompts = detect_interactive_input(func_def)
+        self.assertTrue(has_input)
+        self.assertEqual(prompts, [""])
+
+    def test_source_operation_with_sys_stdin_read_detection(self) -> None:
+        from extensions.sop_converter.source_parser import detect_interactive_input
+        import ast
+
+        source = """
+import sys
+
+def read_api_key():
+    key = sys.stdin.read().strip()
+    return key
+"""
+        tree = ast.parse(source)
+        func_def = tree.body[1]
+        has_input, prompts = detect_interactive_input(func_def)
+        self.assertTrue(has_input)
+        self.assertEqual(prompts, [""])
+
+    def test_source_operation_without_interactive_input(self) -> None:
+        from extensions.sop_converter.source_parser import detect_interactive_input
+        import ast
+
+        source = """
+def add(a, b):
+    return a + b
+"""
+        tree = ast.parse(source)
+        func_def = tree.body[0]
+        has_input, prompts = detect_interactive_input(func_def)
+        self.assertFalse(has_input)
+        self.assertEqual(prompts, [])
+
+
+class TestInteractiveInputWrapper(unittest.TestCase):
+    def setUp(self) -> None:
+        self._cleanup, self.tool_dir, self.scripts_dir = _isolated_dirs()
+        self.addCleanup(self._cleanup)
+
+    def test_wrapper_with_interactive_input_includes_monkey_patch(self) -> None:
+        source = textwrap.dedent(
+            """\
+            def login():
+                import getpass
+                api_key = getpass.getpass("Enter API Key: ")
+                return api_key
+            """
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            source_dir = Path(tmp) / "proj"
+            source_dir.mkdir()
+            source_file = source_dir / "auth.py"
+            source_file.write_text(source, encoding="utf-8")
+
+            op = _make_op(
+                "login",
+                file_stem="auth",
+            )
+            op.requires_interactive_input = True
+            op.interactive_prompts = ["Enter API Key: "]
+
+            script = _generate_wrapper_script(
+                [op],
+                class_name=None,
+                module_name="proj.auth",
+                file_stem="auth",
+                source_dir=str(source_dir),
+                scripts_dir=self.scripts_dir,
+            )
+
+            script_content = script.read_text(encoding="utf-8")
+            self.assertIn("_set_interactive_inputs", script_content)
+            self.assertIn("builtins.input = _interactive_input", script_content)
+            self.assertIn("_getpass_module.getpass = _interactive_getpass", script_content)
+            self.assertIn("_sys_module.stdin.read = _interactive_stdin_read", script_content)
+            self.assertIn("_sys_module.stdin.readline = _interactive_stdin_readline", script_content)
+
+    def test_wrapper_always_includes_interactive_input_preamble(self) -> None:
+        """Preamble is always emitted so subprocess-launching stubs can
+        forward _interactive_input_queue to nested subprocesses, even when
+        the wrapped function does not directly contain input() calls."""
+        source = textwrap.dedent(
+            """\
+            def add(a, b):
+                return a + b
+            """
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            source_dir = Path(tmp) / "proj"
+            source_dir.mkdir()
+            source_file = source_dir / "math.py"
+            source_file.write_text(source, encoding="utf-8")
+
+            op = _make_op(
+                "add",
+                parameters=[_make_param("a", "int"), _make_param("b", "int")],
+                file_stem="math",
+            )
+            op.requires_interactive_input = False
+            op.interactive_prompts = []
+
+            script = _generate_wrapper_script(
+                [op],
+                class_name=None,
+                module_name="proj.math",
+                file_stem="math",
+                source_dir=str(source_dir),
+                scripts_dir=self.scripts_dir,
+            )
+
+            script_content = script.read_text(encoding="utf-8")
+            # preamble is always present now — the detection is shallow
+            # (doesn't follow transitive calls), so CLI entrypoints that
+            # delegate to helpers with input() calls need the preamble.
+            self.assertIn("_interactive_input_queue", script_content)
+            self.assertIn("_set_interactive_inputs", script_content)
+
+    def test_operation_to_spec_adds_interactive_inputs_schema(self) -> None:
+        op = _make_op(
+            "login",
+            file_stem="auth",
+        )
+        op.requires_interactive_input = True
+        op.interactive_prompts = ["Enter API Key: "]
+
+        spec = operation_to_spec(
+            op,
+            source_dir="/tmp/sdk",
+            script_path="/tmp/fake.py",
+            comp_name="demo",
+        )
+
+        props = spec.input_schema["properties"]
+        self.assertIn("__interactive_inputs", props)
+        self.assertEqual(props["__interactive_inputs"]["type"], "array")
+        self.assertEqual(props["__interactive_inputs"]["items"], {"type": "string"})
+        self.assertIn("Enter API Key", props["__interactive_inputs"]["description"])
+
+    def test_operation_to_spec_without_interactive_input_omits_schema(self) -> None:
+        op = _make_op(
+            "add",
+            parameters=[_make_param("a", "int"), _make_param("b", "int")],
+            file_stem="math",
+        )
+        op.requires_interactive_input = False
+        op.interactive_prompts = []
+
+        spec = operation_to_spec(
+            op,
+            source_dir="/tmp/sdk",
+            script_path="/tmp/fake.py",
+            comp_name="demo",
+        )
+
+        props = spec.input_schema["properties"]
+        self.assertNotIn("__interactive_inputs", props)
 
 
 if __name__ == "__main__":

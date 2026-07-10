@@ -7,7 +7,7 @@ docstring、参数类型注解、import 依赖关系，输出结构化的
 设计决定：
 - 不对源码做语义分析，只做结构化提取（类/方法/参数/docstring）。
 - `SourceComponent`/`SourceOperation`/`ParamSpec` 是纯数据容器。
-- docstring 兼容 Google / NumPy / reST 三种格式，统一降级取首段。
+- docstring 兼容 Google / NumPy / reST / 中文「参数:」格式，统一降级取首段。
 """
 
 from __future__ import annotations
@@ -22,6 +22,67 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _ASYNC_ITER_RETURN_RE = re.compile(r"\bAsync(?:Iterator|Generator)\b")
+
+
+class _InteractiveInputDetector(ast.NodeVisitor):
+    """AST visitor that detects interactive input calls.
+
+    Detects:
+    - input() calls
+    - getpass.getpass() calls
+    - sys.stdin.readline() calls
+    - sys.stdin.read() calls
+    """
+
+    def __init__(self) -> None:
+        self.has_interactive_input = False
+        self.prompts: list[str] = []
+
+    def visit_Call(self, node: ast.Call) -> None:
+        self.generic_visit(node)
+
+        if isinstance(node.func, ast.Name) and node.func.id == "input":
+            self.has_interactive_input = True
+            if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                self.prompts.append(node.args[0].value)
+            else:
+                self.prompts.append("")
+            return
+
+        if isinstance(node.func, ast.Attribute):
+            attr = node.func.attr
+            value = node.func.value
+
+            if attr == "getpass" and isinstance(value, ast.Name) and value.id == "getpass":
+                self.has_interactive_input = True
+                if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                    self.prompts.append(node.args[0].value)
+                else:
+                    self.prompts.append("")
+                return
+
+            if attr == "readline" and isinstance(value, ast.Attribute):
+                if isinstance(value.value, ast.Name) and value.value.id == "sys" and value.attr == "stdin":
+                    self.has_interactive_input = True
+                    self.prompts.append("")
+                    return
+
+            if attr == "read" and isinstance(value, ast.Attribute):
+                if isinstance(value.value, ast.Name) and value.value.id == "sys" and value.attr == "stdin":
+                    self.has_interactive_input = True
+                    self.prompts.append("")
+                    return
+
+
+def detect_interactive_input(node: ast.AST) -> tuple[bool, list[str]]:
+    """Detect if an AST node contains interactive input calls.
+
+    Returns:
+        (has_interactive_input, prompts)
+    """
+    detector = _InteractiveInputDetector()
+    detector.visit(node)
+    return detector.has_interactive_input, detector.prompts
 
 
 def is_async_generator_operation(
@@ -65,6 +126,50 @@ _SIMPLE_RETURN_TYPES = frozenset({
     "Path", "str | None", "int | None",
 })
 
+# Docstring descriptions that imply a mapping parameter (no explicit type annotation).
+_DICT_DESC_RE = re.compile(
+    r"(?:字典|映射|键值|键-值|\bdict\b|\bmapping\b|\bjson\s+object\b)",
+    re.IGNORECASE,
+)
+
+_DOC_PARAM_LINE_RE = re.compile(
+    r"^(\w+)\s*(?:\(([^)]*)\))?\s*[：:]\s*(.*)"
+)
+
+_DOC_SECTION_STOP_MARKERS = (
+    "returns:",
+    "raises:",
+    "yields:",
+    "返回:",
+    "返回：",
+    "抛出:",
+    "抛出：",
+    "异常:",
+    "异常：",
+    "说明:",
+    "说明：",
+)
+
+
+def infer_type_hint_from_description(description: str) -> str | None:
+    """Infer a Python type hint from a parameter description line.
+
+    Used when docstrings omit explicit types (common in Chinese ``参数:`` blocks).
+    Currently recognises mapping/dict semantics only — keeps false positives low.
+    """
+    if not description:
+        return None
+    if _DICT_DESC_RE.search(description.strip()):
+        return "dict"
+    return None
+
+
+def _resolve_doc_param_type_hint(type_str: str | None, description: str) -> str | None:
+    """Prefer explicit doc type; otherwise infer from description keywords."""
+    if type_str and type_str.strip():
+        return type_str.strip()
+    return infer_type_hint_from_description(description)
+
 
 @dataclass
 class SourceOperation:
@@ -82,6 +187,8 @@ class SourceOperation:
     is_async_generator: bool = False  # async def 且返回/产出 async iterator
     is_property: bool = False  # @property 装饰的只读属性（无参数，不可调用）
     is_factory: bool = False  # 是否为工厂函数（create_xxx, build_xxx, make_xxx）
+    requires_interactive_input: bool = False  # 是否需要交互式输入（input()/getpass.getpass()/sys.stdin.readline()）
+    interactive_prompts: list[str] = field(default_factory=list)  # 检测到的交互提示文本
 
 
 @dataclass
@@ -463,6 +570,8 @@ class SourceCodeParser:
         )
         is_factory = has_factory_prefix and has_complex_return_type
 
+        requires_interactive_input, interactive_prompts = detect_interactive_input(node)
+
         return SourceOperation(
             name=node.name,
             description=description or node.name,
@@ -475,6 +584,8 @@ class SourceCodeParser:
             is_async_generator=is_async_generator_operation(node, return_type),
             is_property=is_property,
             is_factory=is_factory,
+            requires_interactive_input=requires_interactive_input,
+            interactive_prompts=interactive_prompts,
         )
 
     # ---- docstring parsing ------------------------------------------------
@@ -482,7 +593,7 @@ class SourceCodeParser:
     def _parse_docstring(self, docstring: str | None) -> tuple[str, list[ParamSpec]]:
         """解析 docstring，提取首段描述和参数列表。
 
-        兼容 Google / NumPy / reST 三种格式，降级取纯文本首段。
+        兼容 Google / NumPy / reST / 中文「参数:」格式，降级取纯文本首段。
         """
         if not docstring:
             return "", []
@@ -502,6 +613,11 @@ class SourceCodeParser:
 
         # Try reST: :param name: desc
         params = self._parse_rest_style(docstring)
+        if params:
+            return description, params
+
+        # Try Chinese style: 参数: / 参数：
+        params = self._parse_chinese_style(docstring)
         if params:
             return description, params
 
@@ -556,16 +672,47 @@ class SourceCodeParser:
                 if not stripped or stripped.startswith(("returns:", "raises:", "yields:")):
                     break
                 # Match "name (type): description" or "name: description"
-                match = re.match(r"^(\w+)\s*(?:\(([^)]*)\))?\s*:\s*(.*)", stripped)
+                match = _DOC_PARAM_LINE_RE.match(stripped)
                 if match:
                     name, type_str, desc = match.groups()
+                    desc_stripped = desc.strip()
                     params.append(
                         ParamSpec(
                             name=name,
-                            type_hint=type_str.strip() if type_str else None,
-                            description=desc.strip(),
+                            type_hint=_resolve_doc_param_type_hint(type_str, desc_stripped),
+                            description=desc_stripped,
                         )
                     )
+        return params
+
+    def _parse_chinese_style(self, docstring: str) -> list[ParamSpec]:
+        """Parse Chinese-style ``参数:`` / ``参数：`` sections."""
+        params: list[ParamSpec] = []
+        in_params = False
+
+        for line in docstring.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith(("参数:", "参数：")):
+                in_params = True
+                continue
+            if not in_params:
+                continue
+            if not stripped:
+                continue
+            lowered = stripped.lower()
+            if any(lowered.startswith(marker) for marker in _DOC_SECTION_STOP_MARKERS):
+                break
+            match = _DOC_PARAM_LINE_RE.match(stripped)
+            if match:
+                name, type_str, desc = match.groups()
+                desc_stripped = desc.strip()
+                params.append(
+                    ParamSpec(
+                        name=name,
+                        type_hint=_resolve_doc_param_type_hint(type_str, desc_stripped),
+                        description=desc_stripped,
+                    )
+                )
         return params
 
     def _parse_numpy_style(self, docstring: str) -> list[ParamSpec]:
@@ -610,10 +757,12 @@ class SourceCodeParser:
             match = re.match(r":param\s+(\w+):\s*(.*)", stripped)
             if match:
                 name, desc = match.groups()
+                desc_stripped = desc.strip()
                 params.append(
                     ParamSpec(
                         name=name,
-                        description=desc.strip(),
+                        type_hint=infer_type_hint_from_description(desc_stripped),
+                        description=desc_stripped,
                     )
                 )
         return params

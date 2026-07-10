@@ -106,6 +106,8 @@ _TYPE_MAP: dict[str, str] = {
     "None": "null",
     "NoneType": "null",
     "Path": "string",
+    "UUID": "string",
+    "UUID4": "string",
     "RCConfig": "object",
     "AdapterBundle": "object",
     "Stage": "string",
@@ -210,6 +212,19 @@ def _is_loose_mapping_inputs_type_hint(type_hint: str | None) -> bool:
 
     cleaned = _strip_optional_union(type_hint.strip())
     if cleaned in ("Any", "object", "dict", "Dict", "Mapping", "mapping", "MutableMapping"):
+        return True
+    return cleaned.startswith(
+        ("Dict[", "dict[", "Mapping[", "mapping[", "MutableMapping[")
+    )
+
+
+def _is_dict_type_hint(type_hint: str | None) -> bool:
+    """True when a parameter is explicitly typed as a mapping (not Any/object)."""
+    if not type_hint:
+        return False
+
+    cleaned = _strip_optional_union(type_hint.strip())
+    if cleaned == "dict":
         return True
     return cleaned.startswith(
         ("Dict[", "dict[", "Mapping[", "mapping[", "MutableMapping[")
@@ -354,6 +369,18 @@ def _script_name_for_functions(module_path: str, file_stem: str) -> str:
     """Build a unique script filename for standalone functions in a module."""
     hash_hex = hashlib.sha256(module_path.encode()).hexdigest()[:8]
     return f"{file_stem}_fn_{hash_hex}.py"
+
+
+def _module_path_needs_importlib(module_path: str) -> bool:
+    """Return True if any segment of *module_path* is not a valid Python identifier.
+
+    Python ``from X import Y`` requires every dot-separated segment of X to be a
+    valid identifier (``[a-zA-Z_][a-zA-Z0-9_]*``).  Some SDK source directories
+    contain hyphens (e.g. ``agent-perf-analyzer``, ``gitcode-issue-reply``).
+    For those we must use ``importlib.import_module()`` instead.
+    """
+    _ident_re = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+    return not all(_ident_re.match(segment) for segment in module_path.split("."))
 
 
 # ---------------------------------------------------------------------------
@@ -635,12 +662,70 @@ def _format_extra_sys_path_inserts(extra_sys_path_entries: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+# ---------------------------------------------------------------------------
+# Module working directory resolution
+# ---------------------------------------------------------------------------
+
+# Project markers for determining the effective CWD of a wrapped module.
+# Walk up from source_file.parent; stop at the innermost directory containing
+# any of these markers.  This handles both flat SDKs (JiuwenAgent: markers at
+# SDK root == _SOURCE_DIR) and nested SDKs (data_generation_platform: markers
+# at the subproject root, not the monorepo _SOURCE_DIR).
+_PROJECT_MARKER_FILES: frozenset[str] = frozenset({
+    "config.json", "config.yaml", "config.yml",
+    "pyproject.toml", "setup.py", "setup.cfg",
+})
+_PROJECT_MARKER_DIRS: frozenset[str] = frozenset({"backend"})
+
+
+def _resolve_module_working_dir(source_dir: str, module_name: str) -> str:
+    """Return the best CWD for a wrapped module.
+
+    Walks up from the module's source file directory looking for common
+    project markers.  Returns the innermost match so that nested SDK apps
+    resolve to their subproject root while flat SDKs resolve to *source_dir*.
+
+    Flatten SDK (e.g. JiuwenAgent):
+        ``pyproject.toml`` at the SDK root → returns *source_dir*.
+    Nested SDK (e.g. data_generation_platform under mindsdk-referenceapps):
+        ``config.json`` at the subproject root → returns the subproject dir.
+    """
+    source_file = _resolve_source_file(source_dir, module_name)
+    if not source_file.is_file():
+        return source_dir
+
+    root = Path(source_dir).resolve()
+    current = source_file.parent.resolve()
+
+    for _ in range(20):  # safety limit — walk at most 20 levels up
+        for marker in _PROJECT_MARKER_FILES:
+            if (current / marker).is_file():
+                return str(current)
+        for marker in _PROJECT_MARKER_DIRS:
+            marker_dir = current / marker
+            if marker_dir.is_dir() and any(marker_dir.rglob("*.py")):
+                return str(current)
+        if current == root:
+            break
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+    return source_dir
+
+
 def _format_wrapper_imports(
     symbols: set[str],
     import_map: dict[str, str],
     module_name: str,
 ) -> str:
-    """Render grouped ``from ... import ...`` lines for wrapper scripts."""
+    """Render import lines for wrapper scripts.
+
+    Uses ``from ... import ...`` for modules with valid Python identifiers,
+    and ``importlib.import_module()`` attribute access for modules whose
+    path segments contain hyphens or other non-identifier characters.
+    """
     if not symbols:
         return ""
 
@@ -651,8 +736,16 @@ def _format_wrapper_imports(
 
     lines: list[str] = []
     for resolved_module in sorted(by_module):
-        names = ", ".join(sorted(by_module[resolved_module]))
-        lines.append(f"from {resolved_module} import {names}")
+        names = sorted(by_module[resolved_module])
+        if _module_path_needs_importlib(resolved_module):
+            mod_alias = f"_mod_{hashlib.sha256(resolved_module.encode()).hexdigest()[:8]}"
+            lines.append(
+                f'{mod_alias} = importlib.import_module("{resolved_module}")'
+            )
+            for name in names:
+                lines.append(f"{name} = {mod_alias}.{name}")
+        else:
+            lines.append(f"from {resolved_module} import {', '.join(names)}")
     return "\n".join(lines)
 
 
@@ -687,6 +780,43 @@ def _is_cli_handler_op(op: SourceOperation, dispatch_map: dict[str, str]) -> boo
     if op.name.startswith("cmd_"):
         return True
     return any(_is_namespace_args_param(p) for p in op.parameters)
+
+
+def _source_file_uses_argparse(source_file: Path) -> bool:
+    """True when *source_file* contains ``argparse.add_argument`` calls."""
+    if not source_file.is_file():
+        return False
+    try:
+        tree = ast.parse(source_file.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if node.func.attr == "add_argument":
+                return True
+    return False
+
+
+def _is_cli_main_op(
+    op: SourceOperation,
+    source_dir: str,
+    module_name: str,
+) -> bool:
+    """True when *op* is a CLI main entry point — a parameterless standalone
+    function whose source file uses argparse to read from ``sys.argv``.
+
+    These functions cannot be called via importlib because their input comes
+    from ``sys.argv``, not from Python parameters.  They need subprocess mode
+    so that CLI arguments are passed on the real command line.
+    """
+    if op.class_name is not None:
+        return False
+    if op.parameters:
+        return False
+    if op.name in _CLI_EXCLUDED_HANDLER_NAMES:
+        return False
+    source_file = _resolve_source_file(source_dir, module_name)
+    return _source_file_uses_argparse(source_file)
 
 
 def _extract_command_literal(test: ast.AST) -> str | None:
@@ -776,21 +906,44 @@ def _resolve_cli_argv_prefix(
     return [sys.executable, str(source_file.resolve())]
 
 
+_CLI_SUBPROCESS_OPTIONAL_PARAMS = (
+    "__stdin_config: dict | None = None, __env: dict | None = None"
+)
+
+_CLI_SUBPROCESS_STDIN_ENV_BODY = """
+    # Merge session/runtime secrets for nested CLI subprocesses.
+    _bridge_stdin = __stdin_config if __stdin_config is not None else globals().get("_bridge_stdin_config")
+    _bridge_env_extra = __env if __env is not None else globals().get("_bridge_subprocess_env")
+    _stdin_payload = dict(_bridge_stdin or {})
+    if _interactive_input_queue:
+        _stdin_payload.setdefault("llm_api_key", _interactive_input_queue[0])
+    _stdin_input = _json.dumps(_stdin_payload) if _stdin_payload else None
+    _run_env = {**os.environ, **(_bridge_env_extra or {})}
+    # When no stdin payload is available use DEVNULL so input() / sys.stdin.read()
+    # fail fast (EOFError) instead of blocking on inherited stdin for 300 s.
+    _stdin_kwarg = {'input': _stdin_input} if _stdin_input else {'stdin': subprocess.DEVNULL}
+"""
+
+
 def _generate_cli_handler_stub(op: SourceOperation, *, subcommand: str) -> str:
     """Generate a subprocess-based stub for a CLI ``cmd_*`` handler."""
     docstring = op.description.replace('"', '\\"') if op.description else op.name
     return (
-        f"def {op.name}(args: str) -> dict:\n"
+        f"def {op.name}(args: str, {_CLI_SUBPROCESS_OPTIONAL_PARAMS}) -> dict:\n"
         f'    """{docstring}"""\n'
         "    import shlex\n"
         "    import subprocess\n"
+        "    import json as _json\n"
         "    tail = shlex.split(args) if args else []\n"
         f"    argv = [*CLI_PREFIX, {subcommand!r}, *tail]\n"
-        "    proc = subprocess.run(\n"
+        + _CLI_SUBPROCESS_STDIN_ENV_BODY
+        + "    proc = subprocess.run(\n"
         "        argv,\n"
         "        capture_output=True,\n"
         "        text=True,\n"
-        "        cwd=_SOURCE_DIR,\n"
+        "        cwd=_MODULE_DIR,\n"
+        "        env=_run_env,\n"
+        "        **_stdin_kwarg,\n"
         "    )\n"
         "    result = {\n"
         '        "returncode": proc.returncode,\n'
@@ -803,6 +956,142 @@ def _generate_cli_handler_stub(op: SourceOperation, *, subcommand: str) -> str:
         '            result["error"] = err\n'
         "    return result"
     )
+
+
+def _generate_cli_main_stub(op: SourceOperation) -> str:
+    """Generate a subprocess-based stub for a CLI main entry point.
+
+    Unlike ``_generate_cli_handler_stub`` (which dispatches through a
+    ``cmd_*`` subcommand), this stub runs the source file directly, passing
+    all arguments through to ``sys.argv``.
+    """
+    docstring = op.description.replace('"', '\\"') if op.description else op.name
+    return (
+        f"def {op.name}(args: str, {_CLI_SUBPROCESS_OPTIONAL_PARAMS}) -> dict:\n"
+        f'    """{docstring}"""\n'
+        "    import shlex\n"
+        "    import subprocess\n"
+        "    import json as _json\n"
+        "    tail = shlex.split(args) if args else []\n"
+        "    argv = [sys.executable, str(_SOURCE_FILE), *tail]\n"
+        + _CLI_SUBPROCESS_STDIN_ENV_BODY
+        + "    proc = subprocess.run(\n"
+        "        argv,\n"
+        "        capture_output=True,\n"
+        "        text=True,\n"
+        "        cwd=_MODULE_DIR,\n"
+        "        env=_run_env,\n"
+        "        **_stdin_kwarg,\n"
+        "    )\n"
+        "    result = {\n"
+        '        "returncode": proc.returncode,\n'
+        '        "stdout": proc.stdout,\n'
+        '        "stderr": proc.stderr,\n'
+        "    }\n"
+        "    if proc.returncode != 0:\n"
+        "        err = proc.stderr.strip() or proc.stdout.strip()\n"
+        "        if err:\n"
+        '            result["error"] = err\n'
+        "    return result"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Interactive input handling for wrapper scripts
+# ---------------------------------------------------------------------------
+
+def _generate_interactive_input_preamble(ops: list[SourceOperation]) -> str:
+    """Generate preamble code that monkey-patches input(), getpass.getpass(),
+    sys.stdin.read() and sys.stdin.readline() to read from a pre-provided
+    __interactive_inputs list, with env var fallback.
+
+    This allows tools that use interactive input (like getpass.getpass() for API keys)
+    to work in non-TTY subprocess environments like Agent tool calls.
+
+    Always generated so that subprocess-launching stubs can forward
+    ``_interactive_input_queue`` to nested subprocesses even when the
+    wrapped entrypoint does not itself contain input() calls directly.
+    """
+    # ponytail: always emit the preamble.  The detection (detect_interactive_input)
+    # is shallow — a CLI main() that delegates to _prompt_api_key() may not be
+    # flagged.  The preamble is ~80 lines of idle code when unused; the only
+    # cost is a handful of module-level definitions.
+    return """
+# Interactive input handling for non-TTY environments
+# This monkey-patches input(), getpass.getpass(), sys.stdin.read() and
+# sys.stdin.readline() to read from __interactive_inputs
+import builtins
+import getpass as _getpass_module
+import sys as _sys_module
+
+_interactive_input_queue = []
+_interactive_input_index = 0
+
+
+def _set_interactive_inputs(inputs: list) -> None:
+    global _interactive_input_queue, _interactive_input_index
+    _interactive_input_queue = list(inputs) if inputs else []
+    _interactive_input_index = 0
+
+
+def _interactive_input(prompt: str = "") -> str:
+    global _interactive_input_index
+    if _interactive_input_index < len(_interactive_input_queue):
+        value = _interactive_input_queue[_interactive_input_index]
+        _interactive_input_index += 1
+        return str(value)
+    env_name = "".join(c.upper() if c.isalpha() else "_" for c in prompt.strip()).strip("_")
+    if env_name and env_name in os.environ:
+        return os.environ[env_name]
+    raise RuntimeError(
+        f"Interactive input required but no __interactive_inputs provided. "
+        f"Prompt: '{prompt}'\\n"
+        f"Provide __interactive_inputs array in tool call parameters or set "
+        f"environment variable {env_name}."
+    )
+
+
+def _interactive_getpass(prompt: str = "Password: ") -> str:
+    return _interactive_input(prompt)
+
+
+def _interactive_stdin_read(size: int = -1) -> str:
+    global _interactive_input_index
+    if _interactive_input_index < len(_interactive_input_queue):
+        value = str(_interactive_input_queue[_interactive_input_index])
+        _interactive_input_index += 1
+        if size >= 0:
+            return value[:size]
+        return value
+    # ponytail: match _interactive_input behaviour — raise instead of silent ""
+    # so tools that call sys.stdin.read() get a clear error, not empty data
+    raise RuntimeError(
+        "sys.stdin.read() called but no __interactive_inputs provided. "
+        "Provide __interactive_inputs array in tool call parameters or set "
+        "the relevant environment variable."
+    )
+
+
+def _interactive_stdin_readline(size: int = -1) -> str:
+    global _interactive_input_index
+    if _interactive_input_index < len(_interactive_input_queue):
+        value = str(_interactive_input_queue[_interactive_input_index])
+        _interactive_input_index += 1
+        if size >= 0:
+            return value[:size] + "\\n"
+        return value + "\\n"
+    raise RuntimeError(
+        "sys.stdin.readline() called but no __interactive_inputs provided. "
+        "Provide __interactive_inputs array in tool call parameters or set "
+        "the relevant environment variable."
+    )
+
+
+builtins.input = _interactive_input
+_getpass_module.getpass = _interactive_getpass
+_sys_module.stdin.read = _interactive_stdin_read
+_sys_module.stdin.readline = _interactive_stdin_readline
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -823,14 +1112,20 @@ import dataclasses
 {serialization_helpers}
 {coercion_helpers}
 {extra_sys_path_inserts}_SOURCE_DIR = r"{source_dir}"
+_SOURCE_FILE = r"{source_file}"
 _REPO_ROOT = r"{repo_root}"
 sys.path.insert(0, _SOURCE_DIR)
 if _REPO_ROOT and _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
+_MODULE_DIR = r"{module_dir}"
+if os.path.isdir(_MODULE_DIR):
+    os.chdir(_MODULE_DIR)
 {extra_imports}{model_imports}
 {cli_prefix}
 
 _instances = {{}}
+
+{interactive_input_preamble}
 
 
 def _run_async_iter(make_gen):
@@ -871,6 +1166,11 @@ if __name__ == "__main__":
     except json.JSONDecodeError as exc:
         print(f"Invalid JSON args: {{exc}}", file=sys.stderr)
         sys.exit(1)
+
+    interactive_inputs = args.pop("__interactive_inputs", None)
+    if interactive_inputs is not None and callable(globals().get("_set_interactive_inputs")):
+        _set_interactive_inputs(interactive_inputs)
+
     fn = globals().get(method_name)
     if fn is None:
         print(f"Unknown method: {{method_name}}", file=sys.stderr)
@@ -878,6 +1178,9 @@ if __name__ == "__main__":
     try:
         result = fn(**args)
         serialized = _dumps_sdk_result(result)
+    except SystemExit as exc:
+        print(json.dumps({{"error": f"SDK exited with code {{exc.code}}: {{exc}}"}}, ensure_ascii=False), file=sys.stderr)
+        sys.exit(1)
     except Exception as exc:
         print(json.dumps({{"error": str(exc)}}, ensure_ascii=False), file=sys.stderr)
         sys.exit(1)
@@ -962,14 +1265,19 @@ def _generate_pipeline_execute_stage_stub(op: SourceOperation) -> str:
         '        stage = Stage[stage_key]\n'
         '    if not isinstance(run_dir, Path):\n'
         '        run_dir = Path(run_dir)\n'
-        '    return module.execute_stage(\n'
-        '        stage=stage,\n'
-        '        run_dir=run_dir,\n'
-        '        run_id=run_id,\n'
-        '        config=config,\n'
-        '        adapters=adapters,\n'
-        '        auto_approve_gates=bool(auto_approve_gates),\n'
-        '    )'
+        '    _original_argv = sys.argv\n'
+        '    sys.argv = [sys.argv[0]]\n'
+        '    try:\n'
+        '        return module.execute_stage(\n'
+        '            stage=stage,\n'
+        '            run_dir=run_dir,\n'
+        '            run_id=run_id,\n'
+        '            config=config,\n'
+        '            adapters=adapters,\n'
+        '            auto_approve_gates=bool(auto_approve_gates),\n'
+        '        )\n'
+        '    finally:\n'
+        '        sys.argv = _original_argv'
     )
 
 
@@ -1045,7 +1353,7 @@ def _coerce_param_expression(
 
     # Check if type is optional by looking for None in the original hint.
     has_none = "None" in cleaned or "NoneType" in cleaned
-    
+
     # Strip Optional / Union wrappers, ignoring None.
     all_parts = split_union(cleaned)
     union_parts = [p for p in all_parts if p not in ("None", "NoneType")]
@@ -1073,6 +1381,12 @@ def _coerce_param_expression(
                 expr = f"[{item_expr} for __item in ({param_name} or [])]"
             return expr, element_imports
         return None, set()
+
+    if _is_dict_type_hint(inner_hint):
+        expr = f"_coerce_mapping_value({param_name})"
+        if is_optional:
+            expr = f"None if {param_name} is None else ({expr})"
+        return expr, set()
 
     # Plain model type.
     type_name = type_root(inner_hint)
@@ -1183,6 +1497,13 @@ def _generate_method_stub(
     """
     imports: set[tuple[str, str]] = set()
 
+    argv_guard = (
+        "    _original_argv = sys.argv\n"
+        "    sys.argv = [sys.argv[0]]\n"
+        "    try:\n"
+    )
+    argv_restore = "    finally:\n        sys.argv = _original_argv"
+
     if op.is_property:
         return_type = f" -> {op.return_type}" if op.return_type else ""
         docstring = op.description.replace('"', '\\"') if op.description else op.name
@@ -1206,13 +1527,17 @@ def _generate_method_stub(
             return (
                 f"def {op.name}({params_str}){return_type}:\n"
                 f"    \"\"\"{docstring}\"\"\"\n"
-                f"    return {inner_call}"
+                f"{argv_guard}"
+                f"        return {inner_call}\n"
+                f"{argv_restore}"
             ), imports
         inner_call = f"getattr(importlib.import_module(\"{module_name}\"), \"{op.name}\")"
         return (
             f"def {op.name}(){return_type}:\n"
             f"    \"\"\"{docstring}\"\"\"\n"
-            f"    return {inner_call}"
+            f"{argv_guard}"
+            f"        return {inner_call}\n"
+            f"{argv_restore}"
         ), imports
 
     effective_params = (
@@ -1260,39 +1585,56 @@ def _generate_method_stub(
             body_lines = (
                 f"def {op.name}({params_str}){return_type}:\n"
                 f"    \"\"\"{docstring}\"\"\"\n"
-                f"    return _run_async_iter(lambda: {inner_call})"
+                f"{argv_guard}"
+                f"        return _run_async_iter(lambda: {inner_call})\n"
+                f"{argv_restore}"
             )
         else:
             body_lines = (
                 f"def {op.name}({params_str}){return_type}:\n"
                 f"    \"\"\"{docstring}\"\"\"\n"
                 f"    module = importlib.import_module(\"{module_name}\")\n"
-                f"    return _run_async_iter(lambda: {inner_call})"
+                f"{argv_guard}"
+                f"        return _run_async_iter(lambda: {inner_call})\n"
+                f"{argv_restore}"
             )
         return body_lines, imports
 
     async_prefix = "asyncio.run(" if op.is_async else ""
     async_suffix = ")" if op.is_async else ""
 
+    argv_guard = (
+        "    _original_argv = sys.argv\n"
+        "    sys.argv = [sys.argv[0]]\n"
+        "    try:\n"
+    )
+    argv_restore = "    finally:\n        sys.argv = _original_argv"
+
     if is_class_method:
         body_lines = (
             f"def {op.name}({params_str}){return_type}:\n"
             f"    \"\"\"{docstring}\"\"\"\n"
-            f"    return {async_prefix}{inner_call}{async_suffix}"
+            f"{argv_guard}"
+            f"        return {async_prefix}{inner_call}{async_suffix}\n"
+            f"{argv_restore}"
         )
     elif op.is_factory:
         body_lines = (
             f"def {op.name}({params_str}){return_type}:\n"
             f"    \"\"\"{docstring}\"\"\"\n"
-            f"    instance = {async_prefix}{inner_call}{async_suffix}\n"
-            f"    return _serialize_factory_result(instance)"
+            f"{argv_guard}"
+            f"        instance = {async_prefix}{inner_call}{async_suffix}\n"
+            f"        return _serialize_factory_result(instance)\n"
+            f"{argv_restore}"
         )
     else:
         body_lines = (
             f"def {op.name}({params_str}){return_type}:\n"
             f"    \"\"\"{docstring}\"\"\"\n"
             f"    module = importlib.import_module(\"{module_name}\")\n"
-            f"    return {async_prefix}{inner_call}{async_suffix}"
+            f"{argv_guard}"
+            f"        return {async_prefix}{inner_call}{async_suffix}\n"
+            f"{argv_restore}"
         )
     return body_lines, imports
 
@@ -1308,6 +1650,7 @@ def _generate_wrapper_script(
     init_params: list[ParamSpec] | None = None,
     cli_dispatch_map: dict[str, str] | None = None,
     cli_prefix_override: str | None = None,
+    repo_root: str = "",
 ) -> Path:
     """Generate a wrapper script for a group of related operations.
 
@@ -1374,6 +1717,8 @@ def _generate_wrapper_script(
         subcommand = dispatch_map.get(op.name)
         if subcommand and _is_cli_handler_op(op, dispatch_map):
             body_parts.append(_generate_cli_handler_stub(op, subcommand=subcommand))
+        elif _is_cli_main_op(op, source_dir, module_name):
+            body_parts.append(_generate_cli_main_stub(op))
         elif op.name == "execute_stage" and class_name is None and file_stem == "executor":
             body_parts.append(_generate_pipeline_execute_stage_stub(op))
         else:
@@ -1392,15 +1737,19 @@ def _generate_wrapper_script(
     extra_imports = _format_wrapper_imports(runtime_symbols, import_map, module_name)
 
     # Pydantic/dataclass imports must load after sys.path is seeded.
+    # Some SDK directories contain hyphens (e.g. "agent-perf-analyzer"),
+    # which are invalid in Python ``from X import Y`` statements.
+    # For those we generate ``importlib.import_module()`` attribute access.
     if model_imports:
-        model_import_block = "\n".join(
-            sorted(
-                {
-                    f"from {module_path} import {class_name}"
-                    for module_path, class_name in model_imports
-                }
-            )
-        )
+        _import_lines: list[str] = []
+        for module_path, class_name in sorted(model_imports):
+            if _module_path_needs_importlib(module_path):
+                _import_lines.append(
+                    f'{class_name} = importlib.import_module("{module_path}").{class_name}'
+                )
+            else:
+                _import_lines.append(f"from {module_path} import {class_name}")
+        model_import_block = "\n".join(_import_lines)
         model_import_block = f"\n{model_import_block}\n"
     else:
         model_import_block = ""
@@ -1410,9 +1759,7 @@ def _generate_wrapper_script(
 
     extra_sys_path_entries = _infer_extra_sys_path_entries(source_dir, module_name)
     extra_sys_path_inserts = _format_extra_sys_path_inserts(extra_sys_path_entries)
-
-    # Repository root so wrapper subprocesses can import extensions.sop_converter.*
-    repo_root = str(Path(__file__).resolve().parents[2])
+    module_dir = _resolve_module_working_dir(source_dir, module_name)
 
     body_text = "\n".join(body_parts)
     extra_coercion = ""
@@ -1421,9 +1768,13 @@ def _generate_wrapper_script(
     if "_coerce_messager" in body_text:
         extra_coercion += "\n" + WRAPPER_MESSAGER_COERCION
 
+    interactive_input_preamble = _generate_interactive_input_preamble(ops)
+
     content = _WRAPPER_SCRIPT_TEMPLATE.format(
         header_label=header_label,
         source_dir=source_dir,
+        module_dir=module_dir,
+        source_file=str(source_file.resolve()),
         repo_root=repo_root,
         cli_prefix=cli_prefix_line,
         extra_sys_path_inserts=extra_sys_path_inserts,
@@ -1433,12 +1784,17 @@ def _generate_wrapper_script(
         coercion_helpers=WRAPPER_COERCION_HELPERS + extra_coercion,
         body=body_text,
         script_name=script_name,
+        interactive_input_preamble=interactive_input_preamble,
     )
 
     script_path.write_text(content, encoding="utf-8")
     try:
         compile(content, str(script_path), "exec")
     except SyntaxError as exc:
+        # Save failing content for debugging before deleting the .py file
+        failed_path = script_path.with_suffix(script_path.suffix + ".failed")
+        failed_path.write_text(content, encoding="utf-8")
+        logger.warning("Saved failing wrapper content to %s", failed_path)
         script_path.unlink(missing_ok=True)
         raise RuntimeError(f"Generated wrapper failed syntax check: {script_path}: {exc}") from exc
     logger.info("Generated wrapper script: %s (%d methods)", script_path, len(ops))
@@ -1478,6 +1834,7 @@ def operation_to_spec(
     bundle_id: str | None = None,
     init_params: list[ParamSpec] | None = None,
     cli_subcommand: str | None = None,
+    cli_main: bool = False,
     tool_deps: ToolOperationDeps | None = None,
     module_path: str | None = None,
 ) -> AgentToolSpec:
@@ -1527,6 +1884,18 @@ def operation_to_spec(
             }
         }
         required = ["args"]
+    elif cli_main:
+        properties = {
+            "args": {
+                "type": "string",
+                "description": (
+                    "CLI arguments passed to the entry point.  Include all flags "
+                    "and positional arguments exactly as they would appear on "
+                    "the command line (e.g. '--project myapp --generate-questions')."
+                ),
+            }
+        }
+        required = ["args"]
     else:
         schema_params = (
             _merge_init_and_method_params(init_params or [], op.parameters)
@@ -1561,6 +1930,21 @@ def operation_to_spec(
                 required.append(param.name)
 
         _adjust_pipeline_execute_stage_schema(op, properties, required)
+
+    # ponytail: always include __interactive_inputs for CLI entrypoints
+    # (cli_main=True / cli_subcommand not None) because they run as subprocesses
+    # and the shallow AST detector can miss input() calls delegated to helpers.
+    if op.requires_interactive_input or cli_main or cli_subcommand:
+        properties["__interactive_inputs"] = {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "List of values for interactive input prompts (input()/getpass.getpass()). "
+                f"Detected prompts: {op.interactive_prompts}. "
+                "Provide values in the order they appear in the code. "
+                "Alternatively, set environment variables matching the prompt text in uppercase."
+            ),
+        }
 
     input_schema: dict[str, Any] = {
         "type": "object",
@@ -1657,6 +2041,7 @@ def register_component_tools(
     bundle_dir: str | Path | None = None,
     bundle_id: str | None = None,
     cli_prefix_override: str | None = None,
+    repo_root: str = "",
 ) -> dict[str, str]:
     """Bulk-register all operations from a list of SourceComponents as Tools.
 
@@ -1719,23 +2104,33 @@ def register_component_tools(
 
     # Maps (class_name, module_path) → script absolute path
     script_paths: dict[tuple[str | None, str], str] = {}
+    skipped_groups: list[tuple[str | None, str]] = []
 
     for (class_name, module_path), ops in groups.items():
         first_op = ops[0]
         file_stem = first_op.file_stem or "functions"
 
-        script_path = _generate_wrapper_script(
-            ops,
-            class_name=class_name,
-            module_name=module_path,
-            file_stem=file_stem,
-            source_dir=source_dir_abs,
-            scripts_dir=scripts_dir,
-            init_params=group_init_params.get((class_name, module_path)),
-            cli_dispatch_map=cli_dispatch_by_module.get(module_path),
-            cli_prefix_override=cli_prefix_override,
-        )
-        script_paths[(class_name, module_path)] = str(script_path.resolve())
+        try:
+            script_path = _generate_wrapper_script(
+                ops,
+                class_name=class_name,
+                module_name=module_path,
+                file_stem=file_stem,
+                source_dir=source_dir_abs,
+                scripts_dir=scripts_dir,
+                init_params=group_init_params.get((class_name, module_path)),
+                cli_dispatch_map=cli_dispatch_by_module.get(module_path),
+                cli_prefix_override=cli_prefix_override,
+                repo_root=repo_root,
+            )
+            script_paths[(class_name, module_path)] = str(script_path.resolve())
+        except Exception:
+            logger.warning(
+                "Failed to generate wrapper for class=%s module=%s, skipping %d ops",
+                class_name, module_path, len(ops),
+                exc_info=True,
+            )
+            skipped_groups.append((class_name, module_path))
 
     # ── Phase 3: create AgentToolSpec for each operation ──
 
@@ -1747,6 +2142,8 @@ def register_component_tools(
         for op in comp.operations:
             module_path = op_module_map[id(op)]
             key = (op.class_name, module_path)
+            if key not in script_paths:
+                continue
             script_path = script_paths[key]
 
             init_params = (
@@ -1760,6 +2157,7 @@ def register_component_tools(
                 if _is_cli_handler_op(op, dispatch_map)
                 else None
             )
+            is_cli_main = _is_cli_main_op(op, source_dir_abs, module_path)
             tool_deps = dependency_index.get(to_kebab_tool_name(comp.name, op))
             spec = operation_to_spec(
                 op,
@@ -1769,6 +2167,7 @@ def register_component_tools(
                 bundle_id=effective_bundle_id,
                 init_params=init_params,
                 cli_subcommand=cli_subcommand,
+                cli_main=is_cli_main,
                 tool_deps=tool_deps,
                 module_path=module_path,
             )
@@ -1840,6 +2239,16 @@ def register_component_tools(
                 continue
             save_spec(spec, tool_dir=tool_dir)
             logger.info("Persisted tool spec: %s -> %s", spec.name, spec_path.parent)
+
+    if skipped_groups:
+        skipped_ops = sum(
+            len(ops) for key, ops in groups.items() if key not in script_paths
+        )
+        logger.warning(
+            "%d wrapper script(s) skipped (%d operations) due to syntax errors",
+            len(skipped_groups),
+            skipped_ops,
+        )
 
     logger.info(
         "Registered %d tools from %d components (%d wrapper scripts)",

@@ -376,6 +376,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
     except Exception:
         tool_deps_index = None
 
+    registered: dict[str, str] = {}
     if opts.register_tools and not opts.preview and not opts.validate_only:
         try:
             from extensions.sop_converter.tool_registry_bridge import (
@@ -391,15 +392,6 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 bundle_dir=Path(opts.output_dir) if opts.output_dir else None,
                 bundle_id=Path(opts.output_dir).name if opts.output_dir else None,
             )
-            # Rewrite tool names in skills to match what was actually
-            # registered in the ToolRegistry.  The name_map returned by
-            # register_component_tools maps every naming convention
-            # (file_stem-based, grouper-based, fully-qualified) to the
-            # actual kebab-case spec name.
-            for skill in grouped_skills:
-                skill.allowed_tools = [
-                    registered.get(t, _to_kebab_case(t)) for t in skill.allowed_tools
-                ]
             if registered:
                 print(f"   Registered tools: {len(set(registered.values()))}")
             try:
@@ -464,13 +456,6 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                     f"   Warning: composite tool registration failed: {exc}",
                     file=sys.stderr,
                 )
-            # Sync StageAgentMap profiles with rewritten tool names so
-            # stage agents reference the actual registered spec names.
-            if agent_map:
-                skill_tool_map = {s.name: s.allowed_tools for s in grouped_skills}
-                for profile in agent_map.by_stage_id.values():
-                    if profile.mapped_skill and profile.mapped_skill in skill_tool_map:
-                        profile.recommended_tools = list(skill_tool_map[profile.mapped_skill])
         except ImportError as exc:
             print(
                 f"   Warning: tool registration skipped (missing module: {exc})",
@@ -481,6 +466,28 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 f"   Warning: tool registration failed: {exc}",
                 file=sys.stderr,
             )
+
+        # Always convert tool names to kebab-case, even if registration partially failed.
+        # _to_kebab_case() provides a reliable fallback for tools whose wrappers
+        # couldn't be generated (e.g. due to syntax errors).
+        try:
+            for skill in grouped_skills:
+                skill.allowed_tools = [
+                    registered.get(t, _to_kebab_case(t)) if registered else _to_kebab_case(t)
+                    for t in skill.allowed_tools
+            ]
+        except NameError:
+            # _to_kebab_case not imported (ImportError path taken above) — skip
+            pass
+        if registered:
+            print(f"   Registered tools: {len(set(registered.values()))}")
+        # Sync StageAgentMap profiles with rewritten tool names so
+        # stage agents reference the actual registered spec names.
+        if agent_map:
+            skill_tool_map = {s.name: s.allowed_tools for s in grouped_skills}
+            for profile in agent_map.by_stage_id.values():
+                if profile.mapped_skill and profile.mapped_skill in skill_tool_map:
+                    profile.recommended_tools = list(skill_tool_map[profile.mapped_skill])
 
     # Build per-skill AgentComponentInfo for the overview agent.
     overview_info: list[AgentComponentInfo] = []

@@ -12,6 +12,7 @@ from extensions.sop_converter.source_parser import (
     SourceComponent,
     SourceOperation,
     ParamSpec,
+    infer_type_hint_from_description,
 )
 from extensions.sop_converter.skill_grouper import (
     GroupStrategy,
@@ -390,6 +391,46 @@ def func(name: str) -> str:
             op = next((o for o in ops if o.name == "func"), None)
             assert op is not None
             assert "hello" in op.description.lower()
+
+    def test_chinese_style_params(self) -> None:
+        source = '''
+def send_email(to_email, content, smtp_config=None, sender_config=None):
+    """发送邮件
+
+    参数:
+        to_email: 收件人邮箱
+        content: 邮件内容配置字典，包含 subject, body, html(可选)
+        smtp_config: SMTP服务器配置字典，包含 smtp_server, smtp_port(可选)
+        sender_config: 发件人配置字典，包含 from_email, password(可选)
+    """
+    subject = content.get("subject", "")
+    return subject
+'''
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "mod.py").write_text(source, encoding="utf-8")
+            parser = SourceCodeParser(tmp)
+            comps = parser.parse()
+            ops = [op for comp in comps for op in comp.operations]
+            op = next((o for o in ops if o.name == "send_email"), None)
+            assert op is not None
+            by_name = {p.name: p for p in op.parameters}
+            assert by_name["to_email"].type_hint is None
+            assert by_name["content"].type_hint == "dict"
+            assert by_name["smtp_config"].type_hint == "dict"
+            assert by_name["sender_config"].type_hint == "dict"
+            assert "subject" in by_name["content"].description
+
+
+class TestInferTypeHintFromDescription:
+    def test_dict_keywords(self) -> None:
+        assert infer_type_hint_from_description("邮件内容配置字典，包含 subject, body") == "dict"
+        assert infer_type_hint_from_description("JSON mapping of keys") == "dict"
+
+    def test_non_dict_descriptions(self) -> None:
+        assert infer_type_hint_from_description("收件人邮箱") is None
+        assert infer_type_hint_from_description("SMTP port number") is None
+        assert infer_type_hint_from_description("") is None
 
 
 # =========================================================================

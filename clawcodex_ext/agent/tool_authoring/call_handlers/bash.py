@@ -73,6 +73,14 @@ def execute_bash(
                 env = dict(os.environ)
                 env["CLAWCODEX_BUNDLE_PATH"] = str(bundle_path)
 
+    # ponytail: feed __interactive_inputs through stdin pipe so tools
+    # that call input()/getpass()/sys.stdin.read() in non-TTY subprocesses
+    # receive pre-collected answers instead of blocking on inherited stdin.
+    interactive_inputs = params.pop("__interactive_inputs", None)
+    stdin_input: str | None = None
+    if interactive_inputs:
+        stdin_input = "\n".join(str(v) for v in interactive_inputs) + "\n"
+
     try:
         result = subprocess.run(
             command,
@@ -83,6 +91,7 @@ def execute_bash(
             errors="replace",
             timeout=timeout_sec,
             env=env,
+            input=stdin_input,
         )
     except subprocess.TimeoutExpired as exc:
         raise BashCallError(f"Command timed out after {int(timeout_sec)}s: {command[:80]}") from exc
