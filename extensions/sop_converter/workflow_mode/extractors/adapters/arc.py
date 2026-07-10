@@ -1,4 +1,12 @@
-"""AutoResearchClaw / ResearchClaw pipeline extractor (F-50-G)."""
+"""ArcExtractor — AutoResearchClaw (ARC) workflow extractor (F-50-G).
+
+Extracts stages/transitions/gates/decisions/contracts from projects following
+the ARC convention:
+
+* ``.arc-workflow`` marker file in the project root (optional but preferred).
+* Stage enum classes following the ``*Stage*`` / ``*Step*`` naming pattern.
+* Per-stage implementation files under ``stage_impls/`` or similar directory.
+``"""
 
 from __future__ import annotations
 
@@ -30,11 +38,16 @@ from ..models import (
     StageContract,
     Transition,
 )
+from .generic import GenericPipelineExtractor
 
 logger = logging.getLogger(__name__)
 
 _EXECUTOR_TABLE_NAMES = ("_STAGE_EXECUTORS", "STAGE_EXECUTORS")
 
+
+# ---------------------------------------------------------------------------
+# ARC-specific paths
+# ---------------------------------------------------------------------------
 
 def resolve_arc_pipeline_dir(source_dir: Path) -> Path | None:
     """Locate ``researchclaw/pipeline`` (or equivalent) under *source_dir*."""
@@ -51,19 +64,6 @@ def resolve_arc_pipeline_dir(source_dir: Path) -> Path | None:
         parent = stages_py.parent
         if parent.name == "pipeline" and (parent / "contracts.py").is_file():
             return parent
-    return None
-
-
-def resolve_arc_pipeline_dir(source_dir: Path) -> Path | None:
-    """Return *source_dir* if it follows the ARC project convention.
-
-    This helper is consumed by the capability mapper and the SOP CLI to
-    decide whether to apply ARC-specific skill/agent wiring.  It mirrors
-    :meth:`ArcExtractor._is_arc_project` without forcing a full extraction.
-    """
-    extractor = ArcExtractor()
-    if extractor._is_arc_project(source_dir):
-        return source_dir
     return None
 
 

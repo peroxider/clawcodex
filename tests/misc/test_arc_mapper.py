@@ -1,0 +1,88 @@
+"""Tests for F-50-C ARC stage → skill mapping."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from extensions.sop_converter.skill_grouper import SkillSpec, GroupStrategy, group_source_components
+from extensions.sop_converter.source_parser import SourceCodeParser
+from extensions.sop_converter.workflow_mode.bridge.dispatch import resolve_stage_module_path
+from extensions.sop_converter.workflow_mode.capability import StageCapabilityMapper, ensure_arc_stage_skills
+from extensions.sop_converter.workflow_mode.capability.arc_mapper import (
+    arc_stage_impl_rel_path,
+    resolve_arc_stage_impl_path,
+)
+from extensions.sop_converter.workflow_mode.extractors.adapters.arc import (
+    ArcExtractor,
+    resolve_arc_pipeline_dir,
+)
+
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+ARC_FIXTURE = FIXTURES / "fixture_arc_project"
+ARC_REPO = Path(r"D:\projects\AutoResearchClaw")
+
+
+class TestArcStageImplResolution:
+    def test_resolve_impl_prefers_stage_impls(self):
+        pipeline = resolve_arc_pipeline_dir(ARC_FIXTURE)
+        assert pipeline is not None
+        graph = ArcExtractor(mode="fwa").extract(ARC_FIXTURE)
+        stage = graph.stages[0]
+        impl = resolve_arc_stage_impl_path(ARC_FIXTURE, pipeline, stage)
+        assert impl is not None
+        assert impl.name == "_stages.py"
+        assert impl.parent.name == "stage_impls"
+
+    def test_bridge_module_path_uses_stage_impls(self):
+        graph = ArcExtractor(mode="fwa").extract(ARC_FIXTURE)
+        stage = graph.stages[0]
+        rel = resolve_stage_module_path(stage, ARC_FIXTURE)
+        assert rel is not None
+        assert "stage_impls" in rel
+        assert rel.endswith("_stages.py")
+
+
+class TestArcStageSkillSynthesis:
+    def test_synthesizes_per_stage_skills(self):
+        graph = ArcExtractor(mode="fwa").extract(ARC_FIXTURE)
+        coarse = [
+            SkillSpec(name="researchclaw_merged", description="coarse", allowed_tools=["execute_stage"]),
+        ]
+        skills = ensure_arc_stage_skills(graph, [], coarse, ARC_FIXTURE)
+        names = {s.name for s in skills}
+        assert "researchclaw_merged" in names
+        for stage in graph.stages:
+            assert stage.name in names
+
+    def test_mapper_assigns_unique_agents_per_stage(self):
+        graph = ArcExtractor(mode="fwa").extract(ARC_FIXTURE)
+        coarse = [SkillSpec(name="merged", description="coarse", allowed_tools=[])]
+        skills = ensure_arc_stage_skills(graph, [], coarse, ARC_FIXTURE)
+        agent_map = StageCapabilityMapper().map(graph, [], skills)
+        assert agent_map.has_mapped_stages
+        agents = {agent_map.by_stage_id[s.id].mapped_agent for s in graph.stages}
+        assert len(agents) == len(graph.stages)
+        for stage in graph.stages:
+            profile = agent_map.by_stage_id[stage.id]
+            assert profile.mapping_confidence > 0
+            assert profile.mapped_skill == stage.name
+            assert profile.mapped_agent == f"{stage.name}-agent"
+
+
+class TestArcMapperRealRepo:
+    def test_real_repo_unique_stage_agents(self):
+        if not ARC_REPO.is_dir():
+            return
+        graph = ArcExtractor(mode="fwa").extract(ARC_REPO)
+        components = SourceCodeParser(str(ARC_REPO)).parse()
+        coarse = group_source_components(components, strategy=GroupStrategy.KEYWORD_MATCH).skills
+        skills = ensure_arc_stage_skills(graph, components, coarse, ARC_REPO)
+        agent_map = StageCapabilityMapper().map(graph, components, skills)
+        assert agent_map.has_mapped_stages
+        agents = [agent_map.by_stage_id[s.id].mapped_agent for s in graph.stages]
+        assert len(set(agents)) == len(graph.stages)
+        pipeline = resolve_arc_pipeline_dir(ARC_REPO)
+        assert pipeline is not None
+        rel = arc_stage_impl_rel_path(ARC_REPO, pipeline, graph.stages[0])
+        assert rel is not None
+        assert "stage_impls" in rel

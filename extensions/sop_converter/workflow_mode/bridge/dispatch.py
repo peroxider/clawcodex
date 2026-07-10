@@ -1,18 +1,39 @@
-"""Bridge dispatch table builder for wrapper/hybrid stage execution.
-
-This module materializes the stage-level execution plan produced by the
-capability mapper.  It is intentionally lightweight: the heavy lifting
-(library detection, agent wiring, health checks) lives in the mapper and
-health-check modules.
-"""
+"""Shared stage dispatch tables for Python and CLI bridge generators."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
+from ..capability.arc_mapper import arc_stage_impl_rel_path, is_executor_module_path
 from ..capability.models import ExecutionMode, StageAgentMap
+from ..extractors.adapters.arc import resolve_arc_pipeline_dir
 from ..extractors.models import WorkflowGraph
+
+
+def resolve_stage_module_path(stage, source_dir: Path) -> str | None:
+    """Return repo-relative path to a stage implementation module, if any."""
+    source_dir = Path(source_dir).resolve()
+    pipeline_dir = resolve_arc_pipeline_dir(source_dir)
+    if pipeline_dir is not None and stage.entry_function:
+        impl_rel = arc_stage_impl_rel_path(source_dir, pipeline_dir, stage)
+        if impl_rel and not is_executor_module_path(impl_rel):
+            return impl_rel
+
+    if stage.file_path and not (
+        pipeline_dir is not None
+        and stage.entry_function
+        and is_executor_module_path(stage.file_path)
+    ):
+        return stage.file_path.replace("\\", "/")
+    for sub in ("stage_impls", "stages", "pipeline"):
+        candidate = source_dir / sub / f"{stage.name.replace('-', '_')}.py"
+        if candidate.is_file():
+            return candidate.relative_to(source_dir).as_posix()
+        candidate = source_dir / sub / f"{stage.name}.py"
+        if candidate.is_file():
+            return candidate.relative_to(source_dir).as_posix()
+    return None
 
 
 def build_bridge_tables(
@@ -20,44 +41,30 @@ def build_bridge_tables(
     agent_map: StageAgentMap,
     source_dir: Path,
 ) -> tuple[dict[int, dict[str, Any]], dict[int, list[str]]] | None:
-    """Build dispatch and output tables for wrapper/hybrid stages.
-
-    Returns ``None`` when no stage needs a generated bridge (i.e. every
-    stage is marked as ``AGENT_NATIVE``).  Otherwise returns:
-
-    * ``stage_dispatch`` — maps stage id to runtime metadata such as the
-      target agent, entry function, and working directory.
-    * ``stage_outputs`` — maps stage id to the list of expected output
-      artifacts declared by stage contracts.
-    """
+    """Build ``(stage_dispatch, stage_outputs)`` for wrapper/hybrid stages only."""
+    source_dir = Path(source_dir).resolve()
     stage_dispatch: dict[int, dict[str, Any]] = {}
     stage_outputs: dict[int, list[str]] = {}
 
     for stage in graph.stages:
         profile = agent_map.profile_for_stage(stage.id)
-        if profile is None:
+        if not profile:
             continue
-        if profile.execution_mode == ExecutionMode.AGENT_NATIVE:
-            continue
-
-        agent = profile.mapped_agent or agent_map.agent_for_stage(stage.id)
-        if not agent:
+        if profile.execution_mode not in (ExecutionMode.WRAPPER, ExecutionMode.HYBRID):
             continue
 
+        rel_path = resolve_stage_module_path(stage, source_dir)
+        entry_function = profile.entry_function if profile else None
+        if not entry_function and stage.entry_function:
+            entry_function = stage.entry_function
         stage_dispatch[stage.id] = {
-            "stage_id": stage.id,
+            "module_path": rel_path or stage.file_path,
+            "entry_function": entry_function or stage.name.replace("-", "_"),
             "stage_name": stage.name,
-            "agent": agent,
-            "entry_function": profile.entry_function,
-            "source_dir": str(source_dir),
-            "execution_mode": profile.execution_mode.value,
         }
-
-        outputs: list[str] = []
-        contract = graph.contracts.get(stage.id) if graph.contracts else None
-        if contract is not None:
-            outputs.extend(getattr(contract, "output_files", []) or [])
-        stage_outputs[stage.id] = outputs
+        contract = graph.contracts.get(stage.id)
+        if contract:
+            stage_outputs[stage.id] = list(contract.output_files)
 
     if not stage_dispatch:
         return None

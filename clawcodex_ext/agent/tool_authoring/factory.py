@@ -48,6 +48,12 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
     """
 
     def _call_impl(input: dict[str, Any], _context: ToolContext) -> ToolResult:
+        from extensions.sop_converter.tool_state import (
+            enrich_tool_input,
+            persist_configure_secrets,
+        )
+
+        call_input = enrich_tool_input(spec.name, input, _context.session_id)
         try:
             if should_use_in_process_sdk_wrapper(spec):
                 parsed = parse_sdk_wrapper_call_impl(str(spec.call_impl))
@@ -59,7 +65,7 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
                 output = execute_sdk_wrapper_in_process(
                     script_path=script_path,
                     method_name=method_name,
-                    kwargs=input,
+                    kwargs=call_input,
                     session_id=_context.session_id,
                     agent_id=_context.agent_id,
                 )
@@ -67,9 +73,9 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
                 # Auto-inject {json_args} for sop-converter bridge tools
                 # (and any other tool whose template uses this placeholder).
                 # Harmless no-op when the template doesn't contain {json_args}.
-                enriched = input
+                enriched = call_input
                 if "{json_args}" in spec.call_impl and "json_args" not in enriched:
-                    enriched = {**input, "json_args": json.dumps(input)}
+                    enriched = {**call_input, "json_args": json.dumps(call_input)}
                 # Persisted specs use bare ``python``; on many Linux systems that
                 # resolves to Python 2. Always run bridge scripts with the
                 # current interpreter (the venv that loaded clawcodex).
@@ -80,9 +86,9 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
                 if "{json_args}" in spec.call_impl:
                     output = parse_sop_wrapper_stdout(output)
             elif spec.call_type == "http":
-                output = execute_http(spec.call_impl, input)
+                output = execute_http(spec.call_impl, call_input)
             elif spec.call_type == "python":
-                output = execute_python(spec.call_impl, input)
+                output = execute_python(spec.call_impl, call_input)
             else:
                 output = f"Unknown call_type: {spec.call_type}"
         except (BashCallError, HttpCallError, PythonCallError, SdkWrapperCallError) as exc:
@@ -92,6 +98,22 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
                 is_error=True,
             )
 
+        if isinstance(output, dict):
+            if output.get("error"):
+                return ToolResult(
+                    name=spec.name,
+                    output=output,
+                    is_error=True,
+                )
+            returncode = output.get("returncode")
+            if returncode is not None and returncode != 0:
+                return ToolResult(
+                    name=spec.name,
+                    output=output,
+                    is_error=True,
+                )
+
+        persist_configure_secrets(spec.name, call_input, _context.session_id)
         return ToolResult(
             name=spec.name,
             output=output,

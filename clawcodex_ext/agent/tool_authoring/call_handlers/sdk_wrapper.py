@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import re
 import sys
 import threading
@@ -34,6 +35,18 @@ _SCRIPT_USES_INSTANCE_CACHE: dict[str, bool] = {}
 
 class SdkWrapperCallError(Exception):
     pass
+
+
+def _filter_kwargs_for_callable(fn: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Drop bridge-internal keys the target stub does not accept."""
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return kwargs
+    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        return kwargs
+    allowed = set(sig.parameters)
+    return {k: v for k, v in kwargs.items() if k in allowed}
 
 
 def parse_sdk_wrapper_call_impl(call_impl: str) -> tuple[Path, str] | None:
@@ -142,6 +155,21 @@ def execute_sdk_wrapper_in_process(
             f"Wrapper {script_path.name} has no callable method {method_name!r}"
         )
 
+    interactive_inputs = kwargs.pop("__interactive_inputs", None)
+    if interactive_inputs is not None:
+        set_interactive_inputs = getattr(module, "_set_interactive_inputs", None)
+        if callable(set_interactive_inputs):
+            set_interactive_inputs(interactive_inputs)
+
+    bridge_stdin_config = kwargs.pop("__stdin_config", None)
+    bridge_env = kwargs.pop("__env", None)
+    if bridge_stdin_config is not None:
+        module._bridge_stdin_config = bridge_stdin_config
+    if bridge_env is not None:
+        module._bridge_subprocess_env = bridge_env
+
+    call_kwargs = _filter_kwargs_for_callable(fn, kwargs)
+
     context_registry = get_sdk_context_registry()
     context_key: ContextKey = context_registry.context_key(
         session_id=session_id,
@@ -161,14 +189,14 @@ def execute_sdk_wrapper_in_process(
 
         def _run_class_method() -> Any:
             module._instances = instance_registry.get_bucket(bucket_key)
-            return to_jsonable(fn(**kwargs))
+            return to_jsonable(fn(**call_kwargs))
 
         with bucket_lock:
             with ctx_lock:
                 return ctx.run(_run_class_method)
 
     def _run_standalone() -> Any:
-        return to_jsonable(fn(**kwargs))
+        return to_jsonable(fn(**call_kwargs))
 
     with ctx_lock:
         return ctx.run(_run_standalone)

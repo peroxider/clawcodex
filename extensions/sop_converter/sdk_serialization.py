@@ -94,6 +94,44 @@ def _parse_json_config(value):
     return value
 
 
+def _coerce_mapping_value(value):
+    """Coerce JSON tool args into a dict for mapping-typed SDK parameters.
+
+    Accepts inline dicts or JSON object strings.  Unlike ``_normalize_mapping_inputs``,
+    bare non-JSON strings are rejected — mapping params must be structured objects.
+    """
+    import json
+
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("{"):
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError as exc:
+                raise TypeError(
+                    "expected a JSON object string for mapping parameter; "
+                    f"invalid JSON: {exc}"
+                ) from exc
+            if isinstance(parsed, dict):
+                return parsed
+            raise TypeError(
+                "expected a JSON object for mapping parameter; "
+                f"got {type(parsed).__name__}"
+            )
+        raise TypeError(
+            "expected a dict or JSON object string for mapping parameter; "
+            f"got str: {value!r}"
+        )
+    raise TypeError(
+        "expected a dict or JSON object string for mapping parameter; "
+        f"got {type(value).__name__}: {value!r}"
+    )
+
+
 def _coerce_sdk_type(cls, value):
     """Coerce a JSON-decoded value into *cls* (Pydantic model, dataclass, or constructor)."""
     import dataclasses
@@ -247,6 +285,31 @@ def normalize_mapping_inputs(value: Any, *, message_key: str = "query") -> dict[
         return {message_key: value}
     raise TypeError(
         f"inputs must be a dict, e.g. {{\"{message_key}\": \"...\"}}; "
+        f"got {type(value).__name__}: {value!r}"
+    )
+
+
+def coerce_mapping_value(value: Any) -> dict[str, Any] | None:
+    """Coerce tool args into a dict for mapping-typed SDK parameters."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("{"):
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed
+            raise TypeError(
+                f"expected a JSON object for mapping parameter; got {type(parsed).__name__}"
+            )
+        raise TypeError(
+            "expected a dict or JSON object string for mapping parameter; "
+            f"got str: {value!r}"
+        )
+    raise TypeError(
+        "expected a dict or JSON object string for mapping parameter; "
         f"got {type(value).__name__}: {value!r}"
     )
 

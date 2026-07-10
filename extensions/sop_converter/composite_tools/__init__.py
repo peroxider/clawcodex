@@ -61,6 +61,14 @@ def register_composite_tools(
         A mapping from composite tool names to kebab-case registered names
         (e.g. ``{"AgentTeams": "agent-teams"}``).
     """
+    if _SKIP_PLACEHOLDER_COMPOSITE_TOOLS:
+        logger.info(
+            "Skipping composite tool registration: placeholder implementations "
+            "use 'echo' which is not in bash allowlist. Set "
+            "_SKIP_PLACEHOLDER_COMPOSITE_TOOLS=False to re-enable."
+        )
+        return {}
+
     tool_dir = bundle_tool_dir(bundle_dir) if bundle_dir is not None else None
     name_map: dict[str, str] = {}
 
