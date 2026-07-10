@@ -163,6 +163,26 @@ async def test_notify_on_disconnect_offline(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_repeated_offline_transition_does_not_duplicate_disconnect(tmp_path) -> None:
+    """A stale socket cleanup must not announce the same disconnect twice."""
+    gw, adapter = _gateway_with_wechat(tmp_path)
+
+    gw.binding.bind(
+        "wechat:direct:*:*",
+        SessionTarget(session_id="orchestrator-1", host_type="orchestrator"),
+    )
+    await asyncio.sleep(0.05)
+    adapter.sends.clear()
+
+    gw.binding.mark_offline("wechat:direct:*:*", session_id="orchestrator-1")
+    gw.binding.mark_offline("wechat:direct:*:*", session_id="orchestrator-1")
+    await asyncio.sleep(0.05)
+
+    texts = [msg.text for msg, _ in adapter.sends]
+    assert texts.count("clawcodex-orchestrator已断开") == 1
+
+
+@pytest.mark.asyncio
 async def test_notify_on_disconnect_terminated(tmp_path) -> None:
     """binding_terminated → sends 'clawcodex-orchestrator已断开'."""
     gw, adapter = _gateway_with_wechat(tmp_path)
@@ -478,6 +498,28 @@ def test_collect_broadcast_targets_uses_persisted_feishu_sender_after_restart(tm
     gw = MessageGateway(cfg, store=store)
 
     assert _collect_broadcast_targets(gw.registry) == [("feishu", "oc_chat")]
+
+
+def test_collect_broadcast_targets_uses_scanner_before_first_inbound(tmp_path) -> None:
+    cfg = GatewayConfig(state_dir=str(tmp_path))
+    cfg.replace_channel(
+        ChannelConfig(
+            type=ChannelType.FEISHU,
+            webhook_url="",
+            name="feishu",
+            enabled=True,
+            extra={
+                "connection_mode": "websocket",
+                "app_id": "cli_app",
+                "app_secret": "secret",
+                "allowed_user_open_id": "ou_scanner",
+            },
+        )
+    )
+
+    gw = MessageGateway(cfg)
+
+    assert _collect_broadcast_targets(gw.registry) == [("feishu", "ou_scanner")]
 
 
 @pytest.mark.asyncio

@@ -965,13 +965,27 @@ def _mount_gateway_opt_in(
         # gateway daemon, so keep trying instead of silently disabling IM.
         while not await _connect_and_register():
             await asyncio.sleep(30.0)
+        missed_heartbeats = 0
         while True:
             try:
                 response = await ipc.heartbeat()
-                if response is None or response.ack_layer != "accepted":
+                if response is None:
+                    missed_heartbeats += 1
+                    if missed_heartbeats < 2:
+                        logger.warning(
+                            "orchestrator IM heartbeat ACK timed out; "
+                            "keeping the current registration until the next check"
+                        )
+                    else:
+                        logger.warning("orchestrator IM heartbeat timed out twice; reconnecting")
+                        await _connect_and_register()
+                        missed_heartbeats = 0
+                elif response.ack_layer != "accepted":
                     logger.warning("orchestrator IM heartbeat was not accepted; reconnecting")
                     await _connect_and_register()
+                    missed_heartbeats = 0
                 else:
+                    missed_heartbeats = 0
                     maybe_flush = getattr(wrapper, "_flush_pending_outbound", None)
                     if callable(maybe_flush):
                         await maybe_flush()

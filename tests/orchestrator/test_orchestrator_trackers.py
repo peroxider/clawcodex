@@ -24,6 +24,7 @@ from extensions.orchestrator.local_tracker.adapter import LocalTrackerAdapter
 from extensions.orchestrator.orchestrator import Orchestrator
 from extensions.orchestrator.repo_tracker.client import (
     _PLATFORMS,
+    _build_issue_comment_url,
     _build_issue_update_payload,
 )
 from extensions.orchestrator.repo_tracker.adapter import RepositoryTrackerAdapter
@@ -109,6 +110,22 @@ class TestWorkflowTrackerConfig(unittest.TestCase):
                 platform=_PLATFORMS["github"],
             ),
             {"state": "closed"},
+        )
+        self.assertEqual(
+            _build_issue_update_payload(
+                state="open",
+                labels=[],
+                platform=_PLATFORMS["gitcode"],
+            ),
+            {"state_event": "reopen", "labels": ""},
+        )
+        self.assertEqual(
+            _build_issue_update_payload(
+                state="open",
+                labels=[],
+                platform=_PLATFORMS["github"],
+            ),
+            {"state": "open", "labels": []},
         )
 
     def test_review_feedback_config_defaults_to_manual_disabled(self) -> None:
@@ -557,7 +574,30 @@ pr_title: Local PR
 
 
 class TestIssueReviewCli(unittest.TestCase):
-    def test_review_approve_syncs_local_issue_state_from_workflow(self) -> None:
+    def test_review_reject_recovers_failed_completion_left_by_legacy_flow(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = root / "registry.json"
+            registry = IssueRegistry(registry_path)
+            registry.register("5", "5", branch_name="clawcodex/issue-5")
+            registry.mark_failed_with_reason("5", "empty_branch_no_commits")
+            registry.mark_completed("5")
+            args = argparse.Namespace(
+                id="5",
+                approve=False,
+                reject=True,
+                feedback="注释没有中文",
+                comment=None,
+            )
+
+            rc = _run_review(registry_path, args, workspace_root=root)
+
+            control = root / ".orchestrator_control" / "review_retry_5.control"
+            self.assertEqual(rc, 0)
+            self.assertTrue(control.exists())
+            self.assertIn("注释没有中文", control.read_text(encoding="utf-8"))
+
+    def test_review_approve_defers_local_and_remote_writes_to_daemon(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             issues_path = root / "issues"
@@ -598,12 +638,42 @@ Run the issue.
                 workspace=str(root),
             )
 
-            rc = _run_review(registry_path, args)
+            rc = _run_review(registry_path, args, workspace_root=root)
             updated = issue_path.read_text(encoding="utf-8")
+            control = root / ".orchestrator_control" / "review_approve_LOCAL-001.control"
+            control_exists = control.exists()
+            control_text = control.read_text(encoding="utf-8")
 
         self.assertEqual(rc, 0)
-        self.assertIn("state: completed", updated)
-        self.assertIn("updated_at:", updated)
+        self.assertIn("state: pending_review", updated)
+        self.assertTrue(control_exists)
+        self.assertIn("Looks good", control_text)
+
+    def test_review_reject_does_not_treat_success_output_as_legacy_failure(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = root / "registry.json"
+            registry = IssueRegistry(registry_path)
+            registry.register("9", "9")
+            registry.update_report(
+                "9",
+                verification_status="passed",
+                verification_output="547 passed",
+            )
+            registry.mark_completed("9")
+            args = argparse.Namespace(
+                id="9",
+                approve=False,
+                reject=True,
+                feedback="redo",
+                comment=None,
+            )
+
+            rc = _run_review(registry_path, args, workspace_root=root)
+
+            control = root / ".orchestrator_control" / "review_retry_9.control"
+            self.assertEqual(rc, 1)
+            self.assertFalse(control.exists())
 
 
 class TestReportWriter(unittest.TestCase):
@@ -862,6 +932,55 @@ class _DependencyTracker(TrackerAdapter):
 
 
 class TestOrchestratorDependencies(unittest.IsolatedAsyncioTestCase):
+    async def test_retry_control_relaunches_issue_held_in_completed_memory_state(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            issue = Issue(id="11", identifier="LOCAL-011", state="open")
+            tracker = _DependencyTracker([issue])
+            orchestrator = _ReviewOrchestrator(
+                workflow=WorkflowConfig.from_dict(
+                    {
+                        "workspace": {"root": tmp},
+                        "agent": {
+                            "max_concurrent_agents": 1,
+                            "max_turns": 2,
+                            "max_retries_per_issue": 3,
+                        },
+                    }
+                ),
+                tracker=tracker,
+                workspace=_ReviewWorkspaceManager(root),
+                agent_runner=_ReviewAgentRunner(),
+            )
+            orchestrator._registry.register("11", "LOCAL-011")
+            orchestrator._registry.mark_completed("11")
+            for _ in range(3):
+                orchestrator._registry.increment_retry_count("11")
+            orchestrator._state.completed.add("11")
+            orchestrator._state.failed.add("11")
+            orchestrator._state.retry_attempts["11"] = 3
+
+            control_dir = root / ".orchestrator_control"
+            control_dir.mkdir()
+            control_path = control_dir / "retry_11.control"
+            control_path.write_text("retry\n11\nretry from IM\n", encoding="utf-8")
+
+            await orchestrator._poll_and_dispatch()
+
+            self.assertFalse(control_path.exists())
+            self.assertNotIn("11", orchestrator._state.completed)
+            self.assertNotIn("11", orchestrator._state.failed)
+            self.assertNotIn("11", orchestrator._state.retry_attempts)
+            self.assertIn("11", orchestrator._state.running)
+            self.assertEqual(
+                [created.id for created in orchestrator.workspace.created_for],
+                ["11"],
+            )
+            record = orchestrator._registry.get("11")
+            assert record is not None
+            self.assertEqual(record.retry_count, 1)
+            self.assertEqual(record.last_command, "cli:reset:retry from IM")
+
     async def test_poll_skips_issue_until_dependencies_are_completed(self) -> None:
         with TemporaryDirectory() as tmp:
             tracker = _DependencyTracker(
@@ -931,6 +1050,70 @@ class TestOrchestratorDependencies(unittest.IsolatedAsyncioTestCase):
 
             self.assertNotIn("done", orchestrator._state.running)
             self.assertEqual(orchestrator.workspace.created_for, [])
+
+    async def test_rejected_review_retry_preserves_existing_pr_and_launches(self) -> None:
+        class _ExistingPrTracker(_DependencyTracker):
+            def __init__(self, issues: list[Issue]) -> None:
+                super().__init__(issues)
+                self.closed_prs: list[str | None] = []
+
+            async def find_pull_request(
+                self,
+                *,
+                head_branch: str,
+                base_branch: str,
+            ) -> PullRequestRef | None:
+                return PullRequestRef(number="5", url="https://example.test/pr/5")
+
+            async def close_pull_request(self, pull_request: PullRequestRef) -> bool:
+                self.closed_prs.append(pull_request.number)
+                # Deliberately keep find_pull_request() returning the old PR:
+                # closing is best-effort and must not suppress an explicit retry.
+                return True
+
+        with TemporaryDirectory() as tmp:
+            issue = Issue(
+                id="5",
+                identifier="LOCAL-005",
+                state="open",
+                branch_name="clawcodex/issue-5",
+            )
+            tracker = _ExistingPrTracker([issue])
+            orchestrator = _ReviewOrchestrator(
+                workflow=WorkflowConfig.from_dict(
+                    {
+                        "workspace": {"root": tmp},
+                        "agent": {"max_concurrent_agents": 1, "max_turns": 2},
+                    }
+                ),
+                tracker=tracker,
+                workspace=_ReviewWorkspaceManager(Path(tmp)),
+                agent_runner=_ReviewAgentRunner(),
+            )
+            orchestrator._registry.register(
+                "5",
+                "LOCAL-005",
+                branch_name="clawcodex/issue-5",
+            )
+            orchestrator._registry.mark_synced(
+                "5",
+                branch_name="clawcodex/issue-5",
+                commit_sha="abc123",
+                pr_number="5",
+                pr_url="https://example.test/pr/5",
+            )
+            orchestrator._registry.mark_pending_review("5")
+
+            await orchestrator._handle_review_retry_control("5", "注释没有中文")
+            await orchestrator._poll_and_dispatch()
+
+            self.assertEqual(tracker.closed_prs, [])
+            self.assertIn("5", orchestrator._state.running)
+            self.assertEqual(orchestrator._state.running["5"].run_kind, "review_retry")
+            self.assertEqual(
+                [created.id for created in orchestrator.workspace.created_for],
+                ["5"],
+            )
 
     async def test_escalated_issue_syncs_terminal_tracker_state(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -1212,6 +1395,111 @@ class TestOrchestratorReviewFeedback(unittest.IsolatedAsyncioTestCase):
 
 
 class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
+    async def test_update_issue_state_replaces_conflicting_lifecycle_labels(self) -> None:
+        updates: list[tuple[str, str, list[str] | None]] = []
+
+        class _Client:
+            async def fetch_issue_states_by_ids(self, *args, **kwargs):
+                return [
+                    Issue(
+                        id="5",
+                        identifier="#5",
+                        state="opened",
+                        labels=["bug", "failed", "completed", "pending_review"],
+                    )
+                ]
+
+            async def update_issue(
+                self,
+                issue_id: str,
+                *,
+                state: str,
+                labels: list[str] | None,
+            ) -> None:
+                updates.append((issue_id, state, labels))
+
+        adapter = RepositoryTrackerAdapter(
+            platform="gitcode",
+            owner="acme",
+            repo="widget",
+            api_key="token",
+        )
+        adapter.client = _Client()
+
+        await adapter.update_issue_state("5", "failed")
+        await adapter.update_issue_state("5", "completed")
+
+        self.assertEqual(
+            updates,
+            [
+                ("5", "failed", ["bug", "failed"]),
+                ("5", "completed", ["bug", "completed"]),
+            ],
+        )
+
+    async def test_update_issue_state_can_remove_the_last_lifecycle_label(self) -> None:
+        updates: list[tuple[str, str, list[str] | None]] = []
+
+        class _Client:
+            async def fetch_issue_states_by_ids(self, *args, **kwargs):
+                return [
+                    Issue(
+                        id="5",
+                        identifier="#5",
+                        state="opened",
+                        labels=["pending_review"],
+                    )
+                ]
+
+            async def update_issue(
+                self,
+                issue_id: str,
+                *,
+                state: str,
+                labels: list[str] | None,
+            ) -> None:
+                updates.append((issue_id, state, labels))
+
+        adapter = RepositoryTrackerAdapter(
+            platform="gitcode",
+            owner="acme",
+            repo="widget",
+            api_key="token",
+        )
+        adapter.client = _Client()
+
+        await adapter.update_issue_state("5", "open")
+
+        self.assertEqual(updates, [("5", "open", [])])
+
+    async def test_open_without_a_prefetched_issue_does_not_clear_unknown_labels(self) -> None:
+        updates: list[tuple[str, str, list[str] | None]] = []
+
+        class _Client:
+            async def fetch_issue_states_by_ids(self, *args, **kwargs):
+                return []
+
+            async def update_issue(
+                self,
+                issue_id: str,
+                *,
+                state: str,
+                labels: list[str] | None,
+            ) -> None:
+                updates.append((issue_id, state, labels))
+
+        adapter = RepositoryTrackerAdapter(
+            platform="gitcode",
+            owner="acme",
+            repo="widget",
+            api_key="token",
+        )
+        adapter.client = _Client()
+
+        await adapter.update_issue_state("5", "open")
+
+        self.assertEqual(updates, [("5", "open", None)])
+
     async def test_github_candidate_fetch_normalizes_and_filters_issues(self) -> None:
         requests: list[httpx.Request] = []
 
@@ -2003,3 +2291,82 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(seen["path"], "/repos/acme/widget/issues/42/comments")
         self.assertEqual(seen["payload"], {"body": "Handled"})
+
+
+class TestFeedbackUrlBackfill(unittest.TestCase):
+    """GitCode issue-comments omit html_url -> reconstruct the comment permalink."""
+
+    def test_build_issue_comment_url_gitcode_uses_tid_anchor(self) -> None:
+        url = _build_issue_comment_url(
+            _PLATFORMS["gitcode"], "Gideon_Zhao", "perf-reference-ascend", "4", "179164353"
+        )
+        self.assertEqual(
+            url,
+            "https://gitcode.com/Gideon_Zhao/perf-reference-ascend/issues/4#tid-179164353",
+        )
+
+    def test_build_issue_comment_url_gitee_uses_tid_anchor(self) -> None:
+        url = _build_issue_comment_url(_PLATFORMS["gitee"], "acme", "widget", "12", "55")
+        self.assertEqual(url, "https://gitee.com/acme/widget/issues/12#tid-55")
+
+    def test_build_issue_comment_url_github_uses_issuecomment_anchor(self) -> None:
+        url = _build_issue_comment_url(_PLATFORMS["github"], "acme", "widget", "12", "55")
+        self.assertEqual(url, "https://github.com/acme/widget/issues/12#issuecomment-55")
+
+    def test_build_issue_comment_url_returns_none_when_missing_parts(self) -> None:
+        self.assertIsNone(_build_issue_comment_url(_PLATFORMS["gitcode"], "", "repo", "4", "1"))
+        self.assertIsNone(_build_issue_comment_url(_PLATFORMS["gitcode"], "o", "r", "4", ""))
+
+    def test_backfill_conversation_url_when_html_url_missing(self) -> None:
+        client = RepositoryIssueClient(
+            owner="Gideon_Zhao",
+            repo="perf-reference-ascend",
+            platform="gitcode",
+            api_key="t",
+        )
+        # GitCode payload: no html_url, only the comment id.
+        item = PullRequestFeedback(
+            id="conversation:179164353",
+            source="conversation",
+            body="please fix",
+            url=None,
+        )
+        result = client._backfill_feedback_url(item, pr_number="4")
+        self.assertEqual(
+            result.url,
+            "https://gitcode.com/Gideon_Zhao/perf-reference-ascend/issues/4#tid-179164353",
+        )
+
+    def test_backfill_keeps_existing_html_url(self) -> None:
+        client = RepositoryIssueClient(owner="acme", repo="widget", platform="github", api_key="t")
+        existing = "https://github.com/acme/widget/issues/12#issuecomment-99"
+        item = PullRequestFeedback(
+            id="conversation:99", source="conversation", body="x", url=existing
+        )
+        # Should not overwrite a real html_url from the API.
+        self.assertEqual(client._backfill_feedback_url(item, pr_number="12").url, existing)
+
+    def test_backfill_inline_review_url(self) -> None:
+        client = RepositoryIssueClient(
+            owner="Gideon_Zhao", repo="perf-reference-ascend", platform="gitcode", api_key="t"
+        )
+        item = PullRequestFeedback(
+            id="inline_review:202", source="inline_review", body="nit", url=None
+        )
+        result = client._backfill_feedback_url(item, pr_number="3")
+        self.assertEqual(
+            result.url,
+            "https://gitcode.com/Gideon_Zhao/perf-reference-ascend/issues/3#tid-202",
+        )
+
+    def test_backfill_skips_review_summary_and_ci(self) -> None:
+        client = RepositoryIssueClient(owner="acme", repo="widget", platform="gitcode", api_key="t")
+        for source in ("review_summary", "ci"):
+            item = PullRequestFeedback(
+                id=f"{source}:5",
+                source=source,
+                body="x",
+                url=None,  # type: ignore[arg-type]
+            )
+            # review_summary / ci anchors don't map to #tid-; leave url empty.
+            self.assertIsNone(client._backfill_feedback_url(item, pr_number="3").url)

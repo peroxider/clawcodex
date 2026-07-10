@@ -1073,24 +1073,27 @@ class AgentRunner:
                         options = None
 
                         if clarification_resolver is not None and issue.id:
-                            # Check if this issue has a pending clarification
-                            resolved = clarification_resolver.get_answer(issue.id)
-                            if resolved and resolved.status.value in (
-                                "pending",
-                                "awaiting_local",
-                                "awaiting_author",
-                            ):
-                                # Get the pending item from queue to retrieve question + options
-                                pending_item = clarification_resolver._queue.get(issue.id)
-                                if pending_item:
-                                    pending_question = pending_item.question
-                                    options = pending_item.options if pending_item.options else None
-                                    clarification_context = (
-                                        PromptBuilder.build_clarification_context(
-                                            pending_question=pending_question,
-                                            options=options,
-                                        )
-                                    )
+                            # Review-rejection feedback is a typed one-shot
+                            # instruction.  Use the resolver's public API so
+                            # genuine clarification questions and expired/
+                            # consumed feedback are never replayed here.
+                            get_pending_feedback = getattr(
+                                clarification_resolver,
+                                "get_pending_feedback",
+                                None,
+                            )
+                            pending_item = (
+                                get_pending_feedback(issue.id)
+                                if callable(get_pending_feedback)
+                                else None
+                            )
+                            if pending_item is not None:
+                                pending_question = pending_item.question
+                                options = pending_item.options if pending_item.options else None
+                                clarification_context = PromptBuilder.build_clarification_context(
+                                    pending_question=pending_question,
+                                    options=options,
+                                )
 
                         system_prompt_append, user_prompt = PromptBuilder.render_parts(
                             issue,
@@ -1105,6 +1108,14 @@ class AgentRunner:
                                 issue_executable=getattr(issue, "python_executable", "") or "",
                             ),
                             previous_run_ids=getattr(session, "previous_run_ids", None),
+                            # F-120: inject the conflict-file list for an
+                            # agent_rebase reentry run so the agent knows
+                            # which files need marker resolution. Defense-
+                            # in-depth: _launch_rebase_resolution also sets
+                            # prompt_override via render_rebase, but this
+                            # keeps the inline block working if a future
+                            # caller forgets to set the override.
+                            conflict_files=getattr(session, "conflict_files", None),
                         )
                     # F-?? prompt split: keep the constant workflow background
                     # in the system prompt across every turn; only the
@@ -1219,11 +1230,9 @@ class AgentRunner:
                     env=getattr(self.agent_config, "env", None) or {},
                     timeout_s=self.agent_config.run_timeout_ms / 1000.0,
                     stall_timeout_s=(
-                        getattr(self.agent_config, 'stall_timeout_ms', 300_000) / 1000.0
+                        getattr(self.agent_config, "stall_timeout_ms", 300_000) / 1000.0
                     ),
-                    stall_warn_s=(
-                        getattr(self.agent_config, 'stall_warn_ms', 30_000) / 1000.0
-                    ),
+                    stall_warn_s=(getattr(self.agent_config, "stall_warn_ms", 30_000) / 1000.0),
                     # F-?? prompt split: keep the constant workflow background
                     # in the system prompt across every turn (turn 0 sets it
                     # via render_parts; turn > 0 reads it from the session).

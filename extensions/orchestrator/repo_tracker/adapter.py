@@ -13,6 +13,22 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from ..tracker import CommandIntent
 
+_LIFECYCLE_LABELS = frozenset(
+    {
+        "pending",
+        "queued",
+        "running",
+        "synced",
+        "pending_review",
+        "completed",
+        "failed",
+        "abandoned",
+        "verification_failed",
+        "cancelled",
+        "canceled",
+    }
+)
+
 from ..tracker import (
     Comment,
     DEFAULT_INTENT_LABELS,
@@ -174,6 +190,7 @@ class RepositoryTrackerAdapter(TrackerAdapter):
             for item in [*self.active_states, *self.terminal_states]
             if item.strip()
         }
+        known_state_labels.update(_LIFECYCLE_LABELS)
         labels = [label for label in labels if label.strip().lower() not in known_state_labels]
         if normalized_state and normalized_state not in {
             "open",
@@ -186,7 +203,16 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         await self.client.update_issue(
             issue_id,
             state=state,
-            labels=labels or None,
+            # ``[]`` means "remove every label" while ``None`` means
+            # "leave labels unchanged".  Reopening an issue whose only
+            # label is a terminal lifecycle marker must preserve that
+            # distinction or the remote issue stays labelled failed/
+            # pending_review after the daemon has reset it locally.
+            # If the pre-read could not find the issue, keep the historical
+            # safe behaviour for an ``open`` transition and do not clear
+            # unknown labels.  An empty list is authoritative only when the
+            # current issue was actually fetched.
+            labels=labels if current is not None or labels else None,
         )
 
     async def find_pull_request(

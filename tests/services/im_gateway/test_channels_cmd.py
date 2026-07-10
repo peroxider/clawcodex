@@ -160,8 +160,33 @@ def test_format_status_shows_connected_clients(tmp_path, monkeypatch) -> None:
 
     out = ch.format_status(str(p), state_dir=str(tmp_path))
 
-    assert "connected clients: repl (session=repl-12345, online)" in out
+    assert "connected clients: repl (session=repl-12345, pid=12345, online)" in out
     assert "orchestrator (session=orch-67890, online)" in out
+
+
+def test_format_status_shows_connected_client_pid(tmp_path, monkeypatch) -> None:
+    p = tmp_path / "channels.yaml"
+    ch.add_channel(str(p), _slack("s1", enabled=True))
+    monkeypatch.setattr(
+        ch,
+        "_read_gateway_runtime_status",
+        lambda state_dir=None: {
+            "gateway_running": True,
+            "peers": [
+                {
+                    "session_id": "repl-4321-1",
+                    "host_type": "repl",
+                    "online": True,
+                    "pid": 4321,
+                },
+            ],
+        },
+        raising=False,
+    )
+
+    out = ch.format_status(str(p), state_dir=str(tmp_path))
+
+    assert "repl (session=repl-4321-1, pid=4321, online)" in out
 
 
 def test_format_status_shows_no_clients_when_peers_empty(tmp_path, monkeypatch) -> None:
@@ -339,6 +364,55 @@ def test_format_status_wechat_reports_offline_binding_as_disconnected(
     assert "connected to repl" not in out
 
 
+def test_restart_channel_reports_connected_client_pid_on_exception(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    from extensions.im_gateway.server import DaemonPaths
+
+    paths = DaemonPaths.for_state_dir(tmp_path)
+    ch.add_channel(str(paths.state_dir / "channels.yaml"), ch.build_default_channel("wechat"))
+    monkeypatch.setattr(ch, "_daemon_alive", lambda daemon: True)
+
+    class _FakeGatewayIpcClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return None
+
+        async def status(self):
+            return {
+                "gateway_running": True,
+                "peers": [
+                    {
+                        "session_id": "orchestrator-4321",
+                        "host_type": "orchestrator",
+                        "online": True,
+                        "pid": 4321,
+                    }
+                ],
+            }
+
+        async def reload_channel(self, name):
+            raise RuntimeError("adapter busy")
+
+    monkeypatch.setattr(
+        "clawcodex_ext.services.im_gateway.ipc_client.GatewayIpcClient",
+        _FakeGatewayIpcClient,
+    )
+
+    rc = ch.restart_channel("wechat", state_dir=str(tmp_path))
+    captured = capsys.readouterr()
+
+    assert rc == 1
+    assert "restart failed" in captured.err
+    assert "REPL/Orchestrator" in captured.err
+    assert "pid=4321" in captured.err
+
+
 def test_build_channel_from_inputs_wechat(tmp_path) -> None:
     p = tmp_path / "channels.yaml"
     channel = ch.build_channel_from_inputs(
@@ -371,6 +445,7 @@ def test_build_channel_from_inputs_feishu_websocket() -> None:
             "encrypt_key": "encrypt-key",
             "verification_token": "verification-token",
             "domain": "lark",
+            "allowed_user_open_id": "ou_allowed",
             "bot_open_id": "ou_bot",
             "bot_name": "ClawCodex",
             "ws_reconnect_interval": "180",
@@ -390,7 +465,7 @@ def test_build_channel_from_inputs_feishu_websocket() -> None:
     assert channel.extra["encrypt_key"] == "encrypt-key"
     assert channel.extra["verification_token"] == "verification-token"
     assert channel.extra["domain"] == "lark"
-    assert "allowed_user_open_id" not in channel.extra
+    assert channel.extra["allowed_user_open_id"] == "ou_allowed"
     assert channel.extra["bot_open_id"] == "ou_bot"
     assert channel.extra["bot_name"] == "ClawCodex"
     assert "websocket" not in channel.extra
@@ -780,8 +855,7 @@ def test_wizard_add_feishu_websocket_defaults_to_scan_and_skips_webhook_fields(
             "app_id": "cli_app",
             "app_secret": "secret",
             "domain": "feishu",
-            "bot_open_id": "ou_bot",
-            "bot_name": "ClawCodex",
+            "allowed_user_open_id": "ou_scanner",
         },
     )
     inputs = iter(["1", "1", ""])  # select feishu (add), websocket mode (idx 0), ESC exit
@@ -799,10 +873,9 @@ def test_wizard_add_feishu_websocket_defaults_to_scan_and_skips_webhook_fields(
 
     channel = load_config(str(p)).get_channel("feishu")
     assert channel.extra["connection_mode"] == "websocket"
-    assert channel.extra["bot_open_id"] == "ou_bot"
-    assert channel.extra["bot_name"] == "ClawCodex"
+    assert channel.extra["allowed_user_open_id"] == "ou_scanner"
     assert channel.webhook_url == ""
-    assert "allowed_user_open_id" not in channel.extra
+    assert "bot_open_id" not in channel.extra
     assert "websocket" not in channel.extra
 
     text = (capsys.readouterr().out + "\n".join(prompts)).lower()
@@ -811,6 +884,7 @@ def test_wizard_add_feishu_websocket_defaults_to_scan_and_skips_webhook_fields(
     assert "ws reconnect" not in text
     assert "渠道名称" not in text
     assert "clawcodex-dev gateway restart" in text
+    assert text.count("clawcodex-dev gateway restart") == 1
     assert "clawcodex-dev gateway restart feishu" not in text
 
 
@@ -925,8 +999,7 @@ def test_feishu_scan_login_uses_real_qr_registration_without_manual_prompts(
             "app_id": "cli_app",
             "app_secret": "secret",
             "domain": "feishu",
-            "bot_open_id": "ou_bot",
-            "bot_name": "ClawCodex",
+            "open_id": "ou_scanner",
         },
     )
 
@@ -937,13 +1010,14 @@ def test_feishu_scan_login_uses_real_qr_registration_without_manual_prompts(
 
     captured = capsys.readouterr().out
     assert "占位" not in captured
+    assert "clawcodex-dev gateway restart" not in captured
+    assert "第一条消息" not in captured
     assert result == {
         "connection_mode": "websocket",
         "app_id": "cli_app",
         "app_secret": "secret",
         "domain": "feishu",
-        "bot_open_id": "ou_bot",
-        "bot_name": "ClawCodex",
+        "allowed_user_open_id": "ou_scanner",
     }
 
 
@@ -1009,9 +1083,13 @@ def test_wizard_edit_feishu_login_manual_masks_secret_and_keeps_values(
     assert "orig_plaintext_secret_xyz" not in text
 
 
-def test_wizard_edit_feishu_scan_login_updates_bot_identity(tmp_path, monkeypatch) -> None:
+def test_wizard_edit_feishu_scan_login_updates_allowed_user(tmp_path, monkeypatch, capsys) -> None:
     p = tmp_path / "channels.yaml"
-    ch.add_channel(str(p), _feishu_ws_channel())
+    existing = _feishu_ws_channel()
+    existing.extra["allowed_user_open_id"] = "ou_old_scanner"
+    ch.add_channel(str(p), existing)
+    sender_state = tmp_path / "feishu_last_senders.json"
+    sender_state.write_text('{"feishu":"oc_old_chat"}', encoding="utf-8")
     monkeypatch.setattr(ch, "_feishu_dependencies_available", lambda: True)
     monkeypatch.setattr(
         ch,
@@ -1021,8 +1099,7 @@ def test_wizard_edit_feishu_scan_login_updates_bot_identity(tmp_path, monkeypatc
             "app_id": "new_app",
             "app_secret": "new_secret",
             "domain": "lark",
-            "bot_open_id": "ou_new_bot",
-            "bot_name": "NewBot",
+            "allowed_user_open_id": "ou_new_scanner",
         },
     )
     inputs = iter(
@@ -1043,8 +1120,11 @@ def test_wizard_edit_feishu_scan_login_updates_bot_identity(tmp_path, monkeypatc
     assert channel.extra["app_id"] == "new_app"
     assert channel.extra["app_secret"] == "new_secret"
     assert channel.extra["domain"] == "lark"
-    assert channel.extra["bot_open_id"] == "ou_new_bot"
-    assert channel.extra["bot_name"] == "NewBot"
+    assert channel.extra["allowed_user_open_id"] == "ou_new_scanner"
+    assert "bot_open_id" not in channel.extra
+    assert not sender_state.exists()
+    output = capsys.readouterr().out
+    assert output.count("clawcodex-dev gateway restart") == 1
 
 
 # -- new arrow-key wizard flow (plan: gateway-setup-arrow-key-menu) ---------
@@ -1069,8 +1149,7 @@ def test_run_wizard_feishu_not_logged_in_runs_add_flow(tmp_path, monkeypatch) ->
             "app_id": "cli_app",
             "app_secret": "secret",
             "domain": "feishu",
-            "bot_open_id": "ou_bot",
-            "bot_name": "ClawCodex",
+            "allowed_user_open_id": "ou_scanner",
         },
     )
     inputs = iter(
@@ -1196,8 +1275,7 @@ def test_feishu_edit_remove_then_reenter_runs_add_flow(tmp_path, monkeypatch) ->
             "app_id": "new_app",
             "app_secret": "new_secret",
             "domain": "feishu",
-            "bot_open_id": "ou_new",
-            "bot_name": "NewBot",
+            "allowed_user_open_id": "ou_new_scanner",
         },
     )
     inputs = iter(

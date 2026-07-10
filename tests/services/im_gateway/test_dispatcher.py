@@ -168,6 +168,20 @@ async def test_orchestrator_blocked_command_not_pushed(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_orchestrator_issue_takeover_not_pushed(tmp_path) -> None:
+    """orchestrator 绑定的 origin 发送 /issue takeover → 拒绝，不进入 IPC。"""
+    dispatcher, router, pushed = _make_dispatcher(tmp_path)
+    msg = _make_message("wechat:acct:user2", "/issue takeover --id AGENTSDK-15")
+
+    receipt = await dispatcher.process(msg)
+
+    assert len(pushed) == 0
+    assert receipt.layer == AckLayer.ACCEPTED
+    assert receipt.notify_user is True
+    assert receipt.message == "不支持 /issue takeover 执行"
+
+
+@pytest.mark.asyncio
 async def test_orchestrator_allowed_issue_command_pushed(tmp_path) -> None:
     """orchestrator 绑定的 origin 发送 /issue list → push_handler 被调用。"""
     dispatcher, router, pushed = _make_dispatcher(tmp_path)

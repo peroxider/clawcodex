@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -878,7 +879,7 @@ def run(args: argparse.Namespace) -> int:
     elif cmd == "diff":
         return _run_diff(registry_path, args)
     elif cmd == "retry":
-        return _run_retry(registry_path, args)
+        return _run_retry(registry_path, args, workspace_root=ws)
     elif cmd == "rebase":
         return _run_rebase(registry_path, args, workspace_root=ws)
     elif cmd == "feedback":
@@ -2140,14 +2141,6 @@ def _run_review(
         print(f"Issue {issue_id} not found in registry.", file=sys.stderr)
         return 1
 
-    if record.status != IssueStatus.PENDING_REVIEW:
-        print(
-            f"Issue {issue_id} is not pending review (status: {record.status.value}).",
-            file=sys.stderr,
-        )
-        print("Only issues with 'pending_review' status can be reviewed.", file=sys.stderr)
-        return 1
-
     approve = getattr(args, "approve", False)
     reject = getattr(args, "reject", False)
 
@@ -2155,28 +2148,63 @@ def _run_review(
         print("error: specify --approve or --reject", file=sys.stderr)
         return 2
 
+    recoverable_failed_completion = bool(
+        record.status is IssueStatus.COMPLETED
+        and (
+            record.verification_status == "failed"
+            or record.last_hook_error
+            or record.session_end_reason == "empty_branch_no_commits"
+        )
+    )
+    retry_already_queued = bool(
+        reject
+        and (
+            record.status
+            in {
+                IssueStatus.PENDING,
+                IssueStatus.FAILED,
+                IssueStatus.VERIFICATION_FAILED,
+            }
+            or recoverable_failed_completion
+        )
+        and (
+            getattr(record.intent, "value", record.intent) in {"retry", "followup"}
+            or record.commit_sha
+            or record.pr_number
+            or record.pr_url
+            or recoverable_failed_completion
+        )
+    )
+    approve_already_recorded = approve and record.status is IssueStatus.COMPLETED
+    if (
+        record.status is not IssueStatus.PENDING_REVIEW
+        and not retry_already_queued
+        and not approve_already_recorded
+    ):
+        print(
+            f"Issue {issue_id} is not pending review (status: {record.status.value}).",
+            file=sys.stderr,
+        )
+        print(
+            "Only issues with 'pending_review' status, or an already queued "
+            "rejection retry, can be reviewed.",
+            file=sys.stderr,
+        )
+        return 1
+
     if reject:
         feedback = getattr(args, "feedback", None)
         if not feedback:
             print("error: --reject requires --feedback", file=sys.stderr)
             return 2
 
-        # Inject feedback as clarification request to trigger retry
-        from extensions.orchestrator.clarification_queue import ClarificationQueue
-
-        queue = ClarificationQueue()
-        question = f"[Human Review Rejected] {feedback}"
-        resolved = queue.inject_feedback(issue_id, question)
-        if resolved is None:
-            print(f"Failed to inject feedback for issue {issue_id}.", file=sys.stderr)
-            return 1
-
-        # Reset issue status to pending for retry
-        registry._records[issue_id].status = IssueStatus.PENDING
-        registry._save()
-
-        # Write control command to retry the issue
-        _write_control("retry", issue_id, feedback, workspace_root=workspace_root)
+        # The daemon owns its in-memory registry, lifecycle sets, tracker state,
+        # and clarification queue. Send one durable control command so those
+        # related mutations happen together on the next poll instead of
+        # partially updating the same files through stale CLI-side objects.
+        rc = _write_control("review_retry", issue_id, feedback, workspace_root=workspace_root)
+        if rc != 0:
+            return rc
 
         print(f"Issue {issue_id} rejected with feedback:")
         print(f'  "{feedback}"')
@@ -2185,43 +2213,19 @@ def _run_review(
 
     if approve:
         comment = getattr(args, "comment", None)
+        rc = _write_control(
+            "review_approve",
+            issue_id,
+            comment or "",
+            workspace_root=workspace_root,
+        )
+        if rc != 0:
+            return rc
 
-        # F-?? Fix 3: mark the issue as completed and make the CLI's
-        # write authoritative against the daemon's stale in-memory
-        # state.  ``mark_completed`` writes the file but if the daemon
-        # re-saves with its in-memory copy before we exit, the change
-        # is clobbered.  We re-read the file after the save and, if
-        # the status is back to pending_review, force a second write
-        # so the operator's approval decision is the last word.
-        registry.mark_completed(issue_id)
-        try:
-            _verify_registry = IssueRegistry(registry_path)
-            _verify_record = _verify_registry._records.get(issue_id)
-            if _verify_record is not None and _verify_record.status != IssueStatus.COMPLETED:
-                # Daemon (or another writer) overwrote between our
-                # save and re-read; force the completion back.
-                _verify_registry.mark_completed(issue_id)
-        except Exception as _exc:  # noqa: BLE001
-            print(
-                f"warning: post-approval verification failed: {_exc}",
-                file=sys.stderr,
-            )
-
-        tracker = _tracker_from_workflow_arg(args)
-        if tracker is not None:
-            try:
-                import asyncio
-
-                async def update_tracker() -> None:
-                    await tracker.update_issue_state(issue_id, "completed")
-                    if comment:
-                        await tracker.create_comment(issue_id, f"## Approved\n\n{comment}")
-
-                asyncio.run(update_tracker())
-            except Exception as exc:
-                print(f"Warning: could not update tracker: {exc}", file=sys.stderr)
-
-        print(f"Issue {issue_id} approved and marked as completed.")
+        # The daemon is the sole owner of the registry, lifecycle sets and
+        # remote tracker side effects.  Updating them here as well races its
+        # in-memory snapshot and posts the optional approval comment twice.
+        print(f"Issue {issue_id} approval queued — orchestrator will finalize it.")
         return 0
 
 
@@ -2230,6 +2234,64 @@ def _run_review(
 # ---------------------------------------------------------------------------
 # issue feedback
 # ---------------------------------------------------------------------------
+
+# Matches a repo web URL like
+#   https://gitcode.com/Gideon_Zhao/perf-reference-ascend/merge_requests/3
+#   https://gitee.com/acme/widget/pulls/9
+#   https://github.com/acme/widget/pull/12
+# capturing host / owner / repo so we can rebuild a comment permalink.
+_PR_URL_RE = re.compile(r"^(?P<host>https?://[^/]+)/(?P<owner>[^/]+)/(?P<repo>[^/]+)/")
+
+
+def _fallback_feedback_url(record: Any, feedback_id: str) -> str | None:
+    """Reconstruct a comment URL when none was persisted.
+
+    Used by ``issue feedback --list`` for records written before URL
+    persistence, or items whose source has no html_url (GitCode's
+    issue-comments endpoint omits it). Parses host/owner/repo from the
+    record's ``pr_url`` and builds the platform's comment permalink:
+
+      - gitcode / gitee: ``{host}/{owner}/{repo}/issues/{number}#tid-{id}``
+      - github:          ``{host}/{owner}/{repo}/issues/{number}#issuecomment-{id}``
+
+    Returns ``None`` for review_summary / ci sources (no comment anchor)
+    or when the record has no parseable pr_url.
+    """
+    if not feedback_id or ":" not in feedback_id:
+        return None
+    source, _, raw_id = feedback_id.partition(":")
+    if source not in {"conversation", "inline_review"} or not raw_id:
+        return None
+    pr_url = getattr(record, "pr_url", None)
+    if not isinstance(pr_url, str) or not pr_url:
+        return None
+    m = _PR_URL_RE.match(pr_url)
+    if not m:
+        return None
+    host = m.group("host")
+    owner = m.group("owner")
+    repo = m.group("repo")
+    # Issue/PR number for the URL path. The tracker fetches conversation
+    # comments via ``/issues/{effective_issue_id}/comments`` where
+    # ``effective_issue_id = issue_id or pr_number`` (see
+    # client.fetch_pull_request_feedback), so the comment lives under the
+    # issue number. Prefer the record's issue_id when it is numeric
+    # (GitCode stores the bare issue number there); fall back to pr_number
+    # for GitHub/Gitee where issue_id may be a tracker key (AGENTSDK-15).
+    number = ""
+    raw_issue_id = str(getattr(record, "issue_id", "") or "").strip()
+    if raw_issue_id.startswith("#"):
+        raw_issue_id = raw_issue_id[1:]
+    if raw_issue_id.isdigit():
+        number = raw_issue_id
+    else:
+        pr_number = getattr(record, "pr_number", None)
+        if isinstance(pr_number, str) and pr_number.strip().isdigit():
+            number = pr_number.strip()
+    if not number:
+        return None
+    anchor = f"#issuecomment-{raw_id}" if "github.com" in host else f"#tid-{raw_id}"
+    return f"{host}/{owner}/{repo}/issues/{number}{anchor}"
 
 
 def _run_feedback(
@@ -2266,8 +2328,18 @@ def _run_feedback(
             print(f"No pending feedback for issue {issue_id}.")
             return 0
         print(f"Pending feedback for issue {issue_id}:")
+        print("(use the ID with --feedback-id to approve/dismiss a single item)")
         for i, fid in enumerate(record.pending_feedback_ids, 1):
-            print(f"  {i}. {fid}")
+            # Resolve the canonical comment/check URL when available
+            # (persisted from the tracker's html_url). Fall back to
+            # reconstructing it from pr_url + raw comment id (GitCode's
+            # issue-comments API omits html_url). No URL for review_summary
+            # / ci sources -> show the id alone.
+            url = record.pending_feedback_urls.get(fid) or _fallback_feedback_url(record, fid)
+            if url:
+                print(f"  {i}. {fid}  ->  {url}")
+            else:
+                print(f"  {i}. {fid}")
         print(f"\nTotal: {len(record.pending_feedback_ids)} pending item(s)")
         return 0
 
@@ -2802,7 +2874,12 @@ def _run_rebase(
     return 0
 
 
-def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
+def _run_retry(
+    registry_path: Path | None,
+    args: argparse.Namespace,
+    *,
+    workspace_root: str | Path | None = None,
+) -> int:
     """F-39 Sub-E: CLI 兜底命令 — record an operator-driven retry intent.
 
     Behaviour (per the design doc):
@@ -2872,6 +2949,7 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
     # ``reset_for_retry(increment_retry=True)`` to bump the budget
     # one tick at a time.
     rate_limited = False
+    control_rc = 0
 
     if rate_limited:
         action = "rate-limited (--force required)"
@@ -2923,7 +3001,23 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
                 # local registry.intent is the authoritative
                 # source.
                 _mirror_intent_label(tracker, issue_id, "agent:retry", remove=False)
-            action = "marked for reset"
+            # The CLI may run inside the IM gateway process while the
+            # orchestrator daemon keeps a separate, already-loaded
+            # IssueRegistry instance. Persisting the registry alone does
+            # not update that in-memory state (notably its completed set),
+            # so explicitly notify the daemon through its control queue.
+            control_root = workspace_root or registry_path.parent
+            control_rc = _write_control(
+                "retry",
+                registry_issue_id,
+                reason,
+                workspace_root=control_root,
+            )
+            action = (
+                "marked for reset"
+                if control_rc == 0
+                else "reset persisted, but daemon notification failed"
+            )
         elif mode == "followup":
             registry.mark_intent(
                 registry_issue_id,
@@ -2973,8 +3067,16 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
         print("  (--force set: rate limit bypassed, audit entry marked high-priority)")
     if audit_path is not None:
         print(f"  audit log: {audit_path}")
-    print("  The orchestrator will pick this up on its next poll cycle.")
-    return 0 if not rate_limited else 3
+    if control_rc == 0:
+        print("  The orchestrator will pick this up on its next poll cycle.")
+    else:
+        print(
+            "  The local reset was saved, but the orchestrator control command failed.",
+            file=sys.stderr,
+        )
+    if rate_limited:
+        return 3
+    return control_rc
 
 
 # ── issue init ───────────────────────────────────────────────────────

@@ -192,7 +192,7 @@ $ clawcodex-dev orchestrator issue inject --id gitcode/AGENTSDK-15 "address revi
 | 📺 GitCode Pages | [https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html](https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html) | 待仓库 Pages 启用后即可访问 |
 | 📺 GitHub Pages | [https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html](https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html) | 镜像仓库可同步 |
 | 🏃 本地预览 | `cd assets/video-b/presentation && npm install && npm run dev` → [http://localhost:5174](http://localhost:5174) | 需要 Node 18+ |
-| 📦 单文件直开 | [`assets/video-b/presentation/article.html`](assets/video-b/presentation/article.html) | 离线 / 静态托管通用，238 KB |
+| 📦 单文件直开 | [`assets/video-b/presentation/index.html`](assets/video-b/presentation/index.html) | 离线 / 静态托管通用，238 KB |
 
 > GitHub / GitCode 的 README 不允许 `<script>` 内嵌（会被 sanitize 剥离），所以走外链方式跳转。
 > 静态截图缩略图可在 `assets/video-b/screenshots/` 下重新生成：`python3 scripts/capture_video_b_screenshots.py`。
@@ -311,6 +311,9 @@ clawcodex-dev orchestrator issue resume --id <id>
 clawcodex-dev orchestrator issue takeover --id <id>
 clawcodex-dev orchestrator issue clarify --id <id> --answer <text>
 clawcodex-dev orchestrator issue inject --id <id> [hint]
+clawcodex-dev orchestrator issue feedback --id <id> (--list|--approve|--dismiss)
+clawcodex-dev orchestrator issue review --id <id> (--approve|--reject --feedback <text>)
+clawcodex-dev orchestrator issue retry --id <id> --mode reset|followup|unblock
 clawcodex-dev orchestrator issue workspace --id <id>
 clawcodex-dev orchestrator dashboard [--port 8080]
 ```
@@ -379,7 +382,9 @@ Startup `--gateway` and runtime connect both bind all direct/private senders for
 | Runtime | Whitelisted IM commands |
 |---|---|
 | REPL | `/stop`, `/clear`, `/reset`, `/new`, `/goal`, `/help`, `/?`, `/cost`, `/history`, `/context`, `/recap`, `/btw`, `/cron-list`, `/cron-status`, `/cron-runs`, `/tools`, `/skills`, `/diff`, `/mcp`, `/tasks`, `/idle`, `/doctor`, `/release-notes` |
-| Orchestrator | `/server status`; `/issue list`, `/issue show`, `/issue tail`, `/issue stop`, `/issue pause`, `/issue resume`, `/issue takeover`, `/issue clarify`, `/issue inject`, `/issue workspace` |
+| Orchestrator | `/server status`; `/issue list`, `/issue show`, `/issue tail`, `/issue stop`, `/issue pause`, `/issue resume`, `/issue clarify`, `/issue inject`, `/issue feedback`, `/issue review`, `/issue retry`, `/issue workspace` |
+
+For Orchestrator IM commands, `/issue inject` is a live, non-blocking operator hint while the agent continues running; `/issue clarify` answers an agent clarification that paused waiting for input; `/issue feedback`, `/issue review`, and `/issue retry` are issue lifecycle mutations that can schedule another agent run.
 
 Non-whitelisted Orchestrator slash commands return `不支持 /xxx 执行`.
 

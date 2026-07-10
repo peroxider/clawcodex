@@ -217,11 +217,18 @@ def _registration_result(registration: dict[str, Any], domain: str) -> dict[str,
     app_secret = str(payload.get("client_secret") or payload.get("app_secret") or "")
     if not app_id or not app_secret:
         raise ValueError("Feishu registration did not return app credentials")
+    open_id = str(user_info.get("open_id") or "").strip()
+    if not open_id:
+        # The pinned SDK requests ``request_user_info=open_id`` during the
+        # registration begin step.  Treat a response without it as an
+        # incomplete registration: credentials alone cannot support the
+        # promised first proactive delivery before any inbound message.
+        raise ValueError("Feishu registration did not return scanning user open_id")
     return {
         "app_id": app_id,
         "app_secret": app_secret,
         "domain": result_domain,
-        "open_id": user_info.get("open_id"),
+        "open_id": open_id,
     }
 
 

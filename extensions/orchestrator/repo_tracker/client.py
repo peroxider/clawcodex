@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 import re
 from typing import Any
@@ -32,6 +32,10 @@ class RepositoryPlatform:
     state_param: str = "state"
     accept_header: str | None = None
     supports_ci_statuses: bool = True
+    # Web host for building human-facing comment/issue URLs when the API
+    # response omits ``html_url`` (GitCode issue-comments do). Derived from
+    # the platform, not the API endpoint.
+    web_host: str = ""
 
 
 _PLATFORMS: dict[str, RepositoryPlatform] = {
@@ -42,6 +46,7 @@ _PLATFORMS: dict[str, RepositoryPlatform] = {
         open_state="open",
         closed_state="closed",
         accept_header="application/vnd.github+json",
+        web_host="https://github.com",
     ),
     "gitee": RepositoryPlatform(
         name="gitee",
@@ -50,6 +55,7 @@ _PLATFORMS: dict[str, RepositoryPlatform] = {
         open_state="open",
         closed_state="closed",
         accept_header="application/json",
+        web_host="https://gitee.com",
     ),
     "gitcode": RepositoryPlatform(
         name="gitcode",
@@ -59,6 +65,7 @@ _PLATFORMS: dict[str, RepositoryPlatform] = {
         closed_state="closed",
         accept_header="application/json",
         supports_ci_statuses=False,
+        web_host="https://gitcode.com",
     ),
 }
 
@@ -696,16 +703,43 @@ class RepositoryIssueClient:
                 await asyncio.sleep(1)
         return pr
 
+    def _backfill_feedback_url(
+        self,
+        item: PullRequestFeedback,
+        pr_number: str,
+    ) -> PullRequestFeedback:
+        """Set ``item.url`` from owner/repo/number when the API omitted it.
+
+        GitCode's issue/PR comments endpoints don't return ``html_url``, so
+        normalized conversation/inline feedback would carry no clickable
+        link. We reconstruct the canonical comment permalink from the
+        platform web host. Only applies to comment-anchored sources
+        (``conversation`` / ``inline_review``); review summaries and CI
+        runs keep whatever ``html_url``/``details_url`` the API provided.
+        """
+        if item.url:
+            return item
+        if item.source not in {"conversation", "inline_review"}:
+            return item
+        # ``id`` is stored as ``<source>:<raw_id>``; the raw comment id is
+        # the anchor fragment.
+        raw_id = item.id.split(":", 1)[1] if ":" in item.id else item.id
+        url = _build_issue_comment_url(self.platform, self.owner, self.repo, pr_number, raw_id)
+        if url:
+            return replace(item, url=url)
+        return item
+
     async def _fetch_pull_request_conversation_feedback(
         self,
         pr_number: str,
     ) -> list[PullRequestFeedback]:
         comments = await self.fetch_comments(pr_number)
-        return [
+        feedback = [
             feedback
             for feedback in (_normalize_conversation_feedback(comment) for comment in comments)
             if feedback is not None
         ]
+        return [self._backfill_feedback_url(item, pr_number) for item in feedback]
 
     async def _fetch_pull_request_inline_feedback(
         self,
@@ -714,11 +748,12 @@ class RepositoryIssueClient:
         payload = await self._fetch_paginated(
             f"/repos/{self.owner}/{self.repo}/pulls/{pr_number}/comments"
         )
-        return [
+        feedback = [
             feedback
             for feedback in (_normalize_inline_feedback(item) for item in payload)
             if feedback is not None
         ]
+        return [self._backfill_feedback_url(item, pr_number) for item in feedback]
 
     async def _fetch_pull_request_review_feedback(
         self,
@@ -954,6 +989,36 @@ def _normalize_pull_request(payload: Any) -> PullRequestRef | None:
         url=url if isinstance(url, str) else None,
         title=title if isinstance(title, str) else None,
     )
+
+
+def _build_issue_comment_url(
+    platform: RepositoryPlatform,
+    owner: str,
+    repo: str,
+    number: str,
+    comment_id: str,
+) -> str | None:
+    """Build a human-facing issue/PR comment URL when the API omits html_url.
+
+    GitCode's issue-comments endpoint does not return ``html_url`` for
+    conversation comments, so the normalized feedback carries no URL and
+    ``issue feedback --list`` falls back to the internal id. This builds
+    the canonical web link per platform:
+
+      - GitCode/Gitee: ``{web_host}/{owner}/{repo}/issues/{number}#tid-{id}``
+        (the ``#tid-{comment_id}`` anchor is the platform's comment
+        permalink fragment).
+      - GitHub: ``{web_host}/{owner}/{repo}/issues/{number}#issuecomment-{id}``.
+
+    Returns ``None`` when any required component is missing (caller keeps
+    the existing ``url``/falls back to the id).
+    """
+    if not platform.web_host or not owner or not repo or not number or not comment_id:
+        return None
+    if platform.name == "github":
+        return f"{platform.web_host}/{owner}/{repo}/issues/{number}#issuecomment-{comment_id}"
+    # GitCode + Gitee share the #tid-{id} anchor convention.
+    return f"{platform.web_host}/{owner}/{repo}/issues/{number}#tid-{comment_id}"
 
 
 def _normalize_conversation_feedback(payload: dict[str, Any]) -> PullRequestFeedback | None:
@@ -1343,7 +1408,9 @@ def _build_issue_update_payload(
                 payload["state"] = platform.open_state
             else:
                 payload["state_event"] = "reopen"
-    if labels:
+    # An explicit empty list is a real update: it clears all remote labels.
+    # ``None`` alone means the caller did not request a label mutation.
+    if labels is not None:
         if platform.auth_mode == "bearer":
             payload["labels"] = labels
         else:

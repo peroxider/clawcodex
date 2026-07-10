@@ -70,6 +70,106 @@ async def test_ipc_register_and_heartbeat_ack(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_slow_outbound_does_not_block_heartbeat_ack(tmp_path) -> None:
+    """Provider I/O must not make a healthy IPC connection look offline."""
+    gw = _FakeGateway()
+    send_started = asyncio.Event()
+    release_send = asyncio.Event()
+
+    async def _blocked_send(message):
+        gw.sent.append(message)
+        send_started.set()
+        await release_send.wait()
+        from clawcodex_ext.services.channels.results import ChannelSendResult
+
+        return ChannelSendResult.success(getattr(message, "channel", "wechat"))
+
+    gw.send = _blocked_send
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
+    await server.start()
+    try:
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="orchestrator-11") as client:
+            registered = await client.register(
+                session_id="orchestrator-11",
+                origin=IM_DIRECT_ALL_ORIGIN,
+                capabilities=["outbound_text"],
+            )
+            assert registered is not None and registered.ack_layer == "accepted"
+
+            outbound = asyncio.create_task(
+                client.send_outbound(
+                    origin="wechat:direct:acct:user_zhao",
+                    text="startup notification",
+                )
+            )
+            await asyncio.wait_for(send_started.wait(), timeout=1.0)
+
+            heartbeat = await asyncio.wait_for(client.heartbeat(), timeout=1.0)
+            assert heartbeat is not None and heartbeat.ack_layer == "accepted"
+            assert not outbound.done()
+
+            release_send.set()
+            response = await asyncio.wait_for(outbound, timeout=1.0)
+            assert response is not None and response.ack_layer == "processed"
+    finally:
+        release_send.set()
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_disconnect_cancels_slow_outbound_and_releases_writer_state(tmp_path) -> None:
+    gw = _FakeGateway()
+    send_started = asyncio.Event()
+    release_send = asyncio.Event()
+
+    async def _blocked_send(message):
+        gw.sent.append(message)
+        send_started.set()
+        await release_send.wait()
+
+    gw.send = _blocked_send
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
+    await server.start()
+    client = GatewayIpcClient(tmp_path / "gw.sock", instance_id="orchestrator-12")
+    try:
+        await client.connect()
+        registered = await client.register(
+            session_id="orchestrator-12",
+            origin=IM_DIRECT_ALL_ORIGIN,
+            capabilities=["outbound_text"],
+        )
+        assert registered is not None and registered.ack_layer == "accepted"
+        outbound = asyncio.create_task(
+            client.send_outbound(
+                origin="wechat:direct:acct:user_zhao",
+                text="startup notification",
+            )
+        )
+        await asyncio.wait_for(send_started.wait(), timeout=1.0)
+
+        await client.close()
+        assert await asyncio.wait_for(outbound, timeout=1.0) is None
+        for _ in range(50):
+            if (
+                not server._dispatch_tasks
+                and not server._dispatch_tasks_by_writer
+                and not server._writer_locks
+                and not server._outbound_locks
+            ):
+                break
+            await asyncio.sleep(0.01)
+
+        assert server._dispatch_tasks == set()
+        assert server._dispatch_tasks_by_writer == {}
+        assert server._writer_locks == {}
+        assert server._outbound_locks == {}
+    finally:
+        release_send.set()
+        await client.close()
+        await server.close()
+
+
+@pytest.mark.asyncio
 async def test_ipc_heartbeat_after_unregister_does_not_crash_handler(tmp_path) -> None:
     """A stale in-connection session must not crash after the peer entry is removed."""
     gw = _FakeGateway()
@@ -480,6 +580,59 @@ async def test_ipc_control_status(tmp_path) -> None:
             assert health is not None
             assert health["channels"] == ["wechat"]
     finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_ipc_status_includes_peer_pid_from_session_id(tmp_path) -> None:
+    gw = _FakeGateway()
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
+    await server.start()
+    repl = GatewayIpcClient(tmp_path / "gw.sock", instance_id="repl-4321-1")
+    try:
+        await repl.connect()
+        await repl.register(
+            session_id="repl-4321-1",
+            origin=WECHAT_DIRECT_ALL_ORIGIN,
+            capabilities=["outbound_text"],
+        )
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="ctrl") as ctrl:
+            health = await ctrl.status()
+
+        assert health is not None
+        assert health["peers"][0]["pid"] == 4321
+    finally:
+        await repl.close()
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_ipc_control_reload_exception_returns_nack_with_peers(tmp_path) -> None:
+    class _ReloadFailGateway(_FakeGateway):
+        def reload_channel(self, name):
+            raise RuntimeError("adapter busy")
+
+    gw = _ReloadFailGateway()
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
+    await server.start()
+    repl = GatewayIpcClient(tmp_path / "gw.sock", instance_id="orchestrator-4321")
+    try:
+        await repl.connect()
+        await repl.register(
+            session_id="orchestrator-4321",
+            origin=WECHAT_DIRECT_ALL_ORIGIN,
+            capabilities=["outbound_text", "orchestrator"],
+        )
+        async with GatewayIpcClient(tmp_path / "gw.sock", instance_id="ctrl") as ctrl:
+            resp = await ctrl.reload_channel("wechat")
+
+        assert resp is not None
+        assert resp.ack_layer == "nack"
+        assert "adapter busy" in (resp.reason or "")
+        assert resp.payload is not None
+        assert resp.payload["peers"][0]["pid"] == 4321
+    finally:
+        await repl.close()
         await server.close()
 
 

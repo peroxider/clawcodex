@@ -103,7 +103,11 @@ class BindingPolicy:
 
     def mark_offline(self, origin: OriginKey | str, *, session_id: str | None = None) -> None:
         entry = self._bindings.get(str(origin))
-        if entry is not None and _matches_session(entry, session_id):
+        if (
+            entry is not None
+            and _matches_session(entry, session_id)
+            and entry.connection_state == "active"
+        ):
             entry.connection_state = "offline"
             self._auditor("binding_offline", entry, None)
             logger.info(

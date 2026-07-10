@@ -160,8 +160,13 @@ class FeishuAppChannelAdapter(ChannelAdapter):
             return self._last_sender
         get_last_sender = getattr(self._sender_store, "get_feishu_last_sender", None)
         if callable(get_last_sender):
-            return get_last_sender(self.channel_id)
-        return None
+            persisted = get_last_sender(self.channel_id)
+            if persisted:
+                return persisted
+        # QR registration supplies the scanning user's open_id. It is a valid
+        # receive_id for a fresh message and lets wildcard IM origins resolve
+        # before this gateway lifetime has observed any inbound traffic.
+        return self._settings.allowed_user_open_id or None
 
     # -- lifecycle -------------------------------------------------------
 
@@ -408,9 +413,13 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         attempts = max(1, self._settings.sdk_send_attempts)
         timeout = max(1.0, self._settings.sdk_send_timeout_seconds)
         channel = self._channel
+        send_options = {"receive_id_type": "open_id"} if _looks_like_open_id(chat_id) else None
         for attempt in range(1, attempts + 1):
             try:
-                result = await asyncio.wait_for(channel.send(chat_id, payload), timeout=timeout)
+                result = await asyncio.wait_for(
+                    channel.send(chat_id, payload, send_options),
+                    timeout=timeout,
+                )
             except asyncio.TimeoutError:
                 self._last_error = f"feishu send timed out after {timeout:.0f}s"
                 logger.warning(

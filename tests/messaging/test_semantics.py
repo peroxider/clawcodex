@@ -53,7 +53,22 @@ def test_classify_orchestrator_cli_is_command() -> None:
     c = MessageClassifier()
     assert c.classify(_msg("/issue list")) is MessageSemantics.COMMAND
     assert c.classify(_msg("/issue show --id AGENTSDK-15")) is MessageSemantics.COMMAND
+    assert (
+        c.classify(_msg("/issue feedback --id AGENTSDK-15 --approve")) is MessageSemantics.COMMAND
+    )
+    assert (
+        c.classify(_msg('/issue review --id AGENTSDK-15 --reject --feedback "needs tests"'))
+        is MessageSemantics.COMMAND
+    )
+    assert (
+        c.classify(_msg("/issue retry --id AGENTSDK-15 --mode reset")) is MessageSemantics.COMMAND
+    )
     assert c.classify(_msg("/server status")) is MessageSemantics.COMMAND
+
+
+def test_classify_orchestrator_takeover_is_not_supported_issue_cli() -> None:
+    c = MessageClassifier()
+    assert c.classify(_msg("/issue takeover --id AGENTSDK-15")) is MessageSemantics.NEW_PROMPT
 
 
 def test_classify_busy_plain_text_is_followup() -> None:
@@ -146,6 +161,47 @@ def test_command_router_orchestrator_issue_id_hint() -> None:
     r = CommandRouter().route(_msg("/issue stop --id AGENTSDK-15"))
     assert r is not None
     assert r.issue_hint == "AGENTSDK-15"
+
+
+@pytest.mark.parametrize(
+    ("text", "argv"),
+    [
+        (
+            "/issue feedback --id AGENTSDK-15 --approve",
+            ("issue", "feedback", "--id", "AGENTSDK-15", "--approve"),
+        ),
+        (
+            '/issue review --id AGENTSDK-15 --reject --feedback "needs tests"',
+            (
+                "issue",
+                "review",
+                "--id",
+                "AGENTSDK-15",
+                "--reject",
+                "--feedback",
+                "needs tests",
+            ),
+        ),
+        (
+            "/issue retry --id AGENTSDK-15 --mode reset",
+            ("issue", "retry", "--id", "AGENTSDK-15", "--mode", "reset"),
+        ),
+        (
+            "/issue rebase --id AGENTSDK-15",
+            ("issue", "rebase", "--id", "AGENTSDK-15"),
+        ),
+    ],
+)
+def test_command_router_orchestrator_lifecycle_issue_cli(text: str, argv: tuple[str, ...]) -> None:
+    r = CommandRouter().route(_msg(text))
+    assert r is not None
+    assert r.kind == "orchestrator_cli"
+    assert r.argv == argv
+    assert r.issue_hint == "AGENTSDK-15"
+
+
+def test_command_router_orchestrator_takeover_returns_none() -> None:
+    assert CommandRouter().route(_msg("/issue takeover --id AGENTSDK-15")) is None
 
 
 # -- control bridge ----------------------------------------------------

@@ -49,7 +49,12 @@ from .review_feedback import ReviewFeedbackService, ReviewFollowup
 from .rules_learner import BatchedLLMJudge, RuleEngine, RuleStore
 from .status_dashboard import SessionStatus, StatusDashboard
 from clawcodex_ext.tool_system.context import ToolContext
-from clawcodex_ext.utils.git import get_default_branch, get_file_status, get_repo_root
+from clawcodex_ext.utils.git import (
+    _run_git,
+    get_default_branch,
+    get_file_status,
+    get_repo_root,
+)
 from .tracker import (
     Command,
     Intent,
@@ -69,6 +74,69 @@ logger = logging.getLogger(__name__)
 
 _CONTINUATION_RETRY_DELAY_MS = 1_000
 _FAILURE_RETRY_BASE_MS = 10_000
+
+
+def _operator_failure_detail(exc: BaseException) -> str:
+    """Return a concise failure detail suitable for IM and registry records."""
+
+    raw = " ".join(str(exc).split())
+    body_detail = _extract_error_message_from_body(raw)
+    if body_detail:
+        status_code = _extract_status_code(raw)
+        if raw.startswith("request_failed") and status_code:
+            return f"request_failed status={status_code}: {body_detail}"
+        return body_detail
+    return raw or exc.__class__.__name__
+
+
+def _extract_status_code(text: str) -> str | None:
+    for part in text.split():
+        if part.startswith("status="):
+            status = part.removeprefix("status=").strip()
+            if status:
+                return status
+    return None
+
+
+def _extract_error_message_from_body(text: str) -> str | None:
+    marker = "body="
+    marker_index = text.find(marker)
+    if marker_index < 0:
+        return None
+    body = text[marker_index + len(marker) :].strip()
+    if not body:
+        return None
+    try:
+        payload, _ = json.JSONDecoder().raw_decode(body)
+    except ValueError:
+        return None
+    return _extract_error_message(payload)
+
+
+def _extract_error_message(payload: Any) -> str | None:
+    if isinstance(payload, dict):
+        for key in (
+            "error_message",
+            "message",
+            "error_description",
+            "detail",
+        ):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return " ".join(value.split())
+        error = payload.get("error")
+        if isinstance(error, str) and error.strip():
+            return " ".join(error.split())
+        nested = _extract_error_message(error)
+        if nested:
+            return nested
+        errors = payload.get("errors")
+        if isinstance(errors, list):
+            for item in errors:
+                nested = _extract_error_message(item)
+                if nested:
+                    return nested
+    return None
 
 
 @dataclass
@@ -867,7 +935,11 @@ class Orchestrator:
             for issue in issues:
                 if launched_this_poll >= available_slots:
                     break
-                if issue.id in self._state.running or issue.id in self._state.completed:
+                if (
+                    issue.id in self._state.running
+                    or issue.id in self._state.completed
+                    or issue.id in self._state.pending_review
+                ):
                     continue
                 if issue.id in self._state.claimed:
                     continue
@@ -1809,6 +1881,24 @@ class Orchestrator:
             event_queue=asyncio.Queue(),
         )
         session.run_kind = "agent_rebase"
+        # F-120: route the run through the purpose-built rebase prompt
+        # (resolve markers -> git add -> git rebase --continue ->
+        # --force-with-lease push, "do NOT open a new PR"). Without this
+        # the session ran the generic issue prompt and the agent never
+        # knew it was supposed to resolve the rebase conflict.
+        rebase_branch = (record.branch_name if record else None) or issue.branch_name or ""
+        rebase_base = (
+            (record.base_branch if record else None)
+            or self.workflow.workspace.base_branch
+            or "main"
+        )
+        rebase_conflicts = tuple(record.conflict_files) if record else ()
+        session.prompt_override = PromptBuilder.render_rebase(
+            issue=issue,
+            branch_name=rebase_branch,
+            base_branch=rebase_base,
+            conflict_files=rebase_conflicts,
+        )
         self._prepare_rebase_session(session)
         self._state.running[issue.id or ""] = session
         try:
@@ -1836,6 +1926,206 @@ class Orchestrator:
             )
         finally:
             self._state.running.pop(issue.id or "", None)
+            # F-120: completion handling. Without this the record kept
+            # has_conflict=True forever -> the next poll re-launched an
+            # agent_rebase run in an infinite loop (repeated "Run in
+            # progress" placeholder comments + 任务已启动/任务完成
+            # oscillation on IM), and the PR link never reached IM.
+            # Detect resolution via git ground-truth (not session.status),
+            # clear the conflict on success, and emit a PR-link-bearing
+            # event either way.
+            try:
+                await self._finalize_rebase_resolution(issue, session)
+            except Exception:
+                logger.exception(
+                    "Issue %s rebase-resolution finalizer failed",
+                    issue.id,
+                )
+
+    async def _finalize_rebase_resolution(
+        self,
+        issue: Issue,
+        session: AgentSession,
+    ) -> None:
+        """F-120: post-run completion handling for an ``agent_rebase`` session.
+
+        ``_launch_rebase_resolution`` historically popped the session out of
+        ``_state.running`` and did nothing else. That left ``has_conflict``
+        set on the registry record, so ``_process_pending_rebase_conflicts``
+        re-launched a fresh agent_rebase run on every poll -> an infinite
+        loop (repeated "## ClawCodex Run Summary / Run in progress."
+        placeholder comments, and 任务已启动/任务完成 oscillation on IM), and
+        because the rebase path never runs ``git_sync`` or emits a
+        ``pr=``-bearing event, the PR link never reached Feishu/IM.
+
+        This checks git ground-truth (NOT ``session.status`` - the
+        agent_runner completion heuristics are tuned for normal issue
+        runs and can misclassify a successful rebase+push as
+        "no_changes_produced") and either clears the conflict + emits a
+        PR-link-bearing ``pr.updated`` event, or records an unresolved
+        failure so the operator can intervene.
+        """
+        issue_id = issue.id or ""
+        record = self._registry.get(issue_id)
+        workspace_path = record.workspace_path if record else None
+        resolved, new_head = await self._rebase_conflict_resolved(
+            workspace_path,
+            previous_head=record.commit_sha if record else None,
+            base_branch=record.base_branch if record else None,
+            branch_name=(record.branch_name if record else None) or issue.branch_name,
+        )
+        pr_url = record.pr_url if record else None
+        if resolved:
+            self._registry.clear_conflict(issue_id)
+            if new_head and record is not None:
+                record.commit_sha = new_head
+                record.touch()
+                self._registry._save()
+            self.status_dashboard.on_session_complete(issue_id)
+            self._state.completed.add(issue_id)
+            self._emit_im_event(
+                issue_id,
+                "pr.updated",
+                EventLevel.SUCCESS,
+                "rebase 冲突已解决，PR 已更新",
+                self._issue_payload(issue, pr=pr_url, commit=new_head),
+            )
+            self._log_audit_event(
+                issue_id=issue_id,
+                event="rebase_resolved",
+                mode="agent_rebase",
+                reason=f"conflicts resolved, head={new_head}",
+                author="daemon",
+            )
+            logger.info(
+                "Issue %s rebase-resolution succeeded head=%s pr=%s",
+                issue_id,
+                new_head,
+                pr_url,
+            )
+            return
+        # Conflict not resolved - keep has_conflict so the next poll cycle
+        # can retry (bounded by max_rebase_attempts_per_issue). Surface a
+        # failure event WITH the PR link so the operator can intervene.
+        self.status_dashboard.on_session_failed(issue_id, "rebase_unresolved")
+        self._emit_im_event(
+            issue_id,
+            "issue.failed",
+            EventLevel.WARN,
+            "rebase 冲突未解决，请人工介入",
+            self._issue_payload(issue, pr=pr_url),
+        )
+        self._log_audit_event(
+            issue_id=issue_id,
+            event="rebase_unresolved",
+            mode="agent_rebase",
+            reason="conflicts remain after agent_rebase run",
+            author="daemon",
+        )
+        logger.warning(
+            "Issue %s rebase-resolution did not resolve conflicts; "
+            "has_conflict stays set for retry",
+            issue_id,
+        )
+
+    async def _rebase_conflict_resolved(
+        self,
+        workspace_path: str | None,
+        *,
+        previous_head: str | None = None,
+        base_branch: str | None = None,
+        branch_name: str | None = None,
+    ) -> tuple[bool, str | None]:
+        """F-120: check git ground-truth for whether the agent finished the rebase.
+
+        Returns ``(resolved, new_head_sha)``. ``resolved=True`` only when
+        there are no unmerged files or active sequencer, the expected base
+        is an ancestor of HEAD, and the pushed remote feature ref equals the
+        local HEAD.  This distinguishes a completed rebase from
+        ``git rebase --abort`` and from a local-only rebase whose push failed.
+
+        We trust git state over ``session.status``: the agent_runner
+        completion heuristics (stagnation / read_only_loop /
+        no_changes_produced) are tuned for normal issue runs, not rebase
+        resolution - a successful conflict resolution that pushes and
+        leaves a clean tree can be misclassified as "no changes produced".
+        """
+        if not workspace_path or not base_branch or not branch_name:
+            return False, None
+        repo_root = await asyncio.to_thread(get_repo_root, workspace_path)
+        if not repo_root:
+            return False, None
+
+        def _check() -> tuple[bool, str | None]:
+            # Unmerged files -> conflict markers still present in the worktree.
+            unmerged, _, _ = _run_git(["diff", "--name-only", "--diff-filter=U"], repo_root)
+            if unmerged.strip():
+                return False, None
+            # REBASE_HEAD is deliberately not used here. Git can retain that
+            # pseudo-ref after a completed rebase, so its presence caused
+            # successfully resolved conflicts to be reported as failures.
+            # The sequencer's state directories are the authoritative signal
+            # that a merge- or apply-backed rebase is still active.
+            for state_name in ("rebase-merge", "rebase-apply"):
+                state_out, _, state_rc = _run_git(
+                    ["rev-parse", "--git-path", state_name],
+                    repo_root,
+                )
+                if state_rc != 0 or not state_out:
+                    return False, None
+                state_path = Path(state_out)
+                if not state_path.is_absolute():
+                    state_path = Path(repo_root) / state_path
+                if state_path.exists():
+                    return False, None
+            head_out, _, head_rc = _run_git(["rev-parse", "HEAD"], repo_root)
+            if head_rc != 0 or not head_out.strip():
+                return False, None
+            head = head_out.strip()
+            if previous_head and head == previous_head:
+                return False, None
+
+            current_branch, _, branch_rc = _run_git(
+                ["rev-parse", "--abbrev-ref", "HEAD"],
+                repo_root,
+            )
+            if branch_rc != 0 or current_branch.strip() != branch_name:
+                return False, None
+
+            # Query both refs together so the ancestry decision uses the
+            # current remote base rather than a potentially stale
+            # ``origin/<base>`` left from the initial conflict attempt.
+            remote_out, _, remote_rc = _run_git(
+                [
+                    "ls-remote",
+                    "--heads",
+                    "origin",
+                    f"refs/heads/{base_branch}",
+                    f"refs/heads/{branch_name}",
+                ],
+                repo_root,
+            )
+            if remote_rc != 0:
+                return False, None
+            remote_lines = [line.split() for line in remote_out.splitlines() if line.strip()]
+            remote_heads = {parts[1]: parts[0] for parts in remote_lines if len(parts) >= 2}
+            remote_base = remote_heads.get(f"refs/heads/{base_branch}")
+            remote_feature = remote_heads.get(f"refs/heads/{branch_name}")
+            if not remote_base or remote_feature != head:
+                return False, None
+
+            # A completed rebase must contain the current target tip.  An
+            # aborted rebase returns to the old feature head and fails this
+            # ancestry check even though the worktree itself is clean.
+            _, _, ancestor_rc = _run_git(
+                ["merge-base", "--is-ancestor", remote_base, head],
+                repo_root,
+            )
+            if ancestor_rc != 0:
+                return False, None
+            return True, head
+
+        return await asyncio.to_thread(_check)
 
     def _prepare_rebase_session(self, session: AgentSession) -> None:
         """F-120: copy registry conflict metadata onto the session.
@@ -1939,7 +2229,9 @@ class Orchestrator:
         if record is None or record.intent is not Intent.FOLLOWUP:
             return
 
-        session.run_kind = "agent_followup"
+        session.run_kind = (
+            "review_retry" if record.last_command == "/issue review --reject" else "agent_followup"
+        )
 
         # Wire the existing PR so git_sync reuses it instead of
         # creating a new one.
@@ -2005,6 +2297,7 @@ class Orchestrator:
                 self._registry.mark_feedback_pending(
                     issue_id,
                     [item.id for item in followup.feedback],
+                    feedback_urls={item.id: item.url for item in followup.feedback if item.url},
                 )
                 logger.info(
                     "PR feedback pending manual follow-up issue_id=%s feedback_count=%d",
@@ -2186,14 +2479,16 @@ class Orchestrator:
                     base_branch=base_branch,
                 )
                 if existing_pr is not None:
-                    # F-39 Sub-C: follow-up intents deliberately reuse
-                    # the existing PR — do NOT skip the launch.
+                    # Explicit follow-up and retry intents both bypass the
+                    # ordinary existing-PR guard. Follow-up reuses the PR;
+                    # retry already attempted to close it and must still
+                    # proceed when that best-effort close was a no-op.
                     record = self._registry.get(issue.id or "")
-                    if record and record.intent == "followup":
+                    if record and record.intent in (Intent.RETRY, Intent.FOLLOWUP):
                         logger.info(
-                            "Issue %s follow-up intent on existing PR %s (%s), "
-                            "proceeding with follow-up",
+                            "Issue %s %s intent on existing PR %s (%s), proceeding",
                             issue.id,
+                            record.intent.value,
                             existing_pr.number,
                             existing_pr.url,
                         )
@@ -2220,14 +2515,16 @@ class Orchestrator:
             # intents (``_prepare_intent_reset`` → ``reset_for_retry``) clear it
             # beforehand so a deliberate re-run still passes through.
             if self._registry.has_pr(issue.id or "") or self._registry.is_terminal(issue.id or ""):
-                # F-39 Sub-C: follow-up intents reuse the existing PR,
-                # so has_pr should not block the launch.
+                # Explicit retry/follow-up intents deliberately bypass the
+                # handled guard. Retry clears stale PR state before reaching
+                # this point; follow-up reuses it.
                 record = self._registry.get(issue.id or "")
-                if record and record.intent == "followup":
+                if record and record.intent in (Intent.RETRY, Intent.FOLLOWUP):
                     logger.info(
-                        "Issue %s follow-up intent bypasses registry guard "
+                        "Issue %s %s intent bypasses registry guard "
                         "(has_pr=%s, is_terminal=%s), proceeding",
                         issue.id,
+                        record.intent.value,
                         self._registry.has_pr(issue.id or ""),
                         self._registry.is_terminal(issue.id or ""),
                     )
@@ -2356,11 +2653,12 @@ class Orchestrator:
 
         task.add_done_callback(_unregister_issue_task)
 
-    async def _sync_tracker_issue_state(self, issue_id: str, state: str) -> None:
+    async def _sync_tracker_issue_state(self, issue_id: str, state: str) -> bool:
         if not issue_id:
-            return
+            return False
         try:
             await self.tracker.update_issue_state(issue_id, state)
+            return True
         except Exception as exc:
             logger.warning(
                 "Failed to sync tracker state issue_id=%s state=%s: %s",
@@ -2368,6 +2666,7 @@ class Orchestrator:
                 state,
                 exc,
             )
+            return False
 
     def _update_run_diagnostics(self, session: AgentSession) -> None:
         issue_id = session.issue.id or ""
@@ -2627,7 +2926,10 @@ class Orchestrator:
                     # F-110: 如果配置了 workflow.yaml，使用声明式工作流引擎
                     # review_followup 使用专用 prompt（render_review_feedback），
                     # 不走 workflow.yaml 的完整 stage 流程，避免循环。
-                    if self._workflow_orchestrator is not None and session.run_kind != 'review_followup':
+                    if (
+                        self._workflow_orchestrator is not None
+                        and session.run_kind != "review_followup"
+                    ):
                         await self._run_issue_with_workflow(session, progress_sink)
                     else:
                         # F-?? collaboration-mode dispatch. For the
@@ -2763,7 +3065,8 @@ class Orchestrator:
                         # instead of creating a new one.
                         sync_mode = (
                             "followup"
-                            if session.run_kind in ("agent_followup", "review_followup")
+                            if session.run_kind
+                            in ("agent_followup", "review_followup", "review_retry")
                             else "default"
                         )
                         sync_result = await self.git_sync.sync(session, mode=sync_mode)
@@ -2783,15 +3086,14 @@ class Orchestrator:
                                 session.issue.id,
                                 sync_result.session_end_reason,
                             )
-                            self._registry.mark_failed_with_reason(
-                                session.issue.id or "",
-                                "empty_branch_no_commits: agent did not produce "
-                                "any file modifications; no PR created.",
+                            session.status = "failed"
+                            session.session_end_reason = "empty_branch_no_commits"
+                            session.session_end_summary = (
+                                "Agent did not produce any file modifications; no PR was created."
                             )
-                            await self._sync_tracker_issue_state(session.issue.id or "", "failed")
-                            self.status_dashboard.on_session_complete(session.issue.id or "")
-                            self._state.completed.add(session.issue.id or "")
-                            self._state.failed.add(session.issue.id or "")
+                            session.verification_status = "failed"
+                            session.verification_output = session.session_end_summary
+                            session.last_hook_error = session.session_end_summary
                             return
                         if sync_result is not None:
                             self._registry.update_report(
@@ -2817,7 +3119,7 @@ class Orchestrator:
                                 await self._reply_to_processed_feedback(session)
                                 await self._post_feedback_summary(session, sync_result)
                                 await self._apply_review_rules(session)
-                            elif session.run_kind == "agent_followup":
+                            elif session.run_kind in ("agent_followup", "review_retry"):
                                 # F-39 Sub-C: a follow-up keeps the
                                 # existing pr_number / pr_url / status;
                                 # only the followup_attempt_count and
@@ -2828,6 +3130,15 @@ class Orchestrator:
                                     if record is not None:
                                         record.last_followup_commit_sha = sync_result.commit_sha
                                         self._registry._save()
+                                    if session.run_kind == "review_retry":
+                                        # Keep rejected-review feedback
+                                        # available across failed attempts,
+                                        # but consume it once a follow-up
+                                        # commit has synced so a future reset
+                                        # cannot replay stale advice.
+                                        self._clarification_queue.consume_feedback(
+                                            session.issue.id or ""
+                                        )
                                 logger.info(
                                     "Issue %s followup committed: %s on %s",
                                     session.issue.id,
@@ -2855,6 +3166,7 @@ class Orchestrator:
                                 is_followup = session.run_kind in (
                                     "agent_followup",
                                     "review_followup",
+                                    "review_retry",
                                 )
                                 self._emit_im_event(
                                     session.issue.id or "",
@@ -2892,7 +3204,6 @@ class Orchestrator:
                                         "pending human review",
                                         self._session_payload(session, pr=pr_url),
                                     )
-                                    self._state.completed.add(session.issue.id or "")
                                     self._state.pending_review.add(session.issue.id or "")
                                     # Do NOT cleanup workspace — human needs to review it
                                     return
@@ -2948,7 +3259,7 @@ class Orchestrator:
                     session_end_reason=getattr(session, "session_end_reason", None),
                     session_end_summary=getattr(session, "session_end_summary", ""),
                 )
-                if session.run_kind == "agent_followup":
+                if session.run_kind in ("agent_followup", "review_retry"):
                     record = self._registry.get(session.issue.id or "")
                     if record is not None and sync_result.commit_sha:
                         record.last_followup_commit_sha = sync_result.commit_sha
@@ -3098,11 +3409,15 @@ class Orchestrator:
                     exc,
                 )
                 session.status = "before_run_failed" if not ran_agent else "failed"
-                # Preserve the error detail so the IM notification can
-                # include it — without this, the operator only sees
-                # "任务失败 — failed" with no context about what went wrong.
-                if not getattr(session, "session_end_summary", None):
-                    session.session_end_summary = str(exc)
+                # Replace any prior success summary with the actual failure
+                # detail so IM and registry records show the root cause.
+                detail = _operator_failure_detail(exc)
+                session.session_end_reason = session.status
+                session.session_end_summary = detail
+                session.verification_status = "failed"
+                session.verification_output = detail
+                session.last_hook_error = detail
+                setattr(session, "operator_failure_detail", detail)
             finally:
                 if workspace_dirty is not None:
                     session.run_workspace_dirty = workspace_dirty
@@ -3349,7 +3664,19 @@ class Orchestrator:
                             turns=getattr(session, "turn_count", None),
                         ),
                     )
-                    self._registry.mark_failed(session.issue.id or "")
+                    failure_detail = getattr(session, "operator_failure_detail", None)
+                    if failure_detail:
+                        self._registry.mark_failed_with_reason(
+                            session.issue.id or "",
+                            str(failure_detail),
+                        )
+                        self._registry.update_report(
+                            session.issue.id or "",
+                            session_end_reason=getattr(session, "session_end_reason", None),
+                            session_end_summary=getattr(session, "session_end_summary", ""),
+                        )
+                    else:
+                        self._registry.mark_failed(session.issue.id or "")
                     await self._sync_tracker_issue_state(session.issue.id or "", "failed")
                     # Schedule retry
                     await self._schedule_retry(session)
@@ -3827,7 +4154,7 @@ class Orchestrator:
                     continue
                 cmd = parts[0].strip()
                 issue_id = parts[1].strip() if len(parts) > 1 else ""
-                extra = parts[2].strip() if len(parts) > 2 else ""
+                extra = "\n".join(parts[2:]).strip() if len(parts) > 2 else ""
 
                 try:
                     if cmd == "review_followup":
@@ -3839,6 +4166,12 @@ class Orchestrator:
                         await self._handle_rebase_control(issue_id, extra)
                     elif cmd in {"gateway_connect", "gateway_disconnect"}:
                         await self._handle_gateway_control(cmd, extra)
+                    elif cmd == "review_approve":
+                        await self._handle_review_approve_control(issue_id, extra)
+                    elif cmd == "review_retry":
+                        await self._handle_review_retry_control(issue_id, extra)
+                    elif cmd == "retry":
+                        await self._handle_retry_control(issue_id, extra)
                     else:
                         self._apply_control_command(cmd, issue_id, extra)
                 finally:
@@ -4024,8 +4357,141 @@ class Orchestrator:
             await ipc.unregister(session_id)
         await ipc.close()
 
+    def _reset_issue_for_retry(
+        self,
+        issue_id: str,
+        feedback: str,
+        *,
+        intent: Intent = Intent.RETRY,
+        reset_retry_count: bool = False,
+        command: str | None = None,
+    ) -> bool:
+        """Reset review-gated state and queue feedback without requiring a running session."""
+        if not issue_id:
+            return False
+
+        record = self._registry._records.get(issue_id)
+        is_known = bool(
+            record
+            or issue_id in self._state.running
+            or issue_id in self._state.pending_review
+            or issue_id in self._state.completed
+            or issue_id in self._state.claimed
+        )
+        if not is_known:
+            logger.debug("Retry control for unknown issue %s", issue_id)
+            return False
+
+        if feedback:
+            question = f"[Human Review Rejected] {feedback}"
+            self._clarification_queue.inject_feedback(issue_id, question)
+
+        self._state.pending_review.discard(issue_id)
+        self._state.completed.discard(issue_id)
+        self._state.claimed.discard(issue_id)
+        failed = getattr(self._state, "failed", None)
+        if failed is not None:
+            failed.discard(issue_id)
+        retry_attempts = getattr(self._state, "retry_attempts", None)
+        if retry_attempts is not None:
+            retry_attempts.pop(issue_id, None)
+        retry_queue = getattr(self._state, "retry_queue", None)
+        if retry_queue is not None:
+            self._state.retry_queue = [retry for retry in retry_queue if retry.issue_id != issue_id]
+        if record:
+            was_pending_review = record.status is IssueStatus.PENDING_REVIEW
+            record.status = IssueStatus.PENDING
+            record.intent = intent
+            record.intent_source = "cli"
+            if reset_retry_count:
+                record.retry_count = 0
+            if command is not None:
+                record.last_command = command
+            elif feedback:
+                record.last_command = "/issue review --reject"
+            if was_pending_review:
+                record.attempt_count += 1
+            record.touch()
+            self._registry._save()
+
+        logger.info(
+            "Issue %s queued for retry (attempt %d)",
+            issue_id,
+            record.attempt_count if record else 1,
+        )
+        self._emit_im_event(issue_id, "intent.retry", EventLevel.INFO, "retry requested")
+        return True
+
+    async def _handle_retry_control(self, issue_id: str, reason: str) -> None:
+        """Apply a durable retry request and make the tracker eligible for polling."""
+        if not self._reset_issue_for_retry(
+            issue_id,
+            "",
+            reset_retry_count=True,
+            command=f"cli:reset:{reason[:64]}",
+        ):
+            return
+        await self._sync_tracker_issue_state(issue_id, "open")
+
+    async def _handle_review_retry_control(self, issue_id: str, feedback: str) -> None:
+        """Queue a rejected review as a follow-up that preserves the existing PR."""
+        if not self._reset_issue_for_retry(issue_id, feedback, intent=Intent.FOLLOWUP):
+            return
+        await self._sync_tracker_issue_state(issue_id, "open")
+
+    async def _handle_review_approve_control(self, issue_id: str, comment: str) -> None:
+        """Finalize a human approval in registry, daemon state, and remote tracker."""
+        record = self._registry.get(issue_id)
+        if record is None:
+            logger.warning("Review approval ignored for unknown issue %s", issue_id)
+            return
+
+        already_completed = record.status is IssueStatus.COMPLETED
+        self._registry.mark_completed(issue_id)
+        self._state.pending_review.discard(issue_id)
+        self._state.claimed.discard(issue_id)
+        self._state.completed.add(issue_id)
+        tracker_synced = await self._sync_tracker_issue_state(issue_id, "completed")
+
+        if comment and not already_completed:
+            try:
+                await self.tracker.create_comment(issue_id, f"## Approved\n\n{comment}")
+            except Exception as exc:
+                logger.warning("Failed to post approval comment issue_id=%s: %s", issue_id, exc)
+
+        if tracker_synced:
+            self._emit_im_event(
+                issue_id,
+                "issue.completed",
+                EventLevel.SUCCESS,
+                "人工审批通过",
+                {
+                    "pr": record.pr_url,
+                    "branch": record.branch_name,
+                    "commit": record.commit_sha,
+                },
+            )
+        else:
+            self._emit_im_event(
+                issue_id,
+                "issue.failed",
+                EventLevel.ERROR,
+                "审批已记录，但远端 completed 状态同步失败",
+                {"pr": record.pr_url},
+            )
+
     def _apply_control_command(self, cmd: str, issue_id: str, extra: str) -> None:
-        """Apply a single control command to a running session."""
+        """Apply a control command, including retries outside running sessions."""
+        if cmd == "retry":
+            if not self._reset_issue_for_retry(issue_id, extra):
+                return
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                return
+            loop.create_task(self._sync_tracker_issue_state(issue_id, "open"))
+            return
+
         if not issue_id or issue_id not in self._state.running:
             logger.debug("Control %s for unknown issue %s", cmd, issue_id)
             return
@@ -4062,23 +4528,6 @@ class Orchestrator:
             session.pause_resume_event.set()  # Unblock if paused
             self._emit_im_event(issue_id, "control.takeover", EventLevel.WARN, "takeover requested")
             # Note: REPL takeover requires full session context - handled separately
-        elif cmd == "retry":
-            # Reset pending_review issue for retry with feedback
-            logger.info("Retry requested for issue %s", issue_id)
-            self._state.pending_review.discard(issue_id)
-            self._state.completed.discard(issue_id)
-            self._state.claimed.discard(issue_id)
-            record = self._registry._records.get(issue_id)
-            if record:
-                record.status = IssueStatus.PENDING
-                record.attempt_count += 1
-                self._registry._save()
-            logger.info(
-                "Issue %s queued for retry (attempt %d)",
-                issue_id,
-                record.attempt_count if record else 1,
-            )
-            self._emit_im_event(issue_id, "intent.retry", EventLevel.INFO, "retry requested")
 
     def get_event_stream(self, issue_id: str) -> "asyncio.Queue | None":
         """Get the event queue for a running issue session (for CLI tail)."""

@@ -369,6 +369,26 @@ def _make_args(**overrides: Any) -> argparse.Namespace:
 
 
 class TestRunRetry(unittest.TestCase):
+    def test_reset_writes_daemon_control_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reg_path = root / "registry.json"
+            IssueRegistry(reg_path).register(issue_id="11", issue_identifier="ISSUE-11")
+
+            rc = _run_retry(
+                reg_path,
+                _make_args(id="11", mode="reset", reason="retry from IM"),
+                workspace_root=root,
+            )
+
+            self.assertEqual(rc, 0)
+            control_path = root / ".orchestrator_control" / "retry_11.control"
+            self.assertTrue(control_path.exists())
+            self.assertEqual(
+                control_path.read_text(encoding="utf-8"),
+                "retry\n11\nretry from IM\n",
+            )
+
     def test_reset_marks_intent_and_clears_retry_count(self) -> None:
         """``mode=reset`` is a fresh start: intent=RETRY + retry_count=0.
 
