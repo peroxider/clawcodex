@@ -85,6 +85,12 @@ class OrchestratorEventEmitter:
     def on_session_complete(self, event: "SessionComplete", session: Any) -> None:
         reason = getattr(event, "reason", "") or ""
         issue_id = self.task_id or getattr(getattr(session, "issue", None), "id", "") or ""
+        if reason in _SUCCESS_TERMINAL_REASONS or reason == "noop_completed":
+            # Agent completion is not issue completion. Git sync, verification,
+            # PR creation/update, and the human-review gate still run after
+            # this callback. The orchestrator emits the authoritative success
+            # or pending-review event once those steps finish.
+            return
         if reason in _STATUS_BRANCH_TERMINAL_REASONS:
             # The orchestrator's status dispatch emits the specific
             # ``agent.*`` terminal event; emitting a generic
@@ -92,16 +98,9 @@ class OrchestratorEventEmitter:
             # event_type).
             return
         level = TERMINAL_REASON_LEVEL.get(reason, EventLevel.WARN)
-        if reason in _SUCCESS_TERMINAL_REASONS:
-            event_type = "issue.completed"
-            message = "任务完成"
-        elif reason == "rate_limit_circuit_open":
+        if reason == "rate_limit_circuit_open":
             event_type = "agent.rate_limit_circuit_open"
             message = "限流熔断，会话终止"
-        elif reason == "noop_completed":
-            event_type = "issue.completed"
-            message = "无操作完成"
-            level = EventLevel.INFO
         else:
             event_type = "issue.failed"
             message = f"会话结束: {reason}"

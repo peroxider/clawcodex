@@ -61,6 +61,10 @@ class ClarificationItem:
     first_response_source: str | None = None  # "local" | "author" — first answer source
     duplicate_of: str | None = None  # if DUPLICATE_REJECTED, reference original
     stale_answers: list[str] = field(default_factory=list)  # rejected late answers
+    # ``review_feedback`` entries are one-shot instructions for a rejected
+    # review retry.  Keeping them distinct from real clarification questions
+    # prevents a later ordinary retry from replaying stale reviewer feedback.
+    kind: str = "clarification"
 
     def touch(self) -> None:
         self.updated_at = time.time()
@@ -133,13 +137,29 @@ class ClarificationQueue:
     def get(self, issue_id: str) -> ClarificationItem | None:
         return self._records.get(issue_id)
 
+    def get_pending_feedback(self, issue_id: str) -> ClarificationItem | None:
+        """Return an unexpired one-shot review-feedback item, if present."""
+        item = self._records.get(issue_id)
+        if item is None or item.kind != "review_feedback":
+            return None
+        if item.status not in (
+            ClarificationStatus.PENDING,
+            ClarificationStatus.AWAITING_LOCAL,
+            ClarificationStatus.AWAITING_AUTHOR,
+        ):
+            return None
+        if item.is_expired():
+            return None
+        return item
+
     def poll_pending(self) -> list[ClarificationItem]:
         """Return all pending items that have not expired."""
         now = time.time()
         return [
             item
             for item in self._records.values()
-            if item.status
+            if item.kind == "clarification"
+            and item.status
             in (
                 ClarificationStatus.PENDING,
                 ClarificationStatus.AWAITING_LOCAL,
@@ -364,6 +384,18 @@ class ClarificationQueue:
             del self._records[issue_id]
             self._save()
 
+    def consume_feedback(self, issue_id: str) -> ClarificationItem | None:
+        """Remove and return review feedback after a successful follow-up.
+
+        Ordinary clarification items are deliberately left untouched.
+        """
+        item = self._records.get(issue_id)
+        if item is None or item.kind != "review_feedback":
+            return None
+        del self._records[issue_id]
+        self._save()
+        return item
+
     def inject_feedback(
         self,
         issue_id: str,
@@ -387,6 +419,7 @@ class ClarificationQueue:
                 created_at=now,
                 updated_at=now,
                 status=ClarificationStatus.PENDING,
+                kind="review_feedback",
             )
             self._records[issue_id] = item
         else:
@@ -395,8 +428,11 @@ class ClarificationQueue:
             item.options = []
             item.context_summary = "Human review rejection feedback"
             item.status = ClarificationStatus.PENDING
+            item.kind = "review_feedback"
+            item.expires_at = None
             item.answer = None
             item.answer_source = None
+            item.answered_at = None
             item.touch()
         self._save()
         return item

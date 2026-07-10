@@ -24,6 +24,8 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -378,6 +380,403 @@ class TestProcessPrConflictScan(unittest.IsolatedAsyncioTestCase):
             await orch._process_pr_conflict_scan()
             # None from tracker → daemon scan is a no-op on GitCode.
             orch._process_rebase_intent.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _launch_rebase_resolution (completion handling)
+# ---------------------------------------------------------------------------
+
+
+class TestLaunchRebaseResolution(unittest.IsolatedAsyncioTestCase):
+    """F-120: the agent_rebase run's completion handling.
+
+    Regression coverage for the bug where ``_launch_rebase_resolution``
+    popped the session out of ``_state.running`` and did nothing else,
+    leaving ``has_conflict`` set forever -> an infinite re-launch loop
+    (repeated "Run in progress" comments + 任务已启动/任务完成 oscillation)
+    and no PR link in IM. These tests do NOT mock
+    ``_launch_rebase_resolution``; they exercise the real method end to
+    end (only ``agent_runner.run`` and the git probe are stubbed).
+    """
+
+    def _make_orch(
+        self,
+        tmp: Path,
+        *,
+        conflict_files: tuple[str, ...] = ("src/x.py",),
+        pr_url: str = "https://example/pr/35",
+    ) -> tuple[Orchestrator, IssueRegistry]:
+        reg = _make_registry_record(
+            tmp,
+            has_conflict=True,
+            conflict_files=conflict_files,
+        )
+        rec = reg.get("7")
+        assert rec is not None
+        rec.pr_url = pr_url
+        reg._save()
+        orch = _make_orchestrator(tracker=MagicMock(), registry=reg)
+        orch.git_sync = MagicMock()
+        orch.agent_runner = MagicMock()
+        orch.agent_runner.run = AsyncMock()
+        orch._clarification_resolver = MagicMock()
+        # Stub the sink builder + IM/audit plumbing so the test focuses on
+        # the completion logic, not the IM delivery stack.
+        orch._build_session_sink = MagicMock(return_value=MagicMock())
+        orch._emit_im_event = MagicMock()
+        orch._rebase_conflict_resolved = AsyncMock()
+        orch._state.completed = set()
+        orch._state.failed = set()
+        return orch, reg
+
+    async def test_resolved_clears_conflict_and_emits_pr_link(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            orch, reg = self._make_orch(Path(tmp))
+            orch._rebase_conflict_resolved = AsyncMock(return_value=(True, "abc123deadbeef"))
+            await orch._launch_rebase_resolution(_make_issue())
+
+            # has_conflict cleared + new HEAD recorded on the registry.
+            rec = reg.get("7")
+            assert rec is not None
+            self.assertFalse(rec.has_conflict)
+            self.assertEqual(rec.commit_sha, "abc123deadbeef")
+            # Status transition + dashboard.
+            orch.status_dashboard.on_session_complete.assert_called_once_with("7")
+            self.assertIn("7", orch._state.completed)
+            # A PR-link-bearing pr.updated event was emitted.
+            pr_calls = [
+                c
+                for c in orch._emit_im_event.call_args_list
+                if c.args and len(c.args) > 1 and c.args[1] == "pr.updated"
+            ]
+            self.assertTrue(pr_calls, "pr.updated event not emitted")
+            payload = pr_calls[0].args[4]
+            self.assertEqual(payload.get("pr"), "https://example/pr/35")
+            self.assertEqual(payload.get("commit"), "abc123deadbeef")
+
+    async def test_unresolved_keeps_conflict_and_emits_failure_with_pr(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            orch, reg = self._make_orch(Path(tmp))
+            orch._rebase_conflict_resolved = AsyncMock(return_value=(False, None))
+            await orch._launch_rebase_resolution(_make_issue())
+
+            rec = reg.get("7")
+            assert rec is not None
+            self.assertTrue(rec.has_conflict)  # stays set for bounded retry
+            self.assertNotIn("7", orch._state.completed)
+            orch.status_dashboard.on_session_failed.assert_called_once_with(
+                "7", "rebase_unresolved"
+            )
+            fail_calls = [
+                c
+                for c in orch._emit_im_event.call_args_list
+                if c.args and len(c.args) > 1 and c.args[1] == "issue.failed"
+            ]
+            self.assertTrue(fail_calls, "issue.failed event not emitted")
+            # The failure event still carries the PR link so the operator
+            # can jump to the PR and intervene manually.
+            self.assertEqual(fail_calls[0].args[4].get("pr"), "https://example/pr/35")
+
+    async def test_prompt_override_uses_rebase_template_with_conflict_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            orch, _reg = self._make_orch(
+                Path(tmp), conflict_files=("src/widgets/a.py", "src/widgets/b.py")
+            )
+            await orch._launch_rebase_resolution(_make_issue())
+
+            # The session handed to agent_runner.run carries the purpose-
+            # built rebase prompt (Bug B: previously render_rebase was
+            # dead code and the agent ran the generic issue prompt).
+            session = orch.agent_runner.run.call_args.args[0]
+            prompt = getattr(session, "prompt_override", None)
+            self.assertIsNotNone(prompt, "rebase session must set prompt_override")
+            self.assertIn("force-with-lease", prompt)
+            self.assertIn("src/widgets/a.py", prompt)
+            self.assertIn("src/widgets/b.py", prompt)
+            self.assertEqual(getattr(session, "run_kind", None), "agent_rebase")
+
+
+# ---------------------------------------------------------------------------
+# _rebase_conflict_resolved (real-git detection)
+# ---------------------------------------------------------------------------
+
+
+class TestRebaseConflictResolved(unittest.IsolatedAsyncioTestCase):
+    """F-120: git ground-truth detection for ``_rebase_conflict_resolved``.
+
+    The behavioral tests above stub this method; these exercise the real
+    git probe so "resolved" actually means "no unmerged files and no
+    active rebase state directory" (not just "session.status == completed").
+    """
+
+    _ENV = {
+        **os.environ,
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null",
+        "GIT_AUTHOR_NAME": "test",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "test",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+    }
+
+    @classmethod
+    def _init_repo(cls, path: Path) -> None:
+        subprocess.check_call(["git", "init", "-q", "-b", "main", str(path)], env=cls._ENV)
+        subprocess.check_call(
+            ["git", "config", "user.email", "t@example.com"], cwd=path, env=cls._ENV
+        )
+        subprocess.check_call(["git", "config", "user.name", "test"], cwd=path, env=cls._ENV)
+        subprocess.check_call(["git", "config", "commit.gpgsign", "false"], cwd=path, env=cls._ENV)
+        (path / "README.md").write_text("init\n", encoding="utf-8")
+        subprocess.check_call(["git", "add", "README.md"], cwd=path, env=cls._ENV)
+        subprocess.check_call(["git", "commit", "-q", "-m", "init"], cwd=path, env=cls._ENV)
+
+    @classmethod
+    def _prepare_conflicted_repo(cls, path: Path, remote: Path) -> str:
+        cls._init_repo(path)
+        subprocess.check_call(["git", "init", "--bare", "-q", str(remote)], env=cls._ENV)
+        subprocess.check_call(
+            ["git", "remote", "add", "origin", str(remote)],
+            cwd=path,
+            env=cls._ENV,
+        )
+        subprocess.check_call(
+            ["git", "push", "-q", "-u", "origin", "main"],
+            cwd=path,
+            env=cls._ENV,
+        )
+        subprocess.check_call(
+            ["git", "checkout", "-q", "-b", "base2"],
+            cwd=path,
+            env=cls._ENV,
+        )
+        (path / "README.md").write_text("base-side\n", encoding="utf-8")
+        subprocess.check_call(
+            ["git", "commit", "-q", "-am", "base2"],
+            cwd=path,
+            env=cls._ENV,
+        )
+        subprocess.check_call(
+            ["git", "push", "-q", "-u", "origin", "base2"],
+            cwd=path,
+            env=cls._ENV,
+        )
+        subprocess.check_call(
+            ["git", "checkout", "-q", "main"],
+            cwd=path,
+            env=cls._ENV,
+        )
+        (path / "README.md").write_text("feature-side\n", encoding="utf-8")
+        subprocess.check_call(
+            ["git", "commit", "-q", "-am", "feature"],
+            cwd=path,
+            env=cls._ENV,
+        )
+        subprocess.check_call(
+            ["git", "push", "-q", "origin", "main"],
+            cwd=path,
+            env=cls._ENV,
+        )
+        previous_head = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=path, env=cls._ENV, text=True
+        ).strip()
+        rebase = subprocess.run(
+            ["git", "rebase", "base2"],
+            cwd=path,
+            env=cls._ENV,
+            capture_output=True,
+            text=True,
+        )
+        if rebase.returncode == 0:
+            raise AssertionError("expected a rebase conflict")
+        return previous_head
+
+    async def test_clean_repo_without_rebase_evidence_reports_unresolved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "repo"
+            path.mkdir()
+            self._init_repo(path)
+            orch = Orchestrator.__new__(Orchestrator)
+            resolved, new_head = await orch._rebase_conflict_resolved(str(path))
+            self.assertFalse(resolved)
+            self.assertIsNone(new_head)
+
+    async def test_conflicted_rebase_reports_unresolved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "repo"
+            path.mkdir()
+            self._init_repo(path)
+            # Diverge on the same line so `git rebase` conflicts and leaves
+            # REBASE_HEAD + an unmerged file.
+            subprocess.check_call(["git", "checkout", "-q", "-b", "base2"], cwd=path, env=self._ENV)
+            (path / "README.md").write_text("base-side\n", encoding="utf-8")
+            subprocess.check_call(["git", "commit", "-q", "-am", "base2"], cwd=path, env=self._ENV)
+            subprocess.check_call(["git", "checkout", "-q", "main"], cwd=path, env=self._ENV)
+            (path / "README.md").write_text("feature-side\n", encoding="utf-8")
+            subprocess.check_call(
+                ["git", "commit", "-q", "-am", "feature"], cwd=path, env=self._ENV
+            )
+            r = subprocess.run(
+                ["git", "rebase", "base2"],
+                cwd=path,
+                env=self._ENV,
+                capture_output=True,
+                text=True,
+            )
+            assert r.returncode != 0, "expected a rebase conflict"
+            orch = Orchestrator.__new__(Orchestrator)
+            resolved, new_head = await orch._rebase_conflict_resolved(
+                str(path),
+                base_branch="base2",
+                branch_name="main",
+            )
+            self.assertFalse(resolved)
+            self.assertIsNone(new_head)
+
+    async def test_completed_conflicted_rebase_reports_resolved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "repo"
+            path.mkdir()
+            previous_head = self._prepare_conflicted_repo(path, Path(tmp) / "remote.git")
+            (path / "README.md").write_text("resolved\n", encoding="utf-8")
+            subprocess.check_call(["git", "add", "README.md"], cwd=path, env=self._ENV)
+            subprocess.check_call(
+                ["git", "-c", "core.editor=true", "rebase", "--continue"],
+                cwd=path,
+                env=self._ENV,
+            )
+            subprocess.check_call(
+                ["git", "push", "-q", "--force", "origin", "main"],
+                cwd=path,
+                env=self._ENV,
+            )
+
+            # Git retains REBASE_HEAD after a successful rebase. The old
+            # implementation treated this pseudo-ref as active rebase state
+            # and emitted the false "rebase conflict unresolved" warning.
+            stale_rebase_head = subprocess.run(
+                ["git", "rev-parse", "--verify", "-q", "REBASE_HEAD"],
+                cwd=path,
+                env=self._ENV,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(stale_rebase_head.returncode, 0)
+
+            orch = Orchestrator.__new__(Orchestrator)
+            resolved, new_head = await orch._rebase_conflict_resolved(
+                str(path),
+                previous_head=previous_head,
+                base_branch="base2",
+                branch_name="main",
+            )
+            self.assertTrue(resolved)
+            head = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=path,
+                env=self._ENV,
+                text=True,
+            ).strip()
+            self.assertEqual(new_head, head)
+
+    async def test_aborted_conflicted_rebase_reports_unresolved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "repo"
+            path.mkdir()
+            previous_head = self._prepare_conflicted_repo(path, Path(tmp) / "remote.git")
+            subprocess.check_call(["git", "rebase", "--abort"], cwd=path, env=self._ENV)
+
+            orch = Orchestrator.__new__(Orchestrator)
+            resolved, new_head = await orch._rebase_conflict_resolved(
+                str(path),
+                previous_head=previous_head,
+                base_branch="base2",
+                branch_name="main",
+            )
+
+            self.assertFalse(resolved)
+            self.assertIsNone(new_head)
+
+    async def test_local_only_rebase_without_push_reports_unresolved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "repo"
+            path.mkdir()
+            previous_head = self._prepare_conflicted_repo(path, Path(tmp) / "remote.git")
+            (path / "README.md").write_text("resolved\n", encoding="utf-8")
+            subprocess.check_call(["git", "add", "README.md"], cwd=path, env=self._ENV)
+            subprocess.check_call(
+                ["git", "-c", "core.editor=true", "rebase", "--continue"],
+                cwd=path,
+                env=self._ENV,
+            )
+
+            orch = Orchestrator.__new__(Orchestrator)
+            resolved, new_head = await orch._rebase_conflict_resolved(
+                str(path),
+                previous_head=previous_head,
+                base_branch="base2",
+                branch_name="main",
+            )
+
+            self.assertFalse(resolved)
+            self.assertIsNone(new_head)
+
+    async def test_remote_base_advance_after_push_reports_unresolved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "repo"
+            path.mkdir()
+            previous_head = self._prepare_conflicted_repo(path, Path(tmp) / "remote.git")
+            (path / "README.md").write_text("resolved\n", encoding="utf-8")
+            subprocess.check_call(["git", "add", "README.md"], cwd=path, env=self._ENV)
+            subprocess.check_call(
+                ["git", "-c", "core.editor=true", "rebase", "--continue"],
+                cwd=path,
+                env=self._ENV,
+            )
+            subprocess.check_call(
+                ["git", "push", "-q", "--force", "origin", "main"],
+                cwd=path,
+                env=self._ENV,
+            )
+            subprocess.check_call(
+                ["git", "checkout", "-q", "base2"],
+                cwd=path,
+                env=self._ENV,
+            )
+            (path / "BASE.md").write_text("new target commit\n", encoding="utf-8")
+            subprocess.check_call(["git", "add", "BASE.md"], cwd=path, env=self._ENV)
+            subprocess.check_call(
+                ["git", "commit", "-q", "-m", "advance base"],
+                cwd=path,
+                env=self._ENV,
+            )
+            subprocess.check_call(
+                ["git", "push", "-q", "origin", "base2"],
+                cwd=path,
+                env=self._ENV,
+            )
+            subprocess.check_call(
+                ["git", "checkout", "-q", "main"],
+                cwd=path,
+                env=self._ENV,
+            )
+
+            orch = Orchestrator.__new__(Orchestrator)
+            resolved, new_head = await orch._rebase_conflict_resolved(
+                str(path),
+                previous_head=previous_head,
+                base_branch="base2",
+                branch_name="main",
+            )
+
+            self.assertFalse(resolved)
+            self.assertIsNone(new_head)
+
+    async def test_missing_workspace_reports_unresolved(self) -> None:
+        orch = Orchestrator.__new__(Orchestrator)
+        resolved, new_head = await orch._rebase_conflict_resolved(None)
+        self.assertFalse(resolved)
+        self.assertIsNone(new_head)
 
 
 if __name__ == "__main__":

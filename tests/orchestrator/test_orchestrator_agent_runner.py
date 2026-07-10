@@ -79,6 +79,58 @@ class _ProgressReporter:
 
 
 class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
+    async def test_run_includes_pending_review_feedback_in_first_prompt(self) -> None:
+        from extensions.orchestrator.clarification_queue import ClarificationQueue
+
+        captured_prompts: list[str] = []
+
+        class _PromptCaptureQueryRunner:
+            def __init__(self, config) -> None:
+                captured_prompts.append(config.prompt)
+
+            async def stream(self):
+                yield SessionComplete(reason="success")
+
+        with TemporaryDirectory() as tmp:
+            workspace_path = Path(tmp) / "ws"
+            workspace_path.mkdir()
+            issue = Issue(id="5", identifier="ISSUE-5", title="Review feedback")
+            session = AgentSession(
+                issue=issue,
+                workspace=Workspace(
+                    path=workspace_path,
+                    issue_identifier="ISSUE-5",
+                    issue_id="5",
+                ),
+            )
+            session.run_id = ""
+            queue = ClarificationQueue(Path(tmp) / "clarifications.json")
+            feedback = "[Human Review Rejected] 注释没有中文"
+            queue.inject_feedback(issue.id or "", feedback)
+            clarification_resolver = type(
+                "_Resolver",
+                (),
+                {
+                    "get_pending_feedback": lambda _self, issue_id: queue.get_pending_feedback(
+                        issue_id
+                    )
+                },
+            )()
+            runner = AgentRunner(AgentConfig(max_turns=1), SandboxConfig())
+
+            with patch(
+                "extensions.orchestrator.agent_runner.QueryRunner",
+                _PromptCaptureQueryRunner,
+            ):
+                await runner.run(
+                    session,
+                    WorkflowConfig.from_dict({}),
+                    clarification_resolver=clarification_resolver,
+                )
+
+        self.assertTrue(captured_prompts)
+        self.assertIn(feedback, captured_prompts[0])
+
     async def test_should_continue_stops_when_head_changed(self) -> None:
         with TemporaryDirectory() as tmp:
             workspace_path = Path(tmp) / "ws"

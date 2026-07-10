@@ -52,10 +52,13 @@ ORCHESTRATOR_ALLOWED_COMMANDS: frozenset[str] = frozenset(
         "/issue stop",
         "/issue pause",
         "/issue resume",
-        "/issue takeover",
         "/issue clarify",
         "/issue inject",
+        "/issue feedback",
+        "/issue review",
+        "/issue retry",
         "/issue workspace",
+        "/issue rebase",
     }
 )
 

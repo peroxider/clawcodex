@@ -291,6 +291,9 @@ clawcodex-dev orchestrator issue resume --id <id>
 clawcodex-dev orchestrator issue takeover --id <id>
 clawcodex-dev orchestrator issue clarify --id <id> --answer <text>
 clawcodex-dev orchestrator issue inject --id <id> [hint]
+clawcodex-dev orchestrator issue feedback --id <id> (--list|--approve|--dismiss)
+clawcodex-dev orchestrator issue review --id <id> (--approve|--reject --feedback <text>)
+clawcodex-dev orchestrator issue retry --id <id> --mode reset|followup|unblock
 clawcodex-dev orchestrator issue workspace --id <id>
 clawcodex-dev orchestrator dashboard [--port 8080]
 ```
@@ -355,7 +358,9 @@ clawcodex-dev orchestrator server disconnect-gateway
 | 运行域 | IM 白名单命令 |
 |---|---|
 | REPL | `/stop`、`/clear`、`/reset`、`/new`、`/goal`、`/help`、`/?`、`/cost`、`/history`、`/context`、`/recap`、`/btw`、`/cron-list`、`/cron-status`、`/cron-runs`、`/tools`、`/skills`、`/diff`、`/mcp`、`/tasks`、`/idle`、`/doctor`、`/release-notes` |
-| Orchestrator | `/server status`；`/issue list`、`/issue show`、`/issue tail`、`/issue stop`、`/issue pause`、`/issue resume`、`/issue takeover`、`/issue clarify`、`/issue inject`、`/issue workspace` |
+| Orchestrator | `/server status`；`/issue list`、`/issue show`、`/issue tail`、`/issue stop`、`/issue pause`、`/issue resume`、`/issue clarify`、`/issue inject`、`/issue feedback`、`/issue review`、`/issue retry`、`/issue workspace` |
+
+Orchestrator IM 命令中，`/issue inject` 是实时、非阻断的 operator hint，agent 会继续运行；`/issue clarify` 用于回答 agent 发起且正在暂停等待的澄清问题；`/issue feedback`、`/issue review` 与 `/issue retry` 是 issue 生命周期状态变更，可能调度新一轮 agent 运行。
 
 Orchestrator 非白名单斜杠命令会返回 `不支持 /xxx 执行`。
 

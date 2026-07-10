@@ -15,6 +15,7 @@ import json
 import logging
 import tempfile
 import time
+from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import asdict, dataclass, field, fields
 from enum import Enum
@@ -95,6 +96,15 @@ class IssueRecord:
     stale_answers: list[str] = field(default_factory=list)
     processed_feedback_ids: list[str] = field(default_factory=list)
     pending_feedback_ids: list[str] = field(default_factory=list)
+    # F-?? feedback URL persistence: parallel lookup of the canonical
+    # comment/check URL for each pending feedback id, so the IM/CLI
+    # ``issue feedback --list`` surface can show a clickable link instead
+    # of the internal source-prefixed id. Keyed by the same id string
+    # stored in ``pending_feedback_ids``; entries are dropped together
+    # with the id in ``mark_feedback_processed`` / ``clear_stale_pending``.
+    # Records written before this field load cleanly via the known_fields
+    # back-compat filter (default empty dict -> --list falls back to id).
+    pending_feedback_urls: dict[str, str] = field(default_factory=dict)
     pending_feedback_since: float | None = None
     feedback_cursor: str | None = None
     followup_attempt_count: int = 0
@@ -416,6 +426,7 @@ class IssueRegistry:
             # F-37: preserve review-feedback tracking across re-launches.
             record.processed_feedback_ids = list(existing.processed_feedback_ids)
             record.pending_feedback_ids = list(existing.pending_feedback_ids)
+            record.pending_feedback_urls = dict(existing.pending_feedback_urls)
             record.pending_feedback_since = existing.pending_feedback_since
             record.feedback_cursor = existing.feedback_cursor
             record.followup_attempt_count = existing.followup_attempt_count
@@ -635,6 +646,7 @@ class IssueRegistry:
         feedback_ids: list[str],
         *,
         cursor: str | None = None,
+        feedback_urls: Mapping[str, str] | None = None,
     ) -> IssueRecord | None:
         record = self._records.get(issue_id)
         if record is None:
@@ -642,10 +654,19 @@ class IssueRegistry:
         if not record.pending_feedback_ids:
             record.pending_feedback_since = time.time()
         seen = set(record.pending_feedback_ids)
+        processed = set(record.processed_feedback_ids)
         for feedback_id in feedback_ids:
-            if feedback_id not in seen and feedback_id not in record.processed_feedback_ids:
+            if feedback_id in processed:
+                continue
+            if feedback_id not in seen:
                 record.pending_feedback_ids.append(feedback_id)
                 seen.add(feedback_id)
+            # A feedback item may first be discovered without ``html_url``
+            # and receive a reconstructed URL on a later poll. Update the
+            # lookup even when the pending ID already exists.
+            url = feedback_urls.get(feedback_id) if feedback_urls else None
+            if url:
+                record.pending_feedback_urls[feedback_id] = url
         if cursor is not None:
             record.feedback_cursor = cursor
         record.last_feedback_checked_at = time.time()
@@ -674,6 +695,8 @@ class IssueRegistry:
             for feedback_id in record.pending_feedback_ids
             if feedback_id not in processed
         ]
+        for feedback_id in feedback_ids:
+            record.pending_feedback_urls.pop(feedback_id, None)
         if not record.pending_feedback_ids:
             record.pending_feedback_since = None
         if commit_sha is not None:
@@ -705,6 +728,7 @@ class IssueRegistry:
             return 0
         count = len(record.pending_feedback_ids)
         record.pending_feedback_ids = []
+        record.pending_feedback_urls = {}
         record.pending_feedback_since = None
         record.touch()
         self._save()

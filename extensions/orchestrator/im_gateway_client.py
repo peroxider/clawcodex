@@ -5,7 +5,7 @@ semantics to existing orchestrator entry points — never invents new
 synonyms:
 
   * ``followUp`` → ``queue_pending_message`` (the existing pending queue)
-  * ``pause/resume/stop/takeover`` → control socket verbs
+  * ``pause/resume/stop`` → control socket verbs
   * ``inject`` / ``contextOnly`` → ``issue inject`` / ``.operator_hints.md``
     (NOT the control-socket no-op)
   * ``command`` (``/agent retry|follow-up|unblock``) → existing
@@ -300,7 +300,7 @@ class OrchestratorGatewayClient:
             return "orchestrator_cli_invalid"
 
         noun, verb = argv[0], argv[1]
-        if noun == "issue" and verb in {"stop", "pause", "resume", "takeover"}:
+        if noun == "issue" and verb in {"stop", "pause", "resume"}:
             issue_id = route.issue_hint or self._arg_value(argv, "--id")
             if not issue_id:
                 self._queue_command_reply(route.payload, 2, "", "error: --id is required")

@@ -372,6 +372,9 @@ class TestInjectFeedback(unittest.TestCase):
         self.assertEqual(result.question, "please fix the lint")
         self.assertEqual(result.status, ClarificationStatus.PENDING)
         self.assertEqual(result.context_summary, "Human review rejection feedback")
+        self.assertEqual(result.kind, "review_feedback")
+        self.assertIs(self.queue.get_pending_feedback("i1"), result)
+        self.assertEqual(self.queue.poll_pending(), [])
 
     def test_inject_resets_existing_item(self) -> None:
         # First, create an item with a question.
@@ -383,8 +386,26 @@ class TestInjectFeedback(unittest.TestCase):
         self.assertEqual(result.question, "new feedback")
         self.assertEqual(result.options, [])
         self.assertEqual(result.status, ClarificationStatus.PENDING)
+        self.assertEqual(result.kind, "review_feedback")
+        self.assertIsNone(result.expires_at)
         self.assertIsNone(result.answer)
         self.assertIsNone(result.answer_source)
+
+    def test_consume_feedback_does_not_remove_real_clarification(self) -> None:
+        clarification = self.queue.enqueue(
+            issue_id="i1",
+            issue_identifier="x",
+            question="which mode?",
+        )
+
+        self.assertIsNone(self.queue.consume_feedback("i1"))
+        self.assertIs(self.queue.get("i1"), clarification)
+
+    def test_consume_feedback_removes_one_shot_item(self) -> None:
+        feedback = self.queue.inject_feedback("i1", "please fix the lint")
+
+        self.assertIs(self.queue.consume_feedback("i1"), feedback)
+        self.assertIsNone(self.queue.get("i1"))
 
 
 # ---------------------------------------------------------------------------

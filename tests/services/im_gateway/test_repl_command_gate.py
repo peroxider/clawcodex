@@ -150,7 +150,11 @@ def test_orchestrator_allowed_command_with_args_passes() -> None:
         "/issue list --status running",
         "/issue show --id AGENTSDK-15",
         '/issue inject --id AGENTSDK-15 "address review comments"',
+        "/issue feedback --id AGENTSDK-15 --approve",
+        '/issue review --id AGENTSDK-15 --reject --feedback "needs tests"',
+        "/issue retry --id AGENTSDK-15 --mode reset",
         "/server status --workflow ./workflow.md",
+        "/issue rebase --id AGENTSDK-15",
     ]:
         allowed, reason = check_orchestrator_command(text)
         assert allowed is True, f"expected {text!r} to be allowed"
@@ -161,6 +165,7 @@ def test_orchestrator_allowed_command_with_args_passes() -> None:
     ("cmd", "reason"),
     [
         ("/server stop", "不支持 /server stop 执行"),
+        ("/issue takeover", "不支持 /issue takeover 执行"),
         ("/dashboard", "不支持 /dashboard 执行"),
         ("/workflow init", "不支持 /workflow init 执行"),
         ("/unknown-cmd-xyz", "不支持 /unknown-cmd-xyz 执行"),

@@ -278,6 +278,9 @@ def _build_feishu_channel_from_inputs(name: str, inputs: dict[str, str]) -> Chan
     verification_token = str(inputs.get("verification_token") or "").strip()
     if verification_token:
         extra["verification_token"] = verification_token
+    allowed_user_open_id = str(inputs.get("allowed_user_open_id") or "").strip()
+    if allowed_user_open_id:
+        extra["allowed_user_open_id"] = allowed_user_open_id
     bot_open_id = str(inputs.get("bot_open_id") or "").strip()
     if bot_open_id:
         extra["bot_open_id"] = bot_open_id
@@ -356,8 +359,62 @@ def _format_connected_clients(runtime_status: dict[str, Any]) -> str:
         session_id = str(peer.get("session_id") or "")
         online = bool(peer.get("online"))
         state = "online" if online else "offline"
-        parts.append(f"{host_type} (session={session_id}, {state})")
+        pid = _peer_pid(peer)
+        pid_part = f", pid={pid}" if pid is not None else ""
+        parts.append(f"{host_type} (session={session_id}{pid_part}, {state})")
     return "connected clients: " + ", ".join(parts)
+
+
+def _peer_pid(peer: dict[str, Any]) -> int | None:
+    pid = peer.get("pid")
+    try:
+        parsed = int(pid)
+    except (TypeError, ValueError):
+        parsed = _peer_pid_from_session(str(peer.get("session_id") or ""))
+    return parsed if parsed and parsed > 0 else None
+
+
+def _peer_pid_from_session(session_id: str) -> int | None:
+    parts = session_id.split("-")
+    if len(parts) < 2 or parts[0] not in {"repl", "orchestrator"}:
+        return None
+    try:
+        return int(parts[1])
+    except ValueError:
+        return None
+
+
+def _format_blocking_gateway_peers(runtime_status: dict[str, Any]) -> list[str]:
+    if runtime_status.get("gateway_error") or runtime_status.get("gateway_running") is False:
+        return []
+    formatted: list[str] = []
+    for peer in runtime_status.get("peers") or []:
+        if not isinstance(peer, dict):
+            continue
+        host_type = str(peer.get("host_type") or "opt_in")
+        if host_type not in {"repl", "orchestrator"}:
+            continue
+        if peer.get("online") is False:
+            continue
+        session_id = str(peer.get("session_id") or "")
+        pid = _peer_pid(peer)
+        pid_part = f"pid={pid}, " if pid is not None else ""
+        formatted.append(f"{host_type} ({pid_part}session={session_id})")
+    return formatted
+
+
+def _print_restart_peer_hint(runtime_status: dict[str, Any]) -> None:
+    peers = _format_blocking_gateway_peers(runtime_status)
+    if not peers:
+        return
+    print(
+        "提示：当前通道仍连接到 REPL/Orchestrator；请先关闭对应的 "
+        "REPL/Orchestrator 或执行 `/gateway disconnect`，然后再重试 restart。",
+        file=sys.stderr,
+    )
+    print("已连接进程：", file=sys.stderr)
+    for peer in peers:
+        print(f"  - {peer}", file=sys.stderr)
 
 
 def _resolve_status_state_dir(path: str | None, state_dir: str | None) -> str | None:
@@ -532,21 +589,33 @@ def restart_channel(name: str, *, state_dir: str | None = None) -> int:
         from clawcodex_ext.services.im_gateway.ipc_client import GatewayIpcClient
 
         async def _reload() -> int:
+            runtime_status: dict[str, Any] = {}
             try:
                 async with GatewayIpcClient(paths.sock_file) as client:
+                    with contextlib.suppress(Exception):
+                        runtime_status = await client.status() or {}
                     resp = await client.reload_channel(name)
             except (ConnectionError, FileNotFoundError, OSError) as exc:
                 print(f"error: could not reach gateway daemon: {exc}", file=sys.stderr)
+                _print_restart_peer_hint(runtime_status)
+                return 1
+            except Exception as exc:  # noqa: BLE001
+                print(f"error: channel {name!r} restart failed: {exc}", file=sys.stderr)
+                _print_restart_peer_hint(runtime_status)
                 return 1
             if resp is not None and resp.ack_layer == "accepted":
                 print(
                     f"channel {name!r} reloaded live (gateway daemon PID {read_pid_value(paths)})."
                 )
                 return 0
+            if resp is not None and isinstance(resp.payload, dict):
+                runtime_status.update(resp.payload)
             print(
                 f"channel {name!r} reload returned: {resp.ack_layer if resp else 'no response'} "
-                f"({resp.reason if resp else ''})"
+                f"({resp.reason if resp else ''})",
+                file=sys.stderr,
             )
+            _print_restart_peer_hint(runtime_status)
             return 1
 
         return asyncio.run(_reload())
@@ -630,8 +699,10 @@ def _feishu_scan_login(input_fn: InputFn) -> dict[str, str]:
             "app_id": str(result.get("app_id") or ""),
             "app_secret": str(result.get("app_secret") or ""),
             "domain": str(result.get("domain") or "feishu"),
-            "bot_open_id": str(result.get("bot_open_id") or ""),
-            "bot_name": str(result.get("bot_name") or ""),
+            # The registration SDK requests and returns the scanning user's
+            # open_id. Persist it as the initial outbound/allowlist target so
+            # REPL and Orchestrator can send before the first inbound message.
+            "allowed_user_open_id": str(result.get("open_id") or ""),
         }
         encrypt_key = str(result.get("encrypt_key") or "")
         if encrypt_key:
@@ -822,7 +893,9 @@ def _wizard_edit_feishu(cfg, path, channel: ChannelConfig, ui: InteractiveInput)
                 for key in ("batching", "send", "approval_cards"):
                     if key in previous_extra:
                         extra[key] = previous_extra[key]
-                if previous_extra.get("allowed_user_open_id"):
+                if previous_extra.get("allowed_user_open_id") and not extra.get(
+                    "allowed_user_open_id"
+                ):
                     extra["allowed_user_open_id"] = previous_extra["allowed_user_open_id"]
                 channel = ChannelConfig(
                     type=channel.type,
@@ -835,7 +908,13 @@ def _wizard_edit_feishu(cfg, path, channel: ChannelConfig, ui: InteractiveInput)
                 if channel.enabled and _is_feishu_websocket_channel(channel):
                     _disable_other_inbound_app_channels(cfg, active_name=channel.name)
                 save_config(cfg, path)
-                print("登录配置已更新。")
+                # A re-scan may switch the app or operator. Do not let a
+                # persisted chat_id from the previous login override the new
+                # scanner open_id in ``last_known_sender``.
+                _cleanup_feishu_state(_state_dir_for_config_path(path), channel.name)
+                print(
+                    "登录配置已更新。请执行 `clawcodex-dev gateway restart` 重启 Gateway 后生效。"
+                )
             elif sub == 1:
                 updated = _feishu_manual_login(channel, ui)
                 if updated is None:  # ESC 中断：保留原 channel，回 feishu 编辑菜单

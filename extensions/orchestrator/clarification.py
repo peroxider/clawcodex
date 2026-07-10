@@ -454,6 +454,10 @@ class ClarificationResolver:
             status=resolved.status,
         )
 
+    def get_pending_feedback(self, issue_id: str) -> "ClarificationItem | None":
+        """Return pending rejected-review feedback for an agent retry."""
+        return self._queue.get_pending_feedback(issue_id)
+
     def get_pending_count(self) -> int:
         """Return count of pending clarification items."""
         return len(self._queue.poll_pending())

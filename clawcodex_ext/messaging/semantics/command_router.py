@@ -2,7 +2,7 @@
 
 Reuses the orchestrator's ``parse_agent_command`` for
 ``/agent retry|follow-up|unblock`` and recognizes the issue-CLI control
-verbs (pause/resume/stop/inject/takeover/clarify/review/feedback). It also
+verbs (pause/resume/stop/inject/clarify/review/feedback/retry). It also
 normalizes the README-documented IM orchestrator commands (``/issue ...`` and
 ``/server status``) to the existing orchestrator CLI argv shape. It does NOT
 invent new synonyms — same names as the existing surfaces.
@@ -30,10 +30,13 @@ _ORCHESTRATOR_ISSUE_COMMANDS = frozenset(
         "stop",
         "pause",
         "resume",
-        "takeover",
         "clarify",
         "inject",
+        "feedback",
+        "review",
+        "retry",
         "workspace",
+        "rebase",
     }
 )
 

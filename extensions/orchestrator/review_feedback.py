@@ -105,6 +105,7 @@ class ReviewFeedbackService:
                 record.issue_id,
                 [item.id for item in selected],
                 cursor=selected[-1].updated_at or selected[-1].created_at or selected[-1].id,
+                feedback_urls={item.id: item.url for item in selected if item.url},
             )
             issue = Issue(
                 id=record.issue_id,

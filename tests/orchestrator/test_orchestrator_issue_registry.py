@@ -246,10 +246,13 @@ class TestRegister(unittest.TestCase):
     def test_re_register_preserves_feedback_tracking(self) -> None:
         self.registry.register("i1", "owner/repo#1")
         self.registry.mark_feedback_processed("i1", ["fb-1"], commit_sha="c1")
-        self.registry.mark_feedback_pending("i1", ["fb-2"], cursor="cur")
+        self.registry.mark_feedback_pending(
+            "i1", ["fb-2"], cursor="cur", feedback_urls={"fb-2": "u2"}
+        )
         re_registered = self.registry.register("i1", "owner/repo#1")
         self.assertEqual(re_registered.processed_feedback_ids, ["fb-1"])
         self.assertEqual(re_registered.pending_feedback_ids, ["fb-2"])
+        self.assertEqual(re_registered.pending_feedback_urls, {"fb-2": "u2"})
         self.assertEqual(re_registered.feedback_cursor, "cur")
         self.assertEqual(re_registered.last_followup_commit_sha, "c1")
 
@@ -600,6 +603,53 @@ class TestFeedbackMutations(unittest.TestCase):
 
     def test_clear_stale_pending_no_action_when_none(self) -> None:
         self.assertEqual(self.registry.clear_stale_pending("i1"), 0)
+
+    def test_mark_feedback_pending_persists_urls(self) -> None:
+        result = self.registry.mark_feedback_pending(
+            "i1",
+            ["fb-1", "fb-2"],
+            feedback_urls={"fb-1": "https://example.com/issues/1#tid-1"},
+        )
+        # Only ids with a truthy url are stored; fb-2 had no url entry.
+        self.assertEqual(
+            result.pending_feedback_urls, {"fb-1": "https://example.com/issues/1#tid-1"}
+        )
+
+    def test_mark_feedback_pending_skips_empty_url(self) -> None:
+        result = self.registry.mark_feedback_pending("i1", ["fb-1"], feedback_urls={"fb-1": ""})
+        self.assertEqual(result.pending_feedback_urls, {})
+
+    def test_mark_feedback_pending_backfills_url_for_existing_id(self) -> None:
+        self.registry.mark_feedback_pending("i1", ["fb-1"])
+        result = self.registry.mark_feedback_pending(
+            "i1",
+            ["fb-1"],
+            feedback_urls={"fb-1": "https://example.com/issues/1#tid-1"},
+        )
+        self.assertEqual(result.pending_feedback_ids, ["fb-1"])
+        self.assertEqual(
+            result.pending_feedback_urls,
+            {"fb-1": "https://example.com/issues/1#tid-1"},
+        )
+
+    def test_mark_feedback_processed_drops_url(self) -> None:
+        self.registry.mark_feedback_pending(
+            "i1", ["fb-1", "fb-2"], feedback_urls={"fb-1": "u1", "fb-2": "u2"}
+        )
+        result = self.registry.mark_feedback_processed("i1", ["fb-1"])
+        self.assertNotIn("fb-1", result.pending_feedback_ids)
+        self.assertNotIn("fb-1", result.pending_feedback_urls)
+        self.assertEqual(result.pending_feedback_urls, {"fb-2": "u2"})
+
+    def test_clear_stale_pending_clears_urls(self) -> None:
+        self.registry.mark_feedback_pending("i1", ["fb-1"], feedback_urls={"fb-1": "u1"})
+        record = self.registry.get("i1")
+        record.pending_feedback_since = time.time() - 1000
+        self.registry._save()
+        self.registry.clear_stale_pending("i1", timeout_seconds=10)
+        cleared = self.registry.get("i1")
+        self.assertEqual(cleared.pending_feedback_ids, [])
+        self.assertEqual(cleared.pending_feedback_urls, {})
 
     def test_increment_followup_attempt(self) -> None:
         before = self.registry.get("i1").followup_attempt_count

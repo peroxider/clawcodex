@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -50,6 +51,9 @@ class GatewayIpcServer:
             str, dict[str, Any]
         ] = {}  # session_id -> {writer, last_seen, capabilities}
         self._writer_locks: dict[asyncio.StreamWriter, asyncio.Lock] = {}
+        self._outbound_locks: dict[asyncio.StreamWriter, asyncio.Lock] = {}
+        self._dispatch_tasks: set[asyncio.Task[None]] = set()
+        self._dispatch_tasks_by_writer: dict[asyncio.StreamWriter, set[asyncio.Task[None]]] = {}
 
     async def start(self) -> None:
         self.socket_path.parent.mkdir(parents=True, exist_ok=True)
@@ -71,8 +75,15 @@ class GatewayIpcServer:
                 writer.close()
                 with __import__("contextlib").suppress(ConnectionError, RuntimeError):
                     await writer.wait_closed()
+        for task in list(self._dispatch_tasks):
+            task.cancel()
+        if self._dispatch_tasks:
+            await asyncio.gather(*self._dispatch_tasks, return_exceptions=True)
+        self._dispatch_tasks.clear()
+        self._dispatch_tasks_by_writer.clear()
         self._peers.clear()
         self._writer_locks.clear()
+        self._outbound_locks.clear()
         with __import__("contextlib").suppress(FileNotFoundError):
             self.socket_path.unlink()
         logger.info("gateway ipc server closed")
@@ -101,6 +112,7 @@ class GatewayIpcServer:
                     "origin": origin,
                     "host_type": _host_type(session_id, capabilities),
                     "online": self.is_online(session_id),
+                    **_pid_field(session_id),
                 }
             )
         return peers
@@ -207,12 +219,34 @@ class GatewayIpcServer:
                         peer_session = None
                     else:
                         info["last_seen"] = self._clock()
+                # Channel delivery can legitimately take longer than the
+                # client's five-second reply timeout (Feishu retries and
+                # rate-limit backoff are common). Do not head-of-line block
+                # HEARTBEAT/REGISTER frames behind that provider I/O, or the
+                # client will mistake a busy connection for a dead one and
+                # repeatedly tear down the binding.
+                if frame.type is FrameType.OUTBOUND:
+                    task = asyncio.create_task(self._dispatch_and_send(frame, peer_session, writer))
+                    self._dispatch_tasks.add(task)
+                    writer_tasks = self._dispatch_tasks_by_writer.setdefault(writer, set())
+                    writer_tasks.add(task)
+                    task.add_done_callback(
+                        lambda done, peer_writer=writer: self._discard_dispatch_task(
+                            peer_writer, done
+                        )
+                    )
+                    continue
                 response = await self._dispatch(frame, peer_session, writer)
                 if response is not None:
                     await self._send(writer, response)
         except (ConnectionError, asyncio.CancelledError):
             pass
         finally:
+            writer_tasks = list(self._dispatch_tasks_by_writer.pop(writer, set()))
+            for task in writer_tasks:
+                task.cancel()
+            if writer_tasks:
+                await asyncio.gather(*writer_tasks, return_exceptions=True)
             if peer_session is not None:
                 info = self._peers.get(peer_session)
                 if info is not None and info.get("writer") is writer:
@@ -223,6 +257,45 @@ class GatewayIpcServer:
             writer.close()
             with __import__("contextlib").suppress(ConnectionError, RuntimeError):
                 await writer.wait_closed()
+            self._writer_locks.pop(writer, None)
+            self._outbound_locks.pop(writer, None)
+
+    def _discard_dispatch_task(
+        self,
+        writer: asyncio.StreamWriter,
+        task: asyncio.Task[None],
+    ) -> None:
+        self._dispatch_tasks.discard(task)
+        writer_tasks = self._dispatch_tasks_by_writer.get(writer)
+        if writer_tasks is None:
+            return
+        writer_tasks.discard(task)
+        if not writer_tasks:
+            self._dispatch_tasks_by_writer.pop(writer, None)
+
+    async def _dispatch_and_send(
+        self,
+        frame: GatewayFrame,
+        peer_session: str | None,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        """Dispatch a potentially slow frame without blocking the client read loop."""
+        try:
+            # Preserve outbound ordering per client even though provider I/O
+            # runs outside the read loop. Only heartbeats/control frames may
+            # overtake it; later chat messages still wait their turn.
+            lock = self._outbound_locks.setdefault(writer, asyncio.Lock())
+            async with lock:
+                response = await self._dispatch(frame, peer_session, writer)
+            if response is not None:
+                await self._send(writer, response)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "gateway ipc: asynchronous dispatch failed type=%s",
+                frame.type.value,
+            )
 
     async def _send(self, writer: asyncio.StreamWriter, frame: GatewayFrame) -> None:
         # Serialize writes per writer: _handle_client (ACK/NACK) and
@@ -443,7 +516,20 @@ class GatewayIpcServer:
         etype = frame.event_type or ""
         if etype == "control.reload":
             name = (frame.payload or {}).get("channel", "")
-            ok = self.gateway.reload_channel(name)
+            try:
+                ok = self.gateway.reload_channel(name)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("gateway ipc: reload channel %r failed", name)
+                return GatewayFrame(
+                    type=FrameType.ACK,
+                    delivery_id=frame.message_id,
+                    ack_layer="nack",
+                    reason=f"reload {name}: {exc}",
+                    payload={
+                        "bindings": _binding_snapshot(self.gateway),
+                        "peers": self.peers_snapshot(),
+                    },
+                )
             return GatewayFrame.ack(
                 delivery_id=frame.message_id,
                 layer="accepted" if ok else "nack",
@@ -491,6 +577,20 @@ def _host_type(session_id: str, capabilities: list[str]) -> str:
     if "orchestrator" in joined or "issue" in joined or "run" in joined:
         return "orchestrator"
     return "opt_in"
+
+
+_SESSION_PID_RE = re.compile(r"^(?:repl|orchestrator)-(?P<pid>\d+)(?:-|$)")
+
+
+def _pid_field(session_id: str) -> dict[str, int]:
+    match = _SESSION_PID_RE.match(session_id)
+    if match is None:
+        return {}
+    try:
+        pid = int(match.group("pid"))
+    except ValueError:
+        return {}
+    return {"pid": pid} if pid > 0 else {}
 
 
 def _binding_snapshot(gateway) -> list[dict[str, Any]]:

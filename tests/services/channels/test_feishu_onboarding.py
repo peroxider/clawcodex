@@ -65,6 +65,20 @@ def test_feishu_qr_register_returns_none_on_sdk_denied_scan() -> None:
     assert result is None
 
 
+def test_feishu_qr_register_rejects_credentials_without_scanner_open_id() -> None:
+    from clawcodex_ext.services.channels.feishu_onboarding import qr_register
+
+    result = qr_register(
+        register_app=lambda **_kwargs: {
+            "client_id": "cli_app",
+            "client_secret": "secret",
+        },
+        render_qr=lambda _url: True,
+    )
+
+    assert result is None
+
+
 def test_sdk_register_app_avoids_lark_oapi_root_import(monkeypatch, tmp_path) -> None:
     import clawcodex_ext.services.channels.feishu_onboarding as onboarding
 

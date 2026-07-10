@@ -232,25 +232,19 @@ def test_formatter_agent_stagnation_with_turns():
 # -- emitter -----------------------------------------------------------
 
 
-def test_emitter_session_success_emits_completed():
+def test_emitter_session_success_waits_for_orchestrator_finalization():
     received = []
     em = OrchestratorEventEmitter("AGENTSDK-15", sinks=[received.append])
     em.on_session_complete(SimpleNamespace(reason="success"), _session(pr="https://x/p/15"))
-    assert len(received) == 1
-    assert received[0].event_type == "issue.completed"
-    assert received[0].level is EventLevel.SUCCESS
-    assert received[0].payload["pr"] == "https://x/p/15"
+    assert received == []
 
 
 @pytest.mark.parametrize("reason", ["task_complete", "already_completed"])
-def test_emitter_session_completion_aliases_emit_completed(reason):
+def test_emitter_session_completion_aliases_wait_for_orchestrator(reason):
     received = []
     em = OrchestratorEventEmitter("AGENTSDK-15", sinks=[received.append])
     em.on_session_complete(SimpleNamespace(reason=reason), _session(pr="https://x/p/15"))
-    assert len(received) == 1
-    assert received[0].event_type == "issue.completed"
-    assert received[0].level is EventLevel.SUCCESS
-    assert received[0].payload["pr"] == "https://x/p/15"
+    assert received == []
 
 
 def test_emitter_session_rate_limit_emits_error():
@@ -917,7 +911,7 @@ def test_mount_gateway_retries_initial_register_failure(monkeypatch) -> None:
 
 
 def test_mount_gateway_reconnects_when_heartbeat_is_not_accepted(monkeypatch) -> None:
-    """Heartbeat timeouts/NACKs should rebuild the gateway registration."""
+    """Two consecutive heartbeat timeouts should rebuild the registration."""
     from extensions.orchestrator.cli import server as server_mod
 
     reconnect_calls: list[str] = []
@@ -936,7 +930,7 @@ def test_mount_gateway_reconnects_when_heartbeat_is_not_accepted(monkeypatch) ->
         async def heartbeat(self):
             nonlocal heartbeat_calls
             heartbeat_calls += 1
-            if heartbeat_calls == 1:
+            if heartbeat_calls <= 2:
                 return None
             raise asyncio.CancelledError()
 
@@ -980,6 +974,74 @@ def test_mount_gateway_reconnects_when_heartbeat_is_not_accepted(monkeypatch) ->
         asyncio.run(wrapper._heartbeat_loop())
 
     assert reconnect_calls == [IM_DIRECT_ALL_ORIGIN, IM_DIRECT_ALL_ORIGIN]
+
+
+def test_mount_gateway_keeps_registration_after_one_heartbeat_timeout(monkeypatch) -> None:
+    """One delayed ACK can be provider head-of-line blocking, not a dead socket."""
+    from extensions.orchestrator.cli import server as server_mod
+
+    reconnect_calls: list[str] = []
+    heartbeat_calls = 0
+
+    class _FakeIpc:
+        def __init__(self, sock, instance_id=None):
+            self.sock = sock
+            self.instance_id = instance_id
+            self.on_deliver = None
+
+        async def reconnect_until_registered(self, *, session_id, origin, capabilities, **_kwargs):
+            reconnect_calls.append(origin)
+            return SimpleNamespace(ack_layer="accepted")
+
+        async def heartbeat(self):
+            nonlocal heartbeat_calls
+            heartbeat_calls += 1
+            if heartbeat_calls == 1:
+                return None
+            if heartbeat_calls == 2:
+                return SimpleNamespace(ack_layer="accepted")
+            raise asyncio.CancelledError()
+
+    class _FakeClient:
+        def __init__(self, handlers, *, ipc_client=None, origin="", **_kwargs):
+            self._ipc = ipc_client
+            self._origin = origin
+
+        async def send_outbound(self, text):
+            return None
+
+    _real_sleep = asyncio.sleep
+
+    async def _fast_sleep(_delay):
+        await _real_sleep(0)
+
+    monkeypatch.setattr(
+        "clawcodex_ext.services.im_gateway.ipc_client.GatewayIpcClient",
+        _FakeIpc,
+    )
+    monkeypatch.setattr(
+        "extensions.orchestrator.im_gateway_client.OrchestratorGatewayClient",
+        _FakeClient,
+    )
+    monkeypatch.setattr(server_mod.asyncio, "sleep", _fast_sleep)
+
+    async def _run():
+        return None
+
+    subsystem = SimpleNamespace(_orchestrator=None, run=_run)
+    config = SimpleNamespace(workspace=SimpleNamespace(root="/repo"))
+    wrapper = server_mod._mount_gateway_opt_in(
+        subsystem,
+        config,
+        enabled=True,
+        origin=None,
+        sock="/tmp/gateway.sock",
+    )
+
+    with __import__("contextlib").suppress(asyncio.CancelledError):
+        asyncio.run(wrapper._heartbeat_loop())
+
+    assert reconnect_calls == [IM_DIRECT_ALL_ORIGIN]
 
 
 def test_mount_gateway_flushes_pending_outbound_after_register(monkeypatch) -> None:
@@ -1141,6 +1203,78 @@ async def test_orchestrator_on_pushed_deliver_dispatches_control_verb() -> None:
     )
     await client._on_pushed_deliver(frame)
     assert control_calls and control_calls[0][0] == "pause"
+
+
+@pytest.mark.parametrize(
+    ("text", "argv"),
+    [
+        (
+            "/issue feedback --id AGENTSDK-15 --approve",
+            ["issue", "feedback", "--id", "AGENTSDK-15", "--approve"],
+        ),
+        (
+            '/issue review --id AGENTSDK-15 --reject --feedback "needs tests"',
+            [
+                "issue",
+                "review",
+                "--id",
+                "AGENTSDK-15",
+                "--reject",
+                "--feedback",
+                "needs tests",
+            ],
+        ),
+        (
+            "/issue retry --id AGENTSDK-15 --mode reset",
+            ["issue", "retry", "--id", "AGENTSDK-15", "--mode", "reset"],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_orchestrator_on_pushed_deliver_dispatches_lifecycle_issue_cli(
+    text: str, argv: list[str]
+) -> None:
+    """Lifecycle issue slash commands run through the existing orchestrator CLI path."""
+    from extensions.orchestrator.im_gateway_client import OrchestratorGatewayClient
+    from clawcodex_ext.services.im_gateway.ipc_protocol import GatewayFrame
+
+    cli_calls: list[list[str]] = []
+
+    class _FakeIpc:
+        def __init__(self):
+            self.on_deliver = None
+            self.sent: list[str] = []
+
+        async def send_outbound(self, *, origin, text):
+            self.sent.append(text)
+            return GatewayFrame.ack(delivery_id="d1", layer="processed", message="sent")
+
+    def _run_cli(actual_argv: list[str]) -> tuple[int, str, str]:
+        cli_calls.append(actual_argv)
+        return 0, "ok", ""
+
+    ipc = _FakeIpc()
+    client = OrchestratorGatewayClient(
+        _handlers(),
+        ipc_client=ipc,
+        origin="wechat:direct:a:u",
+        cli_runner=_run_cli,
+    )
+
+    await client._on_pushed_deliver(
+        GatewayFrame.deliver(
+            delivery_id="d1",
+            session_id="orch",
+            origin="wechat:direct:a:u",
+            text=text,
+            semantic="command",
+        )
+    )
+
+    assert cli_calls == [argv]
+    assert ipc.sent
+    assert ipc.sent[0].startswith(f"命令已执行：{text}")
+    assert "ok" in ipc.sent[0]
 
 
 @pytest.mark.asyncio
@@ -1652,6 +1786,157 @@ def test_orchestrator_control_stop_emits_im_event() -> None:
     orchestrator._apply_control_command("stop", issue_id, "")
 
     assert any(event.event_type == "control.stop" for event in received)
+
+
+@pytest.mark.asyncio
+async def test_review_reject_retries_pending_review_issue_with_feedback(tmp_path) -> None:
+    from extensions.orchestrator.clarification_queue import ClarificationQueue
+    from extensions.orchestrator.cli.issue import _run_review
+    from extensions.orchestrator.issue_registry import IssueRegistry, IssueStatus
+    from extensions.orchestrator.orchestrator import Orchestrator
+    from extensions.orchestrator.tracker import Intent
+
+    issue_id = "5"
+    feedback = "注释没有中文\n请补充说明"
+    registry_path = tmp_path / ".clawcodex_issue_registry.json"
+    registry = IssueRegistry(registry_path)
+    registry.register(issue_id, issue_id)
+    registry.mark_pending_review(issue_id)
+
+    args = argparse.Namespace(
+        id=issue_id,
+        approve=False,
+        reject=True,
+        feedback=feedback,
+        comment=None,
+    )
+    assert _run_review(registry_path, args, workspace_root=tmp_path) == 0
+    assert IssueRegistry(registry_path).get(issue_id).status is IssueStatus.PENDING_REVIEW
+
+    tracker_updates: list[tuple[str, str]] = []
+
+    class _Tracker:
+        async def update_issue_state(self, actual_issue_id: str, state: str) -> None:
+            tracker_updates.append((actual_issue_id, state))
+
+    orchestrator = Orchestrator.__new__(Orchestrator)
+    orchestrator._workspace_root = tmp_path
+    orchestrator._state = SimpleNamespace(
+        running={},
+        pending_review={issue_id},
+        completed={issue_id},
+        claimed={issue_id},
+    )
+    orchestrator._registry = registry
+    orchestrator._clarification_queue = ClarificationQueue(
+        tmp_path / ".clawcodex_clarification_queue.json"
+    )
+    orchestrator.tracker = _Tracker()
+    orchestrator._im_emitters = {}
+    orchestrator.im_event_deliver = None
+
+    await orchestrator._process_control_commands()
+
+    record = registry.get(issue_id)
+    assert record is not None
+    assert record.status is IssueStatus.PENDING
+    assert record.attempt_count == 1
+    assert record.intent is Intent.FOLLOWUP
+    assert record.intent_source == "cli"
+    assert issue_id not in orchestrator._state.pending_review
+    assert issue_id not in orchestrator._state.completed
+    assert issue_id not in orchestrator._state.claimed
+    assert tracker_updates == [(issue_id, "open")]
+    queued_feedback = orchestrator._clarification_queue.get(issue_id)
+    assert queued_feedback is not None
+    assert queued_feedback.question == f"[Human Review Rejected] {feedback}"
+
+    # A repeated rejection while the retry is queued is idempotent and can
+    # update the operator feedback instead of failing on status=pending.
+    updated_feedback = "注释仍然没有中文"
+    args.feedback = updated_feedback
+    assert _run_review(registry_path, args, workspace_root=tmp_path) == 0
+    await orchestrator._process_control_commands()
+
+    record = registry.get(issue_id)
+    assert record is not None
+    assert record.status is IssueStatus.PENDING
+    assert record.attempt_count == 1
+    assert record.intent is Intent.FOLLOWUP
+    assert tracker_updates == [(issue_id, "open"), (issue_id, "open")]
+    queued_feedback = orchestrator._clarification_queue.get(issue_id)
+    assert queued_feedback is not None
+    assert queued_feedback.question == f"[Human Review Rejected] {updated_feedback}"
+
+
+@pytest.mark.asyncio
+async def test_review_approve_syncs_daemon_state_and_remote_tracker(tmp_path) -> None:
+    from extensions.orchestrator.cli.issue import _run_review
+    from extensions.orchestrator.issue_registry import IssueRegistry, IssueStatus
+    from extensions.orchestrator.orchestrator import Orchestrator
+
+    issue_id = "7"
+    registry_path = tmp_path / ".clawcodex_issue_registry.json"
+    registry = IssueRegistry(registry_path)
+    registry.register(issue_id, issue_id, branch_name="clawcodex/issue-7")
+    registry.mark_synced(
+        issue_id,
+        branch_name="clawcodex/issue-7",
+        commit_sha="abc123",
+        pr_number="7",
+        pr_url="https://gitcode.example/pulls/7",
+    )
+    registry.mark_pending_review(issue_id)
+
+    args = argparse.Namespace(
+        id=issue_id,
+        approve=True,
+        reject=False,
+        feedback=None,
+        comment="LGTM",
+    )
+    assert _run_review(registry_path, args, workspace_root=tmp_path) == 0
+
+    tracker_updates: list[tuple[str, str]] = []
+    tracker_comments: list[tuple[str, str]] = []
+
+    class _Tracker:
+        async def update_issue_state(self, actual_issue_id: str, state: str) -> None:
+            tracker_updates.append((actual_issue_id, state))
+
+        async def create_comment(self, actual_issue_id: str, body: str) -> None:
+            tracker_comments.append((actual_issue_id, body))
+
+    delivered: list[OrchestratorEvent] = []
+    orchestrator = Orchestrator.__new__(Orchestrator)
+    orchestrator._workspace_root = tmp_path
+    orchestrator._state = SimpleNamespace(
+        pending_review={issue_id},
+        claimed={issue_id},
+        completed=set(),
+    )
+    orchestrator._registry = registry
+    orchestrator.tracker = _Tracker()
+    orchestrator._im_emitters = {}
+    orchestrator.im_event_deliver = lambda event, _text: delivered.append(event)
+
+    await orchestrator._process_control_commands()
+
+    record = registry.get(issue_id)
+    assert record is not None
+    assert record.status is IssueStatus.COMPLETED
+    assert issue_id not in orchestrator._state.pending_review
+    assert issue_id not in orchestrator._state.claimed
+    assert issue_id in orchestrator._state.completed
+    assert tracker_updates == [(issue_id, "completed")]
+    assert tracker_comments == [(issue_id, "## Approved\n\nLGTM")]
+    assert any(event.event_type == "issue.completed" for event in delivered)
+
+    # Reissuing approve repairs a remote label that missed the first sync.
+    assert _run_review(registry_path, args, workspace_root=tmp_path) == 0
+    await orchestrator._process_control_commands()
+    assert tracker_updates == [(issue_id, "completed"), (issue_id, "completed")]
+    assert tracker_comments == [(issue_id, "## Approved\n\nLGTM")]
 
 
 def test_orchestrator_emit_issue_detected_includes_url(tmp_path) -> None:

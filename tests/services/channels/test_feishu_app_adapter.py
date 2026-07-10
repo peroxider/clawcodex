@@ -34,6 +34,7 @@ class _FakeChannel:
         bot_identity: Any | None = None,
     ) -> None:
         self.sent: list[dict] = []
+        self.send_options: list[dict | None] = []
         self.updated_cards: list[dict] = []
         self.connect_exc = connect_exc
         self.connected = False
@@ -59,6 +60,7 @@ class _FakeChannel:
 
     async def send(self, to, message, opts=None) -> SendResult:
         self.sent.append({"to": to, "message": message})
+        self.send_options.append(opts)
         if self._send_results:
             result = self._send_results.pop(0)
             if isinstance(result, BaseException):
@@ -396,6 +398,43 @@ async def test_feishu_adapter_tracks_last_known_sender_from_inbound_chat() -> No
     await channel.fire_message(_sdk_inbound())
 
     assert adapter.last_known_sender() == "oc_chat"
+
+
+def test_feishu_adapter_last_sender_falls_back_to_configured_user() -> None:
+    adapter = FeishuAppChannelAdapter(
+        _config({"allowed_user_open_id": "ou_scanner"}),
+        channel_factory=lambda s: _FakeChannel(),
+    )
+
+    assert adapter.last_known_sender() == "ou_scanner"
+
+
+@pytest.mark.asyncio
+async def test_feishu_adapter_sends_to_scanner_before_first_inbound() -> None:
+    channel = _FakeChannel()
+    adapter = FeishuAppChannelAdapter(
+        _config({"allowed_user_open_id": "ou_scanner"}),
+        channel_factory=lambda s: channel,
+    )
+    await adapter.start()
+
+    result = await adapter.send(
+        ChannelMessage(text="orchestrator connected"),
+        target=adapter.last_known_sender(),
+    )
+
+    assert result.ok is True
+    assert channel.sent == [{"to": "ou_scanner", "message": {"text": "orchestrator connected"}}]
+    assert channel.send_options == [{"receive_id_type": "open_id"}]
+
+
+def test_pinned_sdk_infers_scanner_id_as_open_id() -> None:
+    # Contract check against the locked lark-oapi 1.7.0 implementation:
+    # even if the explicit adapter option is removed accidentally, the SDK
+    # still recognizes the scanner identifier as an open_id.
+    from lark_oapi.channel.outbound.routing import infer_receive_id_type
+
+    assert infer_receive_id_type("ou_scanner") == "open_id"
 
 
 @pytest.mark.asyncio
