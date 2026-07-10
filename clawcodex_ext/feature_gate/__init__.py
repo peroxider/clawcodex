@@ -235,6 +235,12 @@ _DEFAULT_FLAGS: list[FeatureFlag] = [
         ),
         deps=["logical_kanban"],
     ),
+    # --- Skill search ---
+    FeatureFlag(
+        name="SKILL_SEARCH_TFIDF",
+        default=False,
+        description="Enable TF-IDF based skill search for smart skill ranking (F-92)",
+    ),
 ]
 
 

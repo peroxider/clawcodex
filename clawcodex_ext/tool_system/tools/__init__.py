@@ -35,6 +35,7 @@ from .remote_trigger import RemoteTriggerTool
 from .send_message import SendMessageTool
 from .send_user_message import SendUserMessageTool
 from .skill import SkillTool
+from .skill_search import SkillSearchTool
 from .snip import SnipTool
 from .sleep import SleepTool
 from .structured_output import StructuredOutputTool
@@ -89,6 +90,7 @@ ALL_STATIC_TOOLS: list[Tool] = [
     SendMessageTool,
     SendUserMessageTool,
     SkillTool,
+    SkillSearchTool,
     SleepTool,
     SnipTool,
     StatusTool,
@@ -143,6 +145,7 @@ __all__ = [
     "SendMessageTool",
     "SendUserMessageTool",
     "SkillTool",
+    "SkillSearchTool",
     "SleepTool",
     "SnipTool",
     "StatusTool",
