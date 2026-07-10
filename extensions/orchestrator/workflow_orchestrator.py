@@ -51,6 +51,7 @@ class WorkflowOrchestrator:
         tracker: Any = None,
         status_dashboard: Any = None,
         clarification_resolver: Any = None,
+        llm_client: Any = None,
     ) -> None:
         self._workflow_config = workflow_config
         self._yaml_path = Path(workflow_yaml_path)
@@ -69,6 +70,7 @@ class WorkflowOrchestrator:
             default_timeout_seconds=agent_timeout_s,
             workspace_dir=str(workspace_root),
             enable_snapshots=True,
+            llm_client=llm_client,
         )
         self._engine = DeclarativeWorkflowEngine(
             workflow=self._schema,
@@ -85,6 +87,7 @@ class WorkflowOrchestrator:
             tracker=tracker,
             status_dashboard=status_dashboard,
             clarification_resolver=clarification_resolver,
+            llm_client=llm_client,
         )
         self._stage_runner.set_bundle_path(bundle_dir)
         self._engine.set_stage_runner(self._stage_runner)

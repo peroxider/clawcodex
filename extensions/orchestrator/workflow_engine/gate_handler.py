@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from .validators import ContractValidator
 from .workflow_state import StageNode, StageResult, StageStatus, WorkflowState
 
 logger = logging.getLogger(__name__)
@@ -45,9 +46,15 @@ class GateHandler:
         self,
         clarification_queue: Any = None,
         journal: Any = None,
+        workspace_dir: str = "",
+        llm_client: Any = None,
     ) -> None:
         self._clarification_queue = clarification_queue
         self._journal = journal
+        self._validator = ContractValidator(
+            workspace_dir=workspace_dir,
+            llm_client=llm_client,
+        )
 
     async def process(
         self,
@@ -118,9 +125,7 @@ class GateHandler:
                 reason="No validators configured, auto-approved",
             )
 
-        from .validators import ContractValidator
-
-        validator = ContractValidator()
+        validator = self._validator
         results = await validator.validate_all(stage_node.validators)
         all_passed = all(r.passed for r in results)
         failures = [r.message for r in results if not r.passed]

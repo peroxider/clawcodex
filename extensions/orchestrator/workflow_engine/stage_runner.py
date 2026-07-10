@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
+from .validators import ContractValidator
 from .workflow_state import StageNode, WorkflowState
 
 if TYPE_CHECKING:
@@ -84,6 +85,7 @@ class StageRunner:
         status_dashboard: Any = None,
         clarification_resolver: Any = None,
         progress_reporter: Any = None,
+        llm_client: Any = None,
     ) -> None:
         self._agent_runner = agent_runner
         self._workflow_config = workflow_config
@@ -95,7 +97,12 @@ class StageRunner:
         self._status_dashboard = status_dashboard
         self._clarification_resolver = clarification_resolver
         self._progress_reporter = progress_reporter
+        self._llm_client = llm_client
         self._bundle_path: Path | None = None
+        self._validator = ContractValidator(
+            workspace_dir=self._workspace_dir,
+            llm_client=self._llm_client,
+        )
 
     def set_bundle_path(self, bundle_path: Path | str | None) -> None:
         self._bundle_path = Path(bundle_path).resolve() if bundle_path else None
@@ -299,10 +306,7 @@ class StageRunner:
                 stage_id=stage_node.id, approved=True, reason="no validators, auto-approved"
             )
 
-        from .validators import ContractValidator
-
-        validator = ContractValidator()
-        results = await validator.validate_all(stage_node.validators)
+        results = await self._validator.validate_all(stage_node.validators)
         all_passed = all(r.passed for r in results)
 
         return GateRunResult(

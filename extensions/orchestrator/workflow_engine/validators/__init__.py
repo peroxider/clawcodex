@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -32,12 +31,19 @@ class ValidationResult:
 class ContractValidator:
     """阶段契约验证器注册表。
 
-    支持同步和异步验证器。
+    支持同步和异步验证器，可在构造时注入 ``workspace_dir`` 与 ``llm_client``，
+    供 ``custom`` 与 ``llm_judge`` 验证器使用。
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        workspace_dir: str | Path = "",
+        llm_client: Any = None,
+    ) -> None:
+        self._workspace_dir = str(workspace_dir)
+        self._llm_client = llm_client
         self._validators: dict[str, Callable[..., Any]] = {}
-        self._async_validators: set[str] = {"llm_judge"}
+        self._async_validators: set[str] = {"llm_judge", "custom"}
         self._register_builtins()
 
     def _register_builtins(self) -> None:
@@ -47,8 +53,6 @@ class ContractValidator:
         self._validators["regex"] = _validate_regex
         self._validators["line_count"] = _validate_line_count
         self._validators["json_schema"] = _validate_json_schema
-        self._validators["custom"] = _validate_custom
-        self._validators["llm_judge"] = _validate_llm_judge_proxy
 
     def register(self, name: str, fn: Callable[..., Any], is_async: bool = False) -> None:
         """注册自定义验证器。"""
@@ -59,6 +63,17 @@ class ContractValidator:
     async def validate(self, spec: dict[str, Any]) -> ValidationResult:
         """执行单个验证器（支持异步）。"""
         validator_type = spec.get("type", "")
+
+        if validator_type == "custom":
+            from .custom import validate_custom
+
+            return await validate_custom(spec, workspace_dir=self._workspace_dir)
+
+        if validator_type == "llm_judge":
+            from .llm_judge import validate_llm_judge
+
+            return await validate_llm_judge(spec, llm_client=self._llm_client)
+
         fn = self._validators.get(validator_type)
         if fn is None:
             return ValidationResult(
@@ -66,13 +81,9 @@ class ContractValidator:
                 validator_type=validator_type,
                 message=f"Unknown validator type: {validator_type}",
             )
+
         try:
             kwargs = {k: v for k, v in spec.items() if k != "type"}
-            if validator_type in self._async_validators:
-                import asyncio
-
-                if asyncio.iscoroutinefunction(fn):
-                    return await fn(**kwargs)
             result = fn(**kwargs)
             if hasattr(result, "__await__"):
                 return await result
@@ -86,24 +97,26 @@ class ContractValidator:
 
     async def validate_all(self, specs: list[dict[str, Any]]) -> list[ValidationResult]:
         """执行所有验证器（支持异步）。"""
-        import asyncio
-
         results = []
         for spec in specs:
             results.append(await self.validate(spec))
         return results
 
     def validate_sync(self, spec: dict[str, Any]) -> ValidationResult:
-        """同步执行单个验证器。"""
+        """同步执行单个验证器。
+
+        注意：若当前线程已存在运行中的事件循环，请使用 ``validate()`` 异步接口，
+        否则可能阻塞协程。本方法仅在无事件循环时可用。
+        """
         import asyncio
 
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                return asyncio.ensure_future(self.validate(spec)).result()
+            asyncio.get_running_loop()
         except RuntimeError:
-            pass
-        return asyncio.run(self.validate(spec))
+            return asyncio.run(self.validate(spec))
+        raise RuntimeError(
+            "validate_sync cannot be called from a running event loop; use validate() instead"
+        )
 
 
 # ── 内置验证器实现 ──────────────────────────────────────────────────
@@ -262,44 +275,3 @@ def _validate_json_schema(
         return ValidationResult(
             passed=False, validator_type="json_schema", message=f"Schema violation: {exc.message}"
         )
-
-
-def _validate_custom(command: str = "", expected_exit: int = 0, **kwargs: Any) -> ValidationResult:
-    """自定义命令验证（同步，简单版）。"""
-    try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if result.returncode == expected_exit:
-            return ValidationResult(
-                passed=True,
-                validator_type="custom",
-                message=f"Command exited {result.returncode}",
-                details={"stdout": result.stdout[:500], "stderr": result.stderr[:500]},
-            )
-        return ValidationResult(
-            passed=False,
-            validator_type="custom",
-            message=f"Expected exit {expected_exit}, got {result.returncode}",
-            details={"stdout": result.stdout[:500], "stderr": result.stderr[:500]},
-        )
-    except subprocess.TimeoutExpired:
-        return ValidationResult(passed=False, validator_type="custom", message="Command timed out")
-    except Exception as exc:
-        return ValidationResult(
-            passed=False, validator_type="custom", message=f"Command error: {exc}"
-        )
-
-
-async def _validate_llm_judge_proxy(**kwargs: Any) -> ValidationResult:
-    """LLM Judge 验证器代理（F-114 P1）。
-
-    将参数转发到 llm_judge 模块。
-    """
-    from .llm_judge import validate_llm_judge
-
-    return await validate_llm_judge(kwargs)

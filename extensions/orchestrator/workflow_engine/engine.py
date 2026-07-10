@@ -32,6 +32,7 @@ from .event_bus import EventBus
 from .gate_handler import GateHandler
 from .rollback import RollbackManager
 from .gate_rollback import GateRollbackHandler
+from .validators import ContractValidator
 from .workflow_state import (
     StageKind,
     StageNode,
@@ -57,6 +58,7 @@ class EngineConfig:
     run_dir: str = ""
     run_id: str = ""
     enable_snapshots: bool = False  # 是否启用阶段快照（用于回滚）
+    llm_client: Any | None = None  # 供 llm_judge 验证器使用
 
 
 @dataclass
@@ -218,6 +220,12 @@ class DeclarativeWorkflowEngine:
         self._dag_order: list[int] = []
         self._stage_runner = None  # 延迟注入 (F-111)
 
+        # 阶段输出验证器 (F-114)
+        self._validator = ContractValidator(
+            workspace_dir=self.config.workspace_dir,
+            llm_client=self.config.llm_client,
+        )
+
         # 回滚系统 (F-113)
         self._rollback_manager: RollbackManager | None = None
         self._gate_rollback_handler: GateRollbackHandler | None = None
@@ -228,7 +236,10 @@ class DeclarativeWorkflowEngine:
         self._decision_count: dict[int, int] = {}  # 决策循环检测
 
         # GATE/DECISION 处理器 (F-112, F-113)
-        self._gate_handler = GateHandler()
+        self._gate_handler = GateHandler(
+            workspace_dir=self.config.workspace_dir,
+            llm_client=self.config.llm_client,
+        )
         self._decision_handler = DecisionHandler()
 
     def set_stage_runner(self, runner: Any) -> None:
@@ -638,12 +649,9 @@ class DeclarativeWorkflowEngine:
     async def _validate_stage_output(self, stage: StageNode, run_result: Any) -> list[str]:
         """执行阶段输出验证 (F-110-C, F-114)。
 
-        委托给 validators 包的 ContractValidator，支持全部 7 种验证器类型。
+        委托给注入的 ``ContractValidator`` 实例，支持全部 7 种验证器类型。
         """
-        from .validators import ContractValidator
-
-        validator = ContractValidator()
-        results = await validator.validate_all(stage.validators)
+        results = await self._validator.validate_all(stage.validators)
         return [r.message for r in results if not r.passed]
 
     # ── 错误处理 ──────────────────────────────────────────────────
