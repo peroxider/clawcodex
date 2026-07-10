@@ -63,6 +63,34 @@ _DESTRUCTIVE_PATTERNS: list[_DestructivePattern] = [
     # Infrastructure
     (re.compile(r"\bkubectl\s+delete\b"), "Note: may delete Kubernetes resources"),
     (re.compile(r"\bterraform\s+destroy\b"), "Note: may destroy Terraform infrastructure"),
+    # ---------------------------------------------------------------------------
+    # F-107: PowerShell-specific destructive patterns
+    # ---------------------------------------------------------------------------
+    # File deletion
+    (
+        re.compile(r"\bremove-item\b.*-(recurse|r)\b.*-(force|f)\b", re.IGNORECASE),
+        "Note: may recursively force-remove files",
+    ),
+    (
+        re.compile(r"\bremove-item\b.*-(force|f)\b.*-(recurse|r)\b", re.IGNORECASE),
+        "Note: may recursively force-remove files",
+    ),
+    (re.compile(r"\bclear-disk\b", re.IGNORECASE), "Note: may erase disk contents"),
+    (re.compile(r"\bformat-volume\b", re.IGNORECASE), "Note: may format a volume"),
+    # Privilege escalation / arbitrary execution
+    (
+        re.compile(r"\bstart-process\b.*-verb\s+runas\b", re.IGNORECASE),
+        "Note: may run with elevated privileges",
+    ),
+    (
+        re.compile(r"\binvoke-expression\b|\biex\b", re.IGNORECASE),
+        "Note: may execute arbitrary code",
+    ),
+    # Safety bypass
+    (
+        re.compile(r"\bset-executionpolicy\b.*-(executionpolicy\s+)?(unrestricted|bypass|remoteSigned)", re.IGNORECASE),
+        "Note: may weaken script execution policy",
+    ),
 ]
 
 

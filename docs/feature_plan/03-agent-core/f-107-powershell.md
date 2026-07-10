@@ -1,6 +1,6 @@
 # F-107: PowerShell 支持增强
 
-> 状态: ✅ 核心已完成（含已知待完善项）
+> 状态: ✅ 已完成
 > 章节: docs/feature_plan/03-agent-core/f-107-powershell.md
 > 最后更新: 2026-07-10
 
@@ -51,13 +51,12 @@
 - [x] F: `powershell_security.py` 启发式安全分析
 - [x] G: Skill frontmatter `shell: powershell` 透传到 BashTool
 - [x] 测试覆盖：Windows 自动 shell 选择、PowerShell 权限分派不崩溃
+- [x] 测试覆盖：PowerShell 搜索/只读/语义/安全/破坏性提示细粒度单元测试
+- [x] PowerShell 破坏性命令提示（`destructive_warnings.py`）
 
 ## §2.1 已知待完善项
 
-1. `destructive_warnings.py` 当前只有 POSIX 正则，未针对 PowerShell cmdlet 提供额外提示（安全分析 `PWSHSafetyLevel.destructive` 已覆盖破坏性判定，此处为可选增强）。
-2. PowerShell 搜索/只读/语义/安全分析的细粒度单元测试尚不完整，建议后续补充。
-3. 在 POSIX 环境且 `pwsh` 不在 PATH 时，显式 `shell="powershell"` 会降级为 bash 并输出 warning；Windows 真机验证仍是最终验收步骤。
-4. `tests/skills/test_skills_shell_exec.py` 曾因 `_skill_registry` 随技能系统重构迁移到 `clawcodex_ext.skills.loader` 而导入失败，已修复。
+1. 在 POSIX 环境且 `pwsh` 不在 PATH 时，显式 `shell="powershell"` 会降级为 bash 并输出 warning；Windows 真机验证仍是最终验收步骤。
 
 ## §3 实施细节
 
@@ -72,6 +71,7 @@
 | 5 | `Remove-Item -Recurse -Force` 标记为 destructive | ✅ | `powershell_security.py:analyze_powershell_safety` |
 | 6 | 技能 frontmatter `shell: powershell` 实际生效 | ✅ | `clawcodex_ext/tool_system/tools/skill.py:_make_shell_executor` 透传 `shell` |
 | 7 | hooks + BashTool 共用 `shell_resolver.py` | ✅ | hooks 通过 `shell_invocation.py` re-export 引用同一实现 |
+| 8 | PowerShell cmdlet 破坏性操作提示 | ✅ | `clawcodex_ext/tool_system/tools/bash/destructive_warnings.py` |
 
 ### 3.2 实现位置速查
 
