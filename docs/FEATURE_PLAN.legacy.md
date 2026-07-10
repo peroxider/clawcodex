@@ -1734,9 +1734,9 @@ Phase 3 (2-3d): [F] 安全分析 ──→ [G] 技能传播
 | `clawcodex_ext/hooks/shell_invocation.py` | P107-H | 降级为 `shell_resolver.py` 的 re-export 或删除 |
 
 
-### 2.20 Freeze Detection & Auto-Recovery（F-108 📋）
+### 2.20 Freeze Detection & Auto-Recovery（F-108 ✅）
 
-**状态**: 📋 规划中 | **优先级**: P0 | **登记日期**: 2026-06-23
+**状态**: ✅ 已完成 | **优先级**: P0 | **登记日期**: 2026-06-23 | **完成日期**: 2026-07-10
 
 **目标**: 系统性解决 clawcodex 偶发软件卡死与 LLM 对话卡死问题。全链路代码审计发现 8 个卡死风险点（2 CRITICAL + 3 HIGH + 2 MEDIUM + 1 LOW），采用四层混合方案（Layer 0 快速修复 + Layer 1 冻结检测 + Layer 2 硬超时 + Layer 3 自动恢复 + Layer 4 诊断命令），确保用户在卡死发生后 < 30s 内自动恢复或收到明确诊断。
 

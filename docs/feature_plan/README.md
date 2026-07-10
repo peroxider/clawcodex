@@ -46,7 +46,7 @@ docs/feature_plan/
 |----------|------|:----:|---------|
 | F-10 | ExecuteExtraTool 延迟工具系统 | 📋 | [f-10-extratool.md](03-agent-core/f-10-extratool.md) |
 | F-107 | PowerShell 支持增强 | 📋 | [f-107-powershell.md](03-agent-core/f-107-powershell.md) |
-| F-108 | Freeze Detection & Auto-Recovery | 📋 | [f-108-freeze-detection.md](03-agent-core/f-108-freeze-detection.md) |
+| F-108 | Freeze Detection & Auto-Recovery | ✅ | [f-108-freeze-detection.md](03-agent-core/f-108-freeze-detection.md) |
 | F-119 | System Prompt 段落拼装与自迭代基础设施 | 📋 | [f-119-prompt-assembly.md](03-agent-core/f-119-prompt-assembly.md) |
 
 ### CLI 与配置系统

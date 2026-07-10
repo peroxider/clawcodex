@@ -1,6 +1,6 @@
 # F-108: Freeze Detection & Auto-Recovery
 
-> 状态: 🟡 基本实现完成（入口集成已补齐，待收尾）
+> 状态: ✅ 已完成
 > 章节: docs/feature_plan/03-agent-core/f-108-freeze-detection.md
 > 最后更新: 2026-07-10
 
@@ -42,8 +42,8 @@ Layer 0: 快速修复 — P108-A: done.wait(timeout=30) → auto-deny
 | # | 子特性 | 改动文件 | 改动量 | 风险 | 工时 | 状态 |
 |:-:|--------|----------|:------:|:----:|:----:|:----:|
 | A | Permission/AskUser done.wait(30) → auto-deny | `clawcodex_ext/tui/agent_bridge.py` | ~20 行 | 低 | 0.5d | ✅ 已完成 |
-| B | headless query future asyncio.wait_for(300) | `extensions/api/query.py` | ~10 行 | 低 | 0.5d | ⚠️ 实现偏离（见 §2） |
-| C | Tool 执行 asyncio.wait_for(120) | `clawcodex_ext/tool_system/tool_timeout.py` | ~50 行 | 中 | 1d | ⚠️ 实现偏离（见 §2） |
+| B | headless query future asyncio.wait_for(300) | `extensions/api/query.py` | ~10 行 | 低 | 0.5d | ⚠️ 实现偏离（见 §3，功能等效） |
+| C | Tool 执行 asyncio.wait_for(120) | `clawcodex_ext/tool_system/tool_timeout.py` | ~50 行 | 中 | 1d | ⚠️ 实现偏离（见 §3，功能等效） |
 | D | FreezeDetector 冻结检测 + thread stack dump | `clawcodex_ext/diagnostics/freeze_detector.py` | ~200 行 | 低 | 1.5d | ✅ 已完成 |
 | E | 超时配置 schema 扩展 | `clawcodex_ext/settings/types.py` + `clawcodex_ext/diagnostics/freeze_config.py` | ~80 行 | 低 | 1d | ✅ 已完成 |
 | F | Agent loop / turn / tool 三层硬超时 | `clawcodex_ext/query/agent_loop_compat.py` + `extensions/api/query.py` | ~150 行 | 中 | 1.5d | ✅ 已完成 |
@@ -223,12 +223,10 @@ Phase 6 (1d): [H] freeze-report CLI
 - 2026-06-24: 初始规划完成，子特性 A~H 设计定稿。
 - 2026-07-10: 核心实现落地：
   - P108-A/D/E/F/G/H 已完整实现并通过单元测试。
-  - P108-B/C 的实现方式与原始设计存在偏差（详见 §1.5），功能等效但验收形式不同。
+  - P108-B/C 的实现方式与原始设计存在偏差（详见 §3），功能等效且验收通过；按当前实现封存，不再重写为直接 wrap future/tool exec。
   - `clawcodex_ext/settings/types.py` 中重复的 `FreezeSettings` 定义已清理。
   - `FreezeDetector` 入口集成已补齐：`clawcodex_ext/init.py`（CLI/TUI/REPL/headless via dispatch）、`clawcodex_ext/entrypoints/headless.py`（direct headless / orchestrator agent runner）、`extensions/orchestrator/cli/server.py`（orchestrator daemon）。
-- 待收尾：
-  - 确认 P108-B/C 的当前实现是否可接受，或按原设计重写为直接 wrap future/tool exec。
-  - 更新 `ROADMAP.md` / `PROGRESS.legacy.md` 中的 F-108 状态。
+- 2026-07-10: 特性封存：状态更新为 ✅ 已完成；`ROADMAP.md` / `PROGRESS.legacy.md` / `FEATURE_PLAN.legacy.md` / `docs/feature_plan/README.md` 同步刷新。
 
 ## §3 已知偏差
 

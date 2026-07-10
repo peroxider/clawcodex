@@ -207,7 +207,7 @@
 | F-101 | Media Generation Provider Abstraction + Agnes AI | P2 | ✅ 已完成（2026-06-22） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-102 | Agent Loop Hook 扩展点增强 | P1 | 📋 设计完成 | 5 子特性 P102-A~E：pre-LLM 钩子/恢复策略注册表/outbox 类型化/formal registry/turn 回调。总预计 9-15 天。详见 §十五。 |
 | F-107 | PowerShell 支持增强 | P2 | 📋 设计完成 | 8 子特性 P107-A~H：工具 schema 扩展/进程启动适配/命令分类/安全分析/技能传播。总预计 6-8 天。详见 §十七。 |
-| F-108 | Freeze Detection & Auto-Recovery | P0 | 📋 设计完成 | 8 子特性 P108-A~H：四层混合方案（Layer0 快速修复 + Layer1 冻结检测 + Layer2 硬超时 + Layer3 自动恢复 + Layer4 诊断命令）。总预计 7 天。详见 §十八。 |
+| F-108 | Freeze Detection & Auto-Recovery | P0 | ✅ 已完成 | 8 子特性 P108-A~H：四层混合方案（Layer0 快速修复 + Layer1 冻结检测 + Layer2 硬超时 + Layer3 自动恢复 + Layer4 诊断命令）。总预计 7 天。详见 §十八。 |
 | F-105 / F-106 | Agent 执行性能优化 | P0 / P1 | ✅ F-105 已完成 / ✅ F-106 已完成 | `_should_continue` 轮询缓存 + 懒压缩管线门控已落地。剩余 P1-P3 优化项（A~O）待跟进。详见 FEATURE_PLAN.md §十一。详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 
 

@@ -47,10 +47,6 @@ if TYPE_CHECKING:
 #
 # Set to ``0`` to disable the timeout (F-108 §十八 design decision #5:
 # every Layer-2 budget has a ``0`` escape hatch).
-#
-# TODO(F-108 P108-E): plumb this through ``AgentConfig.freeze.agent_loop_timeout_s``
-# so the value is configurable per-run instead of being hard-coded.
-# Now plumbed via QueryConfig.timeout_s (agent_runner passes run_timeout_ms / 1000).
 
 
 @dataclass
