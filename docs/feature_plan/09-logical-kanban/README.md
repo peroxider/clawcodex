@@ -6,15 +6,11 @@ Important integration decision: LKB is an agent-loop todo/task enhancement layer
 
 ## Remaining Feature Map
 
-以下特性已在代码中完全实现，需求文档已删除：F-126 ~ F-144, F-148 ~ F-150。当前目录仅保留尚未实现的特性。
+以下特性已在代码中完全实现，需求文档已删除：F-126 ~ F-144, F-148 ~ F-150, F-151 ~ F-153, F-155。当前目录仅保留尚未完全实现的特性。
 
 | ID | Requirement | Primary Area | Source Chapters | Status |
 | --- | --- | --- | --- | --- |
-| F-151 | Prompt-Integrated Method Reuse | inject method library summary into system prompt; guide LLM to reuse templates | 5, 10, 17 | ✅ 已实现 |
-| F-152 | Bounded Scheduling Solver (OR-Tools CP-SAT) | closed scheduling sub-problem solving with resource constraints and time windows | 5, 10, 17 | ✅ 已实现 |
-| F-153 | Method Library Growth & Governance | save-as-method workflow, version management, approval CLI, coverage metrics | 5, 10, 17 | ✅ 已实现 |
-| F-154 | External Configuration Import | import domain ontology / operation schema / method library from external files | 5, 10, 17 | ✅ 已实现 |
-| F-155 | Acceptance Template Registry | elevate `AcceptanceTemplate` to top-level concept; standalone registry with governance | 5, 10, 17 | ✅ 已实现 |
+| F-154 | External Configuration Import | import domain ontology / operation schema / method library from external files | 5, 10, 17 | ⚠️ 核心代码已实现，缺用户指南文档和测试覆盖率（15/40） |
 
 ## Architectural Placement
 
