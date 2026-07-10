@@ -6,11 +6,7 @@ Important integration decision: LKB is an agent-loop todo/task enhancement layer
 
 ## Remaining Feature Map
 
-以下特性已在代码中完全实现，需求文档已删除：F-126 ~ F-144, F-148 ~ F-150, F-151 ~ F-153, F-155。当前目录仅保留尚未完全实现的特性。
-
-| ID | Requirement | Primary Area | Source Chapters | Status |
-| --- | --- | --- | --- | --- |
-| F-154 | External Configuration Import | import domain ontology / operation schema / method library from external files | 5, 10, 17 | ⚠️ 核心代码已实现，缺用户指南文档和测试覆盖率（15/40） |
+以下特性已在代码中完全实现，需求文档已删除：F-126 ~ F-144, F-148 ~ F-155。当前目录已无保留规划文档，所有 Logical Kanban 特性均已实现。
 
 ## Architectural Placement
 
