@@ -358,13 +358,13 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | AR-F-85 | Templates 模板系统 | 模板定义与实例化 | 用户可基于模板快速创建 Agent 配置 | ⏳ 待开始 → F-85 | py 模板系统 |
 | AR-F-70 | Plugin 插件系统 | BasePlugin 协议 + 注册表/加载器 + 生命周期管理（on_load/on_unload/on_enable/on_disable）+ 子进程沙箱隔离（网络限制/操作白名单）+ PluginManager CLI | 用户可安装和管理插件扩展能力 | 🟡 进行中 → F-70（P70-A~D 2026-06-28 PR #35 合入；P70-B 发现目录扫描 + P70-E plugin.yaml 清单待补） | `src/plugins/` 8 文件 1,070 行 + `tests/plugin/` 792 行 |
 
-### 4.2 IR-6 Agent Dashboard 跨系统统一看板（→ FEATURE_PLAN §08-agent-dashboard/f-120）
+### 4.2 IR-6 Agent Dashboard 跨系统统一看板（→ 源码 `extensions/capabilities/dashboard_entry.py` + `extensions/agent_dashboard/`）
 
 让用户、Agent（模型）、Operator 通过统一的视图查看当前所有 agent loop 相关的任务执行进度。
 
 **核心定位**：数据聚合层 + 契约接口，**不做独立渲染**。渲染由已有消费端（TUI `/dashboard` 命令、Visualizer Web UI、Model Tools）各自完成。
 
-#### SR-6.1 跨系统聚合 Dashboard（→ FEATURE_PLAN f-120-agent-dashboard.md）
+#### SR-6.1 跨系统聚合 Dashboard（→ 源码 `extensions/agent_dashboard/store.py` 与 `sources/`）
 
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 开发工时 | 交付件 |
 |---------|---------|----------------|--------------------|----------|----------|--------|

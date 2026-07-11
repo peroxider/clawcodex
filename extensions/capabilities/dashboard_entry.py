@@ -13,8 +13,11 @@ Design rules followed here:
     with concrete sources from ``extensions/agent_dashboard/`` and
     ``extensions/orchestrator/``, but this module stays clean.
 
-See ``docs/feature_plan/08-agent-dashboard/f-120-agent-dashboard.md``
-§2 for the data model rationale and §3 for source-adapter responsibilities.
+The data model rationale (per-source TTL, sink fan-out, NDJSON archive,
+read-only invariant) lives next to the implementation in
+``extensions/agent_dashboard/store.py:1-31``. Source-adapter contracts
+are documented at the call sites — see ``goal_source.py`` / ``tasks_source.py``
+/ ``orchestrator_source.py`` / ``sop_source.py``.
 """
 
 from __future__ import annotations

@@ -16,7 +16,6 @@ docs/feature_plan/
 ├── 05-cron-system/                    ← Cron 系统
 ├── 06-ccb-benchmark/                  ← CCB 对标
 ├── 07-cli-config/                    ← CLI 与配置系统
-├── 08-agent-dashboard/                ← Agent Dashboard 跨系统聚合
 └── ../decoupling/                     ← 三层解耦方案与 P3 整改记录（独立规划）
 ```
 
@@ -54,12 +53,6 @@ docs/feature_plan/
 |----------|------|:----:|---------|
 | F-46 | permission_mode 正交拆分 | 🔄 | [f-46-permission-split.md](07-cli-config/f-46-permission-split.md) |
 | F-53 | Tool 自动暴露为 CLI 斜杠命令 | 📋 | [f-53-tool-to-cli.md](07-cli-config/f-53-tool-to-cli.md) |
-
-### Agent Dashboard
-
-| F-Number | 名称 | 状态 | 章节路径 |
-|----------|------|:----:|---------|
-| F-120 | Agent Dashboard — 跨系统任务进度统一看板 | 📋 | [f-120-agent-dashboard.md](08-agent-dashboard/f-120-agent-dashboard.md) |
 
 ### Architecture & SDK 下沉
 
@@ -122,3 +115,4 @@ docs/feature_plan/
 | 2026-07-07 | 删除 F-102 已完成特性规划文档(代码确认 P102-A~E 全部落地, 3 新建+9 修改文件, 稳定性门禁通过) | 代码确认特性已全部实现，移除已完成的规范文档 |
 | 2026-07-07 | 删除 F-89 @agent-name 和 F-100 Dreaming 已完成特性规划文档 | 代码确认五入口统一 + Phase B 30min TTL 增强已全部落地；F-89 9 测试用例/F-100 109 单测+6 E2E 全绿 |
 | 2026-07-10 | 删除 F-108 已完成特性规划文档 | F-108 P108-A~H 四层方案全部实现，单元测试与稳定性门禁通过，verification agent 复核 PASS |
+| 2026-07-11 | 删除 F-120 已完成特性规划文档 | F-120 Agent Dashboard 全部 6 个 Phase 完成（124 tests，commit 3639db2b 补齐三个缺口），移除 08-agent-dashboard 章节与 F-120 表行；SOP source 接入点改由 `extensions/agent_dashboard/sources/sop_source.py` 顶部 docstring 记录 |
