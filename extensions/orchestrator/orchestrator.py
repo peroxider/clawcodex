@@ -243,6 +243,13 @@ class Orchestrator:
 
         self.status_dashboard = status_dashboard or StatusDashboard()
         self._agent_config = workflow.agent
+        # F-??? IM-side channel adapter (e.g. FeishuAppChannelAdapter). When
+        # set, :meth:`_build_session_sink` attaches a
+        # :class:`FeishuActivitySink` so the bot's reactions + placeholder
+        # progress card track the agent lifecycle for users on IM. None
+        # → activity sink disabled (default; not every deployment has an IM
+        # channel even if ``im_event_deliver`` is wired).
+        self.im_channel_adapter: Any = None
         self._validate_workspace_strategy()
         self.git_sync = GitSyncService(
             tracker,
@@ -375,6 +382,37 @@ class Orchestrator:
                     payload=self._issue_payload_for_task_id(task_id),
                 )
             )
+        # F-??? IM-side activity sink: when ``im_channel_adapter`` is a
+        # real Feishu adapter (i.e. exposes ``set_reaction`` /
+        # ``update_progress_card`` / ``send_placeholder_card``), attach a
+        # :class:`FeishuActivitySink` so the user's inbound message gets a
+        # 👀 reaction and a placeholder card streams phase progress. Uses
+        # duck-typed ``hasattr`` to avoid a hard import (other channels
+        # — Slack, Discord — could satisfy the same shape later).
+        im_adapter = getattr(self, "im_channel_adapter", None)
+        if im_adapter is not None and all(
+            hasattr(im_adapter, name)
+            for name in (
+                "set_reaction",
+                "update_progress_card",
+                "send_placeholder_card",
+            )
+        ):
+            from .feishu_activity_sink import FeishuActivitySink
+
+            phases_total = (
+                len(self.workflow.agent.phases)
+                if getattr(self.workflow.agent, "phases", None)
+                else None
+            )
+            activity_sink = FeishuActivitySink(
+                task_id=task_id,
+                feishu_adapter=im_adapter,
+                clock=time.time,
+                status_dashboard=self.status_dashboard,
+                phases_total=phases_total,
+            )
+            composite.add(activity_sink)
         return composite
 
     def _emit_im_event(

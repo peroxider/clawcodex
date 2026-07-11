@@ -11,7 +11,7 @@ import logging
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +97,32 @@ class StatusDashboard:
         self._last_rendered_at: float = 0.0
         self._pending_lines: list[str] = []
         self._last_snapshot_fingerprint: str = ""
+        # F-??? session-start listeners: external sinks (e.g. the Feishu
+        # activity sink) can register a callback here without inheriting
+        # from or monkey-patching the dashboard. Listeners receive the
+        # :class:`SessionStatus` already populated by :meth:`on_session_start`.
+        # Failures in any listener are logged + skipped so they never
+        # break the dashboard update path.
+        self._session_start_listeners: list[Callable[[SessionStatus], None]] = []
+
+    def add_session_start_listener(
+        self,
+        listener: Callable[[SessionStatus], None],
+    ) -> Callable[[], None]:
+        """Register ``listener`` to fire after every ``on_session_start``.
+
+        Returns a remove-callable; callers should invoke it when the sink
+        is disposed so defunct listeners do not accumulate.
+        """
+        self._session_start_listeners.append(listener)
+
+        def _remove() -> None:
+            try:
+                self._session_start_listeners.remove(listener)
+            except ValueError:
+                pass
+
+        return _remove
 
     def on_session_start(self, session_status: SessionStatus) -> None:
         self._state.running[session_status.issue_id] = session_status
@@ -106,6 +132,13 @@ class StatusDashboard:
                 session_status.issue_identifier,
                 session_status.issue_id,
             )
+        for listener in list(self._session_start_listeners):
+            try:
+                listener(session_status)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "[dashboard] session_start listener failed: %s", exc
+                )
 
     def on_session_complete(self, issue_id: str) -> None:
         if issue_id in self._state.running:

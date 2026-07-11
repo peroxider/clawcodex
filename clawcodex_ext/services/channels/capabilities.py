@@ -35,6 +35,8 @@ class ChannelCapability(str, Enum):
     MEDIA_IMAGE = "media_image"
     MEDIA_FILE = "media_file"
     MEDIA_VIDEO = "media_video"
+    REACTION = "reaction"  # add_reaction / remove_reaction on inbound messages
+    CARD_UPDATE = "card_update"  # edit a previously-sent interactive card (progress bars)
 
 
 @dataclass(frozen=True)
@@ -126,6 +128,52 @@ class LoginManagedCapability(Protocol):
     channel_id: str
 
 
+@runtime_checkable
+class ReactionCapability(Protocol):
+    """Adapter declaring ``reaction`` can react to / un-react to inbound messages.
+
+    Used by the agent-activity sink to mark inbound messages with ``OnIt``
+    (👀) when work starts and replace it with ``OK`` / ``Cross`` etc. once
+    the session ends. Calling these on an adapter that did NOT declare
+    ``REACTION`` will fail closed via :meth:`ChannelAdapter.require_capability`.
+    """
+
+    channel_id: str
+
+    async def set_reaction(
+        self,
+        message_id: str,
+        emoji_type: str,
+        *,
+        remove: bool = False,
+    ) -> bool: ...
+
+
+@runtime_checkable
+class CardUpdateCapability(Protocol):
+    """Adapter declaring ``card_update`` can edit a previously-sent card.
+
+    Used by the agent-activity sink to stream progress into a placeholder
+    card the sink itself emitted via :meth:`send_placeholder_card`. The
+    returned message_id from the placeholder send is what later
+    ``update_card`` calls target.
+    """
+
+    channel_id: str
+
+    async def send_placeholder_card(
+        self,
+        chat_id: str,
+        card: dict,
+    ) -> str | None: ...
+
+    async def update_card(
+        self,
+        message_id: str,
+        card: dict,
+    ) -> bool: ...
+
+
 class ChannelAdapter(ABC):
     """Physical implementation boundary for a channel.
 
@@ -167,6 +215,7 @@ class ChannelAdapter(ABC):
 __all__ = [
     "CapabilityDescriptor",
     "CapabilityNotDeclaredError",
+    "CardUpdateCapability",
     "ChannelAdapter",
     "ChannelCapability",
     "ChannelCapabilitySet",
@@ -174,4 +223,5 @@ __all__ = [
     "InboundCapability",
     "LoginManagedCapability",
     "OutboundCapability",
+    "ReactionCapability",
 ]

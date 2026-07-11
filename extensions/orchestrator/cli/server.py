@@ -25,6 +25,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -827,6 +828,7 @@ def _mount_gateway_opt_in(
     enabled: bool = False,
     origin: str | None = None,
     sock: str | None = None,
+    feishu_adapter: Any | None = None,
 ):
     """Connect the orchestrator daemon to the IM gateway (opt-in via env).
 
@@ -1023,6 +1025,13 @@ def _mount_gateway_opt_in(
             self._im_gateway_heartbeat_task = getattr(wrapper, "_heartbeat_task", None)
             self.im_event_deliver = _sync_deliver
             self.im_event_channel = "wechat"
+            # F-??? Feishu activity-sink wiring: when the caller passes
+            # a FeishuAppChannelAdapter, propagate it through to the
+            # orchestrator so :meth:`Orchestrator._build_session_sink`
+            # can attach a :class:`FeishuActivitySink` per session. Stays
+            # a no-op when ``feishu_adapter`` is None.
+            if feishu_adapter is not None:
+                self.im_channel_adapter = feishu_adapter
             if hasattr(self, "_emit_im_event"):
                 from extensions.orchestrator.events import EventLevel
 

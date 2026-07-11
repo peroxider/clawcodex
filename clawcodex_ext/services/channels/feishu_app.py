@@ -61,6 +61,8 @@ _FEISHU_CAPABILITIES = ChannelCapabilitySet.of(
     ChannelCapability.INBOUND_POLLING,
     ChannelCapability.CONTEXT_REPLY,
     ChannelCapability.LOGIN_MANAGED,
+    ChannelCapability.REACTION,
+    ChannelCapability.CARD_UPDATE,
     descriptors={
         ChannelCapability.OUTBOUND_TEXT: CapabilityDescriptor(
             ChannelCapability.OUTBOUND_TEXT,
@@ -68,7 +70,15 @@ _FEISHU_CAPABILITIES = ChannelCapabilitySet.of(
             max_text_length=4000,
             requires_login=True,
             extra={"approval_cards": True},
-        )
+        ),
+        ChannelCapability.REACTION: CapabilityDescriptor(
+            ChannelCapability.REACTION,
+            requires_login=True,
+        ),
+        ChannelCapability.CARD_UPDATE: CapabilityDescriptor(
+            ChannelCapability.CARD_UPDATE,
+            requires_login=True,
+        ),
     },
 )
 
@@ -101,6 +111,14 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         self._last_sender: str | None = None
         self._last_inbound_at: float | None = None
         self._last_outbound_at: float | None = None
+        # F-??? activity-sink bookkeeping: record the most recent inbound
+        # message_id+chat_id so the agent-activity sink can react (👀) to it,
+        # and stash placeholder-card message_ids by task_id so we can stream
+        # progress into them later. Both are best-effort: if the SDK ever
+        # drops a message, the sink degrades silently.
+        self._last_inbound_message_id: str | None = None
+        self._last_inbound_chat_id: str | None = None
+        self._placeholder_message_ids: dict[str, str] = {}
         self.approval_manager = ApprovalCardManager(
             clock=self._clock,
             token_ttl_seconds=self._settings.action_token_ttl_seconds,
@@ -282,6 +300,7 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         if message is None:
             return
         self._remember_sender(message.context_token or message.from_user_id)
+        self._remember_inbound(inbound)
         self._last_inbound_at = self._clock()
         await self._emit_inbound(message)
 
@@ -334,6 +353,122 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         set_last_sender = getattr(self._sender_store, "set_feishu_last_sender", None)
         if callable(set_last_sender):
             set_last_sender(self.channel_id, sender)
+
+    def _remember_inbound(self, inbound: Any) -> None:
+        """Cache the most recent inbound message_id + chat_id.
+
+        The agent-activity sink reads these to react to the user's original
+        message (👀 while processing) and to target the placeholder card it
+        later sends. ``inbound`` is the raw SDK event object, so we do
+        duck-typed ``getattr`` reads — different SDK versions place these
+        fields under slightly different names.
+        """
+        message_id = getattr(inbound, "message_id", None) or getattr(
+            getattr(inbound, "event", None), "message_id", None
+        )
+        chat_id = (
+            getattr(inbound, "chat_id", None)
+            or getattr(inbound, "chat_id", None)
+            or getattr(getattr(inbound, "event", None), "chat_id", None)
+        )
+        # SDK message wrappers (MessageReceivedEvent) carry the chat under
+        # ``chat_id``; older shapes use ``chat.open_id``. Try both.
+        if not chat_id:
+            chat = getattr(inbound, "chat", None)
+            if chat is not None:
+                chat_id = getattr(chat, "chat_id", None) or getattr(chat, "open_id", None)
+        if message_id:
+            self._last_inbound_message_id = str(message_id)
+        if chat_id:
+            self._last_inbound_chat_id = str(chat_id)
+
+    # -- reaction / card-update capability (F-??? activity sink) ---------
+
+    async def set_reaction(
+        self,
+        message_id: str,
+        emoji_type: str,
+        *,
+        remove: bool = False,
+    ) -> bool:
+        """React to / un-react to an inbound message.
+
+        Feishu's :class:`lark_oapi.channel.FeishuChannel` does not expose a
+        first-class "bot typing" push, so the agent-activity sink uses
+        emoji reactions as the visible "in-flight" signal. ``emoji_type``
+        accepts Feishu message-reaction constants (``OnIt``, ``OK``,
+        ``Cross``, ``Typing`` …). All SDK calls are wrapped in
+        :func:`asyncio.to_thread` because ``add_reaction`` blocks the
+        running loop otherwise.
+        """
+        if self._channel is None or not message_id or not emoji_type:
+            return False
+        channel = self._channel
+        try:
+            if remove:
+                # SDK v1.7.0 lacks a public ``remove_reaction`` helper; the
+                # best we can do is add the follow-up emoji ("OK"/"Cross")
+                # which replaces the visual state for the user. Returning
+                # True here is intentional — there is nothing to remove.
+                return True
+            await asyncio.to_thread(channel.add_reaction, message_id, emoji_type)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "feishu set_reaction failed: message_id=%s emoji=%s err=%s",
+                message_id,
+                emoji_type,
+                exc,
+            )
+            return False
+
+    async def update_progress_card(self, message_id: str, card: dict) -> bool:
+        """Edit a previously-sent placeholder card (progress bars)."""
+        if self._channel is None or not message_id or not card:
+            return False
+        channel = self._channel
+        try:
+            await asyncio.to_thread(channel.update_card, message_id, card)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "feishu update_card failed: message_id=%s err=%s",
+                message_id,
+                exc,
+            )
+            return False
+
+    async def send_placeholder_card(self, chat_id: str, card: dict) -> str | None:
+        """Send the agent-activity placeholder card; return its message_id.
+
+        Reuses :meth:`_send_with_retry` so the activity sink benefits from
+        the same timeout / retry / error-category behaviour as ordinary
+        ``send()`` calls. Returns ``None`` if the send fails — the caller
+        (sink) treats this as a soft failure and skips subsequent
+        ``update_progress_card`` calls.
+        """
+        if not chat_id or not card:
+            return None
+        result = await self._send_with_retry(
+            chat_id,
+            {"card": card},
+            raw_extra={"placeholder_card": True},
+        )
+        if not result.ok:
+            return None
+        receipt = result.provider_receipt or ""
+        return receipt or None
+
+    def remember_placeholder_message_id(self, task_id: str, message_id: str | None) -> None:
+        """Record a placeholder card message_id so later updates can target it."""
+        if task_id and message_id:
+            self._placeholder_message_ids[task_id] = message_id
+
+    def forget_placeholder_message_id(self, task_id: str) -> None:
+        self._placeholder_message_ids.pop(task_id, None)
+
+    def placeholder_message_id(self, task_id: str) -> str | None:
+        return self._placeholder_message_ids.get(task_id)
 
     # -- outbound --------------------------------------------------------
 
