@@ -1,12 +1,11 @@
 """Tests for F-121 rule extraction, storage, and the orchestration hook.
 
 Phase 1:  extract, RuleStore, exact dedup, get_rules_path
-Phase 2:  RuleEmbedder (TF-IDF), semantic dedup+merge, score, prune
+Phase 2:  semantic dedup+merge (BatchedLLMJudge), score, prune
 """
 
 from __future__ import annotations
 
-import math
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -16,7 +15,6 @@ import yaml
 
 from extensions.orchestrator.rules_learner import (
     JudgeResult,
-    RuleEmbedder,
     RuleEngine,
     RuleStore,
     _infer_category,
@@ -333,54 +331,6 @@ class TestRuleStoreIO(unittest.TestCase):
 
 
 # ═══════════════════════════════════════════════════════════════════
-# RuleEmbedder (Phase 2)
-# ═══════════════════════════════════════════════════════════════════
-
-
-class TestRuleEmbedder(unittest.TestCase):
-    def test_embed_many_returns_correct_count(self) -> None:
-        e = RuleEmbedder()
-        vecs = e.embed_many(["hello world", "foo bar baz"])
-        self.assertEqual(len(vecs), 2)
-
-    def test_identical_texts_have_similarity_one(self) -> None:
-        e = RuleEmbedder()
-        vecs = e.embed_many(["use explicit exception types", "use explicit exception types"])
-        sim = RuleEmbedder.cosine_similarity(vecs[0], vecs[1])
-        self.assertAlmostEqual(sim, 1.0, places=6)
-
-    def test_orthogonal_texts_have_low_similarity(self) -> None:
-        e = RuleEmbedder()
-        vecs = e.embed_many(["use explicit exception types", "paint the wall blue"])
-        sim = RuleEmbedder.cosine_similarity(vecs[0], vecs[1])
-        self.assertLess(sim, 0.5)
-
-    def test_similar_phrasing_has_high_similarity(self) -> None:
-        e = RuleEmbedder()
-        vecs = e.embed_many(
-            [
-                "always specify the exception type when catching",
-                "you should specify the exception type in except blocks",
-            ]
-        )
-        sim = RuleEmbedder.cosine_similarity(vecs[0], vecs[1])
-        self.assertGreater(sim, 0.3)
-
-    def test_cosine_similarity_zero_for_empty_vector(self) -> None:
-        e = RuleEmbedder()
-        vecs = e.embed_many(["", "hello"])
-        sim = RuleEmbedder.cosine_similarity(vecs[0], vecs[1])
-        self.assertEqual(sim, 0.0)
-
-    def test_symmetry(self) -> None:
-        e = RuleEmbedder()
-        vecs = e.embed_many(["hello world", "world hello"])
-        sim_ab = RuleEmbedder.cosine_similarity(vecs[0], vecs[1])
-        sim_ba = RuleEmbedder.cosine_similarity(vecs[1], vecs[0])
-        self.assertAlmostEqual(sim_ab, sim_ba, places=10)
-
-
-# ═══════════════════════════════════════════════════════════════════
 # _merge_two_rules helper (Phase 2)
 # ═══════════════════════════════════════════════════════════════════
 
@@ -567,7 +517,7 @@ class TestRuleEngineDedupMerge(unittest.TestCase):
         self.assertEqual(len(merged), 1)
 
     def test_semantic_dedup_high_similarity_skips(self) -> None:
-        """Semantically similar rules with high word overlap are deduped."""
+        """Without LLM judge, all candidates become new rules (safe fallback)."""
         existing = [
             {
                 "summary": "Use explicit exception types when catching errors",
@@ -581,18 +531,14 @@ class TestRuleEngineDedupMerge(unittest.TestCase):
                 "body": "Always specify the exception type like ValueError instead of bare except",
             }
         ]
-        merged = RuleEngine._deduplicate_and_merge(
-            candidates,
-            existing,
-            similarity_threshold=0.50,
-            enhancement_threshold=0.30,
-        )
-        # Low thresholds guarantee the merge path is exercised
-        self.assertEqual(len(merged), 1)
-        self.assertGreaterEqual(merged[0]["support_count"], 2)
+        merged = RuleEngine._deduplicate_and_merge(candidates, existing)
+        # LLM 不可用时，不合并，追加为新规则
+        self.assertEqual(len(merged), 2)
+        # 现有规则的 support_count 保持不变
+        self.assertEqual(merged[0]["support_count"], 1)
 
     def test_semantic_merge_enhances(self) -> None:
-        """Partially similar rules are merged with enriched fields."""
+        """Without LLM judge, candidates are not merged (safe fallback)."""
         existing = [
             {
                 "summary": "Write unit tests for functions",
@@ -606,15 +552,10 @@ class TestRuleEngineDedupMerge(unittest.TestCase):
                 "body": "Add tests for all public functions in the test directory",
             }
         ]
-        merged = RuleEngine._deduplicate_and_merge(
-            candidates,
-            existing,
-            similarity_threshold=0.90,
-            enhancement_threshold=0.50,
-        )
-        # Lowered thresholds ensure merge path is exercised
-        self.assertEqual(len(merged), 1)
-        self.assertGreaterEqual(merged[0]["support_count"], 2)
+        merged = RuleEngine._deduplicate_and_merge(candidates, existing)
+        # LLM 不可用时，不合并，追加为新规则
+        self.assertEqual(len(merged), 2)
+        self.assertEqual(merged[0]["support_count"], 1)
 
     def test_low_similarity_adds_new_rule(self) -> None:
         """Completely different topics are added as new rules."""
@@ -629,12 +570,7 @@ class TestRuleEngineDedupMerge(unittest.TestCase):
                 "summary": "Paint kitchen walls with light blue color",
             }
         ]
-        merged = RuleEngine._deduplicate_and_merge(
-            candidates,
-            existing,
-            similarity_threshold=0.85,
-            enhancement_threshold=0.70,
-        )
+        merged = RuleEngine._deduplicate_and_merge(candidates, existing)
         self.assertEqual(len(merged), 2)
 
 
@@ -859,7 +795,7 @@ class TestRuleEngineApply(unittest.TestCase):
         reply1 = f"## Extracted Rules\n{reply1}\n"
         asyncio.run(self.engine.apply(reply1, self.rules_path, max_rules=3))
         data = RuleStore.load(self.rules_path)
-        # With TF-IDF, all 5 are semantically different → 5 candidates
+        # LLM unavailble → all new, 5 candidates, max_rules=3 → prune to 3
         # But max_rules=3 → prune to 3
         self.assertLessEqual(len(data["rules"]), 3)
 
@@ -1197,7 +1133,7 @@ class TestConflictDetection(unittest.TestCase):
         self.assertIn("_conflict_with_idx", merged[1])
 
     def test_dedup_merge_tfidf_fallback(self) -> None:
-        """无 _judge_results 时回退 TF-IDF 路径（非 LLM 场景）。"""
+        """无 _judge_results 时全部追加为 new（safe fallback）。"""
         candidates = [
             {"category": "code_style", "summary": "Use single quotes for strings in Python"},
         ]
@@ -1208,11 +1144,6 @@ class TestConflictDetection(unittest.TestCase):
                 "summary": "Prefer single quotes for strings in Python",
             },
         ]
-        merged = RuleEngine._deduplicate_and_merge(
-            candidates,
-            existing,
-            similarity_threshold=0.85,
-            enhancement_threshold=0.70,
-        )
-        # sim ≈ 0.75 → TF-IDF 合并为 1 条
-        self.assertEqual(len(merged), 1)
+        merged = RuleEngine._deduplicate_and_merge(candidates, existing)
+        # LLM 不可用时，不合并，追加为新规则
+        self.assertEqual(len(merged), 2)

@@ -385,7 +385,11 @@ def permission_mode_to_triple(
         "default": {"interactive": True, "default_decision": "ask", "audit_log": "minimal"},
         "plan": {"interactive": True, "default_decision": "ask", "audit_log": "minimal"},
         "acceptEdits": {"interactive": True, "default_decision": "allow", "audit_log": "minimal"},
-        "bypassPermissions": {"interactive": False, "default_decision": "allow", "audit_log": "minimal"},
+        "bypassPermissions": {
+            "interactive": False,
+            "default_decision": "allow",
+            "audit_log": "minimal",
+        },
         "dontAsk": {"interactive": False, "default_decision": "deny", "audit_log": "minimal"},
         "auto": {"interactive": False, "default_decision": "allow", "audit_log": "minimal"},
         "bubble": {"interactive": True, "default_decision": "ask", "audit_log": "minimal"},
@@ -393,7 +397,9 @@ def permission_mode_to_triple(
     defaults = mapping.get(mode, mapping["default"])
     result = {
         "interactive": interactive if interactive is not None else defaults["interactive"],
-        "default_decision": default_decision if default_decision is not None else defaults["default_decision"],
+        "default_decision": default_decision
+        if default_decision is not None
+        else defaults["default_decision"],
         "audit_log": audit_log if audit_log is not None else defaults["audit_log"],
     }
     if result["default_decision"] not in {"allow", "deny", "ask"}:
@@ -518,7 +524,7 @@ class VerificationConfig:
     regression_guard: bool = True
     # Explicit fallback command (overrides auto-detection). Runs from the
     # workspace root; non-zero exit = failing tests.
-    fallback_test_command: str = ''
+    fallback_test_command: str = ""
 
 
 @dataclass
@@ -873,8 +879,6 @@ class RulesConfig:
     enabled: bool = False
     path: str = ""
     max_rules: int = 20
-    similarity_threshold: float = 0.85
-    enhancement_threshold: float = 0.70
     min_confidence: str = "low"
 
 
@@ -1165,8 +1169,6 @@ class WorkflowConfig:
                 enabled=bool(rules_raw.get("enabled", False)),
                 path=str(rules_raw.get("path", "")).strip(),
                 max_rules=int(rules_raw.get("max_rules", 20)),
-                similarity_threshold=float(rules_raw.get("similarity_threshold", 0.85)),
-                enhancement_threshold=float(rules_raw.get("enhancement_threshold", 0.70)),
                 min_confidence=str(rules_raw.get("min_confidence", "low")).strip().lower(),
             ),
             review_feedback=ReviewFeedbackConfig(

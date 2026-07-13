@@ -100,21 +100,33 @@ def add_rules_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Path to WORKFLOW.md (optional auto-detection override)",
     )
 
-    # --- rules refresh ---
-    refresh_parser = rules_sub.add_parser(
-        "refresh",
-        help="[NOT IMPLEMENTED] Re-extract rules from previous follow-up transcripts",
-        description="NOT IMPLEMENTED — re-extraction from past sessions requires "
-        "the orchestrator daemon and will be available in a future release. "
-        "Rules are automatically extracted after each review follow-up completes "
-        "when ``rules.enabled=true`` in the workflow configuration.",
+    # --- rules extract ---
+    extract_parser = rules_sub.add_parser(
+        "extract",
+        help="Extract rules from PR review follow-up commits",
+        description="Scan workspace git history for review-followup commits "
+        "(containing review metadata in their message) and use LLM to extract "
+        "coding conventions from each commit's diff + review comment. "
+        "Idempotent: already-extracted commits are skipped.",
     )
-    refresh_parser.add_argument(
+    extract_parser.add_argument(
         "--workflow",
         type=str,
         default=None,
         metavar="PATH",
         help="Path to WORKFLOW.md (optional auto-detection override)",
+    )
+    extract_parser.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        metavar="N",
+        help="Max number of records to process (default: 10)",
+    )
+    extract_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Only scan, do not write rules or update tracker",
     )
 
     # --- rules stats ---
@@ -161,8 +173,8 @@ def run(args: argparse.Namespace) -> int:
         return _run_review(rules_path, args.id)
     elif cmd == "delete":
         return _run_delete(rules_path, args.id)
-    elif cmd == "refresh":
-        return _run_refresh(workflow_path, rules_path)
+    elif cmd == "extract":
+        return _run_extract(workflow_path, rules_path, args)
     elif cmd == "stats":
         return _run_stats(rules_path)
     else:
@@ -176,7 +188,7 @@ def run(args: argparse.Namespace) -> int:
 
 
 def _resolve_workflow_path(workflow_arg: str | None) -> str | None:
-    """Resolve the WORKFLOW.md path from CLI arg or cwd."""
+    """Resolve the WORKFLOW.md path from CLI arg, cwd, or daemon metadata."""
     if workflow_arg:
         p = Path(workflow_arg)
         if p.exists():
@@ -184,18 +196,23 @@ def _resolve_workflow_path(workflow_arg: str | None) -> str | None:
         print(f"Workflow file not found: {workflow_arg}", file=sys.stderr)
         return None
 
-    # Try default
+    # 1. Try WORKFLOW.md in CWD
     default = WorkflowLoader.default_path()
     if default.exists():
         return str(default.resolve())
 
-    # Try workspace_locator metadata
+    # 2. Try orchestrator daemon metadata (auto-discover running daemon)
     try:
-        from extensions.orchestrator.workspace_locator import get_workflow_path
+        import json
 
-        meta = get_workflow_path(workspace_arg=None)
-        if meta:
-            return str(Path(meta).resolve())
+        from extensions.orchestrator.workspace_locator import _find_latest_metadata
+
+        meta_file = _find_latest_metadata()
+        if meta_file:
+            data = json.loads(meta_file.read_text(encoding="utf-8"))
+            wf = data.get("workflow_path")
+            if wf and Path(wf).exists():
+                return str(Path(wf).resolve())
     except Exception:
         pass
 
@@ -266,13 +283,237 @@ def _run_delete(rules_path: str, rule_id: int) -> int:
     return 0
 
 
+def _run_extract(workflow_path: str, rules_path: str, args: argparse.Namespace) -> int:
+    """Extract rules from review-followup commits via LLM analysis."""
+    import asyncio
+
+    return asyncio.run(_run_extract_async(workflow_path, rules_path, args))
+
+
+async def _run_extract_async(workflow_path: str, rules_path: str, args: argparse.Namespace) -> int:
+    """Async body of ``extract`` command."""
+    import subprocess
+
+    from extensions.orchestrator.issue_registry import IssueRegistry
+    from extensions.orchestrator.rules_learner import (
+        BatchedLLMJudge,
+        ExtractTracker,
+        RuleEngine,
+        RuleStore,
+        _infer_category,
+    )
+
+    dry_run = getattr(args, "dry_run", False)
+    limit = getattr(args, "limit", 10)
+
+    # 1. Locate registry
+    config, _ = WorkflowLoader.load(workflow_path)
+    ws_root = getattr(config.workspace, "root", None)
+    if not ws_root:
+        print("No workspace.root in workflow config.", file=sys.stderr)
+        return 1
+    registry_path = Path(ws_root) / ".clawcodex_issue_registry.json"
+    if not registry_path.exists():
+        print(f"Registry not found at {registry_path}", file=sys.stderr)
+        return 1
+    registry = IssueRegistry(registry_path)
+
+    # 2. Find records with PRs
+    records = registry.iter_records_with_pr()
+    if not records:
+        print("No records with PRs found in registry.")
+        return 0
+
+    # 3. Load existing rules + tracker
+    tracker = ExtractTracker(rules_path)
+    processed = tracker.load()
+    existing_data = RuleStore.load(rules_path)
+    existing = existing_data.get("rules", [])
+
+    count = 0
+    for record in records[:limit]:
+        ws_path = record.workspace_path or ""
+        if not ws_path or not Path(ws_path).exists():
+            print(f"  ⏭️  {record.issue_identifier}: workspace not found, skip")
+            continue
+
+        repo = Path(ws_path)
+        pr_num = record.pr_number or ""
+        branch = record.branch_name or ""
+
+        # 4. Scan commits for review metadata
+        # Use ASCII record separator (\x1e) between commits and unit
+        # separator (\x1f) between SHA and body, so commit messages
+        # containing newlines or '---' don't break parsing.
+        try:
+            log_output = subprocess.run(
+                ["git", "log", branch, "--format=%H%x1f%B%x1e"],
+                capture_output=True,
+                text=True,
+                cwd=repo,
+                timeout=30,
+            )
+            if log_output.returncode != 0:
+                print(f"  ⏭️  {record.issue_identifier}: git log failed, skip")
+                continue
+        except Exception as exc:
+            print(f"  ⏭️  {record.issue_identifier}: {exc}, skip")
+            continue
+
+        commits = []
+        for entry in log_output.stdout.split("\x1e"):
+            if not entry.strip():
+                continue
+            parts = entry.split("\x1f", 1)
+            if len(parts) < 2:
+                continue
+            sha = parts[0].strip()
+            msg = parts[1].strip()
+            if "review-pr:" in msg and sha not in processed:
+                commits.append((sha, msg))
+
+        if not commits:
+            print(f"  ⏭️  {record.issue_identifier}: no new review commits")
+            continue
+
+        print(f"\n  📦 {record.issue_identifier} (PR #{pr_num}, branch {branch}):")
+        for sha, msg in commits[:5]:
+            print(f"    commit {sha[:8]}: {msg.splitlines()[0][:60]}")
+            if dry_run:
+                processed.add(sha)
+                count += 1
+                continue
+
+            # 5. LLM analyze this commit
+            diff = subprocess.run(
+                ["git", "diff", f"{sha}^..{sha}", "--", "*.py"],
+                capture_output=True,
+                text=True,
+                cwd=repo,
+                timeout=30,
+            ).stdout[:4000]
+
+            # Extract review metadata from commit body
+            review_pr = ""
+            review_body = ""
+            for line in msg.splitlines():
+                if line.startswith("review-pr:"):
+                    review_pr = line.split(":", 1)[1].strip()
+                elif line.startswith("review-body:"):
+                    review_body = line.split(":", 1)[1].strip()
+
+            # 6. Build prompt for LLM
+            judge = BatchedLLMJudge()
+            judge_prompt = (
+                f"Analyze this PR review follow-up commit and extract a coding "
+                f"convention that should be followed going forward.\n\n"
+                f"Review (PR {review_pr}): {review_body}\n\n"
+                f"Code diff:\n```diff\n{diff}\n```\n\n"
+                f"Extract ONE coding convention from this review. "
+                f"Output it in this EXACT format:\n\n"
+                f"- [category] Short summary of the convention\n"
+                f"  Body: Detailed explanation with rationale. You MUST include this line.\n\n"
+                f"category MUST be one of:\n"
+                f'  naming          — e.g. "[naming] Use snake_case for function names"\n'
+                f'  error_handling  — e.g. "[error_handling] Catch specific exceptions, not bare except"\n'
+                f'  testing         — e.g. "[testing] Use pytest fixtures for shared setup"\n'
+                f'  import_style    — e.g. "[import_style] Group stdlib imports first"\n'
+                f'  code_style      — e.g. "[code_style] Use double quotes for string literals"\n'
+                f'  type_annotation — e.g. "[type_annotation] Add return type to public functions"\n'
+                f'  architecture    — e.g. "[architecture] Keep business logic out of route handlers"\n'
+                f'  boilerplate     — e.g. "[boilerplate] Every module starts with a license header"\n'
+                f'  security        — e.g. "[security] Never log API keys or tokens"\n'
+                f'  performance     — e.g. "[performance] Use generator expressions for large datasets"\n'
+                f"  other           — only if no category above fits\n\n"
+                f"The Body line is MANDATORY — explain WHY this convention matters "
+                f"and give a brief example."
+            )
+
+            try:
+                llm_reply = await judge._run_clawcodex(judge_prompt)
+            except Exception as exc:
+                print(f"    ⚠ LLM analysis failed: {exc}")
+                processed.add(sha)
+                count += 1
+                continue
+
+            if not llm_reply.strip():
+                print(f"    ⚠ LLM returned empty, record as processed")
+                processed.add(sha)
+                count += 1
+                continue
+
+            # 7. Parse and persist via RuleEngine
+            candidates = RuleEngine.extract(f"## Extracted Rules\n{llm_reply}")
+            if not candidates:
+                print(f"    ⚠ No rules extracted from LLM output, record as processed")
+                processed.add(sha)
+                count += 1
+                continue
+
+            source = f"PR #{pr_num} commit {sha[:8]}"
+            for c in candidates:
+                c["source"] = source
+                if not c.get("category") or c["category"] == "other":
+                    inferred = _infer_category(f"{c.get('summary', '')} {c.get('body', '')}")
+                    if inferred != "other":
+                        c["category"] = inferred
+
+            # LLM judge for semantic dedup / merge / conflict detection.
+            # Skipped when no existing rules (first extraction) — judge()
+            # would return all-NEW anyway. On failure, falls back to all-new.
+            judge_results = None
+            if existing:
+                try:
+                    judge_results = await judge.judge(candidates, existing)
+                except Exception as exc:
+                    print(f"    ⚠ LLM dedup judge failed ({exc}), using all-new fallback")
+
+            merged = RuleEngine._deduplicate_and_merge(
+                candidates,
+                existing,
+                _judge_results=judge_results,
+            )
+
+            # Assign IDs
+            for i, r in enumerate(merged, start=1):
+                r["id"] = i
+
+            # Backfill conflict references from index-based to ID-based
+            for r in merged:
+                conflict_idx = r.pop("_conflict_with_idx", None)
+                if conflict_idx is not None:
+                    if isinstance(conflict_idx, list):
+                        r["conflict_with"] = [merged[idx]["id"] for idx in conflict_idx]
+                    else:
+                        r["conflict_with"] = [merged[conflict_idx]["id"]]
+
+            merged = RuleEngine.prune(merged, max_rules=20)
+
+            # Save
+            RuleStore.save(rules_path, merged, version=existing_data.get("version", 1))
+            existing = merged
+            existing_data = {"version": existing_data.get("version", 1), "rules": merged}
+
+            processed.add(sha)
+            count += 1
+            print(f"    ✅ Extracted {len(candidates)} rule(s)")
+
+    # 8. Save tracker
+    if not dry_run and count > 0:
+        tracker.save(processed)
+
+    print(f"\nDone. Processed {count} commit(s).")
+    return 0
+
+
 def _run_refresh(workflow_path: str, rules_path: str) -> int:
+    """已废弃 — 使用 ``extract`` 替代。"""
     print(
-        "NOT IMPLEMENTED — re-extraction from past sessions requires "
-        "the orchestrator daemon and will be available in a future release.",
+        "`refresh` is deprecated. Use `clawcodex orchestrator rules extract` instead.",
         file=sys.stderr,
     )
-    return 0
+    return 1
 
 
 def _run_stats(rules_path: str) -> int:

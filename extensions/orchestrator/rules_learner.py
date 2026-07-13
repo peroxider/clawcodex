@@ -14,14 +14,14 @@ Phase 2 — intelligent processing:
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
-import math
 import re
-from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Literal
 
 import yaml
 
@@ -42,11 +42,41 @@ class JudgeResult:
     """当 action 为 duplicate/merge/conflict 时，指向 existing 中对应的索引。"""
 
 
-@runtime_checkable
-class RuleJudge(Protocol):
-    """批量判定 candidates 与 existing 的关系。"""
+# ---------------------------------------------------------------------------
+# ExtractTracker — 追踪已提取规则的 commit，保证幂等性
+# ---------------------------------------------------------------------------
 
-    async def judge(self, candidates: list[dict], existing: list[dict]) -> list[JudgeResult]: ...
+
+class ExtractTracker:
+    """管理 ``.clawcodex_extracted.json``，记录已提取的 commit SHA。
+
+    与 ``workflow.rules.yaml`` 同级存放，确保每次 ``extract``
+    命令不会重复提取同一个 commit。
+    """
+
+    FILENAME = ".clawcodex_extracted.json"
+
+    def __init__(self, rules_path: str) -> None:
+        self._path = Path(rules_path).parent / self.FILENAME
+
+    def load(self) -> set[str]:
+        """读取已处理的 commit SHA 集合。"""
+        if not self._path.exists():
+            return set()
+        try:
+            data = json.loads(self._path.read_text(encoding="utf-8"))
+            return set(data.get("processed_commits", []))
+        except Exception:
+            return set()
+
+    def save(self, processed: set[str]) -> None:
+        """写入已处理的 commit SHA 集合。"""
+        data = {
+            "version": 1,
+            "processed_commits": sorted(processed),
+            "last_extracted_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+        self._path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +85,12 @@ class RuleJudge(Protocol):
 
 
 class BatchedLLMJudge:
-    """使用 :func:`clawcodex_ext.llm.llm_complete` 做批量判定。"""
+    """通过子进程调用 `clawcodex-dev -p` 做批量判定。
+
+    复用与 `clawcodex-dev -p --provider --model` 完全相同的
+    provider/model 解析链路，确保 LLM judge 与编排器主线 agent
+    配置一致。
+    """
 
     _JUDGE_SYSTEM = (
         "You are a coding-convention analysis assistant. "
@@ -65,7 +100,8 @@ class BatchedLLMJudge:
         "existing rules.  Reply ONLY with the exact format shown."
     )
 
-    def __init__(self, model: str | None = None) -> None:
+    def __init__(self, provider_name: str | None = None, model: str | None = None) -> None:
+        self._provider_name = provider_name
         self._model = model
 
     async def judge(self, candidates: list[dict], existing: list[dict]) -> list[JudgeResult]:
@@ -73,10 +109,66 @@ class BatchedLLMJudge:
             return [JudgeResult(action="new") for _ in candidates]
 
         prompt = self._build_prompt(candidates, existing)
-        from clawcodex_ext.llm import llm_complete
-
-        reply = await llm_complete(prompt, system_prompt=self._JUDGE_SYSTEM, model=self._model)
+        # 将 system prompt 拼入 prompt 开头（-p 模式不支持 --system-prompt）
+        full_prompt = f"{self._JUDGE_SYSTEM}\n\n{prompt}"
+        reply = await self._run_clawcodex(full_prompt)
         return self._parse_reply(reply, len(candidates))
+
+    # ------------------------------------------------------------------
+    # Subprocess invocation
+    # ------------------------------------------------------------------
+
+    _NOISE_MARKER = "\nResume this session with:"
+
+    @staticmethod
+    def _resolve_clawcodex_dev() -> str:
+        """定位 clawcodex-dev 可执行文件。"""
+        import shutil
+        import sys
+        from pathlib import Path
+
+        exe = shutil.which("clawcodex-dev")
+        if exe:
+            return exe
+        # venv 回退：与当前 Python 同目录
+        return str(Path(sys.executable).parent / "clawcodex-dev")
+
+    async def _run_clawcodex(self, prompt: str) -> str:
+        """子进程执行 ``clawcodex-dev -p <prompt> --provider P --model M``。
+
+        解析 stdout 中的 LLM 回复，过滤尾部 ``Resume this session...`` 噪音。
+        """
+        exe = self._resolve_clawcodex_dev()
+        cmd = [exe, "-p", prompt]
+        if self._provider_name:
+            cmd.extend(["--provider", self._provider_name])
+        if self._model:
+            cmd.extend(["--model", self._model])
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        except asyncio.TimeoutError:
+            proc.kill()
+            raise RuntimeError("clawcodex-dev timed out after 120s")
+
+        if proc.returncode != 0:
+            stderr_text = stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(f"clawcodex-dev exited {proc.returncode}: {stderr_text}")
+
+        result = stdout.decode("utf-8", errors="replace").strip()
+
+        # 过滤尾部噪音："\nResume this session with: clawcodex --resume <id>"
+        noise_pos = result.find(self._NOISE_MARKER)
+        if noise_pos != -1:
+            result = result[:noise_pos].strip()
+
+        return result
 
     # ------------------------------------------------------------------
     # Prompt building
@@ -260,16 +352,6 @@ _W_CRITICALITY = 0.20
 
 
 # ---------------------------------------------------------------------------
-# Tokeniser
-# ---------------------------------------------------------------------------
-
-
-def _tokenize(text: str) -> list[str]:
-    """Lowercase word tokens (strips punctuation)."""
-    return re.findall(r"\w+", text.lower())
-
-
-# ---------------------------------------------------------------------------
 # RuleStore
 # ---------------------------------------------------------------------------
 
@@ -346,86 +428,6 @@ class RuleStore:
 
 
 # ---------------------------------------------------------------------------
-# RuleEmbedder — TF-IDF + cosine similarity (no external deps)
-# ---------------------------------------------------------------------------
-
-
-class RuleEmbedder:
-    """Phase 1 fallback text similarity using TF-IDF + cosine similarity.
-
-    This is a lightweight pure-Python implementation (no external
-    dependencies) intended as a Phase 1 fallback.  In Phase 3 this
-    should be replaced with a sentence-transformer model (e.g.
-    ``all-MiniLM-L6-v2``) for better semantic accuracy, with TF-IDF
-    retained as a fallback when the model is unavailable.
-
-    Builds a vocabulary from all input texts on each ``embed_many()``
-    call, so the caller should batch all texts that need to be compared.
-    """
-
-    def __init__(self) -> None:
-        self._vocab: dict[str, int] = {}
-        self._idf: dict[str, float] = {}
-        self._n_docs: int = 0
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
-    def embed_many(self, texts: list[str]) -> list[list[float]]:
-        """Vectorise a batch of texts.
-
-        Builds a joint vocabulary and IDF across the entire batch, then
-        returns a ``list[list[float]]`` where each inner list is the
-        TF-IDF vector for the corresponding text.
-        """
-        self._n_docs = len(texts)
-        self._build_vocab(texts)
-        return [self._vector(t) for t in texts]
-
-    @staticmethod
-    def cosine_similarity(a: list[float], b: list[float]) -> float:
-        """Cosine similarity between two vectors (0.0 – 1.0)."""
-        dot = sum(ai * bi for ai, bi in zip(a, b))
-        norm_a = math.sqrt(sum(ai * ai for ai in a))
-        norm_b = math.sqrt(sum(bi * bi for bi in b))
-        if norm_a == 0.0 or norm_b == 0.0:
-            return 0.0
-        return dot / (norm_a * norm_b)
-
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
-
-    def _build_vocab(self, texts: list[str]) -> None:
-        """Build vocabulary and compute IDF across all texts."""
-        doc_freq: Counter[str] = Counter()
-        all_tokens: set[str] = set()
-        for text in texts:
-            tokens = set(_tokenize(text))
-            doc_freq.update(tokens)
-            all_tokens.update(tokens)
-
-        self._vocab = {t: i for i, t in enumerate(sorted(all_tokens))}
-        n = self._n_docs or len(texts)
-        self._idf = {t: math.log((n + 1) / (doc_freq[t] + 1)) + 1.0 for t in all_tokens}
-
-    def _vector(self, text: str) -> list[float]:
-        """Compute the TF-IDF vector for one text against the current vocab."""
-        tokens = _tokenize(text)
-        if not tokens:
-            return [0.0] * len(self._vocab)
-        tf = Counter(tokens)
-        max_tf = float(max(tf.values()))
-        vec = [0.0] * len(self._vocab)
-        for token, count in tf.items():
-            if token in self._vocab:
-                tf_norm = 0.5 + 0.5 * (count / max_tf)
-                vec[self._vocab[token]] = tf_norm * self._idf.get(token, 1.0)
-        return vec
-
-
-# ---------------------------------------------------------------------------
 # RuleEngine
 # ---------------------------------------------------------------------------
 
@@ -433,9 +435,8 @@ class RuleEmbedder:
 class RuleEngine:
     """Rule extraction, deduplication, merge, quality scoring, pruning."""
 
-    def __init__(self, store: RuleStore | None = None, rule_judge: RuleJudge | None = None) -> None:
+    def __init__(self, store: RuleStore | None = None) -> None:
         self.store = store or RuleStore()
-        self._rule_judge = rule_judge
 
     # ------------------------------------------------------------------
     # Extraction
@@ -544,20 +545,14 @@ class RuleEngine:
     def _deduplicate_and_merge(
         candidates: list[dict],
         existing: list[dict],
-        similarity_threshold: float = 0.85,
-        enhancement_threshold: float = 0.70,
-        _conflict_pairs: set[tuple[int, int]] | None = None,
         _judge_results: list[JudgeResult] | None = None,
     ) -> list[dict]:
-        """Phase 2 semantic dedup + merge.
+        """Phase 2 dedup + merge.
 
         When ``_judge_results`` is provided (LLM path), its decisions
-        override the TF-IDF similarity-based branching.  Only the exact
-        dedup (same summary text) is kept as a fast path.
-
-        When ``_judge_results`` is ``None`` (TF-IDF fallback), the
-        original three-way threshold logic is used, and
-        ``_conflict_pairs`` are honoured for conflict marking.
+        override the default all-new behaviour.  Exact dedup (same
+        summary text, case-insensitive) is always applied as a fast
+        path regardless of the judge.
         """
         # --- fast path: exact dedup ---------------------------------------------------
         merged = list(existing)
@@ -585,56 +580,15 @@ class RuleEngine:
         if _judge_results is not None:
             return _apply_judge_results(merged, remaining, _judge_results, now)
 
-        # --- TF-IDF fallback path (original behaviour) ---------------------------------
-        existing_texts = [RuleEngine._rule_text(r) for r in merged]
-        candidate_texts = [RuleEngine._rule_text(c) for _, c in remaining]
-        all_texts = existing_texts + candidate_texts
-
-        embedder = RuleEmbedder()
-        vectors = embedder.embed_many(all_texts)
-        existing_vecs = vectors[: len(merged)]
-        candidate_vecs = vectors[len(merged) :]
-
-        conflict_pairs = _conflict_pairs or set()
+        # --- all-new fallback (LLM unavailable) ----------------------------------------
+        # 不做语义去重/合并/冲突检测，所有 candidate 作为新规则追加。
+        # max_rules + prune 会自动控制规则库大小，避免无限膨胀。
         next_id = len(merged) + 1
-        for ci, (oi, c) in enumerate(remaining):
-            c_vec = candidate_vecs[ci]
-            best_sim = 0.0
-            best_ei = -1
-            for ei, e_vec in enumerate(existing_vecs):
-                sim = RuleEmbedder.cosine_similarity(c_vec, e_vec)
-                if sim > best_sim:
-                    best_sim = sim
-                    best_ei = ei
-
-            if best_ei >= 0 and (oi, best_ei) in conflict_pairs:
-                # Confirmed conflict -> keep separate, mark with index refs
-                c["_conflict_with_idx"] = best_ei
-                merged[best_ei].setdefault("_conflict_with_idx", []).append(len(merged))
-                c["updated_at"] = now
-                merged.append(c)
-                existing_vecs.append(c_vec)
-            elif best_sim >= similarity_threshold:
-                # Duplicate — increment support_count on the closest existing rule
-                target = merged[best_ei]
-                target["support_count"] = target.get("support_count", 1) + 1
-                target["updated_at"] = now
-            elif best_sim >= enhancement_threshold:
-                # Merge — combine candidate into the closest existing rule
-                target = merged[best_ei]
-                merged_rule = _merge_two_rules(target, c)
-                merged[best_ei] = merged_rule
-                merged_text = RuleEngine._rule_text(merged_rule)
-                mvecs = embedder.embed_many([merged_text])
-                existing_vecs[best_ei] = mvecs[0]
-            else:
-                # New rule — append
-                c["id"] = next_id
-                next_id += 1
-                c["updated_at"] = now
-                merged.append(c)
-                existing_vecs.append(candidate_vecs[ci])
-
+        for _oi, c in remaining:
+            c["id"] = next_id
+            next_id += 1
+            c["updated_at"] = now
+            merged.append(c)
         return merged
 
     # ------------------------------------------------------------------
@@ -719,8 +673,6 @@ class RuleEngine:
         self,
         agent_reply: str,
         workflow_rules_path: str,
-        similarity_threshold: float = 0.85,
-        enhancement_threshold: float = 0.70,
         max_rules: int = 20,
         min_confidence: str | None = None,
         source: str = "",
@@ -754,21 +706,10 @@ class RuleEngine:
         existing_data = RuleStore.load(workflow_rules_path)
         existing = existing_data.get("rules", [])
 
-        # Phase 2.5: LLM batch judge (dedup + merge + conflict in one call)
-        judge_results: list[JudgeResult] | None = None
-        if self._rule_judge is not None:
-            try:
-                judge_results = await self._rule_judge.judge(candidates, existing)
-            except Exception as exc:
-                logger.warning("LLM judge failed, falling back to TF-IDF: %s", exc)
-                judge_results = None
-
         merged = self._deduplicate_and_merge(
             candidates,
             existing,
-            similarity_threshold=similarity_threshold,
-            enhancement_threshold=enhancement_threshold,
-            _judge_results=judge_results,
+            _judge_results=None,  # all-new fallback
         )
 
         # Assign/refresh sequential ids after dedup+merge

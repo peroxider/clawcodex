@@ -108,33 +108,6 @@ Feedback:
 {% endif %}   Body:
 {{ item.body | indent(3) }}
 {% endfor %}
-
---- Additional Instruction (F-121) ---
-After fixing all feedback items, review the feedback patterns you encountered.
-If you discover **generalizable conventions** that could prevent similar review
-issues in future runs (e.g. a naming pattern, an error-handling idiom, a test
-structure convention), output them at the end of your reply in EXACTLY this
-format (one entry per rule, no extra blank lines between entries):
-
-## Extracted Rules
-- [category] Short summary of the convention
-  Body: Detailed explanation with examples and rationale.
-
-`category` MUST be one of: naming, error_handling, testing, import_style,
-code_style, type_annotation, architecture, boilerplate, security,
-performance, other
-
-Examples (follow this structure exactly — square-bracket category, then
-summary on the same line, then an indented `Body:` line):
-- [code_style] Use double quotes for string literals
-  Body: The project uses double quotes ("...") for all string literals,
-  including CLI help text. Single quotes are flagged in review.
-- [error_handling] Catch specific exception types, never bare except
-  Body: Use `except ValueError:` not `except:` to avoid swallowing
-  KeyboardInterrupt and SystemExit.
-
-If no generalizable convention is found, omit the `## Extracted Rules`
-section entirely. Do not output an empty section header.
 """
 
 
@@ -242,10 +215,10 @@ class PromptBuilder:
             try:
                 missing_paths = check_issue_premise(issue_dict, ws_path)
             except Exception:  # premise checking must never break prompts
-                logger.debug('premise check failed', exc_info=True)
+                logger.debug("premise check failed", exc_info=True)
                 missing_paths = []
             if missing_paths:
-                rendered = f'{rendered}\n\n{build_premise_block(missing_paths)}'
+                rendered = f"{rendered}\n\n{build_premise_block(missing_paths)}"
 
         if previous_run_ids:
             sessions_home = Path.home() / ".clawcodex" / "sessions"
@@ -305,22 +278,7 @@ class PromptBuilder:
             )
 
         # F-121: rules file reference injection
-        if current:
-            config = current[0]
-            workflow_path = getattr(config, "source_path", None) or getattr(
-                config, "_source_path", None
-            )
-            rules_path = RuleEngine.get_rules_path(config, workflow_path)
-            if rules_path:
-                rendered = (
-                    f"{rendered}\n\n"
-                    f"---\n"
-                    f"\U0001f4d0 **Review conventions**: `{rules_path}`\n"
-                    f"The file contains illustrative conventions extracted from "
-                    f"previous PR reviews. Read it with `Read()` when relevant \u2014 "
-                    f"the rules are **reference examples**, not mandatory requirements.\n"
-                    f"---"
-                )
+        rendered = PromptBuilder._inject_rules_reference_from_store(rendered)
 
         # F-140: inject Task V2 / Logical Kanban guidance so orchestrator-launched
         # agents use the same task-loop discipline as interactive sessions.
@@ -336,6 +294,29 @@ class PromptBuilder:
     # between the system section and the issue section. The marker is
     # an HTML comment so it is invisible in Markdown rendering.
     USER_MESSAGE_MARKER = "<!-- === USER MESSAGE === -->"
+
+    # ------------------------------------------------------------------
+    # F-121: rules reference injection (shared by all prompt flows)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _inject_rules_reference(prompt: str, rules_path: str | None) -> str:
+        """Append a rules file reference line to *prompt* if *rules_path* is set.
+
+        The reference is deliberately a single line — the agent is expected
+        to ``Read()`` the file on demand (F-121 §1.2: "参考示例而非强制约束").
+        """
+        if not rules_path:
+            return prompt
+        return (
+            f"{prompt}\n\n"
+            f"---\n"
+            f"\U0001f4d0 **Review conventions**: `{rules_path}`\n"
+            f"The file contains illustrative conventions extracted from "
+            f"previous PR reviews. Read it with `Read()` when relevant \u2014 "
+            f"the rules are **reference examples**, not mandatory requirements.\n"
+            f"---"
+        )
 
     @staticmethod
     def render_parts(
@@ -493,10 +474,28 @@ class PromptBuilder:
             "feedback": feedback,
         }
         try:
-            return _jinja_env.from_string(_REVIEW_FEEDBACK_TEMPLATE).render(context).strip()
+            rendered = _jinja_env.from_string(_REVIEW_FEEDBACK_TEMPLATE).render(context).strip()
         except TemplateError as exc:
             logger.error("Review feedback template render error: %s", exc)
             return _DEFAULT_PROMPT
+
+        # F-121: inject rules reference
+        rendered = PromptBuilder._inject_rules_reference_from_store(rendered)
+        return rendered
+
+    @staticmethod
+    def _inject_rules_reference_from_store(prompt: str) -> str:
+        """Resolve rules path from WorkflowStore and inject reference."""
+        store = get_workflow_store()
+        current = store.current()
+        if not current:
+            return prompt
+        config = current[0]
+        workflow_path = getattr(config, "source_path", None) or getattr(
+            config, "_source_path", None
+        )
+        rules_path = RuleEngine.get_rules_path(config, workflow_path)
+        return PromptBuilder._inject_rules_reference(prompt, rules_path)
 
     @staticmethod
     def render_feedback_summary(
@@ -586,7 +585,7 @@ class PromptBuilder:
             else ""
         )
 
-        return (
+        prompt = (
             f"{hints_block}"
             f"Continuation guidance:\n\n"
             f"{python_constraint}"
@@ -599,6 +598,9 @@ class PromptBuilder:
             f"- Your FIRST action should be a Write or Edit to implement the feature.\n"
             f"{git_log_summary}"
         )
+        # F-121: inject rules reference on continuation turns
+        prompt = PromptBuilder._inject_rules_reference_from_store(prompt)
+        return prompt
 
     @staticmethod
     def build_clarification_context(
