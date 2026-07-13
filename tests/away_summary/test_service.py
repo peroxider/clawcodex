@@ -172,7 +172,8 @@ def test_fallback_summary_describes_exchanges_semantically() -> None:
     """The LLM-free fallback must read like a natural handoff, not a metadata dump.
 
     A user who types ``/recap`` after a short greeting exchange should see
-    one flowing sentence plus a few plain bullets without fixed labels.
+    one flowing sentence. When no files were touched and no tools were used,
+    the low-value next-step bullet ("Continue with hello") is omitted.
     """
     conv = Conversation()
     conv.messages = [
@@ -198,8 +199,8 @@ def test_fallback_summary_describes_exchanges_semantically() -> None:
     # No fixed labels.
     assert "Current state:" not in summary
     assert "Next step:" not in summary
-    # Bullets should use plain ASCII hyphens.
-    assert "\n- Continue with" in summary
+    # No low-value bullets when there are no files or tools to surface.
+    assert "\n- " not in summary
 
 
 def test_fallback_summary_lists_multiple_user_requests() -> None:
@@ -284,8 +285,8 @@ def test_fallback_summary_mentions_tools_used() -> None:
 
 
 def test_fallback_summary_omits_labels_without_tool_calls() -> None:
-    """Plain conversation (no tool_use blocks) should produce the sentence
-    summary plus a single next-step bullet, with no fixed labels."""
+    """Plain conversation (no tool_use blocks) should produce only the
+    sentence summary, with no fixed labels and no low-value next-step bullet."""
     from clawcodex_ext.away_summary.service import _fallback_summary
 
     conv = Conversation()
@@ -298,8 +299,8 @@ def test_fallback_summary_omits_labels_without_tool_calls() -> None:
     # Sentence summary still surfaces the exchange.
     assert "hello" in summary.lower()
     assert "working on" in summary.lower()
-    # A single next-step bullet, no fixed labels.
-    assert "\n- Continue with" in summary
+    # No bullets when there is nothing concrete to surface.
+    assert "\n- " not in summary
     assert "Current state:" not in summary
     assert "Next step:" not in summary
     assert "Files touched:" not in summary

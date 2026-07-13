@@ -522,9 +522,11 @@ def _fallback_summary(conversation: Any) -> str:
 
     Used when the model returned empty content or leaked chain-of-thought
     into ``content``. The output is a short handoff: one flowing sentence
-    that captures the goal and current state, followed by a few plain
-    bullets that surface whatever context matters most (files touched,
-    tools used, next step) without fixed labels.
+    that captures the goal and current state, optionally followed by a few
+    plain bullets that surface whatever context matters most (files touched,
+    tools used, next step). When no files were touched and no tools were
+    used, the bullets are skipped so a bare greeting doesn't end with a
+    low-value "Continue with hello" bullet.
     """
     messages = list(getattr(conversation, "messages", []) or [])
     is_zh = infer_response_language(conversation) == "Chinese"
@@ -594,6 +596,12 @@ def _fallback_bullets(
 
     Both English and Chinese sessions use the ASCII hyphen "-" as the
     bullet marker so the recap renders consistently as Markdown.
+
+    When no files were touched and no tools were used, the only
+    possible bullet would be "Continue with <last user message>". That
+    is low-value for short greetings (e.g. "hello" → "Continue with
+    hello"), so we omit the bullet list entirely in that case and let
+    the leading sentence carry the recap.
     """
     marker = "-"
     bullets: list[str] = []
@@ -608,7 +616,12 @@ def _fallback_bullets(
         extra = " …" if len(tool_actions) > 4 else ""
         bullets.append(f"{marker} {', '.join(unique_actions)}{extra}")
 
-    # Always add a next-step bullet so the user has something actionable.
+    if not bullets:
+        # Nothing concrete to surface; skip the generic next-step bullet.
+        return []
+
+    # Only add a next-step bullet when there is already something
+    # concrete (files or actions) to give it context.
     next_step = _leading_point(last_user, limit=60)
     if is_zh:
         bullets.append(f"{marker} 继续 {next_step}")
