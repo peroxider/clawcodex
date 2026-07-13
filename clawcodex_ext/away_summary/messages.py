@@ -46,4 +46,8 @@ def format_away_summary_for_display(message_or_text: Any) -> str:
     if text.startswith("[AWAY SUMMARY]"):
         parts = text.split("\n\n", 1)
         text = parts[1] if len(parts) > 1 else text
-    return "Recapitulate\n" + text.strip()
+    # Use a blank line after the prefix so Rich Markdown renders
+    # "Recapitulate" and the recap body as two distinct paragraphs.
+    # A single newline is folded into a space by Markdown, which is
+    # why the prefix and body were appearing on the same line.
+    return "Recapitulate\n\n" + text.strip()

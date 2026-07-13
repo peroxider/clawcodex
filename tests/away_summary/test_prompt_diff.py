@@ -20,7 +20,8 @@ def _conv_with_mixed_messages() -> Conversation:
 
 
 def test_manual_trigger_uses_strict_three_part_template() -> None:
-    """``/recap`` (manual) keeps the canonical 1-2 sentence + three-part shape."""
+    """``/recap`` (manual) keeps the goal+state+next-step guidance, but
+    forbids fixed labels so the model can phrase things naturally."""
     messages = build_summary_messages(
         _conv_with_mixed_messages(),
         max_input_tokens=4_000,
@@ -32,16 +33,21 @@ def test_manual_trigger_uses_strict_three_part_template() -> None:
     assert system == AWAY_SUMMARY_INSTRUCTIONS.format(
         language_instruction="MUST write the recap in natural English."
     )
-    assert "1-2 plain sentences" in system
+    # Relaxed from "1-2 plain sentences" to "1-2 short, flowing sentences"
+    assert "1-2 short, flowing sentences" in system
     assert "high-level goal" in system.lower()
-    assert "current task" in system.lower()
-    assert "next action" in system.lower()
-    assert "Return only the recap — 1-2 plain sentences, no markdown." in user
+    # Bullets are requested, but fixed labels are forbidden.
+    assert "bullet list" in system.lower()
+    assert 'fixed section labels' in system.lower()
+    assert "current state:" not in system.lower()
+    assert "next step:" not in system.lower()
+    assert "Return only the recap" in user
 
 
 def test_auto_trigger_uses_relaxed_three_sentence_template() -> None:
-    """The idle "while you were away" card allows 1-3 sentences and
-    explicitly invites weaving in session memory when supplied."""
+    """The idle "while you were away" card allows 1-3 flowing sentences plus
+    a short bullet list, and explicitly invites weaving in session memory
+    when supplied."""
     messages = build_summary_messages(
         _conv_with_mixed_messages(),
         max_input_tokens=4_000,
@@ -53,9 +59,14 @@ def test_auto_trigger_uses_relaxed_three_sentence_template() -> None:
     assert system == AWAY_SUMMARY_INSTRUCTIONS_AUTO.format(
         language_instruction="MUST write the recap in natural English."
     )
-    assert "1-3 plain sentences" in system
-    assert "60 words" in system.lower()  # relaxed vs manual's 40
+    assert "1-3 short, flowing sentences" in system
+    assert "80 words" in system.lower()
     assert "broader session memory" in system.lower()
+    # Bullets are requested, but fixed labels are forbidden.
+    assert "bullet list" in system.lower()
+    assert 'fixed section labels' in system.lower()
+    assert "current state:" not in system.lower()
+    assert "next step:" not in system.lower()
     # Three-part strict ordering must NOT be required for auto.
     assert "in this order" not in system.lower()
 

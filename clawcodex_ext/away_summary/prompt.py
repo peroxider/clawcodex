@@ -22,22 +22,32 @@ from clawcodex_ext.types.messages import NO_CONTENT_MESSAGE
 # Manual trigger: /recap command
 # ---------------------------------------------------------------------------
 
-AWAY_SUMMARY_INSTRUCTIONS = """The user stepped away from an interactive coding session and is coming back. Write a session recap for them.
+AWAY_SUMMARY_INSTRUCTIONS = """The user stepped away from an interactive coding session and is coming back. Write a brief, natural session recap.
 
 Format:
-- Exactly 1-2 plain sentences, no markdown.
-- Recap under 40 words (English) / 60 Chinese characters (中文).
-- No bullet lists, no headings, no bold, no asterisks.
+- 1-2 short, flowing sentences that name the high-level goal and where things stand.
+- Then add a short bullet list (1-3 items) with whatever context matters most: the most useful next action, files touched, tools used, or anything else the user needs to pick up quickly.
+- Use plain text only. Do NOT use fixed section labels (e.g. labels ending in a colon that name a category). Let the bullets speak for themselves.
+- No headings, no bold, no markdown beyond the bullet markers.
+- Under 60 words (English) / 90 Chinese characters (中文).
 
-Content (in this order):
-1. The high-level goal — what the user is building or debugging, NOT implementation details.
-2. The current task state — where they were last working.
-3. The single most useful next action they should take when they return.
+Content guidance (consider these dimensions, but do not label them):
+- High-level goal: what the user is building or debugging, NOT implementation details.
+- Where they left off: the last meaningful state.
+- The single most useful next action.
+- Files touched or tools used by the assistant, if any.
+
+Example:
+We're debugging why away-summary messages now render in white with less content compared to the earlier light-gray, fuller recaps. The assistant inspected tui/screens/repl.py and confirmed the muted style is still applied.
+- tui/screens/repl.py
+- Read(tui/screens/repl.py), Grep
+- Compare the fallback formatter against the earlier structured-label version.
 
 {language_instruction}
 
 Rules:
 - The recap MUST be written in the language specified above. Do not switch languages mid-recap.
+- The first sentence should sound like a handoff, not a status report.
 - Skip root-cause narrative, internal fix details, secondary to-dos, and em-dash tangents.
 - Do not mention that you are an AI.
 - Do NOT output any internal chain-of-thought, planning notes, or self-checks
@@ -55,22 +65,33 @@ Rules:
 # Auto trigger: idle 5-min "while you were away" card
 # ---------------------------------------------------------------------------
 
-AWAY_SUMMARY_INSTRUCTIONS_AUTO = """The user stepped away from an interactive coding session and is coming back. Write a short session recap for the "while you were away" card.
+AWAY_SUMMARY_INSTRUCTIONS_AUTO = """The user stepped away from an interactive coding session and is coming back. Write a brief, natural session recap for the "while you were away" card.
 
 Format:
-- Exactly 1-3 plain sentences, no markdown.
-- Recap under 60 words (English) / 90 Chinese characters (中文).
-- No bullet lists, no headings, no bold, no asterisks.
+- 1-3 short, flowing sentences that name the high-level goal and where things stand.
+- Then add a short bullet list (1-3 items) with whatever context matters most: the most useful next action, files touched, tools used, or anything else the user needs to pick up quickly.
+- Use plain text only. Do NOT use fixed section labels (e.g. labels ending in a colon that name a category). Let the bullets speak for themselves.
+- No headings, no bold, no markdown beyond the bullet markers.
+- Under 80 words (English) / 120 Chinese characters (中文).
 
-Content:
-- Lead with the high-level goal — what the user is building or debugging, NOT implementation details.
-- Then describe the most concrete next step the user should take when they return.
-- If a broader session memory block is provided below, you may weave in the long-running project context (the user's project, recent goals, open threads) so the recap reads like a project handoff rather than a status report.
+Content guidance (consider these dimensions, but do not label them):
+- High-level goal: what the user is building or debugging, NOT implementation details.
+- Where they left off: the last meaningful state.
+- The single most useful next action.
+- Files touched or tools used by the assistant, if any.
+- If a broader session memory block is provided below, you may weave in the long-running project context so the recap reads like a project handoff rather than a status report.
+
+Example:
+We're debugging why away-summary messages now render in white with less content compared to the earlier light-gray, fuller recaps. The assistant inspected tui/screens/repl.py and confirmed the muted style is still applied.
+- tui/screens/repl.py
+- Read(tui/screens/repl.py), Grep
+- Compare the fallback formatter against the earlier structured-label version.
 
 {language_instruction}
 
 Rules:
 - The recap MUST be written in the language specified above. Do not switch languages mid-recap.
+- The first sentence should sound like a handoff, not a status report.
 - Skip status reports and commit recaps; the user does not want a re-narration of every step that already happened.
 - Skip root-cause narrative, internal fix details, secondary to-dos, and em-dash tangents.
 - Do not mention that you are an AI.

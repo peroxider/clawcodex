@@ -2375,7 +2375,12 @@ class ClawcodexREPL:
 
     @staticmethod
     def _is_recap_text(text: str) -> bool:
-        return text.strip().startswith(("Recapitulate\n", "Away Summary\n"))
+        # Accept either a single newline (legacy persisted recaps) or the
+        # double newline used by ``format_away_summary_for_display`` so
+        # Markdown renders the prefix and body as separate paragraphs.
+        return text.strip().startswith(
+            ("Recapitulate\n", "Recapitulate\n\n", "Away Summary\n", "Away Summary\n\n")
+        )
 
     def _get_slash_command_words(self) -> list[str]:
         words = list(self._built_in_commands)

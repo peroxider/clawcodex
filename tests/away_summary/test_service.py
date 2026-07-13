@@ -169,13 +169,10 @@ def test_fallback_summary_flattens_content_blocks() -> None:
 
 
 def test_fallback_summary_describes_exchanges_semantically() -> None:
-    """The LLM-free fallback must read like a recap, not a metadata dump.
+    """The LLM-free fallback must read like a natural handoff, not a metadata dump.
 
     A user who types ``/recap`` after a short greeting exchange should see
-    a 1-2 sentence description of what happened — e.g.
-    ``You're working on: hello. Assistant last replied: Hello!. Continue
-    from where you left off.`` — rather than the legacy
-    ``This session has 2 messages across 1 user requests. Started with: hello``.
+    one flowing sentence plus a few plain bullets without fixed labels.
     """
     conv = Conversation()
     conv.messages = [
@@ -198,16 +195,18 @@ def test_fallback_summary_describes_exchanges_semantically() -> None:
     # No raw session metadata.
     assert "Started with:" not in summary
     assert "This session has" not in summary
-    # No markdown bullets either.
-    assert "\n- " not in summary
-    assert "\n* " not in summary
+    # No fixed labels.
+    assert "Current state:" not in summary
+    assert "Next step:" not in summary
+    # Bullets should use plain ASCII hyphens.
+    assert "\n- Continue with" in summary
 
 
 def test_fallback_summary_lists_multiple_user_requests() -> None:
     """The fallback surfaces the most recent user request as the goal and the
     most recent assistant reply as the current task state — but it does NOT
-    enumerate every prior turn (that would balloon past the 1-2 sentence
-    budget and leak process)."""
+    enumerate every prior turn (that would balloon past the readable budget
+    and leak process)."""
     conv = Conversation()
     conv.messages = [
         Message(role="user", content="Please implement the recap feature."),
@@ -229,11 +228,12 @@ def test_fallback_summary_lists_multiple_user_requests() -> None:
     # The LAST user request is the current goal.
     assert "add a /recap command" in summary
     # The LAST assistant reply is the current task state.
-    assert "Got it." in summary
+    assert "Got it" in summary
     # Earlier turns should NOT be surfaced (would blow the budget).
     assert "implement the recap" not in summary
-    assert "Started with:" not in summary
-    assert "Latest task:" not in summary
+    # No fixed labels.
+    assert "Current state:" not in summary
+    assert "Next step:" not in summary
 
 
 def test_fallback_summary_handles_empty_session() -> None:
@@ -253,9 +253,8 @@ def test_fallback_summary_handles_empty_session() -> None:
 
 
 def test_fallback_summary_mentions_tools_used() -> None:
-    """Tool actions performed by the assistant should appear as a recap line
-    in the structured-label section of the hybrid fallback, so the user
-    can see what was done before they walked away."""
+    """Tool actions performed by the assistant should appear as plain bullet
+    lines in the fallback recap, without fixed labels."""
     from clawcodex_ext.away_summary.service import _fallback_summary
 
     conv = Conversation()
@@ -273,16 +272,20 @@ def test_fallback_summary_mentions_tools_used() -> None:
     summary = _fallback_summary(conv)
     # Sentence summary still surfaces the user request.
     assert "read /tmp/data.csv" in summary
-    # Structured label section surfaces both the file and the tool action.
-    assert "Files mentioned: /tmp/data.csv" in summary
-    assert "Actions taken: Read(/tmp/data.csv)" in summary
+    # No fixed labels.
+    assert "Files mentioned:" not in summary
+    assert "Actions taken:" not in summary
+    assert "Current state:" not in summary
+    assert "Next step:" not in summary
+    # Plain bullets surface the file and the tool action.
+    assert "\n- /tmp/data.csv" in summary
+    assert "\n- Read(/tmp/data.csv)" in summary
+    assert "\n- Continue with" in summary
 
 
 def test_fallback_summary_omits_labels_without_tool_calls() -> None:
-    """Plain conversation (no tool_use blocks) should produce only the
-    sentence summary — no Files mentioned / Actions taken section.
-    This is the most common case (short Q&A exchanges) and must stay
-    tight instead of bloating into a 4-5 line dump."""
+    """Plain conversation (no tool_use blocks) should produce the sentence
+    summary plus a single next-step bullet, with no fixed labels."""
     from clawcodex_ext.away_summary.service import _fallback_summary
 
     conv = Conversation()
@@ -295,16 +298,18 @@ def test_fallback_summary_omits_labels_without_tool_calls() -> None:
     # Sentence summary still surfaces the exchange.
     assert "hello" in summary.lower()
     assert "working on" in summary.lower()
-    # No structured labels when there were no tool calls.
-    assert "Files mentioned:" not in summary
+    # A single next-step bullet, no fixed labels.
+    assert "\n- Continue with" in summary
+    assert "Current state:" not in summary
+    assert "Next step:" not in summary
+    assert "Files touched:" not in summary
     assert "Actions taken:" not in summary
-    # No trailing blank line either (no second section).
-    assert "\n\n" not in summary
 
 
 def test_fallback_summary_separates_sentence_and_labels_with_blank_line() -> None:
-    """The sentence section and the structured-label section are visually
-    separated by a blank line so the recap reads as two distinct blocks."""
+    """The fallback is one sentence followed by bullet lines, each separated
+    by a newline. With tool calls, extra detail bullets appear before the
+    next-step bullet."""
     from clawcodex_ext.away_summary.service import _fallback_summary
 
     conv = Conversation()
@@ -321,24 +326,21 @@ def test_fallback_summary_separates_sentence_and_labels_with_blank_line() -> Non
     ]
 
     summary = _fallback_summary(conv)
-    parts = summary.split("\n\n")
-    # Exactly two sections: sentence + label block.
-    assert len(parts) == 2
-    sentence, labels = parts
-    assert "working on" in sentence.lower()
-    assert "Files mentioned" in labels
-    assert "Actions taken" in labels
-    # Both files appear.
-    assert "/tmp/x.py" in labels
-    assert "/tmp/y.py" in labels
-    # Both tool actions appear, deduped and labelled.
-    assert "Read(/tmp/x.py)" in labels
-    assert "Edit(/tmp/y.py)" in labels
+    lines = summary.split("\n")
+    # Sentence line first.
+    assert "working on" in lines[0].lower()
+    # Plain bullets for files, actions, and next step.
+    assert "\n- /tmp/x.py, /tmp/y.py" in summary
+    assert "\n- Read(/tmp/x.py), Edit(/tmp/y.py)" in summary
+    assert "\n- Continue with" in summary
+    # No fixed labels.
+    assert "Files touched:" not in summary
+    assert "Actions taken:" not in summary
 
 
 def test_fallback_summary_chinese_labels() -> None:
-    """Chinese sessions get Chinese label headers — matches the language
-    inference already applied to the sentence summary."""
+    """Chinese sessions get Chinese sentence phrasing and Chinese middle-dot
+    bullet markers — with no English fixed labels."""
     from clawcodex_ext.away_summary.service import _fallback_summary
 
     conv = Conversation()
@@ -354,20 +356,22 @@ def test_fallback_summary_chinese_labels() -> None:
     ]
 
     summary = _fallback_summary(conv)
-    # Chinese sentence + Chinese label headers.
-    assert "正在进行" in summary
-    assert "涉及文件" in summary
-    assert "执行操作" in summary
-    assert "/tmp/x.py" in summary
+    # Chinese sentence + Chinese bullets.
+    assert "我们正在处理" in summary
+    assert "· /tmp/x.py" in summary
+    assert "· Read(/tmp/x.py)" in summary
+    assert "· 继续" in summary
     # English label headers must NOT appear in a Chinese session.
+    assert "Current state:" not in summary
+    assert "Next step:" not in summary
     assert "Files mentioned:" not in summary
     assert "Actions taken:" not in summary
 
 
 def test_fallback_summary_caps_label_lists() -> None:
-    """The label section must never balloon past a readable budget — when
-    more than 6 files/actions happened, only the first 6 are shown and a
-    trailing ``… and N more`` marker is appended."""
+    """The detail bullet lists must never balloon past a readable budget — when
+    more than 4 files/actions happened, only the first 4 are shown and a
+    trailing ``…`` marker is appended."""
     from clawcodex_ext.away_summary.service import _fallback_summary
 
     tool_uses = [
@@ -381,10 +385,10 @@ def test_fallback_summary_caps_label_lists() -> None:
     ]
 
     summary = _fallback_summary(conv)
-    # 6 files listed, then a marker — not all 10.
-    assert "/tmp/f5.py" in summary
-    assert "/tmp/f6.py" not in summary
-    assert "more" in summary
+    # 4 files listed, then a marker — not all 10.
+    assert "/tmp/f3.py" in summary
+    assert "/tmp/f4.py" not in summary
+    assert "…" in summary
 
 
 def test_infer_language_from_chinese_user_message() -> None:
@@ -461,9 +465,9 @@ def test_summary_prompt_forbids_thinking_preamble() -> None:
 
 
 def test_summary_prompt_requires_goal_plus_next_action() -> None:
-    """The recap prompt must require the three-part goal+state+next-action
-    structure that the Claude Code /recap canonical implementation uses
-    (lead with goal + current task, then the one next action)."""
+    """The recap prompt must ask for the goal+state+next-step dimensions
+    that the Claude Code /recap canonical implementation uses, while
+    forbidding fixed labels so the model can phrase things naturally."""
     conv = Conversation()
     conv.messages = [
         Message(role="user", content="请帮我修改代码"),
@@ -471,16 +475,21 @@ def test_summary_prompt_requires_goal_plus_next_action() -> None:
     ]
     prompt = build_summary_messages(conv, max_input_tokens=4_000)[0]["content"]
     lowered = prompt.lower()
-    # 1-2 sentence budget.
-    assert "1-2 plain sentences" in lowered or "1-2 句" in prompt
-    # No markdown / no bullets.
-    assert "no markdown" in lowered
-    # Length caps mirrored from the canonical prompt.
-    assert "40 words" in lowered
-    # Goal + current state + next-action ordering.
+    # 1-2 sentence budget (now described as "short, flowing sentences").
+    assert "1-2 short, flowing sentences" in lowered or "1-2 句" in prompt
+    # Plain text only, no headings / no bold.
+    assert "no headings" in lowered
+    assert "no bold" in lowered
+    # Goal + current state + next step are covered as guidance.
     assert "high-level goal" in lowered
-    assert "current task" in lowered
+    assert "where they left off" in lowered
     assert "next action" in lowered
+    # Fixed labels are explicitly forbidden.
+    assert 'fixed section labels' in lowered
+    assert "current state:" not in lowered
+    assert "next step:" not in lowered
+    assert "files mentioned:" not in lowered
+    assert "actions taken:" not in lowered
 
 
 def test_service_strips_thinking_preamble_from_content() -> None:

@@ -518,21 +518,13 @@ def _clean_summary_text(text: str) -> str:
 
 
 def _fallback_summary(conversation: Any) -> str:
-    """Build a hybrid recap from conversation history without calling the LLM.
+    """Build a natural, flexible recap from conversation history.
 
     Used when the model returned empty content or leaked chain-of-thought
-    into ``content``. The output is a two-section recap:
-
-    * Section 1 (always) — a 1-2 sentence goal + task + next-action summary
-      matching the LLM path's shape, so users get a consistent reading
-      experience whether the recap was LLM-generated or fell back to
-      conversation-derived text.
-    * Section 2 (only when tool calls happened) — a small structured block
-      listing the files mentioned and the actions taken, so the user has
-      a quick visual anchor for what was actually done before they walked
-      away. The labels mirror the legacy 1afd40cc format (``Files mentioned:``
-      / ``Actions taken:``) but only the populated subsets are emitted, and
-      no markdown bullets / headings are used.
+    into ``content``. The output is a short handoff: one flowing sentence
+    that captures the goal and current state, followed by a few plain
+    bullets that surface whatever context matters most (files touched,
+    tools used, next step) without fixed labels.
     """
     messages = list(getattr(conversation, "messages", []) or [])
     is_zh = infer_response_language(conversation) == "Chinese"
@@ -568,24 +560,62 @@ def _fallback_summary(conversation: Any) -> str:
 
     if not assistant_messages:
         if is_zh:
-            sentence = f"你正在进行：{user_point}。等待助手响应后继续。"
+            sentence = f"我们刚聊到 {user_point}，还没有收到助手回应。"
         else:
-            sentence = f"You're working on: {user_point}. Waiting for the assistant to respond."
+            sentence = f"We were talking about {user_point} and haven't heard back from the assistant yet."
     else:
         last_asst = assistant_messages[-1]
         asst_point = _leading_point(last_asst, limit=80)
         if is_zh:
-            sentence = f"你正在进行：{user_point}。助手已回复：{asst_point}。请从中断处继续。"
+            sentence = f"我们正在处理 {user_point}，助手回应了：{asst_point}"
         else:
-            sentence = (
-                f"You're working on: {user_point}. "
-                f"Assistant last replied: {asst_point}. Continue from where you left off."
-            )
+            sentence = f"We're working on {user_point}. The assistant just replied: {asst_point}"
 
-    label_lines = _fallback_labels(files_touched, tool_actions, is_zh=is_zh)
-    if label_lines:
-        return sentence + "\n\n" + "\n".join(label_lines)
+    bullets = _fallback_bullets(
+        user_messages[-1] if user_messages else "",
+        files_touched,
+        tool_actions,
+        is_zh=is_zh,
+    )
+    if bullets:
+        return sentence + "\n" + "\n".join(bullets)
     return sentence
+
+
+def _fallback_bullets(
+    last_user: str,
+    files_touched: set[str],
+    tool_actions: list[str],
+    *,
+    is_zh: bool,
+) -> list[str]:
+    """Build plain, label-free bullets for the fallback recap.
+
+    The bullets surface files touched, tools used, and the next step
+    naturally, without fixed labels like "Current state:" or "Next step:".
+    Chinese sessions use the middle-dot "·"; English sessions use "-".
+    """
+    marker = "·" if is_zh else "-"
+    bullets: list[str] = []
+
+    if files_touched:
+        shown = sorted(files_touched)[:4]
+        extra = " …" if len(files_touched) > 4 else ""
+        bullets.append(f"{marker} {', '.join(shown)}{extra}")
+
+    if tool_actions:
+        unique_actions = _dedup_ordered(tool_actions)[:4]
+        extra = " …" if len(tool_actions) > 4 else ""
+        bullets.append(f"{marker} {', '.join(unique_actions)}{extra}")
+
+    # Always add a next-step bullet so the user has something actionable.
+    next_step = _leading_point(last_user, limit=60)
+    if is_zh:
+        bullets.append(f"{marker} 继续 {next_step}")
+    else:
+        bullets.append(f"{marker} Continue with {next_step}")
+
+    return bullets
 
 
 def _fallback_labels(
