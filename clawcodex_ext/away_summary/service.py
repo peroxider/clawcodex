@@ -578,7 +578,8 @@ def _fallback_summary(conversation: Any) -> str:
         is_zh=is_zh,
     )
     if bullets:
-        return sentence + "\n" + "\n".join(bullets)
+        intro = "后续计划" if is_zh else "Next steps"
+        return sentence + "\n" + intro + "\n" + "\n".join(bullets)
     return sentence
 
 
@@ -591,11 +592,10 @@ def _fallback_bullets(
 ) -> list[str]:
     """Build plain, label-free bullets for the fallback recap.
 
-    The bullets surface files touched, tools used, and the next step
-    naturally, without fixed labels like "Current state:" or "Next step:".
-    Chinese sessions use the middle-dot "·"; English sessions use "-".
+    Both English and Chinese sessions use the ASCII hyphen "-" as the
+    bullet marker so the recap renders consistently as Markdown.
     """
-    marker = "·" if is_zh else "-"
+    marker = "-"
     bullets: list[str] = []
 
     if files_touched:

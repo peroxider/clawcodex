@@ -27,6 +27,8 @@ AWAY_SUMMARY_INSTRUCTIONS = """The user stepped away from an interactive coding 
 Format:
 - 1-2 short, flowing sentences that name the high-level goal and where things stand.
 - Then add a short bullet list (1-3 items) with whatever context matters most: the most useful next action, files touched, tools used, or anything else the user needs to pick up quickly.
+- On the line immediately before the bullet list, add ONE short phrase that explains the intent of the bullets. Use a plain phrase, not a label ending in a colon. Examples: `后续计划` / `后续步骤` / `Next steps` / `What next` / `To wrap up`. Do NOT use a colon.
+- Use `-` as the bullet marker for both English and Chinese.
 - Use plain text only. Do NOT use fixed section labels (e.g. labels ending in a colon that name a category). Let the bullets speak for themselves.
 - No headings, no bold, no markdown beyond the bullet markers.
 - Under 60 words (English) / 90 Chinese characters (中文).
@@ -39,6 +41,7 @@ Content guidance (consider these dimensions, but do not label them):
 
 Example:
 We're debugging why away-summary messages now render in white with less content compared to the earlier light-gray, fuller recaps. The assistant inspected tui/screens/repl.py and confirmed the muted style is still applied.
+- 后续计划
 - tui/screens/repl.py
 - Read(tui/screens/repl.py), Grep
 - Compare the fallback formatter against the earlier structured-label version.
@@ -70,6 +73,8 @@ AWAY_SUMMARY_INSTRUCTIONS_AUTO = """The user stepped away from an interactive co
 Format:
 - 1-3 short, flowing sentences that name the high-level goal and where things stand.
 - Then add a short bullet list (1-3 items) with whatever context matters most: the most useful next action, files touched, tools used, or anything else the user needs to pick up quickly.
+- On the line immediately before the bullet list, add ONE short phrase that explains the intent of the bullets. Use a plain phrase, not a label ending in a colon. Examples: `后续计划` / `后续步骤` / `Next steps` / `What next` / `To wrap up`. Do NOT use a colon.
+- Use `-` as the bullet marker for both English and Chinese.
 - Use plain text only. Do NOT use fixed section labels (e.g. labels ending in a colon that name a category). Let the bullets speak for themselves.
 - No headings, no bold, no markdown beyond the bullet markers.
 - Under 80 words (English) / 120 Chinese characters (中文).
@@ -83,6 +88,7 @@ Content guidance (consider these dimensions, but do not label them):
 
 Example:
 We're debugging why away-summary messages now render in white with less content compared to the earlier light-gray, fuller recaps. The assistant inspected tui/screens/repl.py and confirmed the muted style is still applied.
+- 后续计划
 - tui/screens/repl.py
 - Read(tui/screens/repl.py), Grep
 - Compare the fallback formatter against the earlier structured-label version.

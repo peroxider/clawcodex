@@ -356,16 +356,18 @@ def test_fallback_summary_chinese_labels() -> None:
     ]
 
     summary = _fallback_summary(conv)
-    # Chinese sentence + Chinese bullets.
+    # Chinese sentence + ASCII hyphen bullets.
     assert "我们正在处理" in summary
-    assert "· /tmp/x.py" in summary
-    assert "· Read(/tmp/x.py)" in summary
-    assert "· 继续" in summary
+    assert "- /tmp/x.py" in summary
+    assert "- Read(/tmp/x.py)" in summary
+    assert "- 继续" in summary
     # English label headers must NOT appear in a Chinese session.
     assert "Current state:" not in summary
     assert "Next step:" not in summary
     assert "Files mentioned:" not in summary
     assert "Actions taken:" not in summary
+    # Chinese middle-dot should no longer be used.
+    assert "·" not in summary
 
 
 def test_fallback_summary_caps_label_lists() -> None:
