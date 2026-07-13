@@ -254,7 +254,8 @@ def test_fallback_summary_handles_empty_session() -> None:
 
 def test_fallback_summary_mentions_tools_used() -> None:
     """Tool actions performed by the assistant should appear as a recap line
-    rather than being hidden behind a generic "no tools used" sentence."""
+    in the structured-label section of the hybrid fallback, so the user
+    can see what was done before they walked away."""
     from clawcodex_ext.away_summary.service import _fallback_summary
 
     conv = Conversation()
@@ -270,9 +271,120 @@ def test_fallback_summary_mentions_tools_used() -> None:
     ]
 
     summary = _fallback_summary(conv)
-    assert "Read" in summary
+    # Sentence summary still surfaces the user request.
+    assert "read /tmp/data.csv" in summary
+    # Structured label section surfaces both the file and the tool action.
+    assert "Files mentioned: /tmp/data.csv" in summary
+    assert "Actions taken: Read(/tmp/data.csv)" in summary
+
+
+def test_fallback_summary_omits_labels_without_tool_calls() -> None:
+    """Plain conversation (no tool_use blocks) should produce only the
+    sentence summary — no Files mentioned / Actions taken section.
+    This is the most common case (short Q&A exchanges) and must stay
+    tight instead of bloating into a 4-5 line dump."""
+    from clawcodex_ext.away_summary.service import _fallback_summary
+
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="hello"),
+        Message(role="assistant", content="Hi! How can I help?"),
+    ]
+
+    summary = _fallback_summary(conv)
+    # Sentence summary still surfaces the exchange.
+    assert "hello" in summary.lower()
+    assert "working on" in summary.lower()
+    # No structured labels when there were no tool calls.
     assert "Files mentioned:" not in summary
     assert "Actions taken:" not in summary
+    # No trailing blank line either (no second section).
+    assert "\n\n" not in summary
+
+
+def test_fallback_summary_separates_sentence_and_labels_with_blank_line() -> None:
+    """The sentence section and the structured-label section are visually
+    separated by a blank line so the recap reads as two distinct blocks."""
+    from clawcodex_ext.away_summary.service import _fallback_summary
+
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="refactor the recap feature"),
+        Message(
+            role="assistant",
+            content=[
+                {"type": "text", "text": "On it."},
+                {"type": "tool_use", "name": "Read", "input": {"file_path": "/tmp/x.py"}},
+                {"type": "tool_use", "name": "Edit", "input": {"file_path": "/tmp/y.py"}},
+            ],
+        ),
+    ]
+
+    summary = _fallback_summary(conv)
+    parts = summary.split("\n\n")
+    # Exactly two sections: sentence + label block.
+    assert len(parts) == 2
+    sentence, labels = parts
+    assert "working on" in sentence.lower()
+    assert "Files mentioned" in labels
+    assert "Actions taken" in labels
+    # Both files appear.
+    assert "/tmp/x.py" in labels
+    assert "/tmp/y.py" in labels
+    # Both tool actions appear, deduped and labelled.
+    assert "Read(/tmp/x.py)" in labels
+    assert "Edit(/tmp/y.py)" in labels
+
+
+def test_fallback_summary_chinese_labels() -> None:
+    """Chinese sessions get Chinese label headers — matches the language
+    inference already applied to the sentence summary."""
+    from clawcodex_ext.away_summary.service import _fallback_summary
+
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="帮我读一下源码"),
+        Message(
+            role="assistant",
+            content=[
+                {"type": "text", "text": "好的。"},
+                {"type": "tool_use", "name": "Read", "input": {"file_path": "/tmp/x.py"}},
+            ],
+        ),
+    ]
+
+    summary = _fallback_summary(conv)
+    # Chinese sentence + Chinese label headers.
+    assert "正在进行" in summary
+    assert "涉及文件" in summary
+    assert "执行操作" in summary
+    assert "/tmp/x.py" in summary
+    # English label headers must NOT appear in a Chinese session.
+    assert "Files mentioned:" not in summary
+    assert "Actions taken:" not in summary
+
+
+def test_fallback_summary_caps_label_lists() -> None:
+    """The label section must never balloon past a readable budget — when
+    more than 6 files/actions happened, only the first 6 are shown and a
+    trailing ``… and N more`` marker is appended."""
+    from clawcodex_ext.away_summary.service import _fallback_summary
+
+    tool_uses = [
+        {"type": "tool_use", "name": "Read", "input": {"file_path": f"/tmp/f{i}.py"}}
+        for i in range(10)
+    ]
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="scan files"),
+        Message(role="assistant", content=[{"type": "text", "text": "scanning"}] + tool_uses),
+    ]
+
+    summary = _fallback_summary(conv)
+    # 6 files listed, then a marker — not all 10.
+    assert "/tmp/f5.py" in summary
+    assert "/tmp/f6.py" not in summary
+    assert "more" in summary
 
 
 def test_infer_language_from_chinese_user_message() -> None:

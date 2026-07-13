@@ -1,4 +1,13 @@
-"""Prompt construction for Away Summary."""
+"""Prompt construction for Away Summary.
+
+Two distinct instruction templates are maintained, mirroring the
+canonical Claude Code split between the *automatic* "while you were away"
+card and the *manual* ``/recap`` command. The automatic variant is
+slightly more relaxed (1-3 sentences, narrative-style) so the prompt-card
+reads naturally when shown alongside the transcript; the manual variant
+is strict (1-2 sentences, three-part structure) so a user who types
+``/recap`` gets a tight recap they can scan in one breath.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +17,10 @@ from typing import Any
 from clawcodex_ext.away_summary.fingerprint import is_away_summary_message
 from clawcodex_ext.types.messages import NO_CONTENT_MESSAGE
 
+
+# ---------------------------------------------------------------------------
+# Manual trigger: /recap command
+# ---------------------------------------------------------------------------
 
 AWAY_SUMMARY_INSTRUCTIONS = """The user stepped away from an interactive coding session and is coming back. Write a session recap for them.
 
@@ -37,6 +50,41 @@ Rules:
       draft, step 4: check constraints" self-audit scaffolding.
 - Return only the recap."""
 
+
+# ---------------------------------------------------------------------------
+# Auto trigger: idle 5-min "while you were away" card
+# ---------------------------------------------------------------------------
+
+AWAY_SUMMARY_INSTRUCTIONS_AUTO = """The user stepped away from an interactive coding session and is coming back. Write a short session recap for the "while you were away" card.
+
+Format:
+- Exactly 1-3 plain sentences, no markdown.
+- Recap under 60 words (English) / 90 Chinese characters (中文).
+- No bullet lists, no headings, no bold, no asterisks.
+
+Content:
+- Lead with the high-level goal — what the user is building or debugging, NOT implementation details.
+- Then describe the most concrete next step the user should take when they return.
+- If a broader session memory block is provided below, you may weave in the long-running project context (the user's project, recent goals, open threads) so the recap reads like a project handoff rather than a status report.
+
+{language_instruction}
+
+Rules:
+- The recap MUST be written in the language specified above. Do not switch languages mid-recap.
+- Skip status reports and commit recaps; the user does not want a re-narration of every step that already happened.
+- Skip root-cause narrative, internal fix details, secondary to-dos, and em-dash tangents.
+- Do not mention that you are an AI.
+- Do NOT output any internal chain-of-thought, planning notes, or self-checks
+  — even if your prompt normally does so. In particular:
+    * Never start your reply with "Here's a thinking process", "思考过程:",
+      "Thinking process:", "Let me think", or any similar preamble.
+    * Never enclose the recap in <think>…</think>, <thinking>…</thinking>, or
+      any other reasoning tags.
+    * Never include numbered "step 1: analyze, step 2: identify, step 3:
+      draft, step 4: check constraints" self-audit scaffolding.
+- Return only the recap."""
+
+
 _LANGUAGE_INSTRUCTION_MAP: dict[str, str] = {
     "Chinese": "MUST write the recap in natural Simplified Chinese.",
     "English": "MUST write the recap in natural English.",
@@ -48,25 +96,61 @@ def build_summary_messages(
     *,
     max_input_tokens: int,
     response_language: str | None = None,
+    trigger: str = "manual",
+    memory: str | None = None,
 ) -> list[dict[str, str]]:
+    """Build the (system, user) message pair for the recap request.
+
+    Args:
+        conversation: The live conversation whose transcript is summarised.
+        max_input_tokens: Token budget for the truncated transcript.
+        response_language: Optional explicit language override
+            (``"Chinese"`` / ``"English"``). Falls back to
+            :func:`infer_response_language`.
+        trigger: ``"auto"`` for the idle card (1-3 sentences, narrative),
+            ``"manual"`` for ``/recap`` (1-2 sentences, three-part). Any
+            other value is treated as ``"manual"`` to preserve backward
+            compatibility with callers that pre-date this parameter.
+        memory: Optional broader session-memory block. When provided and
+            ``trigger == "auto"`` it is prepended to the user message so
+            the model can weave long-running project context into the
+            recap. ``/recap`` ignores it (manual recaps already see the
+            full transcript).
+    """
     lang = infer_response_language(conversation, response_language)
     lang_instruction = _LANGUAGE_INSTRUCTION_MAP.get(lang, "Write the recap in natural English.")
+    is_auto = trigger == "auto"
+
+    template = AWAY_SUMMARY_INSTRUCTIONS_AUTO if is_auto else AWAY_SUMMARY_INSTRUCTIONS
+    system_content = template.format(language_instruction=lang_instruction)
 
     transcript = _serialize_transcript(conversation)
     transcript = _truncate_transcript(transcript, max_input_tokens=max_input_tokens)
+
+    if is_auto and memory:
+        user_content = (
+            "Write the recap based on the transcript and broader session "
+            "memory below.\n\n"
+            f"Session memory (broader context):\n{memory}\n\n"
+            f"Session transcript:\n{transcript}\n\n"
+            "Return only the recap — 1-3 plain sentences, no markdown."
+        )
+    elif is_auto:
+        user_content = (
+            "Write the recap based on the transcript below.\n\n"
+            f"Session transcript:\n{transcript}\n\n"
+            "Return only the recap — 1-3 plain sentences, no markdown."
+        )
+    else:
+        user_content = (
+            "Write the recap based on the transcript below.\n\n"
+            f"Session transcript:\n{transcript}\n\n"
+            "Return only the recap — 1-2 plain sentences, no markdown."
+        )
+
     return [
-        {
-            "role": "system",
-            "content": AWAY_SUMMARY_INSTRUCTIONS.format(language_instruction=lang_instruction),
-        },
-        {
-            "role": "user",
-            "content": (
-                "Write the recap based on the transcript below.\n\n"
-                f"Session transcript:\n{transcript}\n\n"
-                "Return only the recap — 1-2 plain sentences, no markdown."
-            ),
-        },
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_content},
     ]
 
 

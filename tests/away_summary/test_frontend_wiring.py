@@ -501,10 +501,10 @@ def test_tui_away_summary_display_posts_to_ui_thread(monkeypatch, tmp_path) -> N
     app._away_summary_controller.display("auto recap")
 
     assert posted
-    assert rendered == [("Recapitulate\nauto recap", "light", "markdown")]
+    assert rendered == [("Recapitulate\nauto recap", "muted", "markdown")]
 
     app._away_summary_controller.display("Recap\nsecond recap")
-    assert rendered[-1] == ("Recap\nsecond recap", "light", "markdown")
+    assert rendered[-1] == ("Recap\nsecond recap", "muted", "markdown")
 
     app._away_summary_controller.display("Away Summary\nlegacy recap")
-    assert rendered[-1] == ("Away Summary\nlegacy recap", "light", "markdown")
+    assert rendered[-1] == ("Away Summary\nlegacy recap", "muted", "markdown")

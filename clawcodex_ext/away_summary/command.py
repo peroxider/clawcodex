@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from clawcodex_ext.away_summary.config import load_away_summary_config
 from clawcodex_ext.away_summary.messages import format_away_summary_for_display
 from clawcodex_ext.away_summary.service import AwaySummaryService
 from src.command_system.types import LocalCommand, LocalCommandResult
+
+logger = logging.getLogger(__name__)
 
 
 def build_recap_command() -> LocalCommand:
@@ -44,6 +47,19 @@ def _recap_call(args: str, context: Any) -> LocalCommandResult:
         return LocalCommandResult(type="text", value="No conversation is available to recap.")
 
     cfg = load_away_summary_config(cwd=getattr(context, "cwd", None))
+
+    # Try to share the parent query loop's prompt-cache prefix. The main
+    # loop snapshots CacheSafeParams after each turn; the recap can
+    # replay them so the recap request piggybacks on Anthropic's
+    # prompt-cache instead of issuing an independent cold call.
+    cache_safe_params = None
+    if cfg.enable_recap_cache:
+        cache_safe_params = _try_get_last_cache_safe_params()
+        if cache_safe_params is not None:
+            logger.debug("/recap: using cached CacheSafeParams (cache hit)")
+        else:
+            logger.debug("/recap: no CacheSafeParams cached, using fresh provider call")
+
     try:
         result = AwaySummaryService(
             conversation=conversation,
@@ -51,7 +67,10 @@ def _recap_call(args: str, context: Any) -> LocalCommandResult:
             model=model,
             session=session,
             config=cfg,
-        ).generate(trigger="manual")
+        ).generate(
+            trigger="manual",
+            cache_safe_params=cache_safe_params,
+        )
     except Exception as exc:
         return LocalCommandResult(type="text", value=f"Recap failed: {exc}")
 
@@ -61,3 +80,16 @@ def _recap_call(args: str, context: Any) -> LocalCommandResult:
         type="text",
         value=format_away_summary_for_display(result.summary),
     )
+
+
+def _try_get_last_cache_safe_params() -> Any | None:
+    """Read the most recent CacheSafeParams snapshot, if the fork
+    primitive is importable. Returns ``None`` for any failure — the
+    recap will then fall back to a fresh ``provider.chat`` call.
+    """
+    try:
+        from clawcodex_ext.agent.forked_agent import get_last_cache_safe_params
+
+        return get_last_cache_safe_params()
+    except Exception:
+        return None

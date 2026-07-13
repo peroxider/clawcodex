@@ -13,6 +13,7 @@ from clawcodex_ext.away_summary.fingerprint import (
     last_away_summary_fingerprint,
     session_turn_count,
 )
+from clawcodex_ext.away_summary.memory import get_session_memory_content
 from clawcodex_ext.away_summary.messages import format_away_summary_for_display
 from clawcodex_ext.away_summary.service import AwaySummaryService
 
@@ -45,6 +46,10 @@ class AwaySummaryController:
     config_loader: Callable[[], AwaySummaryConfig] = load_away_summary_config
     timer_factory: TimerFactory | None = None
     interactive: bool = True
+    # Optional override for the session-memory lookup. Default uses
+    # :func:`get_session_memory_content` which reads the sidecar; tests
+    # and call sites can swap in a stub.
+    memory_getter: Callable[[], str | None] | None = None
 
     # Reasons that genuinely mean "the user is starting a new agent run" and
     # therefore warrant cancelling the idle timer. Anything else (slash
@@ -143,12 +148,29 @@ class AwaySummaryController:
             self._timer = None
 
         try:
+            memory: str | None = None
+            if cfg.include_session_memory:
+                getter = self.memory_getter or get_session_memory_content
+                try:
+                    session = self.session_getter()
+                    sid = getattr(session, "session_id", None) if session is not None else None
+                except Exception:
+                    sid = None
+                try:
+                    memory = getter(session_id=sid) if "session_id" in getter.__code__.co_varnames else getter()  # type: ignore[call-arg]
+                except Exception:
+                    logger.debug(
+                        "Away Summary: memory_getter raised, continuing without memory"
+                    )
+                    memory = None
+
             service = AwaySummaryService(
                 conversation=self.conversation,
                 provider=self.provider_getter(),
                 model=self.model_getter(),
                 session=self.session_getter(),
                 config=cfg,
+                memory=memory,
             )
             result = service.generate(trigger="auto")
             if result.generated and self.display is not None:

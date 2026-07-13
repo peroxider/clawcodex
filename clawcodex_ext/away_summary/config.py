@@ -19,6 +19,17 @@ class AwaySummaryConfig:
     max_output_tokens: int = 500
     persist_last_recap: bool = True
     response_language: str = "auto"
+    # When True, the automatic recap prepends a short session-memory
+    # block (read from the session-summary sidecar) so the model can
+    # see broader context the recent transcript may have lost to
+    # truncation. Off by default to keep the auto recap byte-identical
+    # to its prior behaviour unless the user opts in.
+    include_session_memory: bool = False
+    # When True, /recap shares the parent query loop's prompt-cache
+    # prefix via ``run_forked_agent`` rather than issuing an
+    # independent provider call. Defaults ON; disable only if a fork
+    # regression needs to be isolated.
+    enable_recap_cache: bool = True
 
     @classmethod
     def from_mapping(cls, raw: Any) -> "AwaySummaryConfig":
@@ -39,6 +50,14 @@ class AwaySummaryConfig:
             max_output_tokens=max(64, _int_value(data.get("max_output_tokens"), 500)),
             persist_last_recap=_bool_value(data.get("persist_last_recap"), True),
             response_language=_language_value(data.get("response_language"), "auto"),
+            include_session_memory=_bool_value(
+                data.get("include_session_memory"),
+                False,
+            ),
+            enable_recap_cache=_bool_value(
+                data.get("enable_recap_cache"),
+                True,
+            ),
         )
 
 

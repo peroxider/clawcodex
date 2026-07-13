@@ -1444,7 +1444,7 @@ class ClawCodexTUI(App):
                 )
                 self._append_repl_system_message(
                     display_text,
-                    style="light",
+                    style="muted",
                     render="markdown",
                 )
 
@@ -1531,7 +1531,7 @@ class ClawCodexTUI(App):
                 if subtype == "away_summary" and self._repl_screen is not None:
                     self._repl_screen.transcript.append_system(
                         format_away_summary_for_display(msg),
-                        style="light",
+                        style="muted",
                         render="markdown",
                     )
                 elif subtype == "intent_forecast" and self._repl_screen is not None:
