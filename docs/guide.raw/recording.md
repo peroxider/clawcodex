@@ -121,7 +121,45 @@ with writer as capture:
 # demo.cast 已 flush 并 close，可直接给 asciinema player 播放
 ```
 
-## 7. 故障排查
+## 7. 端到端示例：REPL 中录制逻辑看板
+
+`extensions/recording/examples/logical_kanban_repl_demo.py` 是一个
+**可运行 + 可测试** 的端到端示例，模拟以下 REPL 场景：
+
+> 用户在 ClawCodex REPL 中打开了 `/dashboard`（逻辑看板），看到
+> orchestrator 正在处理 3 个 GitHub issue；4 个 tick 内看板状态从
+> `pending / running` 演化到 `done / failed / blocked`，最终还有 1
+> 个新 issue 加入队列。
+
+直接跑：
+
+```bash
+python3 -m extensions.recording.examples.logical_kanban_repl_demo \
+    --out /tmp/kanban.cast --ticks 4 --frame-delay 0.5
+# [demo] /tmp/kanban.cast — 22 frame(s); validation: OK
+```
+
+或者作为 pytest 子进程 E2E 跑（CI 友好）：
+
+```bash
+python3 -m pytest tests/extensions/recording/test_logical_kanban_repl_e2e.py -q
+# 6 passed in 7s
+```
+
+录制的 `.cast` 内容示例（4 个 tick 的统计行）：
+
+```
+Logical Kanban (tick 0)    ⏳ pending: 1  🔵 running: 2  ✅ done: 0  ❌ failed: 0  🚧 blocked: 0
+Logical Kanban (tick 1)    ⏳ pending: 1  🔵 running: 1  ✅ done: 1  ❌ failed: 0  🚧 blocked: 0
+Logical Kanban (tick 2)    ⏳ pending: 0  🔵 running: 0  ✅ done: 2  ❌ failed: 1  🚧 blocked: 0
+Logical Kanban (tick 3)    ⏳ pending: 1  🔵 running: 0  ✅ done: 2  ❌ failed: 0  🚧 blocked: 1
+```
+
+每个 tick 是一组 ASCII 面板（`─` 框线 + 状态徽章 `⏳/🔵/✅/❌/🚧`），
+和 `/dashboard` 命令在终端里显示的视觉风格一致，可以直接喂给
+asciinema player 在浏览器中回放。
+
+## 8. 故障排查
 
 | 症状 | 原因 | 修复 |
 |------|------|------|
@@ -130,7 +168,7 @@ with writer as capture:
 | 浏览器播放没颜色 | `width`/`height` 与 ANSI 冲突 | 用 `--width 120 --height 36` 显式声明 |
 | 多线程场景下顺序乱 | asciicast v2 不保证跨线程顺序 | 这是 NDJSON 格式的自然限制，按时间戳回放即可 |
 
-## 8. 架构概览
+## 9. 架构概览
 
 ```
 extensions/capabilities/recorder.py    ← Protocol-only 契约

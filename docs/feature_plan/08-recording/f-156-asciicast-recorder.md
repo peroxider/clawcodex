@@ -46,7 +46,8 @@ GitHub/Notion），由 ClawCodex 各子系统**按结构化事件投影** + **�
 | F-REC-F | 5 个 per-subsystem adapter（orchestrator/sop/visualizer/cron/query） | ✅ | `extensions/orchestrator/asciicast_sink.py` / `extensions/sop_converter/asciicast_projector.py` / `extensions/visualizer/asciicast_dashboard_source.py` / `clawcodex_ext/cron_system/asciicast_observer.py` / `extensions/recording/query_forwarder.py` |
 | F-REC-G | 5 处一行挂载点（orchestrator / query / sop CLI / cron runtime / report_writer） | ✅ | `extensions/orchestrator/orchestrator.py` / `extensions/api/query.py` / `clawcodex_ext/cli/sop_cmd/commands.py` / `clawcodex_ext/cron_system/runtime.py` / `extensions/orchestrator/report_writer.py` |
 | F-REC-H | `clawcodex record` CLI（argparse + duration + SIGINT + multi-source fan-in） | ✅ | `extensions/recording/cli.py` |
-| F-REC-I | 测试套件（60 用例：unit + integration + subprocess E2E） | ✅ | `tests/extensions/recording/` |
+| F-REC-I | 测试套件（66 用例：unit + integration + subprocess E2E） | ✅ | `tests/extensions/recording/` |
+| F-REC-J | 端到端示例：REPL `/dashboard` 逻辑看板 4-tick 演化录制（可运行 + 可测试） | ✅ | `extensions/recording/examples/logical_kanban_repl_demo.py` |
 
 ### 1.4 录制模式
 
