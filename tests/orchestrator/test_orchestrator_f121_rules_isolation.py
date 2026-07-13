@@ -35,10 +35,10 @@ def _make_session() -> AgentSession:
 
 
 class TestApplyReviewRulesIsolation(unittest.IsolatedAsyncioTestCase):
-    """F-121 问题 1：规则提取失败不阻塞 session。"""
+    """F-121: _apply_review_rules 已简化为无操作（规则提取改为 CLI 触发）。"""
 
-    async def test_apply_failure_does_not_block_session(self) -> None:
-        """RuleEngine.apply 抛 OSError 时，_apply_review_rules 不重抛。"""
+    async def test_apply_review_rules_is_noop(self) -> None:
+        """_apply_review_rules 不再调用 RuleEngine.apply，只是空返回。"""
         with tempfile.TemporaryDirectory() as tmp:
             workflow = WorkflowConfig(
                 rules=RulesConfig(enabled=True, path="workflow.rules.yaml"),
@@ -47,73 +47,20 @@ class TestApplyReviewRulesIsolation(unittest.IsolatedAsyncioTestCase):
             session = _make_session()
 
             with patch("extensions.orchestrator.orchestrator.RuleEngine") as MockEngine:
-                MockEngine.get_rules_path.return_value = str(Path(tmp) / "workflow.rules.yaml")
-                MockEngine.return_value.apply = AsyncMock(side_effect=OSError("disk full"))
-                # 不应抛出异常
                 await orch._apply_review_rules(session)
-                MockEngine.return_value.apply.assert_awaited_once()
-
-    async def test_apply_failure_logs_warning(self) -> None:
-        """apply 抛错时记录 warning 日志，含 issue id。"""
-        with tempfile.TemporaryDirectory() as tmp:
-            workflow = WorkflowConfig(
-                rules=RulesConfig(enabled=True, path="workflow.rules.yaml"),
-            )
-            orch = _make_orchestrator(workflow, str(Path(tmp) / "WORKFLOW.md"))
-            session = _make_session()
-
-            with patch("extensions.orchestrator.orchestrator.RuleEngine") as MockEngine:
-                MockEngine.get_rules_path.return_value = str(Path(tmp) / "workflow.rules.yaml")
-                MockEngine.return_value.apply = AsyncMock(side_effect=ValueError("bad yaml"))
-                with self.assertLogs("extensions.orchestrator.orchestrator", level="WARNING") as cm:
-                    await orch._apply_review_rules(session)
-                self.assertTrue(
-                    any("F-121" in msg and "42" in msg for msg in cm.output),
-                    f"warning log should mention F-121 and issue id, got: {cm.output}",
-                )
-
-    async def test_disabled_rules_skips_apply(self) -> None:
-        """rules.enabled=False 时不调用 apply。"""
-        with tempfile.TemporaryDirectory() as tmp:
-            workflow = WorkflowConfig(rules=RulesConfig(enabled=False))
-            orch = _make_orchestrator(workflow, str(Path(tmp) / "WORKFLOW.md"))
-            session = _make_session()
-
-            with patch("extensions.orchestrator.orchestrator.RuleEngine") as MockEngine:
-                await orch._apply_review_rules(session)
-                MockEngine.get_rules_path.assert_not_called()
+                # 不应调用 apply（规则提取已改为 CLI 触发）
                 MockEngine.return_value.apply.assert_not_called()
+                MockEngine.get_rules_path.assert_not_called()
 
-    async def test_no_rules_path_skips_apply(self) -> None:
-        """get_rules_path 返回 None（如无 _workflow_path）时不调用 apply。"""
+    async def test_apply_review_rules_never_throws(self) -> None:
+        """_apply_review_rules 即使传入任意 session 也不会抛出。"""
         workflow = WorkflowConfig(
             rules=RulesConfig(enabled=True, path="workflow.rules.yaml"),
         )
         orch = _make_orchestrator(workflow, "/tmp/WORKFLOW.md")
-        orch._workflow_path = None  # 触发 get_rules_path 返回 None
         session = _make_session()
-
-        with patch("extensions.orchestrator.orchestrator.RuleEngine") as MockEngine:
-            MockEngine.get_rules_path.return_value = None
-            await orch._apply_review_rules(session)
-            MockEngine.return_value.apply.assert_not_called()
-
-    async def test_yaml_error_is_isolated(self) -> None:
-        """yaml.YAMLError 同样被隔离（设计 §2.10 边界）。"""
-        import yaml
-
-        with tempfile.TemporaryDirectory() as tmp:
-            workflow = WorkflowConfig(
-                rules=RulesConfig(enabled=True, path="workflow.rules.yaml"),
-            )
-            orch = _make_orchestrator(workflow, str(Path(tmp) / "WORKFLOW.md"))
-            session = _make_session()
-
-            with patch("extensions.orchestrator.orchestrator.RuleEngine") as MockEngine:
-                MockEngine.get_rules_path.return_value = str(Path(tmp) / "workflow.rules.yaml")
-                MockEngine.return_value.apply = AsyncMock(side_effect=yaml.YAMLError("malformed"))
-                # 不应抛出
-                await orch._apply_review_rules(session)
+        # 不应抛出任何异常
+        await orch._apply_review_rules(session)
 
 
 if __name__ == "__main__":

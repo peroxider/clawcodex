@@ -46,7 +46,7 @@ from .repro_gate import (
     format_repro_gate_comment,
 )
 from .review_feedback import ReviewFeedbackService, ReviewFollowup
-from .rules_learner import BatchedLLMJudge, RuleEngine, RuleStore
+from .rules_learner import RuleEngine, RuleStore
 from .status_dashboard import SessionStatus, StatusDashboard
 from clawcodex_ext.tool_system.context import ToolContext
 from clawcodex_ext.utils.git import (
@@ -2300,6 +2300,14 @@ class Orchestrator:
                     issue_id,
                 )
 
+        # F-121: wire feedback metadata so git_sync writes review-id /
+        # review-body into the commit message.  pending_feedback_ids
+        # are the unprocessed review comments that prompted this
+        # follow-up; feedback_commit_body is unavailable here (the
+        # registry stores IDs, not body text) so review-body: is
+        # omitted for agent_followup — review-pr: is still written.
+        session.feedback_ids = list(record.pending_feedback_ids)
+
         logger.info(
             "Issue %s followup: session wired (branch=%s pr=%s base=%s)",
             issue_id,
@@ -2382,7 +2390,7 @@ class Orchestrator:
         session.feedback_ids = [item.id for item in followup.feedback]
         # Use the first feedback body as the commit message for descriptive titles
         first_body = (followup.feedback[0].body or "").strip() if followup.feedback else ""
-        session.feedback_commit_body = first_body[:72]
+        session.feedback_commit_body = first_body
         self._state.running[issue.id or ""] = session
         if self._registry.mark_running(issue.id or "") is None:
             logger.warning(
@@ -2821,12 +2829,11 @@ class Orchestrator:
         run kinds), only when enabled, and — when ``labels`` is
         configured — only for issues carrying one of those labels."""
         config = self.workflow.agent.repro_first
-        if not config.enabled or session.run_kind != 'issue':
+        if not config.enabled or session.run_kind != "issue":
             return False
         if config.labels:
             issue_labels = {
-                label.strip().lower()
-                for label in (getattr(session.issue, 'labels', None) or [])
+                label.strip().lower() for label in (getattr(session.issue, "labels", None) or [])
             }
             wanted = {label.strip().lower() for label in config.labels}
             if not issue_labels & wanted:
@@ -2843,11 +2850,11 @@ class Orchestrator:
         """
         issue = session.issue
         config = self.workflow.agent.repro_first
-        session.run_kind = 'repro'
+        session.run_kind = "repro"
         session.prompt_override = build_repro_prompt(issue)
         repro_timeout_seconds = config.timeout_ms / 1000.0
         session.timeout_deadline_at = time.time() + repro_timeout_seconds
-        logger.info('Issue %s: repro-first gate starting', issue.id)
+        logger.info("Issue %s: repro-first gate starting", issue.id)
         timed_out = False
         try:
             await asyncio.wait_for(
@@ -2865,9 +2872,9 @@ class Orchestrator:
             )
         except asyncio.TimeoutError:
             timed_out = True
-            logger.warning('Issue %s: repro stage timed out', issue.id)
+            logger.warning("Issue %s: repro stage timed out", issue.id)
 
-        result = ReproGateResult(verdict='missing')
+        result = ReproGateResult(verdict="missing")
         if not timed_out:
             result = await evaluate_repro_gate(
                 session.workspace.path,
@@ -2877,7 +2884,7 @@ class Orchestrator:
         if result.proceed:
             assert result.command is not None
             logger.info(
-                'Issue %s: reproduction established (%s) — opening fix stage',
+                "Issue %s: reproduction established (%s) — opening fix stage",
                 issue.id,
                 result.command,
             )
@@ -2886,47 +2893,47 @@ class Orchestrator:
             # Reset per-run state so the fix stage gets a clean session
             # (mirrors the pipeline mode's between-stage reset).
             session.turn_count = 0
-            session.status = 'running'
-            session.output_text = ''
+            session.status = "running"
+            session.output_text = ""
             session.session_end_reason = None
-            session.session_end_summary = ''
+            session.session_end_summary = ""
             session.run_id = None
             session.consecutive_429_count = 0
             session.rate_limit_pending_turn = None
             session.prompt_override = None
-            session.run_kind = 'issue'
+            session.run_kind = "issue"
             return True
 
-        verdict = 'repro_stage_timeout' if timed_out else result.verdict
+        verdict = "repro_stage_timeout" if timed_out else result.verdict
         logger.warning(
-            'Issue %s: repro-first gate closed (verdict=%s) — marking FAILED '
-            'without attempting a fix',
+            "Issue %s: repro-first gate closed (verdict=%s) — marking FAILED "
+            "without attempting a fix",
             issue.id,
             verdict,
         )
-        session.status = 'failed'
-        session.session_end_reason = 'not_reproducible'
-        session.session_end_summary = f'repro gate closed: {verdict}'
+        session.status = "failed"
+        session.session_end_reason = "not_reproducible"
+        session.session_end_summary = f"repro gate closed: {verdict}"
         self._registry.mark_failed_with_reason(
-            issue.id or '',
-            f'not_reproducible ({verdict}): the described behavior could not '
-            'be demonstrated; no fix attempted, no PR created.',
+            issue.id or "",
+            f"not_reproducible ({verdict}): the described behavior could not "
+            "be demonstrated; no fix attempted, no PR created.",
         )
         try:
             await self.tracker.create_comment(
-                issue.id or '',
+                issue.id or "",
                 format_repro_gate_comment(issue, result),
             )
         except Exception:
             logger.warning(
-                'Issue %s: failed to post repro-gate comment',
+                "Issue %s: failed to post repro-gate comment",
                 issue.id,
                 exc_info=True,
             )
-        await self._sync_tracker_issue_state(issue.id or '', 'failed')
-        self.status_dashboard.on_session_complete(issue.id or '')
-        self._state.completed.add(issue.id or '')
-        self._state.failed.add(issue.id or '')
+        await self._sync_tracker_issue_state(issue.id or "", "failed")
+        self.status_dashboard.on_session_complete(issue.id or "")
+        self._state.completed.add(issue.id or "")
+        self._state.failed.add(issue.id or "")
         return False
 
     async def _run_issue(self, session: AgentSession) -> None:
@@ -3025,38 +3032,38 @@ class Orchestrator:
                         # to the issue and mark FAILED instead of falling
                         # through to git_sync — which would either open an MR
                         # around a fabricated fix or an empty branch.
-                        _cannot = read_cannot_proceed(getattr(session.workspace, 'path', None))
+                        _cannot = read_cannot_proceed(getattr(session.workspace, "path", None))
                         if _cannot is not None:
-                            _reason = str(_cannot.get('reason', 'cannot_proceed'))
-                            session.status = 'failed'
-                            session.session_end_reason = 'premise_not_met'
-                            session.session_end_summary = str(_cannot.get('details', ''))[:500]
+                            _reason = str(_cannot.get("reason", "cannot_proceed"))
+                            session.status = "failed"
+                            session.session_end_reason = "premise_not_met"
+                            session.session_end_summary = str(_cannot.get("details", ""))[:500]
                             logger.warning(
-                                'Issue %s: agent declared cannot_proceed (%s) — '
-                                'marking FAILED without creating a PR',
+                                "Issue %s: agent declared cannot_proceed (%s) — "
+                                "marking FAILED without creating a PR",
                                 session.issue.id,
                                 _reason,
                             )
                             self._registry.mark_failed_with_reason(
-                                session.issue.id or '',
-                                f'premise_not_met ({_reason}): agent declared the issue '
-                                'cannot honestly be completed; no PR created.',
+                                session.issue.id or "",
+                                f"premise_not_met ({_reason}): agent declared the issue "
+                                "cannot honestly be completed; no PR created.",
                             )
                             try:
                                 await self.tracker.create_comment(
-                                    session.issue.id or '',
+                                    session.issue.id or "",
                                     format_cannot_proceed_comment(session.issue, _cannot),
                                 )
                             except Exception:
                                 logger.warning(
-                                    'Issue %s: failed to post cannot_proceed comment',
+                                    "Issue %s: failed to post cannot_proceed comment",
                                     session.issue.id,
                                     exc_info=True,
                                 )
-                            await self._sync_tracker_issue_state(session.issue.id or '', 'failed')
-                            self.status_dashboard.on_session_complete(session.issue.id or '')
-                            self._state.completed.add(session.issue.id or '')
-                            self._state.failed.add(session.issue.id or '')
+                            await self._sync_tracker_issue_state(session.issue.id or "", "failed")
+                            self.status_dashboard.on_session_complete(session.issue.id or "")
+                            self._state.completed.add(session.issue.id or "")
+                            self._state.failed.add(session.issue.id or "")
                             return
                         # Safety net: verify workspace has actual changes before git_sync.
                         # If agent reported "completed" but workspace is clean (no uncommitted
@@ -3765,47 +3772,16 @@ class Orchestrator:
                 "Failed to update summary comment issue_id=%s: %s", session.issue.id, exc
             )
 
-    def _get_rule_judge(self) -> BatchedLLMJudge | None:
-        """Return a :class:`BatchedLLMJudge` for LLM-based rule dedup/merge/conflict.
-
-        Falls back to ``None`` (TF-IDF path) when the LLM is not available.
-        """
-        return BatchedLLMJudge()
-
     async def _apply_review_rules(self, session: AgentSession) -> None:
-        """F-121: 从 review follow-up agent 回复中提取规则并持久化。
+        """F-121: 确保 review commit 包含 review metadata。
 
-        规则提取为参考性质，失败不应阻塞 session 正常流程；
-        任何异常（OSError / YAMLError / ValueError 等）仅 log warning 不重抛。
+        规则提取已从 follow-up 流水线中移除，改为 CLI 命令
+        ``clawcodex rules extract`` 手动触发。
+        Commit message 中已由 ``GitSyncService`` 写入 review
+        metadata（review-pr / review-id），供 CLI extract 命令
+        扫描 commit log 时解析。
         """
-        if not getattr(self.workflow.rules, "enabled", False):
-            return
-        try:
-            rules_path = RuleEngine.get_rules_path(self.workflow, self._workflow_path)
-            if rules_path:
-                rc = self.workflow.rules
-                # 构造 source：从 session 的 pull_request 信息中提取
-                pr_ref = getattr(session, "pull_request", None)
-                source = ""
-                if pr_ref:
-                    pr_num = getattr(pr_ref, "number", None) or getattr(pr_ref, "id", None) or ""
-                    if pr_num:
-                        source = f"PR #{pr_num}"
-                await RuleEngine(rule_judge=self._get_rule_judge()).apply(
-                    session.output_text,
-                    rules_path,
-                    similarity_threshold=rc.similarity_threshold,
-                    enhancement_threshold=rc.enhancement_threshold,
-                    max_rules=rc.max_rules,
-                    min_confidence=rc.min_confidence,
-                    source=source,
-                )
-        except Exception as exc:
-            logger.warning(
-                "F-121 rule extraction failed for issue %s: %s",
-                session.issue.id,
-                exc,
-            )
+        pass
 
     async def _reply_to_processed_feedback(self, session: AgentSession) -> None:
         if not self.workflow.review_feedback.reply_to_comments:

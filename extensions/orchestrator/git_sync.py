@@ -215,6 +215,14 @@ class GitSyncService:
                     # Agent already committed, skip auto-commit
                     agent_committed = True
                     commit_sha = current_sha
+                    # F-121: amend agent's commit with review metadata (safe before push)
+                    if followup_pr is not None:
+                        await asyncio.to_thread(
+                            self._ensure_review_metadata, repo_root, session, followup_pr
+                        )
+                        commit_sha = await asyncio.to_thread(
+                            self._run_git_output, ["rev-parse", "HEAD"], repo_root
+                        )
                 else:
                     # No staged changes and HEAD unchanged - likely whitelist filtered everything
                     # Fall through to normal commit flow (which will create empty commit or skip)
@@ -224,6 +232,7 @@ class GitSyncService:
                     issue,
                     followup=followup_pr is not None,
                     feedback_body=getattr(session, "feedback_commit_body", None),
+                    session=session,
                 )
                 await asyncio.to_thread(
                     self._run_git_checked, ["commit", "-m", commit_message], repo_root
@@ -502,13 +511,8 @@ class GitSyncService:
         # loop above runs nothing and verification used to pass vacuously.
         # Fall back to an auto-detected test run compared against the
         # pre-change baseline so net-new failures block the push.
-        if (
-            not self._agent_config.test_command
-            and self._agent_config.verification.regression_guard
-        ):
-            verification_status, guard_output = await self._run_regression_guard(
-                repo_root, session
-            )
+        if not self._agent_config.test_command and self._agent_config.verification.regression_guard:
+            verification_status, guard_output = await self._run_regression_guard(repo_root, session)
             if guard_output:
                 outputs.append(f"## regression_guard\n{guard_output}".strip())
         # Repro-first gate follow-through: the reproduction command that
@@ -560,9 +564,7 @@ class GitSyncService:
     #   ERROR tests/test_z.py - ImportError: ...
     _PYTEST_FAILURE_RE = re.compile(r"^(?:FAILED|ERROR)\s+(\S+)", re.MULTILINE)
 
-    async def _run_regression_guard(
-        self, repo_root: str, session: Any
-    ) -> tuple[str, str]:
+    async def _run_regression_guard(self, repo_root: str, session: Any) -> tuple[str, str]:
         """Run the fallback test suite and gate on **net-new** failures.
 
         Returns ``(verification_status, output_note)``. Statuses:
@@ -1025,7 +1027,12 @@ class GitSyncService:
             self._run_git_checked(["reset", "--", *to_unstage], repo_root)
 
     def _build_commit_message(
-        self, issue: Issue, *, followup: bool = False, feedback_body: str | None = None
+        self,
+        issue: Issue,
+        *,
+        followup: bool = False,
+        feedback_body: str | None = None,
+        session: Any | None = None,
     ) -> str:
         identifier = (issue.identifier or "issue").strip().lstrip("#")
         prefix = "fix" if followup else "feat"
@@ -1035,7 +1042,44 @@ class GitSyncService:
         else:
             title = (issue.title or "automated update").strip()
         message = f"{prefix}: {identifier} {title}"
-        return message[:72]
+
+        # Append review metadata for later rules extraction.
+        if followup and session is not None:
+            pr_ref = getattr(session, "pull_request", None)
+            pr_num = getattr(pr_ref, "number", None) or getattr(pr_ref, "id", "")
+            lines = [message, ""]
+            if pr_num:
+                lines.append(f"review-pr: #{pr_num}")
+            feedback_ids = getattr(session, "feedback_ids", None) or []
+            for fid in feedback_ids:
+                lines.append(f"review-id: {fid}")
+            feedback_body = (getattr(session, "feedback_commit_body", None) or "").strip()
+            if feedback_body:
+                lines.append(f"review-body: {feedback_body}")
+            if len(lines) > 2:
+                message = "\n".join(lines)
+        return message[:1024] if followup else message[:72]
+
+    def _ensure_review_metadata(self, repo_root: str, session: Any, followup_pr: Any) -> None:
+        """Amend agent's commit to add review metadata if missing (safe before push)."""
+        current_msg = self._run_git_output(["log", "-1", "--format=%B"], repo_root)
+        if "review-pr:" in current_msg:
+            return
+        pr_num = getattr(followup_pr, "number", None) or getattr(followup_pr, "id", "")
+        feedback_body = (getattr(session, "feedback_commit_body", None) or "").strip()
+        lines = [current_msg.strip(), "", f"review-pr: #{pr_num}"]
+        feedback_ids = getattr(session, "feedback_ids", None) or []
+        for fid in feedback_ids:
+            lines.append(f"review-id: {fid}")
+        if feedback_body:
+            lines.append(f"review-body: {feedback_body}")
+        new_msg = "\n".join(lines)
+        self._run_git_checked(["commit", "--amend", "-m", new_msg], repo_root)
+        logger.info(
+            "F-121: amended commit with review metadata (PR=%s, body=%s)",
+            pr_num,
+            feedback_body[:40],
+        )
 
     def _build_pr_title(self, issue: Issue) -> str:
         identifier = (issue.identifier or "issue").strip()
@@ -1163,6 +1207,7 @@ class GitSyncService:
     def _strip_think_blocks(text: str) -> str:
         """Remove <think>...</think> blocks from LLM output."""
         import re
+
         return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
     @staticmethod

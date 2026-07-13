@@ -202,21 +202,6 @@ class TestRulesCliStats(unittest.TestCase):
             self.assertEqual(rc, 0)
 
 
-class TestRulesCliRefresh(unittest.TestCase):
-    """``rules refresh`` subcommand (stub)."""
-
-    def test_refresh_returns_zero(self) -> None:
-        with tempfile.TemporaryDirectory() as d:
-            root = Path(d)
-            wf = _make_workflow(root, rules_enabled=True)
-            args = argparse.Namespace(
-                rules_subcommand="refresh",
-                workflow=str(wf),
-            )
-            rc = rules_run(args)
-            self.assertEqual(rc, 0)
-
-
 class TestRulesCliWorkflowNotFound(unittest.TestCase):
     """Error path: workflow file does not exist."""
 
