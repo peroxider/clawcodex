@@ -149,3 +149,18 @@ def test_auto_template_forbids_thinking_preamble() -> None:
     assert "thinking process" in system
     assert "do not output any internal chain-of-thought" in system
     assert "<think>" in messages[0]["content"]
+
+
+def test_prompt_forbids_preamble_and_requires_hyphen_bullets() -> None:
+    """The recap prompt must explicitly forbid model-added meta-intros and
+    require the ASCII hyphen as the only bullet marker."""
+    system = build_summary_messages(
+        _conv_with_mixed_messages(),
+        max_input_tokens=4_000,
+        trigger="auto",
+    )[0]["content"]
+    lowered = system.lower()
+    assert "你刚回来，这是之前的会话摘要" in system
+    assert "do not start the recap with a preamble" in lowered
+    assert "use `-` and only `-` as the bullet marker" in lowered
+    assert "do not use `•`" in lowered

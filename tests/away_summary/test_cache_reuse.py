@@ -79,13 +79,38 @@ def _install_fork_stub(monkeypatch, *, response_text: str = "forked recap") -> l
     return captured
 
 
+def _extract_first_user_text(messages: list) -> str:
+    """Return the text of the first user message in the fork payload."""
+    from clawcodex_ext.types.content_blocks import TextBlock
+    from clawcodex_ext.types.messages import Message
+
+    for msg in messages:
+        if getattr(msg, "role", None) != "user":
+            continue
+        content = getattr(msg, "content", None)
+        if isinstance(content, list) and content:
+            block = content[0]
+            if isinstance(block, TextBlock):
+                return block.text
+            if isinstance(block, dict):
+                return str(block.get("text") or "")
+        if isinstance(content, str):
+            return content
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # Service-level: cache_safe_params enables the fork path
 # ---------------------------------------------------------------------------
 
 
 def test_service_uses_fork_when_cache_safe_params_available(monkeypatch) -> None:
-    """``/recap`` with a cached CSP takes the fork path, not provider.chat."""
+    """``/recap`` with a cached CSP takes the fork path, not provider.chat.
+
+    The away-summary formatting instructions must be forwarded in the user
+    message because ``run_forked_agent`` reuses the parent's cached system
+    prompt.
+    """
     captured = _install_fork_stub(monkeypatch, response_text="cache-recap")
 
     conv = _conv()
@@ -105,6 +130,11 @@ def test_service_uses_fork_when_cache_safe_params_available(monkeypatch) -> None
     assert captured, "run_forked_agent was not called"
     # Provider.chat was NOT called — the fork output replaced it.
     assert provider.calls == []
+    # The recap-specific system instructions travelled inside the user message.
+    params = captured[0]
+    user_text = _extract_first_user_text(params.prompt_messages)
+    assert "Use `-` and ONLY `-` as the bullet marker" in user_text
+    assert "你刚回来，这是之前的会话摘要" in user_text
 
 
 def test_service_skips_fork_when_config_disables_cache(monkeypatch) -> None:

@@ -11,7 +11,10 @@ from clawcodex_ext.away_summary.prompt import (
     build_summary_messages,
     infer_response_language,
 )
-from clawcodex_ext.away_summary.service import AwaySummaryService
+from clawcodex_ext.away_summary.service import (
+    AwaySummaryService,
+    _normalize_summary_output,
+)
 
 
 class FakeProvider:
@@ -657,3 +660,66 @@ def test_service_falls_back_when_content_is_full_cot_transcript() -> None:
     assert "no hidden reasoning" not in lowered
     # We get the conversation-derived fallback instead of the CoT.
     assert "你是谁" in result.summary
+
+
+def test_normalize_summary_output_strips_chinese_preamble() -> None:
+    """Models may emit a meta-intro such as '你刚回来，这是之前的会话摘要：'
+    despite the prompt forbidding it. The post-processor must strip it."""
+    raw = "你刚回来，这是之前的会话摘要：\n用户与助手进行了简单的问候。\n- 继续聊天"
+    cleaned = _normalize_summary_output(raw)
+    assert "你刚回来" not in cleaned
+    assert "这是之前的会话摘要" not in cleaned
+    assert cleaned.startswith("用户与助手进行了简单的问候。")
+
+
+def test_normalize_summary_output_replaces_non_hyphen_bullets() -> None:
+    """The prompt requires '-' bullets, but models sometimes emit '•', '*',
+    '·', or numbered bullets. Normalize them all to '-'."""
+    raw = "我们刚聊到 greeting。\n• 文件 A\n* 工具 B\n· 继续\n1. 下一步"
+    cleaned = _normalize_summary_output(raw)
+    assert "•" not in cleaned
+    assert "* " not in cleaned
+    assert "·" not in cleaned
+    assert "1." not in cleaned
+    assert "- 文件 A" in cleaned
+    assert "- 工具 B" in cleaned
+    assert "- 继续" in cleaned
+    assert "- 下一步" in cleaned
+
+
+def test_normalize_summary_output_drops_low_value_greeting_bullets() -> None:
+    """A bare greeting session should not produce a bullet that only says
+    '问候' / 'hello' — such bullets carry no useful context."""
+    raw = "用户与助手打了个招呼。\n- 问候\n- 继续聊天"
+    cleaned = _normalize_summary_output(raw)
+    assert "- 问候" not in cleaned
+    assert "- 继续聊天" in cleaned
+
+
+def test_service_normalizes_model_noncompliant_output() -> None:
+    """End-to-end: a model that ignores the prompt and emits a preamble plus
+    '•' bullets still yields a clean, normalized recap."""
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="hello"),
+        Message(role="assistant", content="hi there"),
+    ]
+    result = AwaySummaryService(
+        conversation=conv,
+        provider=FakeProvider(
+            "你刚回来，这是之前的会话摘要：\n"
+            "用户与助手进行了简单的问候。\n"
+            "• 问候\n"
+            "- 继续聊天"
+        ),
+        model="fake-model",
+        config=AwaySummaryConfig(),
+    ).generate(trigger="manual")
+
+    assert result.generated is True
+    assert "你刚回来" not in result.summary
+    assert "这是之前的会话摘要" not in result.summary
+    assert "•" not in result.summary
+    assert "- 继续聊天" in result.summary
+    # The low-value greeting bullet is dropped.
+    assert "- 问候" not in result.summary

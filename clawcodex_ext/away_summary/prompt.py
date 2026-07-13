@@ -51,6 +51,9 @@ We're debugging why away-summary messages now render in white with less content 
 Rules:
 - The recap MUST be written in the language specified above. Do not switch languages mid-recap.
 - The first sentence should sound like a handoff, not a status report.
+- Do NOT start the recap with a preamble such as "你刚回来，这是之前的会话摘要：", "Here's a summary:", or any meta-introduction about what the text is.
+- Use `-` and ONLY `-` as the bullet marker. Do NOT use `•`, `*`, `·`, or numbered bullets.
+- Do NOT add a heading or label before the bullet list; only the single intent phrase is allowed, and it must NOT end with a colon.
 - Skip root-cause narrative, internal fix details, secondary to-dos, and em-dash tangents.
 - Do not mention that you are an AI.
 - Do NOT output any internal chain-of-thought, planning notes, or self-checks
@@ -99,6 +102,9 @@ Rules:
 - The recap MUST be written in the language specified above. Do not switch languages mid-recap.
 - The first sentence should sound like a handoff, not a status report.
 - Skip status reports and commit recaps; the user does not want a re-narration of every step that already happened.
+- Do NOT start the recap with a preamble such as "你刚回来，这是之前的会话摘要：", "Here's a summary:", or any meta-introduction about what the text is.
+- Use `-` and ONLY `-` as the bullet marker. Do NOT use `•`, `*`, `·`, or numbered bullets.
+- Do NOT add a heading or label before the bullet list; only the single intent phrase is allowed, and it must NOT end with a colon.
 - Skip root-cause narrative, internal fix details, secondary to-dos, and em-dash tangents.
 - Do not mention that you are an AI.
 - Do NOT output any internal chain-of-thought, planning notes, or self-checks

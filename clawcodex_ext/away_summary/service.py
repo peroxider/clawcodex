@@ -139,6 +139,14 @@ def _generate_via_fork(
     if not user_text:
         raise _ForkUnavailable("recap user message has no extractable text")
 
+    # The fork reuses the parent's system prompt for cache efficiency, but the
+    # recap still needs its own formatting instructions (bullet marker,
+    # preamble ban, etc.). Inject those instructions into the user message so
+    # the model sees them while the parent's cached system prefix stays intact.
+    system_text = _extract_system_text(messages)
+    if system_text:
+        user_text = f"{system_text}\n\n{user_text}"
+
     prompt_messages = [
         create_user_message(content=[TextBlock(text=user_text)])
     ]
@@ -194,6 +202,33 @@ def _extract_user_text(messages: list[dict[str, Any]]) -> str:
                         if text is not None:
                             parts.append(str(text))
                 return "\n".join(p for p in parts if p)
+    return ""
+
+
+def _extract_system_text(messages: list[dict[str, Any]]) -> str:
+    """Pick the system-role message's text content from a chat pair.
+
+    Used by the fork path: the away-summary system prompt contains the
+    formatting rules (bullet marker, preamble ban, etc.) that the recap
+    model must follow. Because ``run_forked_agent`` reuses the parent's
+    cached system prompt, we inject these instructions into the user
+    message instead.
+    """
+    for msg in messages:
+        if isinstance(msg, dict) and msg.get("role") == "system":
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                return content.strip()
+            if isinstance(content, list):
+                parts: list[str] = []
+                for item in content:
+                    if isinstance(item, dict):
+                        parts.append(str(item.get("text") or ""))
+                    else:
+                        text = getattr(item, "text", None)
+                        if text is not None:
+                            parts.append(str(text))
+                return "\n".join(p for p in parts if p).strip()
     return ""
 
 
@@ -399,7 +434,8 @@ def _extract_summary(response: Any) -> str:
     Treat that block as reasoning — never as recap.
     """
     raw = str(getattr(response, "content", "") or "").strip()
-    return _clean_summary_text(raw)
+    cleaned = _clean_summary_text(raw)
+    return _normalize_summary_output(cleaned)
 
 
 # Pre-compiled regexes used by ``_clean_summary_text``. Each pattern matches a
@@ -514,6 +550,53 @@ def _clean_summary_text(text: str) -> str:
     #    surrender to the conversation-derived fallback.
     if _looks_like_cot_transcript(cleaned):
         return ""
+    return cleaned
+
+
+def _normalize_summary_output(text: str) -> str:
+    """Normalize a model-generated recap to match the requested style.
+
+    Models occasionally ignore the prompt's formatting instructions and
+    emit:
+
+    * a preamble such as "你刚回来，这是之前的会话摘要：" or "Here's a summary:";
+    * non-hyphen bullet markers (``•``, ``*``, ``·``);
+    * low-value bullets for bare greetings (e.g. ``• 问候``).
+
+    This function cleans those up as a defensive post-processing step so
+    the rendered recap stays consistent regardless of model compliance.
+    """
+    if not text:
+        return text
+
+    # 1. Strip common preamble patterns that models add despite the prompt.
+    preamble_patterns = [
+        r"^你刚回来\s*[,，]?\s*这是之前的会话摘要\s*[:：]\s*",
+        r"^这是之前的会话摘要\s*[:：]\s*",
+        r"^你刚回来\s*[:：]\s*",
+        r"^(?:here['']?s?\s+a\s+)?summary\s*[:：]\s*",
+        r"^session\s+recap\s*[:：]\s*",
+    ]
+    cleaned = text
+    for pattern in preamble_patterns:
+        cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
+
+    # 2. Normalize bullet markers to the ASCII hyphen required by the prompt.
+    #    Match line-start bullets: •, *, ·, or numbered like "1. " / "1) ".
+    cleaned = re.sub(r"(?m)^\s*[•*·]\s+", "- ", cleaned)
+    cleaned = re.sub(r"(?m)^\s*\d+[\.\)]\s+", "- ", cleaned)
+
+    # 3. Drop low-value greeting bullets that contain only social filler.
+    _LOW_VALUE_BULLET_RE = re.compile(
+        r"(?m)^-\s*(?:"
+        r"问候|打招呼|问好|寒暄|hello|hi|hey|greetings|welcome"
+        r")\s*$",
+        re.IGNORECASE,
+    )
+    cleaned = _LOW_VALUE_BULLET_RE.sub("", cleaned)
+
+    # 4. Collapse any blank lines introduced by the cleanup.
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
     return cleaned
 
 
