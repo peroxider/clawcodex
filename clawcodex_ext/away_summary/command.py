@@ -15,6 +15,7 @@ def build_recap_command() -> LocalCommand:
         name="recap",
         description="Generate a short recap of the current session",
         argument_hint="",
+        aliases=["away", "catchup"],
         supports_non_interactive=False,
         run_in_thread=True,
         is_enabled=lambda: load_away_summary_config().recap_command_enabled,

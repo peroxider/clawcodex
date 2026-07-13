@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -14,7 +15,7 @@ from clawcodex_ext.away_summary.fingerprint import (
     session_turn_count,
 )
 from clawcodex_ext.away_summary.messages import create_away_summary_message
-from clawcodex_ext.away_summary.prompt import build_summary_messages
+from clawcodex_ext.away_summary.prompt import build_summary_messages, infer_response_language
 
 logger = logging.getLogger(__name__)
 
@@ -108,13 +109,20 @@ class AwaySummaryService:
 
         if _last_exc is not None:
             raise _last_exc  # type: ignore[misc] — re-raise so the controller logs it
-        summary = str(getattr(response, "content", "") or "").strip()
+        summary = _extract_summary(response)
         if not summary:
             reasoning = str(getattr(response, "reasoning_content", "") or "").strip()
             if reasoning:
-                summary = reasoning
-            else:
-                summary = _fallback_summary(self.conversation)
+                # ``reasoning_content`` is an internal chain-of-thought stream
+                # and is treated as private context elsewhere in the system
+                # (see ``clawcodex_ext/query/query.py``). Never leak it to the
+                # user; log it for diagnostics and fall back to the
+                # conversation-derived summary instead.
+                logger.info(
+                    "Away Summary: model returned empty content with reasoning; "
+                    "using fallback recap. reasoning_len=%d", len(reasoning),
+                )
+            summary = _fallback_summary(self.conversation)
 
         summary_message = create_away_summary_message(
             summary,
@@ -155,67 +163,202 @@ class AwaySummaryService:
         )
 
 
-def _fallback_summary(conversation: Any) -> str:
-    """Build a readable summary from conversation history without calling the LLM.
+def _extract_summary(response: Any) -> str:
+    """Pull the user-facing recap text out of a ChatResponse, stripping any
+    internal chain-of-thought the model may have leaked into ``content``.
 
-    Scans messages to extract user intents, files touched, and key actions,
-    producing a structured recap that does not look like raw internal metadata.
+    Several providers (e.g. Sapiens AI / Agnes, Kimi thinking mode, Gemini
+    thinking variants) emit a ``"Here's a thinking process"`` style draft
+    block *inside* ``content`` even when asked to return only the recap.
+    Treat that block as reasoning — never as recap.
+    """
+    raw = str(getattr(response, "content", "") or "").strip()
+    return _clean_summary_text(raw)
+
+
+# Pre-compiled regexes used by ``_clean_summary_text``. Each pattern matches a
+# thinking/reasoning preamble that some models prepend to free-form text in
+# ``content``. They are intentionally conservative: only strip when the leaked
+# block is clearly demarcated (intro line + blank line, or explicit XML tags).
+_THINKING_PREAMBLE_RE = re.compile(
+    r"""
+    ^\s*
+    (?:
+        here\s*['']?s?\s+a?\s+thinking\s+process\s*[:：]?    # "Here's a thinking process"
+      | thinking\s+process\s*[:：]?                           # "Thinking process:"
+      | 思考过程\s*[:：]                                       # Chinese: "思考过程:"
+      | let\s+me\s+think\s+(?:about\s+this\s+)?[:：]?         # "Let me think"
+      | my\s+thought\s+process\s*[:：]?                       # "My thought process:"
+    )
+    .*?(?=\n\s*\n|\Z)                                          # up to next blank line or EOF
+    """,
+    re.IGNORECASE | re.DOTALL | re.VERBOSE,
+)
+_THINKING_TAG_RE = re.compile(
+    r"<(?P<tag>think(?:ing)?|reasoning|thought|reflection|analysis)>.*?</(?P=tag)>",
+    re.IGNORECASE | re.DOTALL,
+)
+
+# Hallmarks of a leaked chain-of-thought scaffold. When these appear in the
+# ``content`` after the preamble has been stripped, the entire content is
+# almost certainly the model's reasoning transcript rather than a real recap.
+# In that case ``_clean_summary_text`` returns the empty string so the caller
+# can fall back to the conversation-derived ``_fallback_summary`` instead of
+# leaking thinking to the user.
+_COT_HALLMARKS: tuple[str, ...] = (
+    "no hidden reasoning",
+    "no reasoning trace",
+    "check constraints",
+    "draft recap (mental refinement",
+    "input transcript:",
+    "5 writing style",
+    "focus areas covered?",
+    "language: natural simplified chinese?",
+)
+
+# A recap is, in the worst case, a numbered list (1. ... 2. ... 3. ...).
+# When we see THREE OR MORE leading-numbered chapter headings inside the
+# cleaned body, we treat the body as a CoT chain (1 Analyze, 2 Identify,
+# 3 Draft, 4 Check, ...) and fall back. A genuine 1./2./3. bullet recap is
+# very rare — and even if it occurs, the conversation-derived fallback
+# still gives the user something sensible to read on return.
+_COT_CHAPTER_RE = re.compile(
+    r"(?:^|\n)\s*[1-9]\d*[\.\s]+[\u4e00-\u9fffA-Za-z][^\n]{0,80}:\s*\n",
+)
+_COT_CHAPTER_THRESHOLD = 2
+
+
+def _looks_like_cot_transcript(text: str) -> bool:
+    """Return True if ``text`` shows the hallmarks of leaked chain-of-thought.
+
+    Two independent signals are checked:
+
+    1. A hard-coded list of self-check phrases that would never appear in
+       a user-facing recap (``No hidden reasoning`` etc.).
+    2. Three or more numbered chapter headings on their own line. Real
+       recaps don't read like ``1 Analyze`` / ``2 Identify`` / ``3 Draft``
+       / ``4 Check`` — those are CoT scaffolding.
+
+    The list is deliberately narrow so legitimate content (e.g. a recap
+    that mentions these words in passing) still passes through.
+    """
+    if not text:
+        return False
+    lowered = text.lower()
+    if any(marker in lowered for marker in _COT_HALLMARKS):
+        return True
+    chapters = _COT_CHAPTER_RE.findall(text)
+    return len(chapters) >= _COT_CHAPTER_THRESHOLD
+
+
+def _clean_summary_text(text: str) -> str:
+    """Strip leaked thinking/reasoning blocks from a model's free-form text.
+
+    Handles two leakage modes observed in the wild:
+
+    1. The leading "Here's a thinking process: 1 Foo 2 Bar ...\n\n3 Draft
+       Recap ..." template — strip everything before the blank line that
+       precedes the actual recap.
+    2. XML-style ``<think>...</think>`` envelopes around the recap — strip
+       the envelopes but keep the recap body.
+
+    If, after stripping, the remaining text still exhibits obvious
+    chain-of-thought scaffolding (``Check Constraints``, ``No hidden
+    reasoning`` etc.), return the empty string so the caller's
+    ``_fallback_summary`` path takes over.
+
+    The function is deliberately conservative: when in doubt, leave the text
+    alone rather than risk eating the recap itself.
+    """
+    if not text:
+        return text
+
+    cleaned = text
+
+    # 1. XML-style envelopes — strip while preserving the inner content.
+    cleaned = _THINKING_TAG_RE.sub("", cleaned)
+
+    # 2. Free-form preamble of the form "Here's a thinking process...\n\n…".
+    cleaned = _THINKING_PREAMBLE_RE.sub("", cleaned)
+
+    # Collapse any double blanks that the cuts may have introduced.
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
+    # 3. If the post-clean body still looks like reasoning scaffolding,
+    #    surrender to the conversation-derived fallback.
+    if _looks_like_cot_transcript(cleaned):
+        return ""
+    return cleaned
+
+
+def _fallback_summary(conversation: Any) -> str:
+    """Build a 1-2 sentence recap from conversation history without calling the LLM.
+
+    Used when the model returned empty content or leaked chain-of-thought
+    into ``content``. The output mirrors the LLM path's format — exactly
+    1-2 plain sentences (no markdown, no bullets), with a goal + next-action
+    shape — so users get a consistent reading experience whether the recap
+    was LLM-generated or fell back to conversation-derived text.
     """
     messages = list(getattr(conversation, "messages", []) or [])
+    is_zh = infer_response_language(conversation) == "Chinese"
 
-    # Collect rich information from each turn.
-    user_requests: list[str] = []
-    files_touched: set[str] = set()
-    tool_actions: list[str] = []
-    last_msgs: list[str] = []
+    user_messages: list[str] = []
+    assistant_messages: list[str] = []
 
     for msg in messages:
         role = getattr(msg, "role", "")
         content = getattr(msg, "content", "")
         if role == "user":
-            text = _flatten_content(content)
-            text = text[:300].rstrip()
+            text = _flatten_content(content).strip()
             if text:
-                user_requests.append(text)
-                last_msgs.append(f"User: {text}")
+                user_messages.append(text)
         elif role == "assistant":
-            actions, fnames = _extract_actions_and_files(content)
-            tool_actions.extend(actions)
-            files_touched.update(fnames)
-            text = _flatten_content(content)[:300].rstrip()
+            text = _flatten_content(content).strip()
             if text and not text.startswith("[tool:"):
-                last_msgs.append(f"Assistant: {text}")
+                assistant_messages.append(text)
 
-    parts: list[str] = []
+    if not user_messages and not assistant_messages:
+        return (
+            "会话刚开始，暂无内容。请直接告诉我你想做什么。" if is_zh
+            else "The session just started; nothing to recap yet. Tell me what you'd like to do next."
+        )
 
-    # Summarise the conversation scope.
-    if not user_requests:
-        parts.append(f"This session has {len(messages)} messages.")
-    else:
-        first = user_requests[0][:200]
-        parts.append(f"This session has {len(messages)} messages across {len(user_requests)} user requests.")
-        parts.append(f"Started with: {first}")
+    last_user = user_messages[-1]
+    user_point = _leading_point(last_user, limit=80)
 
-    # What files were touched.
-    if files_touched:
-        file_list = sorted(files_touched, key=lambda p: (p.count("/"), p))[:12]
-        if len(file_list) <= 6:
-            parts.append("Files mentioned: " + ", ".join(file_list))
-        else:
-            parts.append("Files mentioned: " + ", ".join(sorted(files_touched)[:6]) + " … and more")
+    if not assistant_messages:
+        if is_zh:
+            return f"你正在进行：{user_point}。等待助手响应后继续。"
+        return f"You're working on: {user_point}. Waiting for the assistant to respond."
 
-    # What tool actions were taken.
-    if tool_actions:
-        unique_actions = _dedup_ordered(tool_actions)
-        parts.append("Actions taken: " + ", ".join(unique_actions[:6]))
+    last_asst = assistant_messages[-1]
+    asst_point = _leading_point(last_asst, limit=80)
 
-    # Last user request (useful for context).
-    if user_requests:
-        last_req = user_requests[-1][:240]
-        if last_req not in parts[-1]:
-            parts.append(f"Latest task: {last_req}")
+    if is_zh:
+        return f"你正在进行：{user_point}。助手已回复：{asst_point}。请从中断处继续。"
+    return (
+        f"You're working on: {user_point}. "
+        f"Assistant last replied: {asst_point}. Continue from where you left off."
+    )
 
-    return "\n".join(parts)
+
+def _leading_point(text: str, limit: int = 140) -> str:
+    """Return the leading point of ``text`` for use in a recap.
+
+    Prefers the first sentence (terminated by ``. ! ? 。 ！ ？``) when it
+    fits in ``limit`` characters; otherwise truncates with an ellipsis.
+    """
+    if not text:
+        return ""
+    flat = " ".join(text.split())
+    for sep in (". ", "! ", "? ", "。", "！", "？"):
+        idx = flat.find(sep)
+        if 0 < idx < limit:
+            return flat[: idx + len(sep)].strip()
+    if len(flat) > limit:
+        return flat[:limit].rstrip() + "…"
+    return flat
 
 
 def _extract_actions_and_files(

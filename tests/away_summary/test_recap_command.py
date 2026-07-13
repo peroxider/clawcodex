@@ -104,3 +104,23 @@ def test_recap_command_can_be_unregistered(monkeypatch) -> None:
     values["enabled"] = False
     register_away_summary_commands(registry)
     assert not registry.has("recap")
+
+
+def test_recap_command_has_away_and_catchup_aliases() -> None:
+    """The /recap command exposes ``/away`` and ``/catchup`` aliases that
+    mirror the canonical Claude Code /recap UX (TS upstream ships these
+    aliases in ``src/commands/recap/index.ts``)."""
+    monkeypatch_obj = __import__("pytest").MonkeyPatch()
+    try:
+        monkeypatch_obj.setattr(
+            "clawcodex_ext.away_summary.registration.load_away_summary_config",
+            lambda: AwaySummaryConfig(recap_command_enabled=True),
+        )
+        registry = CommandRegistry()
+        register_away_summary_commands(registry)
+        cmd = registry.get("recap")
+        assert cmd is not None
+        assert "away" in cmd.aliases
+        assert "catchup" in cmd.aliases
+    finally:
+        monkeypatch_obj.undo()

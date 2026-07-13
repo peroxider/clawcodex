@@ -15,8 +15,14 @@ from clawcodex_ext.away_summary.service import AwaySummaryService
 
 
 class FakeProvider:
-    def __init__(self, content: str = "worked on the feature") -> None:
+    def __init__(
+        self,
+        content: str = "worked on the feature",
+        *,
+        reasoning_content: str | None = None,
+    ) -> None:
         self.content = content
+        self.reasoning_content = reasoning_content
         self.calls: list[dict] = []
         self.model = "fake-model"
 
@@ -27,6 +33,7 @@ class FakeProvider:
             model="fake-model",
             usage={},
             finish_reason="stop",
+            reasoning_content=self.reasoning_content,
         )
 
 
@@ -147,9 +154,125 @@ def test_fallback_summary_flattens_content_blocks() -> None:
     ).generate(trigger="auto")
 
     assert result.generated is True
-    assert "Started with: 你好" in result.summary
+    # Recap should describe the exchange semantically, not surface raw
+    # session metadata like "Started with:" or "This session has …".
+    assert "Started with:" not in result.summary
+    assert "This session has" not in result.summary
+    assert "Files mentioned:" not in result.summary
+    assert "Actions taken:" not in result.summary
+    assert "Latest task:" not in result.summary
+    # Must still surface the actual exchange content.
+    assert "你好" in result.summary
+    # Must not leak SDK internals into the recap.
     assert "TextBlock(" not in result.summary
     assert "type='text'" not in result.summary
+
+
+def test_fallback_summary_describes_exchanges_semantically() -> None:
+    """The LLM-free fallback must read like a recap, not a metadata dump.
+
+    A user who types ``/recap`` after a short greeting exchange should see
+    a 1-2 sentence description of what happened — e.g.
+    ``You're working on: hello. Assistant last replied: Hello!. Continue
+    from where you left off.`` — rather than the legacy
+    ``This session has 2 messages across 1 user requests. Started with: hello``.
+    """
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="hello"),
+        Message(role="assistant", content="Hello! How can I help you today?"),
+    ]
+
+    result = AwaySummaryService(
+        conversation=conv,
+        provider=FakeProvider(""),
+        model="fake-model",
+        config=AwaySummaryConfig(),
+    ).generate(trigger="manual")
+
+    assert result.generated is True
+    summary = result.summary
+    # English fallback because the user's message is English.
+    assert "working on" in summary.lower()
+    assert "hello" in summary.lower()
+    # No raw session metadata.
+    assert "Started with:" not in summary
+    assert "This session has" not in summary
+    # No markdown bullets either.
+    assert "\n- " not in summary
+    assert "\n* " not in summary
+
+
+def test_fallback_summary_lists_multiple_user_requests() -> None:
+    """The fallback surfaces the most recent user request as the goal and the
+    most recent assistant reply as the current task state — but it does NOT
+    enumerate every prior turn (that would balloon past the 1-2 sentence
+    budget and leak process)."""
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="Please implement the recap feature."),
+        Message(role="assistant", content="Sure, working on it now."),
+        Message(role="user", content="Also add a /recap command."),
+        Message(role="assistant", content="Got it."),
+    ]
+
+    result = AwaySummaryService(
+        conversation=conv,
+        provider=FakeProvider(""),
+        model="fake-model",
+        config=AwaySummaryConfig(),
+    ).generate(trigger="manual")
+
+    assert result.generated is True
+    summary = result.summary
+    # English fallback because all messages are English.
+    # The LAST user request is the current goal.
+    assert "add a /recap command" in summary
+    # The LAST assistant reply is the current task state.
+    assert "Got it." in summary
+    # Earlier turns should NOT be surfaced (would blow the budget).
+    assert "implement the recap" not in summary
+    assert "Started with:" not in summary
+    assert "Latest task:" not in summary
+
+
+def test_fallback_summary_handles_empty_session() -> None:
+    """When there is no user or assistant content, surface a clear empty-state.
+
+    Tested directly against ``_fallback_summary`` because the public
+    ``generate()`` path is gated by ``min_turns`` and would short-circuit
+    before the fallback ever runs.
+    """
+    from clawcodex_ext.away_summary.service import _fallback_summary
+
+    conv = Conversation()
+    conv.messages = []
+
+    summary = _fallback_summary(conv)
+    assert "nothing to recap" in summary.lower() or "刚开始" in summary
+
+
+def test_fallback_summary_mentions_tools_used() -> None:
+    """Tool actions performed by the assistant should appear as a recap line
+    rather than being hidden behind a generic "no tools used" sentence."""
+    from clawcodex_ext.away_summary.service import _fallback_summary
+
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="read /tmp/data.csv"),
+        Message(
+            role="assistant",
+            content=[
+                {"type": "text", "text": "Reading the file now."},
+                {"type": "tool_use", "name": "Read", "input": {"file_path": "/tmp/data.csv"}},
+            ],
+        ),
+    ]
+
+    summary = _fallback_summary(conv)
+    assert "Read" in summary
+    assert "Files mentioned:" not in summary
+    assert "Actions taken:" not in summary
 
 
 def test_infer_language_from_chinese_user_message() -> None:
@@ -203,3 +326,210 @@ def test_summary_prompt_includes_must_language_instruction() -> None:
     assert "MUST write the recap in natural Simplified Chinese" in prompt
     assert "MUST be written in the language specified above" in prompt
     assert "Do not switch languages mid-recap" in prompt
+
+
+def test_summary_prompt_forbids_thinking_preamble() -> None:
+    """The Away Summary prompt must explicitly forbid thinking-scaffold leakage.
+
+    A Sapiens AI / Agnes-2.0-Flash style provider was emitting a free-form
+    "Here's a thinking process: 1 Analyze 2 Identify 3 Draft Recap 4 Check
+    Constraints …" block inside ``content`` instead of the structured
+    ``reasoning_content`` field, which previously leaked into the recap.
+    The prompt now forbids that scaffold outright.
+    """
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="你是谁"),
+        Message(role="assistant", content="我是 Agnes-2.0-Flash"),
+    ]
+    prompt = build_summary_messages(conv, max_input_tokens=4_000)[0]["content"]
+    assert "thinking process" in prompt.lower()
+    assert "do not output any internal chain-of-thought" in prompt.lower()
+    assert "<think>" in prompt
+
+
+def test_summary_prompt_requires_goal_plus_next_action() -> None:
+    """The recap prompt must require the three-part goal+state+next-action
+    structure that the Claude Code /recap canonical implementation uses
+    (lead with goal + current task, then the one next action)."""
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="请帮我修改代码"),
+        Message(role="assistant", content="好的，我来帮你。"),
+    ]
+    prompt = build_summary_messages(conv, max_input_tokens=4_000)[0]["content"]
+    lowered = prompt.lower()
+    # 1-2 sentence budget.
+    assert "1-2 plain sentences" in lowered or "1-2 句" in prompt
+    # No markdown / no bullets.
+    assert "no markdown" in lowered
+    # Length caps mirrored from the canonical prompt.
+    assert "40 words" in lowered
+    # Goal + current state + next-action ordering.
+    assert "high-level goal" in lowered
+    assert "current task" in lowered
+    assert "next action" in lowered
+
+
+def test_service_strips_thinking_preamble_from_content() -> None:
+    """A free-form 'Here's a thinking process:\\n\\n…' preamble inside
+    ``content`` must be stripped before the recap is surfaced. When the
+    remaining body still looks like a multi-chapter CoT (1 Analyze / 2
+    Identify / 3 Draft Recap / 4 Check …) we deliberately fall back to
+    the conversation-derived summary rather than surface any of the
+    leaked scaffolding."""
+    leaked = (
+        "Here's a thinking process:\n\n"
+        " 1 Analyze User Input:\n\n"
+        " • Task: Write a short recap\n"
+        " • Constraints: 3-6 bullets\n\n"
+        " 2 Identify Key Information:\n\n"
+        " • The session just started.\n\n"
+        " 3 Draft Recap:\n\n"
+        " • 会话刚刚开启，目前处于初始问候与身份确认阶段。\n"
+        " • 用户仅进行了基础打招呼并询问了助手身份。\n"
+        " • 下一步建议：直接说明需要实现的功能。\n"
+    )
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="你是谁"),
+        Message(role="assistant", content="我是 Agnes"),
+    ]
+    result = AwaySummaryService(
+        conversation=conv,
+        provider=FakeProvider(leaked),
+        model="fake-model",
+        config=AwaySummaryConfig(),
+    ).generate(trigger="manual")
+
+    assert result.generated is True
+    lowered = result.summary.lower()
+    assert "thinking process" not in lowered
+    assert "analyze user input" not in lowered
+    assert "draft recap" not in lowered
+    assert "identify key information" not in lowered
+    # We fell back to the conversation-derived recap, not the CoT body.
+    assert "你是谁" in result.summary
+
+
+def test_service_keeps_clean_recap_when_thinking_preamble_present() -> None:
+    """Counter-test: a single numbered chapter heading that happens to be
+    preceded by a "thinking process" preamble must be allowed to pass
+    through, since that's a possible shape for a normally-recap response
+    that includes one bullet section."""
+    leaked = (
+        "Here's a thinking process:\n\n"
+        "- 会话刚刚开启，目前处于初始问候与身份确认阶段。\n"
+        "- 用户仅进行了基础打招呼并询问了助手身份。\n"
+        "- 下一步建议：直接说明需要实现的功能。\n"
+    )
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="你是谁"),
+        Message(role="assistant", content="我是 Agnes"),
+    ]
+    result = AwaySummaryService(
+        conversation=conv,
+        provider=FakeProvider(leaked),
+        model="fake-model",
+        config=AwaySummaryConfig(),
+    ).generate(trigger="manual")
+
+    assert result.generated is True
+    assert "thinking process" not in result.summary.lower()
+    assert "会话刚刚开启" in result.summary
+    assert "下一步建议" in result.summary
+
+
+def test_service_strips_think_xml_envelopes_from_content() -> None:
+    """Models that wrap their answer in <think>…</think> should drop the
+    envelope while keeping the recap body."""
+    leaked = (
+        "<think>The user greeted me and asked who I am. The session is in its "
+        "opening moments. Just summarise that.</think>\n"
+        "- 会话刚刚开启，目前处于初始问候阶段。\n"
+        "- 用户询问了助手的身份。\n"
+        "- 下一步建议：直接说明需要实现的功能。\n"
+        "</think>"  # trailing tag without content — must be cleaned up too
+    )
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="你是谁"),
+        Message(role="assistant", content="我是 Agnes"),
+    ]
+    result = AwaySummaryService(
+        conversation=conv,
+        provider=FakeProvider(leaked),
+        model="fake-model",
+        config=AwaySummaryConfig(),
+    ).generate(trigger="manual")
+
+    assert result.generated is True
+    assert "<think>" not in result.summary.lower()
+    assert "会话刚刚开启" in result.summary
+    assert "下一步建议" in result.summary
+
+
+def test_service_does_not_leak_reasoning_content() -> None:
+    """``reasoning_content`` must NEVER be used as a recap — it's an
+    internal chain-of-thought, equivalent to the cached stream in
+    ``clawcodex_ext/query/query.py``. When the model returns empty
+    ``content`` with reasoning populated, fall back to the
+    conversation-derived summary."""
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="你是谁"),
+        Message(role="assistant", content="我是 Agnes-2.0-Flash"),
+    ]
+    provider = FakeProvider(content="", reasoning_content="internal CoT — never show this")
+    result = AwaySummaryService(
+        conversation=conv,
+        provider=provider,
+        model="fake-model",
+        config=AwaySummaryConfig(),
+    ).generate(trigger="manual")
+
+    assert result.generated is True
+    assert "internal CoT" not in result.summary
+    assert "never show this" not in result.summary
+    assert "你是谁" in result.summary  # we got the fallback summary
+
+
+def test_service_falls_back_when_content_is_full_cot_transcript() -> None:
+    """Some providers emit the entire CoT transcript inside ``content``
+    (no preamble, no XML tags). The post-clean CoT-hallmark heuristic
+    should detect that and surrender to the conversation-derived summary."""
+    transcript = (
+        "1 Analyze User Input:\n\n"
+        " • Task: Write a recap\n"
+        " • Constraints: 3-6 bullets\n\n"
+        "2 Identify Key Information:\n\n"
+        " • The session just started.\n\n"
+        "3 Draft Recap (Mental Refinement in Simplified Chinese):\n\n"
+        " • 会话刚刚开启。\n\n"
+        "4 Check Constraints:\n\n"
+        " • Concise recap? Yes.\n"
+        " • 3-6 bullets? I have 5 bullets.\n"
+        " • Focus areas covered? Yes.\n"
+        " • Language: Natural Simplified Chinese? Yes.\n"
+        " • No hidden reasoning\n"
+    )
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="你是谁"),
+        Message(role="assistant", content="我是 Agnes"),
+    ]
+    result = AwaySummaryService(
+        conversation=conv,
+        provider=FakeProvider(transcript),
+        model="fake-model",
+        config=AwaySummaryConfig(),
+    ).generate(trigger="manual")
+
+    assert result.generated is True
+    lowered = result.summary.lower()
+    assert "check constraints" not in lowered
+    assert "draft recap (mental refinement" not in lowered
+    assert "no hidden reasoning" not in lowered
+    # We get the conversation-derived fallback instead of the CoT.
+    assert "你是谁" in result.summary

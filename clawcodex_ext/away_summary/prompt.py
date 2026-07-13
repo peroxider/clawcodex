@@ -9,20 +9,32 @@ from clawcodex_ext.away_summary.fingerprint import is_away_summary_message
 from clawcodex_ext.types.messages import NO_CONTENT_MESSAGE
 
 
-AWAY_SUMMARY_INSTRUCTIONS = """You are writing a short session recap for a user who stepped away from an interactive coding session.
+AWAY_SUMMARY_INSTRUCTIONS = """The user stepped away from an interactive coding session and is coming back. Write a session recap for them.
 
-Write a concise recap of the full session so far. Use 3-6 bullets maximum.
-Focus on:
-- what the user asked for,
-- important decisions and current state,
-- files or commands that matter,
-- the next useful action when the user returns.
+Format:
+- Exactly 1-2 plain sentences, no markdown.
+- Recap under 40 words (English) / 60 Chinese characters (中文).
+- No bullet lists, no headings, no bold, no asterisks.
+
+Content (in this order):
+1. The high-level goal — what the user is building or debugging, NOT implementation details.
+2. The current task state — where they were last working.
+3. The single most useful next action they should take when they return.
 
 {language_instruction}
 
 Rules:
 - The recap MUST be written in the language specified above. Do not switch languages mid-recap.
-- Do not include hidden reasoning. Do not mention that you are an AI. Keep it brief.
+- Skip root-cause narrative, internal fix details, secondary to-dos, and em-dash tangents.
+- Do not mention that you are an AI.
+- Do NOT output any internal chain-of-thought, planning notes, or self-checks
+  — even if your prompt normally does so. In particular:
+    * Never start your reply with "Here's a thinking process", "思考过程:",
+      "Thinking process:", "Let me think", or any similar preamble.
+    * Never enclose the recap in <think>…</think>, <thinking>…</thinking>, or
+      any other reasoning tags.
+    * Never include numbered "step 1: analyze, step 2: identify, step 3:
+      draft, step 4: check constraints" self-audit scaffolding.
 - Return only the recap."""
 
 _LANGUAGE_INSTRUCTION_MAP: dict[str, str] = {
@@ -50,9 +62,9 @@ def build_summary_messages(
         {
             "role": "user",
             "content": (
-                "Write a concise session recap based on the transcript below.\n\n"
+                "Write the recap based on the transcript below.\n\n"
                 f"Session transcript:\n{transcript}\n\n"
-                "Return only the recap."
+                "Return only the recap — 1-2 plain sentences, no markdown."
             ),
         },
     ]
