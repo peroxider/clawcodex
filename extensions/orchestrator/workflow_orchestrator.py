@@ -22,8 +22,9 @@ from .workflow_engine.engine import (
 from .workflow_engine.stage_runner import StageRunner
 from .workflow_engine.cost import CostBudget
 from .workflow_engine.checkpoint import CheckpointManager
-from .workflow_engine.observability import WorkflowProgressSink
+from .workflow_engine.observability import WorkflowObservability, WorkflowProgressSink
 from .workflow_engine.audit import WorkflowAuditWriter
+from .state_journal import StateJournalWriter
 
 if TYPE_CHECKING:
     from .agent_runner import AgentRunner
@@ -103,6 +104,9 @@ class WorkflowOrchestrator:
             workflow_name=self._schema.name,
         )
 
+        # F-116 工作流可观测性（per-issue 激活）
+        self._observability: WorkflowObservability | None = None
+
         # 检查点
         if self._checkpoint_dir:
             self._checkpoint_mgr = CheckpointManager(
@@ -126,6 +130,41 @@ class WorkflowOrchestrator:
         self._engine.event_bus.on("gate_approved", self._on_gate_approved)
         self._engine.event_bus.on("gate_rejected", self._on_gate_rejected)
         self._engine.event_bus.on("cost_warning", self._on_cost_warning)
+
+    def _wire_observability(self) -> None:
+        """F-116: 将 WorkflowObservability 接入事件总线。
+
+        工作流阶段事件同时写入 State Journal（可视化器消费）
+        和 tool-events NDJSON（F-45 审计追踪）。
+        """
+        if self._observability is None:
+            return
+        bus = self._engine.event_bus
+        obs = self._observability
+        bus.on("stage_start", lambda _t, e: obs.write_stage_start(
+            e.get("stage_id", 0), e.get("stage_name", ""), e.get("phase", "")))
+        bus.on("stage_complete", lambda _t, e: obs.write_stage_complete(
+            e.get("stage_id", 0), e.get("stage_name", ""),
+            e.get("cost", 0.0), e.get("duration", 0.0)))
+        bus.on("stage_failed", lambda _t, e: obs.write_stage_failed(
+            e.get("stage_id", 0), e.get("stage_name", ""), e.get("error", "")))
+        bus.on("stage_skipped", lambda _t, e: obs._emit(
+            "workflow_stage_skipped", {"stage_id": e.get("stage_id", 0),
+            "stage_name": e.get("stage_name", ""), "reason": e.get("reason", "")}))
+        bus.on("gate_request", lambda _t, e: obs.write_gate_request(
+            e.get("stage_id", 0), e.get("stage_name", ""), e.get("mode", "")))
+        bus.on("gate_approved", lambda _t, e: obs.write_gate_result(
+            e.get("stage_id", 0), e.get("stage_name", ""), True, ""))
+        bus.on("gate_rejected", lambda _t, e: obs.write_gate_result(
+            e.get("stage_id", 0), e.get("stage_name", ""), False,
+            e.get("reason", "")))
+        bus.on("decision_evaluated", lambda _t, e: obs.write_decision(
+            e.get("stage_id", 0), e.get("outcome", ""), e.get("next_stage")))
+        bus.on("workflow_complete", lambda _t, e: obs.write_workflow_complete(
+            e.get("total_cost", 0.0), e.get("total_duration", 0.0),
+            e.get("completed_stages", 0), e.get("total_stages", 0)))
+        bus.on("workflow_error", lambda _t, e: obs.write_workflow_error(
+            e.get("error", ""), e.get("stage_id")))
 
     # ── 公开接口 ──────────────────────────────────────────────────
 
@@ -222,6 +261,21 @@ class WorkflowOrchestrator:
             self._engine.set_checkpoint_manager(self._checkpoint_mgr)
         else:
             self._checkpoint_mgr = None
+
+        # F-116: 激活 WorkflowObservability，写入 State Journal + tool-events
+        if workspace_path:
+            journal_dir = Path(workspace_path) / ".orchestrator_workspace"
+            journal_dir.mkdir(parents=True, exist_ok=True)
+            journal_writer = StateJournalWriter(
+                run_dir=journal_dir,
+                run_id=f"workflow-{issue.id or 'unknown'}",
+            )
+            tool_events_path = str(journal_dir / "tool-events.ndjson")
+            self._observability = WorkflowObservability(
+                journal=journal_writer,
+                tool_events_path=tool_events_path,
+            )
+            self._wire_observability()
 
         # 重置引擎状态（防止单例跨 issue 状态污染）
         # 如果存在检查点，run() 会自动从检查点恢复

@@ -64,6 +64,7 @@ workspace:
   root: {{WORKSPACE_ROOT}}                                 # e.g. /tmp/symphony_workspaces/myrepo
   repo_clone_url: {{REPO_CLONE_URL}}                       # clone URL passed to `git clone`
   clone_depth: 1                                           # shallow clone for speed
+  base_branch: main                                         # repository default branch (main / master)
   checkout_issue_branch: true                              # create per-issue branch from main
   git_username: {{GIT_PUSH_USER}}                         # used for `git push`
   git_token: ${{GIT_PUSH_TOKEN_ENV}}                       # $VAR form reads from env at load time
