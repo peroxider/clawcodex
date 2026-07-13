@@ -48,6 +48,14 @@ dependencies = [
     # Ch16 Phase 0: SSE consumer for the CCR v2 SSE read transport. ``httpx``
     # itself is transitively available via the ``anthropic`` SDK.
     "httpx-sse>=0.4",
+    # MCP (Model Context Protocol) SDK. ``src/services/mcp/transport.py``
+    # imports ``mcp.client.{stdio,sse,streamable_http,websocket}`` at module
+    # load — required for cold-start import of the MCP transport layer, not
+    # optional. Without this dep, ``uv sync`` produces an env where
+    # ``bootstrap_mcp_runtime`` ImportErrors before any user code runs.
+    # 1.27.x is the current series; upper bound pinned to <2 to avoid
+    # surprise breaking changes from the upstream 2.x line.
+    "mcp>=1.27.2,<2",
     # Open source replacement: Pydantic Settings for type-safe config
     "pydantic-settings>=2.0.0",
     # Open source replacement: python-frontmatter for parsing SKILL.md / agent files

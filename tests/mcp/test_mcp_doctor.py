@@ -98,7 +98,9 @@ class TestDiagnosticReport:
 
 class TestValidateStdioConfig:
     def test_valid_command(self):
-        config = McpStdioServerConfig(command="python")
+        # Use ``python3`` instead of ``python`` because some environments
+        # (including this WSL image) only have the former on PATH.
+        config = McpStdioServerConfig(command="python3")
         warnings = _validate_stdio_config("test", config)
         assert warnings == []
 
