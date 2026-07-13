@@ -181,12 +181,20 @@ class Orchestrator:
         *,
         stage_runners: dict[str, "AgentRunner"] | None = None,
         workflow_yaml_path: str | None = None,
+        asciicast_capture: Any = None,
     ) -> None:
         self.workflow = workflow
         self.tracker = tracker
         self.workspace = workspace
         self.agent_runner = agent_runner
         self.stage_runners = stage_runners or {}
+        # F-REC: optional asciicast capture. When set, every per-session
+        # :class:`CompositeProgressSink` built by :meth:`_build_session_sink`
+        # registers an :class:`AsciicastSink` so the agent's progress
+        # events land in the same ``.cast`` file as the other adapters.
+        # ``None`` (the default) preserves the existing behaviour — no
+        # recording happens, no extra import cost.
+        self.asciicast_capture = asciicast_capture
         # F-?? collaboration modes — Phase 2 wires the registry +
         # ``ModeSelector`` + ``Router`` based on the ``modes:`` YAML
         # section. ``ModesConfig`` defaults (no router, only "single"
@@ -413,6 +421,35 @@ class Orchestrator:
                 phases_total=phases_total,
             )
             composite.add(activity_sink)
+        # F-REC: when a capture handle is wired (typically by the
+        # ``clawcodex record`` CLI or by ``report_writer.write`` dual-
+        # write), attach an :class:`AsciicastSink` so phase / session
+        # markers land in the .cast. Defensive try/except mirrors the
+        # IM-sink block above — recording failures must never block
+        # the live orchestrator.
+        capture = getattr(self, "asciicast_capture", None)
+        if capture is not None:
+            try:
+                from .asciicast_sink import AsciicastSink
+
+                phases_total = (
+                    len(self.workflow.agent.phases)
+                    if getattr(self.workflow.agent, "phases", None)
+                    else None
+                )
+                composite.add(
+                    AsciicastSink(
+                        capture,
+                        task_id=task_id,
+                        phases_total=phases_total,
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "asciicast sink attach failed (task_id=%s): %s",
+                    task_id,
+                    exc,
+                )
         return composite
 
     def _emit_im_event(

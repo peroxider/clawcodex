@@ -17,6 +17,11 @@ class ReportResult:
     persistent_markdown_path: str
     workspace_json_path: str
     persistent_json_path: str
+    # F-REC: optional cast artifact paths (None when recording was
+    # disabled). Listed in the result so callers can attach the .cast
+    # to PR comments or surface the file in tracker updates.
+    workspace_cast_path: str | None = None
+    persistent_cast_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -66,6 +71,7 @@ def write(
     verification_output: str | None = None,
     output_text: str = "",
     tool_events_path: str | None = None,
+    cast_path: str | None = None,
 ) -> ReportResult:
     issue_id = str(getattr(issue, "id", None) or "unknown")
     safe_tracker = _safe_segment(tracker or "unknown")
@@ -131,12 +137,37 @@ def write(
             persistent_events = persistent_dir / f"{run_id}.events.ndjson"
             _copy_with_fallback(tool_events, persistent_events)
 
+    # F-REC: dual-write the asciicast recording the same way. When
+    # ``cast_path`` is provided, the .cast lives next to the run's
+    # .md / .json artifacts in both the workspace and the persistent
+    # reports directory. The file format is asciicast v2 (validated by
+    # ``extensions.recording.validate_cast``).
+    workspace_cast: str | None = None
+    persistent_cast: str | None = None
+    if cast_path:
+        cast_src = Path(cast_path)
+        if cast_src.exists():
+            workspace_cast_file = workspace_dir / f"{run_id}.cast"
+            persistent_cast_file = persistent_dir / f"{run_id}.cast"
+            try:
+                _copy_with_fallback(cast_src, workspace_cast_file)
+                _copy_with_fallback(cast_src, persistent_cast_file)
+                workspace_cast = str(workspace_cast_file)
+                persistent_cast = str(persistent_cast_file)
+            except Exception:
+                # Recording dual-write is best-effort — the live run
+                # already succeeded, the report should still ship.
+                workspace_cast = None
+                persistent_cast = None
+
     return ReportResult(
         run_id=run_id,
         workspace_markdown_path=str(workspace_md),
         persistent_markdown_path=str(persistent_md),
         workspace_json_path=str(workspace_json),
         persistent_json_path=str(persistent_json),
+        workspace_cast_path=workspace_cast,
+        persistent_cast_path=persistent_cast,
     )
 
 

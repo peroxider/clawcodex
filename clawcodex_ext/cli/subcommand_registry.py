@@ -98,3 +98,14 @@ def load_builtin_subcommands() -> None:
     from clawcodex_ext.cli.tool_cmd.hooks import install_tool_subcommand
 
     install_tool_subcommand()
+
+    # F-REC: ``clawcodex record --sources ... --out <path>`` asciicast v2
+    # recorder. Imported for side-effect — the @register("record")
+    # decorator inside the module wires the subcommand into the
+    # registry. Wrapped in try/except so a partial checkout that lacks
+    # the recording extension (e.g. CI smoke) does not break unrelated
+    # subcommand discovery.
+    try:
+        from extensions.recording import cli as _recording_cli  # noqa: F401
+    except ImportError:
+        _recording_cli = None

@@ -45,6 +45,7 @@ def attach_cron_runtime(
     is_killed: Any | None = None,
     is_loading: Callable[[], bool] | None = None,
     assistant_mode: bool = False,
+    asciicast_observer: Any | None = None,
 ) -> CronScheduler:
     """Wire Cron tools + scheduler to a session context.
 
@@ -99,6 +100,20 @@ def attach_cron_runtime(
     def _log_event(payload: dict) -> None:
         _log.debug("cron event: %s", payload)
 
+    # F-REC: when an asciicast observer is wired, mirror its four
+    # callbacks into the scheduler in addition to the debug logger so
+    # cron fires land in the recording's .cast file. When the observer
+    # is None (the common case), the existing debug logger is the only
+    # sink.
+    if asciicast_observer is not None:
+        on_fire_event = getattr(asciicast_observer, "on_fire_event", _log_event)
+        on_missed_event = getattr(asciicast_observer, "on_missed_event", _log_event)
+        on_expired_event = getattr(asciicast_observer, "on_expired_event", _log_event)
+    else:
+        on_fire_event = _log_event
+        on_missed_event = _log_event
+        on_expired_event = _log_event
+
     # F-22-G2: the scheduler hot-loads the jitter config on every
     # ``check_once`` tick. Threading the loader through ctx.cron_jitter_config
     # (if present) lets REPL callers inject a GrowthBook-style remote source.
@@ -117,9 +132,9 @@ def attach_cron_runtime(
         on_missed=on_missed,
         is_killed=is_killed,
         load_jitter_config=config_loader,
-        on_fire_event=_log_event,
-        on_missed_event=_log_event,
-        on_expired_event=_log_event,
+        on_fire_event=on_fire_event,
+        on_missed_event=on_missed_event,
+        on_expired_event=on_expired_event,
         session_store=session_store,
         is_loading=is_loading,
         assistant_mode=assistant_mode,

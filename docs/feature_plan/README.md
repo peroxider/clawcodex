@@ -16,6 +16,7 @@ docs/feature_plan/
 ├── 05-cron-system/                    ← Cron 系统
 ├── 06-ccb-benchmark/                  ← CCB 对标
 ├── 07-cli-config/                    ← CLI 与配置系统
+├── 08-recording/                     ← F-REC Asciicast v2 录制器
 └── ../decoupling/                     ← 三层解耦方案与 P3 整改记录（独立规划）
 ```
 
@@ -67,6 +68,12 @@ docs/feature_plan/
 |----------|------|:----:|---------|
 | F-22 | Cron 系统执行引擎 | 🔄 | [f-22-cron-execution.md](05-cron-system/f-22-cron-execution.md) |
 
+### Recording / 可观测性增强
+
+| F-Number | 名称 | 状态 | 章节路径 |
+|----------|------|:----:|---------|
+| F-156 | Asciicast v2 录制器（orchestrator / query / SOP / visualizer / cron） | ✅ | [f-156-asciicast-recorder.md](08-recording/f-156-asciicast-recorder.md) |
+
 ### CCB 对标
 
 | F-Number | 名称 | 状态 | 章节路径 |
@@ -116,3 +123,4 @@ docs/feature_plan/
 | 2026-07-07 | 删除 F-89 @agent-name 和 F-100 Dreaming 已完成特性规划文档 | 代码确认五入口统一 + Phase B 30min TTL 增强已全部落地；F-89 9 测试用例/F-100 109 单测+6 E2E 全绿 |
 | 2026-07-10 | 删除 F-108 已完成特性规划文档 | F-108 P108-A~H 四层方案全部实现，单元测试与稳定性门禁通过，verification agent 复核 PASS |
 | 2026-07-11 | 删除 F-120 已完成特性规划文档 | F-120 Agent Dashboard 全部 6 个 Phase 完成（124 tests，commit 3639db2b 补齐三个缺口），移除 08-agent-dashboard 章节与 F-120 表行；SOP source 接入点改由 `extensions/agent_dashboard/sources/sop_source.py` 顶部 docstring 记录 |
+| 2026-07-13 | 新增 08-recording 章节与 F-156 Asciicast v2 录制器 | 5 子系统（orchestrator / query / SOP / visualizer / cron）零 src/ 改动落地，60 unit+integration 测试通过，稳定性门禁 Stages 1-5/7-9 全绿 |

@@ -66,6 +66,11 @@ class ConvertOptions:
     strict_workflow_yaml: bool = False
     json_output: bool = False
     validate_only: bool = False
+    # F-REC: optional .cast output path. When set, the convert call is
+    # wrapped in a :class:`SopStageProjector` so the SOP CLI's stdout
+    # (and the start/done markers) land in an asciicast file. Default
+    # empty string keeps the existing behaviour (no recording).
+    record_path: str = ""
 
 
 @register("sop")
@@ -90,6 +95,32 @@ def run_sop_command(args: list[str]) -> int:
 def run_pos_command(args: list[str]) -> int:
     """Backward-compatible alias for ``sop``."""
     return run_sop_command(args)
+
+
+def _open_capture(record_path: str):
+    """Open an asciicast capture when ``--record <path>`` was supplied.
+
+    Returns ``None`` when ``record_path`` is empty (the recording-
+    disabled path). The projector + caller are responsible for
+    ``close()``.
+    """
+    if not record_path:
+        return None
+    try:
+        from extensions.capabilities.recorder import AsciicastHeader
+        from extensions.recording.asciicast_writer import AsciicastWriter
+    except Exception:  # pragma: no cover - import failure fallback
+        return None
+    path = Path(record_path)
+    header = AsciicastHeader(
+        width=80,
+        height=24,
+        title=f"SOP convert ({path.stem})",
+        command="clawcodex-dev sop convert --record",
+    )
+    writer = AsciicastWriter(path, header)
+    writer.open()
+    return writer.capture
 
 
 def _parse_convert_args(args: list[str]) -> ConvertOptions:
@@ -176,6 +207,9 @@ def _parse_convert_args(args: list[str]) -> ConvertOptions:
         elif token == "--validate":
             opts.validate_only = True
             i += 1
+        elif token == "--record" and i + 1 < len(args):
+            opts.record_path = args[i + 1]
+            i += 2
         elif token == "--preview":
             opts.preview = True
             i += 1
@@ -219,19 +253,33 @@ def _handle_convert(args: list[str]) -> int:
         print(f"error: {result.get('error', 'conversion failed')}", file=sys.stderr)
         return 2
 
-    # Print summary to stdout
-    print(f"✅ Converted SOP: {result['agent_type']}")
-    print(f"   Description: {result['agent_description']}")
-    print(f"   Model: {result.get('model', 'default')}")
-    print(f"   Skills: {len(result['skills'])}")
-    for skill in result["skills"]:
-        print(f"     - {skill['name']} ({', '.join(skill['tools'])})")
-    print(f"   Tools: {len(result.get('tools', []))}")
-    print(f"   Persistence: {result['persist_status']}")
+    # F-REC: when ``--record <path>`` is set, mirror the summary block
+    # (and the call above) into an asciicast capture. The projector is
+    # a no-op when ``record_path`` is empty so the default CLI path
+    # pays no cost.
+    capture = _open_capture(opts.record_path)
+    from extensions.sop_converter.asciicast_projector import SopStageProjector
 
-    if result.get("warnings"):
-        for w in result["warnings"]:
-            print(f"   Warning: {w}", file=sys.stderr)
+    with SopStageProjector(capture, title=opts.agent_name or "SOP convert"):
+        # Print summary to stdout
+        print(f"✅ Converted SOP: {result['agent_type']}")
+        print(f"   Description: {result['agent_description']}")
+        print(f"   Model: {result.get('model', 'default')}")
+        print(f"   Skills: {len(result['skills'])}")
+        for skill in result["skills"]:
+            print(f"     - {skill['name']} ({', '.join(skill['tools'])})")
+        print(f"   Tools: {len(result.get('tools', []))}")
+        print(f"   Persistence: {result['persist_status']}")
+
+        if result.get("warnings"):
+            for w in result["warnings"]:
+                print(f"   Warning: {w}", file=sys.stderr)
+
+    if capture is not None:
+        try:
+            capture.close()
+        except Exception:
+            pass
 
     # If --out is specified, write the output files to the target directory
     if opts.output_dir:

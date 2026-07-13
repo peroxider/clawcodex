@@ -123,6 +123,12 @@ class QueryConfig:
     # ``exit_code=124``. The narrower 600 s lets long plugin installs
     # (which the agent really shouldn't run inline) abort early.
     agent_loop_timeout_s: float = 600.0
+    # F-REC: optional asciicast capture. When set, every event drained
+    # from the headless session queue is forwarded to ``capture.emit``
+    # via ``extensions.recording.query_forwarder.forward_event``.
+    # ``None`` (the default) keeps the query loop allocation-free for
+    # the common non-recording path.
+    capture: Any = None
 
 
 @dataclass
@@ -393,6 +399,19 @@ class QueryRunner:
 
         # Drain the event queue while the headless session runs in the background.
         # A short timeout lets us poll for completion without busy-waiting.
+        # F-REC: when a capture handle is wired, forward each drained
+        # :class:`QueryEvent` to the recorder. The forwarder is a pure
+        # function that returns ``None`` for events it cannot translate,
+        # so a recording-disabled path pays only one ``if`` check per
+        # event.
+        capture = getattr(self.config, "capture", None)
+        if capture is not None:
+            try:
+                from extensions.recording.query_forwarder import forward_event
+            except Exception:  # pragma: no cover - import failure fallback
+                forward_event = None  # type: ignore[assignment]
+        else:
+            forward_event = None
         #
         # F-108 P108-B: the polling loop also enforces ``timeout_s`` from
         # ``QueryConfig`` (default 1800 s). ``asyncio.wait_for`` cannot cancel an executor
@@ -418,6 +437,8 @@ class QueryRunner:
                     ev: Any = event_queue.get(timeout=0.05)
                     event = convert_tool_event(ev)
                     if event is not None:
+                        if forward_event is not None:
+                            forward_event(capture, event)
                         yield event
                 except queue.Empty:
                     if future.done():
@@ -428,6 +449,8 @@ class QueryRunner:
                                 break
                             event = convert_tool_event(ev)
                             if event is not None:
+                                if forward_event is not None:
+                                    forward_event(capture, event)
                                 yield event
                         break
                     now = time.monotonic()
@@ -604,9 +627,13 @@ class QueryRunner:
                 exit_code = code if isinstance(code, int) else 1
         result_text = stdout.getvalue()
         if result_text:
+            if forward_event is not None:
+                forward_event(capture, TextDelta(content=result_text))
             yield TextDelta(content=result_text)
 
         reason = "success" if exit_code == 0 else f"exit_code={exit_code}"
+        if forward_event is not None:
+            forward_event(capture, SessionComplete(reason=reason))
         yield SessionComplete(reason=reason)
 
     async def run(self) -> dict[str, Any]:
