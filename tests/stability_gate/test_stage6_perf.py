@@ -192,15 +192,17 @@ class TestStage6Perf:
         )
 
     def test_repl_heavy_runtime_cold_start(self):
-        """REPL 重型运行时栈冷启动不应超过 8s，CI x N。
+        """REPL 重型运行时栈冷启动不应超过 6.5s，CI x N。
 
         ``_load_heavy_runtime()`` 在 ``ClawcodexREPL.__init__`` 首次调用时
-        触发，集中 import Session、provider、tool registry、QueryEngine、
-        command_system、CostTracker、HistoryLog 等 ~27 项重型依赖。这是
-        用户从命令行启动到 REPL 第一个 prompt 之前的最大单点开销。
+        触发，集中 import Session、provider、tool registry、CommandSystem
+        的 hook 关联 + CostTracker、HistoryLog 等 ~22 项重型依赖（QueryEngine
+        与 command_system 已延后到首条 prompt，见 B+C 优化后）。这是用
+        户从命令行启动到 REPL 第一个 prompt 之前的最大单点开销。
 
-        本地基线 ~5.5s（实测），留 2.5s 余量设 8s budget。CI 上 ×2 阈值。
-        失败说明有模块被无谓地拉到 _load_heavy_runtime 顶部 import 了。
+        本地基线 ~5.3s（实测，B+C 优化后），留 1.2s 余量设 6.5s budget。
+        CI 上 ×2 阈值。失败说明有模块被无谓地拉到 ``_load_heavy_runtime``
+        顶部 import 了。
 
         跳过条件：依赖 ``httpx``（Codex OAuth 的传递依赖）缺失时跳过，
         避免在没有安装完整依赖的环境下产生 false negative。
@@ -238,7 +240,7 @@ class TestStage6Perf:
             heavy_ms = int(proc.stdout.strip().splitlines()[-1])
         except (ValueError, IndexError):
             heavy_ms = -1
-        budget = 8.0 * _THRESHOLD_MULT
+        budget = 6.5 * _THRESHOLD_MULT
         assert elapsed < budget, (
             f"REPL _load_heavy_runtime() cold start took {elapsed:.2f}s "
             f"(inner={heavy_ms}ms), expected < {budget:.2f}s "
@@ -246,7 +248,7 @@ class TestStage6Perf:
         )
 
     def test_repl_first_prompt_end_to_end(self):
-        """REPL 端到端冷启动（import + _load_heavy_runtime + 构造 + 渲染）不应超过 9s。
+        """REPL 端到端冷启动（import + _load_heavy_runtime + 构造 + 渲染）不应超过 7s。
 
         模拟用户从命令行启动 clawcodex 到 REPL 第一个 prompt 出现的
         完整路径：包括 ``ClawcodexREPL`` 类导入、``_load_heavy_runtime``
@@ -263,8 +265,9 @@ class TestStage6Perf:
         guards the Stage A / Stage B split by ensuring defer mode returns
         within the synchronous budget.
 
-        本地基线 ~7.3s（实测，含 deferred Stage B 收益），留 1.7s 余量
-        设 9s budget。CI 上 ×2 阈值。
+        B+C 优化后：CommandSystem 延后到首次 ``/``，QueryEngine 延后到
+        首条非 slash 提示；本地基线 ~6.0s（实测），留 1.0s 余量设 7s budget。
+        CI 上 ×2 阈值。
 
         跳过条件：依赖 ``httpx``（Codex OAuth 的传递依赖）缺失时跳过。
         """
@@ -305,7 +308,7 @@ class TestStage6Perf:
             inner_ms = int(proc.stdout.strip().splitlines()[-1])
         except (ValueError, IndexError):
             inner_ms = -1
-        budget = 9.0 * _THRESHOLD_MULT
+        budget = 7.0 * _THRESHOLD_MULT
         assert elapsed < budget, (
             f"REPL end-to-end cold start took {elapsed:.2f}s "
             f"(inner={inner_ms}ms), expected < {budget:.2f}s "

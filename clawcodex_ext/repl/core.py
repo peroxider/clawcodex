@@ -441,16 +441,25 @@ def _load_heavy_runtime() -> None:
     global build_provider_from_config, get_provider_class, tool_to_api_schema
     global ToolContext, build_default_registry, ToolCall
     global ToolEvent, summarize_tool_result, summarize_tool_use
-    global QueryEngine, QueryEngineConfig, StreamEvent
+    global StreamEvent
     global NO_CONTENT_MESSAGE, AssistantMessage, SystemMessage, UserMessage
     global TextBlock, ToolUseBlock, ToolResultBlock, AbortController
-    global CommandRegistry, CommandResult, create_command_context
-    global execute_command_async, execute_command_sync, register_builtin_commands
     global CostTracker, HistoryLog, AgentMentionCompleter, AtFileCompleter
     global LiveStatus, _HAS_CRON, attach_cron_runtime, replace_cron_tools
     global claim_cron_run, finalize_cron_run
     global format_advisor_status, permission_mode_short_title
     global compute_session_cost, format_cost_usd
+    # Note: QueryEngine / QueryEngineConfig are NOT imported here. They are
+    # only needed when actually driving the query loop (i.e. after the user
+    # submits a non-slash prompt), so we import them locally inside
+    # ``ClawcodexREPL.chat`` — pulling in ~1.1s of query engine startup
+    # before first input would dominate REPL cold start.
+    # Note: command_system symbols (CommandRegistry, register_builtin_commands,
+    # etc.) are also NOT imported here. ``_init_command_system`` does its own
+    # local imports and is itself lazy — see ``_ensure_command_system`` which
+    # fires on first slash command. Pulling command_system in
+    # ``_load_heavy_runtime`` adds ~0.8s of import cost that 90% of REPL
+    # sessions will never pay for.
 
     if _heavy_runtime_loaded:
         return
@@ -470,7 +479,6 @@ def _load_heavy_runtime() -> None:
     from src.tool_system.defaults import build_default_registry
     from clawcodex_ext.tool_system.protocol import ToolCall
     from src.tool_system.renderers import ToolEvent, summarize_tool_result, summarize_tool_use
-    from clawcodex_ext.query.engine import QueryEngine, QueryEngineConfig
     from src.query.query import StreamEvent
     from clawcodex_ext.types.messages import (
         NO_CONTENT_MESSAGE,
@@ -480,14 +488,6 @@ def _load_heavy_runtime() -> None:
     )
     from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
     from src.utils.abort_controller import AbortController
-    from src.command_system import (
-        CommandRegistry,
-        CommandResult,
-        create_command_context,
-        execute_command_async,
-        execute_command_sync,
-        register_builtin_commands,
-    )
     from src.cost_tracker import CostTracker
     from src.history import HistoryLog
     from src.repl.agent_mention_completer import AgentMentionCompleter
@@ -915,8 +915,12 @@ class ClawcodexREPL:
         ]
         self._built_in_commands = list(self._original_built_ins)
 
-        # Initialize new command system
-        self._init_command_system()
+        # Command system is built lazily on first slash command via
+        # ``_ensure_command_system``. ``_load_heavy_runtime`` does NOT import
+        # command_system symbols — pulling ``src.command_system`` here would
+        # add ~0.8s of import cost that most sessions never pay back. The
+        # cost moves to the first ``/`` keystroke path (``handle_command``)
+        # which fires well after startup completes.
 
         # Prompt toolkit with tab completion
         from clawcodex_ext.debug.agent_debug import resolve_repl_history_file
@@ -1931,8 +1935,33 @@ class ClawcodexREPL:
 
         self.console.print(f"[dim]Could not enable {setting_name}.[/dim]")
 
-    def _init_command_system(self):
-        """Initialize the new command system."""
+    def _ensure_command_system(self):
+        """Idempotently build the new command system on first slash command.
+
+        ``_load_heavy_runtime`` deliberately does NOT import command_system
+        symbols — pulling ``src.command_system`` (~0.8s of transitive deps
+        including the away_summary / intent_forecast / cli registrations)
+        into the heavy runtime would inflate every REPL cold start regardless
+        of whether the user ever types ``/``.
+
+        Instead, ``__init__`` skips command-system setup and we build it here
+        on first invocation. The cheap sentinel check makes subsequent calls
+        free. Cost moves to the first ``/xxx`` keystroke, which by definition
+        happens after the user has had time to read the startup banner.
+
+        Local imports are intentional — see ``_load_heavy_runtime`` note.
+        """
+        if getattr(self, "command_registry", None) is not None:
+            return
+
+        # All command_system symbols imported locally; see module top docstring
+        # of ``_load_heavy_runtime`` for the rationale.
+        from src.command_system import (
+            CommandRegistry,
+            create_command_context,
+            register_builtin_commands,
+        )
+
         # Also register to global registry so execute_command_async can find commands
         register_builtin_commands(None)  # None = use global registry
 
@@ -1992,6 +2021,14 @@ class ClawcodexREPL:
         # Merge new commands with built-in list for completion
         self._update_built_in_commands_with_command_system()
 
+    # Backwards-compatible alias — kept so any third-party extension or unit
+    # test that calls ``repl._init_command_system()`` (e.g. in fixtures) still
+    # works. New code should call ``_ensure_command_system`` which is
+    # idempotent.
+    def _init_command_system(self):  # noqa: D401 — kept for backward compat
+        """Backward-compatible alias for :meth:`_ensure_command_system`."""
+        self._ensure_command_system()
+
     def _update_built_in_commands_with_command_system(self):
         """Update the built-in commands list with commands from the new system."""
         # Start with original built-ins
@@ -2017,6 +2054,12 @@ class ClawcodexREPL:
         Returns:
             Tuple of (handled: bool, result_text: str | None)
         """
+        # Local import — ``execute_command_sync`` is no longer pulled in by
+        # ``_load_heavy_runtime``. ``_try_execute_new_command`` only fires on
+        # ``/xxx`` slash input, which is the same lazy trigger as
+        # ``_ensure_command_system``; no incremental cost.
+        from src.command_system import execute_command_sync
+
         try:
             success, result_text, error = execute_command_sync(command, args, self.command_context)
             if success:
@@ -2026,12 +2069,18 @@ class ClawcodexREPL:
         except Exception as e:
             return False, str(e)
 
-    async def _try_execute_command_async(self, command: str, args: str) -> CommandResult:
+    async def _try_execute_command_async(self, command: str, args: str) -> CommandResult:  # noqa: F821 — forward ref under ``from __future__ import annotations``
         """Execute a command asynchronously, supporting both LocalCommand and PromptCommand.
 
         Returns:
             CommandResult with the execution result
         """
+        # Local import — same lazy rationale as ``_try_execute_new_command``.
+        from src.command_system import (
+            CommandResult,
+            execute_command_async,
+        )
+
         try:
             return await execute_command_async(command, args, self.command_context)
         except Exception as e:
@@ -2043,7 +2092,7 @@ class ClawcodexREPL:
         args: str,
         *,
         status_message: str | None = None,
-    ) -> CommandResult:
+    ) -> CommandResult:  # noqa: F821 — forward ref under ``from __future__ import annotations``
         """Run async slash-command execution without freezing the visible REPL."""
 
         import concurrent.futures
@@ -2087,7 +2136,7 @@ class ClawcodexREPL:
                     self._active_live_status = None
             return future.result()
 
-    def _handle_command_result(self, result: CommandResult) -> bool:
+    def _handle_command_result(self, result: CommandResult) -> bool:  # noqa: F821 — forward ref under ``from __future__ import annotations``
         """Handle the result of a command execution.
 
         Returns True if the command was handled, False otherwise.
@@ -4400,6 +4449,11 @@ class ClawcodexREPL:
     def handle_command(self, command: str):
         """Handle slash commands."""
         _load_heavy_runtime()
+        # Lazy command-system build — fires on first ``/`` keystroke. The
+        # cost (~0.8s of command_system import + registration) was previously
+        # paid up front in ``__init__``; moving it here saves that on every
+        # session that opens with non-slash input.
+        self._ensure_command_system()
         try:
             return self._handle_command(command)
         finally:
@@ -5852,6 +5906,12 @@ class ClawcodexREPL:
                     append_prompt = f"{append_prompt}\n\n{extra}"
 
             prior_messages = list(self._engine_messages)
+
+            # Local import — ``clawcodex_ext.query.engine`` pulls in ~1.1s of
+            # transitive deps (query protocol + state machine). Kept out of
+            # ``_load_heavy_runtime`` so REPL cold start doesn't pay the cost
+            # until the user actually submits a non-slash prompt.
+            from clawcodex_ext.query.engine import QueryEngine, QueryEngineConfig
 
             engine_config = QueryEngineConfig(
                 cwd=self.tool_context.workspace_root,

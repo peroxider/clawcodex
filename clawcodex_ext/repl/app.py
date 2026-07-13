@@ -28,13 +28,13 @@ Usage
 
 from __future__ import annotations
 
+import os
 import threading
 from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.agent import Session
-from src.providers.runtime import build_provider_from_config
 from src.repl.core import ClawcodexREPL, _MessageHistoryCompleter, _SlashOnlyCompleter
 from src.utils.abort_controller import AbortController
 
@@ -43,6 +43,96 @@ if TYPE_CHECKING:
 
 from rich.console import Console as RichConsole
 from rich.markdown import Markdown
+
+
+class _LazyProvider:
+    """``__getattr__`` proxy that defers real provider construction.
+
+    ``build_provider_from_config`` pulls in ``src.providers.runtime`` (~573ms
+    of provider-class imports including ``clawcodex_ext.providers`` package
+    init for the F-99 OAuth override registration) plus constructs the
+    actual provider object (HTTP clients, model lookup). REPL cold start
+    used to pay both costs eagerly.
+
+    The placeholder stores only the provider name and proxies attribute
+    access through to the resolved provider on first touch. After the first
+    successful access the real provider is cached on the instance, so
+    subsequent accesses are zero-cost.
+
+    Construction errors (``RuntimeError`` for missing API key, OAuth state
+    errors, etc.) are cached and re-raised on every access — ``__getattr__``
+    cannot return ``None`` because the user-facing API expects a real provider
+    object, and surfacing the error at first use site gives the user the
+    same helpful message as the eager path with no startup cost.
+
+    Only attribute reads are proxied. ``isinstance`` checks and explicit
+    ``type(...)`` lookups see the ``_LazyProvider`` class, which is the
+    intended behaviour: callers that need to short-circuit on the proxy
+    can use ``_clawcodex_lazy_provider_placeholder`` identity check (mirrors
+    ``_clawcodex_lazy_runtime_placeholder`` for ``_LazySession``).
+    """
+
+    _clawcodex_lazy_provider_placeholder = True
+
+    def __init__(self, provider_name: str, model: str | None = None) -> None:
+        self._provider_name = provider_name
+        self._model = model
+        self._resolved: Any = None
+        self._errored: BaseException | None = None
+
+    def _ensure_loaded(self):
+        """Lazily trigger ``build_provider_from_config`` on first attribute access.
+
+        Returns the cached provider on subsequent calls. Re-raises any
+        construction error so callers see the same message the eager path
+        would have shown.
+        """
+        if self._resolved is not None:
+            return self._resolved
+        if self._errored is not None:
+            raise self._errored
+        try:
+            # Local import — ``src.providers.runtime`` triggers the
+            # F-99 provider-override side-effect import on first load.
+            from src.providers.runtime import build_provider_from_config
+            self._resolved = build_provider_from_config(self._provider_name, self._model)
+        except BaseException as exc:  # noqa: BLE001 — cache and re-raise verbatim
+            self._errored = exc
+            raise
+        return self._resolved
+
+    def __getattr__(self, name: str):
+        # NOTE: dunder methods (``__repr__``, ``__class__``, etc.) hit this
+        # path too. ``__class__`` is special-cased by Python so it's not
+        # proxied. ``__repr__`` is intentionally proxied so the user sees
+        # the real provider's repr once resolved.
+        real = self._ensure_loaded()
+        # After ``_ensure_loaded`` the resolved provider owns its own
+        # attributes; ``getattr`` is the cheapest passthrough.
+        return getattr(real, name)
+
+
+def _provider_env_key_present(provider_name: str) -> bool:
+    """Best-effort env-var check for ``_LazyProvider`` early-exit UX.
+
+    Returns ``True`` if a provider env var is set or the provider uses an
+    out-of-band mechanism (OAuth for ``openai-codex``). Returns ``False``
+    only when the env check can conclusively rule out a configured key —
+    keychain-only configs return ``False`` here too, but the lazy proxy
+    will surface the correct error on first attribute access.
+
+    This is intentionally a cheap ``os.environ.get`` probe so REPL cold
+    start doesn't pay the ``build_provider_from_config`` import cost
+    just to validate configuration. See :class:`_LazyProvider`.
+    """
+    if provider_name == "openai-codex":
+        # OAuth — handled by Codex auth store; runtime validation occurs
+        # on first ``_LazyProvider`` attribute access.
+        return True
+    return bool(
+        os.environ.get(f"{provider_name.upper()}_API_KEY")
+        or os.environ.get("CLAWCODEX_API_KEY")
+    )
 
 
 class ClawCodexExtREPL(ClawcodexREPL):
@@ -95,14 +185,22 @@ class ClawCodexExtREPL(ClawcodexREPL):
 
         # ---- Provider construction (downstream) ----
         if provider is not None:
+            # Caller supplied a pre-built provider instance — use it as-is.
             self.provider = provider
             self._api_key_missing = False
         else:
-            try:
-                self.provider = build_provider_from_config(provider_name)
-                self._api_key_missing = False
-            except RuntimeError:
-                self._api_key_missing = True
+            # Wrap in ``_LazyProvider`` — real construction fires on first
+            # attribute access (e.g. ``self.provider.model`` in
+            # ``Session.create`` below, or anywhere in the bottom toolbar).
+            # This moves the ``src.providers.runtime`` import chain (~573ms
+            # of provider class imports + F-99 OAuth override side-effect)
+            # out of REPL cold start.
+            self.provider = _LazyProvider(provider_name)
+            # Cheap env-var pre-check preserves the ``_api_key_missing``
+            # early-exit UX for the common env-only config case. OAuth
+            # (``openai-codex``) and keychain-only configs skip this and
+            # surface their error at first access through the proxy.
+            self._api_key_missing = not _provider_env_key_present(provider_name)
 
         if self._api_key_missing:
             # No configured credentials — initialise minimal read-only state
@@ -149,6 +247,21 @@ class ClawCodexExtREPL(ClawcodexREPL):
         self._engine_messages: list[Any] = []
         self._resume_session_id = resume_session_id
         self._session_metadata: dict[str, Any] | None = None  # S-R4-M: cached metadata
+
+        # Cheap model lookup — read default_model from the loaded config
+        # dict instead of accessing ``self.provider.model`` (which would
+        # trigger the lazy proxy during ``__init__`` and forfeit the
+        # ~573ms savings from ``_LazyProvider``). ``src.config`` is
+        # already in ``sys.modules`` because ``from src.agent import
+        # Session`` (line 36) transitively pulls it via
+        # ``clawcodex_ext.agent.session`` → ``bootstrap.state``.
+        try:
+            from src.config import get_provider_config
+
+            _initial_model = get_provider_config(provider_name).get("default_model", "") or ""
+        except Exception:
+            _initial_model = ""
+
         if session is not None:
             self.session = session
             self._engine_messages = list(self.session.conversation.messages or [])
@@ -181,9 +294,23 @@ class ClawCodexExtREPL(ClawcodexREPL):
                     f"[warning]Session not found: {resume_session_id}. "
                     "Starting new session.[/warning]"
                 )
-                self.session = Session.create(provider_name, self.provider.model)
+                self.session = Session.create(provider_name, _initial_model)
         else:
-            self.session = Session.create(provider_name, self.provider.model)
+            self.session = Session.create(provider_name, _initial_model)
+
+        # Warm the lazy provider in the background — overlaps the
+        # ``build_default_registry`` Stage B daemon + ``_print_startup_header``
+        # + the user's "read the banner" think time. By the time the user
+        # submits the first prompt, the real provider is usually resolved
+        # and ``__getattr__`` calls are zero-cost. If the first chat beats
+        # the daemon to it, the proxy still serves the request on its own
+        # — the warm is a pure latency-hiding optimization.
+        if getattr(self.provider, "_clawcodex_lazy_provider_placeholder", False):
+            threading.Thread(
+                target=self._warm_lazy_provider,
+                name="repl-provider-warm",
+                daemon=True,
+            ).start()
 
         # ---- Tool registry + context ----
         def _get_mcp_servers_for_prompt() -> list[str]:
@@ -322,11 +449,11 @@ class ClawCodexExtREPL(ClawcodexREPL):
         ]
         self._built_in_commands = list(self._original_built_ins)
 
-        # ---- Initialise command system (must happen before PromptSession) ----
-        # NOTE: this is deferred to first use of _init_command_system
-        # via the _init_command_system override below; we call it here
-        # to match upstream ordering.
-        self._init_command_system()
+        # Command system is now lazy — built on first slash command via
+        # ``handle_command`` (inherited from ``ClawcodexREPL``), which calls
+        # ``self._ensure_command_system()`` and dispatches to this subclass's
+        # override below. Cost (~0.8s of command_system import + downstream
+        # registration) moves out of REPL cold start.
         self._install_intent_forecast_controller()
         try:
             from clawcodex_ext.session_intelligence.queue import start_summary_queue_worker
@@ -488,10 +615,58 @@ class ClawCodexExtREPL(ClawcodexREPL):
             has_tab_alias=_accept_tab_alias,
         )
 
-    # ---- Override _init_command_system to pass downstream fields ----
+    def _warm_lazy_provider(self) -> None:
+        """Resolve the lazy provider in the background and back-fill session.model.
 
-    def _init_command_system(self) -> None:
-        """Initialise the command system with downstream context."""
+        Runs on a daemon thread spawned by ``__init__``. Two responsibilities:
+
+        1. Force ``_LazyProvider._ensure_loaded()`` so the real provider
+           is constructed (and cached) before the user submits their first
+           prompt — overlapping the import cost with the user's banner-read
+           think time.
+        2. If we used ``get_provider_config(...).get("default_model", "")``
+           as a placeholder for ``Session.create`` and the resolved model
+           differs, write it back to ``self.session.model`` so the first
+           chat round-trip uses the canonical model string.
+
+        Errors are swallowed: this is a latency-hiding optimization, not
+        a correctness gate. If the warm fails, the proxy will surface the
+        error on first user-driven access anyway.
+        """
+        try:
+            real_model = self.provider.model
+        except Exception:  # noqa: BLE001 — warm is best-effort
+            return
+        sess = getattr(self, "session", None)
+        if sess is None:
+            return
+        current = getattr(sess, "model", "")
+        if current:
+            return
+        try:
+            sess.model = real_model
+        except Exception:  # noqa: BLE001 — Session may be frozen, ignore
+            pass
+
+    # ---- Override _ensure_command_system to pass downstream fields ----
+
+    def _ensure_command_system(self) -> None:
+        """Lazy build of the command system with downstream context.
+
+        Mirrors the parent (``ClawcodexREPL._ensure_command_system``) idiom:
+        an idempotent sentinel guards re-entry, and the body is the full
+        subclass registration flow (built-in commands + downstream runtime
+        commands + skill ext + ui_host + command context).
+
+        Previously this logic ran unconditionally from ``__init__`` via
+        ``self._init_command_system()``. Moving it behind ``_ensure_command_system``
+        lets the subclass inherit the lazy semantics introduced in core.py
+        without duplicating the trigger logic — ``ClawcodexREPL.handle_command``
+        in the parent class calls ``self._ensure_command_system()`` which
+        dispatches here.
+        """
+        if getattr(self, "command_registry", None) is not None:
+            return
         from src.command_system import (
             CommandRegistry,
             create_command_context,
@@ -556,6 +731,13 @@ class ClawCodexExtREPL(ClawcodexREPL):
         )
 
         self._update_built_in_commands_with_command_system()
+
+    # Backwards-compatible alias — kept so any test fixture that calls
+    # ``repl._init_command_system()`` still works. New code should call
+    # ``_ensure_command_system`` which is idempotent.
+    def _init_command_system(self) -> None:
+        """Backward-compatible alias for :meth:`_ensure_command_system`."""
+        self._ensure_command_system()
 
     # ---- Runtime permission controller helpers ----
     # Mirrors the upstream ``ClawcodexREPL`` methods. The downstream
