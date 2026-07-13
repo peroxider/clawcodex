@@ -41,12 +41,32 @@ class IssueState:
 
 
 @dataclass
+@dataclass
+class WorkflowStage:
+    """Aggregated state of one workflow stage."""
+    stage_id: int = 0
+    name: str = ""
+    phase: str = ""
+    status: str = "pending"
+    started_at: str = ""
+    completed_at: str = ""
+    cost_usd: float = 0.0
+    duration_seconds: float = 0.0
+    error: str = ""
+
+
+@dataclass
 class RunState:
     """Aggregated state of one orchestrator run."""
 
     run_id: str = ""
     workflow: str = ""
     started_at: str = ""
+    completed_at: str = ""
+    total_stages: int = 0
+    completed_stages: int = 0
+    workflow_status: str = "unknown"
+    stages: dict[int, WorkflowStage] = field(default_factory=dict)
     issues: dict[str, IssueState] = field(default_factory=dict)
     event_count: int = 0
 
@@ -158,13 +178,72 @@ class OrchestratorStateParser:
             "run_id": run_state.run_id,
             "workflow": run_state.workflow,
             "started_at": run_state.started_at,
+            "completed_at": run_state.completed_at,
             "issue_count": len(run_state.issues),
+            "workflow_status": run_state.workflow_status,
+            "total_stages": run_state.total_stages,
+            "completed_stages": run_state.completed_stages,
+            "stages": {
+                str(sid): {
+                    "stage_id": s.stage_id,
+                    "name": s.name,
+                    "phase": s.phase,
+                    "status": s.status,
+                    "started_at": s.started_at,
+                    "completed_at": s.completed_at,
+                    "cost_usd": s.cost_usd,
+                    "duration_seconds": s.duration_seconds,
+                    "error": s.error,
+                }
+                for sid, s in run_state.stages.items()
+            },
             "issues": issues_list,
         }
 
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _apply_stage_event(
+        state: RunState, event_type: str, event: dict[str, Any]
+    ) -> None:
+        """Fold a workflow stage event into the run state (F-116)."""
+        stage_id = event.get("stage_id", 0)
+        if stage_id and stage_id not in state.stages:
+            state.stages[stage_id] = WorkflowStage(stage_id=stage_id)
+
+        stage = state.stages.get(stage_id)
+        if stage is None:
+            return
+        stage.name = event.get("stage_name", stage.name)
+        stage.phase = event.get("phase", stage.phase)
+        ts = event.get("timestamp", "")
+
+        # Normalize event type: strip "workflow_" prefix for uniform handling
+        normalized = event_type
+        if normalized.startswith("workflow_"):
+            normalized = normalized[len("workflow_"):]
+
+        if normalized in ("stage_start",):
+            stage.status = "running"
+            stage.started_at = stage.started_at or ts
+        elif normalized in ("stage_complete",):
+            stage.status = "completed"
+            stage.completed_at = ts
+            stage.cost_usd = event.get("cost_usd", event.get("cost", 0.0))
+            stage.duration_seconds = event.get("duration_seconds", event.get("duration", 0.0))
+        elif normalized in ("stage_failed",):
+            stage.status = "failed"
+            stage.error = event.get("error", "")
+        elif normalized in ("stage_skipped",):
+            stage.status = "skipped"
+        elif normalized in ("gate_approved", "gate_result"):
+            stage.status = "gate_approved" if event.get("approved", True) else "gate_rejected"
+            stage.error = event.get("reason", "")
+        elif normalized in ("gate_rejected",):
+            stage.status = "gate_rejected"
+            stage.error = event.get("reason", "")
 
     @staticmethod
     def _read_ndjson(path: Path) -> list[dict[str, Any]]:
@@ -209,6 +288,25 @@ class OrchestratorStateParser:
             state.workflow = event.get("workflow", "")
             state.started_at = ts
             return
+
+        # Workflow-level events (F-116)
+        if event_type == "workflow_start":
+            state.workflow_status = "running"
+            state.total_stages = event.get("total_stages", 0)
+            return
+
+        if event_type == "workflow_complete":
+            state.workflow_status = "success"
+            state.completed_at = ts
+            state.completed_stages = state.total_stages
+            return
+
+        if event_type == "workflow_error":
+            state.workflow_status = "error"
+            return
+
+        if event_type.startswith(("workflow_stage_", "workflow_gate_", "workflow_decision", "stage_", "gate_", "decision_")):
+            return self._apply_stage_event(state, event_type, event)
 
         # Issue-level events — ensure the IssueState exists
         if issue_id and issue_id not in state.issues:
