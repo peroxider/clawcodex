@@ -198,6 +198,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
         self.tool_registry = tool_registry or build_default_registry(
             provider=self.provider,
             get_available_mcp_servers=_get_mcp_servers_for_prompt,
+            defer_extended_tools=True,
         )
 
         from src.permissions.types import ToolPermissionContext

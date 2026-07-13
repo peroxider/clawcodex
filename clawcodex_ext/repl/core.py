@@ -438,8 +438,7 @@ def _load_heavy_runtime() -> None:
     """Import agent/provider/tool/command deps on first REPL use."""
     global _heavy_runtime_loaded
     global Session, get_provider_config, resolve_output_style
-    global build_provider_from_config, AnthropicProvider, ChatMessage
-    global MinimaxProvider, get_provider_class, tool_to_api_schema
+    global build_provider_from_config, get_provider_class, tool_to_api_schema
     global ToolContext, build_default_registry, ToolCall
     global ToolEvent, summarize_tool_result, summarize_tool_use
     global QueryEngine, QueryEngineConfig, StreamEvent
@@ -460,9 +459,11 @@ def _load_heavy_runtime() -> None:
     from src.config import get_provider_config as _get_provider_config
     from src.outputStyles import resolve_output_style
     from src.providers.runtime import build_provider_from_config as _build_provider_from_config
-    from src.providers.anthropic_provider import AnthropicProvider
-    from clawcodex_ext.providers.base import ChatMessage
-    from src.providers.minimax_provider import MinimaxProvider
+    # Note: AnthropicProvider / MinimaxProvider / ChatMessage are NOT imported
+    # here. Callers that need them (``_provider_uses_system_kwarg``,
+    # ``clawcodex_ext.query.query``, ``clawcodex_ext.utils.advisor``) do their
+    # own internal imports, so pulling them into the REPL's heavy-runtime
+    # bootstrap would load provider modules users may never touch.
     from src.providers import get_provider_class as _get_provider_class
     from clawcodex_ext.services.api.claude import tool_to_api_schema
     from src.tool_system.context import ToolContext
@@ -762,6 +763,7 @@ class ClawcodexREPL:
         self.tool_registry = build_default_registry(
             provider=self.provider,
             get_available_mcp_servers=_get_mcp_servers_for_prompt,
+            defer_extended_tools=True,
         )
         if _HAS_CRON:
             replace_cron_tools(self.tool_registry)
@@ -6420,6 +6422,7 @@ class ClawcodexREPL:
         self.tool_registry = build_default_registry(
             provider=self.provider,
             get_available_mcp_servers=_get_mcp_servers_for_prompt,
+            defer_extended_tools=True,
         )
 
         self.console.print(

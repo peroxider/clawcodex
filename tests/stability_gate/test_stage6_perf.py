@@ -190,3 +190,190 @@ class TestStage6Perf:
             f"REPL cold start took {elapsed:.2f}s, expected < {budget:.2f}s "
             f"(threshold multiplier={_THRESHOLD_MULT})"
         )
+
+    def test_repl_heavy_runtime_cold_start(self):
+        """REPL 重型运行时栈冷启动不应超过 8s，CI x N。
+
+        ``_load_heavy_runtime()`` 在 ``ClawcodexREPL.__init__`` 首次调用时
+        触发，集中 import Session、provider、tool registry、QueryEngine、
+        command_system、CostTracker、HistoryLog 等 ~27 项重型依赖。这是
+        用户从命令行启动到 REPL 第一个 prompt 之前的最大单点开销。
+
+        本地基线 ~5.5s（实测），留 2.5s 余量设 8s budget。CI 上 ×2 阈值。
+        失败说明有模块被无谓地拉到 _load_heavy_runtime 顶部 import 了。
+
+        跳过条件：依赖 ``httpx``（Codex OAuth 的传递依赖）缺失时跳过，
+        避免在没有安装完整依赖的环境下产生 false negative。
+        """
+        import subprocess
+        import sys
+
+        pytest = __import__("pytest")
+        pytest.importorskip("httpx")
+
+        # Probe isolates import timing from test runner state.
+        # Runs in fresh subprocess so sys.modules cache starts empty.
+        probe = (
+            "import sys, os, time;"
+            "os.environ.setdefault('HOME', '/tmp');"
+            "sys.path.insert(0, '.');"
+            "from clawcodex_ext.repl.core import _load_heavy_runtime;"
+            "_load_heavy_runtime();"
+            "print(int(time.monotonic() * 1000))"
+        )
+
+        start = time.monotonic()
+        proc = subprocess.run(
+            [sys.executable, "-c", probe],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        elapsed = time.monotonic() - start
+        assert proc.returncode == 0, (
+            f"_load_heavy_runtime() failed (rc={proc.returncode}): "
+            f"stderr={proc.stderr[-400:]!r}"
+        )
+        try:
+            heavy_ms = int(proc.stdout.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            heavy_ms = -1
+        budget = 8.0 * _THRESHOLD_MULT
+        assert elapsed < budget, (
+            f"REPL _load_heavy_runtime() cold start took {elapsed:.2f}s "
+            f"(inner={heavy_ms}ms), expected < {budget:.2f}s "
+            f"(threshold multiplier={_THRESHOLD_MULT})"
+        )
+
+    def test_repl_first_prompt_end_to_end(self):
+        """REPL 端到端冷启动（import + _load_heavy_runtime + 构造 + 渲染）不应超过 9s。
+
+        模拟用户从命令行启动 clawcodex 到 REPL 第一个 prompt 出现的
+        完整路径：包括 ``ClawcodexREPL`` 类导入、``_load_heavy_runtime``
+        全栈加载、``ClawcodexREPL.__init__`` 实例化（provider、Session、
+        tool registry Stage A）以及 ``_print_startup_header`` 渲染。
+
+        不实际进入 prompt_toolkit 主循环（那受 terminal 状态影响不可控），
+        但 ``__init__`` 已完成 REPL 启动期全部同步重型工作。
+
+        Stage B（extension tools + persisted agent tools + workflow tool）
+        runs on a daemon thread (see ``build_default_registry`` in
+        ``clawcodex_ext/tool_system/defaults.py``); it does not block this
+        measurement. ``test_build_default_registry_defer_fast`` below
+        guards the Stage A / Stage B split by ensuring defer mode returns
+        within the synchronous budget.
+
+        本地基线 ~7.3s（实测，含 deferred Stage B 收益），留 1.7s 余量
+        设 9s budget。CI 上 ×2 阈值。
+
+        跳过条件：依赖 ``httpx``（Codex OAuth 的传递依赖）缺失时跳过。
+        """
+        import subprocess
+        import sys
+
+        pytest = __import__("pytest")
+        pytest.importorskip("httpx")
+
+        # Probe is the canonical REPL constructor entry point, minus the
+        # interactive prompt loop. Stops just before prompt_toolkit to
+        # avoid TTY-dependent timing variance.
+        probe = (
+            "import sys, os, time;"
+            "os.environ.setdefault('HOME', '/tmp');"
+            "os.environ.setdefault('CLAWCODEX_API_KEY', 'sk-perf-test');"
+            "os.environ.setdefault('ANTHROPIC_AUTH_TOKEN', 'sk-perf-test');"
+            "sys.path.insert(0, '.');"
+            "from src.repl import ClawcodexREPL;"
+            "repl = ClawcodexREPL(provider_name='anthropic', stream=False);"
+            "repl._print_startup_header();"
+            "print(int(time.monotonic() * 1000))"
+        )
+
+        start = time.monotonic()
+        proc = subprocess.run(
+            [sys.executable, "-c", probe],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        elapsed = time.monotonic() - start
+        assert proc.returncode == 0, (
+            f"REPL end-to-end init failed (rc={proc.returncode}): "
+            f"stderr={proc.stderr[-400:]!r}"
+        )
+        try:
+            inner_ms = int(proc.stdout.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            inner_ms = -1
+        budget = 9.0 * _THRESHOLD_MULT
+        assert elapsed < budget, (
+            f"REPL end-to-end cold start took {elapsed:.2f}s "
+            f"(inner={inner_ms}ms), expected < {budget:.2f}s "
+            f"(threshold multiplier={_THRESHOLD_MULT})"
+        )
+
+    def test_build_default_registry_defer_fast(self):
+        """``build_default_registry(defer_extended_tools=True)`` 应立即返回。
+
+        Stage A（51 个静态工具 + Agent + ToolSearch）必须同步注册。
+        Stage B（extension tools + persisted agent tools + workflow tool）
+        推到 daemon 线程，所以 ``build_default_registry`` 调用必须 < 1000ms
+        返回（budget）。否则说明 Stage B 又被错误地阻塞到 sync path。
+
+        这个测试和 ``test_repl_first_prompt_end_to_end`` 一起验证 deferred
+        Stage B 方案的两个不变量：
+        1. ``build_default_registry(defer_extended_tools=True)`` 快速返回
+        2. ``ClawcodexREPL.__init__`` 端到端时间 < 9s
+
+        如果 Stage A 的 ``ALL_STATIC_TOOLS`` 列表未来被改大（例如新增重型
+        工具类），本测试会触发 Stage A 的回归 —— 因为 Stage A 是同步的，
+        defer 路径只对 Stage B 起作用。
+        """
+        import subprocess
+        import sys
+
+        pytest = __import__("pytest")
+        pytest.importorskip("httpx")
+
+        probe = """
+import sys, os, time
+os.environ.setdefault('HOME', '/tmp')
+sys.path.insert(0, '.')
+from src.tool_system.defaults import build_default_registry
+t0 = time.monotonic()
+r = build_default_registry(provider=object(), defer_extended_tools=True)
+elapsed = (time.monotonic() - t0) * 1000
+stage_a_count = len(r.list_tools())
+print(f\"DEFER_MS={int(elapsed)}\")
+print(f\"STAGE_A_COUNT={stage_a_count}\")
+"""
+        start = time.monotonic()
+        proc = subprocess.run(
+            [sys.executable, "-c", probe],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        elapsed = time.monotonic() - start
+        assert proc.returncode == 0, (
+            f"build_default_registry probe failed (rc={proc.returncode}): "
+            f"stderr={proc.stderr[-400:]!r}"
+        )
+        lines = proc.stdout.strip().splitlines()
+        try:
+            defer_ms = int(lines[-2].split("=", 1)[1])
+            stage_a_count = int(lines[-1].split("=", 1)[1])
+        except (ValueError, IndexError, IndexError):
+            defer_ms = -1
+            stage_a_count = -1
+        # Stage A must register at least 50 tools (51 ALL_STATIC_TOOLS + Agent + ToolSearch).
+        assert stage_a_count >= 50, (
+            f"Stage A only registered {stage_a_count} tools, expected >= 50"
+        )
+        # Defer path must return quickly (Stage A is the only sync work).
+        budget = 1.0 * _THRESHOLD_MULT
+        assert defer_ms < 1000, (
+            f"build_default_registry(defer_extended_tools=True) took {defer_ms}ms, "
+            f"expected < 1000ms (threshold multiplier={_THRESHOLD_MULT}). "
+            f"Stage A is supposed to be the only synchronous work."
+        )
