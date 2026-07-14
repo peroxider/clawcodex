@@ -33,6 +33,42 @@ tail -1 /tmp/cron-demo.cast | python3 -m json.tool  # 最后一帧
 `asciinema play /tmp/cron-demo.cast` 在本地终端回放（需先 `brew install
 asciinema` 或 `apt install asciinema`）。
 
+### 1.1 录制真实的 REPL 交互
+
+如果你要做特性展示（而不是模拟界面），最直接的方式是启动 REPL 时同时
+打开录制：
+
+```bash
+clawcodex-dev --record /tmp/real-repl.cast
+```
+
+进入 REPL 后正常交互——你键入的每一行、agent 返回的 Rich Panel、tool
+block 都会写入 `.cast`。
+
+```bash
+# 可选：显式指定 .cast 头里的终端尺寸（默认自动检测当前终端）
+clawcodex-dev --record /tmp/real-repl.cast --record-width 120 --record-height 40
+
+# 退出 REPL 后验证
+head -1 /tmp/real-repl.cast
+python3 -c "from extensions.recording.validate_cast import validate_cast; \
+  print(validate_cast('/tmp/real-repl.cast'))"
+```
+
+> **限制**：prompt_toolkit 的提示符栏（`❯`、行编辑、补全弹窗）由
+> prompt_toolkit 自己渲染，不走 Rich `Console`，因此不会被录制成像素；
+> 我们用 `m` marker 标记每次 prompt 的开始/提交边界，回放时仍可定位到
+> 交互节点。
+
+### 1.2 与 `clawcodex record` 的关系
+
+| 命令 | 录制对象 | 场景 |
+|---|---|---|
+| `clawcodex record --sources ... --out x.cast` | 后台子系统事件（orchestrator、cron、query...） | CI / orchestrator 跑完 issue 自动挂 `.cast` |
+| `clawcodex record --auto --out x.cast` | 真实 orchestrator batch + dashboard tick | 无人值守的自动化演示 |
+| `clawcodex-dev --record x.cast` | **真实 REPL 交互** | 特性展示、人工演示 |
+
+
 ## 2. 多 source 同时录制
 
 同一份 `.cast` 可以装多个子系统的输出，事件按时间顺序写入：
@@ -223,6 +259,8 @@ Pillow）。
 | `cast-to-mp4` 提示 `ffmpeg not found` | 本机没装 ffmpeg | `apt install ffmpeg`（Debian/Ubuntu）或 `brew install ffmpeg`（macOS）后重试 |
 | `cast-to-mp4` 报 `RuntimeError: cast_to_mp4 requires Pillow` | 转换路径需要 Pillow | `pip install Pillow`（主录制 `clawcodex record` 不依赖 Pillow） |
 | MP4 在 Chrome 显示黑屏 | h264 不是 yuv420p 色彩空间 | 已是默认；如手动调整务必保留 `-vf format=yuv420p` |
+| `--record` 后 REPL 没输出到 `.cast` | `ctx.options.record` 在 TUI 模式被另一条路径消费 | `--record` 仅支持默认 inline REPL，不支持 `--tui` |
+| `--record` 的 `.cast` 里没有 `❯` 提示符 | prompt_toolkit 提示符栏不走 Rich Console | 这是已知限制；我们用 `repl:prompt:start/submit` marker 标记交互节点 |
 
 ## 10. 架构概览
 
@@ -235,10 +273,14 @@ extensions/recording/                  ← 共享 writer + registry + CLI
 ├── registry.py                        ← RecordableSource 注册中心
 ├── cli.py                             ← clawcodex record 入口
 ├── cast_to_mp4_cli.py                 ← clawcodex cast-to-mp4 入口
+├── repl_source.py                     ← F-REC-L：真实 REPL 捕获
 ├── query_forwarder.py                 ← query 事件 → AsciicastEvent 翻译
 ├── _factories.py                      ← 5 个 built-in source 工厂
 ├── tools/                             ← .cast 后续处理工具（opt-in）
 │   └── cast_to_mp4.py                 ← Pillow + ffmpeg 渲染与编码
+├── examples/                          ← 可运行示例
+│   ├── logical_kanban_repl_demo.py    ← 模拟 dashboard tick 演化
+│   └── repl_demo_driver.py            ← 真实 REPL capture 驱动（E2E）
 └── __init__.py
 
 per-subsystem adapters:
@@ -247,7 +289,11 @@ extensions/sop_converter/asciicast_projector.py
 extensions/visualizer/asciicast_dashboard_source.py
 clawcodex_ext/cron_system/asciicast_observer.py
 
-5 个一行挂载点：
+REPL 捕获挂载点（Layer 1）:
+clawcodex_ext/cli/parser.py              ← --record / --record-width / --record-height
+clawcodex_ext/frontend/repl.py           ← install_repl_capture(repl, ctx)
+
+5 个一行挂载点（后台子系统）:
 extensions/orchestrator/orchestrator.py    ← asciicast_capture: kwarg
 extensions/api/query.py                    ← QueryConfig.capture field
 clawcodex_ext/cli/sop_cmd/commands.py      ← --record flag

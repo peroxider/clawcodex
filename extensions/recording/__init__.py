@@ -17,6 +17,10 @@ from extensions.recording.registry import (
     get_default_registry,
     register_source,
 )
+from extensions.recording.repl_source import (
+    ReplConsoleSource,
+    install_repl_capture,
+)
 from extensions.recording.validate_cast import validate_cast
 
 # Register the well-known source factories at import time so callers
@@ -31,7 +35,9 @@ __all__ = [
     "AsciicastWriter",
     "RecordableSourceRegistry",
     "RecordingConfig",
+    "ReplConsoleSource",
     "get_default_registry",
+    "install_repl_capture",
     "register_source",
     "validate_cast",
 ]

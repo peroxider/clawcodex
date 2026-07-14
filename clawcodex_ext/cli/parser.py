@@ -226,6 +226,32 @@ Examples:
             "no internet access."
         ),
     )
+    parser.add_argument(
+        "--record",
+        type=str,
+        default=None,
+        metavar="CAST_PATH",
+        help=(
+            "Record the REPL session to an asciicast v2 .cast file. "
+            "Captures console output (Rich) and user input; plays back "
+            "with asciinema-player. Requires the recording extension."
+        ),
+    )
+    parser.add_argument(
+        "--record-width",
+        type=int,
+        default=None,
+        metavar="COLS",
+        help="Terminal width for the recorded .cast header (default: auto-detect).",
+    )
+    parser.add_argument(
+        "--record-height",
+        type=int,
+        default=None,
+        metavar="ROWS",
+        help="Terminal height for the recorded .cast header (default: auto-detect).",
+    )
+
     # ---- Agent type selection ----
     parser.add_argument(
         "--agent",

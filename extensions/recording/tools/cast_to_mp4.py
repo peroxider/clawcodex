@@ -166,14 +166,22 @@ def render_cast_to_pngs(
     bg: tuple[int, int, int] = (14, 17, 22),
     fg: tuple[int, int, int] = (201, 209, 217),
     palette: dict[str, tuple[int, int, int]] | None = None,
+    snapshot_markers: tuple[str, ...] = ("dashboard:snapshot", "repl:prompt:start"),
+    fallback_interval_s: float = 2.0,
 ) -> list[tuple[Path, float]]:
-    """Render one PNG per dashboard snapshot from ``cast_path``.
+    """Render one PNG per meaningful snapshot from ``cast_path``.
+
+    By default it looks for ``dashboard:snapshot`` or
+    ``repl:prompt:start`` markers.  If neither is present, it falls back
+    to sampling all ``"o"`` frames at ``fallback_interval_s`` intervals
+    so arbitrary asciicast recordings (e.g. a real REPL session) can
+    still be converted to MP4.
 
     Returns ``[(png_path, hold_seconds)]``.  ``hold_seconds`` is how
     long the player should display that frame before moving on, derived
-    from the gap between consecutive ``dashboard:snapshot`` markers.
-    The final frame is held for 2 extra seconds so the demo doesn't
-    disappear too abruptly.
+    from the gap between consecutive markers (or intervals in fallback
+    mode).  The final frame is held for 2 extra seconds so the demo
+    doesn't disappear too abruptly.
     """
     Image, ImageDraw, ImageFont = _import_pillow()
     raw = cast_path.read_text(encoding="utf-8").splitlines()
@@ -188,23 +196,15 @@ def render_cast_to_pngs(
         if line.strip()
     ]
 
-    # Group output frames by snapshot marker.
-    snapshots: list[tuple[float, list[str]]] = []
-    current_marker_t: float | None = None
-    current_outputs: list[str] = []
-    for event in events:
-        if event[1] == "m" and event[2] == "dashboard:snapshot":
-            if current_marker_t is not None:
-                snapshots.append((current_marker_t, current_outputs))
-            current_marker_t = event[0]
-            current_outputs = []
-        elif event[1] == "o" and current_marker_t is not None:
-            current_outputs.append(event[2])
-    if current_marker_t is not None:
-        snapshots.append((current_marker_t, current_outputs))
-
+    snapshots = _group_output_by_markers(
+        events, markers=snapshot_markers
+    )
     if not snapshots:
-        raise RuntimeError("no dashboard:snapshot markers found in .cast")
+        snapshots = _sample_output_by_interval(
+            events, interval_s=fallback_interval_s
+        )
+    if not snapshots:
+        raise RuntimeError("no renderable output frames found in .cast")
 
     holds = _compute_hold_seconds(snapshots)
 
@@ -233,6 +233,53 @@ def render_cast_to_pngs(
         pairs.append((png, hold))
 
     return pairs
+
+
+def _group_output_by_markers(
+    events: list[list[object]],
+    *,
+    markers: tuple[str, ...],
+) -> list[tuple[float, list[str]]]:
+    """Group ``"o"`` frames between recognized markers."""
+    snapshots: list[tuple[float, list[str]]] = []
+    current_marker_t: float | None = None
+    current_outputs: list[str] = []
+    for event in events:
+        if event[1] == "m" and event[2] in markers:
+            if current_marker_t is not None:
+                snapshots.append((current_marker_t, current_outputs))
+            current_marker_t = event[0]
+            current_outputs = []
+        elif event[1] == "o" and current_marker_t is not None:
+            current_outputs.append(event[2])
+    if current_marker_t is not None:
+        snapshots.append((current_marker_t, current_outputs))
+    return snapshots
+
+
+def _sample_output_by_interval(
+    events: list[list[object]],
+    *,
+    interval_s: float,
+) -> list[tuple[float, list[str]]]:
+    """Fallback sampler: one snapshot per ``interval_s`` of ``"o"`` output."""
+    snapshots: list[tuple[float, list[str]]] = []
+    current_outputs: list[str] = []
+    last_t: float | None = None
+    for event in events:
+        if event[1] != "o":
+            continue
+        t = float(event[0])
+        if last_t is None or t - last_t >= interval_s:
+            if last_t is not None:
+                snapshots.append((last_t, current_outputs))
+            last_t = t
+            current_outputs = [event[2]]
+        else:
+            current_outputs.append(event[2])
+    if last_t is not None:
+        snapshots.append((last_t, current_outputs))
+    return snapshots
 
 
 def _compute_hold_seconds(

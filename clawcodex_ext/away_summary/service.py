@@ -561,6 +561,7 @@ def _normalize_summary_output(text: str) -> str:
 
     * a preamble such as "你刚回来，这是之前的会话摘要：" or "Here's a summary:";
     * non-hyphen bullet markers (``•``, ``*``, ``·``);
+    * markdown emphasis/backticks/headings/bold;
     * low-value bullets for bare greetings (e.g. ``• 问候``).
 
     This function cleans those up as a defensive post-processing step so
@@ -586,7 +587,14 @@ def _normalize_summary_output(text: str) -> str:
     cleaned = re.sub(r"(?m)^\s*[•*·]\s+", "- ", cleaned)
     cleaned = re.sub(r"(?m)^\s*\d+[\.\)]\s+", "- ", cleaned)
 
-    # 3. Drop low-value greeting bullets that contain only social filler.
+    # 3. Strip inline markdown the prompt forbids (bold, italic, inline code).
+    #    Keep the text inside backticks/asterisks so the content remains useful.
+    cleaned = re.sub(r"(?m)^(#+\s*)+", "", cleaned)
+    cleaned = re.sub(r"\*\*(.+?)\*\*", r"\1", cleaned)
+    cleaned = re.sub(r"_(.+?)_", r"\1", cleaned)
+    cleaned = re.sub(r"`(.+?)`", r"\1", cleaned)
+
+    # 4. Drop low-value greeting bullets that contain only social filler.
     _LOW_VALUE_BULLET_RE = re.compile(
         r"(?m)^-\s*(?:"
         r"问候|打招呼|问好|寒暄|hello|hi|hey|greetings|welcome"
@@ -595,7 +603,7 @@ def _normalize_summary_output(text: str) -> str:
     )
     cleaned = _LOW_VALUE_BULLET_RE.sub("", cleaned)
 
-    # 4. Collapse any blank lines introduced by the cleanup.
+    # 5. Collapse any blank lines introduced by the cleanup.
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
     return cleaned
 

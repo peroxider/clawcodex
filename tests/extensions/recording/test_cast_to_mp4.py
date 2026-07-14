@@ -117,14 +117,19 @@ def test_render_cast_to_pngs_enforces_min_hold_floor(
     assert holds == [1.0, 1.0, 2.0]
 
 
-def test_render_cast_to_pngs_raises_when_no_markers(
+def test_render_cast_to_pngs_raises_when_no_output_frames(
     tmp_path: Path,
 ) -> None:
+    """When no output frames exist, fallback sampling is empty too."""
     from extensions.recording.tools.cast_to_mp4 import render_cast_to_pngs
 
     bad = tmp_path / "empty.cast"
-    bad.write_text('{"version":2,"width":120,"height":36}\n', encoding="utf-8")
-    with pytest.raises(RuntimeError, match="no dashboard:snapshot"):
+    bad.write_text(
+        '{"version":2,"width":120,"height":36}\n'
+        '[0.0,"m","unknown:marker"]\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="no renderable output frames"):
         render_cast_to_pngs(bad, tmp_path / "out")
 
 
@@ -262,6 +267,32 @@ def test_convert_cast_to_mp4_writes_keep_pngs_when_requested(
     assert keep_dir.exists()
     preserved = sorted(keep_dir.glob("frame_*.png"))
     assert len(preserved) == len(pairs)
+
+
+def test_render_cast_to_pngs_falls_back_to_interval_sampling(
+    tmp_path: Path,
+) -> None:
+    """If no recognized markers are present, the renderer samples o frames."""
+    from extensions.recording.tools.cast_to_mp4 import render_cast_to_pngs
+
+    cast = tmp_path / "plain.cast"
+    cast.write_text(
+        json.dumps({"version": 2, "width": 120, "height": 36, "title": "repl"})
+        + "\n"
+        + json.dumps([0.0, "o", "line 1\n"])
+        + "\n"
+        + json.dumps([1.0, "o", "line 2\n"])
+        + "\n"
+        + json.dumps([3.0, "o", "line 3\n"])
+        + "\n"
+        + json.dumps([3.5, "o", "line 4\n"])
+        + "\n",
+        encoding="utf-8",
+    )
+    pairs = render_cast_to_pngs(cast, tmp_path / "out", fallback_interval_s=1.5)
+    # Events at 0.0, 1.0, 3.0, 3.5 with interval 1.5:
+    # 0.0 and 1.0 fall in the first bucket, 3.0 and 3.5 in the second.
+    assert len(pairs) == 2
 
 
 def test_run_cast_to_mp4_rejects_missing_input(tmp_path: Path) -> None:

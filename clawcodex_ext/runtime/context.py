@@ -46,6 +46,9 @@ class RuntimeOptions:
     gateway_sock: str | None = None
     startup_agent: Any | None = None
     bundle_path: Path | None = None
+    record: str | None = None
+    record_width: int | None = None
+    record_height: int | None = None
 
 
 @dataclass

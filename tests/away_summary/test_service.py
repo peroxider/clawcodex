@@ -696,6 +696,26 @@ def test_normalize_summary_output_drops_low_value_greeting_bullets() -> None:
     assert "- 继续聊天" in cleaned
 
 
+def test_normalize_summary_output_strips_inline_markdown() -> None:
+    """The prompt forbids markdown beyond bullet markers; strip bold,
+    italic, inline code, and heading markers while preserving the text."""
+    raw = (
+        "我们正在处理 recap。\n"
+        "## 更新\n"
+        "- **当前分支** `dev-decoupling-refactor-0573f4c` 上有改动\n"
+        "- _最新提交_ 是 asciicast 录制器\n"
+        "- 下一步继续"
+    )
+    cleaned = _normalize_summary_output(raw)
+    assert "##" not in cleaned
+    assert "**" not in cleaned
+    assert "`" not in cleaned
+    assert "_最新提交_" not in cleaned
+    assert "当前分支 dev-decoupling-refactor-0573f4c 上有改动" in cleaned
+    assert "最新提交 是 asciicast 录制器" in cleaned
+    assert "- 下一步继续" in cleaned
+
+
 def test_service_normalizes_model_noncompliant_output() -> None:
     """End-to-end: a model that ignores the prompt and emits a preamble plus
     '•' bullets still yields a clean, normalized recap."""

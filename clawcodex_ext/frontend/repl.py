@@ -45,5 +45,13 @@ class REPLFrontend(FrontendPlugin):
             append_system_prompt=ctx.options.append_system_prompt,
         )
         install_repl_extensions(repl, ctx)
+        try:
+            from extensions.recording.repl_source import install_repl_capture
+
+            install_repl_capture(repl, ctx)
+        except Exception:
+            # Recorder extension is optional; a missing/broken recording
+            # package must not prevent the REPL from starting.
+            pass
         repl.run()
         return 0

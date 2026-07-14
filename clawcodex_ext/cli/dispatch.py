@@ -548,6 +548,9 @@ def run_cli(argv: list[str] | None = None) -> int:
         gateway_origin=getattr(args, "gateway_origin", None),
         gateway_sock=getattr(args, "gateway_sock", None),
         bundle_path=bundle_path,
+        record=getattr(args, "record", None),
+        record_width=getattr(args, "record_width", None),
+        record_height=getattr(args, "record_height", None),
     )
     if _is_provider_free_goal_summary_print(args):
         from src.entrypoints.headless import HeadlessOptions, run_headless

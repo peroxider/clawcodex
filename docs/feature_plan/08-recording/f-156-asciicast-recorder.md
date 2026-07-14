@@ -2,7 +2,7 @@
 
 > 状态: ✅ 已完成
 > 章节: docs/feature_plan/08-recording/f-156-asciicast-recorder.md
-> 最后更新: 2026-07-13
+> 最后更新: 2026-07-14
 > 设计来源: 2026-07 用户提出「agent 自动录制 ClawCodex 功能演示」需求
 
 ## §1 设计规划
@@ -49,6 +49,7 @@ GitHub/Notion），由 ClawCodex 各子系统**按结构化事件投影** + **�
 | F-REC-I | 测试套件（66 用例：unit + integration + subprocess E2E） | ✅ | `tests/extensions/recording/` |
 | F-REC-J | 端到端示例：REPL `/dashboard` 逻辑看板 4-tick 演化录制（可运行 + 可测试） | ✅ | `extensions/recording/examples/logical_kanban_repl_demo.py` |
 | F-REC-K | `.cast → MP4` 后处理器（Pillow 渲染 + ffmpeg 编码 + `clawcodex cast-to-mp4` 子命令） | ✅ | `extensions/recording/tools/cast_to_mp4.py` + `extensions/recording/cast_to_mp4_cli.py` |
+| F-REC-L | 真实 REPL 交互录制（Rich Console TeeWriter + prompt_async proxy + `clawcodex-dev --record`） | ✅ | `extensions/recording/repl_source.py` + `clawcodex_ext/cli/parser.py` + `clawcodex_ext/frontend/repl.py` |
 
 ### 1.4 录制模式
 
@@ -56,8 +57,9 @@ GitHub/Notion），由 ClawCodex 各子系统**按结构化事件投影** + **�
 |------|--------|------|
 | **结构化事件投影** | orchestrator / query / cron | adapter 监听 `ProgressSink` / `HeadlessSessionOptions.on_event` / 4 个 cron 回调，转成 `m`/`o` 帧 |
 | **渲染输出捕获** | SOP converter / visualizer dashboard | `TeeWriter` 镜像 `sys.stdout`，或把 HTML 面板渲染成 ASCII 文本帧 |
+| **真实 REPL 捕获** | 默认 inline REPL（prompt_toolkit + rich） | 替换 `repl.console.file` 为 `RichConsoleTeeWriter`，包装 `repl.prompt_session.prompt_async` 为 `PromptSessionProxy`；`"i"` 帧记录用户输入，`"o"` 帧记录 Rich 实际渲染 |
 
-两种模式**共用同一个 writer**，append-only，不需要区分。
+三种模式**共用同一个 writer**，append-only，不需要区分。
 
 ### 1.5 影响范围
 
@@ -70,6 +72,10 @@ GitHub/Notion），由 ClawCodex 各子系统**按结构化事件投影** + **�
 | `extensions/orchestrator/report_writer.py` | +2 field + ~25 行 | `cast_path: str | None`，dual-write `.cast` 到 workspace + persistent |
 | `extensions/visualizer/__init__.py` | +5 行 | try/except 注册 `AsciicastDashboardSource()` |
 | `clawcodex_ext/cli/subcommand_registry.py` | +5 行 | lazy import `extensions.recording.cli` 触发 `@register("record")` |
+| `clawcodex_ext/cli/parser.py` | +3 个 flag | `--record` / `--record-width` / `--record-height`（仅默认 REPL，不支持 `--tui`） |
+| `clawcodex_ext/cli/dispatch.py` | +3 行 | 把 `--record*` 参数注入 `RuntimeOptions(...)` |
+| `clawcodex_ext/runtime/context.py` | +3 行 | `RuntimeOptions` 新增 `record` / `record_width` / `record_height` 字段 |
+| `clawcodex_ext/frontend/repl.py` | +6 行 | `install_repl_extensions(...)` 之后 try/except 调用 `install_repl_capture(...)` |
 
 **`src/` 改动：0 行**（CLAUDE.md 解耦硬约束达成）。
 
@@ -78,7 +84,7 @@ GitHub/Notion），由 ClawCodex 各子系统**按结构化事件投影** + **�
 ```bash
 # 1. 单元 + 集成测试
 python3 -m pytest tests/extensions/recording/ -q
-# 期望: 60 passed
+# 期望: 115 passed
 
 # 2. 稳定性门禁（除 pre-existing flaky Stage 6 perf 外全绿）
 python3 -m pytest tests/stability_gate/ --ignore=tests/stability_gate/test_stage6_perf.py -q
@@ -97,6 +103,14 @@ python3 -m extensions.recording.examples.logical_kanban_repl_demo \
     --out /tmp/kanban.cast --ticks 4 --frame-delay 0.5
 clawcodex cast-to-mp4 --cast /tmp/kanban.cast --out /tmp/kanban.mp4 --fps 2
 file /tmp/kanban.mp4    # 应输出 "ISO Media, MP4 v2"
+
+# 6. 真实 REPL 录制
+clawcodex-dev --record /tmp/real-repl.cast
+# 进入 REPL 后键入任意 prompt，退出后：
+python3 -c "from extensions.recording.validate_cast import validate_cast; \
+  print(validate_cast('/tmp/real-repl.cast'))"   # []
+python3 -c "import json; \
+  print([l for l in open('/tmp/real-repl.cast') if '\"i\"' in l][:3])"  # 用户输入
 ```
 
 ### 1.7 风险与约束
