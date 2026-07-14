@@ -1,13 +1,11 @@
 """F-121: Rule extraction, storage, and retrieval from PR review feedback.
 
-Phase 1 — end-to-end minimal pipeline:
+Pipeline:
   - RuleStore: read/write workflow.rules.yaml with atomic write
   - RuleEngine.extract(): parse agent reply for ## Extracted Rules section
-
-Phase 2 — intelligent processing:
-  - RuleEmbedder: TF-IDF + cosine similarity for semantic dedup (Phase 1
-    fallback — Phase 3 should prioritise a sentence-transformer model)
-  - RuleEngine.merge(): merge similar rules (via configurable threshold)
+  - BatchedLLMJudge: batched LLM-based dedup / merge / conflict detection
+    (subprocess `clawcodex-dev -p`), replacing the earlier TF-IDF/embedding
+    approach
   - RuleEngine.score(): 5-dimension quality scoring
   - RuleEngine.prune(): auto-prune when over max_rules limit
 """
@@ -576,7 +574,7 @@ class RuleEngine:
         if not remaining:
             return merged
 
-        # --- decide: LLM path or TF-IDF fallback ---------------------------------------
+        # --- decide: LLM judge path or all-new fallback -------------------------------
         if _judge_results is not None:
             return _apply_judge_results(merged, remaining, _judge_results, now)
 
