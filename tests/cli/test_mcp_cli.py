@@ -67,6 +67,7 @@ def _reset_mcp_disabled_state(monkeypatch: pytest.MonkeyPatch):
     """
     try:
         from clawcodex_ext.services.mcp import config as _mcp_config
+
         monkeypatch.setattr(_mcp_config, "_disabled_servers", set())
     except Exception:  # pragma: no cover
         yield
@@ -115,9 +116,7 @@ class TestAddStdio:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        rc = run_mcp_subcommand(
-            ["add", "demo", "--scope", "user", "--", "echo", "hi"]
-        )
+        rc = run_mcp_subcommand(["add", "demo", "--scope", "user", "--", "echo", "hi"])
         assert rc == 0
         out = capsys.readouterr().out
         assert "Added MCP server 'demo'" in out
@@ -172,9 +171,7 @@ class TestAddRemote:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        rc = run_mcp_subcommand(
-            ["add", "remote1", "--url", "https://example.com/mcp"]
-        )
+        rc = run_mcp_subcommand(["add", "remote1", "--url", "https://example.com/mcp"])
         assert rc == 0
         cfg = _read_user_config(isolated_config)["mcpServers"]["remote1"]
         assert cfg == {"type": "http", "url": "https://example.com/mcp"}
@@ -226,9 +223,7 @@ class TestAddRemote:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        rc = run_mcp_subcommand(
-            ["add", "x", "--url", "https://x", "--", "echo"]
-        )
+        rc = run_mcp_subcommand(["add", "x", "--url", "https://x", "--", "echo"])
         assert rc == 1
         assert "not both" in capsys.readouterr().err
 
@@ -245,9 +240,7 @@ class TestAddProjectScope:
         isolated_config: Path,
         project_cwd: Path,
     ) -> None:
-        rc = run_mcp_subcommand(
-            ["add", "local", "--scope", "project", "--", "echo", "hi"]
-        )
+        rc = run_mcp_subcommand(["add", "local", "--scope", "project", "--", "echo", "hi"])
         assert rc == 0
         data = _read_project_mcp(project_cwd)
         assert "local" in data["mcpServers"]
@@ -282,12 +275,8 @@ class TestAddErrors:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        assert run_mcp_subcommand(
-            ["add", "demo", "--scope", "user", "--", "echo"]
-        ) == 0
-        rc = run_mcp_subcommand(
-            ["add", "demo", "--scope", "user", "--", "echo"]
-        )
+        assert run_mcp_subcommand(["add", "demo", "--scope", "user", "--", "echo"]) == 0
+        rc = run_mcp_subcommand(["add", "demo", "--scope", "user", "--", "echo"])
         assert rc == 1
         assert "already exists" in capsys.readouterr().err
 
@@ -296,9 +285,7 @@ class TestAddErrors:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        rc = run_mcp_subcommand(
-            ["add", "x", "--scope", "enterprise", "--", "echo"]
-        )
+        rc = run_mcp_subcommand(["add", "x", "--scope", "enterprise", "--", "echo"])
         assert rc == 1
         err = capsys.readouterr().err
         assert "Cannot add MCP server to scope: enterprise" in err
@@ -308,9 +295,7 @@ class TestAddErrors:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        rc = run_mcp_subcommand(
-            ["add", "x", "--url", "https://x", "--type", "ftp"]
-        )
+        rc = run_mcp_subcommand(["add", "x", "--url", "https://x", "--type", "ftp"])
         assert rc == 1
         assert "invalid --type 'ftp'" in capsys.readouterr().err
 
@@ -319,9 +304,7 @@ class TestAddErrors:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        rc = run_mcp_subcommand(
-            ["add", "x", "--env", "NOVAL", "--", "echo"]
-        )
+        rc = run_mcp_subcommand(["add", "x", "--env", "NOVAL", "--", "echo"])
         assert rc == 1
         assert "expected KEY=VAL" in capsys.readouterr().err
 
@@ -330,9 +313,7 @@ class TestAddErrors:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        rc = run_mcp_subcommand(
-            ["add", "a", "b", "--scope", "user", "--", "echo"]
-        )
+        rc = run_mcp_subcommand(["add", "a", "b", "--scope", "user", "--", "echo"])
         assert rc == 1
         assert "unexpected extra positional argument: 'b'" in capsys.readouterr().err
 
@@ -342,9 +323,7 @@ class TestAddErrors:
         isolated_config: Path,
     ) -> None:
         """``add_mcp_config`` enforces name charset; surface its error."""
-        rc = run_mcp_subcommand(
-            ["add", "bad name!", "--scope", "user", "--", "echo"]
-        )
+        rc = run_mcp_subcommand(["add", "bad name!", "--scope", "user", "--", "echo"])
         assert rc == 1
         assert "Invalid name" in capsys.readouterr().err
 
@@ -370,9 +349,7 @@ class TestRemove:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        assert run_mcp_subcommand(
-            ["add", "demo", "--scope", "user", "--", "echo"]
-        ) == 0
+        assert run_mcp_subcommand(["add", "demo", "--scope", "user", "--", "echo"]) == 0
         rc = run_mcp_subcommand(["remove", "demo", "--scope", "user"])
         assert rc == 0
         assert "Removed MCP server 'demo'" in capsys.readouterr().out
@@ -411,12 +388,8 @@ class TestRemove:
         project_cwd: Path,
     ) -> None:
         # Add into project scope first.
-        assert run_mcp_subcommand(
-            ["add", "local", "--scope", "project", "--", "echo"]
-        ) == 0
-        assert run_mcp_subcommand(
-            ["remove", "local", "--scope", "project"]
-        ) == 0
+        assert run_mcp_subcommand(["add", "local", "--scope", "project", "--", "echo"]) == 0
+        assert run_mcp_subcommand(["remove", "local", "--scope", "project"]) == 0
         assert "local" not in _read_project_mcp(project_cwd).get("mcpServers", {})
 
 
@@ -439,13 +412,9 @@ class TestList:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        assert run_mcp_subcommand(
-            ["add", "zeta", "--scope", "user", "--", "echo"]
-        ) == 0
+        assert run_mcp_subcommand(["add", "zeta", "--scope", "user", "--", "echo"]) == 0
         capsys.readouterr()  # discard add stdout before list
-        assert run_mcp_subcommand(
-            ["add", "alpha", "--scope", "user", "--", "echo"]
-        ) == 0
+        assert run_mcp_subcommand(["add", "alpha", "--scope", "user", "--", "echo"]) == 0
         capsys.readouterr()  # discard add stdout before list
         rc = run_mcp_subcommand(["list"])
         assert rc == 0
@@ -466,9 +435,7 @@ class TestListScope:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        assert run_mcp_subcommand(
-            ["add", "u", "--scope", "user", "--", "echo"]
-        ) == 0
+        assert run_mcp_subcommand(["add", "u", "--scope", "user", "--", "echo"]) == 0
         capsys.readouterr()
         rc = run_mcp_subcommand(["list", "--scope", "user"])
         assert rc == 0
@@ -500,9 +467,7 @@ class TestListFormat:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        assert run_mcp_subcommand(
-            ["add", "demo", "--scope", "user", "--", "echo"]
-        ) == 0
+        assert run_mcp_subcommand(["add", "demo", "--scope", "user", "--", "echo"]) == 0
         capsys.readouterr()
         rc = run_mcp_subcommand(["list", "--format", "json"])
         assert rc == 0
@@ -517,9 +482,7 @@ class TestListFormat:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        assert run_mcp_subcommand(
-            ["add", "remote", "--url", "https://example.com/mcp"]
-        ) == 0
+        assert run_mcp_subcommand(["add", "remote", "--url", "https://example.com/mcp"]) == 0
         capsys.readouterr()
         rc = run_mcp_subcommand(["list", "--format", "table"])
         assert rc == 0
@@ -542,9 +505,7 @@ class TestListAll:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        assert run_mcp_subcommand(
-            ["add", "demo", "--scope", "user", "--", "echo"]
-        ) == 0
+        assert run_mcp_subcommand(["add", "demo", "--scope", "user", "--", "echo"]) == 0
         capsys.readouterr()
         assert run_mcp_subcommand(["disable", "demo"]) == 0
         capsys.readouterr()
@@ -558,9 +519,7 @@ class TestListAll:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        assert run_mcp_subcommand(
-            ["add", "demo", "--scope", "user", "--", "echo"]
-        ) == 0
+        assert run_mcp_subcommand(["add", "demo", "--scope", "user", "--", "echo"]) == 0
         capsys.readouterr()
         rc = run_mcp_subcommand(["list", "--all"])
         assert rc == 0
@@ -579,9 +538,7 @@ class TestGet:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        assert run_mcp_subcommand(
-            ["add", "demo", "--scope", "user", "--", "echo", "hi"]
-        ) == 0
+        assert run_mcp_subcommand(["add", "demo", "--scope", "user", "--", "echo", "hi"]) == 0
         capsys.readouterr()
         rc = run_mcp_subcommand(["get", "demo"])
         assert rc == 0
@@ -597,9 +554,10 @@ class TestGet:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        assert run_mcp_subcommand(
-            ["add", "r", "--url", "https://example.com/mcp", "--type", "sse"]
-        ) == 0
+        assert (
+            run_mcp_subcommand(["add", "r", "--url", "https://example.com/mcp", "--type", "sse"])
+            == 0
+        )
         capsys.readouterr()
         rc = run_mcp_subcommand(["get", "r"])
         assert rc == 0
@@ -646,9 +604,7 @@ class TestEnableDisable:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        assert run_mcp_subcommand(
-            ["add", "demo", "--scope", "user", "--", "echo"]
-        ) == 0
+        assert run_mcp_subcommand(["add", "demo", "--scope", "user", "--", "echo"]) == 0
         capsys.readouterr()
         rc = run_mcp_subcommand(["disable", "demo"])
         assert rc == 0
@@ -702,10 +658,7 @@ class TestEnableDisable:
 
 class TestDoctorQuick:
     def _seed(self, isolated_config: Path) -> None:
-        assert run_mcp_subcommand(
-            ["add", "demo", "--scope", "user", "--", "echo"]
-        ) == 0
-
+        assert run_mcp_subcommand(["add", "demo", "--scope", "user", "--", "echo"]) == 0
 
     def test_doctor_quick_text(
         self,
@@ -742,9 +695,12 @@ class TestDoctorQuick:
         isolated_config: Path,
     ) -> None:
         """A stdio command not on PATH must surface a warning in --quick."""
-        assert run_mcp_subcommand(
-            ["add", "ghost-bin", "--scope", "user", "--", "definitely-not-a-real-cmd"]
-        ) == 0
+        assert (
+            run_mcp_subcommand(
+                ["add", "ghost-bin", "--scope", "user", "--", "definitely-not-a-real-cmd"]
+            )
+            == 0
+        )
         capsys.readouterr()
         rc = run_mcp_subcommand(["doctor", "--quick"])
         assert rc == 1
@@ -756,12 +712,8 @@ class TestDoctorQuick:
         capsys: pytest.CaptureFixture,
         isolated_config: Path,
     ) -> None:
-        assert run_mcp_subcommand(
-            ["add", "a", "--scope", "user", "--", "echo"]
-        ) == 0
-        assert run_mcp_subcommand(
-            ["add", "b", "--scope", "user", "--", "echo"]
-        ) == 0
+        assert run_mcp_subcommand(["add", "a", "--scope", "user", "--", "echo"]) == 0
+        assert run_mcp_subcommand(["add", "b", "--scope", "user", "--", "echo"]) == 0
         capsys.readouterr()
         rc = run_mcp_subcommand(["doctor", "--quick", "--name", "a"])
         assert rc == 1

@@ -353,6 +353,8 @@ clawcodex-dev gateway status wechat # show WeChat login health and REPL/orchestr
 
 With the gateway daemon running and a bidirectional app channel logged in, start REPL or Orchestrator normally, then connect that runtime to the IM channel. WeChat direct/private messages or Feishu p2p messages can drive the agent, and replies flow back to the actual sender. Feishu setup uses QR scan-to-create registration when available and falls back to manual app credentials if the scan is denied, expires, or cannot complete. After first-time Feishu setup, restart the whole gateway daemon so the Feishu SDK loads in a fresh process.
 
+While a Feishu message is being processed, ClawCodex adds a `Typing` reaction to the original message. It removes the reaction after success or cancellation and replaces it with `CrossMark` after failure. Set `FEISHU_REACTIONS=false`, or set the Feishu channel's `extra.reactions` to `false`, to disable this behavior. Manually created apps need the Feishu **Send and delete message reactions** permission (`im:message.reactions:write_only`).
+
 **Connect to the gateway:**
 
 ```bash
@@ -383,6 +385,8 @@ Startup `--gateway` and runtime connect both bind all direct/private senders for
 |---|---|
 | REPL | `/stop`, `/clear`, `/reset`, `/new`, `/goal`, `/help`, `/?`, `/cost`, `/history`, `/context`, `/recap`, `/btw`, `/cron-list`, `/cron-status`, `/cron-runs`, `/tools`, `/skills`, `/diff`, `/mcp`, `/tasks`, `/idle`, `/doctor`, `/release-notes` |
 | Orchestrator | `/server status`; `/issue list`, `/issue show`, `/issue tail`, `/issue stop`, `/issue pause`, `/issue resume`, `/issue clarify`, `/issue inject`, `/issue feedback`, `/issue review`, `/issue retry`, `/issue workspace` |
+
+Edit `command_allowlists.repl` and `command_allowlists.orchestrator` in `~/.clawcodex/gateway/channels.yaml`, then restart the gateway to customize these lists; omitting a list preserves its defaults, while an explicit empty list disables all slash commands for that runtime.
 
 For Orchestrator IM commands, `/issue inject` is a live, non-blocking operator hint while the agent continues running; `/issue clarify` answers an agent clarification that paused waiting for input; `/issue feedback`, `/issue review`, and `/issue retry` are issue lifecycle mutations that can schedule another agent run.
 

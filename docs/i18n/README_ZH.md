@@ -349,6 +349,8 @@ clawcodex-dev gateway status wechat # 查看 WeChat 登录健康状态和 REPL/o
 
 gateway 守护进程运行且某个双向 app 渠道登录后，先正常启动 REPL 或 orchestrator，再把该运行时接入 IM 渠道。WeChat direct/private 私信或 Feishu p2p 私聊都可以驱动 agent，回复会回流到实际发送者。Feishu setup 优先使用二维码 scan-to-create 注册；扫码拒绝、过期或无法完成时，会回退到手动填写应用凭证。首次配置 Feishu 后，请重启整个 gateway 守护进程，让 Feishu SDK 在新进程中加载。
 
+处理飞书消息期间，ClawCodex 会在原消息上添加 `Typing` 表情回应；成功或取消时删除，失败时替换为 `CrossMark`。可设置 `FEISHU_REACTIONS=false`，或把飞书 channel 的 `extra.reactions` 设为 `false` 来关闭。手动创建的飞书应用需要授予“发送、删除消息表情回复”权限（`im:message.reactions:write_only`）。
+
 **连接网关：**
 
 ```bash
@@ -379,6 +381,8 @@ clawcodex-dev orchestrator server disconnect-gateway
 |---|---|
 | REPL | `/stop`、`/clear`、`/reset`、`/new`、`/goal`、`/help`、`/?`、`/cost`、`/history`、`/context`、`/recap`、`/btw`、`/cron-list`、`/cron-status`、`/cron-runs`、`/tools`、`/skills`、`/diff`、`/mcp`、`/tasks`、`/idle`、`/doctor`、`/release-notes` |
 | Orchestrator | `/server status`；`/issue list`、`/issue show`、`/issue tail`、`/issue stop`、`/issue pause`、`/issue resume`、`/issue clarify`、`/issue inject`、`/issue feedback`、`/issue review`、`/issue retry`、`/issue workspace` |
+
+可在 `~/.clawcodex/gateway/channels.yaml` 中手动编辑 `command_allowlists.repl` 与 `command_allowlists.orchestrator`，随后重启 gateway；省略某个列表时保留其默认值，显式配置空列表则禁用该运行域的全部斜杠命令。
 
 Orchestrator IM 命令中，`/issue inject` 是实时、非阻断的 operator hint，agent 会继续运行；`/issue clarify` 用于回答 agent 发起且正在暂停等待的澄清问题；`/issue feedback`、`/issue review` 与 `/issue retry` 是 issue 生命周期状态变更，可能调度新一轮 agent 运行。
 

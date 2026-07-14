@@ -114,8 +114,10 @@ def _generate_via_fork(
         # The structure of the try/except above guarantees we never
         # reach here on the "no loop" path, so any RuntimeError here is
         # genuinely the "running loop" branch.
-        if "no running event loop" not in str(exc).lower() and \
-                "no current event loop" not in str(exc).lower():
+        if (
+            "no running event loop" not in str(exc).lower()
+            and "no current event loop" not in str(exc).lower()
+        ):
             raise _ForkUnavailable(str(exc))
 
     try:
@@ -147,9 +149,7 @@ def _generate_via_fork(
     if system_text:
         user_text = f"{system_text}\n\n{user_text}"
 
-    prompt_messages = [
-        create_user_message(content=[TextBlock(text=user_text)])
-    ]
+    prompt_messages = [create_user_message(content=[TextBlock(text=user_text)])]
 
     async def _deny_all(_tool_use: Any) -> PermissionDecision:
         return PermissionDecision(behavior="deny", reason="away_summary")
@@ -331,11 +331,7 @@ class AwaySummaryService:
         # or when no live cache-safe params are available; in either
         # case we fall back to a synchronous ``provider.chat`` call.
         used_fork = False
-        if (
-            self.config.enable_recap_cache
-            and cache_safe_params is not None
-            and trigger == "manual"
-        ):
+        if self.config.enable_recap_cache and cache_safe_params is not None and trigger == "manual":
             try:
                 response = _generate_via_fork(
                     cache_safe_params,
@@ -345,9 +341,7 @@ class AwaySummaryService:
                 )
                 used_fork = True
             except _ForkUnavailable:
-                logger.debug(
-                    "Away Summary: fork path unavailable, falling back to provider.chat"
-                )
+                logger.debug("Away Summary: fork path unavailable, falling back to provider.chat")
                 response = None
             except Exception as exc:
                 logger.debug(
@@ -367,9 +361,7 @@ class AwaySummaryService:
             )
 
         if used_fork:
-            logger.info(
-                "Away Summary: served via forked agent (cache-safe prefix reused)"
-            )
+            logger.info("Away Summary: served via forked agent (cache-safe prefix reused)")
         summary = _extract_summary(response)
         if not summary:
             reasoning = str(getattr(response, "reasoning_content", "") or "").strip()
@@ -381,7 +373,8 @@ class AwaySummaryService:
                 # conversation-derived summary instead.
                 logger.info(
                     "Away Summary: model returned empty content with reasoning; "
-                    "using fallback recap. reasoning_len=%d", len(reasoning),
+                    "using fallback recap. reasoning_len=%d",
+                    len(reasoning),
                 )
             summary = _fallback_summary(self.conversation)
 
@@ -644,7 +637,8 @@ def _fallback_summary(conversation: Any) -> str:
 
     if not user_messages and not assistant_messages:
         return (
-            "会话刚开始，暂无内容。请直接告诉我你想做什么。" if is_zh
+            "会话刚开始，暂无内容。请直接告诉我你想做什么。"
+            if is_zh
             else "The session just started; nothing to recap yet. Tell me what you'd like to do next."
         )
 
@@ -655,7 +649,9 @@ def _fallback_summary(conversation: Any) -> str:
         if is_zh:
             sentence = f"我们刚聊到 {user_point}，还没有收到助手回应。"
         else:
-            sentence = f"We were talking about {user_point} and haven't heard back from the assistant yet."
+            sentence = (
+                f"We were talking about {user_point} and haven't heard back from the assistant yet."
+            )
     else:
         last_asst = assistant_messages[-1]
         asst_point = _leading_point(last_asst, limit=80)
@@ -765,7 +761,9 @@ def _fallback_labels(
         shown = unique_actions[:6]
         if len(unique_actions) > 6:
             shown_text = ", ".join(shown) + (
-                f" … 等 {len(unique_actions)} 项" if is_zh else f" … and {len(unique_actions) - 6} more"
+                f" … 等 {len(unique_actions)} 项"
+                if is_zh
+                else f" … and {len(unique_actions) - 6} more"
             )
         else:
             shown_text = ", ".join(shown)

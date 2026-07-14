@@ -18,6 +18,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from clawcodex_ext.services.channels.capabilities import ProcessingOutcome
+
 from .ipc_protocol import GatewayFrame, FrameType
 from .origin_utils import resolve_origin as _resolve_origin
 
@@ -327,9 +329,9 @@ class GatewayIpcServer:
                 )
             return await self._handle_deliver(frame)
         if frame.type is FrameType.OUTBOUND:
-            return await self._handle_outbound(frame)
+            return await self._handle_outbound(frame, peer_session)
         if frame.type is FrameType.EVENT:
-            return await self._handle_event(frame)
+            return await self._handle_event(frame, peer_session)
         if frame.type is FrameType.UNREGISTER:
             if peer_session is not None:
                 info = self._peers.pop(peer_session, None)
@@ -414,7 +416,11 @@ class GatewayIpcServer:
             message=ack.message if hasattr(ack, "message") else "",
         )
 
-    async def _handle_outbound(self, frame: GatewayFrame) -> GatewayFrame | None:
+    async def _handle_outbound(
+        self,
+        frame: GatewayFrame,
+        peer_session: str | None = None,
+    ) -> GatewayFrame | None:
         """OUTBOUND (client→server): route a reply back to the IM channel.
 
         The origin encodes the channel + target (e.g.
@@ -424,11 +430,21 @@ class GatewayIpcServer:
         origin = frame.origin or ""
         text = frame.text or ""
         if not origin or not text:
+            await self._finish_processing(
+                frame.in_reply_to,
+                ProcessingOutcome.FAILURE,
+                peer_session,
+            )
             return GatewayFrame.nack(
                 delivery_id=frame.message_id, reason="outbound requires origin+text"
             )
         channel, target = _resolve_origin(origin, self.gateway)
         if channel is None:
+            await self._finish_processing(
+                frame.in_reply_to,
+                ProcessingOutcome.FAILURE,
+                peer_session,
+            )
             return GatewayFrame.nack(
                 delivery_id=frame.message_id, reason=f"unresolvable origin {origin!r}"
             )
@@ -450,6 +466,11 @@ class GatewayIpcServer:
             send_elapsed = time.monotonic() - send_started
         except Exception as exc:  # noqa: BLE001
             logger.exception("gateway ipc: OUTBOUND send failed origin=%s", origin[:24])
+            await self._finish_processing(
+                frame.in_reply_to,
+                ProcessingOutcome.FAILURE,
+                peer_session,
+            )
             return GatewayFrame.nack(delivery_id=frame.message_id, reason=f"send error: {exc}")
         # A send slower than the client's ACK timeout means the client has
         # already logged "OUTBOUND timed out" and moved on — the ACK we are
@@ -471,6 +492,11 @@ class GatewayIpcServer:
                 send_elapsed,
                 message,
             )
+            await self._finish_processing(
+                frame.in_reply_to,
+                ProcessingOutcome.FAILURE,
+                peer_session,
+            )
             return GatewayFrame.nack(
                 delivery_id=frame.message_id,
                 reason=f"send failed: {message}",
@@ -486,6 +512,11 @@ class GatewayIpcServer:
                 len(text),
                 send_elapsed,
                 message,
+            )
+            await self._finish_processing(
+                frame.in_reply_to,
+                ProcessingOutcome.SUCCESS,
+                peer_session,
             )
             return GatewayFrame.ack(
                 delivery_id=frame.message_id,
@@ -510,10 +541,56 @@ class GatewayIpcServer:
                 len(text),
                 send_elapsed,
             )
+        await self._finish_processing(
+            frame.in_reply_to,
+            ProcessingOutcome.SUCCESS,
+            peer_session,
+        )
         return GatewayFrame.ack(delivery_id=frame.message_id, layer="processed", message="sent")
 
-    async def _handle_event(self, frame: GatewayFrame) -> GatewayFrame | None:
+    async def _handle_event(
+        self,
+        frame: GatewayFrame,
+        peer_session: str | None = None,
+    ) -> GatewayFrame | None:
         etype = frame.event_type or ""
+        if etype == "processing.complete":
+            payload = frame.payload or {}
+            message_id = str(payload.get("message_id") or "")
+            try:
+                outcome = ProcessingOutcome(str(payload.get("outcome") or ""))
+            except ValueError:
+                return GatewayFrame.nack(
+                    delivery_id=frame.message_id,
+                    reason="processing.complete requires a valid outcome",
+                )
+            if peer_session is None:
+                return GatewayFrame.nack(
+                    delivery_id=frame.message_id,
+                    reason="processing.complete requires a registered peer",
+                )
+            entry, authorized = self._processing_entry_for_peer(message_id, peer_session)
+            if entry is None:
+                if not authorized:
+                    return GatewayFrame.nack(
+                        delivery_id=frame.message_id,
+                        reason="processing.complete peer does not own message",
+                    )
+                return GatewayFrame.ack(
+                    delivery_id=frame.message_id,
+                    layer="accepted",
+                    message="processing completion ignored; message not pending",
+                )
+            completed = await self.gateway.processing_status.complete(
+                message_id,
+                outcome,
+                origin=entry.origin,
+            )
+            return GatewayFrame.ack(
+                delivery_id=frame.message_id,
+                layer="processed" if completed else "accepted",
+                message="processing completed" if completed else "processing completion deferred",
+            )
         if etype == "control.reload":
             name = (frame.payload or {}).get("channel", "")
             try:
@@ -568,6 +645,40 @@ class GatewayIpcServer:
                 message=f"unbound {len(removed)} binding(s)",
             )
         return None
+
+    async def _finish_processing(
+        self,
+        message_id: str | None,
+        outcome: ProcessingOutcome,
+        peer_session: str | None,
+    ) -> bool:
+        if not message_id or peer_session is None:
+            return False
+        entry, authorized = self._processing_entry_for_peer(message_id, peer_session)
+        if entry is None or not authorized:
+            return False
+        return await self.gateway.processing_status.complete(
+            message_id,
+            outcome,
+            origin=entry.origin,
+        )
+
+    def _processing_entry_for_peer(
+        self,
+        message_id: str,
+        peer_session: str,
+    ) -> tuple[Any | None, bool]:
+        manager = getattr(self.gateway, "processing_status", None)
+        if manager is None:
+            return None, True
+        entry = manager.pending(message_id)
+        if entry is None:
+            return None, True
+        binding = getattr(self.gateway, "binding", None)
+        binding_entry = binding.get(entry.origin) if binding is not None else None
+        if binding_entry is None or binding_entry.target.session_id != peer_session:
+            return None, False
+        return entry, True
 
 
 def _host_type(session_id: str, capabilities: list[str]) -> str:

@@ -230,6 +230,32 @@ async def test_repl_on_pushed_deliver_enqueues_into_repl(monkeypatch) -> None:
     assert client.peek_reply_context_token() == "ctx_abc"
 
 
+@pytest.mark.asyncio
+async def test_repl_pushed_deliver_queue_full_reports_failure(monkeypatch) -> None:
+    client, enqueued = _make_repl_client(capacity=1)
+    client._queue_size = lambda: 1
+    completed: list[tuple[str, str, str]] = []
+
+    async def _fake_complete(*, message_id, outcome, reason):
+        completed.append((message_id, outcome, reason))
+
+    monkeypatch.setattr(client._client, "complete_processing", _fake_complete, raising=False)
+
+    from clawcodex_ext.services.im_gateway.ipc_protocol import GatewayFrame
+
+    await client._on_pushed_deliver(
+        GatewayFrame.deliver(
+            delivery_id="d_full",
+            session_id="repl_main",
+            origin="feishu:dm:cli_app:ou_user",
+            text="hello",
+        )
+    )
+
+    assert enqueued == []
+    assert completed == [("d_full", "failure", "REPL prompt queue full")]
+
+
 def test_im_reply_controller_sends_when_loop_is_not_running() -> None:
     """OUTBOUND must be scheduled even when ``_cron_loop`` is stopped.
 
@@ -390,14 +416,14 @@ def test_repl_feishu_reply_preserves_context_token_for_chat_id(monkeypatch) -> N
     from clawcodex_ext.frontend.repl_extensions import _ImReplyController
     from clawcodex_ext.services.im_gateway.ipc_protocol import GatewayFrame
 
-    sent: list[tuple[str, str, str | None]] = []
+    sent: list[tuple[str, str, str | None, str | None]] = []
 
     async def _fake_ack(*, delivery_id, layer, message=None):
         return None
 
     class _FakeInner:
-        async def send_outbound(self, *, origin, text, context_token=None):
-            sent.append((origin, text, context_token))
+        async def send_outbound(self, *, origin, text, context_token=None, in_reply_to=None):
+            sent.append((origin, text, context_token, in_reply_to))
 
     class _FakeRepl:
         def __init__(self):
@@ -433,7 +459,124 @@ def test_repl_feishu_reply_preserves_context_token_for_chat_id(monkeypatch) -> N
     finally:
         repl._cron_loop.close()
 
-    assert sent == [("feishu:dm:cli_app:ou_user", "reply to feishu", "oc_chat")]
+    assert sent == [("feishu:dm:cli_app:ou_user", "reply to feishu", "oc_chat", "d_feishu")]
+
+
+@pytest.mark.parametrize(
+    ("run_outcome", "assistant_text", "expected_outcome"),
+    [
+        ("success", "", "success"),
+        ("failure", "unused", "failure"),
+        ("cancelled", "unused", "cancelled"),
+    ],
+)
+def test_im_reply_controller_reports_terminal_outcome_without_reply(
+    run_outcome: str,
+    assistant_text: str,
+    expected_outcome: str,
+) -> None:
+    import asyncio
+    import time
+    from types import SimpleNamespace
+
+    from clawcodex_ext.frontend.repl_extensions import _ImReplyController
+
+    completed: list[tuple[str, str]] = []
+
+    class _FakeInner:
+        async def complete_processing(self, *, message_id, outcome):
+            completed.append((message_id, outcome))
+
+    class _FakeClient:
+        def __init__(self):
+            self._client = _FakeInner()
+            self.pending = SimpleNamespace(
+                delivery_id="d_terminal",
+                origin="feishu:dm:cli_app:ou_user",
+                context_token="oc_chat",
+            )
+
+        def pop_reply_delivery(self):
+            pending, self.pending = self.pending, None
+            return pending
+
+    class _FakeRepl:
+        def __init__(self):
+            self._cron_loop = asyncio.new_event_loop()
+
+        def _get_last_assistant_text(self):
+            return assistant_text
+
+    repl = _FakeRepl()
+    controller = _ImReplyController(repl, _FakeClient(), "feishu:dm:*:*")
+    controller.on_run_finish(run_outcome)
+    controller.on_assistant_turn_complete()
+    try:
+        deadline = time.time() + 1.0
+        while not completed and time.time() < deadline:
+            repl._cron_loop.run_until_complete(asyncio.sleep(0.02))
+    finally:
+        repl._cron_loop.close()
+
+    assert completed == [("d_terminal", expected_outcome)]
+
+
+def test_im_reply_controller_does_not_resend_previous_assistant_message() -> None:
+    import asyncio
+    import time
+
+    from clawcodex_ext.frontend.repl_extensions import _ImReplyController
+    from clawcodex_ext.frontend.repl_gateway import PendingImReply
+
+    sent: list[dict] = []
+    completed: list[tuple[str, str]] = []
+
+    class _FakeInner:
+        async def send_outbound(self, **kwargs):
+            sent.append(kwargs)
+
+        async def complete_processing(self, *, message_id, outcome):
+            completed.append((message_id, outcome))
+
+    class _FakeClient:
+        def __init__(self):
+            self._client = _FakeInner()
+            self.pending = PendingImReply(
+                "d_no_reply",
+                "feishu:dm:cli_app:ou_user",
+                "oc_chat",
+            )
+
+        def pop_reply_delivery(self):
+            pending, self.pending = self.pending, None
+            return pending
+
+    class _FakeRepl:
+        def __init__(self):
+            self._cron_loop = asyncio.new_event_loop()
+            self.session = SimpleNamespace(
+                conversation=SimpleNamespace(
+                    messages=[SimpleNamespace(role="assistant", content="previous reply")]
+                )
+            )
+
+        def _get_last_assistant_text(self):
+            return "previous reply"
+
+    repl = _FakeRepl()
+    controller = _ImReplyController(repl, _FakeClient(), "feishu:dm:*:*")
+    controller.on_run_start()
+    controller.on_run_finish("success")
+    controller.on_assistant_turn_complete()
+    try:
+        deadline = time.time() + 1.0
+        while not completed and time.time() < deadline:
+            repl._cron_loop.run_until_complete(asyncio.sleep(0.02))
+    finally:
+        repl._cron_loop.close()
+
+    assert sent == []
+    assert completed == [("d_no_reply", "success")]
 
 
 def test_im_reply_controller_sends_command_feedback_with_context() -> None:
@@ -485,6 +628,50 @@ def test_im_reply_controller_sends_command_feedback_with_context() -> None:
         }
     ]
     assert client._reply_context == []
+
+
+def test_im_reply_controller_command_failure_reports_failure_separately() -> None:
+    import asyncio
+    import time
+
+    from clawcodex_ext.frontend.repl_extensions import _ImReplyController
+    from clawcodex_ext.frontend.repl_gateway import PendingImReply
+
+    sent: list[dict] = []
+    completed: list[tuple[str, str]] = []
+
+    class _FakeInner:
+        async def send_outbound(self, **kwargs):
+            sent.append(kwargs)
+
+        async def complete_processing(self, *, message_id, outcome):
+            completed.append((message_id, outcome))
+
+    class _FakeClient:
+        def __init__(self):
+            self._client = _FakeInner()
+            self._pending = [PendingImReply("d_failed", "feishu:dm:cli_app:ou_user", "oc_chat")]
+
+        def pop_reply_delivery(self):
+            return self._pending.pop(0) if self._pending else None
+
+    class _FakeRepl:
+        def __init__(self):
+            self._cron_loop = asyncio.new_event_loop()
+
+    repl = _FakeRepl()
+    controller = _ImReplyController(repl, _FakeClient(), "feishu:dm:*:*")
+    try:
+        repl._cron_loop.call_soon(lambda: controller.send_command_feedback("/clear", success=False))
+        deadline = time.time() + 1.0
+        while (not sent or not completed) and time.time() < deadline:
+            repl._cron_loop.run_until_complete(asyncio.sleep(0.02))
+    finally:
+        repl._cron_loop.close()
+
+    assert len(sent) == 1
+    assert "in_reply_to" not in sent[0]
+    assert completed == [("d_failed", "failure")]
 
 
 def test_im_reply_controller_sends_permission_prompt_without_consuming_origin(monkeypatch) -> None:
@@ -693,9 +880,14 @@ def test_im_permission_prompt_sends_structured_metadata() -> None:
 
     assert controller.send_permission_prompt(
         message="Claude wants to use Bash. Allow?",
-        options=[("y", "Yes, allow this action"), ("n", "No, deny this action")],
+        options=[
+            ("y", "Yes, allow this action"),
+            ("s", "Yes, and don't ask again for Bash"),
+            ("n", "No, deny this action"),
+        ],
         suggestion="Review command",
         interactive=True,
+        allow_choices={"y", "s"},
     )
 
     assert sent[0]["origin"] == "wechat:direct:a:u1"
@@ -704,7 +896,13 @@ def test_im_permission_prompt_sends_structured_metadata() -> None:
     assert sent[0]["metadata"]["permission"]["suggestion"] == "Review command"
     assert [option["value"] for option in sent[0]["metadata"]["permission"]["options"]] == [
         "y",
+        "s",
         "n",
+    ]
+    assert [option["decision"] for option in sent[0]["metadata"]["permission"]["options"]] == [
+        "allow",
+        "allow",
+        "deny",
     ]
     assert sent[0]["semantic_tags"] == ["approval"]
 
@@ -1123,6 +1321,52 @@ async def test_repl_deliver_wakes_blocked_prompt_loop(monkeypatch) -> None:
     assert wakes == [1], "deliver() must wake the REPL prompt loop after enqueue"
 
 
+def test_repl_im_wake_erases_abandoned_prompt_row() -> None:
+    """An IM wake must not leave an empty prompt line in REPL scrollback."""
+    from unittest.mock import Mock
+
+    from clawcodex_ext.repl.core import ClawcodexREPL
+
+    app = SimpleNamespace(future=object(), erase_when_done=False, exit=Mock())
+    repl = ClawcodexREPL.__new__(ClawcodexREPL)
+    repl.prompt_session = SimpleNamespace(app=app)
+
+    repl._exit_pending_prompt_for_im()
+
+    assert app.erase_when_done is True
+    app.exit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_repl_im_wake_restores_normal_prompt_rendering() -> None:
+    """Erasing the IM-woken row must not erase later keyboard prompts."""
+    from unittest.mock import Mock
+
+    from clawcodex_ext.repl.core import ClawcodexREPL
+
+    app = SimpleNamespace(
+        future=object(),
+        erase_when_done=False,
+        exit=Mock(),
+        default_buffer=None,
+    )
+    repl = ClawcodexREPL.__new__(ClawcodexREPL)
+
+    class _PromptSession:
+        async def prompt_async(self, _prompt):
+            repl._exit_pending_prompt_for_im()
+            assert app.erase_when_done is True
+            return "ignored"
+
+    repl.prompt_session = _PromptSession()
+    repl.prompt_session.app = app
+    repl.tool_context = SimpleNamespace(outbox=[])
+
+    await repl._prompt_with_cron_watch()
+
+    assert app.erase_when_done is False
+
+
 @pytest.mark.asyncio
 async def test_repl_stop_command_uses_priority_control_path(monkeypatch) -> None:
     """IM /stop should interrupt the active REPL run instead of waiting in queue."""
@@ -1376,10 +1620,14 @@ async def test_orchestrator_pushed_cli_command_sends_outbound_reply() -> None:
         def __init__(self):
             self.on_deliver = None
             self.sent: list[tuple[str, str]] = []
+            self.completed: list[tuple[str, str, str]] = []
 
         async def send_outbound(self, *, origin, text):
             self.sent.append((origin, text))
             return GatewayFrame.ack(delivery_id="d1", layer="processed", message="sent")
+
+        async def complete_processing(self, *, message_id, outcome, reason):
+            self.completed.append((message_id, outcome, reason))
 
     ipc = _FakeIpc()
     c = OrchestratorGatewayClient(
@@ -1405,6 +1653,7 @@ async def test_orchestrator_pushed_cli_command_sends_outbound_reply() -> None:
             "命令已执行：/server status\n\nOrchestrator daemon: RUNNING",
         )
     ]
+    assert ipc.completed == [("d1", "success", "orchestrator_cli_server_status")]
 
 
 def test_orchestrator_issue_tail_returns_bounded_notice() -> None:

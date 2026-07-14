@@ -47,62 +47,62 @@ def run_mcp_subcommand(rest: list[str]) -> int:
 
     Returns the process exit code.
     """
-    if not rest or rest[0] in ('--help', '-h'):
+    if not rest or rest[0] in ("--help", "-h"):
         _print_usage()
         return 0
 
     verb = rest[0]
-    if verb == 'list':
+    if verb == "list":
         return _list_servers(rest[1:])
-    if verb == 'get':
+    if verb == "get":
         return _get_server(rest[1:])
-    if verb == 'add':
+    if verb == "add":
         return _add_server(rest[1:])
-    if verb == 'remove':
+    if verb == "remove":
         return _remove_server(rest[1:])
-    if verb == 'enable':
+    if verb == "enable":
         return _set_disabled(rest[1:], enabled=True)
-    if verb == 'disable':
+    if verb == "disable":
         return _set_disabled(rest[1:], enabled=False)
-    if verb == 'doctor':
+    if verb == "doctor":
         return _doctor_server(rest[1:])
-    print(f'clawcodex mcp: unknown verb {verb!r}', file=sys.stderr)
+    print(f"clawcodex mcp: unknown verb {verb!r}", file=sys.stderr)
     _print_usage()
     return 2
 
 
 def _print_usage() -> None:
-    print('Usage: clawcodex mcp <verb> [args...]')
-    print('')
-    print('Verbs:')
-    print('  list    [options]          List configured MCP servers')
-    print('  get     NAME                Show one server\'s configuration')
-    print('  add     NAME [options]      Register a new MCP server')
-    print('  remove  NAME [--scope ...]  Delete a configured MCP server')
-    print('  enable  NAME                Re-enable a disabled server (process-local)')
-    print('  disable NAME                Disable a server without removing its config')
-    print('  doctor  [options]           Health-check servers')
-    print('')
-    print('list options:')
-    print('  --scope <scope>             Filter by scope (user/project/local/...)')
-    print('  --all                       Mark disabled entries with [disabled]')
-    print('  --format names|table|json   Output format (default: names)')
-    print('')
-    print('add options:')
-    print('  --scope <user|project>      Target config (default: user)')
-    print('  --url <URL> [--type s|http|w]')
-    print('                              Remote MCP server (default type: http)')
-    print('  -- <command> [args...]      stdio MCP server (everything after --)')
-    print('  --env KEY=VAL               Environment variable for stdio (repeatable)')
-    print('  --header KEY:VAL            HTTP header for remote (repeatable)')
-    print('')
-    print('remove options:')
-    print('  --scope <user|project>      Target config (default: user)')
-    print('')
-    print('doctor options:')
-    print('  --quick                     Static checks only (skip live connect)')
-    print('  --json                      Emit JSON instead of text report')
-    print('  --name NAME                 Diagnose only one server')
+    print("Usage: clawcodex mcp <verb> [args...]")
+    print("")
+    print("Verbs:")
+    print("  list    [options]          List configured MCP servers")
+    print("  get     NAME                Show one server's configuration")
+    print("  add     NAME [options]      Register a new MCP server")
+    print("  remove  NAME [--scope ...]  Delete a configured MCP server")
+    print("  enable  NAME                Re-enable a disabled server (process-local)")
+    print("  disable NAME                Disable a server without removing its config")
+    print("  doctor  [options]           Health-check servers")
+    print("")
+    print("list options:")
+    print("  --scope <scope>             Filter by scope (user/project/local/...)")
+    print("  --all                       Mark disabled entries with [disabled]")
+    print("  --format names|table|json   Output format (default: names)")
+    print("")
+    print("add options:")
+    print("  --scope <user|project>      Target config (default: user)")
+    print("  --url <URL> [--type s|http|w]")
+    print("                              Remote MCP server (default type: http)")
+    print("  -- <command> [args...]      stdio MCP server (everything after --)")
+    print("  --env KEY=VAL               Environment variable for stdio (repeatable)")
+    print("  --header KEY:VAL            HTTP header for remote (repeatable)")
+    print("")
+    print("remove options:")
+    print("  --scope <user|project>      Target config (default: user)")
+    print("")
+    print("doctor options:")
+    print("  --quick                     Static checks only (skip live connect)")
+    print("  --json                      Emit JSON instead of text report")
+    print("  --name NAME                 Diagnose only one server")
 
 
 # ---------------------------------------------------------------------------
@@ -125,31 +125,28 @@ def _list_servers(rest: list[str]) -> int:
         _err(str(exc))
         return 1
 
-    if 'format' in opts:
-        if len(opts['format']) > 1:
+    if "format" in opts:
+        if len(opts["format"]) > 1:
             _err("--format specified more than once")
             return 1
-        fmt = opts['format'][0]
+        fmt = opts["format"][0]
     else:
-        fmt = 'names'
-    if fmt not in ('names', 'table', 'json'):
+        fmt = "names"
+    if fmt not in ("names", "table", "json"):
         _err(f"invalid --format {fmt!r}; expected names|table|json")
         return 1
 
     scope_filter = None
-    if 'scope' in opts:
-        if len(opts['scope']) > 1:
+    if "scope" in opts:
+        if len(opts["scope"]) > 1:
             _err("--scope specified more than once")
             return 1
-        scope_filter = opts['scope'][0]
+        scope_filter = opts["scope"][0]
         if scope_filter not in _VALID_SCOPES:
-            _err(
-                f"invalid --scope {scope_filter!r}; "
-                f"expected one of {_VALID_SCOPES}"
-            )
+            _err(f"invalid --scope {scope_filter!r}; expected one of {_VALID_SCOPES}")
             return 1
 
-    show_disabled = 'all' in opts
+    show_disabled = "all" in opts
 
     try:
         # Local imports keep the module-load cost off the hot cold-start
@@ -176,43 +173,43 @@ def _list_servers(rest: list[str]) -> int:
     rows: list[tuple[str, str, str]] = []
     for name in sorted(configs.keys()):
         scoped = configs[name]
-        transport = getattr(scoped.config, 'type', None) or _transport_label(scoped.config)
+        transport = getattr(scoped.config, "type", None) or _transport_label(scoped.config)
         rows.append((name, scoped.scope, transport))
 
     if not rows:
-        if fmt == 'json':
-            print('[]')
+        if fmt == "json":
+            print("[]")
         elif scope_filter is not None:
-            print(f'(no MCP servers configured in scope {scope_filter!r})')
+            print(f"(no MCP servers configured in scope {scope_filter!r})")
         else:
-            print('(no MCP servers configured)')
+            print("(no MCP servers configured)")
         return 0
 
     disabled_set: set[str] = set()
     if show_disabled:
         disabled_set = {n for n, _, _ in rows if is_mcp_server_disabled(n)}
 
-    if fmt == 'json':
+    if fmt == "json":
         payload = [
             {
-                'name': name,
-                'scope': scope,
-                'transport': transport,
-                **({'disabled': True} if name in disabled_set else {}),
+                "name": name,
+                "scope": scope,
+                "transport": transport,
+                **({"disabled": True} if name in disabled_set else {}),
             }
             for name, scope, transport in rows
         ]
         print(json.dumps(payload, ensure_ascii=False, indent=2))
-    elif fmt == 'table':
+    elif fmt == "table":
         name_w = max(len(n) for n, _, _ in rows)
         scope_w = max(len(s) for _, s, _ in rows)
         for name, scope, transport in rows:
-            suffix = '  [disabled]' if name in disabled_set else ''
-            print(f'{name:<{name_w}}  {scope:<{scope_w}}  {transport}{suffix}')
+            suffix = "  [disabled]" if name in disabled_set else ""
+            print(f"{name:<{name_w}}  {scope:<{scope_w}}  {transport}{suffix}")
     else:  # names
         for name, scope, transport in rows:
-            suffix = '  [disabled]' if name in disabled_set else ''
-            print(f'{name}{suffix}')
+            suffix = "  [disabled]" if name in disabled_set else ""
+            print(f"{name}{suffix}")
     return 0
 
 
@@ -220,11 +217,11 @@ def _transport_label(config: object) -> str:
     """Best-effort transport label when ``type`` field isn't on the dataclass."""
     cls = type(config).__name__
     return {
-        'McpStdioServerConfig': 'stdio',
-        'McpSSEServerConfig': 'sse',
-        'McpHTTPServerConfig': 'http',
-        'McpWebSocketServerConfig': 'ws',
-        'McpSdkServerConfig': 'sdk',
+        "McpStdioServerConfig": "stdio",
+        "McpSSEServerConfig": "sse",
+        "McpHTTPServerConfig": "http",
+        "McpWebSocketServerConfig": "ws",
+        "McpSdkServerConfig": "sdk",
     }.get(cls, cls)
 
 
@@ -254,10 +251,10 @@ def _get_server(rest: list[str]) -> int:
         return 1
 
     payload = {
-        'name': name,
-        'scope': scoped.scope,
-        'transport': getattr(scoped.config, 'type', None) or _transport_label(scoped.config),
-        'config': _config_to_dict(scoped.config),
+        "name": name,
+        "scope": scoped.scope,
+        "transport": getattr(scoped.config, "type", None) or _transport_label(scoped.config),
+        "config": _config_to_dict(scoped.config),
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
@@ -265,8 +262,9 @@ def _get_server(rest: list[str]) -> int:
 
 def _config_to_dict(config: object) -> object:
     """Serialize a ``McpServerConfig`` dataclass into a plain dict."""
-    if hasattr(config, '__dataclass_fields__'):
+    if hasattr(config, "__dataclass_fields__"):
         from dataclasses import asdict
+
         d = asdict(config)
         # Drop None defaults so output stays compact.
         return {k: v for k, v in d.items() if v is not None}
@@ -285,7 +283,7 @@ def _take_name(rest: list[str]) -> tuple[str | None, list[str]]:
     we'd silently treat it as an unknown option). Bare ``--help`` / ``-h``
     are intercepted upstream by ``run_mcp_subcommand``.
     """
-    if not rest or rest[0].startswith('--'):
+    if not rest or rest[0].startswith("--"):
         return None, rest
     return rest[0], rest[1:]
 
@@ -298,10 +296,10 @@ def _split_options_and_command(rest: list[str]) -> tuple[list[str], list[str]]:
     ``(options, command_args)``; if no ``--`` present, command_args is
     empty (meaning the user is configuring a remote server via ``--url``).
     """
-    if '--' not in rest:
+    if "--" not in rest:
         return list(rest), []
-    idx = rest.index('--')
-    return list(rest[:idx]), list(rest[idx + 1:])
+    idx = rest.index("--")
+    return list(rest[:idx]), list(rest[idx + 1 :])
 
 
 def _parse_options(options: list[str]) -> dict[str, list[str]]:
@@ -315,24 +313,24 @@ def _parse_options(options: list[str]) -> dict[str, list[str]]:
     i = 0
     while i < len(options):
         tok = options[i]
-        if not tok.startswith('--'):
+        if not tok.startswith("--"):
             raise ValueError(f"unexpected positional argument: {tok!r}")
         flag = tok[2:]
         if not flag:
             raise ValueError("dangling '--' in options (use after positional command)")
-        if '=' in flag:
-            key, _, value = flag.partition('=')
-            key = key.replace('-', '_')
+        if "=" in flag:
+            key, _, value = flag.partition("=")
+            key = key.replace("-", "_")
         elif flag in _BOOL_FLAGS:
             # Boolean flag: store a sentinel value so callers can check
             # membership (``'all' in opts``) regardless of how many
             # times it appeared.
             key = flag
-            value = 'true'
+            value = "true"
         else:
             if i + 1 >= len(options):
                 raise ValueError(f"option {tok!r} requires a value")
-            key = flag.replace('-', '_')
+            key = flag.replace("-", "_")
             value = options[i + 1]
             i += 1
         out.setdefault(key, []).append(value)
@@ -342,15 +340,13 @@ def _parse_options(options: list[str]) -> dict[str, list[str]]:
 
 def _resolve_scope(opts: dict[str, list[str]]) -> str:
     """Resolve the target scope from ``--scope`` option (default ``user``)."""
-    if 'scope' not in opts:
-        return 'user'
-    if len(opts['scope']) > 1:
+    if "scope" not in opts:
+        return "user"
+    if len(opts["scope"]) > 1:
         raise ValueError("--scope specified more than once")
-    value = opts['scope'][0]
+    value = opts["scope"][0]
     if value not in _VALID_SCOPES:
-        raise ValueError(
-            f"invalid --scope {value!r}; expected one of {_VALID_SCOPES}"
-        )
+        raise ValueError(f"invalid --scope {value!r}; expected one of {_VALID_SCOPES}")
     return value  # type: ignore[return-value]
 
 
@@ -369,12 +365,10 @@ def _build_config(
     Otherwise a ``--url`` is required.
     """
     has_cmd = bool(cmd_args)
-    has_url = 'url' in opts
+    has_url = "url" in opts
 
     if has_cmd and has_url:
-        raise ValueError(
-            "specify either 'command (after --)' or '--url', not both"
-        )
+        raise ValueError("specify either 'command (after --)' or '--url', not both")
     if not has_cmd and not has_url:
         raise ValueError(
             "no server specified: provide either '-- <command> [args...]' "
@@ -384,24 +378,22 @@ def _build_config(
     if has_cmd:
         command = cmd_args[0]
         args = cmd_args[1:]
-        cfg: dict[str, object] = {'command': command, 'args': args}
-        env = _parse_kv_list(opts.get('env', []), '=')
+        cfg: dict[str, object] = {"command": command, "args": args}
+        env = _parse_kv_list(opts.get("env", []), "=")
         if env:
-            cfg['env'] = env
+            cfg["env"] = env
         return cfg
 
-    if len(opts['url']) > 1:
+    if len(opts["url"]) > 1:
         raise ValueError("--url specified more than once")
-    url = opts['url'][0]
-    remote_type = opts.get('type', ['http'])[0]
+    url = opts["url"][0]
+    remote_type = opts.get("type", ["http"])[0]
     if remote_type not in _REMOTE_TYPES:
-        raise ValueError(
-            f"invalid --type {remote_type!r}; expected one of {_REMOTE_TYPES}"
-        )
-    cfg = {'type': remote_type, 'url': url}
-    headers = _parse_kv_list(opts.get('header', []), ':')
+        raise ValueError(f"invalid --type {remote_type!r}; expected one of {_REMOTE_TYPES}")
+    cfg = {"type": remote_type, "url": url}
+    headers = _parse_kv_list(opts.get("header", []), ":")
     if headers:
-        cfg['headers'] = headers
+        cfg["headers"] = headers
     return cfg
 
 
@@ -410,9 +402,7 @@ def _parse_kv_list(pairs: list[str], sep: str) -> dict[str, str]:
     out: dict[str, str] = {}
     for raw in pairs:
         if sep not in raw:
-            raise ValueError(
-                f"expected KEY{sep}VAL pair, got {raw!r}"
-            )
+            raise ValueError(f"expected KEY{sep}VAL pair, got {raw!r}")
         key, _, value = raw.partition(sep)
         key = key.strip()
         if not key:
@@ -435,15 +425,17 @@ def _resolve_target_path(scope: str) -> str:
     ``project`` scope, returns ``<cwd>/.mcp.json`` resolved to an
     absolute path so the success message doesn't lie about the location.
     """
-    if scope == 'user':
+    if scope == "user":
         try:
             from clawcodex_ext.services.mcp.config import _get_global_config_dir
-            return str(_get_global_config_dir() / 'config.json')
+
+            return str(_get_global_config_dir() / "config.json")
         except Exception:  # pragma: no cover
-            return '~/.claude/config.json'
+            return "~/.claude/config.json"
     # project
     from pathlib import Path
-    return str(Path.cwd() / '.mcp.json')
+
+    return str(Path.cwd() / ".mcp.json")
 
 
 def _add_server(rest: list[str]) -> int:
@@ -452,7 +444,7 @@ def _add_server(rest: list[str]) -> int:
     if not name:
         _err("missing server NAME")
         return 1
-    if rest and not rest[0].startswith('--') and rest[0] != '--':
+    if rest and not rest[0].startswith("--") and rest[0] != "--":
         # Extra positional before any flag → reject.
         _err(f"unexpected extra positional argument: {rest[0]!r}")
         return 1
@@ -493,7 +485,7 @@ def _remove_server(rest: list[str]) -> int:
     if not name:
         _err("missing server NAME")
         return 1
-    if rest and not rest[0].startswith('--'):
+    if rest and not rest[0].startswith("--"):
         _err(f"unexpected extra positional argument: {rest[0]!r}")
         return 1
 
@@ -525,7 +517,7 @@ def _remove_server(rest: list[str]) -> int:
 
 
 def _err(msg: str) -> None:
-    print(f'clawcodex mcp: {msg}', file=sys.stderr)
+    print(f"clawcodex mcp: {msg}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -562,6 +554,7 @@ def _set_disabled(rest: list[str], *, enabled: bool) -> int:
     # guards against typos like ``mcp disable githbu``.
     try:
         from clawcodex_ext.services.mcp.config import get_all_mcp_configs
+
         configs, _ = get_all_mcp_configs()
     except Exception as exc:
         _err(f"error reading config: {exc}")
@@ -578,7 +571,7 @@ def _set_disabled(rest: list[str], *, enabled: bool) -> int:
     if not enabled and not state_now:
         _err(f"failed to disable {name!r}")
         return 1
-    verb = 'enable' if enabled else 'disable'
+    verb = "enable" if enabled else "disable"
     note = "" if enabled else " (process-local; not persisted to disk)"
     print(f"MCP server {name!r}: {verb}d{note}")
     return 0
@@ -605,14 +598,14 @@ def _doctor_server(rest: list[str]) -> int:
         _err(str(exc))
         return 1
 
-    quick = 'quick' in opts
-    as_json = 'json' in opts
+    quick = "quick" in opts
+    as_json = "json" in opts
     name_filter: str | None = None
-    if 'name' in opts:
-        if len(opts['name']) > 1:
+    if "name" in opts:
+        if len(opts["name"]) > 1:
             _err("--name specified more than once")
             return 1
-        name_filter = opts['name'][0]
+        name_filter = opts["name"][0]
 
     try:
         from clawcodex_ext.services.mcp.doctor import run_diagnostics
@@ -640,11 +633,12 @@ def _doctor_server(rest: list[str]) -> int:
     if name_filter is not None:
         if ServerDiagnostic is not None:
             report.servers = [
-                s for s in report.servers
+                s
+                for s in report.servers
                 if isinstance(s, ServerDiagnostic) and s.name == name_filter
             ]
         else:
-            report.servers = [s for s in report.servers if getattr(s, 'name', None) == name_filter]
+            report.servers = [s for s in report.servers if getattr(s, "name", None) == name_filter]
         if not report.servers:
             _err(f"no MCP server found with name {name_filter!r}")
             return 1
@@ -666,16 +660,16 @@ def _report_to_dict(report: object) -> dict[str, object]:
     from dataclasses import asdict
 
     return {
-        'timestamp': getattr(report, 'timestamp', 0.0),
-        'healthy_count': getattr(report, 'healthy_count', 0),
-        'unhealthy_count': getattr(report, 'unhealthy_count', 0),
-        'total_count': getattr(report, 'total_count', 0),
-        'config_errors': getattr(report, 'config_errors', []),
-        'servers': [
+        "timestamp": getattr(report, "timestamp", 0.0),
+        "healthy_count": getattr(report, "healthy_count", 0),
+        "unhealthy_count": getattr(report, "unhealthy_count", 0),
+        "total_count": getattr(report, "total_count", 0),
+        "config_errors": getattr(report, "config_errors", []),
+        "servers": [
             {
                 **asdict(s),
-                'is_healthy': getattr(s, 'is_healthy', False),
+                "is_healthy": getattr(s, "is_healthy", False),
             }
-            for s in getattr(report, 'servers', [])
+            for s in getattr(report, "servers", [])
         ],
     }

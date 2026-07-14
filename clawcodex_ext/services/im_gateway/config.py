@@ -35,6 +35,123 @@ DEFAULT_CHANNELS_YAML = "~/.clawcodex/gateway/channels.yaml"
 # can move an existing install forward the first time the new path is used.
 LEGACY_STATE_DIR = "~/.clawcodex/im-gateway"
 
+DEFAULT_REPL_COMMAND_ALLOWLIST: tuple[str, ...] = (
+    "/stop",
+    "/clear",
+    "/reset",
+    "/new",
+    "/goal",
+    "/help",
+    "/?",
+    "/cost",
+    "/history",
+    "/context",
+    "/recap",
+    "/btw",
+    "/cron-list",
+    "/cron-status",
+    "/cron-runs",
+    "/tools",
+    "/skills",
+    "/diff",
+    "/mcp",
+    "/tasks",
+    "/idle",
+    "/doctor",
+    "/release-notes",
+)
+
+DEFAULT_ORCHESTRATOR_COMMAND_ALLOWLIST: tuple[str, ...] = (
+    "/server status",
+    "/issue list",
+    "/issue show",
+    "/issue tail",
+    "/issue stop",
+    "/issue pause",
+    "/issue resume",
+    "/issue clarify",
+    "/issue inject",
+    "/issue feedback",
+    "/issue review",
+    "/issue retry",
+    "/issue workspace",
+    "/issue rebase",
+)
+
+
+def _normalize_command_allowlist(
+    commands: Any,
+    *,
+    path: str,
+    max_parts: int,
+) -> tuple[str, ...]:
+    if not isinstance(commands, (list, tuple)):
+        raise ValueError(f"{path}: expected a YAML list of slash commands")
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in commands:
+        if not isinstance(item, str):
+            raise ValueError(f"{path}: every command must be a string")
+        command = " ".join(item.strip().lower().split())
+        parts = command.split()
+        if not command.startswith("/") or not parts or len(parts) > max_parts:
+            raise ValueError(
+                f"{path}: invalid command {item!r}; expected at most {max_parts} slash token(s)"
+            )
+        if command not in seen:
+            seen.add(command)
+            normalized.append(command)
+    return tuple(normalized)
+
+
+@dataclass(frozen=True)
+class CommandAllowlistConfig:
+    """Runtime slash-command allowlists persisted in ``channels.yaml``."""
+
+    repl: tuple[str, ...] = DEFAULT_REPL_COMMAND_ALLOWLIST
+    orchestrator: tuple[str, ...] = DEFAULT_ORCHESTRATOR_COMMAND_ALLOWLIST
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "repl",
+            _normalize_command_allowlist(
+                self.repl,
+                path="command_allowlists.repl",
+                max_parts=1,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "orchestrator",
+            _normalize_command_allowlist(
+                self.orchestrator,
+                path="command_allowlists.orchestrator",
+                max_parts=2,
+            ),
+        )
+
+    def to_dict(self) -> dict[str, list[str]]:
+        return {
+            "repl": list(self.repl),
+            "orchestrator": list(self.orchestrator),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> CommandAllowlistConfig:
+        if data is None:
+            return cls()
+        if not isinstance(data, dict):
+            raise ValueError("command_allowlists: expected a YAML mapping")
+        return cls(
+            repl=data["repl"] if "repl" in data else DEFAULT_REPL_COMMAND_ALLOWLIST,
+            orchestrator=(
+                data["orchestrator"]
+                if "orchestrator" in data
+                else DEFAULT_ORCHESTRATOR_COMMAND_ALLOWLIST
+            ),
+        )
+
 
 def migrate_legacy_state_dir(target: str | Path | None = None) -> Path:
     """One-way migration ``~/.clawcodex/im-gateway`` → ``~/.clawcodex/gateway``.
@@ -158,6 +275,7 @@ class GatewayConfig:
     default_targets: list[str] = field(default_factory=list)
     state_dir: str = DEFAULT_STATE_DIR
     storage_backend: str = "files"
+    command_allowlists: CommandAllowlistConfig = field(default_factory=CommandAllowlistConfig)
     reliability: ReliabilityConfig = field(default_factory=ReliabilityConfig)
     channels: list[ChannelConfig] = field(default_factory=list)
 
@@ -167,6 +285,7 @@ class GatewayConfig:
             "default_targets": _normalize_default_targets(self.default_targets),
             "state_dir": self.state_dir,
             "storage_backend": self.storage_backend,
+            "command_allowlists": self.command_allowlists.to_dict(),
             "reliability": self.reliability.to_dict(),
             "channels": [c.to_dict() for c in _unique_channels_by_type(self.channels)],
         }
@@ -180,6 +299,7 @@ class GatewayConfig:
             default_targets=list(data.get("default_targets") or []),
             state_dir=str(data.get("state_dir", DEFAULT_STATE_DIR)),
             storage_backend=str(data.get("storage_backend", "files")),
+            command_allowlists=CommandAllowlistConfig.from_dict(data.get("command_allowlists")),
             reliability=ReliabilityConfig.from_dict(data.get("reliability")),
         )
         channels_raw = data.get("channels") or []
@@ -311,7 +431,10 @@ def _lock_path(yaml_path: Path) -> Path:
 
 
 __all__ = [
+    "CommandAllowlistConfig",
     "DEFAULT_CHANNELS_YAML",
+    "DEFAULT_ORCHESTRATOR_COMMAND_ALLOWLIST",
+    "DEFAULT_REPL_COMMAND_ALLOWLIST",
     "DEFAULT_STATE_DIR",
     "LEGACY_STATE_DIR",
     "GatewayConfig",

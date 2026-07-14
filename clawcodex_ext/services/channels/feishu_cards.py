@@ -17,6 +17,7 @@ class ApprovalPending:
     chat_id: str
     allowed_user_open_id: str
     choices: frozenset[str]
+    allow_choices: frozenset[str]
     expires_at: float
 
 
@@ -67,8 +68,10 @@ def build_resolved_permission_card(
     *,
     choice: str,
     operator_open_id: str = "",
+    allowed: bool | None = None,
 ) -> dict[str, Any]:
-    allowed = str(choice).lower() in {"y", "yes", "1", "allow", "allowed"}
+    if allowed is None:
+        allowed = _legacy_choice_is_allowed(choice)
     status = "已允许" if allowed else "已拒绝"
     template = "green" if allowed else "red"
     actor = f"\n处理人: {operator_open_id}" if operator_open_id else ""
@@ -112,16 +115,24 @@ class ApprovalCardManager:
         allowed_user_open_id: str,
         choices: Iterable[str],
         ttl_seconds: int,
+        allow_choices: Iterable[str] | None = None,
     ) -> ApprovalPending:
         approval_id = approval_id or secrets.token_urlsafe(12)
         nonce = nonce or secrets.token_urlsafe(8)
+        choice_set = frozenset(str(choice) for choice in choices)
+        allow_choice_set = (
+            frozenset(str(choice) for choice in allow_choices)
+            if allow_choices is not None
+            else frozenset(choice for choice in choice_set if _legacy_choice_is_allowed(choice))
+        )
         state = ApprovalPending(
             approval_id=approval_id,
             nonce=nonce,
             origin=origin,
             chat_id=chat_id,
             allowed_user_open_id=allowed_user_open_id,
-            choices=frozenset(str(choice) for choice in choices),
+            choices=choice_set,
+            allow_choices=allow_choice_set,
             expires_at=self._clock() + ttl_seconds,
         )
         self.pending[approval_id] = state
@@ -154,6 +165,7 @@ class ApprovalCardManager:
             return None
         self._seen_tokens[action_token] = self._clock()
         self.pending.pop(approval_id, None)
+        decision = "allow" if choice in state.allow_choices else "deny"
         from clawcodex_ext.services.im_gateway.models import InboundMessage, MessageSemantics
 
         return InboundMessage(
@@ -170,6 +182,7 @@ class ApprovalCardManager:
                 "source": "feishu_card_action",
                 "approval_id": approval_id,
                 "choice": choice,
+                "decision": decision,
             },
         )
 
@@ -182,6 +195,21 @@ class ApprovalCardManager:
         ]
         for token in expired:
             self._seen_tokens.pop(token, None)
+
+
+def _legacy_choice_is_allowed(choice: Any) -> bool:
+    """Compatibility fallback for approval payloads without explicit semantics."""
+    return str(choice).strip().lower() in {
+        "y",
+        "yes",
+        "1",
+        "allow",
+        "allowed",
+        "e",
+        "enable",
+        "s",
+        "session",
+    }
 
 
 def _operator_open_id(event: Any) -> str:

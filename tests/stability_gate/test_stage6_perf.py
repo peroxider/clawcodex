@@ -233,8 +233,7 @@ class TestStage6Perf:
         )
         elapsed = time.monotonic() - start
         assert proc.returncode == 0, (
-            f"_load_heavy_runtime() failed (rc={proc.returncode}): "
-            f"stderr={proc.stderr[-400:]!r}"
+            f"_load_heavy_runtime() failed (rc={proc.returncode}): stderr={proc.stderr[-400:]!r}"
         )
         try:
             heavy_ms = int(proc.stdout.strip().splitlines()[-1])
@@ -301,8 +300,7 @@ class TestStage6Perf:
         )
         elapsed = time.monotonic() - start
         assert proc.returncode == 0, (
-            f"REPL end-to-end init failed (rc={proc.returncode}): "
-            f"stderr={proc.stderr[-400:]!r}"
+            f"REPL end-to-end init failed (rc={proc.returncode}): stderr={proc.stderr[-400:]!r}"
         )
         try:
             inner_ms = int(proc.stdout.strip().splitlines()[-1])
@@ -370,9 +368,7 @@ print(f\"STAGE_A_COUNT={stage_a_count}\")
             defer_ms = -1
             stage_a_count = -1
         # Stage A must register at least 50 tools (51 ALL_STATIC_TOOLS + Agent + ToolSearch).
-        assert stage_a_count >= 50, (
-            f"Stage A only registered {stage_a_count} tools, expected >= 50"
-        )
+        assert stage_a_count >= 50, f"Stage A only registered {stage_a_count} tools, expected >= 50"
         # Defer path must return quickly (Stage A is the only sync work).
         budget = 1.0 * _THRESHOLD_MULT
         assert defer_ms < 1000, (

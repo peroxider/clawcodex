@@ -31,6 +31,7 @@ from .config import GatewayConfig, load_config
 from .dispatcher import InboundDispatcher, InboundHandler
 from .models import AckReceipt, InboundMessage, OutboundMessage
 from .outbound import OutboundDispatcher
+from .processing_status import ProcessingStatusManager
 from .router import SessionRouter
 from .store import ReliabilityStore
 
@@ -52,7 +53,13 @@ class MessageGateway:
         self.router = SessionRouter(self.binding, self.store)
         self.gate = CapabilityGate(self.registry)
         self.outbound = OutboundDispatcher(self.registry, self.gate, self.store, self.config)
-        self.inbound = InboundDispatcher(self.store, self.router)
+        self.processing_status = ProcessingStatusManager(self.registry)
+        self.inbound = InboundDispatcher(
+            self.store,
+            self.router,
+            command_allowlists=self.config.command_allowlists,
+            processing_status=self.processing_status,
+        )
         self._inbound_adapters: list = []
         self._running = False
         self._stop_lock = asyncio.Lock()
@@ -337,13 +344,18 @@ class MessageGateway:
             return
 
         host_label = _host_label(entry.target.host_type)
+        # Orchestrator 绑定目前仅能通过命令交互驱动,连接通知里附加提示,
+        # 避免运营侧误以为可以像 REPL 一样自由对话。
+        connected_note = (
+            "，当前Orchestrator仅支持命令交互" if entry.target.host_type == "orchestrator" else ""
+        )
         messages: list[str] = []
         if action == "binding_created":
-            messages.append(f"{host_label}已连接")
+            messages.append(f"{host_label}已连接{connected_note}")
         elif action == "binding_override" and previous is not None:
             if previous.connection_state == "active":
                 messages.append(f"{_host_label(previous.target.host_type)}已断开")
-            messages.append(f"{host_label}已连接")
+            messages.append(f"{host_label}已连接{connected_note}")
         elif action in ("binding_offline", "binding_terminated"):
             messages.append(f"{host_label}已断开")
 

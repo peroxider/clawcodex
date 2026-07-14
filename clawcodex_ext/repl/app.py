@@ -95,6 +95,7 @@ class _LazyProvider:
             # Local import — ``src.providers.runtime`` triggers the
             # F-99 provider-override side-effect import on first load.
             from src.providers.runtime import build_provider_from_config
+
             self._resolved = build_provider_from_config(self._provider_name, self._model)
         except BaseException as exc:  # noqa: BLE001 — cache and re-raise verbatim
             self._errored = exc
@@ -130,8 +131,7 @@ def _provider_env_key_present(provider_name: str) -> bool:
         # on first ``_LazyProvider`` attribute access.
         return True
     return bool(
-        os.environ.get(f"{provider_name.upper()}_API_KEY")
-        or os.environ.get("CLAWCODEX_API_KEY")
+        os.environ.get(f"{provider_name.upper()}_API_KEY") or os.environ.get("CLAWCODEX_API_KEY")
     )
 
 
@@ -844,8 +844,15 @@ class ClawCodexExtREPL(ClawcodexREPL):
         forecast = getattr(self, "_intent_forecast_controller", None)
         if forecast is not None:
             forecast.on_run_start()
+        im_reply = getattr(self, "_im_reply_controller", None)
+        if im_reply is not None:
+            im_reply.on_run_start()
         try:
             return super().chat(user_input, max_turns=max_turns)
+        except BaseException:
+            if getattr(self, "_last_chat_outcome", None) != "cancelled":
+                self._last_chat_outcome = "failure"
+            raise
         finally:
             if controller is not None:
                 controller.on_run_finish()
@@ -855,9 +862,9 @@ class ClawCodexExtREPL(ClawcodexREPL):
                     forecast.on_run_finish()
                 except Exception:
                     pass
-            im_reply = getattr(self, "_im_reply_controller", None)
             if im_reply is not None:
                 try:
+                    im_reply.on_run_finish(getattr(self, "_last_chat_outcome", "failure"))
                     im_reply.on_assistant_turn_complete()
                 except Exception:
                     pass

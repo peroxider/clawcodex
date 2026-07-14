@@ -130,7 +130,7 @@ async def test_notify_on_connect_repl(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_notify_on_connect_orchestrator(tmp_path) -> None:
-    """binding_created → sends 'clawcodex-orchestrator已连接'."""
+    """binding_created → sends 'clawcodex-orchestrator已连接，当前Orchestrator仅支持命令交互'."""
     gw, adapter = _gateway_with_wechat(tmp_path)
 
     gw.binding.bind(
@@ -140,7 +140,7 @@ async def test_notify_on_connect_orchestrator(tmp_path) -> None:
     await asyncio.sleep(0.05)
 
     texts = [msg.text for msg, _ in adapter.sends]
-    assert "clawcodex-orchestrator已连接" in texts
+    assert "clawcodex-orchestrator已连接，当前Orchestrator仅支持命令交互" in texts
 
 
 @pytest.mark.asyncio

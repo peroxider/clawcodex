@@ -70,6 +70,7 @@ async def _send_client_outbound(
     context_token: str | None = None,
     metadata: dict | None = None,
     semantic_tags: list[str] | None = None,
+    in_reply_to: str | None = None,
 ):
     kwargs = {
         "origin": origin,
@@ -77,9 +78,10 @@ async def _send_client_outbound(
         "context_token": context_token,
         "metadata": metadata,
         "semantic_tags": semantic_tags,
+        "in_reply_to": in_reply_to,
     }
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
-    fallback_order = ("context_token", "metadata", "semantic_tags")
+    fallback_order = ("context_token", "metadata", "semantic_tags", "in_reply_to")
     while True:
         try:
             return await client.send_outbound(**kwargs)
@@ -111,46 +113,52 @@ class _ImReplyController:
         self._client = client
         self._origin = origin
         self._last_sent: str | None = None
+        self._run_outcome = "success"
+        self._assistant_count_at_start: int | None = None
 
     def on_run_start(self) -> None:
         # reset per-turn so a repeated identical reply across turns still sends
         self._last_sent = None
+        self._run_outcome = "success"
+        self._assistant_count_at_start = self._assistant_message_count()
 
-    def on_run_finish(self) -> None:
-        pass
+    def on_run_finish(self, outcome: str = "success") -> None:
+        self._run_outcome = outcome if outcome in {"success", "failure", "cancelled"} else "failure"
 
     def on_assistant_turn_complete(self) -> None:
         import asyncio
 
+        loop = getattr(self._repl, "_cron_loop", None)
+        if loop is None or loop.is_closed():
+            return
         text_fn = getattr(self._repl, "_get_last_assistant_text", None)
+        pending = self._pop_reply_delivery()
+        if pending is None:
+            return
+        im_origin, context_token, delivery_id = pending
+        if self._run_outcome != "success":
+            self._schedule_processing_complete(delivery_id, self._run_outcome)
+            return
+        assistant_count = self._assistant_message_count()
+        if (
+            self._assistant_count_at_start is not None
+            and assistant_count is not None
+            and assistant_count <= self._assistant_count_at_start
+        ):
+            self._schedule_processing_complete(delivery_id, "success")
+            return
         if not callable(text_fn):
+            self._schedule_processing_complete(delivery_id, "success")
             return
         try:
             text = text_fn()
         except Exception:  # noqa: BLE001
+            self._schedule_processing_complete(delivery_id, "failure")
             return
         if not text or text == self._last_sent:
-            return  # nothing new, or already sent this turn
-        self._last_sent = text
-        # Only reply to WeChat when this turn was driven by an IM message.
-        # ReplGatewayClient records each inbound IM origin; pop_reply_origin
-        # returns None for keyboard-initiated turns so we don't spam the
-        # WeChat user with every assistant reply typed at the REPL prompt.
-        pop_context = getattr(self._client, "pop_reply_context", None)
-        if callable(pop_context):
-            im_origin, context_token = pop_context()
-        else:
-            context_fn = getattr(self._client, "peek_reply_context_token", None)
-            context_token = context_fn() if callable(context_fn) else None
-            pop_origin = getattr(self._client, "pop_reply_origin", None)
-            if not callable(pop_origin):
-                return
-            im_origin = pop_origin()
-        if not im_origin:
-            return  # keyboard-driven turn — no IM reply to send
-        loop = getattr(self._repl, "_cron_loop", None)
-        if loop is None:
+            self._schedule_processing_complete(delivery_id, "success")
             return
+        self._last_sent = text
         client = self._client._client  # GatewayIpcClient
         try:
             # run_coroutine_threadsafe works even when the target loop is
@@ -162,12 +170,25 @@ class _ImReplyController:
                     origin=im_origin,
                     text=text,
                     context_token=context_token,
+                    in_reply_to=delivery_id,
                 ),
                 loop,
             )
             _log.info("repl IM reply sent: origin=%s len=%d", im_origin[:24], len(text))
         except Exception:  # noqa: BLE001
             _log.warning("repl IM reply send failed", exc_info=True)
+            self._schedule_processing_complete(delivery_id, "failure")
+
+    def _assistant_message_count(self) -> int | None:
+        session = getattr(self._repl, "session", None)
+        conversation = getattr(session, "conversation", None)
+        messages = getattr(conversation, "messages", None)
+        if messages is None:
+            return None
+        try:
+            return sum(1 for message in messages if getattr(message, "role", None) == "assistant")
+        except Exception:  # noqa: BLE001
+            return None
 
     def send_command_feedback(
         self,
@@ -177,22 +198,14 @@ class _ImReplyController:
         message: str | None = None,
     ) -> bool:
         """Send a visible completion notice for an IM-driven local command."""
-        pop_context = getattr(self._client, "pop_reply_context", None)
-        if callable(pop_context):
-            im_origin, context_token = pop_context()
-        else:
-            context_fn = getattr(self._client, "peek_reply_context_token", None)
-            context_token = context_fn() if callable(context_fn) else None
-            pop_origin = getattr(self._client, "pop_reply_origin", None)
-            if not callable(pop_origin):
-                return False
-            im_origin = pop_origin()
-        if not im_origin:
+        pending = self._pop_reply_delivery()
+        if pending is None:
             return False
+        im_origin, context_token, delivery_id = pending
 
         normalized = self._normalize_command_name(command)
         text = message or self._format_command_feedback(normalized, success=success)
-        return self._send_outbound_text(
+        sent = self._send_outbound_text(
             im_origin,
             text,
             context_token=context_token,
@@ -202,7 +215,52 @@ class _ImReplyController:
                 "success": success,
             },
             semantic_tags=["command_feedback"],
+            in_reply_to=delivery_id if success else None,
         )
+        if not success or not sent:
+            self._schedule_processing_complete(delivery_id, "failure")
+        return sent
+
+    def _pop_reply_delivery(self) -> tuple[str, str | None, str | None] | None:
+        pop_delivery = getattr(self._client, "pop_reply_delivery", None)
+        if callable(pop_delivery):
+            pending = pop_delivery()
+            if pending is None:
+                return None
+            return pending.origin, pending.context_token, pending.delivery_id
+        delivery_fn = getattr(self._client, "peek_reply_delivery_id", None)
+        delivery_id = delivery_fn() if callable(delivery_fn) else None
+        pop_context = getattr(self._client, "pop_reply_context", None)
+        if callable(pop_context):
+            im_origin, context_token = pop_context()
+        else:
+            context_fn = getattr(self._client, "peek_reply_context_token", None)
+            context_token = context_fn() if callable(context_fn) else None
+            pop_origin = getattr(self._client, "pop_reply_origin", None)
+            if not callable(pop_origin):
+                return None
+            im_origin = pop_origin()
+        if not im_origin:
+            return None
+        return im_origin, context_token, delivery_id
+
+    def _schedule_processing_complete(self, message_id: str | None, outcome: str) -> None:
+        if not message_id:
+            return
+        import asyncio
+
+        client = getattr(self._client, "_client", None)
+        complete = getattr(client, "complete_processing", None)
+        loop = getattr(self._repl, "_cron_loop", None)
+        if not callable(complete) or loop is None or loop.is_closed():
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(
+                complete(message_id=message_id, outcome=outcome),
+                loop,
+            )
+        except Exception:  # noqa: BLE001
+            _log.warning("repl IM processing completion failed", exc_info=True)
 
     @staticmethod
     def _normalize_command_name(command: str) -> str:
@@ -226,12 +284,16 @@ class _ImReplyController:
         options: list[tuple[str, str]],
         suggestion: str | None = None,
         interactive: bool = False,
+        allow_choices: set[str] | None = None,
     ) -> bool:
         """Forward an in-REPL permission menu to the active IM origin.
 
         ``interactive=True`` is used when the WeChat user is expected to
         reply with a choice (IM-driven permission wait): the footer invites
         a reply instead of directing the user back to the REPL.
+
+        ``allow_choices`` carries stable decision semantics for rich channels;
+        consumers must not infer approval from REPL-specific keys such as ``s``.
         """
         peek_origin = getattr(self._client, "peek_reply_origin", None)
         if not callable(peek_origin):
@@ -253,7 +315,16 @@ class _ImReplyController:
                     "message": str(message).strip().replace("Claude", "ClawCodex"),
                     "suggestion": suggestion,
                     "options": [
-                        {"value": key, "label": _zh_option_desc(desc)} for key, desc in options
+                        {
+                            "value": key,
+                            "label": _zh_option_desc(desc),
+                            **(
+                                {"decision": "allow" if key in allow_choices else "deny"}
+                                if allow_choices is not None
+                                else {}
+                            ),
+                        }
+                        for key, desc in options
                     ],
                     "expires_in_seconds": 600,
                 },
@@ -300,11 +371,12 @@ class _ImReplyController:
         context_token: str | None = None,
         metadata: dict | None = None,
         semantic_tags: list[str] | None = None,
+        in_reply_to: str | None = None,
     ) -> bool:
         import asyncio
 
         loop = getattr(self._repl, "_cron_loop", None)
-        if loop is None:
+        if loop is None or loop.is_closed():
             return False
         client = self._client._client
         try:
@@ -322,6 +394,25 @@ class _ImReplyController:
                         context_token=context_token,
                         metadata=metadata,
                         semantic_tags=semantic_tags,
+                        in_reply_to=in_reply_to,
+                    ),
+                    loop,
+                )
+                return True
+            if in_reply_to is not None:
+                # Correlated final/command replies must use the registered
+                # REPL IPC peer so the gateway can authorize completion of
+                # the matching pending message. The loop will drain as soon
+                # as the synchronous command returns.
+                asyncio.run_coroutine_threadsafe(
+                    _send_client_outbound(
+                        client,
+                        origin=im_origin,
+                        text=text,
+                        context_token=context_token,
+                        metadata=metadata,
+                        semantic_tags=semantic_tags,
+                        in_reply_to=in_reply_to,
                     ),
                     loop,
                 )
@@ -338,6 +429,7 @@ class _ImReplyController:
                 context_token=context_token,
                 metadata=metadata,
                 semantic_tags=semantic_tags,
+                in_reply_to=in_reply_to,
             )
         except Exception:  # noqa: BLE001
             _log.warning("repl IM outbound send failed", exc_info=True)
@@ -351,6 +443,7 @@ class _ImReplyController:
         context_token: str | None = None,
         metadata: dict | None = None,
         semantic_tags: list[str] | None = None,
+        in_reply_to: str | None = None,
     ) -> bool:
         """Send while the REPL event loop is about to block on terminal input."""
         socket_path = getattr(self._client, "_socket_path", None)
@@ -373,6 +466,7 @@ class _ImReplyController:
                         context_token=context_token,
                         metadata=metadata,
                         semantic_tags=semantic_tags,
+                        in_reply_to=in_reply_to,
                     )
                 finally:
                     await client.close()

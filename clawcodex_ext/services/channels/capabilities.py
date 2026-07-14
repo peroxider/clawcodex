@@ -36,7 +36,24 @@ class ChannelCapability(str, Enum):
     MEDIA_FILE = "media_file"
     MEDIA_VIDEO = "media_video"
     REACTION = "reaction"  # add_reaction / remove_reaction on inbound messages
+    PROCESSING_STATUS = "processing_status"  # inbound processing lifecycle
     CARD_UPDATE = "card_update"  # edit a previously-sent interactive card (progress bars)
+
+
+class ProcessingOutcome(str, Enum):
+    """Terminal outcome for one inbound message processing lifecycle."""
+
+    SUCCESS = "success"
+    FAILURE = "failure"
+    CANCELLED = "cancelled"
+
+
+@dataclass(frozen=True)
+class InboundActivityContext:
+    """Public channel context used to start an activity/progress card."""
+
+    message_id: str
+    chat_id: str
 
 
 @dataclass(frozen=True)
@@ -150,16 +167,35 @@ class ReactionCapability(Protocol):
 
 
 @runtime_checkable
+class ProcessingStatusCapability(Protocol):
+    """Adapter hooks for visible inbound-message processing state."""
+
+    channel_id: str
+
+    async def on_processing_start(self, message_id: str) -> bool: ...
+
+    async def on_processing_complete(
+        self,
+        message_id: str,
+        outcome: ProcessingOutcome,
+    ) -> bool: ...
+
+
+@runtime_checkable
 class CardUpdateCapability(Protocol):
     """Adapter declaring ``card_update`` can edit a previously-sent card.
 
-    Used by the agent-activity sink to stream progress into a placeholder
-    card the sink itself emitted via :meth:`send_placeholder_card`. The
-    returned message_id from the placeholder send is what later
-    ``update_card`` calls target.
+    Used by activity sinks to stream progress into a placeholder card. The
+    sink owns the returned message id; adapters expose only the context and
+    card operations, not their private caches or event-loop internals.
     """
 
     channel_id: str
+
+    @property
+    def capabilities(self) -> ChannelCapabilitySet: ...
+
+    def last_inbound_context(self) -> InboundActivityContext | None: ...
 
     async def send_placeholder_card(
         self,
@@ -167,7 +203,7 @@ class CardUpdateCapability(Protocol):
         card: dict,
     ) -> str | None: ...
 
-    async def update_card(
+    async def update_progress_card(
         self,
         message_id: str,
         card: dict,
@@ -221,7 +257,10 @@ __all__ = [
     "ChannelCapabilitySet",
     "ContextReplyCapability",
     "InboundCapability",
+    "InboundActivityContext",
     "LoginManagedCapability",
     "OutboundCapability",
+    "ProcessingOutcome",
+    "ProcessingStatusCapability",
     "ReactionCapability",
 ]

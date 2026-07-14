@@ -7,9 +7,11 @@ import pytest
 from clawcodex_ext.services.channels.capabilities import (
     CapabilityDescriptor,
     CapabilityNotDeclaredError,
+    CardUpdateCapability,
     ChannelAdapter,
     ChannelCapability,
     ChannelCapabilitySet,
+    InboundActivityContext,
     OutboundCapability,
 )
 from clawcodex_ext.services.channels.results import ChannelHealth, ValidationResult
@@ -96,6 +98,23 @@ def test_outbound_capability_is_structural_protocol() -> None:
         async def send(self, message, *, target=None, context_token=None): ...
 
     assert isinstance(_Out(), OutboundCapability)
+
+
+def test_card_update_capability_is_structural_protocol() -> None:
+    class _Cards:
+        channel_id = "cards"
+        capabilities = ChannelCapabilitySet.of(ChannelCapability.CARD_UPDATE)
+
+        def last_inbound_context(self):
+            return InboundActivityContext(message_id="om_1", chat_id="oc_1")
+
+        async def send_placeholder_card(self, chat_id, card):
+            return "om_placeholder"
+
+        async def update_progress_card(self, message_id, card):
+            return True
+
+    assert isinstance(_Cards(), CardUpdateCapability)
 
 
 def test_channel_adapter_default_retry_policy() -> None:

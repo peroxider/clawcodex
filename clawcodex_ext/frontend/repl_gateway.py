@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
+from dataclasses import dataclass
 from typing import Awaitable, Callable
 
 from clawcodex_ext.services.im_gateway.ipc_client import GatewayIpcClient
@@ -36,6 +37,13 @@ ControlHandlerFn = Callable[[str, str | None], bool]
 PermissionProbeFn = Callable[[str], bool]
 
 _REPL_CONTROL_COMMANDS = frozenset({"/stop"})
+
+
+@dataclass(frozen=True)
+class PendingImReply:
+    delivery_id: str
+    origin: str
+    context_token: str | None = None
 
 
 class ReplGatewayClient:
@@ -78,8 +86,7 @@ class ReplGatewayClient:
             on_deliver=self._on_pushed_deliver,
         )
         self._seen: set[str] = set()
-        self._reply_origins: deque[str] = deque()
-        self._reply_context_tokens: deque[str | None] = deque()
+        self._pending_replies: deque[PendingImReply] = deque()
         self._heartbeat_task: asyncio.Task[None] | None = None
 
     @property
@@ -117,8 +124,18 @@ class ReplGatewayClient:
             )
         except QueueFull:
             logger.warning("repl_gateway: queue full, rejected delivery_id=%s", delivery_id[:16])
+            await self._complete_processing(
+                message_id=delivery_id,
+                outcome="failure",
+                reason="REPL prompt queue full",
+            )
         except Exception:  # noqa: BLE001
             logger.exception("repl_gateway: deliver failed delivery_id=%s", delivery_id[:16])
+            await self._complete_processing(
+                message_id=delivery_id,
+                outcome="failure",
+                reason="REPL delivery failed",
+            )
 
     async def connect(self) -> GatewayFrame | None:
         await self._client.connect()
@@ -179,25 +196,42 @@ class ReplGatewayClient:
         # new prompt for the next turn.
         if self._permission_probe is not None and self._permission_probe(text):
             self._seen.add(delivery_id)
-            return await self._client.ack(
+            response = await self._client.ack(
                 delivery_id=delivery_id, layer="processed", message="permission reply"
             )
+            await self._complete_processing(
+                message_id=delivery_id,
+                outcome="success",
+                reason="permission reply",
+            )
+            return response
         if self._is_priority_control(text, semantic):
             self._seen.add(delivery_id)
             handled = False
             if self._control_handler is not None:
                 handled = bool(self._control_handler(text, origin))
             message = "control dispatched" if handled else "control ignored"
-            return await self._client.ack(
+            response = await self._client.ack(
                 delivery_id=delivery_id, layer="processed", message=message
             )
+            await self._complete_processing(
+                message_id=delivery_id,
+                outcome="success" if handled else "failure",
+                reason=message,
+            )
+            return response
         if not self.can_enqueue():
             raise QueueFull(f"REPL prompt queue at capacity ({self._capacity})")
         self._seen.add(delivery_id)
-        if origin:
-            self._reply_origins.append(origin)
-            self._reply_context_tokens.append(context_token)
         self._enqueue(text)
+        if origin:
+            self._pending_replies.append(
+                PendingImReply(
+                    delivery_id=delivery_id,
+                    origin=origin,
+                    context_token=context_token,
+                )
+            )
         # Wake the REPL prompt loop so it iterates and drains the just-enqueued
         # prompt instead of staying blocked on ``prompt_async('❯ ')``.
         if self._wake is not None:
@@ -208,6 +242,29 @@ class ReplGatewayClient:
         # acknowledge enqueued back to the gateway
         return await self._client.ack(delivery_id=delivery_id, layer="enqueued", message="enqueued")
 
+    async def _complete_processing(
+        self,
+        *,
+        message_id: str,
+        outcome: str,
+        reason: str,
+    ) -> None:
+        complete = getattr(self._client, "complete_processing", None)
+        if callable(complete):
+            try:
+                await complete(message_id=message_id, outcome=outcome, reason=reason)
+            except (ConnectionError, RuntimeError, OSError):
+                logger.debug(
+                    "repl processing completion skipped while disconnected: %s",
+                    message_id[:16],
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "repl processing completion failed: %s",
+                    message_id[:16],
+                    exc_info=True,
+                )
+
     @staticmethod
     def _is_priority_control(text: str, semantic: str | None) -> bool:
         normalized = (text or "").strip().split(maxsplit=1)[0].lower()
@@ -217,30 +274,39 @@ class ReplGatewayClient:
 
     def next_reply_origin(self, fallback: str) -> str:
         """Return the origin that should receive the next assistant reply."""
-        if self._reply_origins:
-            origin, _context_token = self.pop_reply_context()
-            return origin or fallback
+        if self._pending_replies:
+            pending = self.pop_reply_delivery()
+            return pending.origin if pending is not None else fallback
         return fallback
 
     def peek_reply_origin(self) -> str | None:
         """Return the current IM origin without consuming the final-reply slot."""
-        if self._reply_origins:
-            return self._reply_origins[0]
+        if self._pending_replies:
+            return self._pending_replies[0].origin
         return None
 
     def peek_reply_context_token(self) -> str | None:
         """Return the current IM context token without consuming the reply slot."""
-        if self._reply_context_tokens:
-            return self._reply_context_tokens[0]
+        if self._pending_replies:
+            return self._pending_replies[0].context_token
         return None
+
+    def peek_reply_delivery_id(self) -> str | None:
+        if self._pending_replies:
+            return self._pending_replies[0].delivery_id
+        return None
+
+    def pop_reply_delivery(self) -> PendingImReply | None:
+        if not self._pending_replies:
+            return None
+        return self._pending_replies.popleft()
 
     def pop_reply_context(self) -> tuple[str | None, str | None]:
         """Pop the IM origin and context token that triggered this turn."""
-        if not self._reply_origins:
+        pending = self.pop_reply_delivery()
+        if pending is None:
             return None, None
-        origin = self._reply_origins.popleft()
-        context_token = self._reply_context_tokens.popleft() if self._reply_context_tokens else None
-        return origin, context_token
+        return pending.origin, pending.context_token
 
     def pop_reply_origin(self) -> str | None:
         """Pop the IM origin that triggered the current assistant turn.
@@ -261,6 +327,7 @@ class QueueFull(Exception):
 __all__ = [
     "EnqueueFn",
     "PermissionProbeFn",
+    "PendingImReply",
     "QueueFull",
     "QueueSizeFn",
     "ReplGatewayClient",

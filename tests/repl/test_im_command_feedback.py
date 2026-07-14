@@ -22,15 +22,37 @@ def _make_clear_repl() -> ClawcodexREPL:
 def test_handle_command_clear_sends_im_command_feedback() -> None:
     """IM-driven /clear should get a visible command completion notice."""
     repl = _make_clear_repl()
-    calls: list[str] = []
+    calls: list[tuple[str, bool]] = []
 
     class _FakeImReply:
-        def send_command_feedback(self, command: str) -> bool:
-            calls.append(command)
+        def send_command_feedback(self, command: str, *, success: bool) -> bool:
+            calls.append((command, success))
             return True
 
     repl._im_reply_controller = _FakeImReply()
 
     repl.handle_command("/clear")
 
-    assert calls == ["/clear"]
+    assert calls == [("/clear", True)]
+
+
+def test_handle_command_exception_sends_failed_im_command_feedback() -> None:
+    repl = _make_clear_repl()
+    repl._handle_command = Mock(side_effect=RuntimeError("command failed"))
+    calls: list[tuple[str, bool]] = []
+
+    class _FakeImReply:
+        def send_command_feedback(self, command: str, *, success: bool) -> bool:
+            calls.append((command, success))
+            return True
+
+    repl._im_reply_controller = _FakeImReply()
+
+    try:
+        repl.handle_command("/clear")
+    except RuntimeError as exc:
+        assert str(exc) == "command failed"
+    else:
+        raise AssertionError("command failure must propagate")
+
+    assert calls == [("/clear", False)]

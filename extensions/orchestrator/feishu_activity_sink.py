@@ -1,30 +1,25 @@
-"""FeishuActivitySink — translate agent lifecycle into Feishu-visible actions.
+"""FeishuActivitySink — translate agent lifecycle into Feishu progress cards.
 
 The orchestrator's :class:`ProgressSink` protocol gives us three hooks
 (``on_phase_complete`` / ``on_turn_complete`` / ``on_session_complete``),
 and :class:`StatusDashboard` fires ``on_session_start`` for global
-lifecycle flips. This sink combines them to produce the two Feishu-side
-visual signals we actually have (Feishu Open Platform has no bot_typing
-push):
+lifecycle flips. Processing reactions are owned centrally by the IM gateway;
+this sink only owns the richer orchestrator progress card:
 
-* On ``on_session_start`` — react to the inbound user message with the
-  ``OnIt`` emoji (👀) and send a placeholder progress card back to the
-  same chat. The card's ``message_id`` is cached so subsequent updates
-  can target it.
+* On ``on_session_start`` — send a placeholder progress card back to the
+  same chat. The card's ``message_id`` is cached for subsequent updates.
 * On every ``on_phase_complete`` — rebuild the placeholder card with the
   fresh phase progress and ``update_card`` it. Keeps the Feishu-side
   progress bar / header in lock-step with the agent runner.
-* On ``on_session_complete`` — replace the 👀 reaction with the terminal
-  emoji (``OK`` / ``Cross`` / ``Typing``) and rewrite the card title and
-  header template to the terminal colour (green / red / grey).
+* On ``on_session_complete`` — rewrite the card title and header template
+  to the terminal colour (green / red / grey).
 
 All entry points are synchronous (matches the :class:`ProgressSink`
-contract) but each Feishu API call is ``async`` — we hop onto the
-adapter's main loop with :func:`asyncio.run_coroutine_threadsafe` and
-swallow every exception. The sink *never* propagates errors back into
-the agent runner; :class:`CompositeProgressSink` already isolates us,
-but we also try/except inside this class so any direct caller is
-safe.
+contract) but each channel API call is ``async``. Calls are scheduled on
+the current runner loop and every exception is swallowed. The sink *never*
+propagates errors back into the agent runner; :class:`CompositeProgressSink`
+already isolates us, but we also try/except inside this class so any direct
+caller is safe.
 """
 
 from __future__ import annotations
@@ -40,20 +35,13 @@ from ..capabilities.automation_state_protocol import (
 )
 
 if TYPE_CHECKING:
-    from clawcodex_ext.services.channels.feishu_app import FeishuAppChannelAdapter
+    from clawcodex_ext.services.channels.capabilities import CardUpdateCapability
 
     from .agent_runner import AgentSession
     from .progress_sink import ProgressSink
     from .status_dashboard import SessionStatus, StatusDashboard
 
 logger = logging.getLogger(__name__)
-
-
-# Feishu message-reaction emoji_type constants (lark-oapi 1.7.0).
-_REACTION_WORKING = "OnIt"      # 👀
-_REACTION_OK = "OK"             # ✅
-_REACTION_CROSS = "Cross"       # ❌
-_REACTION_PAUSED = "Typing"     # ⏸ (no dedicated "paused" emoji)
 
 
 # Terminal header colours used by the Feishu card template.
@@ -63,15 +51,11 @@ _HEADER_RED = "red"
 _HEADER_GREY = "grey"
 
 
-def _schedule(adapter: Any, coro: Any) -> None:
-    """Schedule ``coro`` on the adapter's main loop with full error isolation.
+def _schedule(coro: Any) -> None:
+    """Schedule ``coro`` on the current loop with full error isolation.
 
-    Resolution order:
-
-    1. If the adapter exposes ``_main_loop`` and we are *not* on it,
-       :func:`asyncio.run_coroutine_threadsafe` hands the coroutine off.
-    2. If we are already on a running loop (the agent runner calls us
-       from a coroutine), ``create_task`` schedules a task on it.
+    If the agent runner already has a running loop, ``create_task`` schedules
+    the call there without inspecting channel-specific loop internals.
 
     When there is no running loop at all (only happens in synchronous
     unit tests where the test driver invokes the sink from a ``def test_*``),
@@ -83,18 +67,14 @@ def _schedule(adapter: Any, coro: Any) -> None:
 
     Exceptions are logged and swallowed — the sink is best-effort.
     """
-    loop = getattr(adapter, "_main_loop", None)
     try:
         running_loop = asyncio.get_running_loop()
     except RuntimeError:
         running_loop = None
     try:
-        if loop is not None and loop is not running_loop:
-            future = asyncio.run_coroutine_threadsafe(coro, loop)
-            future.add_done_callback(_log_future_exception)
-            return
         if running_loop is not None:
-            running_loop.create_task(coro)
+            task = running_loop.create_task(coro)
+            task.add_done_callback(_log_future_exception)
             return
         # No running loop. Stash for the test helper to drain. In
         # production this branch never fires.
@@ -161,7 +141,7 @@ class FeishuActivitySink:
         self,
         *,
         task_id: str,
-        feishu_adapter: "FeishuAppChannelAdapter",
+        feishu_adapter: "CardUpdateCapability",
         clock: Callable[[], float],
         status_dashboard: "StatusDashboard | None" = None,
         phases_total: int | None = None,
@@ -175,11 +155,12 @@ class FeishuActivitySink:
         self._phases_total = phases_total
         self._last_phase: int = 0
         self._last_emitted_at: float | None = None
+        self._placeholder_message_id: str | None = None
         # Subscribe to the dashboard's session-start so users see 👀 on
         # their inbound message the moment work begins.
         if status_dashboard is not None:
-            self._remove_session_listener = (
-                status_dashboard.add_session_start_listener(self._on_session_status)
+            self._remove_session_listener = status_dashboard.add_session_start_listener(
+                self._on_session_status
             )
 
     # ------------------------------------------------------------------
@@ -210,9 +191,8 @@ class FeishuActivitySink:
         Errors are isolated inside :func:`_schedule`; this method never
         raises.
         """
-        message_id = self._adapter._last_inbound_message_id  # type: ignore[attr-defined]
-        chat_id = self._adapter._last_inbound_chat_id  # type: ignore[attr-defined]
-        if not message_id or not chat_id:
+        context = self._adapter.last_inbound_context()
+        if context is None:
             # No inbound context cached yet — usually because the agent
             # was launched out-of-band (e.g. via CLI). Soft skip.
             return
@@ -222,14 +202,10 @@ class FeishuActivitySink:
             header_template=_HEADER_BLUE,
             progress=0,
             summary=(
-                f"已收到任务 {issue_identifier or issue_id}, "
-                f"phase 1/{self._phases_total or '?'}"
+                f"已收到任务 {issue_identifier or issue_id}, phase 1/{self._phases_total or '?'}"
             ).strip(),
         )
-        _schedule(
-            self._adapter,
-            self._emit_session_start(message_id, chat_id, card),
-        )
+        _schedule(self._emit_session_start(context.chat_id, card))
 
     # ------------------------------------------------------------------
     # AutomationStateObserver (push)
@@ -245,19 +221,15 @@ class FeishuActivitySink:
 
     async def _emit_session_start(
         self,
-        message_id: str,
         chat_id: str,
         card: dict,
     ) -> None:
         try:
-            await self._adapter.set_reaction(message_id, _REACTION_WORKING)
             placeholder_id = await self._adapter.send_placeholder_card(chat_id, card)
             if placeholder_id:
-                self._adapter.remember_placeholder_message_id(self.task_id, placeholder_id)
+                self._placeholder_message_id = placeholder_id
         except Exception as exc:  # noqa: BLE001
-            logger.exception(
-                "feishu activity sink session_start dispatch failed: %s", exc
-            )
+            logger.exception("feishu activity sink session_start dispatch failed: %s", exc)
 
     # ------------------------------------------------------------------
     # ProgressSink (synchronous dispatch from AgentRunner)
@@ -268,7 +240,7 @@ class FeishuActivitySink:
         event: PhaseComplete,
         session: "AgentSession",
     ) -> None:
-        placeholder_id = self._adapter.placeholder_message_id(self.task_id)
+        placeholder_id = self._placeholder_message_id
         if not placeholder_id:
             return
         phase_idx = event.phase or 0
@@ -281,7 +253,7 @@ class FeishuActivitySink:
             progress=progress,
             summary=_phase_summary(session, phase_idx, self._phases_total),
         )
-        _schedule(self._adapter, self._adapter.update_progress_card(placeholder_id, card))
+        _schedule(self._adapter.update_progress_card(placeholder_id, card))
 
     def on_turn_complete(
         self,
@@ -302,9 +274,8 @@ class FeishuActivitySink:
         event: SessionComplete,
         session: "AgentSession",
     ) -> None:
-        message_id = self._adapter._last_inbound_message_id  # type: ignore[attr-defined]
-        placeholder_id = self._adapter.placeholder_message_id(self.task_id)
-        reaction, header, title, progress = _terminal_visuals(event.reason)
+        placeholder_id = self._placeholder_message_id
+        header, title, progress = _terminal_visuals(event.reason)
         # The card might never have been emitted (CLI-launched session);
         # ``update_progress_card`` returns False silently in that case.
         if placeholder_id:
@@ -314,23 +285,10 @@ class FeishuActivitySink:
                 progress=progress,
                 summary=f"session: {event.reason}",
             )
-            _schedule(self._adapter, self._adapter.update_progress_card(placeholder_id, card))
-        if message_id:
-            _schedule(
-                self._adapter,
-                self._emit_terminal_reaction(message_id, reaction),
-            )
+            _schedule(self._adapter.update_progress_card(placeholder_id, card))
         # Drop cached placeholder so a re-run can claim a fresh card.
-        self._adapter.forget_placeholder_message_id(self.task_id)
+        self._placeholder_message_id = None
         self._last_emitted_at = self._clock()
-
-    async def _emit_terminal_reaction(self, message_id: str, emoji_type: str) -> None:
-        try:
-            await self._adapter.set_reaction(message_id, emoji_type)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception(
-                "feishu activity sink terminal reaction failed: %s", exc
-            )
 
     # ------------------------------------------------------------------
     # AutomationStateReporter (pull)
@@ -341,9 +299,7 @@ class FeishuActivitySink:
             "task_id": self.task_id,
             "last_phase": self._last_phase,
             "last_emitted_at": self._last_emitted_at,
-            "placeholder_message_id": self._adapter.placeholder_message_id(self.task_id)
-            if self._adapter
-            else None,
+            "placeholder_message_id": self._placeholder_message_id,
         }
 
 
@@ -374,16 +330,16 @@ def _phase_summary(
     return f"{issue_part}phase {phase}/{total}"
 
 
-def _terminal_visuals(reason: str) -> tuple[str, str, str, int | None]:
-    """Map a :class:`SessionComplete.reason` to (reaction, header, title, progress)."""
+def _terminal_visuals(reason: str) -> tuple[str, str, int | None]:
+    """Map a session outcome to card header, title and progress."""
     if reason == "success":
-        return _REACTION_OK, _HEADER_GREEN, "✅ 已完成", 100
+        return _HEADER_GREEN, "✅ 已完成", 100
     if reason == "paused":
-        return _REACTION_PAUSED, _HEADER_GREY, "⏸ 已暂停", None
+        return _HEADER_GREY, "⏸ 已暂停", None
     # Everything else (stagnation / loop_detected / max_turns_exceeded /
     # rate_limit_circuit_open / exit_code=N / noop_completed / failed /
     # budget_exhausted …) is a failure for visual purposes.
-    return _REACTION_CROSS, _HEADER_RED, f"❌ 失败: {reason}", None
+    return _HEADER_RED, f"❌ 失败: {reason}", None
 
 
 def _build_card(

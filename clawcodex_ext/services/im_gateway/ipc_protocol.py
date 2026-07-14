@@ -54,6 +54,7 @@ class GatewayFrame:
     metadata: dict[str, Any] | None = None
     semantic_tags: list[str] = field(default_factory=list)
     context_token: str | None = None
+    in_reply_to: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -77,6 +78,7 @@ class GatewayFrame:
             "metadata",
             "semantic_tags",
             "context_token",
+            "in_reply_to",
         ):
             v = getattr(self, k)
             if v not in (None, [], {}):
@@ -123,6 +125,7 @@ class GatewayFrame:
             metadata=data.get("metadata") if isinstance(data.get("metadata"), dict) else None,
             semantic_tags=list(data.get("semantic_tags") or []),
             context_token=data.get("context_token"),
+            in_reply_to=data.get("in_reply_to"),
         )
 
     # -- convenience constructors ---------------------------------------
@@ -194,6 +197,19 @@ class GatewayFrame:
         return cls(type=FrameType.EVENT, event_type=event_type, payload=payload)
 
     @classmethod
+    def processing_complete(
+        cls,
+        *,
+        message_id: str,
+        outcome: str,
+        reason: str | None = None,
+    ) -> GatewayFrame:
+        payload: dict[str, Any] = {"message_id": message_id, "outcome": outcome}
+        if reason:
+            payload["reason"] = reason
+        return cls.event(event_type="processing.complete", payload=payload)
+
+    @classmethod
     def outbound(
         cls,
         *,
@@ -202,6 +218,7 @@ class GatewayFrame:
         context_token: str | None = None,
         metadata: dict[str, Any] | None = None,
         semantic_tags: list[str] | None = None,
+        in_reply_to: str | None = None,
     ) -> GatewayFrame:
         """Client→server frame carrying a reply to send back to an IM origin.
 
@@ -216,6 +233,7 @@ class GatewayFrame:
             context_token=context_token,
             metadata=dict(metadata) if metadata is not None else None,
             semantic_tags=list(semantic_tags or []),
+            in_reply_to=in_reply_to,
         )
 
 

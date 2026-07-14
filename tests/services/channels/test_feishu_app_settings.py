@@ -106,6 +106,19 @@ def test_feishu_settings_reads_startup_connect_timeout() -> None:
     assert settings.startup_connect_timeout_seconds == 5.5
 
 
+def test_feishu_reactions_env_overrides_channel_config() -> None:
+    cfg = _websocket_config({"reactions": False})
+
+    assert FeishuAppSettings.from_config(cfg, environ={}).reactions_enabled is False
+    assert (
+        FeishuAppSettings.from_config(
+            cfg,
+            environ={"FEISHU_REACTIONS": "true"},
+        ).reactions_enabled
+        is True
+    )
+
+
 def test_feishu_settings_rejects_missing_credentials_in_websocket_mode() -> None:
     cfg = _websocket_config({"app_id": "", "app_secret": ""})
 

@@ -15,6 +15,7 @@ import asyncio
 import pytest
 
 from clawcodex_ext.services.im_gateway.binding import BindingPolicy
+from clawcodex_ext.services.im_gateway.config import CommandAllowlistConfig
 from clawcodex_ext.services.im_gateway.dispatcher import InboundDispatcher
 from clawcodex_ext.services.im_gateway.models import (
     AckLayer,
@@ -40,6 +41,7 @@ def _make_dispatcher(
     *,
     repl_origin: str = "wechat:acct:user1",
     orchestrator_origin: str = "wechat:acct:user2",
+    command_allowlists: CommandAllowlistConfig | None = None,
 ) -> tuple[InboundDispatcher, SessionRouter, list[InboundMessage]]:
     """构造一个 dispatcher，REPL 与 orchestrator 各绑定一个 origin。
 
@@ -61,7 +63,7 @@ def _make_dispatcher(
         pushed.append(message)
         return True
 
-    dispatcher = InboundDispatcher(store, router)
+    dispatcher = InboundDispatcher(store, router, command_allowlists=command_allowlists)
     dispatcher.set_push_handler(push_handler)
     return dispatcher, router, pushed
 
@@ -150,6 +152,28 @@ async def test_repl_plain_text_pushed(tmp_path) -> None:
     assert receipt.layer == AckLayer.ENQUEUED
 
 
+@pytest.mark.asyncio
+async def test_repl_uses_channels_yaml_command_allowlist(tmp_path) -> None:
+    dispatcher, router, pushed = _make_dispatcher(
+        tmp_path,
+        command_allowlists=CommandAllowlistConfig(
+            repl=("/model",),
+            orchestrator=(),
+        ),
+    )
+
+    allowed_receipt = await dispatcher.process(
+        _make_message("wechat:acct:user1", "/model gpt-5", message_id="repl-custom-allowed")
+    )
+    blocked_receipt = await dispatcher.process(
+        _make_message("wechat:acct:user1", "/clear", message_id="repl-default-blocked")
+    )
+
+    assert [message.text for message in pushed] == ["/model gpt-5"]
+    assert allowed_receipt.layer is AckLayer.ENQUEUED
+    assert blocked_receipt.notify_user is True
+
+
 # -- orchestrator 目标：白名单生效 -------------------------------------------
 
 
@@ -207,6 +231,36 @@ async def test_orchestrator_allowed_server_status_pushed(tmp_path) -> None:
     assert pushed[0].text == "/server status"
     assert pushed[0].semantic is MessageSemantics.COMMAND
     assert receipt.layer == AckLayer.ENQUEUED
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_uses_channels_yaml_command_allowlist(tmp_path) -> None:
+    dispatcher, router, pushed = _make_dispatcher(
+        tmp_path,
+        command_allowlists=CommandAllowlistConfig(
+            repl=(),
+            orchestrator=("/issue takeover",),
+        ),
+    )
+
+    allowed_receipt = await dispatcher.process(
+        _make_message(
+            "wechat:acct:user2",
+            "/issue takeover --id AGENTSDK-15",
+            message_id="orch-custom-allowed",
+        )
+    )
+    blocked_receipt = await dispatcher.process(
+        _make_message(
+            "wechat:acct:user2",
+            "/server status",
+            message_id="orch-default-blocked",
+        )
+    )
+
+    assert [message.text for message in pushed] == ["/issue takeover --id AGENTSDK-15"]
+    assert allowed_receipt.layer is AckLayer.ENQUEUED
+    assert blocked_receipt.notify_user is True
 
 
 # -- 拒绝时记录 audit -------------------------------------------------------

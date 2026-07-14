@@ -188,6 +188,7 @@ def test_recap_command_skips_cache_when_disabled(monkeypatch, tmp_path) -> None:
     )
 
     from clawcodex_ext.away_summary import service as service_mod
+
     real_generate = service_mod.AwaySummaryService.generate
 
     def spy_generate(self, *, trigger, force=False, persist=None, cache_safe_params=None):

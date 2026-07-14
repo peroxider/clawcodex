@@ -491,7 +491,7 @@ def test_summary_prompt_requires_goal_plus_next_action() -> None:
     assert "where they left off" in lowered
     assert "next action" in lowered
     # Fixed labels are explicitly forbidden.
-    assert 'fixed section labels' in lowered
+    assert "fixed section labels" in lowered
     assert "current state:" not in lowered
     assert "next step:" not in lowered
     assert "files mentioned:" not in lowered
@@ -727,10 +727,7 @@ def test_service_normalizes_model_noncompliant_output() -> None:
     result = AwaySummaryService(
         conversation=conv,
         provider=FakeProvider(
-            "你刚回来，这是之前的会话摘要：\n"
-            "用户与助手进行了简单的问候。\n"
-            "• 问候\n"
-            "- 继续聊天"
+            "你刚回来，这是之前的会话摘要：\n用户与助手进行了简单的问候。\n• 问候\n- 继续聊天"
         ),
         model="fake-model",
         config=AwaySummaryConfig(),

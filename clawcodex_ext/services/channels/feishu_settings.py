@@ -47,6 +47,7 @@ class FeishuAppSettings:
     approval_cards_enabled: bool = True
     action_token_ttl_seconds: int = 900
     decision_ttl_seconds: int = 600
+    reactions_enabled: bool = True
 
     @classmethod
     def from_config(
@@ -100,6 +101,7 @@ class FeishuAppSettings:
             approval_cards_enabled=_as_bool(approval_cards.get("enabled"), True),
             action_token_ttl_seconds=_as_int(approval_cards.get("action_token_ttl_seconds"), 900),
             decision_ttl_seconds=_as_int(approval_cards.get("decision_ttl_seconds"), 600),
+            reactions_enabled=_reaction_enabled(extra.get("reactions"), env),
         )
 
     def validation_errors(self) -> list[str]:
@@ -157,6 +159,15 @@ def _as_bool(value: Any, default: bool) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _reaction_enabled(config_value: Any, env: Mapping[str, str]) -> bool:
+    """Environment explicitly overrides channel config; default is enabled."""
+    if "FEISHU_REACTIONS" in env:
+        return _as_bool(env.get("FEISHU_REACTIONS"), True)
+    if isinstance(config_value, dict):
+        config_value = config_value.get("enabled")
+    return _as_bool(config_value, True)
 
 
 __all__ = ["FeishuAppSettings"]

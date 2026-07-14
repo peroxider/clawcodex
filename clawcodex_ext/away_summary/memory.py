@@ -77,5 +77,5 @@ def _format_memory(data: dict[str, Any], *, max_chars: int) -> str | None:
     if not text:
         return None
     if len(text) > max_chars:
-        return text[: max_chars].rstrip() + "…"
+        return text[:max_chars].rstrip() + "…"
     return text
