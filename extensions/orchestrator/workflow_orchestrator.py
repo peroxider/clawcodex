@@ -53,6 +53,7 @@ class WorkflowOrchestrator:
         status_dashboard: Any = None,
         clarification_resolver: Any = None,
         llm_client: Any = None,
+        diagnostics_callback: Any = None,
     ) -> None:
         self._workflow_config = workflow_config
         self._yaml_path = Path(workflow_yaml_path)
@@ -89,6 +90,7 @@ class WorkflowOrchestrator:
             status_dashboard=status_dashboard,
             clarification_resolver=clarification_resolver,
             llm_client=llm_client,
+            diagnostics_callback=diagnostics_callback,
         )
         self._stage_runner.set_bundle_path(bundle_dir)
         self._engine.set_stage_runner(self._stage_runner)

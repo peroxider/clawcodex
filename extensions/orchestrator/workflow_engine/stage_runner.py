@@ -87,6 +87,7 @@ class StageRunner:
         clarification_resolver: Any = None,
         progress_reporter: Any = None,
         llm_client: Any = None,
+        diagnostics_callback: Any = None,
     ) -> None:
         self._agent_runner = agent_runner
         self._workflow_config = workflow_config
@@ -99,6 +100,7 @@ class StageRunner:
         self._clarification_resolver = clarification_resolver
         self._progress_reporter = progress_reporter
         self._llm_client = llm_client
+        self._diagnostics_callback = diagnostics_callback
         self._bundle_path: Path | None = None
         self._validator = ContractValidator(
             workspace_dir=self._workspace_dir,
@@ -290,6 +292,7 @@ class StageRunner:
                 status_dashboard=self._status_dashboard,
                 clarification_resolver=self._clarification_resolver,
                 progress_reporter=self._progress_reporter,
+                diagnostics_callback=self._diagnostics_callback,
             )
         except Exception as exc:
             logger.exception("AgentRunner.run failed for stage %s", stage_node.id)
