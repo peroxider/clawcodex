@@ -1354,7 +1354,7 @@ def _run_dashboard_headless(
     """Run ``/dashboard`` synchronously in headless mode and return ``(text, error)``."""
     import asyncio
 
-    from clawcodex_ext.command_system.dashboard_command import DashboardCommand
+    from clawcodex_ext.command_system.dashboard_command import DASHBOARD_COMMAND
     from clawcodex_ext.command_system.engine import create_command_context
 
     ctx = create_command_context(
@@ -1364,7 +1364,13 @@ def _run_dashboard_headless(
         cwd=cwd,
     )
     try:
-        outcome = asyncio.run(DashboardCommand().run(args, ctx))
+        # Use the pre-built ``DASHBOARD_COMMAND`` singleton (which carries
+        # ``name`` and ``description``) rather than constructing a fresh
+        # ``DashboardCommand()`` — the latter raises
+        # ``InteractiveCommand.__init__() missing 2 required positional
+        # arguments: 'name' and 'description'`` because ``CommandBase``
+        # is a frozen dataclass with no defaults on those fields.
+        outcome = asyncio.run(DASHBOARD_COMMAND.run(args, ctx))
     except Exception as exc:  # noqa: BLE001 — surface any failure cleanly
         return (None, f"Dashboard failed: {exc}")
 
