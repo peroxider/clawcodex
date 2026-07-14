@@ -22,7 +22,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
-import fcntl
 import hashlib
 import logging
 import os
@@ -35,6 +34,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
+
+from clawcodex_ext.utils.file_lock import HAS_FLOCK, flock_exclusive, flock_unlock
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -280,10 +281,12 @@ class WeChatPairingStore:
         lock_path = self._path.with_suffix(self._path.suffix + ".lock")
         fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            if HAS_FLOCK:
+                flock_exclusive(fd)
             yield
         finally:
-            fcntl.flock(fd, fcntl.LOCK_UN)
+            if HAS_FLOCK:
+                flock_unlock(fd)
             os.close(fd)
 
     def _reload_unlocked(self) -> None:

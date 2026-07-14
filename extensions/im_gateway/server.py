@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
-import fcntl
 import json
 import logging
 import logging.handlers
@@ -29,6 +28,8 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+from clawcodex_ext.utils.file_lock import HAS_FLOCK, flock_exclusive, flock_unlock
 
 from clawcodex_ext.services.im_gateway.config import (
     DEFAULT_STATE_DIR,
@@ -131,7 +132,8 @@ def acquire_lock(paths: DaemonPaths) -> int | None:
     paths.lock_file.touch(exist_ok=True)
     fd = os.open(str(paths.lock_file), os.O_RDWR)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if HAS_FLOCK:
+            flock_exclusive(fd, non_blocking=True)
         return fd
     except OSError:
         os.close(fd)

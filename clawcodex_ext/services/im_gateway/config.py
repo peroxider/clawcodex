@@ -14,7 +14,6 @@ round-trip is reused unchanged.
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import logging
 import os
 import shutil
@@ -24,6 +23,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from clawcodex_ext.utils.file_lock import HAS_FLOCK, flock_exclusive, flock_unlock
 
 from clawcodex_ext.services.channels.models import ChannelConfig, ChannelType
 
@@ -384,10 +385,12 @@ def _file_lock(lock_path: Path):
     lock_path.touch(exist_ok=True)
     fd = os.open(str(lock_path), os.O_RDWR)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        if HAS_FLOCK:
+            flock_exclusive(fd)
         yield
     finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        if HAS_FLOCK:
+            flock_unlock(fd)
         os.close(fd)
 
 
