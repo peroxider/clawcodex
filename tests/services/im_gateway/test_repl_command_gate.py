@@ -131,6 +131,16 @@ def test_case_insensitive_blocked() -> None:
     assert "/exit" in reason  # reason 中回显的 token 是小写化后的
 
 
+def test_repl_command_uses_configured_allowlist() -> None:
+    allowed, reason = check_repl_command("/model gpt-5", allowed_commands={"/model"})
+    assert allowed is True
+    assert reason == ""
+
+    allowed, reason = check_repl_command("/clear", allowed_commands=set())
+    assert allowed is False
+    assert "`/clear`" in reason
+
+
 # -- Orchestrator 白名单 -----------------------------------------------------
 
 
@@ -182,3 +192,19 @@ def test_orchestrator_plain_text_passes() -> None:
     allowed, reason = check_orchestrator_command("普通文本 follow-up")
     assert allowed is True
     assert reason == ""
+
+
+def test_orchestrator_command_uses_configured_allowlist() -> None:
+    allowed, reason = check_orchestrator_command(
+        "/issue takeover --id AGENTSDK-15",
+        allowed_commands={"/issue takeover"},
+    )
+    assert allowed is True
+    assert reason == ""
+
+    allowed, reason = check_orchestrator_command(
+        "/server status",
+        allowed_commands=set(),
+    )
+    assert allowed is False
+    assert reason == "不支持 /server status 执行"

@@ -17,7 +17,7 @@ from clawcodex_ext.services.channels.results import (
     ChannelSendResult,
     ValidationResult,
 )
-from clawcodex_ext.services.im_gateway.config import GatewayConfig
+from clawcodex_ext.services.im_gateway.config import CommandAllowlistConfig, GatewayConfig
 from clawcodex_ext.services.im_gateway.gateway import MessageGateway
 from clawcodex_ext.services.im_gateway.models import (
     IM_DIRECT_ALL_ORIGIN,
@@ -70,6 +70,21 @@ def _gateway(tmp_path, *, adapter: _FakeAdapter | None = None) -> MessageGateway
         reg.register(adapter)
     cfg = GatewayConfig(state_dir=str(tmp_path))
     return MessageGateway(cfg, registry=reg)
+
+
+def test_gateway_applies_configured_command_allowlists(tmp_path) -> None:
+    cfg = GatewayConfig(
+        state_dir=str(tmp_path),
+        command_allowlists=CommandAllowlistConfig(
+            repl=("/model",),
+            orchestrator=("/issue takeover",),
+        ),
+    )
+
+    gateway = MessageGateway(cfg, registry=ChannelAdapterRegistry())
+
+    assert gateway.inbound._repl_allowed_commands == {"/model"}
+    assert gateway.inbound._orchestrator_allowed_commands == {"/issue takeover"}
 
 
 class _FakeInboundAdapter(_FakeAdapter):

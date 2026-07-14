@@ -1,8 +1,7 @@
 """Unit tests for the Feishu activity sink (F-??? activity visibility).
 
-The Feishu Open Platform has no first-class bot_typing push. The sink
-translates agent lifecycle into two visible signals — emoji reactions
-on the inbound message and progress updates to a placeholder card.
+Processing reactions are owned by the IM gateway. This sink translates
+orchestrator lifecycle events into progress updates to a placeholder card.
 
 These tests exercise the translation layer in isolation, mocking both
 the :class:`FeishuAppChannelAdapter` and the asynchronous coroutines
@@ -11,7 +10,6 @@ the sink schedules.
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -22,6 +20,11 @@ from extensions.orchestrator.feishu_activity_sink import (
     drain_pending_for_test,
 )
 from extensions.orchestrator.status_dashboard import SessionStatus
+from clawcodex_ext.services.channels.capabilities import (
+    ChannelCapability,
+    ChannelCapabilitySet,
+    InboundActivityContext,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -37,15 +40,19 @@ class _FakeAdapter:
     """
 
     def __init__(self) -> None:
+        self.channel_id = "feishu"
+        self.capabilities = ChannelCapabilitySet.of(ChannelCapability.CARD_UPDATE)
         self.calls: list[tuple[str, tuple, dict]] = []
-        self._last_inbound_message_id: str | None = "om_inbound_001"
-        self._last_inbound_chat_id: str | None = "oc_chat_001"
-        self._placeholder_message_ids: dict[str, str] = {}
-        self._main_loop: asyncio.AbstractEventLoop | None = None
+        self.inbound_context: InboundActivityContext | None = InboundActivityContext(
+            message_id="om_inbound_001",
+            chat_id="oc_chat_001",
+        )
+        self.placeholder_result = "om_placeholder_001"
 
-    async def set_reaction(
-        self, message_id: str, emoji_type: str, *, remove: bool = False
-    ) -> bool:
+    def last_inbound_context(self) -> InboundActivityContext | None:
+        return self.inbound_context
+
+    async def set_reaction(self, message_id: str, emoji_type: str, *, remove: bool = False) -> bool:
         self.calls.append(("set_reaction", (message_id, emoji_type), {"remove": remove}))
         return True
 
@@ -55,19 +62,7 @@ class _FakeAdapter:
 
     async def send_placeholder_card(self, chat_id: str, card: dict) -> str | None:
         self.calls.append(("send_placeholder_card", (chat_id,), {"card": card}))
-        return "om_placeholder_001"
-
-    def remember_placeholder_message_id(self, task_id: str, message_id: str | None) -> None:
-        self.calls.append(("remember_placeholder_message_id", (task_id, message_id), {}))
-        if message_id:
-            self._placeholder_message_ids[task_id] = message_id
-
-    def forget_placeholder_message_id(self, task_id: str) -> None:
-        self.calls.append(("forget_placeholder_message_id", (task_id,), {}))
-        self._placeholder_message_ids.pop(task_id, None)
-
-    def placeholder_message_id(self, task_id: str) -> str | None:
-        return self._placeholder_message_ids.get(task_id)
+        return self.placeholder_result
 
 
 class _FakeDashboard:
@@ -94,7 +89,7 @@ class _FakeDashboard:
 
 
 class FeishuActivitySinkSessionStartTests(unittest.TestCase):
-    """``notify_session_start`` triggers reaction + placeholder card."""
+    """``notify_session_start`` triggers the placeholder card only."""
 
     def test_session_start_emits_reaction_and_placeholder(self) -> None:
         adapter = _FakeAdapter()
@@ -114,11 +109,9 @@ class FeishuActivitySinkSessionStartTests(unittest.TestCase):
             kinds = [c[0] for c in adapter.calls]
             self.assertEqual(
                 kinds,
-                ["set_reaction", "send_placeholder_card", "remember_placeholder_message_id"],
+                ["send_placeholder_card"],
             )
-            reaction_call = adapter.calls[0]
-            self.assertEqual(reaction_call[1], ("om_inbound_001", "OnIt"))
-            send_call = adapter.calls[1]
+            send_call = adapter.calls[0]
             placeholder_card = send_call[2]["card"]
             self.assertIn("header", placeholder_card)
             self.assertEqual(placeholder_card["header"]["template"], "blue")
@@ -128,8 +121,7 @@ class FeishuActivitySinkSessionStartTests(unittest.TestCase):
 
     def test_session_start_noop_when_inbound_context_missing(self) -> None:
         adapter = _FakeAdapter()
-        adapter._last_inbound_message_id = None
-        adapter._last_inbound_chat_id = None
+        adapter.inbound_context = None
         sink = FeishuActivitySink(
             task_id="ISSUE-2",
             feishu_adapter=adapter,  # type: ignore[arg-type]
@@ -153,9 +145,7 @@ class FeishuActivitySinkSessionStartTests(unittest.TestCase):
         )
         # Directly invoke the listener path with a non-matching issue_id
         # (simulates ``StatusDashboard`` firing for a different session).
-        sink._on_session_status(
-            SessionStatus(issue_id="other-task", issue_identifier="other")
-        )
+        sink._on_session_status(SessionStatus(issue_id="other-task", issue_identifier="other"))
         drain_pending_for_test()
         self.assertEqual(adapter.calls, [])
 
@@ -165,13 +155,14 @@ class FeishuActivitySinkProgressTests(unittest.TestCase):
 
     def test_phase_complete_updates_placeholder_card(self) -> None:
         adapter = _FakeAdapter()
-        adapter._placeholder_message_ids["ISSUE-4"] = "om_placeholder_001"
         sink = FeishuActivitySink(
             task_id="ISSUE-4",
             feishu_adapter=adapter,  # type: ignore[arg-type]
             clock=lambda: 2.0,
             phases_total=4,
         )
+        sink.notify_session_start(issue_id="ISSUE-4")
+        drain_pending_for_test()
         session = _make_session_stub(identifier="ISSUE-4")
         sink.on_phase_complete(
             PhaseComplete(phase=2, turn_count=2),
@@ -179,17 +170,13 @@ class FeishuActivitySinkProgressTests(unittest.TestCase):
         )
         drain_pending_for_test()
 
-        update_calls = [
-            c for c in adapter.calls if c[0] == "update_progress_card"
-        ]
+        update_calls = [c for c in adapter.calls if c[0] == "update_progress_card"]
         self.assertEqual(len(update_calls), 1)
         _op, args, kwargs = update_calls[0]
         self.assertEqual(args, ("om_placeholder_001",))
         card = kwargs["card"]
         # Progress for phase 2/4 should be 50%.
-        progress_elements = [
-            el for el in card["elements"] if el.get("tag") == "progress"
-        ]
+        progress_elements = [el for el in card["elements"] if el.get("tag") == "progress"]
         self.assertEqual(progress_elements[0]["percent"], 50)
 
     def test_phase_complete_noop_when_placeholder_missing(self) -> None:
@@ -199,43 +186,35 @@ class FeishuActivitySinkProgressTests(unittest.TestCase):
             feishu_adapter=adapter,  # type: ignore[arg-type]
             clock=lambda: 1.0,
         )
-        sink.on_phase_complete(
-            PhaseComplete(phase=1, turn_count=1), _make_session_stub()
-        )
+        sink.on_phase_complete(PhaseComplete(phase=1, turn_count=1), _make_session_stub())
         drain_pending_for_test()
         self.assertEqual(adapter.calls, [])
 
 
 class FeishuActivitySinkTerminalTests(unittest.TestCase):
-    """``on_session_complete`` maps reasons to reaction + card template."""
+    """``on_session_complete`` maps reasons to the terminal card template."""
 
     def _assert_terminal(
         self,
         reason: str,
         *,
-        emoji: str,
         header: str,
         title_substring: str,
     ) -> None:
         adapter = _FakeAdapter()
-        adapter._placeholder_message_ids["ISSUE-6"] = "om_placeholder_006"
+        adapter.placeholder_result = "om_placeholder_006"
         sink = FeishuActivitySink(
             task_id="ISSUE-6",
             feishu_adapter=adapter,  # type: ignore[arg-type]
             clock=lambda: 1.0,
         )
-        sink.on_session_complete(
-            SessionComplete(reason=reason), _make_session_stub()
-        )
+        sink.notify_session_start(issue_id="ISSUE-6")
         drain_pending_for_test()
-        reactions = [
-            c for c in adapter.calls if c[0] == "set_reaction"
-        ]
-        self.assertEqual(len(reactions), 1)
-        self.assertEqual(reactions[0][1], ("om_inbound_001", emoji))
-        updates = [
-            c for c in adapter.calls if c[0] == "update_progress_card"
-        ]
+        sink.on_session_complete(SessionComplete(reason=reason), _make_session_stub())
+        drain_pending_for_test()
+        reactions = [c for c in adapter.calls if c[0] == "set_reaction"]
+        self.assertEqual(reactions, [])
+        updates = [c for c in adapter.calls if c[0] == "update_progress_card"]
         self.assertEqual(len(updates), 1)
         card = updates[0][2]["card"]
         self.assertEqual(card["header"]["template"], header)
@@ -244,7 +223,6 @@ class FeishuActivitySinkTerminalTests(unittest.TestCase):
     def test_success_terminal(self) -> None:
         self._assert_terminal(
             "success",
-            emoji="OK",
             header="green",
             title_substring="已完成",
         )
@@ -252,7 +230,6 @@ class FeishuActivitySinkTerminalTests(unittest.TestCase):
     def test_paused_terminal(self) -> None:
         self._assert_terminal(
             "paused",
-            emoji="Typing",
             header="grey",
             title_substring="暂停",
         )
@@ -260,27 +237,28 @@ class FeishuActivitySinkTerminalTests(unittest.TestCase):
     def test_failure_terminal(self) -> None:
         self._assert_terminal(
             "stagnation",
-            emoji="Cross",
             header="red",
             title_substring="失败",
         )
 
     def test_session_complete_clears_placeholder(self) -> None:
         adapter = _FakeAdapter()
-        adapter._placeholder_message_ids["ISSUE-7"] = "om_placeholder_007"
+        adapter.placeholder_result = "om_placeholder_007"
         sink = FeishuActivitySink(
             task_id="ISSUE-7",
             feishu_adapter=adapter,  # type: ignore[arg-type]
             clock=lambda: 1.0,
         )
+        sink.notify_session_start(issue_id="ISSUE-7")
+        drain_pending_for_test()
         sink.on_session_complete(
             SessionComplete(reason="success"),
             _make_session_stub(),
         )
         drain_pending_for_test()
-        self.assertNotIn("ISSUE-7", adapter._placeholder_message_ids)
+        self.assertIsNone(sink.automation_state()["placeholder_message_id"])
 
-    def test_session_complete_without_placeholder_still_reacts(self) -> None:
+    def test_session_complete_without_placeholder_does_not_react(self) -> None:
         adapter = _FakeAdapter()
         sink = FeishuActivitySink(
             task_id="ISSUE-8",
@@ -293,18 +271,20 @@ class FeishuActivitySinkTerminalTests(unittest.TestCase):
         )
         drain_pending_for_test()
         reactions = [c for c in adapter.calls if c[0] == "set_reaction"]
-        self.assertEqual(len(reactions), 1)
+        self.assertEqual(reactions, [])
 
 
 class FeishuActivitySinkExceptionIsolationTests(unittest.TestCase):
     """Adapter failures must never propagate into the sink's callers."""
 
-    def test_adapter_reaction_failure_does_not_raise(self) -> None:
+    def test_adapter_card_failure_does_not_raise(self) -> None:
         adapter = _FakeAdapter()
+
         # Patch the async method to raise.
         async def _boom(*a, **kw):
             raise RuntimeError("sdk blew up")
-        adapter.set_reaction = _boom  # type: ignore[assignment]
+
+        adapter.send_placeholder_card = _boom  # type: ignore[assignment]
         sink = FeishuActivitySink(
             task_id="ISSUE-9",
             feishu_adapter=adapter,  # type: ignore[arg-type]
@@ -320,12 +300,14 @@ class FeishuActivitySinkStateReportTests(unittest.TestCase):
 
     def test_automation_state_snapshot(self) -> None:
         adapter = _FakeAdapter()
-        adapter._placeholder_message_ids["ISSUE-10"] = "om_placeholder_010"
+        adapter.placeholder_result = "om_placeholder_010"
         sink = FeishuActivitySink(
             task_id="ISSUE-10",
             feishu_adapter=adapter,  # type: ignore[arg-type]
             clock=lambda: 5.0,
         )
+        sink.notify_session_start(issue_id="ISSUE-10")
+        drain_pending_for_test()
         sink.on_phase_complete(
             PhaseComplete(phase=3, turn_count=3),
             _make_session_stub(identifier="ISSUE-10"),

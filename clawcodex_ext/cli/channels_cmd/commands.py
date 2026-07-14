@@ -890,7 +890,7 @@ def _wizard_edit_feishu(cfg, path, channel: ChannelConfig, ui: InteractiveInput)
                 previous_extra = dict(channel.extra or {})
                 # Re-login replaces credentials but preserves non-login tuning
                 # (batching / send / approval_cards) the user may have customized.
-                for key in ("batching", "send", "approval_cards"):
+                for key in ("batching", "send", "approval_cards", "reactions"):
                     if key in previous_extra:
                         extra[key] = previous_extra[key]
                 if previous_extra.get("allowed_user_open_id") and not extra.get(

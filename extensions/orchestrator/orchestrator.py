@@ -14,6 +14,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from clawcodex_ext.services.channels.capabilities import (
+    CardUpdateCapability,
+    ChannelCapability,
+)
+from clawcodex_ext.tool_system.context import ToolContext
+
 from .agent_runner import AgentRunner, AgentSession, RetryItem
 from .config.schema import WorkflowConfig
 from .debug_log import append_debug_event
@@ -48,7 +54,6 @@ from .repro_gate import (
 from .review_feedback import ReviewFeedbackService, ReviewFollowup
 from .rules_learner import RuleEngine, RuleStore
 from .status_dashboard import SessionStatus, StatusDashboard
-from clawcodex_ext.tool_system.context import ToolContext
 from clawcodex_ext.utils.git import (
     _run_git,
     get_default_branch,
@@ -391,21 +396,12 @@ class Orchestrator:
                     payload=self._issue_payload_for_task_id(task_id),
                 )
             )
-        # F-??? IM-side activity sink: when ``im_channel_adapter`` is a
-        # real Feishu adapter (i.e. exposes ``set_reaction`` /
-        # ``update_progress_card`` / ``send_placeholder_card``), attach a
-        # :class:`FeishuActivitySink` so the user's inbound message gets a
-        # 👀 reaction and a placeholder card streams phase progress. Uses
-        # duck-typed ``hasattr`` to avoid a hard import (other channels
-        # — Slack, Discord — could satisfy the same shape later).
+        # IM-side activity sink: attach only through the public card-update
+        # protocol and its declared capability. Channel-specific caches and
+        # loop internals stay behind the adapter boundary.
         im_adapter = getattr(self, "im_channel_adapter", None)
-        if im_adapter is not None and all(
-            hasattr(im_adapter, name)
-            for name in (
-                "set_reaction",
-                "update_progress_card",
-                "send_placeholder_card",
-            )
+        if isinstance(im_adapter, CardUpdateCapability) and im_adapter.capabilities.has(
+            ChannelCapability.CARD_UPDATE
         ):
             from .feishu_activity_sink import FeishuActivitySink
 

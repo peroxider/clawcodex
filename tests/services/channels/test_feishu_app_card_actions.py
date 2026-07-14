@@ -31,7 +31,7 @@ def _config() -> ChannelConfig:
     )
 
 
-def _card_action_event(*, approval_id: str, nonce: str) -> SimpleNamespace:
+def _card_action_event(*, approval_id: str, nonce: str, choice: str = "y") -> SimpleNamespace:
     return SimpleNamespace(
         message_id="om_card",
         chat_id="oc_chat",
@@ -42,10 +42,22 @@ def _card_action_event(*, approval_id: str, nonce: str) -> SimpleNamespace:
                 "clawcodex_action": "permission_approval",
                 "approval_id": approval_id,
                 "nonce": nonce,
-                "choice": "y",
+                "choice": choice,
             },
         ),
     )
+
+
+def test_feishu_adapter_exposes_public_inbound_activity_context() -> None:
+    adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda _settings: _FakeChannel())
+
+    assert adapter.last_inbound_context() is None
+    adapter._remember_inbound(SimpleNamespace(message_id="om_activity", chat_id="oc_chat"))
+
+    context = adapter.last_inbound_context()
+    assert context is not None
+    assert context.message_id == "om_activity"
+    assert context.chat_id == "oc_chat"
 
 
 @pytest.mark.asyncio
@@ -85,3 +97,34 @@ async def test_feishu_card_click_updates_card_before_slow_gateway_handler() -> N
         await asyncio.wait_for(task, timeout=1.0)
 
     assert len(delivered) == 1
+
+
+@pytest.mark.asyncio
+async def test_feishu_session_approval_click_updates_card_as_allowed() -> None:
+    channel = _FakeChannel()
+    delivered = []
+    adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda _settings: channel)
+    adapter._channel = channel
+    adapter._main_loop = asyncio.get_running_loop()
+    adapter.set_inbound_handler(lambda message: delivered.append(message))
+    pending = adapter.approval_manager.create_pending(
+        origin="feishu:dm:cli_app:ou_allowed",
+        chat_id="oc_chat",
+        allowed_user_open_id="ou_allowed",
+        choices={"y", "s", "n"},
+        allow_choices={"y", "s"},
+        ttl_seconds=60,
+    )
+
+    await adapter._on_card_action(
+        _card_action_event(
+            approval_id=pending.approval_id,
+            nonce=pending.nonce,
+            choice="s",
+        )
+    )
+
+    assert len(delivered) == 1
+    assert delivered[0].text == "s"
+    assert channel.updated_cards[0]["card"]["header"]["template"] == "green"
+    assert "已允许" in channel.updated_cards[0]["card"]["header"]["title"]["content"]

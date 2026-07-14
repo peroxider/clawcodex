@@ -18,16 +18,21 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Awaitable, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable
 
 from clawcodex_ext.messaging.semantics import MessageClassifier
+from clawcodex_ext.services.channels.capabilities import ProcessingOutcome
 
 logger = logging.getLogger(__name__)
 
+from .config import CommandAllowlistConfig
 from .models import AckLayer, AckReceipt, InboundMessage, MessageSemantics
 from .repl_command_gate import check_orchestrator_command, check_repl_command
 from .router import SessionRouter
 from .store import ReliabilityStore
+
+if TYPE_CHECKING:
+    from .processing_status import ProcessingStatusManager
 
 InboundHandler = Callable[[InboundMessage], Awaitable[AckReceipt | None]]
 PushHandler = Callable[[InboundMessage], Awaitable[bool]]
@@ -44,10 +49,16 @@ class InboundDispatcher:
         router: SessionRouter,
         *,
         classifier: MessageClassifier | None = None,
+        command_allowlists: CommandAllowlistConfig | None = None,
+        processing_status: "ProcessingStatusManager | None" = None,
     ) -> None:
         self._store = store
         self._router = router
         self._classifier = classifier or MessageClassifier()
+        effective_allowlists = command_allowlists or CommandAllowlistConfig()
+        self._repl_allowed_commands = frozenset(effective_allowlists.repl)
+        self._orchestrator_allowed_commands = frozenset(effective_allowlists.orchestrator)
+        self._processing_status = processing_status
         self._handler: InboundHandler | None = None
         self._push_handler: PushHandler | None = None
 
@@ -109,7 +120,10 @@ class InboundDispatcher:
         # 3.5 opt-in runtime 白名单门禁：只放行白名单内的斜杠命令，
         # 其余斜杠命令在网关层直接拒绝（不 push、不入队）。
         if target.host_type == "repl":
-            allowed, reason = check_repl_command(message.text or "")
+            allowed, reason = check_repl_command(
+                message.text or "",
+                allowed_commands=self._repl_allowed_commands,
+            )
             if not allowed:
                 self._store.audit(
                     "repl_command_blocked",
@@ -130,7 +144,10 @@ class InboundDispatcher:
                     notify_user=True,
                 )
         elif target.host_type == "orchestrator":
-            allowed, reason = check_orchestrator_command(message.text or "")
+            allowed, reason = check_orchestrator_command(
+                message.text or "",
+                allowed_commands=self._orchestrator_allowed_commands,
+            )
             if not allowed:
                 self._store.audit(
                     "orchestrator_command_blocked",
@@ -150,6 +167,8 @@ class InboundDispatcher:
                     message=reason,
                     notify_user=True,
                 )
+        if self._processing_status is not None:
+            await self._processing_status.start(message)
         # 4. opt-in origin (REPL/orchestrator bound over IPC) → push the whole
         # message to the peer; the peer owns its own queueing/semantics. This
         # overrides the default in-process handler.
@@ -168,10 +187,34 @@ class InboundDispatcher:
             )
         # 5. dispatch → handler
         if self._handler is not None:
-            result = await self._handler(message)
+            try:
+                result = await self._handler(message)
+            except Exception:
+                await self._complete_processing(message, ProcessingOutcome.FAILURE)
+                raise
             if result is not None:
+                outcome = (
+                    ProcessingOutcome.SUCCESS
+                    if result.layer is AckLayer.PROCESSED
+                    else ProcessingOutcome.FAILURE
+                )
+                await self._complete_processing(message, outcome)
                 return result
+        await self._complete_processing(message, ProcessingOutcome.FAILURE)
         return AckReceipt(delivery_id, AckLayer.ACCEPTED, message="accepted")
+
+    async def _complete_processing(
+        self,
+        message: InboundMessage,
+        outcome: ProcessingOutcome,
+    ) -> None:
+        if self._processing_status is None:
+            return
+        await self._processing_status.complete(
+            message.message_id,
+            outcome,
+            origin=message.origin,
+        )
 
 
 __all__ = ["InboundDispatcher", "InboundHandler"]

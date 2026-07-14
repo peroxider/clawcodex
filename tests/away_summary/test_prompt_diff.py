@@ -38,7 +38,7 @@ def test_manual_trigger_uses_strict_three_part_template() -> None:
     assert "high-level goal" in system.lower()
     # Bullets are requested, but fixed labels are forbidden.
     assert "bullet list" in system.lower()
-    assert 'fixed section labels' in system.lower()
+    assert "fixed section labels" in system.lower()
     assert "current state:" not in system.lower()
     assert "next step:" not in system.lower()
     assert "Return only the recap" in user
@@ -64,7 +64,7 @@ def test_auto_trigger_uses_relaxed_three_sentence_template() -> None:
     assert "broader session memory" in system.lower()
     # Bullets are requested, but fixed labels are forbidden.
     assert "bullet list" in system.lower()
-    assert 'fixed section labels' in system.lower()
+    assert "fixed section labels" in system.lower()
     assert "current state:" not in system.lower()
     assert "next step:" not in system.lower()
     # Three-part strict ordering must NOT be required for auto.

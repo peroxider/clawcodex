@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from clawcodex_ext.services.channels.models import ChannelConfig, ChannelType
 from clawcodex_ext.services.im_gateway.config import (
+    CommandAllowlistConfig,
     GatewayConfig,
     ReliabilityConfig,
     load_config,
@@ -49,6 +52,54 @@ def test_config_roundtrip(tmp_path) -> None:
     slack = loaded.get_channel("slack-ops")
     assert slack is not None
     assert slack.enabled is False
+    assert loaded.command_allowlists == CommandAllowlistConfig()
+    raw = p.read_text(encoding="utf-8")
+    assert "command_allowlists:" in raw
+    assert "repl:" in raw
+    assert "orchestrator:" in raw
+
+
+def test_config_roundtrip_preserves_explicit_command_allowlists(tmp_path) -> None:
+    p = tmp_path / "channels.yaml"
+    cfg = _cfg()
+    cfg.command_allowlists = CommandAllowlistConfig(
+        repl=("/stop", "/model"),
+        orchestrator=("/server status", "/issue takeover"),
+    )
+
+    save_config(cfg, p)
+    loaded = load_config(p)
+
+    assert loaded.command_allowlists.repl == ("/stop", "/model")
+    assert loaded.command_allowlists.orchestrator == (
+        "/server status",
+        "/issue takeover",
+    )
+
+
+def test_config_explicit_empty_command_allowlists_block_all_slash_commands(tmp_path) -> None:
+    p = tmp_path / "channels.yaml"
+    p.write_text(
+        "command_allowlists:\n  repl: []\n  orchestrator: []\n",
+        encoding="utf-8",
+    )
+
+    loaded = load_config(p)
+
+    assert loaded.command_allowlists.repl == ()
+    assert loaded.command_allowlists.orchestrator == ()
+
+
+def test_config_omitted_runtime_allowlist_keeps_its_default() -> None:
+    loaded = GatewayConfig.from_dict({"command_allowlists": {"repl": []}})
+
+    assert loaded.command_allowlists.repl == ()
+    assert loaded.command_allowlists.orchestrator == CommandAllowlistConfig().orchestrator
+
+
+def test_config_rejects_malformed_command_allowlist() -> None:
+    with pytest.raises(ValueError, match="command_allowlists.repl"):
+        GatewayConfig.from_dict({"command_allowlists": {"repl": "/stop"}})
 
 
 def test_load_config_normalizes_legacy_wechat_name_to_single_instance(tmp_path) -> None:

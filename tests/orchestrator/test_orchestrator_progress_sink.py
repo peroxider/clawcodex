@@ -511,6 +511,71 @@ class TestPerSessionIsolation(unittest.TestCase):
             self.assertEqual(len(stages_a), 2)
             self.assertEqual(len(stages_b), 1)
 
+    def test_orchestrator_attaches_activity_sink_via_declared_public_capability(self) -> None:
+        from clawcodex_ext.services.channels.capabilities import (
+            ChannelCapability,
+            ChannelCapabilitySet,
+            InboundActivityContext,
+        )
+        from extensions.orchestrator.feishu_activity_sink import FeishuActivitySink
+        from extensions.orchestrator.orchestrator import Orchestrator
+        from src.tool_system.context import ToolContext
+
+        class _Cards:
+            channel_id = "cards"
+            capabilities = ChannelCapabilitySet.of(ChannelCapability.CARD_UPDATE)
+
+            def last_inbound_context(self):
+                return InboundActivityContext(message_id="om_1", chat_id="oc_1")
+
+            async def send_placeholder_card(self, chat_id, card):
+                return "om_placeholder"
+
+            async def update_progress_card(self, message_id, card):
+                return True
+
+        with tempfile.TemporaryDirectory() as tmp:
+            orchestrator = Orchestrator.__new__(Orchestrator)
+            orchestrator.workflow = WorkflowConfig()
+            orchestrator._progress_context = ToolContext(workspace_root=tmp)
+            orchestrator._progress_context.tasks["a"] = {"id": "a", "metadata": {}}
+            orchestrator.im_channel_adapter = _Cards()
+            orchestrator.status_dashboard = None
+
+            sink = orchestrator._build_session_sink("a")
+
+        assert any(isinstance(child, FeishuActivitySink) for child in sink)
+
+    def test_orchestrator_rejects_undeclared_card_shape(self) -> None:
+        from clawcodex_ext.services.channels.capabilities import ChannelCapabilitySet
+        from extensions.orchestrator.feishu_activity_sink import FeishuActivitySink
+        from extensions.orchestrator.orchestrator import Orchestrator
+        from src.tool_system.context import ToolContext
+
+        class _UndeclaredCards:
+            channel_id = "cards"
+            capabilities = ChannelCapabilitySet.of()
+
+            def last_inbound_context(self):
+                return None
+
+            async def send_placeholder_card(self, chat_id, card):
+                return "om_placeholder"
+
+            async def update_progress_card(self, message_id, card):
+                return True
+
+        with tempfile.TemporaryDirectory() as tmp:
+            orchestrator = Orchestrator.__new__(Orchestrator)
+            orchestrator.workflow = WorkflowConfig()
+            orchestrator._progress_context = ToolContext(workspace_root=tmp)
+            orchestrator._progress_context.tasks["a"] = {"id": "a", "metadata": {}}
+            orchestrator.im_channel_adapter = _UndeclaredCards()
+
+            sink = orchestrator._build_session_sink("a")
+
+        assert not any(isinstance(child, FeishuActivitySink) for child in sink)
+
 
 if __name__ == "__main__":
     unittest.main()

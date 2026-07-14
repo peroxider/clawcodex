@@ -59,6 +59,13 @@ def test_resolved_permission_card_removes_action_buttons() -> None:
     assert all(element.get("tag") != "action" for element in card["elements"])
 
 
+def test_resolved_permission_card_treats_session_choice_as_allowed() -> None:
+    card = build_resolved_permission_card(choice="s", allowed=True)
+
+    assert card["header"]["template"] == "green"
+    assert "已允许" in card["header"]["title"]["content"]
+
+
 def test_card_click_from_allowed_user_emits_approval_inbound() -> None:
     manager = ApprovalCardManager(clock=lambda: 100.0)
     manager.create_pending(
@@ -82,6 +89,26 @@ def test_card_click_from_allowed_user_emits_approval_inbound() -> None:
     assert inbound.semantic_tags == ["approval"]
     assert inbound.raw["source"] == "feishu_card_action"
     assert "ap1" not in manager.pending
+
+
+def test_card_click_session_choice_carries_explicit_allow_decision() -> None:
+    manager = ApprovalCardManager(clock=lambda: 100.0)
+    manager.create_pending(
+        approval_id="ap1",
+        nonce="n1",
+        origin="feishu:dm:cli_app:ou_allowed",
+        chat_id="oc_chat",
+        allowed_user_open_id="ou_allowed",
+        choices={"y", "s", "n"},
+        allow_choices={"y", "s"},
+        ttl_seconds=60,
+    )
+
+    inbound = manager.resolve_action(_event(choice="s"))
+
+    assert inbound is not None
+    assert inbound.text == "s"
+    assert inbound.raw["decision"] == "allow"
 
 
 def test_card_click_from_sdk_model_object_emits_approval_inbound() -> None:

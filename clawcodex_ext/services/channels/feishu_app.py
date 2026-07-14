@@ -20,6 +20,7 @@ import inspect
 import logging
 import re
 import time
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from typing import Any
@@ -29,6 +30,8 @@ from .capabilities import (
     ChannelAdapter,
     ChannelCapability,
     ChannelCapabilitySet,
+    InboundActivityContext,
+    ProcessingOutcome,
 )
 from .feishu_cards import (
     ApprovalCardManager,
@@ -55,6 +58,9 @@ RetrySleep = Callable[[float], Awaitable[None]]
 
 _MARKDOWN_HINT_RE = re.compile(r"(```)|(^#{1,6}\s)|(\*\*.+\*\*)|(^[-*]\s)", re.MULTILINE)
 _FEISHU_SDK_WS_TASK_NAMES = frozenset({"_ping_loop", "_receive_message_loop", "_start_clear_cron"})
+_FEISHU_REACTION_IN_PROGRESS = "Typing"
+_FEISHU_REACTION_FAILURE = "CrossMark"
+_FEISHU_PROCESSING_REACTION_CACHE_SIZE = 1024
 
 _FEISHU_CAPABILITIES = ChannelCapabilitySet.of(
     ChannelCapability.OUTBOUND_TEXT,
@@ -62,6 +68,7 @@ _FEISHU_CAPABILITIES = ChannelCapabilitySet.of(
     ChannelCapability.CONTEXT_REPLY,
     ChannelCapability.LOGIN_MANAGED,
     ChannelCapability.REACTION,
+    ChannelCapability.PROCESSING_STATUS,
     ChannelCapability.CARD_UPDATE,
     descriptors={
         ChannelCapability.OUTBOUND_TEXT: CapabilityDescriptor(
@@ -73,6 +80,10 @@ _FEISHU_CAPABILITIES = ChannelCapabilitySet.of(
         ),
         ChannelCapability.REACTION: CapabilityDescriptor(
             ChannelCapability.REACTION,
+            requires_login=True,
+        ),
+        ChannelCapability.PROCESSING_STATUS: CapabilityDescriptor(
+            ChannelCapability.PROCESSING_STATUS,
             requires_login=True,
         ),
         ChannelCapability.CARD_UPDATE: CapabilityDescriptor(
@@ -111,14 +122,11 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         self._last_sender: str | None = None
         self._last_inbound_at: float | None = None
         self._last_outbound_at: float | None = None
-        # F-??? activity-sink bookkeeping: record the most recent inbound
-        # message_id+chat_id so the agent-activity sink can react (👀) to it,
-        # and stash placeholder-card message_ids by task_id so we can stream
-        # progress into them later. Both are best-effort: if the SDK ever
-        # drops a message, the sink degrades silently.
+        # Keep the latest inbound destination behind the public activity-card
+        # capability. Placeholder message ids belong to the consuming sink.
         self._last_inbound_message_id: str | None = None
         self._last_inbound_chat_id: str | None = None
-        self._placeholder_message_ids: dict[str, str] = {}
+        self._pending_processing_reactions: OrderedDict[str, str] = OrderedDict()
         self.approval_manager = ApprovalCardManager(
             clock=self._clock,
             token_ttl_seconds=self._settings.action_token_ttl_seconds,
@@ -167,6 +175,9 @@ class FeishuAppChannelAdapter(ChannelAdapter):
                 "approval_cards": "supported"
                 if self._settings.approval_cards_enabled
                 else "disabled",
+                "processing_reactions": (
+                    "enabled" if self._settings.reactions_enabled else "disabled"
+                ),
             },
         )
 
@@ -322,9 +333,16 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         card = build_resolved_permission_card(
             choice=inbound.text,
             operator_open_id=inbound.from_user_id,
+            allowed=(inbound.raw or {}).get("decision") == "allow",
         )
         try:
-            await channel.update_card(message_id, card)
+            result = await channel.update_card(message_id, card)
+            if getattr(result, "success", True) is False:
+                logger.warning(
+                    "feishu update_card rejected: message_id=%s error=%s",
+                    message_id[:16],
+                    getattr(result, "error", None),
+                )
         except Exception as exc:  # noqa: BLE001
             logger.warning("feishu update_card failed: %s", exc)
 
@@ -357,11 +375,10 @@ class FeishuAppChannelAdapter(ChannelAdapter):
     def _remember_inbound(self, inbound: Any) -> None:
         """Cache the most recent inbound message_id + chat_id.
 
-        The agent-activity sink reads these to react to the user's original
-        message (👀 while processing) and to target the placeholder card it
-        later sends. ``inbound`` is the raw SDK event object, so we do
-        duck-typed ``getattr`` reads — different SDK versions place these
-        fields under slightly different names.
+        Consumers access this state only through ``last_inbound_context``.
+        ``inbound`` is the raw SDK event object, so we do duck-typed
+        ``getattr`` reads — different SDK versions place these fields under
+        slightly different names.
         """
         message_id = getattr(inbound, "message_id", None) or getattr(
             getattr(inbound, "event", None), "message_id", None
@@ -390,28 +407,40 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         emoji_type: str,
         *,
         remove: bool = False,
+        _remember_handle: bool = True,
     ) -> bool:
         """React to / un-react to an inbound message.
 
-        Feishu's :class:`lark_oapi.channel.FeishuChannel` does not expose a
-        first-class "bot typing" push, so the agent-activity sink uses
-        emoji reactions as the visible "in-flight" signal. ``emoji_type``
-        accepts Feishu message-reaction constants (``OnIt``, ``OK``,
-        ``Cross``, ``Typing`` …). All SDK calls are wrapped in
-        :func:`asyncio.to_thread` because ``add_reaction`` blocks the
-        running loop otherwise.
+        The async SDK returns an opaque ``reaction_id`` for each add call;
+        deletion must use that exact handle, so it is cached until removal.
         """
         if self._channel is None or not message_id or not emoji_type:
             return False
         channel = self._channel
         try:
+            key = message_id
             if remove:
-                # SDK v1.7.0 lacks a public ``remove_reaction`` helper; the
-                # best we can do is add the follow-up emoji ("OK"/"Cross")
-                # which replaces the visual state for the user. Returning
-                # True here is intentional — there is nothing to remove.
+                reaction_id = self._pending_processing_reactions.get(key)
+                if not reaction_id:
+                    return False
+                result = channel.remove_reaction(message_id, reaction_id)
+                if inspect.isawaitable(result):
+                    result = await result
+                if not _sdk_result_succeeded(result):
+                    return False
+                self._pending_processing_reactions.pop(key, None)
                 return True
-            await asyncio.to_thread(channel.add_reaction, message_id, emoji_type)
+            result = channel.add_reaction(message_id, emoji_type)
+            if inspect.isawaitable(result):
+                result = await result
+            if not _sdk_result_succeeded(result):
+                return False
+            if not _remember_handle:
+                return True
+            reaction_id = _reaction_id_from_result(result)
+            if not reaction_id:
+                return False
+            self._remember_reaction(key, reaction_id)
             return True
         except Exception as exc:  # noqa: BLE001
             logger.warning(
@@ -422,14 +451,63 @@ class FeishuAppChannelAdapter(ChannelAdapter):
             )
             return False
 
+    def _remember_reaction(self, message_id: str, reaction_id: str) -> None:
+        cache = self._pending_processing_reactions
+        cache[message_id] = reaction_id
+        cache.move_to_end(message_id)
+        while len(cache) > _FEISHU_PROCESSING_REACTION_CACHE_SIZE:
+            cache.popitem(last=False)
+
+    async def on_processing_start(self, message_id: str) -> bool:
+        if not message_id:
+            return False
+        if not self._settings.reactions_enabled:
+            return True
+        if message_id in self._pending_processing_reactions:
+            self._pending_processing_reactions.move_to_end(message_id)
+            return True
+        return await self.set_reaction(message_id, _FEISHU_REACTION_IN_PROGRESS)
+
+    async def on_processing_complete(
+        self,
+        message_id: str,
+        outcome: ProcessingOutcome,
+    ) -> bool:
+        if not message_id:
+            return False
+        if not self._settings.reactions_enabled:
+            return True
+        if message_id in self._pending_processing_reactions:
+            removed = await self.set_reaction(
+                message_id,
+                _FEISHU_REACTION_IN_PROGRESS,
+                remove=True,
+            )
+            if not removed:
+                # Avoid showing contradictory "working" and "failed" badges.
+                return False
+        if outcome is ProcessingOutcome.FAILURE:
+            # CrossMark is terminal and intentionally remains visible. Do
+            # not put its deletion handle into the processing LRU: when the
+            # cache is full, a terminal add for a message whose Typing add
+            # failed must not evict another message's live Typing handle.
+            return await self.set_reaction(
+                message_id,
+                _FEISHU_REACTION_FAILURE,
+                _remember_handle=False,
+            )
+        return True
+
     async def update_progress_card(self, message_id: str, card: dict) -> bool:
         """Edit a previously-sent placeholder card (progress bars)."""
         if self._channel is None or not message_id or not card:
             return False
         channel = self._channel
         try:
-            await asyncio.to_thread(channel.update_card, message_id, card)
-            return True
+            result = channel.update_card(message_id, card)
+            if inspect.isawaitable(result):
+                result = await result
+            return _sdk_result_succeeded(result)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "feishu update_card failed: message_id=%s err=%s",
@@ -437,6 +515,16 @@ class FeishuAppChannelAdapter(ChannelAdapter):
                 exc,
             )
             return False
+
+    def last_inbound_context(self) -> InboundActivityContext | None:
+        """Return the latest inbound message destination for activity cards."""
+
+        if not self._last_inbound_message_id or not self._last_inbound_chat_id:
+            return None
+        return InboundActivityContext(
+            message_id=self._last_inbound_message_id,
+            chat_id=self._last_inbound_chat_id,
+        )
 
     async def send_placeholder_card(self, chat_id: str, card: dict) -> str | None:
         """Send the agent-activity placeholder card; return its message_id.
@@ -458,17 +546,6 @@ class FeishuAppChannelAdapter(ChannelAdapter):
             return None
         receipt = result.provider_receipt or ""
         return receipt or None
-
-    def remember_placeholder_message_id(self, task_id: str, message_id: str | None) -> None:
-        """Record a placeholder card message_id so later updates can target it."""
-        if task_id and message_id:
-            self._placeholder_message_ids[task_id] = message_id
-
-    def forget_placeholder_message_id(self, task_id: str) -> None:
-        self._placeholder_message_ids.pop(task_id, None)
-
-    def placeholder_message_id(self, task_id: str) -> str | None:
-        return self._placeholder_message_ids.get(task_id)
 
     # -- outbound --------------------------------------------------------
 
@@ -515,6 +592,9 @@ class FeishuAppChannelAdapter(ChannelAdapter):
             chat_id=chat_id,
             allowed_user_open_id=self._settings.allowed_user_open_id,
             choices={str(option.get("value")) for option in options},
+            allow_choices={
+                str(option.get("value")) for option in options if option.get("decision") == "allow"
+            },
             ttl_seconds=int(
                 permission.get("expires_in_seconds") or self._settings.decision_ttl_seconds
             ),
@@ -814,6 +894,38 @@ def _result_raw(result: Any) -> dict[str, Any]:
     return {}
 
 
+def _sdk_result_succeeded(result: Any) -> bool:
+    """Normalize lark-oapi SendResult and lightweight test doubles."""
+    if result is None:
+        return True
+    success = getattr(result, "success", None)
+    if callable(success):
+        return bool(success())
+    if success is not None:
+        return bool(success)
+    ok = getattr(result, "ok", None)
+    if callable(ok):
+        return bool(ok())
+    if ok is not None:
+        return bool(ok)
+    if isinstance(result, dict):
+        return int(result.get("code", 0) or 0) == 0
+    raw = _result_raw(result)
+    return int(raw.get("code", 0) or 0) == 0
+
+
+def _reaction_id_from_result(result: Any) -> str | None:
+    data = getattr(result, "data", None)
+    direct = getattr(data, "reaction_id", None) if data is not None else None
+    if direct:
+        return str(direct)
+    raw = result if isinstance(result, dict) else _result_raw(result)
+    raw_data = raw.get("data") if isinstance(raw, dict) else None
+    if isinstance(raw_data, dict) and raw_data.get("reaction_id"):
+        return str(raw_data["reaction_id"])
+    return None
+
+
 def _error_result_for(
     channel_id: str,
     message: str,
@@ -877,11 +989,23 @@ def _permission_options(permission: dict[str, Any]) -> list[dict[str, str]]:
             {
                 "value": str(item.get("value") or ""),
                 "label": str(item.get("label") or item.get("value") or ""),
+                "decision": _permission_option_decision(item),
             }
             for item in options
             if isinstance(item, dict) and item.get("value")
         ]
-    return [{"value": "y", "label": "允许"}, {"value": "n", "label": "拒绝"}]
+    return [
+        {"value": "y", "label": "允许", "decision": "allow"},
+        {"value": "n", "label": "拒绝", "decision": "deny"},
+    ]
+
+
+def _permission_option_decision(option: dict[str, Any]) -> str:
+    decision = str(option.get("decision") or "").strip().lower()
+    if decision in {"allow", "deny"}:
+        return decision
+    value = str(option.get("value") or "").strip().lower()
+    return "allow" if value in {"y", "yes", "1", "e", "enable", "s", "session"} else "deny"
 
 
 __all__ = ["FeishuAppChannelAdapter"]

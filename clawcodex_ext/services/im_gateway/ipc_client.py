@@ -164,7 +164,7 @@ class GatewayIpcClient:
             return None
 
     async def _write_frame_no_reply(self, frame: GatewayFrame) -> None:
-        """Write a frame that is itself a reply and should not get another reply."""
+        """Write a fire-and-forget frame without waiting on the read loop."""
         if self._writer is None:
             raise RuntimeError("not connected")
         if self._write_lock is None:
@@ -282,6 +282,7 @@ class GatewayIpcClient:
         context_token: str | None = None,
         metadata: dict[str, Any] | None = None,
         semantic_tags: list[str] | None = None,
+        in_reply_to: str | None = None,
     ) -> GatewayFrame | None:
         """Send a reply back to the gateway for delivery to the IM origin.
 
@@ -296,6 +297,7 @@ class GatewayIpcClient:
             context_token=context_token,
             metadata=metadata,
             semantic_tags=semantic_tags,
+            in_reply_to=in_reply_to,
         )
         response = await self._send(frame)
         if response is None:
@@ -309,6 +311,23 @@ class GatewayIpcClient:
         else:
             logger.debug("gateway ipc: sent OUTBOUND origin=%s len=%d", origin[:24], len(text))
         return response
+
+    async def complete_processing(
+        self,
+        *,
+        message_id: str,
+        outcome: str,
+        reason: str | None = None,
+    ) -> GatewayFrame | None:
+        """Report a terminal processing outcome for a pushed DELIVER frame."""
+        await self._write_frame_no_reply(
+            GatewayFrame.processing_complete(
+                message_id=message_id,
+                outcome=outcome,
+                reason=reason,
+            )
+        )
+        return None
 
     async def reload_channel(self, name: str) -> GatewayFrame | None:
         return await self._send(

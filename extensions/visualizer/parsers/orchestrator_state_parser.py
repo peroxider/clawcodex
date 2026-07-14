@@ -44,6 +44,7 @@ class IssueState:
 @dataclass
 class WorkflowStage:
     """Aggregated state of one workflow stage."""
+
     stage_id: int = 0
     name: str = ""
     phase: str = ""
@@ -205,9 +206,7 @@ class OrchestratorStateParser:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _apply_stage_event(
-        state: RunState, event_type: str, event: dict[str, Any]
-    ) -> None:
+    def _apply_stage_event(state: RunState, event_type: str, event: dict[str, Any]) -> None:
         """Fold a workflow stage event into the run state (F-116)."""
         stage_id = event.get("stage_id", 0)
         if stage_id and stage_id not in state.stages:
@@ -223,7 +222,7 @@ class OrchestratorStateParser:
         # Normalize event type: strip "workflow_" prefix for uniform handling
         normalized = event_type
         if normalized.startswith("workflow_"):
-            normalized = normalized[len("workflow_"):]
+            normalized = normalized[len("workflow_") :]
 
         if normalized in ("stage_start",):
             stage.status = "running"
@@ -305,8 +304,17 @@ class OrchestratorStateParser:
             state.workflow_status = "error"
             return
 
-        if event_type.startswith(("workflow_stage_", "workflow_gate_", "workflow_decision", "stage_", "gate_", "decision_")):
-            return self._apply_stage_event(state, event_type, event)
+        if event_type.startswith(
+            (
+                "workflow_stage_",
+                "workflow_gate_",
+                "workflow_decision",
+                "stage_",
+                "gate_",
+                "decision_",
+            )
+        ):
+            return OrchestratorStateParser._apply_stage_event(state, event_type, event)
 
         # Issue-level events — ensure the IssueState exists
         if issue_id and issue_id not in state.issues:

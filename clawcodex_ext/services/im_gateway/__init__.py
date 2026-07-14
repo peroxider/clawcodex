@@ -14,7 +14,13 @@ from __future__ import annotations
 
 from .binding import BindingEntry, BindingPolicy
 from .capability_gate import CapabilityGate
-from .config import GatewayConfig, ReliabilityConfig, load_config, save_config
+from .config import (
+    CommandAllowlistConfig,
+    GatewayConfig,
+    ReliabilityConfig,
+    load_config,
+    save_config,
+)
 from .dispatcher import InboundDispatcher
 from .gateway import MessageGateway
 from .ipc_protocol import GatewayFrame, FrameType, PROTOCOL_VERSION
@@ -29,6 +35,7 @@ from .models import (
     SessionTarget,
 )
 from .outbound import OutboundDispatcher
+from .processing_status import ProcessingStatusManager
 from .reliability import ReliabilityStore
 from .router import SessionRouter
 from .store import ReliabilityStore as _Store  # noqa: F401
@@ -41,6 +48,7 @@ __all__ = [
     "BindingPolicy",
     "CircuitState",
     "CapabilityGate",
+    "CommandAllowlistConfig",
     "FrameType",
     "GatewayConfig",
     "GatewayFrame",
@@ -52,6 +60,7 @@ __all__ = [
     "OutboundDispatcher",
     "OutboundMessage",
     "PROTOCOL_VERSION",
+    "ProcessingStatusManager",
     "ReliabilityConfig",
     "ReliabilityStore",
     "SessionRouter",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +19,7 @@ from clawcodex_ext.services.im_gateway.models import (
     AckLayer,
     AckReceipt,
 )
+from clawcodex_ext.services.channels.capabilities import ProcessingOutcome
 
 
 class _FakeGateway:
@@ -44,6 +46,73 @@ class _FakeGateway:
         from clawcodex_ext.services.channels.results import ChannelSendResult
 
         return ChannelSendResult.success(getattr(message, "channel", "wechat"))
+
+
+class _FakeProcessingStatus:
+    def __init__(self, *, message_id: str, origin: str) -> None:
+        self.entry = SimpleNamespace(message_id=message_id, origin=origin)
+        self.completed: list[tuple[str, ProcessingOutcome, str | None]] = []
+
+    def pending(self, message_id: str):
+        return self.entry if message_id == self.entry.message_id else None
+
+    async def complete(self, message_id, outcome, *, origin=None):
+        self.completed.append((message_id, outcome, origin))
+        return True
+
+
+@pytest.mark.asyncio
+async def test_processing_complete_event_requires_owning_peer(tmp_path) -> None:
+    gw = _FakeGateway()
+    origin = "feishu:dm:cli_app:ou_user"
+    gw.processing_status = _FakeProcessingStatus(message_id="om_1", origin=origin)
+    gw.binding.bind(origin, SimpleNamespace(session_id="repl-1", host_type="repl"))
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
+    frame = GatewayFrame.processing_complete(message_id="om_1", outcome="cancelled")
+
+    rejected = await server._handle_event(frame, "repl-other")
+    assert rejected is not None and rejected.type is FrameType.NACK
+    assert gw.processing_status.completed == []
+
+    accepted = await server._handle_event(frame, "repl-1")
+    assert accepted is not None and accepted.ack_layer == "processed"
+    assert gw.processing_status.completed == [("om_1", ProcessingOutcome.CANCELLED, origin)]
+
+
+@pytest.mark.asyncio
+async def test_correlated_outbound_completes_processing_success(tmp_path) -> None:
+    gw = _FakeGateway()
+    origin = "wechat:direct:acct:user_zhao"
+    gw.processing_status = _FakeProcessingStatus(message_id="om_1", origin=origin)
+    gw.binding.bind(origin, SimpleNamespace(session_id="repl-1", host_type="repl"))
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
+
+    response = await server._handle_outbound(
+        GatewayFrame.outbound(origin=origin, text="done", in_reply_to="om_1"),
+        "repl-1",
+    )
+
+    assert response is not None and response.ack_layer == "processed"
+    assert gw.processing_status.completed == [("om_1", ProcessingOutcome.SUCCESS, origin)]
+
+
+@pytest.mark.asyncio
+async def test_correlated_outbound_validation_failure_completes_processing_failure(
+    tmp_path,
+) -> None:
+    gw = _FakeGateway()
+    origin = "wechat:direct:acct:user_zhao"
+    gw.processing_status = _FakeProcessingStatus(message_id="om_1", origin=origin)
+    gw.binding.bind(origin, SimpleNamespace(session_id="repl-1", host_type="repl"))
+    server = GatewayIpcServer(tmp_path / "gw.sock", gw)
+
+    response = await server._handle_outbound(
+        GatewayFrame.outbound(origin="unknown:direct:a:b", text="done", in_reply_to="om_1"),
+        "repl-1",
+    )
+
+    assert response is not None and response.type is FrameType.NACK
+    assert gw.processing_status.completed == [("om_1", ProcessingOutcome.FAILURE, origin)]
 
 
 @pytest.mark.asyncio
@@ -776,12 +845,22 @@ async def test_ipc_client_send_outbound_accepts_metadata(tmp_path) -> None:
             await client.send_outbound(
                 origin="wechat:direct:acct:user_zhao",
                 text="permission prompt",
-                metadata={"intent": "permission_approval"},
+                metadata={
+                    "intent": "permission_approval",
+                    "permission": {
+                        "options": [{"value": "s", "label": "allow session", "decision": "allow"}]
+                    },
+                },
                 semantic_tags=["approval"],
             )
         await asyncio.sleep(0.05)
         assert len(gw.sent) == 1
-        assert gw.sent[0].metadata == {"intent": "permission_approval"}
+        assert gw.sent[0].metadata == {
+            "intent": "permission_approval",
+            "permission": {
+                "options": [{"value": "s", "label": "allow session", "decision": "allow"}]
+            },
+        }
         assert gw.sent[0].semantic_tags == ["approval"]
     finally:
         await server.close()

@@ -32,6 +32,7 @@ def test_get_session_memory_returns_none_when_load_summary_raises(
     monkeypatch,
 ) -> None:
     """An exception inside ``load_summary`` is swallowed, not propagated."""
+
     def boom(*_args, **_kwargs):
         raise RuntimeError("sidecar broken")
 

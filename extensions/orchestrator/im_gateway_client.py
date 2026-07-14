@@ -108,13 +108,45 @@ class OrchestratorGatewayClient:
         try:
             status = self.dispatch(message, semantic)
             await self._flush_pending_outbound(force=True)
+            await self._complete_processing(
+                frame.delivery_id or "",
+                "failure" if status in {"not_dispatched", "command_unroutable"} else "success",
+                status,
+            )
             logger.info(
                 "orchestrator IM push dispatched: delivery_id=%s status=%s",
                 (frame.delivery_id or "")[:16],
                 status,
             )
         except Exception:  # noqa: BLE001
+            await self._complete_processing(
+                frame.delivery_id or "",
+                "failure",
+                "orchestrator dispatch failed",
+            )
             logger.exception("orchestrator IM dispatch failed")
+
+    async def _complete_processing(
+        self,
+        message_id: str,
+        outcome: str,
+        reason: str,
+    ) -> None:
+        complete = getattr(self._ipc, "complete_processing", None)
+        if message_id and callable(complete):
+            try:
+                await complete(message_id=message_id, outcome=outcome, reason=reason)
+            except (ConnectionError, RuntimeError, OSError):
+                logger.debug(
+                    "orchestrator processing completion skipped while disconnected: %s",
+                    message_id[:16],
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "orchestrator processing completion failed: %s",
+                    message_id[:16],
+                    exc_info=True,
+                )
 
     def _classify(self, message):
         from clawcodex_ext.messaging.semantics import MessageClassifier

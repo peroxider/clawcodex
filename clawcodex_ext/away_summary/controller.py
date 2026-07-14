@@ -157,11 +157,13 @@ class AwaySummaryController:
                 except Exception:
                     sid = None
                 try:
-                    memory = getter(session_id=sid) if "session_id" in getter.__code__.co_varnames else getter()  # type: ignore[call-arg]
+                    memory = (
+                        getter(session_id=sid)
+                        if "session_id" in getter.__code__.co_varnames
+                        else getter()
+                    )  # type: ignore[call-arg]
                 except Exception:
-                    logger.debug(
-                        "Away Summary: memory_getter raised, continuing without memory"
-                    )
+                    logger.debug("Away Summary: memory_getter raised, continuing without memory")
                     memory = None
 
             service = AwaySummaryService(

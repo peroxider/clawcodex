@@ -15,10 +15,14 @@ from .base import BaseChannel, ChannelManager
 from .capabilities import (
     CapabilityDescriptor,
     CapabilityNotDeclaredError,
+    CardUpdateCapability,
     ChannelAdapter,
     ChannelCapability,
     ChannelCapabilitySet,
+    InboundActivityContext,
     OutboundCapability,
+    ProcessingOutcome,
+    ProcessingStatusCapability,
 )
 from .discord import DiscordChannel
 from .exceptions import (
@@ -67,6 +71,7 @@ __all__ = [
     "BaseChannel",
     "CapabilityDescriptor",
     "CapabilityNotDeclaredError",
+    "CardUpdateCapability",
     "ChannelAdapter",
     "ChannelAdapterRegistry",
     "ChannelCapability",
@@ -87,10 +92,13 @@ __all__ = [
     "FEISHU_SUCCESS_CODE",
     "FeishuChannel",
     "FeishuAppChannelAdapter",
+    "InboundActivityContext",
     "InvalidWebhookURLError",
     "MessageLevel",
     "NullChannel",
     "OutboundCapability",
+    "ProcessingOutcome",
+    "ProcessingStatusCapability",
     "RecordedSend",
     "RetryPolicy",
     "SendStatus",

@@ -468,6 +468,7 @@ def _load_heavy_runtime() -> None:
     from src.config import get_provider_config as _get_provider_config
     from src.outputStyles import resolve_output_style
     from src.providers.runtime import build_provider_from_config as _build_provider_from_config
+
     # Note: AnthropicProvider / MinimaxProvider / ChatMessage are NOT imported
     # here. Callers that need them (``_provider_uses_system_kwarg``,
     # ``clawcodex_ext.query.query``, ``clawcodex_ext.utils.advisor``) do their
@@ -1632,6 +1633,7 @@ class ClawcodexREPL:
                         message=message,
                         suggestion=suggestion,
                         options=options,
+                        allow_choices={key for key, _desc in options if key != "n"},
                     )
                     .strip()
                     .lower()
@@ -1774,6 +1776,9 @@ class ClawcodexREPL:
                         message=request.message,
                         suggestion=None,
                         options=options,
+                        allow_choices={
+                            key for key, _desc, action in option_actions if action != "deny"
+                        },
                     )
                     .strip()
                     .lower()
@@ -1851,6 +1856,7 @@ class ClawcodexREPL:
         message: str,
         options: list[tuple[str, str]],
         suggestion: str | None = None,
+        allow_choices: set[str] | None = None,
     ) -> str:
         """Wait for a WeChat reply to resolve an IM-driven permission prompt.
 
@@ -1897,6 +1903,7 @@ class ClawcodexREPL:
                     suggestion=suggestion,
                     options=options,
                     interactive=True,
+                    allow_choices=allow_choices,
                 )
             except Exception:
                 pass
@@ -3124,6 +3131,11 @@ class ClawcodexREPL:
         if app is None:
             return
         if getattr(app, "future", None) is not None:
+            # This is a programmatic wake, not a submitted keyboard prompt.
+            # Ask prompt_toolkit to erase the abandoned prompt row; otherwise
+            # app.exit() commits an empty prompt line to scrollback immediately
+            # before the queued IM message is echoed.
+            app.erase_when_done = True
             app.exit(result=_CRON_WAKE)
 
     def _get_chat_loop(self):
@@ -3218,6 +3230,7 @@ class ClawcodexREPL:
         exception propagation issues.
         """
         app = self.prompt_session.app
+        original_erase_when_done = getattr(app, "erase_when_done", False)
 
         async def _watch_outbox():
             """Watch for cron events and wake the prompt when found."""
@@ -3225,6 +3238,7 @@ class ClawcodexREPL:
                 await asyncio.sleep(1.0)
                 outbox = getattr(self.tool_context, "outbox", None)
                 if outbox and getattr(app, "future", None) is not None:
+                    app.erase_when_done = True
                     app.exit(result=_CRON_WAKE)
                     return
 
@@ -3253,6 +3267,10 @@ class ClawcodexREPL:
                     buffer_changed_handler = None
             return await self.prompt_session.prompt_async("❯ ")
         finally:
+            # A programmatic wake temporarily enables erase_when_done so its
+            # empty prompt row is not left in scrollback. Restore the normal
+            # interactive behavior for the next prompt.
+            app.erase_when_done = original_erase_when_done
             if buffer_changed_handler is not None and default_buffer is not None:
                 try:
                     default_buffer.on_text_changed -= buffer_changed_handler
@@ -4427,7 +4445,9 @@ class ClawcodexREPL:
                     self.session.save()
                 except Exception:
                     pass
-                self.console.print("\n[warning]Interrupted. Type /exit or press Ctrl+D to quit.[/warning]")
+                self.console.print(
+                    "\n[warning]Interrupted. Type /exit or press Ctrl+D to quit.[/warning]"
+                )
                 continue
             except EOFError:
                 try:
@@ -4438,7 +4458,7 @@ class ClawcodexREPL:
                 self.console.print("\n[primary]Goodbye![/primary]")
                 break
 
-    def _send_im_command_feedback(self, command: str) -> None:
+    def _send_im_command_feedback(self, command: str, *, success: bool) -> None:
         raw = str(command or "").strip()
         if not raw.startswith("/") or raw == "/":
             return
@@ -4447,7 +4467,7 @@ class ClawcodexREPL:
         if not callable(send_feedback):
             return
         try:
-            send_feedback(raw)
+            send_feedback(raw, success=success)
         except Exception:  # noqa: BLE001
             logger.debug("IM command feedback failed", exc_info=True)
 
@@ -4459,10 +4479,13 @@ class ClawcodexREPL:
         # paid up front in ``__init__``; moving it here saves that on every
         # session that opens with non-slash input.
         self._ensure_command_system()
+        success = False
         try:
-            return self._handle_command(command)
+            result = self._handle_command(command)
+            success = True
+            return result
         finally:
-            self._send_im_command_feedback(command)
+            self._send_im_command_feedback(command, success=success)
 
     def _handle_command(self, command: str):
         raw = command.strip()
@@ -5604,7 +5627,6 @@ class ClawcodexREPL:
             )
 
     def chat(self, user_input: str, max_turns: int | None = None):
-        _load_heavy_runtime()
         """Send message to LLM and display response.
 
         Uses the new QueryEngine (WS-4) state machine to drive the query loop.
@@ -5614,6 +5636,8 @@ class ClawcodexREPL:
             max_turns: Maximum number of tool call turns. None means unlimited
                 (matching TS interactive REPL behavior). Only set for SDK/non-interactive mode.
         """
+        _load_heavy_runtime()
+        self._last_chat_outcome = "success"
         from src.repl.background_escape import BackgroundEscape
 
         # Expand ``@path`` mentions into context attachments before the model
@@ -5781,6 +5805,7 @@ class ClawcodexREPL:
                 self._direct_abort_controller = AbortController()
 
                 def _cancel_direct_stream() -> None:
+                    self._last_chat_outcome = "cancelled"
                     if self._direct_abort_controller is not None:
                         self._direct_abort_controller.abort("user_interrupt")
                     # Immediate visual feedback — update the LiveStatus message
@@ -5856,6 +5881,7 @@ class ClawcodexREPL:
                     self._direct_abort_controller is not None
                     and self._direct_abort_controller.signal.aborted
                 ):
+                    self._last_chat_outcome = "cancelled"
                     return False
                 if _background_requested_direct:
                     raise BackgroundEscape()
@@ -6187,6 +6213,7 @@ class ClawcodexREPL:
                 return last_text, last_text_was_printed
 
             def _cancel_engine() -> None:
+                self._last_chat_outcome = "cancelled"
                 try:
                     engine.interrupt()
                 except Exception:
@@ -6313,9 +6340,12 @@ class ClawcodexREPL:
                 raise BackgroundEscape()
 
         except BackgroundEscape:
+            self._last_chat_outcome = "cancelled"
             self._handle_background_escape()
             return False
         except Exception as e:
+            if self._last_chat_outcome != "cancelled":
+                self._last_chat_outcome = "failure"
             error_str = str(e)
 
             if "401" in error_str or "authentication" in error_str.lower() or "令牌" in error_str:

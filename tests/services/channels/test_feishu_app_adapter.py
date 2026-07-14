@@ -19,8 +19,11 @@ import pytest
 from lark_oapi.channel.errors import FeishuChannelErrorCode, SendError
 from lark_oapi.channel.types import SendResult
 
-from clawcodex_ext.services.channels.capabilities import ChannelCapability
-from clawcodex_ext.services.channels.feishu_app import FeishuAppChannelAdapter
+from clawcodex_ext.services.channels.capabilities import ChannelCapability, ProcessingOutcome
+from clawcodex_ext.services.channels.feishu_app import (
+    _FEISHU_PROCESSING_REACTION_CACHE_SIZE,
+    FeishuAppChannelAdapter,
+)
 from clawcodex_ext.services.channels.models import ChannelConfig, ChannelMessage, ChannelType
 from clawcodex_ext.services.channels.results import ErrorCategory, SendStatus
 
@@ -36,6 +39,11 @@ class _FakeChannel:
         self.sent: list[dict] = []
         self.send_options: list[dict | None] = []
         self.updated_cards: list[dict] = []
+        self.added_reactions: list[tuple[str, str]] = []
+        self.removed_reactions: list[tuple[str, str]] = []
+        self.add_reaction_success = True
+        self.reaction_id_present = True
+        self.delete_reaction_success = True
         self.connect_exc = connect_exc
         self.connected = False
         self.disconnected = False
@@ -71,6 +79,40 @@ class _FakeChannel:
     async def update_card(self, message_id: str, card: dict) -> SendResult:
         self.updated_cards.append({"message_id": message_id, "card": card})
         return SendResult.ok(message_id=message_id)
+
+    async def add_reaction(self, message_id: str, emoji_type: str) -> SendResult:
+        self.added_reactions.append((message_id, emoji_type))
+        if not self.add_reaction_success:
+            return SendResult.fail(
+                _send_error(
+                    FeishuChannelErrorCode.UNKNOWN,
+                    retryable=False,
+                    hint="add rejected",
+                )
+            )
+        return SendResult.ok(
+            message_id=message_id,
+            raw={
+                "code": 0,
+                "data": (
+                    {"reaction_id": f"r_{len(self.added_reactions)}"}
+                    if self.reaction_id_present
+                    else {}
+                ),
+            },
+        )
+
+    async def remove_reaction(self, message_id: str, reaction_id: str) -> SendResult:
+        self.removed_reactions.append((message_id, reaction_id))
+        if self.delete_reaction_success:
+            return SendResult.ok(message_id=message_id)
+        return SendResult.fail(
+            _send_error(
+                FeishuChannelErrorCode.UNKNOWN,
+                retryable=False,
+                hint="delete rejected",
+            )
+        )
 
     @property
     def bot_identity(self) -> Any:
@@ -229,6 +271,109 @@ def test_feishu_app_adapter_declares_capabilities() -> None:
     assert adapter.capabilities.has(ChannelCapability.INBOUND_POLLING)
     assert adapter.capabilities.has(ChannelCapability.CONTEXT_REPLY)
     assert adapter.capabilities.has(ChannelCapability.LOGIN_MANAGED)
+    assert adapter.capabilities.has(ChannelCapability.REACTION)
+    assert adapter.capabilities.has(ChannelCapability.PROCESSING_STATUS)
+
+
+@pytest.mark.asyncio
+async def test_feishu_processing_reaction_success_lifecycle() -> None:
+    channel = _FakeChannel()
+    adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda s: channel)
+    await adapter.start()
+
+    assert await adapter.on_processing_start("om_1") is True
+    assert await adapter.on_processing_start("om_1") is True
+    assert channel.added_reactions == [("om_1", "Typing")]
+
+    assert await adapter.on_processing_complete("om_1", ProcessingOutcome.SUCCESS) is True
+    assert channel.removed_reactions == [("om_1", "r_1")]
+    assert channel.added_reactions == [("om_1", "Typing")]
+
+
+@pytest.mark.asyncio
+async def test_feishu_processing_reaction_failure_and_cancelled() -> None:
+    channel = _FakeChannel()
+    adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda s: channel)
+    await adapter.start()
+
+    await adapter.on_processing_start("om_failed")
+    assert await adapter.on_processing_complete("om_failed", ProcessingOutcome.FAILURE) is True
+    assert channel.added_reactions[-1] == ("om_failed", "CrossMark")
+
+    await adapter.on_processing_start("om_cancelled")
+    assert await adapter.on_processing_complete("om_cancelled", ProcessingOutcome.CANCELLED) is True
+    assert ("om_cancelled", "CrossMark") not in channel.added_reactions
+
+
+@pytest.mark.asyncio
+async def test_feishu_processing_delete_failure_does_not_stack_cross_mark() -> None:
+    channel = _FakeChannel()
+    adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda s: channel)
+    await adapter.start()
+    await adapter.on_processing_start("om_1")
+    channel.delete_reaction_success = False
+
+    assert await adapter.on_processing_complete("om_1", ProcessingOutcome.FAILURE) is False
+    assert channel.added_reactions == [("om_1", "Typing")]
+    assert "om_1" in adapter._pending_processing_reactions
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("missing_reaction_id", [False, True])
+async def test_feishu_processing_add_failure_does_not_cache_handle(
+    missing_reaction_id: bool,
+) -> None:
+    channel = _FakeChannel()
+    channel.add_reaction_success = missing_reaction_id
+    channel.reaction_id_present = not missing_reaction_id
+    adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda s: channel)
+    await adapter.start()
+
+    assert await adapter.on_processing_start("") is False
+    assert await adapter.on_processing_start("om_1") is False
+    assert "om_1" not in adapter._pending_processing_reactions
+
+
+@pytest.mark.asyncio
+async def test_feishu_processing_reactions_can_be_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("FEISHU_REACTIONS", "false")
+    channel = _FakeChannel()
+    adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda s: channel)
+    await adapter.start()
+
+    assert await adapter.on_processing_start("om_1") is True
+    assert await adapter.on_processing_complete("om_1", ProcessingOutcome.FAILURE) is True
+    assert channel.added_reactions == []
+
+
+def test_feishu_processing_reaction_cache_is_bounded() -> None:
+    adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda s: _FakeChannel())
+    for index in range(_FEISHU_PROCESSING_REACTION_CACHE_SIZE + 1):
+        adapter._remember_reaction(f"om_{index}", f"r_{index}")
+
+    assert len(adapter._pending_processing_reactions) == _FEISHU_PROCESSING_REACTION_CACHE_SIZE
+    assert "om_0" not in adapter._pending_processing_reactions
+
+
+@pytest.mark.asyncio
+async def test_terminal_cross_mark_does_not_evict_live_typing_handle() -> None:
+    channel = _FakeChannel()
+    channel.reaction_id_present = False
+    adapter = FeishuAppChannelAdapter(_config(), channel_factory=lambda s: channel)
+    await adapter.start()
+    for index in range(_FEISHU_PROCESSING_REACTION_CACHE_SIZE):
+        adapter._remember_reaction(f"om_{index}", f"r_{index}")
+
+    assert (
+        await adapter.on_processing_complete(
+            "om_without_typing",
+            ProcessingOutcome.FAILURE,
+        )
+        is True
+    )
+    assert len(adapter._pending_processing_reactions) == _FEISHU_PROCESSING_REACTION_CACHE_SIZE
+    assert adapter._pending_processing_reactions["om_0"] == "r_0"
+    assert "om_without_typing" not in adapter._pending_processing_reactions
 
 
 @pytest.mark.asyncio

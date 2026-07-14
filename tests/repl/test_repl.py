@@ -1374,6 +1374,37 @@ class TestREPL(unittest.TestCase):
         self.assertEqual(reply.behavior, "allow")
         self.assertEqual(reply.chosen_updates, (update,))
 
+    def test_permission_ask_request_marks_session_choice_allowed_for_im(self):
+        """Rich IM channels receive stable allow/deny semantics for session choices."""
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl._permission_prompt_lock = threading.Lock()
+        repl._current_status = None
+        repl.console = Mock()
+        repl.tool_context = Mock(allow_docs=True)
+
+        class _FakeClient:
+            def peek_reply_origin(self):
+                return "feishu:dm:cli_app:ou_allowed"
+
+        repl._im_reply_controller = Mock(_client=_FakeClient())
+        repl._wait_im_permission_choice = Mock(return_value="s")
+        update = PermissionUpdateSetMode(destination="session", mode="acceptEdits")
+        request = PermissionAskRequest(
+            tool_name="Bash",
+            message="Claude wants to use Bash. Allow?",
+            tool_input={"command": "pwd"},
+            suggestions=(update,),
+        )
+
+        reply = repl._handle_permission_ask_request(request)
+
+        self.assertEqual(reply.behavior, "allow")
+        self.assertEqual(reply.chosen_updates, (update,))
+        self.assertEqual(
+            repl._wait_im_permission_choice.call_args.kwargs["allow_choices"],
+            {"y", "s"},
+        )
+
     def test_permission_ask_request_ignores_hidden_enable_alias(self):
         """Typing hidden aliases must not allow options absent from the menu."""
         repl = ClawcodexREPL.__new__(ClawcodexREPL)

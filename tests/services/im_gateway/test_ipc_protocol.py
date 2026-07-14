@@ -64,12 +64,14 @@ def test_outbound_frame_roundtrip() -> None:
         text="reply text",
         metadata={"intent": "permission_approval"},
         semantic_tags=["approval"],
+        in_reply_to="om_inbound",
     )
     assert f.type is FrameType.OUTBOUND
     assert f.origin == "wechat:direct:acct:user_zhao"
     assert f.text == "reply text"
     assert f.metadata == {"intent": "permission_approval"}
     assert f.semantic_tags == ["approval"]
+    assert f.in_reply_to == "om_inbound"
     # round-trips through encode/decode
     back = GatewayFrame.decode(f.encode())
     assert back.type is FrameType.OUTBOUND
@@ -77,6 +79,25 @@ def test_outbound_frame_roundtrip() -> None:
     assert back.text == f.text
     assert back.metadata == f.metadata
     assert back.semantic_tags == f.semantic_tags
+    assert back.in_reply_to == "om_inbound"
+
+
+def test_processing_complete_event_roundtrip() -> None:
+    frame = GatewayFrame.processing_complete(
+        message_id="om_inbound",
+        outcome="cancelled",
+        reason="user stopped",
+    )
+
+    back = GatewayFrame.decode(frame.encode())
+    assert back.type is FrameType.EVENT
+    assert back.event_type == "processing.complete"
+    assert back.payload == {
+        "message_id": "om_inbound",
+        "outcome": "cancelled",
+        "reason": "user stopped",
+    }
+    assert back.protocol_version == PROTOCOL_VERSION
 
 
 def test_decode_rejects_bad_type() -> None:
