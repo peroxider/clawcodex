@@ -190,9 +190,9 @@ This project ships a 4-chapter interactive video demo (coldopen · orchestrator 
 | Channel | Link | Notes |
 |---|---|---|
 | 📺 GitCode Pages | [https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html](https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html) | Available once repo Pages are enabled |
-| 📺 GitHub Pages | [https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html](https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html) | Mirror repo can sync |
+| 📺 GitHub Pages | [https://peroxider.github.io/clawcodex/assets/video-b/presentation/article.html](https://peroxider.github.io/clawcodex/assets/video-b/presentation/article.html) | Mirror repo can sync |
 | 🏃 Local preview | `cd assets/video-b/presentation && npm install && npm run dev` → [http://localhost:5174](http://localhost:5174) | Requires Node 18+ |
-| 📦 Single file | [`assets/video-b/presentation/index.html`](assets/video-b/presentation/index.html) | Offline / static hosting, 238 KB |
+| 📦 Single file | [`assets/video-b/presentation/article.html`](assets/video-b/presentation/article.html) | Offline / static hosting, 238 KB |
 
 > GitHub / GitCode READMEs strip `<script>` tags via sanitization, so external links are used instead of inline embeds.
 > Static screenshot thumbnails can be regenerated from `assets/video-b/screenshots/` via `python3 scripts/capture_video_b_screenshots.py`.

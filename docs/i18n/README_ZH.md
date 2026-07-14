@@ -190,9 +190,9 @@ $ clawcodex-dev orchestrator issue inject --id gitcode/AGENTSDK-15 "address revi
 | 渠道 | 链接 | 备注 |
 |---|---|---|
 | 📺 GitCode Pages | [https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html](https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html) | 待仓库 Pages 启用后即可访问 |
-| 📺 GitHub Pages | [https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html](https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html) | 镜像仓库可同步 |
+| 📺 GitHub Pages | [https://peroxider.github.io/clawcodex/assets/video-b/presentation/article.html](https://peroxider.github.io/clawcodex/assets/video-b/presentation/article.html) | 镜像仓库可同步 |
 | 🏃 本地预览 | `cd assets/video-b/presentation && npm install && npm run dev` → [http://localhost:5174](http://localhost:5174) | 需要 Node 18+ |
-| 📦 单文件直开 | [`assets/video-b/presentation/index.html`](../../assets/video-b/presentation/index.html) | 离线 / 静态托管通用，238 KB |
+| 📦 单文件直开 | [`assets/video-b/presentation/article.html`](../../assets/video-b/presentation/article.html) | 离线 / 静态托管通用，238 KB |
 
 > GitHub / GitCode 的 README 不允许 `<script>` 内嵌（会被 sanitize 剥离），所以走外链方式跳转。
 > 静态截图缩略图可在 `assets/video-b/screenshots/` 下重新生成：`python3 scripts/capture_video_b_screenshots.py`。
