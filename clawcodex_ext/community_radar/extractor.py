@@ -90,6 +90,21 @@ _CHECKBOX_RE = re.compile(r"^\s*[-*]\s+\[[ xX]\]\s+(?P<text>.+?)\s*$", re.MULTIL
 # would silently survive the dedup-by-text and double-count the line).
 _BULLET_RE = re.compile(r"^\s*[-*]\s+(?!\[)(?P<text>.+?)\s*$", re.MULTILINE)
 
+# Patterns for bullet-level bugfix detection.  Applied only when the section
+# heading doesn't give us an explicit classification (e.g. "## What's Changed").
+# Word boundaries (\b) on single-word patterns prevent matching "prefix",
+# "debug", etc.
+_BUGFIX_TEXT_RE = re.compile(
+    r"\b(?:bug|fix|fixed|hotfix|crash|regression|backport)\b|"
+    r"hot-fix|race[-\s]condition|memory[-\s]leak",
+    re.IGNORECASE,
+)
+
+
+def _is_bugfix_by_text(text: str) -> bool:
+    """Return True if *text* contains bugfix-indicating keywords."""
+    return bool(_BUGFIX_TEXT_RE.search(text))
+
 
 @dataclass
 class _Section:
@@ -268,6 +283,7 @@ class FeatureExtractor:
         last_kind: FeatureType | None = None
         for section in sections:
             section_kind = self._classify_section(section.heading)
+            section_explicit = section_kind is not None
             if section_kind is not None:
                 last_kind = section_kind
             elif not section.heading:
@@ -288,6 +304,18 @@ class FeatureExtractor:
                 if not title:
                     continue
                 kind = last_kind or FeatureType.NEW
+                # ── Bullet-level bugfix detection ──
+                # When the section heading is unrecognised (e.g. "## What's
+                # Changed"), fall back to keyword matching on the bullet
+                # text itself.  We deliberately skip sections with an
+                # explicit heading classification — a "fix" inside
+                # "## Added" is a new capability, not a bugfix.
+                if (
+                    not section_explicit
+                    and kind != FeatureType.BUGFIX
+                    and _is_bugfix_by_text(title)
+                ):
+                    kind = FeatureType.BUGFIX
                 candidates.append(
                     FeatureExtractor._Candidate(
                         title=title,

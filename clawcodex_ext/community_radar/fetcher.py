@@ -79,9 +79,7 @@ def _changelog_cache_path(cache_dir: Path, source: WatchSource) -> Path:
     return cache_dir / "changelogs" / f"{safe}.txt"
 
 
-def _read_changelog_cache(
-    cache_dir: Path, source: WatchSource, ttl: int = CHANGELOG_CACHE_TTL_SECONDS
-) -> str | None:
+def _read_changelog_cache(cache_dir: Path, source: WatchSource, ttl: int = CHANGELOG_CACHE_TTL_SECONDS) -> str | None:
     path = _changelog_cache_path(cache_dir, source)
     if not path.exists():
         return None
@@ -110,9 +108,7 @@ def _domain_cache_path(cache_dir: Path, repo: str) -> Path:
     return cache_dir / "domains" / f"{safe}.json"
 
 
-def _read_domain_cache(
-    cache_dir: Path, repo: str, ttl: int = CHANGELOG_CACHE_TTL_SECONDS
-) -> str | None:
+def _read_domain_cache(cache_dir: Path, repo: str, ttl: int = CHANGELOG_CACHE_TTL_SECONDS) -> str | None:
     path = _domain_cache_path(cache_dir, repo)
     if not path.exists():
         return None
@@ -141,38 +137,17 @@ def _write_domain_cache(cache_dir: Path, repo: str, domain: str) -> None:
 # Keywords matched against GitHub topics + description to auto-detect
 # a project's domain when the user has not set one explicitly.
 _EMBODIED_AI_DOMAIN_KEYWORDS = [
-    "robot",
-    "robotics",
-    "manipulation",
-    "locomotion",
-    "grasping",
-    "embodied",
-    "vla",
-    "reinforcement-learning",
-    "imitation-learning",
-    "humanoid",
-    "legged-robot",
-    "mobile-manipulation",
-    "teleoperation",
-    "sim-to-real",
-    "robot-learning",
+    "robot", "robotics", "manipulation", "locomotion", "grasping",
+    "embodied", "vla", "reinforcement-learning", "imitation-learning",
+    "humanoid", "legged-robot", "mobile-manipulation", "teleoperation",
+    "sim-to-real", "robot-learning",
 ]
 
 _SPATIAL_DOMAIN_KEYWORDS = [
-    "nerf",
-    "neural-radiance",
-    "3d-reconstruction",
-    "3d-vision",
-    "gaussian-splatting",
-    "point-cloud",
-    "slam",
-    "lidar",
-    "novel-view-synthesis",
-    "volumetric",
-    "mesh",
-    "voxel",
-    "spatial-intelligence",
-    "radiance-field",
+    "nerf", "neural-radiance", "3d-reconstruction", "3d-vision",
+    "gaussian-splatting", "point-cloud", "slam", "lidar",
+    "novel-view-synthesis", "volumetric", "mesh", "voxel",
+    "spatial-intelligence", "radiance-field",
 ]
 
 
@@ -321,7 +296,9 @@ class Fetcher:
             core = data.get("resources", {}).get("core", {})
             remaining = core.get("remaining", "?")
             limit = core.get("limit", "?")
-            _log.info("GitHub token is valid (rate limit: %s/%s remaining)", remaining, limit)
+            _log.info(
+                "GitHub token is valid (rate limit: %s/%s remaining)", remaining, limit
+            )
         elif resp.status_code == 401:
             _log.warning(
                 "GitHub token is invalid (401 Bad credentials). "
@@ -350,31 +327,38 @@ class Fetcher:
     # Public API
     # ------------------------------------------------------------------
 
-    def fetch(self, source: WatchSource, *, incremental: bool = False) -> FetchResult:
+    def fetch(
+        self, source: WatchSource, *, incremental: bool = False,
+        since: str | None = None,
+    ) -> FetchResult:
         """Fetch everything ``source`` requested. Always returns a result."""
         result = FetchResult(source=source.name)
         try:
             if source.track_releases:
-                result.releases = self.fetch_releases(source, incremental=incremental)
+                result.releases = self.fetch_releases(source, incremental=incremental, since=since)
             if source.track_commits:
-                result.commits = self.fetch_commits(source)
+                result.commits = self.fetch_commits(source, since=since)
             if source.track_prs:
-                result.prs = self.fetch_prs(source)
+                result.prs = self.fetch_prs(source, since=since)
         except Exception as exc:  # noqa: BLE001 — log + degrade gracefully
             _log.exception("fetch failed for source %s: %s", source.name, exc)
             result.errors.append(f"{type(exc).__name__}: {exc}")
         return result
 
     def fetch_all(
-        self, sources: Iterable[WatchSource], *, incremental: bool = False
+        self, sources: Iterable[WatchSource], *, incremental: bool = False,
+        since: str | None = None,
     ) -> list[FetchResult]:
-        return [self.fetch(s, incremental=incremental) for s in sources]
+        return [self.fetch(s, incremental=incremental, since=since) for s in sources]
 
     # ------------------------------------------------------------------
     # Releases (four-layer fallback: API → Tags → CHANGELOG raw → git clone)
     # ------------------------------------------------------------------
 
-    def fetch_releases(self, source: WatchSource, *, incremental: bool = False) -> list[Release]:
+    def fetch_releases(
+        self, source: WatchSource, *, incremental: bool = False,
+        since: str | None = None,
+    ) -> list[Release]:
         """Fetch releases via four-layer fallback strategy.
 
         Layer 1:  GitHub Releases API (structured, fast)
@@ -382,6 +366,9 @@ class Fetcher:
         Layer 2:  GitHub Tags API (covers tag-only projects)
         Layer 3:  GitHub Content API → CHANGELOG raw (no clone needed)
         Layer 4:  git clone + local file parse (last resort / non-GitHub)
+
+        When *since* is given (ISO-8601), releases with ``published_at``
+        older than *since* are dropped.
         """
         releases: list[Release] = []
 
@@ -393,13 +380,19 @@ class Fetcher:
             if changelog_text:
                 releases = self._merge_changelog_raw(releases, changelog_text)
             releases = self._apply_tag_filter(releases, source)
-            return releases[:MAX_RELEASES_PER_SOURCE]
+            releases = releases[:MAX_RELEASES_PER_SOURCE]
+            if since:
+                releases = [r for r in releases if r.published_at and r.published_at >= since]
+            return releases
 
         # ── Layer 2: GitHub Tags API ──────────────────────────────
         releases = self._fetch_tags_api(source)
         if releases:
             releases = self._apply_tag_filter(releases, source)
-            return releases[:MAX_RELEASES_PER_SOURCE]
+            releases = releases[:MAX_RELEASES_PER_SOURCE]
+            if since:
+                releases = [r for r in releases if r.published_at and r.published_at >= since]
+            return releases
 
         # ── Layer 3: GitHub Content API → CHANGELOG raw ──────────
         changelog_text = self._fetch_changelog_raw(source)
@@ -407,7 +400,10 @@ class Fetcher:
             releases = self._parse_changelog(changelog_text, source=source)
             if releases:
                 releases = self._apply_tag_filter(releases, source)
-                return releases[:MAX_RELEASES_PER_SOURCE]
+                releases = releases[:MAX_RELEASES_PER_SOURCE]
+                if since:
+                    releases = [r for r in releases if r.published_at and r.published_at >= since]
+                return releases
 
         # ── Layer 4: git clone + local CHANGELOG file ─────────────
         return self._fetch_releases_via_clone(source, incremental=incremental)
@@ -442,15 +438,12 @@ class Fetcher:
         elif resp.status_code in (401, 403):
             _log.warning(
                 "Layer 1 (releases API) returned %s for %s, falling back",
-                resp.status_code,
-                source.name,
+                resp.status_code, source.name,
             )
         elif resp.status_code == 404:
             _log.info("Layer 1 (releases API) 404 for %s (repo not found or private)", source.name)
         else:
-            _log.warning(
-                "Layer 1 (releases API) unexpected %s for %s", resp.status_code, source.name
-            )
+            _log.warning("Layer 1 (releases API) unexpected %s for %s", resp.status_code, source.name)
         return []
 
     # ── Layer 1.5: merge CHANGELOG raw_body ───────────────────────
@@ -495,11 +488,7 @@ class Fetcher:
                     r"^(?P<version>.+?)\s*[-—]\s*(?P<date>\d{4}-\d{2}-\d{2})\s*$",
                     heading_line,
                 )
-                version = (
-                    m2.group("version").strip().lstrip("[").rstrip("]")
-                    if m2
-                    else heading_line.strip().lstrip("[").rstrip("]")
-                )
+                version = m2.group("version").strip().lstrip("[").rstrip("]") if m2 else heading_line.strip().lstrip("[").rstrip("]")
             else:
                 version = m.group("version")
             start = first_line_end + 1 if first_line_end != -1 else len(block)
@@ -531,11 +520,7 @@ class Fetcher:
                     published_at=None,
                     url=f"https://github.com/{owner_repo}/releases/tag/{quote(item.get('name', ''))}",
                     is_prerelease=bool(
-                        re.search(
-                            r"-(?:rc|alpha|beta|dev|pre)\.?\d*$",
-                            str(item.get("name", "")),
-                            re.IGNORECASE,
-                        )
+                        re.search(r"-(?:rc|alpha|beta|dev|pre)\.?\d*$", str(item.get("name", "")), re.IGNORECASE)
                     ),
                 )
                 for item in payload
@@ -544,8 +529,7 @@ class Fetcher:
         elif resp.status_code in (401, 403):
             _log.warning(
                 "Layer 2 (tags API) returned %s for %s, falling back",
-                resp.status_code,
-                source.name,
+                resp.status_code, source.name,
             )
         elif resp.status_code == 404:
             _log.info("Layer 2 (tags API) 404 for %s", source.name)
@@ -571,15 +555,13 @@ class Fetcher:
         paths_to_try: list[str] = []
         if source.changelog_path:
             paths_to_try.append(source.changelog_path)
-        paths_to_try.extend(
-            [
-                "CHANGELOG.md",
-                "CHANGELOG",
-                "RELEASE.md",
-                "RELEASE_NOTES.md",
-                "History.md",
-            ]
-        )
+        paths_to_try.extend([
+            "CHANGELOG.md",
+            "CHANGELOG",
+            "RELEASE.md",
+            "RELEASE_NOTES.md",
+            "History.md",
+        ])
 
         seen: set[str] = set()
         for rel_path in paths_to_try:
@@ -590,12 +572,7 @@ class Fetcher:
             try:
                 resp = self._request("GET", url)
             except Exception as exc:
-                _log.debug(
-                    "Layer 3 (contents API) request failed for %s %s: %s",
-                    source.name,
-                    rel_path,
-                    exc,
-                )
+                _log.debug("Layer 3 (contents API) request failed for %s %s: %s", source.name, rel_path, exc)
                 continue
             self._check_rate_limit(resp)
             if resp.status_code == 200:
@@ -605,9 +582,7 @@ class Fetcher:
                     try:
                         text = base64.b64decode(content_b64).decode("utf-8")
                     except (ValueError, UnicodeDecodeError) as exc:
-                        _log.warning(
-                            "Layer 3 base64 decode failed for %s %s: %s", source.name, rel_path, exc
-                        )
+                        _log.warning("Layer 3 base64 decode failed for %s %s: %s", source.name, rel_path, exc)
                         continue
                     _write_changelog_cache(self.cache_dir, source, text)
                     _log.debug("changelog fetched via API for %s (%s)", source.name, rel_path)
@@ -639,7 +614,9 @@ class Fetcher:
 
         changelog_text = self._read_changelog(clone_dir, source)
         if not changelog_text:
-            _log.warning("no changelog found for %s (searched in %s)", source.name, clone_dir)
+            _log.warning(
+                "no changelog found for %s (searched in %s)", source.name, clone_dir
+            )
             return []
 
         releases = self._parse_changelog(changelog_text, source=source)
@@ -658,9 +635,7 @@ class Fetcher:
         if not filtered and releases:
             _log.debug(
                 "release_tag_filter '%s' excluded all %d releases for %s",
-                tag_filter,
-                len(releases),
-                source.name,
+                tag_filter, len(releases), source.name,
             )
         return filtered
 
@@ -686,12 +661,18 @@ class Fetcher:
     # Commits / PRs (lightweight, optional)
     # ------------------------------------------------------------------
 
-    def fetch_commits(self, source: WatchSource, *, since: str | None = None) -> list[Commit]:
+    def fetch_commits(
+        self, source: WatchSource, *, since: str | None = None
+    ) -> list[Commit]:
         owner, name = source.repo.split("/", 1)
         cache_path = _list_cache_path(self.cache_dir, "commits", source)
         cached = _read_cached_json(cache_path) or {"fetched_at": 0.0, "items": []}
         fetched_at = float(cached.get("fetched_at") or 0.0)
-        if not since and fetched_at and (time.time() - fetched_at) < self.cache_ttl_seconds:
+        if (
+            not since
+            and fetched_at
+            and (time.time() - fetched_at) < self.cache_ttl_seconds
+        ):
             return [Commit.from_dict(item) for item in cached.get("items", [])]
 
         params: dict[str, Any] = {"per_page": self.page_size, "page": 1}
@@ -705,7 +686,9 @@ class Fetcher:
         commits = [
             Commit(
                 sha=str(item.get("sha", "")),
-                message=str((item.get("commit") or {}).get("message") or ""),
+                message=str(
+                    (item.get("commit") or {}).get("message") or ""
+                ),
                 author=((item.get("commit") or {}).get("author") or {}).get("name"),
                 committed_at=((item.get("commit") or {}).get("author") or {}).get("date"),
                 url=str(item.get("html_url") or ""),
@@ -713,9 +696,7 @@ class Fetcher:
             for item in payload
             if isinstance(item, dict)
         ]
-        _write_cached_json(
-            cache_path, {"fetched_at": time.time(), "items": [c.to_dict() for c in commits]}
-        )
+        _write_cached_json(cache_path, {"fetched_at": time.time(), "items": [c.to_dict() for c in commits]})
         return commits
 
     def fetch_prs(self, source: WatchSource, *, since: str | None = None) -> list[PullRequest]:
@@ -723,7 +704,11 @@ class Fetcher:
         cache_path = _list_cache_path(self.cache_dir, "prs", source)
         cached = _read_cached_json(cache_path) or {"fetched_at": 0.0, "items": []}
         fetched_at = float(cached.get("fetched_at") or 0.0)
-        if not since and fetched_at and (time.time() - fetched_at) < self.cache_ttl_seconds:
+        if (
+            not since
+            and fetched_at
+            and (time.time() - fetched_at) < self.cache_ttl_seconds
+        ):
             return [PullRequest.from_dict(item) for item in cached.get("items", [])]
 
         params: dict[str, Any] = {
@@ -752,9 +737,7 @@ class Fetcher:
             for item in payload
             if isinstance(item, dict)
         ]
-        _write_cached_json(
-            cache_path, {"fetched_at": time.time(), "items": [p.to_dict() for p in prs]}
-        )
+        _write_cached_json(cache_path, {"fetched_at": time.time(), "items": [p.to_dict() for p in prs]})
         return prs
 
     # ------------------------------------------------------------------
@@ -800,15 +783,13 @@ class Fetcher:
         paths_to_try: list[str] = []
         if source.changelog_path:
             paths_to_try.append(source.changelog_path)
-        paths_to_try.extend(
-            [
-                "CHANGELOG.md",
-                "CHANGELOG",
-                "RELEASE.md",
-                "RELEASE_NOTES.md",
-                "History.md",
-            ]
-        )
+        paths_to_try.extend([
+            "CHANGELOG.md",
+            "CHANGELOG",
+            "RELEASE.md",
+            "RELEASE_NOTES.md",
+            "History.md",
+        ])
 
         seen: set[str] = set()
         for rel_path in paths_to_try:
@@ -878,16 +859,14 @@ class Fetcher:
             is_prerelease = bool(
                 _re.search(r"-(?:rc|alpha|beta|dev|pre)\.?\d*$", version, _re.IGNORECASE)
             )
-            releases.append(
-                Release(
-                    tag=tag,
-                    name=version,
-                    body=body,
-                    published_at=published_at,
-                    url=url,
-                    is_prerelease=is_prerelease,
-                )
-            )
+            releases.append(Release(
+                tag=tag,
+                name=version,
+                body=body,
+                published_at=published_at,
+                url=url,
+                is_prerelease=is_prerelease,
+            ))
         return releases
 
     # ------------------------------------------------------------------
@@ -933,7 +912,6 @@ def make_fetcher(
 # is not always picked up by ``make_dataclass`` discovery tooling.
 def _attach_pr_from_dict() -> None:  # pragma: no cover
     if not hasattr(PullRequest, "from_dict"):
-
         def _from_dict(cls: type, data: dict[str, Any]) -> PullRequest:  # type: ignore[no-redef]
             return cls(
                 number=int(data.get("number") or 0),
@@ -943,7 +921,6 @@ def _attach_pr_from_dict() -> None:  # pragma: no cover
                 url=str(data.get("url") or ""),
                 body=str(data.get("body") or ""),
             )
-
         PullRequest.from_dict = classmethod(_from_dict)  # type: ignore[attr-defined]
 
 
@@ -952,7 +929,6 @@ _attach_pr_from_dict()
 
 def _attach_commit_from_dict() -> None:  # pragma: no cover
     if not hasattr(Commit, "from_dict"):
-
         def _from_dict(cls: type, data: dict[str, Any]) -> Commit:  # type: ignore[no-redef]
             return cls(
                 sha=str(data.get("sha", "")),
@@ -961,7 +937,6 @@ def _attach_commit_from_dict() -> None:  # pragma: no cover
                 committed_at=data.get("committed_at"),
                 url=str(data.get("url") or ""),
             )
-
         Commit.from_dict = classmethod(_from_dict)  # type: ignore[attr-defined]
 
 

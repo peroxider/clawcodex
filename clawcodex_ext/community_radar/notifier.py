@@ -302,7 +302,7 @@ def build_digest_message(
         raise RuntimeError("Channels module unavailable; cannot build message.")
     models = channels_module["models"]
 
-    period_label = {"weekly": "周报", "monthly": "月报"}.get(digest.period, digest.period)
+    period_label = {"weekly": "周报", "monthly": "月报", "full": "总报"}.get(digest.period, digest.period)
     title = f"ClawCodex 社区动态 {period_label}"
     lines: list[str] = []
     lines.append(f"**{digest.summary.strip()}**")

@@ -29,6 +29,24 @@ _log = logging.getLogger(__name__)
 DEFAULT_OUTPUT_DIR = ".reports/community-radar"
 DEFAULT_CRON_SCHEDULE = "0 8 * * 1"  # Mondays 08:00 UTC
 DEFAULT_MAX_FEATURES = 20
+DEFAULT_LANGUAGE = "zh"
+# Feature types excluded from reports (case-insensitive, matched against
+# FeatureType.value). BUGFIX and DEPRECATION are excluded by default because
+# they don't represent new capabilities.
+DEFAULT_EXCLUDE_FEATURE_TYPES: list[str] = ["bugfix", "deprecation"]
+# Categories that qualify for the "Highlights / 本期重点" summary section.
+# Only features in these categories + scoring above highlight_min_score are
+# promoted to the prose-summary block.
+DEFAULT_HIGHLIGHT_CATEGORIES: list[str] = [
+    "agent_loop",
+    "tool_system",
+    "multi_agent",
+    "orchestrator",
+    "provider",
+    "memory",
+    "mcp",
+]
+DEFAULT_HIGHLIGHT_MIN_SCORE = 55.0
 DEFAULT_WEIGHTS: dict[str, float] = {
     "popularity": 0.15,
     "maturity": 0.20,
@@ -98,16 +116,24 @@ class RadarConfig:
     output_dir: str = DEFAULT_OUTPUT_DIR
     notify: bool = True
     cache_dir: str = ".cache/community-radar"
+    # i18n & report filtering (Phase 4 / SR-5.3)
+    language: str = DEFAULT_LANGUAGE  # "zh" | "en"
+    exclude_feature_types: list[str] = field(
+        default_factory=lambda: list(DEFAULT_EXCLUDE_FEATURE_TYPES)
+    )
+    highlight_categories: list[str] = field(
+        default_factory=lambda: list(DEFAULT_HIGHLIGHT_CATEGORIES)
+    )
+    highlight_min_score: float = DEFAULT_HIGHLIGHT_MIN_SCORE
     # ``weights`` + ``roadmap_keywords`` are deliberately not part of
     # the public workflow.md schema; tests and advanced users can
     # override them via env vars (CLAWCODEX_RADAR_WEIGHT_POPULARITY=0.20)
     # or via the Python API.
     weights: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_WEIGHTS))
     roadmap_keywords: list[str] = field(default_factory=lambda: list(DEFAULT_ROADMAP_KEYWORDS))
-    # When True, the LLM-assisted classifier is invoked even when
-    # rule-based matching already produced a label. Disabled by default
-    # so the radar does not silently call out to a model on each scan.
-    use_llm: bool = False
+    # LLM classification (MAJOR/MINOR + highlights) is always enabled.
+    # Translation (title_zh / desc_zh) is controlled by ``language``:
+    # when "zh" the LLM prompt includes translation; when "en" it does not.
 
     # ------------------------------------------------------------------
     # Normalisation helpers
@@ -145,9 +171,12 @@ class RadarConfig:
             "output_dir": self.output_dir,
             "notify": self.notify,
             "cache_dir": self.cache_dir,
+            "language": self.language,
+            "exclude_feature_types": list(self.exclude_feature_types),
+            "highlight_categories": list(self.highlight_categories),
+            "highlight_min_score": self.highlight_min_score,
             "weights": dict(self.weights),
             "roadmap_keywords": list(self.roadmap_keywords),
-            "use_llm": self.use_llm,
         }
 
     @classmethod
@@ -168,6 +197,36 @@ class RadarConfig:
             keywords = [str(k) for k in keywords_raw]
         else:
             keywords = list(DEFAULT_ROADMAP_KEYWORDS)
+
+        # Language
+        lang = str(data.get("language") or DEFAULT_LANGUAGE)
+        if lang not in ("zh", "en"):
+            lang = DEFAULT_LANGUAGE
+
+        # Exclude feature types
+        exclude_raw = data.get("exclude_feature_types") or data.get("excludeFeatureTypes")
+        if isinstance(exclude_raw, list):
+            exclude_types = [str(t).lower() for t in exclude_raw]
+        else:
+            exclude_types = list(DEFAULT_EXCLUDE_FEATURE_TYPES)
+
+        # Highlight categories
+        hl_cats_raw = data.get("highlight_categories") or data.get("highlightCategories")
+        if isinstance(hl_cats_raw, list):
+            hl_cats = [str(c).lower() for c in hl_cats_raw]
+        else:
+            hl_cats = list(DEFAULT_HIGHLIGHT_CATEGORIES)
+
+        # Highlight min score
+        try:
+            hl_score = float(
+                data.get("highlight_min_score")
+                or data.get("highlightMinScore")
+                or DEFAULT_HIGHLIGHT_MIN_SCORE
+            )
+        except (TypeError, ValueError):
+            hl_score = DEFAULT_HIGHLIGHT_MIN_SCORE
+
         return cls(
             enabled=bool(data.get("enabled", True)),
             cron_schedule=str(data.get("cron_schedule") or DEFAULT_CRON_SCHEDULE),
@@ -178,12 +237,13 @@ class RadarConfig:
             ),
             output_dir=str(data.get("output_dir") or data.get("outputDir") or DEFAULT_OUTPUT_DIR),
             notify=bool(data.get("notify", True)),
-            cache_dir=str(
-                data.get("cache_dir") or data.get("cacheDir") or ".cache/community-radar"
-            ),
+            cache_dir=str(data.get("cache_dir") or data.get("cacheDir") or ".cache/community-radar"),
+            language=lang,
+            exclude_feature_types=exclude_types,
+            highlight_categories=hl_cats,
+            highlight_min_score=hl_score,
             weights=weights,
             roadmap_keywords=keywords,
-            use_llm=bool(data.get("use_llm") or data.get("useLlm") or False),
         )
 
 
@@ -204,12 +264,14 @@ def apply_env_overrides(config: RadarConfig) -> RadarConfig:
     * ``CLAWCODEX_RADAR_NOTIFY=1``
     * ``CLAWCODEX_RADAR_CACHE_DIR=/var/cache/...``
     * ``CLAWCODEX_RADAR_WEIGHT_POPULARITY=0.20`` (per dimension)
-    * ``CLAWCODEX_RADAR_USE_LLM=1``
+    * ``CLAWCODEX_RADAR_LANGUAGE=en``
+    * ``CLAWCODEX_RADAR_EXCLUDE_TYPES=bugfix,deprecation``
+    * ``CLAWCODEX_RADAR_HIGHLIGHT_CATEGORIES=agent_loop,tool_system``
+    * ``CLAWCODEX_RADAR_HIGHLIGHT_MIN_SCORE=60``
 
     Unknown keys are silently ignored so a stale env file does not
     crash the radar.
     """
-
     def _bool(name: str) -> bool | None:
         raw = os.environ.get(name)
         if raw is None or raw == "":
@@ -220,8 +282,24 @@ def apply_env_overrides(config: RadarConfig) -> RadarConfig:
         config.enabled = v
     if (v := _bool("CLAWCODEX_RADAR_NOTIFY")) is not None:
         config.notify = v
-    if (v := _bool("CLAWCODEX_RADAR_USE_LLM")) is not None:
-        config.use_llm = v
+
+    if raw := os.environ.get("CLAWCODEX_RADAR_LANGUAGE"):
+        lang = raw.strip().lower()
+        if lang in ("zh", "en"):
+            config.language = lang
+    if raw := os.environ.get("CLAWCODEX_RADAR_EXCLUDE_TYPES"):
+        config.exclude_feature_types = [
+            t.strip().lower() for t in raw.split(",") if t.strip()
+        ]
+    if raw := os.environ.get("CLAWCODEX_RADAR_HIGHLIGHT_CATEGORIES"):
+        config.highlight_categories = [
+            c.strip().lower() for c in raw.split(",") if c.strip()
+        ]
+    if raw := os.environ.get("CLAWCODEX_RADAR_HIGHLIGHT_MIN_SCORE"):
+        try:
+            config.highlight_min_score = float(raw)
+        except ValueError:
+            _log.warning("invalid CLAWCODEX_RADAR_HIGHLIGHT_MIN_SCORE=%r; ignored", raw)
 
     if raw := os.environ.get("CLAWCODEX_RADAR_CRON"):
         config.cron_schedule = raw.strip()
