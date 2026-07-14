@@ -49,6 +49,7 @@ docs/feature_plan/
 | F-10 | ExecuteExtraTool 延迟工具系统 | 📋 | [f-10-extratool.md](03-agent-core/f-10-extratool.md) |
 | F-107 | PowerShell 支持增强 | 📋 | [f-107-powershell.md](03-agent-core/f-107-powershell.md) |
 | F-119 | System Prompt 段落拼装与自迭代基础设施 | 📋 | [f-119-prompt-assembly.md](03-agent-core/f-119-prompt-assembly.md) |
+| F-130 | 自校正上下文切换 — 元认知"换脑"机制 | 📋 | [f-130-self-correct-context-switch.md](03-agent-core/f-130-self-correct-context-switch.md) |
 
 ### CLI 与配置系统
 
@@ -126,3 +127,4 @@ docs/feature_plan/
 | 2026-07-10 | 删除 F-108 已完成特性规划文档 | F-108 P108-A~H 四层方案全部实现，单元测试与稳定性门禁通过，verification agent 复核 PASS |
 | 2026-07-11 | 删除 F-120 已完成特性规划文档 | F-120 Agent Dashboard 全部 6 个 Phase 完成（124 tests，commit 3639db2b 补齐三个缺口），移除 08-agent-dashboard 章节与 F-120 表行；SOP source 接入点改由 `extensions/agent_dashboard/sources/sop_source.py` 顶部 docstring 记录 |
 | 2026-07-13 | 新增 08-recording 章节与 F-156 Asciicast v2 录制器 | 5 子系统（orchestrator / query / SOP / visualizer / cron）零 src/ 改动落地，60 unit+integration 测试通过，稳定性门禁 Stages 1-5/7-9 全绿 |
+| 2026-07-14 | 新增 F-130 自校正上下文切换 | 在 F-119 section registry 基础上规划元认知换脑机制；模板 + Agent 自定义的 Profile 系统；循环检测器框架；上下文切换引擎 + rollback；默认 4 个 Profile（default/debug/creative/review） |
