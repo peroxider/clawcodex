@@ -109,3 +109,13 @@ def load_builtin_subcommands() -> None:
         from extensions.recording import cli as _recording_cli  # noqa: F401
     except ImportError:
         _recording_cli = None
+
+    # F-REC: ``clawcodex cast-to-mp4 --cast <in.cast> --out <out.mp4>``
+    # post-processor that turns a recorded .cast into a video. Imported
+    # for side-effect — the @register("cast-to-mp4") decorator wires it
+    # into the registry. Same try/except guard so a missing Pillow (the
+    # cast-to-mp4 dependency) does not break unrelated subcommands.
+    try:
+        from extensions.recording import cast_to_mp4_cli as _cast_to_mp4_cli  # noqa: F401
+    except ImportError:
+        _cast_to_mp4_cli = None

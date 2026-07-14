@@ -48,6 +48,7 @@ GitHub/Notion），由 ClawCodex 各子系统**按结构化事件投影** + **�
 | F-REC-H | `clawcodex record` CLI（argparse + duration + SIGINT + multi-source fan-in） | ✅ | `extensions/recording/cli.py` |
 | F-REC-I | 测试套件（66 用例：unit + integration + subprocess E2E） | ✅ | `tests/extensions/recording/` |
 | F-REC-J | 端到端示例：REPL `/dashboard` 逻辑看板 4-tick 演化录制（可运行 + 可测试） | ✅ | `extensions/recording/examples/logical_kanban_repl_demo.py` |
+| F-REC-K | `.cast → MP4` 后处理器（Pillow 渲染 + ffmpeg 编码 + `clawcodex cast-to-mp4` 子命令） | ✅ | `extensions/recording/tools/cast_to_mp4.py` + `extensions/recording/cast_to_mp4_cli.py` |
 
 ### 1.4 录制模式
 
@@ -90,6 +91,12 @@ clawcodex record --list-sources
 clawcodex record --sources cron --out /tmp/demo.cast --duration 1s --validate
 head -1 /tmp/demo.cast  # header
 tail -1 /tmp/demo.cast | python3 -m json.tool  # last frame
+
+# 5. .cast → MP4（需要本机 ffmpeg + Pillow）
+python3 -m extensions.recording.examples.logical_kanban_repl_demo \
+    --out /tmp/kanban.cast --ticks 4 --frame-delay 0.5
+clawcodex cast-to-mp4 --cast /tmp/kanban.cast --out /tmp/kanban.mp4 --fps 2
+file /tmp/kanban.mp4    # 应输出 "ISO Media, MP4 v2"
 ```
 
 ### 1.7 风险与约束

@@ -159,7 +159,60 @@ Logical Kanban (tick 3)    ⏳ pending: 1  🔵 running: 0  ✅ done: 2  ❌ fai
 和 `/dashboard` 命令在终端里显示的视觉风格一致，可以直接喂给
 asciinema player 在浏览器中回放。
 
-## 8. 故障排查
+## 8. 把 `.cast` 转成 MP4 / 视频
+
+`.cast` 本身是 NDJSON 文本流（不是视频），在需要嵌入 README、PR 评论或
+Notion 演示时，可以用 `cast-to-mp4` 子命令把每个 `dashboard:snapshot`
+标记渲染成一帧 PNG，再交给 ffmpeg 编码成 MP4 / WebM / MKV 等任意
+`libx264` 支持的格式。
+
+```bash
+# 先准备一个 .cast（与 §1 相同的命令）
+python3 -m extensions.recording.examples.logical_kanban_repl_demo \
+    --out /tmp/kanban.cast --ticks 4 --frame-delay 0.5
+
+# 转成 MP4：960×480, h264/yuv420p, 浏览器可直接播放
+clawcodex cast-to-mp4 \
+    --cast /tmp/kanban.cast \
+    --out /tmp/kanban.mp4 \
+    --fps 2
+
+# 想保留 PNG 中间帧方便复盘时：
+clawcodex cast-to-mp4 \
+    --cast /tmp/kanban.cast \
+    --out /tmp/kanban.mp4 \
+    --fps 2 \
+    --keep-pngs
+# → /tmp/kanban.mp4.pngs/frame_000.png ... frame_003.png
+```
+
+可调参数：
+
+| 参数 | 默认 | 说明 |
+|------|------|------|
+| `--fps` | 4 | 帧率（每秒多少张 PNG 进入编码器） |
+| `--width` / `--height` | 960 / 480 | PNG 分辨率 |
+| `--keep-pngs` | 关 | 额外把 PNG 序列复制到 `<out>.pngs/` |
+
+**前置依赖**：本机需要 `ffmpeg` 在 `PATH`；转换器函数使用 Pillow 渲染
+PNG（cast-to-mp4 这一路径才会触发，主录制管线 `clawcodex record` 不依赖
+Pillow）。
+
+**为什么 Pillow + ffmpeg 而不是 `agg`**：`asciinema/agg` 是官方 GIF
+生成器，但只输出 GIF，没有 MP4。`ffmpeg` 通用，能产出任意
+`libx264` 容器，对嵌入场景更友好。源：[asciinema 文档 — agg](https://docs.asciinema.org/manual/agg/)、
+[ffmpeg 文档 — concat demuxer](https://ffmpeg.org/ffmpeg-formats.html#concat)。
+
+**色彩空间坑**：MP4 在 Chrome / Safari 上必须用 h264 + yuv420p，否则
+会显示成黑白棋盘；`cast-to-mp4` 已经把 `format=yuv420p` 和
+`+faststart` 写到命令行里，无需手动加。
+
+**emoji fallback**：服务器没有 emoji 字体时，Pillow 会把 `⏳/🔵/✅/❌/🚧`
+画成空白方块。`cast-to-mp4` 在写入 PNG 前自动替换成 ASCII 标签（`[pending]` /
+`[running]` / `[done]` / `[failed]` / `[blocked]`），浏览器侧
+`asciinema-player` 仍按原 `.cast` 的 emoji 渲染，不受影响。
+
+## 9. 故障排查
 
 | 症状 | 原因 | 修复 |
 |------|------|------|
@@ -167,8 +220,11 @@ asciinema player 在浏览器中回放。
 | `.cast` 只有 header 没有事件 | 录制时长太短，adapter 还没触发事件 | 加 `--duration` 到 ≥ 1s，或触发子系统负载 |
 | 浏览器播放没颜色 | `width`/`height` 与 ANSI 冲突 | 用 `--width 120 --height 36` 显式声明 |
 | 多线程场景下顺序乱 | asciicast v2 不保证跨线程顺序 | 这是 NDJSON 格式的自然限制，按时间戳回放即可 |
+| `cast-to-mp4` 提示 `ffmpeg not found` | 本机没装 ffmpeg | `apt install ffmpeg`（Debian/Ubuntu）或 `brew install ffmpeg`（macOS）后重试 |
+| `cast-to-mp4` 报 `RuntimeError: cast_to_mp4 requires Pillow` | 转换路径需要 Pillow | `pip install Pillow`（主录制 `clawcodex record` 不依赖 Pillow） |
+| MP4 在 Chrome 显示黑屏 | h264 不是 yuv420p 色彩空间 | 已是默认；如手动调整务必保留 `-vf format=yuv420p` |
 
-## 9. 架构概览
+## 10. 架构概览
 
 ```
 extensions/capabilities/recorder.py    ← Protocol-only 契约
@@ -178,8 +234,11 @@ extensions/recording/                  ← 共享 writer + registry + CLI
 ├── validate_cast.py                   ← 自包含 v2 schema 校验
 ├── registry.py                        ← RecordableSource 注册中心
 ├── cli.py                             ← clawcodex record 入口
+├── cast_to_mp4_cli.py                 ← clawcodex cast-to-mp4 入口
 ├── query_forwarder.py                 ← query 事件 → AsciicastEvent 翻译
 ├── _factories.py                      ← 5 个 built-in source 工厂
+├── tools/                             ← .cast 后续处理工具（opt-in）
+│   └── cast_to_mp4.py                 ← Pillow + ffmpeg 渲染与编码
 └── __init__.py
 
 per-subsystem adapters:
