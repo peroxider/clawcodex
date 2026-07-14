@@ -27,6 +27,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import asyncio
 import re
 import signal
 import sys
@@ -111,6 +112,63 @@ def parse_duration(value: str) -> float:
     return n * _DURATION_UNITS[unit]
 
 
+def _positive_finite_float(value: str) -> float:
+    """argparse type: float, must be positive and finite (no NaN / inf)."""
+    import math
+
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError(
+            f"expected a number, got {value!r}"
+        )
+    if not math.isfinite(n):
+        raise argparse.ArgumentTypeError(
+            f"value must be a finite number, got {value!r}"
+        )
+    if n <= 0:
+        raise argparse.ArgumentTypeError(
+            f"value must be positive (> 0), got {value!r}"
+        )
+    return n
+
+
+def _non_negative_finite_float(value: str) -> float:
+    """argparse type: float, must be non-negative and finite (no NaN / inf)."""
+    import math
+
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError(
+            f"expected a number, got {value!r}"
+        )
+    if not math.isfinite(n):
+        raise argparse.ArgumentTypeError(
+            f"value must be a finite number, got {value!r}"
+        )
+    if n < 0:
+        raise argparse.ArgumentTypeError(
+            f"value must be non-negative (>= 0), got {value!r}"
+        )
+    return n
+
+
+def _positive_int(value: str) -> int:
+    """argparse type: int, must be >= 1."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError(
+            f"expected an integer, got {value!r}"
+        )
+    if n < 1:
+        raise argparse.ArgumentTypeError(
+            f"value must be >= 1, got {value!r}"
+        )
+    return n
+
+
 # ---------------------------------------------------------------------------
 # Argparse
 # ---------------------------------------------------------------------------
@@ -187,6 +245,40 @@ def build_record_parser() -> argparse.ArgumentParser:
         help=(
             "After recording, run the self-contained validator on the "
             "output file and print any errors."
+        ),
+    )
+    p.add_argument(
+        "--auto",
+        action="store_true",
+        help=(
+            "Run F-REC-AUTO: drive a real orchestrator batch + dashboard "
+            "ticks into one .cast file. Mutually exclusive with --sources."
+        ),
+    )
+    p.add_argument(
+        "--auto-frame-delay-s",
+        type=_positive_finite_float,
+        default=1.0,
+        help=(
+            "Wall-clock seconds between dashboard ticks under --auto "
+            "(default: %(default)s). Must be a positive finite number."
+        ),
+    )
+    p.add_argument(
+        "--auto-duration-s",
+        type=_non_negative_finite_float,
+        default=30.0,
+        help=(
+            "Total wall-clock budget for --auto in seconds (default: "
+            "%(default)s). Must be a non-negative finite number."
+        ),
+    )
+    p.add_argument(
+        "--auto-issue-count",
+        type=_positive_int,
+        default=3,
+        help=(
+            "Number of issues to dispatch under --auto, 1..3 (default: %(default)s)."
         ),
     )
     return p
@@ -285,6 +377,23 @@ def run_record_command(args: list[str] | None = None) -> int:
         parser.error("--out is required (or pass --list-sources)")
 
     out_path = Path(parsed.out).expanduser().resolve()
+
+    # F-REC-AUTO: mutually exclusive with --sources. Drives a real
+    # orchestrator batch + dashboard ticks into one .cast file.
+    if parsed.auto:
+        if parsed.sources:
+            parser.error("--auto is mutually exclusive with --sources")
+        from extensions.recording.auto_demo import run as auto_run
+
+        return asyncio.run(
+            auto_run(
+                out_path,
+                duration_s=parsed.auto_duration_s,
+                issue_count=parsed.auto_issue_count,
+                frame_delay_s=parsed.auto_frame_delay_s,
+            )
+        )
+
     sources = _resolve_sources(parsed.sources, available)
 
     if not sources:
