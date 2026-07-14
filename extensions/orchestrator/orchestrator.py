@@ -241,6 +241,7 @@ class Orchestrator:
                 agent_runner=agent_runner,
                 tracker=tracker,
                 status_dashboard=status_dashboard,
+                diagnostics_callback=self._update_run_diagnostics,
             )
             logger.info(
                 "Workflow engine enabled: %s (%s, %d stages)",
@@ -2766,12 +2767,13 @@ class Orchestrator:
             workspace_dirty=getattr(session, "run_workspace_dirty", None),
         )
         if record is None:
-            logger.warning(
-                "Skipped run diagnostics update because registry record is missing issue_id=%s run_id=%s status=%s",
-                issue_id,
-                getattr(session, "run_id", None),
-                getattr(session, "status", None),
-            )
+            if not (issue_id or "").startswith("stage-"):
+                logger.warning(
+                    "Skipped run diagnostics update because registry record is missing issue_id=%s run_id=%s status=%s",
+                    issue_id,
+                    getattr(session, "run_id", None),
+                    getattr(session, "status", None),
+                )
 
     async def _run_issue_with_workflow(
         self,
