@@ -298,6 +298,38 @@ def dispatch_local_command(
             )
         except Exception as exc:
             return CommandDispatchResult(handled=True, error=f"/tools: {exc}")
+    if name == "/skills":
+        try:
+            from src.skills.loader import get_all_skills
+
+            cwd = workspace_root
+            skills = list(get_all_skills(project_root=cwd))
+            skills.sort(key=lambda s: s.name.lower())
+            if not skills:
+                return CommandDispatchResult(
+                    handled=True,
+                    system_text="No skills found.\nCreate skills in ~/.clawcodex/skills/ or .clawcodex/skills/ in your project.",
+                )
+            from collections import defaultdict
+
+            by_source: dict[str, list] = defaultdict(list)
+            for s in skills:
+                loaded = getattr(s, "loaded_from", "") or "unknown"
+                by_source[loaded].append(s)
+            lines = [f"Available Skills ({len(skills)}):"]
+            for source in sorted(by_source.keys()):
+                source_skills = by_source[source]
+                lines.append(f"\n{source.title()} Skills:")
+                for s in source_skills:
+                    desc = (s.description or "").strip()
+                    tag = f" — {desc}" if desc else ""
+                    lines.append(f"  /{s.name}{tag}")
+            return CommandDispatchResult(
+                handled=True,
+                system_text="\n".join(lines),
+            )
+        except Exception as exc:
+            return CommandDispatchResult(handled=True, error=f"/skills: {exc}")
     if name == "/stream":
         parts = raw.split(maxsplit=1)
         if len(parts) == 1:

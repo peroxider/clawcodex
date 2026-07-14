@@ -54,6 +54,7 @@ from .agent_bridge import AgentBridge
 from .commands import (
     CommandDispatchResult,
     CommandSuggestion,
+    LOCAL_BUILTINS,
     build_command_suggestions,
     build_command_words,
     dispatch_local_command,
@@ -655,8 +656,12 @@ class ClawCodexTUI(App):
             if show_busy:
                 self.app_state.set_thinking(False)
         if not result.handled:
-            # Unknown command — show the raw text as a user prompt so
-            # the agent can react to it, matching legacy REPL behavior.
+            # Unknown command — try as a skill before falling through
+            # to the agent text prompt (matching REPL's
+            # ``_try_run_skill_slash``).
+            if self._try_run_skill_slash(text, transcript):
+                return
+            # Fall through to the agent as a plain text prompt.
             if result.error:
                 transcript.append_system(result.error, style="error")
                 return
@@ -664,6 +669,65 @@ class ClawCodexTUI(App):
             self.submit_to_agent(text)
             return
         self._apply_command_result(result, transcript)
+
+    def _try_run_skill_slash(self, raw: str, transcript: Transcript) -> bool:
+        """Try to run an unknown ``/xxx`` command as a skill.
+
+        Mirrors ``clawcodex_ext/repl/core.py:_try_run_skill_slash``.
+        Returns ``True`` if the command was consumed as a skill.
+        """
+        text = raw.strip()
+        if not text.startswith("/"):
+            return False
+        body = text[1:]
+        if not body:
+            return False
+        # Skip if the name matches a known built-in.
+        first_word = body.split(maxsplit=1)[0].lower()
+        if first_word in {b.lstrip("/").lower() for b in LOCAL_BUILTINS}:
+            return False
+        parts = body.split(maxsplit=1)
+        skill_name = parts[0].strip()
+        args = parts[1] if len(parts) > 1 else ""
+        if not skill_name:
+            return False
+        try:
+            from src.tool_system import ToolCall
+
+            result = self.tool_registry.dispatch(
+                ToolCall(name="Skill", input={"skill": skill_name, "args": args}),
+                self.tool_context,
+            )
+        except Exception as e:
+            transcript.append_system(f"Skill error: {e}", style="error")
+            return True
+        payload = result.output if isinstance(result.output, dict) else {}
+        if result.is_error or not payload.get("success"):
+            err = (
+                payload.get("error")
+                if isinstance(payload.get("error"), str)
+                else "Unknown skill error"
+            )
+            transcript.append_system(err, style="error")
+            return True
+        prompt = payload.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            transcript.append_system("Skill produced empty prompt", style="error")
+            return True
+        meta_parts: list[str] = []
+        loaded = payload.get("loadedFrom")
+        if isinstance(loaded, str) and loaded:
+            meta_parts.append(f"source={loaded}")
+        model = payload.get("model")
+        if isinstance(model, str) and model:
+            meta_parts.append(f"model={model}")
+        if meta_parts:
+            info = " · ".join(meta_parts)
+            transcript.append_system(f"Launching skill: {skill_name}  ({info})", style="info")
+        else:
+            transcript.append_system(f"Launching skill: {skill_name}", style="info")
+        self.submit_to_agent(prompt)
+        return True
 
     def _apply_command_result(
         self,
@@ -1232,6 +1296,17 @@ class ClawCodexTUI(App):
             from src.history import HistoryLog
 
             register_builtin_commands(None)
+            # Register disk skills as PromptCommands in the global
+            # command registry so ``dispatch_registry_command`` can
+            # resolve ``/<skill-name>`` slash commands. Idempotent
+            # via the registry's shadowing guard (builtins win).
+            # Failures must never block command dispatch.
+            try:
+                from src.command_system import load_and_register_skills
+
+                load_and_register_skills(registry=None)
+            except Exception:
+                pass
             # F-53: also register dynamic tool commands in the global
             # registry so ``execute_command_sync`` (which looks at the
             # global registry, not the TUI's private one) can route
