@@ -80,7 +80,7 @@ def test_validate_cast_rejects_malformed_event_tuple(tmp_path: Path) -> None:
     path = _cast(tmp_path)
     # Append a deliberately broken event.
     with path.open("a", encoding="utf-8") as fp:
-        fp.write("[0.1, \"x\", \"bad\"]\n")
+        fp.write("[0.1, \"z\", \"bad\"]\n")
         fp.write("[0.2]\n")
         fp.write("[\"o\", 0.3, \"bad\"]\n")
         fp.write("not-json\n")

@@ -29,7 +29,10 @@ from __future__ import annotations
 import argparse
 import asyncio
 import re
+import shlex
+import shutil
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -281,6 +284,110 @@ def build_record_parser() -> argparse.ArgumentParser:
             "Number of issues to dispatch under --auto, 1..3 (default: %(default)s)."
         ),
     )
+    # F-REC-M: full-PTY capture. The structured mode (default) routes
+    # per-subsystem events through the in-process source registry; pty
+    # mode forks a real pseudo-terminal and captures the *entire screen*
+    # — including prompt_toolkit's `❯` glyph, line editing, cursor
+    # moves, and any Rich output — which F-REC-L's Rich tee cannot
+    # capture because prompt_toolkit renders directly to the TTY, not
+    # through Rich. The native backend uses only the standard-library
+    # `pty` module; an optional `asciinema` backend is available for
+    # users who already have the Rust CLI installed.
+    p.add_argument(
+        "--mode",
+        type=str,
+        choices=("structured", "pty"),
+        default="structured",
+        help=(
+            "Recording mode. 'structured' (default) uses the source "
+            "registry + per-subsystem adapters. 'pty' forks a real "
+            "pseudo-terminal and records the full screen including the "
+            "prompt_toolkit prompt bar and cursor."
+        ),
+    )
+    p.add_argument(
+        "--pty-cmd",
+        type=str,
+        default="clawcodex-dev",
+        help=(
+            "Under --mode pty, the command to run inside the recorded "
+            "PTY (default: %(default)s). For interactive sessions use "
+            "--no-pty-auto-exit; otherwise the command is executed and "
+            "the PTY is closed automatically."
+        ),
+    )
+    p.add_argument(
+        "--pty-backend",
+        type=str,
+        choices=("native", "asciinema"),
+        default="native",
+        help=(
+            "PTY recording backend. 'native' (default) uses the Python "
+            "standard-library pty module and works everywhere. "
+            "'asciinema' delegates to the external `asciinema` CLI; "
+            "only the Rust build reliably captures command output in "
+            "headless environments."
+        ),
+    )
+    p.add_argument(
+        "--pty-auto-exit",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "When true (default), send an 'exit' keystroke after the "
+            "--pty-cmd so the recording ends automatically. Use "
+            "--no-pty-auto-exit for interactive sessions where you want "
+            "to close the shell yourself."
+        ),
+    )
+    p.add_argument(
+        "--pty-capture-input",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Mirror typed input as asciicast 'i' frames (default: "
+            "%(default)s). Native backend only."
+        ),
+    )
+    p.add_argument(
+        "--pty-input-script",
+        type=str,
+        default="",
+        help=(
+            "Multi-line input to feed to the PTY after --pty-input-delay-s. "
+            "Each line is sent as if the user had typed it, followed by "
+            "Enter. If the value starts with '@', the rest is treated as a "
+            "file path to read. Native backend only."
+        ),
+    )
+    p.add_argument(
+        "--pty-input-delay-s",
+        type=_non_negative_finite_float,
+        default=0.0,
+        help=(
+            "Seconds to wait after the PTY starts before sending the "
+            "input script (default: %(default)s). Useful for REPLs "
+            "that need time to render their splash screen before "
+            "accepting commands. Native backend only."
+        ),
+    )
+    p.add_argument(
+        "--pty-quiet",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Pass --quiet to asciinema to suppress its own status "
+            "messages (default: %(default)s). asciinema backend only."
+        ),
+    )
+    p.add_argument(
+        "--pty-overwrite",
+        action="store_true",
+        help=(
+            "Pass -y to asciinema so an existing output file is "
+            "overwritten. asciinema backend only."
+        ),
+    )
     return p
 
 
@@ -352,6 +459,171 @@ def _restore_sigint_handler(stop_event: threading.Event) -> None:
         pass
 
 
+# ---------------------------------------------------------------------------
+# F-REC-M: full-PTY capture via external asciinema
+# ---------------------------------------------------------------------------
+
+
+_ASCIINEMA_INSTALL_HINT = (
+    "`asciinema` not found on PATH. Install one of:\n"
+    "  - Ubuntu/Debian:  sudo apt install asciinema\n"
+    "  - pip (Python):   pip install asciinema\n"
+    "  - cargo (Rust):   cargo install asciinema\n"
+    "  - static binary:  https://github.com/asciinema/asciinema/releases"
+)
+
+
+def _run_pty_recording_asciinema(
+    *,
+    out_path: Path,
+    pty_cmd: Sequence[str],
+    title: str | None,
+    quiet: bool,
+    overwrite: bool,
+    auto_exit: bool,
+) -> int:
+    """Drive ``asciinema rec`` to capture the full PTY screen.
+
+    Optional F-REC-M backend. asciinema 2.x writes asciicast v2 NDJSON
+    directly, so the file can be re-validated by :func:`validate_cast`
+    and converted to MP4 by the existing ``cast-to-mp4``
+    post-processor. The .cast produced by this mode includes the
+    prompt_toolkit prompt bar (``❯`` glyph, line edit, cursor moves) —
+    which F-REC-L's Rich tee cannot capture because prompt_toolkit
+    renders directly to the TTY, not via Rich.
+
+    asciinema is treated as a soft dependency: a clear error message is
+    printed when it is missing; users can fall back to the native
+    ``pty`` backend (the default) which uses only the Python standard
+    library.
+
+    The command is sent to asciinema's interactive shell via stdin
+    rather than using ``asciinema rec --command ...``. Some Python
+    builds of asciinema 2.4.0 drop all output from ``--command`` mode
+    (only the header is written), so feeding the command through the
+    shell prompt works around that bug while preserving the full PTY
+    screen capture.
+
+    When ``auto_exit`` is true, an ``exit`` command is appended so the
+    recording terminates automatically. For interactive sessions the
+    user can pass ``--no-pty-auto-exit`` and end the recording by
+    sending EOF (Ctrl-D) or typing ``exit`` in the inner shell.
+    """
+    if shutil.which("asciinema") is None:
+        print(
+            f"error: --pty-backend asciinema requires the `asciinema` CLI.\n"
+            f"{_ASCIINEMA_INSTALL_HINT}\n"
+            f"hint: use --pty-backend native (the default) for a "
+            f"dependency-free PTY recorder.",
+            file=sys.stderr,
+        )
+        return 2
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    argv: list[str] = ["asciinema", "rec"]
+    if quiet:
+        argv.append("--quiet")
+    if overwrite:
+        argv.append("--yes")
+    if title:
+        argv.extend(["--title", title])
+    argv.append(str(out_path))
+
+    script_lines: list[str] = [shlex.join(list(pty_cmd))]
+    if auto_exit:
+        script_lines.append("exit")
+    script = ("\n".join(script_lines) + "\n").encode("utf-8")
+
+    print(
+        f"[record/pty/asciinema] launching {' '.join(pty_cmd)}; "
+        f"output → {out_path}",
+        file=sys.stderr,
+    )
+    if auto_exit:
+        print(
+            "[record/pty/asciinema] the inner command will run and the "
+            "shell will exit automatically.",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            "[record/pty/asciinema] send EOF (Ctrl-D) in the inner shell, "
+            "or Ctrl-C in this terminal, to end the recording.",
+            file=sys.stderr,
+        )
+
+    proc = subprocess.Popen(
+        argv,
+        stdin=subprocess.PIPE,
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+    )
+    try:
+        proc.communicate(input=script)
+    except KeyboardInterrupt:
+        # Ctrl-C at this terminal — ask asciinema to clean up.
+        try:
+            proc.terminate()
+            return proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            return proc.wait()
+    return proc.returncode
+
+
+def _parse_pty_input_script(value: str) -> bytes:
+    """Resolve ``--pty-input-script`` to raw input bytes.
+
+    A leading ``@`` means "read this file"; otherwise the literal
+    string is used, with ``\\n`` sequences normalised to real newlines.
+    """
+    if value.startswith("@"):
+        path = Path(value[1:]).expanduser().resolve()
+        return path.read_bytes()
+    return value.replace("\\n", "\n").encode("utf-8")
+
+
+def _run_pty_recording_native(
+    *,
+    out_path: Path,
+    pty_cmd: Sequence[str],
+    width: int,
+    height: int,
+    title: str | None,
+    auto_exit: bool,
+    capture_input: bool,
+    input_delay_s: float,
+    input_script_raw: str,
+) -> int:
+    """Native PTY backend for F-REC-M (Python stdlib only).
+
+    Forks the command into a pseudo-terminal and writes all terminal
+    output as asciicast v2 ``"o"`` events. Input script bytes are sent
+    to the PTY and optionally mirrored as ``"i"`` events. This backend
+    works on any POSIX system with no external dependencies.
+    """
+    from extensions.recording.pty_recorder import run_pty_recording
+
+    input_script = _parse_pty_input_script(input_script_raw)
+    if auto_exit:
+        input_script = input_script + b"\nexit\n"
+
+    print(
+        f"[record/pty/native] launching {' '.join(pty_cmd)} in PTY "
+        f"({width}x{height}); output -> {out_path}",
+        file=sys.stderr,
+    )
+    return run_pty_recording(
+        cmd=pty_cmd,
+        out_path=out_path,
+        width=width,
+        height=height,
+        title=title,
+        input_script=input_script or None,
+        capture_input=capture_input,
+        input_delay_s=input_delay_s,
+    )
 def run_record_command(args: list[str] | None = None) -> int:
     """Entry point invoked by ``subcommand_registry``."""
     parser = build_record_parser()
@@ -383,6 +655,8 @@ def run_record_command(args: list[str] | None = None) -> int:
     if parsed.auto:
         if parsed.sources:
             parser.error("--auto is mutually exclusive with --sources")
+        if parsed.mode == "pty":
+            parser.error("--auto is mutually exclusive with --mode pty")
         from extensions.recording.auto_demo import run as auto_run
 
         return asyncio.run(
@@ -393,6 +667,48 @@ def run_record_command(args: list[str] | None = None) -> int:
                 frame_delay_s=parsed.auto_frame_delay_s,
             )
         )
+
+    # F-REC-M: full-PTY capture. Native backend (default) forks a real
+    # pseudo-terminal via the Python standard library; optional
+    # asciinema backend delegates to the external CLI. Mutually
+    # exclusive with --sources and --auto. --list-sources is
+    # intentionally allowed under --mode pty so the same registry view
+    # is available for documentation / debugging.
+    if parsed.mode == "pty":
+        if parsed.sources:
+            parser.error("--mode pty is mutually exclusive with --sources")
+        if parsed.pty_backend == "native":
+            rc = _run_pty_recording_native(
+                out_path=out_path,
+                pty_cmd=shlex.split(parsed.pty_cmd),
+                width=parsed.width,
+                height=parsed.height,
+                title=parsed.title,
+                auto_exit=parsed.pty_auto_exit,
+                capture_input=parsed.pty_capture_input,
+                input_delay_s=parsed.pty_input_delay_s,
+                input_script_raw=parsed.pty_input_script,
+            )
+        else:
+            rc = _run_pty_recording_asciinema(
+                out_path=out_path,
+                pty_cmd=shlex.split(parsed.pty_cmd),
+                title=parsed.title,
+                quiet=parsed.pty_quiet,
+                overwrite=parsed.pty_overwrite,
+                auto_exit=parsed.pty_auto_exit,
+            )
+        if rc != 0:
+            return rc
+        if parsed.validate:
+            errors = validate_cast(out_path)
+            if errors:
+                print("[record/pty] validation errors:", file=sys.stderr)
+                for err in errors:
+                    print(f"  - {err}", file=sys.stderr)
+                return 1
+            print("[record/pty] validation: OK", file=sys.stderr)
+        return rc
 
     sources = _resolve_sources(parsed.sources, available)
 

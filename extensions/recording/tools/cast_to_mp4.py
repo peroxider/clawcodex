@@ -90,20 +90,91 @@ def _import_pillow():
 # ---------------------------------------------------------------------------
 
 
-def _font(size: int, ImageFont):
+def _font(size: int, ImageFont, *, bold: bool = False):
     """Return the best monospace ``ImageFont`` Pillow can find on this box.
 
     Falls back to ``ImageFont.load_default()`` if no TTF is reachable —
     the output is still readable, just bitmap-aliased.
     """
-    for candidate in (
-        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-        "/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf",
-        "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
-    ):
+    candidates: tuple[str, ...]
+    if bold:
+        candidates = (
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+            "/usr/share/fonts/truetype/ubuntu/UbuntuMono-B.ttf",
+            "/usr/share/fonts/TTF/DejaVuSansMono-Bold.ttf",
+        )
+    else:
+        candidates = (
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+            "/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf",
+            "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+        )
+    for candidate in candidates:
         if Path(candidate).exists():
             return ImageFont.truetype(candidate, size)
     return ImageFont.load_default()
+
+
+# ---------------------------------------------------------------------------
+# ANSI color handling for terminal-accurate rendering
+# ---------------------------------------------------------------------------
+
+
+#: Default 16-color ANSI palette (xterm standard).
+_ANSI_PALETTE = {
+    "default": (201, 209, 217),
+    "black": (0, 0, 0),
+    "red": (205, 49, 49),
+    "green": (13, 188, 121),
+    "yellow": (229, 229, 16),
+    "blue": (36, 114, 200),
+    "magenta": (188, 63, 188),
+    "cyan": (17, 168, 205),
+    "white": (229, 229, 229),
+    "brightblack": (102, 102, 102),
+    "brightred": (241, 76, 76),
+    "brightgreen": (35, 209, 139),
+    "brightyellow": (245, 245, 67),
+    "brightblue": (59, 142, 234),
+    "brightmagenta": (214, 112, 214),
+    "brightcyan": (41, 184, 219),
+    "brightwhite": (255, 255, 255),
+}
+
+
+def _resolve_color(value: str | int, default: tuple[int, int, int]) -> tuple[int, int, int]:
+    """Resolve a pyte color value to an RGB tuple."""
+    if value == "default":
+        return default
+    if isinstance(value, int):
+        # 256-color index — map the 6x6x6 color cube and grayscale ramp.
+        if 0 <= value <= 15:
+            name = list(_ANSI_PALETTE)[value + 1]
+            return _ANSI_PALETTE[name]
+        if 16 <= value <= 231:
+            value -= 16
+            r = (value // 36) * 51
+            g = ((value // 6) % 6) * 51
+            b = (value % 6) * 51
+            return (r, g, b)
+        if 232 <= value <= 255:
+            gray = 8 + (value - 232) * 10
+            return (gray, gray, gray)
+        return default
+    if isinstance(value, str):
+        value = value.lower()
+        if value in _ANSI_PALETTE:
+            return _ANSI_PALETTE[value]
+        if len(value) == 6:
+            try:
+                return (
+                    int(value[0:2], 16),
+                    int(value[2:4], 16),
+                    int(value[4:6], 16),
+                )
+            except ValueError:
+                pass
+    return default
 
 
 # ---------------------------------------------------------------------------
@@ -210,26 +281,53 @@ def render_cast_to_pngs(
 
     font = _font(14, ImageFont)
     badge_font = _font(13, ImageFont)
+    ansi_font = _font(14, ImageFont)
+    ansi_font_bold = _font(14, ImageFont, bold=True)
     effective_palette = palette or BADGE_PALETTE
 
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Auto-detect ANSI output: if any snapshot contains an escape byte we
+    # render the whole cast as a terminal screen so colors / cursor moves
+    # survive into the MP4.
+    has_ansi = any(
+        "\x1b" in chunk for _, outputs in snapshots for chunk in outputs
+    )
+
     pairs: list[tuple[Path, float]] = []
     for i, ((_, outputs), hold) in enumerate(zip(snapshots, holds)):
         png = out_dir / f"frame_{i:03d}.png"
-        _draw_frame(
-            png,
-            outputs=outputs,
-            title=title,
-            width_px=width_px,
-            height_px=height_px,
-            bg=bg,
-            fg=fg,
-            palette=effective_palette,
-            font=font,
-            badge_font=badge_font,
-            Image=Image,
-            ImageDraw=ImageDraw,
-        )
+        if has_ansi:
+            _draw_frame_ansi(
+                png,
+                outputs=outputs,
+                title=title,
+                width_px=width_px,
+                height_px=height_px,
+                header_width=header.get("width", 80),
+                header_height=header.get("height", 24),
+                bg=bg,
+                fg=fg,
+                font=ansi_font,
+                bold_font=ansi_font_bold,
+                Image=Image,
+                ImageDraw=ImageDraw,
+            )
+        else:
+            _draw_frame(
+                png,
+                outputs=outputs,
+                title=title,
+                width_px=width_px,
+                height_px=height_px,
+                bg=bg,
+                fg=fg,
+                palette=effective_palette,
+                font=font,
+                badge_font=badge_font,
+                Image=Image,
+                ImageDraw=ImageDraw,
+            )
         pairs.append((png, hold))
 
     return pairs
@@ -360,6 +458,86 @@ def _draw_frame(
                 break
         if y > bottom_limit:
             break
+
+    img.save(png, "PNG")
+
+
+def _draw_frame_ansi(
+    png: Path,
+    *,
+    outputs: list[str],
+    title: str,
+    width_px: int,
+    height_px: int,
+    header_width: int,
+    header_height: int,
+    bg: tuple[int, int, int],
+    fg: tuple[int, int, int],
+    font,
+    bold_font,
+    Image,
+    ImageDraw,
+) -> None:
+    """Render one PNG frame by emulating a terminal screen.
+
+    Uses ``pyte`` to parse ANSI escape sequences (colors, cursor moves,
+    bold, etc.) and then draws each cell of the resulting screen buffer
+    with Pillow. This is what makes recordings of the real interactive
+    REPL look like the reference screenshot instead of raw escape-code
+    soup.
+    """
+    try:
+        import pyte  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise RuntimeError(
+            "ANSI-aware MP4 rendering requires `pyte`. "
+            "Install with: pip install pyte"
+        ) from exc
+
+    screen = pyte.Screen(header_width, header_height)
+    stream = pyte.Stream(screen)
+    for chunk in outputs:
+        stream.feed(chunk)
+
+    img = Image.new("RGB", (width_px, height_px), color=bg)
+    draw = ImageDraw.Draw(img)
+    # Title strip.
+    draw.rectangle((0, 0, width_px, 32), fill=(22, 27, 34))
+    draw.text((12, 8), title, fill=fg, font=font)
+
+    cell_w = width_px // header_width
+    cell_h = (height_px - 32) // header_height
+    if cell_w <= 0 or cell_h <= 0:
+        raise RuntimeError(
+            f"terminal dimensions too large for {width_px}x{height_px} image: "
+            f"{header_width}x{header_height}"
+        )
+
+    # Use a slightly smaller font size than the cell so glyphs fit.
+    font_size = max(8, cell_h - 2)
+    font = font.font_variant(size=font_size)
+    bold_font = bold_font.font_variant(size=font_size)
+
+    base_y = 32
+    for y in range(header_height):
+        row = screen.buffer[y]
+        for x in range(header_width):
+            char_obj = row.get(x)
+            if char_obj is None:
+                continue
+            char = char_obj.data
+            if char == " " and char_obj.bg == "default":
+                continue
+            px = x * cell_w
+            py = base_y + y * cell_h
+            cell_bg = _resolve_color(char_obj.bg, default=bg)
+            cell_fg = _resolve_color(char_obj.fg, default=fg)
+            draw.rectangle(
+                (px, py, px + cell_w - 1, py + cell_h - 1),
+                fill=cell_bg,
+            )
+            face = bold_font if char_obj.bold else font
+            draw.text((px, py), char, fill=cell_fg, font=face)
 
     img.save(png, "PNG")
 

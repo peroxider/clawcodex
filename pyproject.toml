@@ -108,6 +108,9 @@ dev = [
     "pexpect>=4.9.0",
     "lark-oapi==1.7.0",
     "qrcode==7.4.2",
+    # F-REC-M: ANSI-aware cast→mp4 rendering. Tiny pure-Python VTxxx
+    # emulator; tests skip the ANSI render path if it is absent.
+    "pyte>=0.8.0",
 ]
 # F-62 Chrome browser automation. ``playwright`` drives a real
 # headless Chromium; ``pillow`` composites screenshot frames into

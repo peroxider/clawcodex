@@ -26,7 +26,10 @@ __all__ = ["validate_cast"]
 # (https://docs.asciinema.org/manual/asciicast/v2/).
 _REQUIRED_HEADER = {"version", "width", "height"}
 _VALID_VERSION = 2
-_VALID_EVENT_KINDS = {"o", "i", "m", "r"}
+# ``o`` output, ``i`` input, ``m`` marker, ``r`` resize are in the core
+# spec; ``x`` (exit code) is an optional extension event supported by
+# both asciinema and our native PTY recorder.
+_VALID_EVENT_KINDS = {"o", "i", "m", "r", "x"}
 
 
 def validate_cast(path: Path) -> list[str]:
@@ -90,10 +93,10 @@ def validate_cast(path: Path) -> list[str]:
             or len(event) != 3
             or not isinstance(event[0], (int, float))
             or not isinstance(event[1], str)
-            or not isinstance(event[2], str)
+            or not isinstance(event[2], (str, int))
         ):
             errors.append(
-                f"line {idx}: event must be [time:number, code:str, data:str], "
+                f"line {idx}: event must be [time:number, code:str, data:str|int], "
                 f"got {type(event).__name__}: {raw[:80]!r}"
             )
             continue
@@ -105,5 +108,10 @@ def validate_cast(path: Path) -> list[str]:
             )
         if event[0] < 0:
             errors.append(f"line {idx}: event time must be >= 0, got {event[0]}")
+        # ``x`` (exit code) data must be an integer.
+        if kind == "x" and not isinstance(event[2], int):
+            errors.append(
+                f"line {idx}: 'x' event data must be an int exit code, got {event[2]!r}"
+            )
 
     return errors
