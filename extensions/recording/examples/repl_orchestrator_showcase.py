@@ -1,7 +1,8 @@
 """REPL showcase: real orchestrator batch + REPL ``/dashboard`` → one ``.cast``.
 
 This example composes F-REC-AUTO (real ``GitSyncService.sync``) with
-F-REC-L (REPL-style prompt markers + ``AsciicastDashboardSource``) so
+F-REC-L (REPL-style prompt markers) and the live ``/dashboard``
+formatter from ``clawcodex_ext.command_system.dashboard_command`` so
 that a single ``.cast`` file shows a developer running
 ``clawcodex-dev --record`` while a real orchestrator batch executes in
 the background and the REPL ``/dashboard`` command snapshots the
@@ -15,11 +16,18 @@ What the script writes into the ``.cast``:
 * Every 2 s a simulated "user typed /dashboard" sequence:
   - marker ``repl:prompt:start``
   - marker ``repl:command:/dashboard``
-  - one ``o`` frame containing the ``❯ /dashboard`` echo line
   - marker ``repl:prompt:submit``
-  - one or more ``o`` frames containing the rendered ASCII kanban
-    panel (same vocabulary as the live dashboard)
+  - one ``o`` frame per section of the real ``/dashboard`` snapshot
+    (rendered via ``_format_snapshot`` — the same Rich markup the
+    interactive REPL produces when a user runs the command, so the
+    .cast content matches what the user actually sees)
 * Frames are flushed per-frame so ``tail -f`` reads incrementally.
+
+Note: the prompt_toolkit prompt bar itself (``❯`` glyph, line edit,
+status row) is rendered by prompt_toolkit and not captured by
+``install_repl_capture`` — see ``repl_source.py`` for that F-REC-L
+limitation. The markers + the rendered snapshot together reconstruct
+the user-perceived ``/dashboard`` event flow in playback.
 
 Layer rule (CLAUDE.md): this file lives in Layer 2 alongside the
 recorder package and is independent from ``src/`` /
@@ -61,7 +69,7 @@ from extensions.capabilities.dashboard_entry import (  # noqa: E402
     DASHBOARD_STATUS_PENDING,
     DashboardEntry,
 )
-from extensions.capabilities.recorder import AsciicastHeader  # noqa: E402
+from extensions.capabilities.recorder import AsciicastEvent, AsciicastHeader  # noqa: E402
 from extensions.orchestrator.config.schema import (  # noqa: E402
     AgentConfig,
     HooksConfig,
@@ -76,8 +84,14 @@ from extensions.orchestrator.workspace import (  # noqa: E402
 )
 from extensions.recording.asciicast_writer import AsciicastWriter  # noqa: E402
 from extensions.recording.validate_cast import validate_cast  # noqa: E402
-from extensions.visualizer.asciicast_dashboard_source import (  # noqa: E402
-    AsciicastDashboardSource,
+
+# Reuse the real ``/dashboard`` renderer so the .cast content matches
+# what a user sees when typing ``/dashboard`` in the interactive REPL.
+# The previous version called ``AsciicastDashboardSource.record_snapshot``
+# (a home-grown ASCII panel) and looked nothing like the real dashboard
+# in the rendered MP4 — see that insight in the demo commit history.
+from clawcodex_ext.command_system.dashboard_command import (  # noqa: E402
+    _format_snapshot,
 )
 
 logger = logging.getLogger(__name__)
@@ -216,29 +230,37 @@ def _update_entry(
 
 
 # ---------------------------------------------------------------------------
-# REPL `/dashboard` echo — simulates a user pressing Enter on the prompt
+# REPL `/dashboard` echo + real snapshot — uses the *same* renderer the
+# interactive REPL calls into when the user submits the slash command.
 # ---------------------------------------------------------------------------
 
 
-def _emit_repl_dashboard_echo(capture: Any, tick: int) -> None:
-    """Emit the prompt + echoed command line for a simulated ``/dashboard``.
-
-    The REPL prompt bar itself is rendered by prompt_toolkit and isn't
-    captured as video (see ``repl_source.py`` note); the user input IS
-    captured as an ``i`` frame in the real REPL. Here we mimic the same
-    observable effect with ``m`` markers + a minimal prompt echo ``o``
-    frame so the .cast timeline shows the submission boundary.
-    """
+def _emit_repl_prompt_echo(capture: Any, tick: int) -> None:
+    """Emit the prompt boundary markers for a simulated ``/dashboard`` submit."""
     capture.marker("repl:prompt:start", text=f"prompt {tick}")
     capture.marker("repl:command:/dashboard", text="user typed /dashboard")
-    capture.emit(
-        # Tiny typewriter-like echo so a viewer of the .cast sees the
-        # command at the prompt location.
-        AsciicastEvent_payload := __import__(
-            "extensions.capabilities.recorder", fromlist=["AsciicastEvent"]
-        ).AsciicastEvent(t=0.0, kind="o", data="\x1b[2m❯\x1b[0m \x1b[1m/dashboard\x1b[0m\n")
-    )
     capture.marker("repl:prompt:submit", text=f"submit {tick}")
+
+
+def _emit_dashboard_snapshot(
+    capture: Any, entries: list[DashboardEntry], tick: int
+) -> None:
+    """Render the dashboard via the *real* ``/dashboard`` formatter.
+
+    Calls ``extensions.recording.repl_source``'s pipeline-equivalent path:
+    the same ``_format_snapshot`` function the live ``DashboardCommand``
+    uses, so the .cast output is character-for-character identical to
+    what an interactive REPL user sees when they type ``/dashboard``.
+    """
+    snapshot = _format_snapshot(entries)
+    # Per-section split so the eventual MP4 shows one block at a time
+    # rather than landing the whole render in a single instant.
+    blocks = snapshot.split("\n\n")
+    capture.marker(
+        "dashboard:snapshot", text=f"REPL /dashboard snapshot tick {tick}"
+    )
+    for block in blocks:
+        capture.emit(AsciicastEvent(t=0.0, kind="o", data=block.rstrip() + "\n"))
 
 
 # ---------------------------------------------------------------------------
@@ -391,18 +413,16 @@ async def run(
         async def tick_loop(stop_event: asyncio.Event, n_issues: int) -> int:
             """Simulate REPL ``/dashboard`` snapshots at ``frame_delay_s`` cadence.
 
-            Each iteration emits the prompt markers + ASCII panel; returns the
-            total tick count when the deadline fires.
+            Each iteration emits the prompt markers + a *real* dashboard
+            snapshot rendered through ``_format_snapshot`` (the same path
+            the live ``/dashboard`` slash command uses) so the .cast
+            content matches what a user would see in the interactive
+            REPL.
             """
-            dash_source = AsciicastDashboardSource()
             tick = 0
             while not stop_event.is_set():
-                _emit_repl_dashboard_echo(capture, tick)
-                dash_source.record_snapshot(
-                    capture,
-                    list(synth_entries),
-                    title=f"Logical Kanban — REPL /dashboard (tick {tick} of {n_issues})",
-                )
+                _emit_repl_prompt_echo(capture, tick)
+                _emit_dashboard_snapshot(capture, list(synth_entries), tick)
                 tick += 1
                 try:
                     await asyncio.wait_for(stop_event.wait(), timeout=frame_delay_s)
