@@ -7,7 +7,7 @@
 
 > 📍 **Repo location:** [`https://gitcode.com/chadwweng/clawcodex`](https://gitcode.com/chadwweng/clawcodex) — the project is now **open-sourced** under the MIT license. Public contributions, issues, and discussions are welcome.
 
-[English](README.md) · [中文](docs/i18n/README_ZH.md) · [Original upstream README](README.md.raw)
+[English](README.md) · [Chinese](docs/i18n/README_ZH.md) · [Original upstream README](README.md.raw)
 
 </div>
 
@@ -179,23 +179,23 @@ $ clawcodex-dev orchestrator issue inject --id gitcode/AGENTSDK-15 "address revi
 
 ---
 
-## 🎬 项目展示 / Video Showcase
+## 🎬 Video Showcase
 
-> **1 分钟看完 clawcodex-dev 能干什么** —— 看视频比读文字更直观。
+> **See what clawcodex-dev can do in 1 minute** — a video is worth a thousand words.
 
-本项目有一份 4 章交互式视频演示（coldopen · orchestrator · sop-compiler · install），配套一个 ~238 KB 的自包含单文件 React SPA（`vite-plugin-singlefile` 构建，JS/CSS 全部 inline，浏览器双击即跑）。
+This project ships a 4-chapter interactive video demo (coldopen · orchestrator · sop-compiler · install), packaged as a ~238 KB self-contained single-file React SPA (built with `vite-plugin-singlefile`, all JS/CSS inlined — double-click to open in any browser).
 
-### 看视频
+### Watch
 
-| 渠道 | 链接 | 备注 |
+| Channel | Link | Notes |
 |---|---|---|
-| 📺 GitCode Pages | [https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html](https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html) | 待仓库 Pages 启用后即可访问 |
-| 📺 GitHub Pages | [https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html](https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html) | 镜像仓库可同步 |
-| 🏃 本地预览 | `cd assets/video-b/presentation && npm install && npm run dev` → [http://localhost:5174](http://localhost:5174) | 需要 Node 18+ |
-| 📦 单文件直开 | [`assets/video-b/presentation/index.html`](assets/video-b/presentation/index.html) | 离线 / 静态托管通用，238 KB |
+| 📺 GitCode Pages | [https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html](https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html) | Available once repo Pages are enabled |
+| 📺 GitHub Pages | [https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html](https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html) | Mirror repo can sync |
+| 🏃 Local preview | `cd assets/video-b/presentation && npm install && npm run dev` → [http://localhost:5174](http://localhost:5174) | Requires Node 18+ |
+| 📦 Single file | [`assets/video-b/presentation/index.html`](assets/video-b/presentation/index.html) | Offline / static hosting, 238 KB |
 
-> GitHub / GitCode 的 README 不允许 `<script>` 内嵌（会被 sanitize 剥离），所以走外链方式跳转。
-> 静态截图缩略图可在 `assets/video-b/screenshots/` 下重新生成：`python3 scripts/capture_video_b_screenshots.py`。
+> GitHub / GitCode READMEs strip `<script>` tags via sanitization, so external links are used instead of inline embeds.
+> Static screenshot thumbnails can be regenerated from `assets/video-b/screenshots/` via `python3 scripts/capture_video_b_screenshots.py`.
 
 ---
 
@@ -386,7 +386,7 @@ Startup `--gateway` and runtime connect both bind all direct/private senders for
 
 For Orchestrator IM commands, `/issue inject` is a live, non-blocking operator hint while the agent continues running; `/issue clarify` answers an agent clarification that paused waiting for input; `/issue feedback`, `/issue review`, and `/issue retry` are issue lifecycle mutations that can schedule another agent run.
 
-Non-whitelisted Orchestrator slash commands return `不支持 /xxx 执行`.
+Non-whitelisted Orchestrator slash commands are rejected with a "command not supported" error message.
 
 **Troubleshooting:**
 

@@ -17,7 +17,7 @@
   AGENT / LLM 搜索元数据 — 请勿删除
   ════════════════════════════════════════════════════════════════════════════
   项目        : ClawCodex DevMind
-  语言        : Python 3.10+
+  语言        : Python 3.11 - 3.13
   类型        : 下游衍生版 — 自主 agent 工程层
   基础        : Claude Code Python 重构版（clawcodex 上游）
   许可证      : MIT
@@ -113,7 +113,7 @@
 
 <p align="center">
 
-  <img src="https://img.shields.io/badge/python-3.10%2B-blue?logo=python" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue?logo=python" alt="Python 3.11+">
 
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License MIT">
 
@@ -176,6 +176,26 @@ $ clawcodex-dev orchestrator issue tail --id gitcode/AGENTSDK-15
 $ clawcodex-dev orchestrator issue inject --id gitcode/AGENTSDK-15 "address review comments"
 ✓ agent resumed · re-reading PR comments · pushing fix commits
 ```
+
+---
+
+## 🎬 视频展示 / Video Showcase
+
+> **1 分钟看完 clawcodex-dev 能干什么** —— 看视频比读文字更直观。
+
+本项目有一份 4 章交互式视频演示（coldopen · orchestrator · sop-compiler · install），配套一个约 238 KB 的自包含单文件 React SPA（`vite-plugin-singlefile` 构建，JS/CSS 全部 inline，浏览器双击即跑）。
+
+### 看视频
+
+| 渠道 | 链接 | 备注 |
+|---|---|---|
+| 📺 GitCode Pages | [https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html](https://chadwweng.gitcode.com/clawcodex/assets/video-b/presentation/dist/index.html) | 待仓库 Pages 启用后即可访问 |
+| 📺 GitHub Pages | [https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html](https://peroxider.github.io/clawcodex/assets/video-b/presentation/dist/index.html) | 镜像仓库可同步 |
+| 🏃 本地预览 | `cd assets/video-b/presentation && npm install && npm run dev` → [http://localhost:5174](http://localhost:5174) | 需要 Node 18+ |
+| 📦 单文件直开 | [`assets/video-b/presentation/index.html`](../../assets/video-b/presentation/index.html) | 离线 / 静态托管通用，238 KB |
+
+> GitHub / GitCode 的 README 不允许 `<script>` 内嵌（会被 sanitize 剥离），所以走外链方式跳转。
+> 静态截图缩略图可在 `assets/video-b/screenshots/` 下重新生成：`python3 scripts/capture_video_b_screenshots.py`。
 
 ---
 
@@ -243,7 +263,7 @@ clawcodex-dev orchestrator --help    # 查看所有编排器命令
 | 工具 | 最低版本 | 是否自动安装？ |
 |---|---|---|
 | **Git** | 任意 2.x | 通过系统包管理器安装 |
-| **Python** | 3.10+（推荐 3.11） | ✅ `uv` 按需安装 |
+| **Python** | 3.11 - 3.13 | ✅ `uv` 按需安装 |
 | **uv** | 任意 0.5+ | ✅ 首次运行从 `astral.sh` 下载 |
 | **curl** 或 **wget** | 任意 | 安装 uv 和克隆仓库时需要 |
 
