@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import signal
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -370,6 +371,8 @@ def acquire_cron_storage_lock(
 def _pid_is_alive(pid: int) -> bool:
     if pid <= 0:
         return False
+    if sys.platform == "win32":
+        return _pid_is_alive_win32(pid)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -378,4 +381,36 @@ def _pid_is_alive(pid: int) -> bool:
         return True
     except OSError:
         return True
+    return True
+
+
+def _pid_is_alive_win32(pid: int) -> bool:
+    """Check if a process is running on Windows using kernel32.OpenProcess.
+
+    Returns True if the process exists (or we can't determine), False if it's
+    definitively gone (ERROR_INVALID_PARAMETER).
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:
+        # ctypes is part of stdlib — should not happen, but fall back
+        # gracefully: assume alive to avoid false-positive lock recovery.
+        return True
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    PROCESS_QUERY_INFORMATION = 0x0400
+    handle = kernel32.OpenProcess(PROCESS_QUERY_INFORMATION, False, pid)
+    if not handle:
+        err = ctypes.get_last_error()
+        # ERROR_INVALID_PARAMETER (87) = process doesn't exist
+        # ERROR_ACCESS_DENIED (5) = exists but no access (treat as alive)
+        if err == 5:  # ERROR_ACCESS_DENIED
+            return True
+        return False
+    kernel32.CloseHandle(handle)
     return True

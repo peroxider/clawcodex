@@ -87,3 +87,47 @@ class TestStage2CliSmoke:
         elapsed = time.monotonic() - start
         assert proc.returncode == 0
         assert elapsed < 5.0, f"--help took {elapsed:.2f}s, expected < 5s"
+
+    def test_cli_print_mode_initializes_without_crash(self):
+        """-p \"hello\" 初始化路径不崩溃（即使等待 LLM 超时）。
+
+        print mode 会触发完整的 RuntimeContext 初始化（包括 cron 调度器
+        文件锁），然后进入 headless 等待 LLM 响应。本测试验证初始化阶段
+        不会抛出未捕获异常（如 Windows 上 os.kill 的 SystemError）。
+
+        预期行为：进程因等待 LLM 响应而超时（TimeoutExpired），
+        而非崩溃退出（traceback / SystemError）。
+        """
+        import subprocess as _sp
+
+        proc = _sp.Popen(
+            [sys.executable, "-m", "src.cli", "-p", "hello"],
+            stdout=_sp.PIPE,
+            stderr=_sp.STDOUT,
+            text=True,
+        )
+        try:
+            stdout, _ = proc.communicate(timeout=8)
+            # 如果 8 秒内返回了，检查非崩溃退出
+            output = stdout
+            assert "Traceback (most recent call last)" not in output, (
+                f"CLI crashed with unhandled exception:\n{output}"
+            )
+            assert "SystemError" not in output, (
+                f"CLI crashed with SystemError:\n{output}"
+            )
+        except _sp.TimeoutExpired:
+            proc.kill()
+            stdout, _ = proc.communicate(timeout=5)
+            output = stdout
+            # 超时是预期行为（等待 LLM 响应），检查 partial output 无崩溃
+            assert "Traceback (most recent call last)" not in output, (
+                f"CLI crashed with unhandled exception (partial output):\n{output}"
+            )
+            assert "SystemError" not in output, (
+                f"CLI crashed with SystemError (partial output):\n{output}"
+            )
+            # 应包含预期的初始化输出
+            assert "model" in output.lower(), (
+                f"Expected model-related output in print mode:\n{output}"
+            )
