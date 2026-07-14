@@ -2,13 +2,25 @@
 
 > 状态: 📋 规划中
 > 章节: docs/feature_plan/07-other/f-53-tool-to-cli.md
-> 最后更新: 2026-06-24
+> 最后更新: 2026-07-14
 
 ## §1 设计规划
 
 ### 1.1 目标
 
 将注册到 `ToolRegistry` 的工具自动暴露为 REPL/TUI 中的 `/tool-name` 斜杠命令，使 SOP 生成的子 Agent 方法（如 `detect_modality`）同时可在 CLI 中作为常规命令直接调用。
+
+**模式范围（重要）**：本 feature **仅覆盖 REPL 与 TUI 模式**。`clawcodex-dev -p`（headless / 非交互式模式）下 `/<tool-name>` 不会被识别为合法 slash command——`headless.py` 的命令解析路径（`clawcodex_ext/entrypoints/headless.py:725-882`）只查 `CommandRegistry` + 内置命令表，不走 TUI 的 `_try_run_skill_slash` 兜底（`clawcodex_ext/tui/app.py:659-663`）。在 headless 模式下要使用已注册工具，需改用自然语言 prompt 让 agent 自行调用：
+
+```bash
+# ✅ 有效：headless 模式下让 agent 自己调用 tool
+clawcodex-dev -p "调用 <tool-name> 工具，对 /data/sample.mp4 执行"
+
+# ❌ 无效：headless 模式会立即返回 error: Unknown command: <tool-name>
+clawcodex-dev -p "/<tool-name> --path /data/sample.mp4"
+```
+
+这一点与 `skills` 子系统的行为对齐——`/skill-creator` 类型的 skill slash 调用在 REPL/TUI 走 `_try_run_skill_slash` 兜底，在 headless 模式同样会失败。详见 `clawcodex_ext/entrypoints/headless.py:865-882` 的 `execute_command_sync` 失败分支。如未来需要在 headless 模式支持 `/<tool-name>`，应作为单独 feature 评估（参考 `claude-code-best/src/utils/processUserInput/processSlashCommand.tsx:996-1012` 的"错误转消息"模式）。
 
 ### 1.2 背景
 
@@ -71,6 +83,7 @@ ToolRegistry ──> DynamicCommandDiscovery ──> subcommand_registry 注册 
 4. 工具执行报错时输出错误信息而非崩溃
 5. TUI 斜杠自动补全包含已注册工具
 6. 现有 CLI/REPL/TUI 测试继续通过
+7. **（范围限定）** Headless 模式（`-p`）下 `/<tool-name>` 不被识别——调用方收到 `error: Unknown command: <tool-name>` 并以非零退出码退出；功能正常路径为自然语言 prompt（见 §1.1）。
 
 ### 1.8 风险与约束
 
@@ -93,3 +106,4 @@ ToolRegistry ──> DynamicCommandDiscovery ──> subcommand_registry 注册 
 |------|------|------|
 | 2026-06-24 | 初始创建（从四源融合） | 四文档合并 |
 | 2026-06-24 | 补全详细设计（架构+参数映射+实现切片+风险） | 对齐 FEATURE_PLAN.legacy.md |
+| 2026-07-14 | §1.1 新增"模式范围"说明，§1.7 新增验收标准 #7：明确 headless (`-p`) 模式不覆盖 `/<tool-name>`，需用自然语言 prompt | 用户反馈 `clawcodex-dev -p "/skill-creator ..."` 报 `Unknown command`；澄清 F-53 与 skills 子系统的 headless 模式盲区，避免后续 PR 误用 |
