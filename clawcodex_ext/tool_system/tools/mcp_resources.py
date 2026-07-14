@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from typing import Any, Protocol
 
@@ -7,6 +8,7 @@ from ..build_tool import Tool, build_tool
 from ..context import ToolContext
 from ..errors import ToolInputError
 from ..protocol import ToolResult
+from .mcp import _run_async, _run_on_loop
 
 
 class _McpResourceClient(Protocol):
@@ -122,10 +124,21 @@ def _list_mcp_resources_call(tool_input: dict[str, Any], context: ToolContext) -
         clients = list(context.mcp_clients.items())
 
     resources: list[dict[str, Any]] = []
+    manager_loop = getattr(context, "mcp_manager_loop", None)
     for name, client in clients:
         if hasattr(client, "list_resources"):
             try:
-                items = client.list_resources()
+                async def _async_list() -> Any:
+                    raw = client.list_resources()
+                    if inspect.isawaitable(raw):
+                        raw = await raw
+                    return raw
+
+                coro = _async_list()
+                if manager_loop is not None and not manager_loop.is_closed():
+                    items = _run_on_loop(coro, manager_loop)
+                else:
+                    items = _run_async(coro)
             except Exception as e:
                 resources.append({"server": name, "uri": "", "name": "", "description": str(e)})
                 continue
@@ -191,7 +204,25 @@ def _read_mcp_resource_call(tool_input: dict[str, Any], context: ToolContext) ->
             output={"error": f"mcp server does not support resources: {server}"},
             is_error=True,
         )
-    out = client.read_resource(uri)
+    try:
+        async def _async_read() -> Any:
+            raw = client.read_resource(uri)
+            if inspect.isawaitable(raw):
+                raw = await raw
+            return raw
+
+        coro = _async_read()
+        manager_loop = getattr(context, "mcp_manager_loop", None)
+        if manager_loop is not None and not manager_loop.is_closed():
+            out = _run_on_loop(coro, manager_loop)
+        else:
+            out = _run_async(coro)
+    except Exception as e:
+        return ToolResult(
+            name="ReadMcpResourceTool",
+            output={"error": f"failed to read resource from {server}: {e}"},
+            is_error=True,
+        )
     if isinstance(out, dict) and "contents" in out:
         return ToolResult(name="ReadMcpResourceTool", output=out)
     return ToolResult(

@@ -77,6 +77,10 @@ class ToolContext:
     )
     task_manager: TaskManager = field(default_factory=TaskManager)
     mcp_clients: dict[str, Any] = field(default_factory=dict)
+    # Event loop that owns the active MCP stdio transports. Populated by
+    # RuntimeContext when MCP servers are bootstrapped; generic MCP tool calls
+    # use it to run client.call_tool on the correct loop.
+    mcp_manager_loop: Any | None = field(default=None, repr=False)
     lsp_client: Any | None = None
     todos: list[dict[str, Any]] = field(default_factory=list)
     tasks: dict[str, dict[str, Any]] = field(default_factory=dict)

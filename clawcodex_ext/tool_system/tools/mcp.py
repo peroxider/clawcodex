@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import inspect
 import json
 import logging
 from typing import Any, Protocol
@@ -187,8 +189,100 @@ def _mcp_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
             name="MCP", output={"error": f"mcp server not connected: {server}"}, is_error=True
         )
 
-    out = client.call_tool(tool_name, args)
+    async def _async_call() -> Any:
+        raw = client.call_tool(tool_name, args)
+        if inspect.isawaitable(raw):
+            raw = await raw
+        return raw
+
+    coro = _async_call()
+    manager_loop = getattr(context, "mcp_manager_loop", None)
+    try:
+        if manager_loop is not None and not manager_loop.is_closed():
+            result = _run_on_loop(coro, manager_loop)
+        else:
+            result = _run_async(coro)
+    except Exception as exc:
+        return ToolResult(
+            name="MCP",
+            output={"server": server, "tool": tool_name, "error": str(exc)},
+            is_error=True,
+        )
+
+    out = _serialize_mcp_result(result)
     return ToolResult(name="MCP", output={"server": server, "tool": tool_name, "output": out})
+
+
+def _run_on_loop(coro: Any, loop: asyncio.AbstractEventLoop) -> Any:
+    """Run a coroutine on a specific event loop (which owns the MCP stdio
+    transport) and block for the result.
+
+    The loop is kept open for the runtime lifetime, so each tool call drives
+    it with ``run_until_complete`` in a worker thread rather than creating a
+    fresh loop that would not share the transport.
+    """
+    import concurrent.futures
+
+    def runner() -> Any:
+        return loop.run_until_complete(coro)
+
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        return pool.submit(runner).result()
+
+
+def _run_async(coro: Any) -> Any:
+    """Run an async coroutine from a possibly sync context.
+
+    Mirrors the pattern used by the per-server MCP tool wrappers so the
+    generic ``MCP`` tool works whether it is invoked from a synchronous
+    headless loop or an already-running async event loop.
+    """
+    try:
+        asyncio.get_running_loop()
+        running = True
+    except RuntimeError:
+        running = False
+
+    if running:
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            future = pool.submit(asyncio.run, coro)
+            return future.result()
+    return asyncio.run(coro)
+
+
+def _serialize_mcp_result(result: Any) -> Any:
+    """Convert an MCP tool result into a JSON-serializable value.
+
+    ``McpToolResult`` carries typed content blocks; downstream mappers
+    expect plain dicts/lists so they can JSON-encode the tool result.
+    """
+    if result is None:
+        return None
+
+    if hasattr(result, "content"):
+        content = result.content
+    elif isinstance(result, dict):
+        return result
+    else:
+        content = result
+
+    if isinstance(content, list):
+        return [_content_block_to_dict(item) for item in content]
+    return _content_block_to_dict(content)
+
+
+def _content_block_to_dict(block: Any) -> Any:
+    if block is None:
+        return None
+    if isinstance(block, dict):
+        return block
+    if hasattr(block, "model_dump"):
+        return block.model_dump()
+    if hasattr(block, "__dict__"):
+        return block.__dict__
+    return str(block)
 
 
 MCPTool: Tool = build_tool(

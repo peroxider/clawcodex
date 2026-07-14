@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -74,6 +76,8 @@ class RuntimeContext:
     # to None after consuming; headless calls :meth:`close_tail_follower`
     # in its finally block.
     tail_follower: Any | None = None
+    # MCP runtime handle. Kept so frontends can close connections on exit.
+    _mcp_manager: Any | None = field(default=None, repr=False)
 
     @classmethod
     def build(cls, options: RuntimeOptions) -> RuntimeContext:
@@ -150,12 +154,28 @@ class RuntimeContext:
             wire_real_dream_runner()
             init_auto_dream(registry=tool_context.runtime_tasks)
         except Exception:
-            import logging
-
             logging.getLogger(__name__).debug(
                 "dreaming system wiring failed; dream feature may be unavailable",
                 exc_info=True,
             )
+
+        # Bootstrap configured MCP servers so tools like MCP / ListMcpResourcesTool
+        # can actually call them in headless/print mode (and any other frontend
+        # that builds a RuntimeContext). Failures are best-effort: if a server
+        # is down or unconfigured, the rest of the runtime keeps working.
+        mcp_manager = _bootstrap_mcp_sync(tool_context)
+        if mcp_manager is not None:
+            # Register per-server wrapped tools (e.g. mcp__server__tool_name)
+            # into the registry so the model can see and call them directly.
+            for mcp_tool in mcp_manager.all_tools():
+                try:
+                    tool_registry.register(mcp_tool)
+                except Exception:
+                    logging.getLogger(__name__).debug(
+                        "Failed to register MCP tool %s; skipping",
+                        getattr(mcp_tool, "name", "<unknown>"),
+                        exc_info=True,
+                    )
 
         # Resume session if requested
         session = None
@@ -200,6 +220,7 @@ class RuntimeContext:
             workspace_root=workspace_root,
             options=options,
             tail_follower=tail_follower,
+            _mcp_manager=mcp_manager,
         )
         attach_cron_runtime(runtime)
         return runtime
@@ -233,10 +254,35 @@ class RuntimeContext:
             finally:
                 loop.close()
         except Exception:
-            import logging
-
             logging.getLogger(__name__).debug(
                 "F-125 C14: tail follower release failed (non-fatal)",
+                exc_info=True,
+            )
+
+    def close(self) -> None:
+        """Release all runtime resources held by this context.
+
+        Headless/print mode calls this in a ``finally`` block so MCP server
+        subprocesses and tail followers are cleaned up. Failures are best-effort.
+        """
+        self.close_tail_follower()
+        manager = getattr(self, "_mcp_manager", None)
+        if manager is None:
+            return
+        self._mcp_manager = None
+        close_all = getattr(manager, "close_all", None)
+        if close_all is None:
+            return
+        loop = getattr(manager, "_clawcodex_event_loop", None)
+        try:
+            if loop is not None and not loop.is_closed():
+                loop.run_until_complete(close_all())
+                loop.close()
+            else:
+                asyncio.run(close_all())
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "MCP manager cleanup failed (non-fatal)",
                 exc_info=True,
             )
 
@@ -296,6 +342,50 @@ class RuntimeContext:
         # Fan-out to downstream observers (REPL, TUI, AgentBridge).
         # See clawcodex_ext/runtime/observer.py for the Protocol contract.
         notify_observers(self)
+
+
+def _bootstrap_mcp_sync(tool_context: Any) -> Any | None:
+    """Best-effort bootstrap of configured MCP servers.
+
+    Headless/print mode (and any frontend using RuntimeContext) needs active
+    MCP clients in ``tool_context.mcp_clients`` so the ``MCP`` / ``MCPBatch`` /
+    ``ListMcpResourcesTool`` / ``ReadMcpResourceTool`` tools can actually call
+    configured servers. Returns the connection manager so callers can close it
+    on exit, or ``None`` when no servers are configured or bootstrap fails.
+
+    The manager's clients own stdio transports that are bound to the event
+    loop they were created on. ``asyncio.run`` would close that loop before
+    the tools get a chance to use them, so we create a dedicated loop here and
+    keep it open for the lifetime of the runtime.
+    """
+    try:
+        from clawcodex_ext.services.mcp import bootstrap_mcp_runtime
+    except Exception as exc:
+        logging.getLogger(__name__).debug("MCP runtime unavailable: %s", exc)
+        return None
+
+    loop = asyncio.new_event_loop()
+    try:
+        manager = loop.run_until_complete(
+            bootstrap_mcp_runtime(prefetch_claudeai=False)
+        )
+    except Exception as exc:
+        logging.getLogger(__name__).debug("MCP bootstrap failed: %s", exc)
+        try:
+            loop.close()
+        except Exception:
+            pass
+        return None
+
+    # Attach the loop so tool calls can run on the same loop that owns the
+    # stdio transports, and so shutdown can close it cleanly.
+    manager._clawcodex_event_loop = loop  # type: ignore[attr-defined]
+
+    clients = getattr(manager, "_clients", None)
+    if clients:
+        tool_context.mcp_clients = clients
+        tool_context.mcp_manager_loop = loop
+    return manager
 
 
 def _filter_registry(

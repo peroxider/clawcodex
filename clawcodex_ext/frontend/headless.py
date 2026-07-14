@@ -42,6 +42,8 @@ class HeadlessFrontend(FrontendPlugin):
             append_system_prompt=ctx.options.append_system_prompt,
             startup_agent=ctx.options.startup_agent,
             bundle_context=getattr(ctx.tool_context, "bundle_context", None),
+            mcp_clients=getattr(ctx.tool_context, "mcp_clients", {}),
+            mcp_manager_loop=getattr(ctx.tool_context, "mcp_manager_loop", None),
             resume_session_id=getattr(ctx.options, "resume_session_id", None),
             fork_session_id=getattr(ctx.options, "fork_session_id", None),
             resume_session_at=getattr(ctx.options, "resume_session_at", None),
@@ -55,10 +57,10 @@ class HeadlessFrontend(FrontendPlugin):
         # iterates it — without an explicit release the follower keeps a
         # reference to the transcript path and asyncio event state for
         # the lifetime of the RuntimeContext. Best-effort; failures are
-        # swallowed by ``close_tail_follower`` itself.
+        # swallowed by ``close`` itself.
         try:
             return run_headless(options)
         finally:
-            close = getattr(ctx, "close_tail_follower", None)
+            close = getattr(ctx, "close", None)
             if callable(close):
                 close()

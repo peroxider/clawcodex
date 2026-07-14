@@ -119,6 +119,11 @@ class HeadlessOptions:
     startup_agent: Any | None = None
     bundle_context: Any | None = None
 
+    # MCP runtime state forwarded from RuntimeContext so headless can call
+    # connected MCP servers without re-bootstrapping them.
+    mcp_clients: dict[str, Any] = field(default_factory=dict)
+    mcp_manager_loop: Any | None = None
+
     # Environment variables merged into every Bash subprocess env.
     # Values override inherited daemon env.
     env: dict[str, str] = field(default_factory=dict)
@@ -477,6 +482,8 @@ def _run_headless_core(options: HeadlessOptions) -> int:
         agent_type=getattr(options.startup_agent, "agent_type", None),
         bundle_context=getattr(options, "bundle_context", None),
     )
+    tool_context.mcp_clients = getattr(options, "mcp_clients", {}) or {}
+    tool_context.mcp_manager_loop = getattr(options, "mcp_manager_loop", None)
     tool_context.session_id = session.session_id
     tool_context.goal_thread_id = session.session_id
     tool_context.options.is_non_interactive_session = True
@@ -1136,6 +1143,8 @@ def _try_run_provider_free_goal_summary(
         agent_type=getattr(options.startup_agent, "agent_type", None),
         bundle_context=getattr(options, "bundle_context", None),
     )
+    tool_context.mcp_clients = getattr(options, "mcp_clients", {}) or {}
+    tool_context.mcp_manager_loop = getattr(options, "mcp_manager_loop", None)
     tool_context.session_id = session.session_id
     tool_context.goal_thread_id = session.session_id
     tool_context.options.is_non_interactive_session = True

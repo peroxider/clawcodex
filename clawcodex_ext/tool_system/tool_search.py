@@ -169,7 +169,15 @@ def is_deferred_tool(tool: Tool) -> bool:
 
     A tool is deferred if it's an MCP tool or has should_defer=True.
     Mirrors TS isDeferredTool from toolSearch.ts.
+
+    The generic ``MCP`` dispatcher is kept non-deferred: it's the small
+    meta-tool that routes calls to any connected MCP server, so hiding it
+    behind ToolSearchTool would prevent models from invoking configured
+    servers unless ToolSearchTool happens to discover it first. Per-server
+    MCP wrappers (``mcp__*``) remain deferred.
     """
+    if getattr(tool, "name", None) == "MCP":
+        return False
     if tool.is_mcp:
         return True
     if tool.should_defer:

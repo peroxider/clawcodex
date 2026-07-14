@@ -139,6 +139,10 @@ class TestIsDeferredTool(unittest.TestCase):
         tool = _make_tool("mcp_tool", is_mcp=True)
         self.assertTrue(is_deferred_tool(tool))
 
+    def test_generic_mcp_dispatcher_not_deferred(self):
+        tool = _make_tool("MCP", is_mcp=True)
+        self.assertFalse(is_deferred_tool(tool))
+
     def test_should_defer_tool(self):
         tool = _make_tool("deferred", should_defer=True)
         self.assertTrue(is_deferred_tool(tool))
