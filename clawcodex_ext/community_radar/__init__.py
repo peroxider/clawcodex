@@ -32,6 +32,7 @@ from .cron_integration import (
     load_registry_safely,
     uninstall_cron_task,
 )
+from .i18n import STRINGS, Language, build_template_labels, get_text
 from .llm_classifier import (
     LLMConfig,
     build_classifier_hook,
@@ -118,6 +119,11 @@ __all__ = [
     "build_extractor_hook",
     "build_summarizer_hook",
     "llm_generated_marker",
+    # i18n (Phase 4 / SR-5.3)
+    "STRINGS",
+    "Language",
+    "get_text",
+    "build_template_labels",
     # Notifier (Phase 4)
     "NOTIFY_CONFIG_RELATIVE_PATH",
     "DigestNotifier",

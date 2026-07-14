@@ -1,105 +1,124 @@
-{# Weekly Community Digest — SR-5.1 — rendered via Jinja2 #}
+{# Weekly Community Digest — SR-5.1 / SR-5.3 — rendered via Jinja2 #}
 # {{ title }} ({{ period_label }})
 
-> 生成时间: {{ generated_at }}
-> 覆盖范围: {{ sources_count }} 个项目 · {{ total_versions }} 个版本 · {{ total_features }} 条特性记录
+> {{ labels.generated_at }}: {{ generated_at }}
+> {{ labels.coverage_label }}: {{ sources_count }} {{ labels.coverage_projects }} · {{ total_versions }} {{ labels.coverage_versions }} · {{ total_features }} {{ labels.coverage_features }}
+{%- if filtered_count > 0 %}
+> {{ labels.filtered_info }}: {{ filtered_count }} {{ labels.counter_filtered }}
+{%- endif %}
 {%- if llm_assisted %}
-> LLM 辅助: 本期分类/摘要经模型精炼
+> {{ labels.llm_assisted }}
 {%- endif %}
 
 {% if comparison.get('has_comparison') %}
-## 变化对比 (vs 上期)
+## {{ labels.section_comparison }}
 
-> 对比基准: {{ comparison.previous_generated_at }}
+> {{ labels.comparison_baseline }}: {{ comparison.previous_generated_at }}
 
-### 新增特性 ({{ comparison.new_count }})
+### {{ labels.comparison_new.format(n=comparison.new_count) }}
 
 {% if comparison.show_new_features -%}
 {% for rec in comparison.new_features %}
-- **{{ rec.title }}** — {{ rec.desc }}（{{ rec.category }}，来源: {{ rec.source }}）
+- **{{ rec.title }}** — {{ rec.desc }}（{{ rec.category }}，{{ labels.source_from }}: {{ rec.source }}）
 {% endfor %}
 {% else -%}
-（无新增特性）
+{{ labels.no_new_features }}
 {% endif %}
 
-### 消失特性 ({{ comparison.disappeared_count }})
+### {{ labels.comparison_disappeared.format(n=comparison.disappeared_count) }}
 
 {% if comparison.show_disappeared -%}
 {% for rec in comparison.disappeared_features %}
-- ~~**{{ rec.title }}**~~ — {{ rec.desc }}（{{ rec.category }}，来源: {{ rec.source }}）
+- ~~**{{ rec.title }}**~~ — {{ rec.desc }}（{{ rec.category }}，{{ labels.source_from }}: {{ rec.source }}）
 {% endfor %}
 {% else -%}
-（无消失特性）
+{{ labels.no_disappeared }}
 {% endif %}
 
-### 评分变化 ({{ comparison.score_changed|length }})
+### {{ labels.comparison_score.format(n=comparison.score_changed|length) }}
 
 {% if comparison.show_score_changes -%}
-| 特性 | 旧评分 | 新评分 | 变化 |
+| {{ labels.th_feature }} | {{ labels.th_old_score }} | {{ labels.th_new_score }} | {{ labels.th_change }} |
 |------|:-:|:-:|:-:|
 {% for item in comparison.score_changed %}
 | {{ item.title }} | {{ "%.1f"|format(item.old_score) }} | {{ "%.1f"|format(item.new_score) }} | {% if item.delta > 0 %}↑{% else %}↓{% endif %} {{ "%.1f"|format(item.delta|abs) }} |
 {% endfor %}
 {% else -%}
-（无显著评分变化）
+{{ labels.no_score_changes }}
 {% endif %}
 
 {% endif %}
 
-## 摘要
+{% if highlights %}
+## {{ labels.section_highlights }}
+
+> {{ labels.highlights_desc }}
+
+{% for item in highlights %}
+{{ loop.index }}. **{{ item.title }}** — {{ item.desc }}（{{ labels.highlight_score }} {{ "%.1f"|format(item.score) }} · {{ labels.highlight_source }}: {{ item.sources }} · {{ labels.highlight_category }}: {{ item.category }}）{% if item.url %} — [{{ labels.view_detail_link }}]({{ item.url }}){% endif %}
+
+{% endfor %}
+{% else %}
+## {{ labels.section_highlights }}
+
+{{ labels.no_activity }}
+{% endif %}
+
+{% if trending %}
+## {{ labels.section_detail_table }}
+
+| {{ labels.th_feature }} | {{ labels.th_source }} | {{ labels.th_score }} | {{ labels.th_category }} | {{ labels.th_desc }} |
+|------|------|:----:|------|------|
+{% for item in trending %}
+| {% if item.url %}[{{ item.title }}]({{ item.url }}){% else %}{{ item.title }}{% endif %} | {{ item.sources }} | {{ "%.1f"|format(item.score) }} | {{ item.category }} | {{ item.desc }} |
+{% endfor %}
+{% else %}
+## {{ labels.section_detail_table }}
+
+{{ labels.none }}
+{% endif %}
+
+## {{ labels.section_summary }}
 
 {{ summary }}
 
-{% if trending %}
-## 高评分候选特性
-
-| 特性 | 来源 | 评分 | 分类 | 简述 |
-|------|------|:----:|------|------|
-{% for item in trending %}
-| {{ item.title }} | {{ item.sources }} | {{ "%.1f"|format(item.score) }} | {{ item.category }} | {{ item.desc }} |
-{% endfor %}
-{% else %}
-## 高评分候选特性
-
-（无）
-{% endif %}
-
 {% if new_features %}
-## 新增候选特性
+## {{ labels.section_new_features }}
 
 {% for record in new_features %}
-- **{{ record.title }}** — {{ record.desc }}（{{ record.feature_type }}；{{ record.related }}）
+- **{{ record.title }}** — {{ record.desc }}（{{ record.feature_type }}；{{ record.related }}）{% if record.url %} — [{{ labels.view_detail_link }}]({{ record.url }}){% endif %}
+
 {% endfor %}
 {% else %}
-## 新增候选特性
+## {{ labels.section_new_features }}
 
-（无）
+{{ labels.none }}
 {% endif %}
 
 {% if breaking_changes %}
-## 破坏性变更预警
+## {{ labels.section_breaking }}
 
-| 项目 | 特性 | 影响评估 |
+| {{ labels.th_project }} | {{ labels.th_feature }} | {{ labels.th_impact }} |
 |------|------|---------|
 {% for record in breaking_changes %}
-| {{ record.source }} | {{ record.title }} | {{ record.impact }} |
+| {{ record.source }} | {% if record.url %}[{{ record.title }}]({{ record.url }}){% else %}{{ record.title }}{% endif %} | {{ record.impact }} |
 {% endfor %}
 {% else %}
-## 破坏性变更预警
+## {{ labels.section_breaking }}
 
-（无）
+{{ labels.none }}
 {% endif %}
 
-## 分类分布
+## {{ labels.section_distribution }}
 
 {% if by_root_category %}
-### 按领域
+### {{ labels.section_by_domain }}
 
 {% for root_name, count in by_root_category %}
 - {{ root_name }}: {{ count }}
 {% endfor %}
 
-### 按子分类
+### {{ labels.section_by_subcategory }}
 
 {% endif %}
 {% if by_category %}
@@ -107,11 +126,11 @@
 - {{ cat }}: {{ count }}
 {% endfor %}
 {% else %}
-（无）
+{{ labels.none }}
 {% endif %}
 
 {% if errors %}
-## 抓取错误
+## {{ labels.section_errors }}
 
 {% for err in errors %}
 - {{ err }}

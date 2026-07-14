@@ -463,6 +463,9 @@ class FeatureScore:
 class DigestStats:
     total_versions: int = 0
     total_features: int = 0
+    filtered_count: int = 0  # features excluded by exclude_feature_types
+    major_count: int = 0  # features promoted to Highlights section
+    minor_count: int = 0  # features in Detail Table only
     by_category: dict[str, int] = field(default_factory=dict)
     by_root_category: dict[str, int] = field(default_factory=dict)
     top_projects: list[tuple[str, int]] = field(default_factory=list)
@@ -471,6 +474,9 @@ class DigestStats:
         return {
             "total_versions": self.total_versions,
             "total_features": self.total_features,
+            "filtered_count": self.filtered_count,
+            "major_count": self.major_count,
+            "minor_count": self.minor_count,
             "by_category": dict(self.by_category),
             "by_root_category": dict(self.by_root_category),
             "top_projects": [list(item) for item in self.top_projects],
@@ -496,8 +502,13 @@ class CommunityDigest:
     period: str  # "weekly" | "monthly"
     generated_at: str
     summary: str
+    period_start: str = ""  # ISO-8601, the "since" cutoff for this scan
     new_features: list[FeatureRecord] = field(default_factory=list)
     trending: list[ScoredFeature] = field(default_factory=list)
+    # Phase 4 / SR-5.3: major-feature highlights for the prose-summary block.
+    highlights: list[ScoredFeature] = field(default_factory=list)
+    # LLM importance data: feature_id → {"level": "MAJOR"|"MINOR", "highlight": "intro text"}
+    llm_importance: dict[str, dict[str, str]] = field(default_factory=dict)
     breaking_changes: list[FeatureRecord] = field(default_factory=list)
     stats: DigestStats = field(default_factory=DigestStats)
     # When the run was manual (CLI), include raw sources so users can
@@ -509,9 +520,12 @@ class CommunityDigest:
         return {
             "period": self.period,
             "generated_at": self.generated_at,
+            "period_start": self.period_start,
             "summary": self.summary,
             "new_features": [r.to_dict() for r in self.new_features],
             "trending": [s.to_dict() for s in self.trending],
+            "highlights": [s.to_dict() for s in self.highlights],
+            "llm_importance": dict(self.llm_importance),
             "breaking_changes": [r.to_dict() for r in self.breaking_changes],
             "stats": self.stats.to_dict(),
             "sources_used": list(self.sources_used),

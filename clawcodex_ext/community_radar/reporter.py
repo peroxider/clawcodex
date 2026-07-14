@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .config import RadarConfig
+from .i18n import get_text, build_template_labels, _format_date_range
 from .models import (
     CommunityDigest,
     DigestStats,
@@ -39,7 +40,6 @@ from .models import (
     get_root,
     utc_now_iso,
 )
-
 _log = logging.getLogger(__name__)
 
 
@@ -59,57 +59,146 @@ def _escape(text: str) -> str:
     return (text or "").replace("|", "\\|").replace("\n", " ")
 
 
-def _impact_for(record: FeatureRecord) -> str:
+def _impact_for(record: FeatureRecord, lang: str = "zh") -> str:
     if record.related_projects:
-        return "中—多项目已采纳，需评估兼容"
-    return "中—需评估迁移成本"
+        return get_text("impact_multi_project", lang)
+    return get_text("impact_migration", lang)
+
+
+def _t_title(record: FeatureRecord, llm_info: dict[str, str], lang: str) -> str:
+    """Return the translated title when lang is zh and LLM data is available."""
+    if lang == "zh" and llm_info.get("title_zh"):
+        return llm_info["title_zh"]
+    return record.title
+
+
+def _t_desc(record: FeatureRecord, llm_info: dict[str, str], lang: str) -> str:
+    """Return the best description for *lang*.
+
+    For zh: LLM highlight (Chinese) > translated desc_zh > short original.
+    For en: original description only (zh-prompt highlights are in Chinese).
+    """
+    if lang == "zh":
+        hl = llm_info.get("highlight", "")
+        if hl:
+            return hl
+        desc_zh = llm_info.get("desc_zh", "")
+        if desc_zh:
+            return desc_zh
+    return _short_desc(record.description)
+
+
+def _make_url_suffix(url: str, lang: str) -> str:
+    """Return `` — [查看详情](url)`` or `` — [View](url)``, empty if no URL."""
+    if not url:
+        return ""
+    label = get_text("view_detail_link", lang)
+    return f" — [{label}]({url})"
+
+
+def _title_link(
+    record: FeatureRecord, llm_info: dict[str, str], lang: str
+) -> str:
+    """Feature title, optionally hyperlinked when a URL is available."""
+    title = _escape(_t_title(record, llm_info, lang))
+    if record.url:
+        return f"[{title}]({record.url})"
+    return title
 
 
 def _render_inline_markdown(
     digest: CommunityDigest,
     *,
     comparison: HistoryComparison | None = None,
+    lang: str = "zh",
 ) -> str:
     """Phase-1 fallback renderer; used when no Jinja template is available."""
     lines: list[str] = []
-    period_label = {"weekly": "周报", "monthly": "月报"}.get(digest.period, digest.period)
-    lines.append(f"# ClawCodex 社区动态报告 ({period_label})")
+    period_label = get_text(f"period_{digest.period}", lang)
+    period_word = get_text(f"period_{digest.period}", lang)
+    date_range = _format_date_range(digest.period_start)
+    lines.append(f"# {get_text('report_title', lang)} ({period_label})")
     lines.append("")
-    lines.append(f"> 生成时间: {digest.generated_at}")
-    sources = ", ".join(digest.sources_used) if digest.sources_used else "无"
+    lines.append(f"> {get_text('generated_at', lang)}: {digest.generated_at}")
+    sources = ", ".join(digest.sources_used) if digest.sources_used else get_text("none", lang)
     lines.append(
-        f"> 覆盖范围: {len(digest.sources_used)} 个项目 · "
-        f"{digest.stats.total_versions} 个版本 · "
-        f"{digest.stats.total_features} 条特性记录"
+        f"> {get_text('coverage_label', lang)}: "
+        f"{len(digest.sources_used)} {get_text('coverage_projects', lang)} · "
+        f"{digest.stats.total_versions} {get_text('coverage_versions', lang)} · "
+        f"{digest.stats.total_features} {get_text('coverage_features', lang)}"
     )
+    # Show filtered count when non-zero
+    if digest.stats.filtered_count > 0:
+        lines.append(
+            f"> {get_text('filtered_info', lang)}: "
+            f"{get_text('filtered_summary', lang, n=digest.stats.filtered_count)}"
+        )
     lines.append("")
 
     # History comparison section (before summary when present)
     if comparison is not None:
-        lines.append(_render_comparison_section(comparison))
+        lines.append(_render_comparison_section(comparison, lang=lang))
 
-    lines.append("## 摘要")
+    # ── Highlights (major features in prose) ──
+    lines.append(f"## {get_text('section_highlights', lang)}")
     lines.append("")
-    lines.append(digest.summary.strip() or "（本周暂无显著动态。）")
-    lines.append("")
+    if digest.highlights:
+        hl_desc_key = "highlights_desc_full" if digest.period == "full" else "highlights_desc"
+        lines.append(f"> {get_text(hl_desc_key, lang, period_word=period_word, date_range=date_range)}")
+        lines.append("")
+        for idx, item in enumerate(digest.highlights, 1):
+            record = item.record
+            score = item.score
+            related = " + ".join([record.source, *record.related_projects])
+            llm_info = digest.llm_importance.get(record.id, {})
+            title_text = _t_title(record, llm_info, lang)
+            desc_text = _t_desc(record, llm_info, lang)
+            url_suffix = _make_url_suffix(record.url, lang)
+            lines.append(
+                f"{idx}. **{_escape(title_text)}** — {_escape(desc_text)} "
+                f"({get_text('highlight_score', lang)} {score.overall:.1f} · "
+                f"{get_text('highlight_source', lang)}: {related} · "
+                f"{get_text('highlight_category', lang)}: {record.category.value})"
+                f"{url_suffix}"
+            )
+            lines.append("")
+    else:
+        lines.append(get_text("no_activity", lang))
+        lines.append("")
 
-    lines.append("## 高评分候选特性")
+    # ── Detail table (all trending features) ──
+    lines.append(f"## {get_text('section_detail_table', lang)}")
     lines.append("")
     if digest.trending:
-        lines.append("| 特性 | 来源 | 评分 | 分类 | 简述 |")
+        lines.append(
+            f"| {get_text('th_feature', lang)} | {get_text('th_source', lang)} | "
+            f"{get_text('th_score', lang)} | {get_text('th_category', lang)} | "
+            f"{get_text('th_desc', lang)} |"
+        )
         lines.append("|------|------|:----:|------|------|")
         for item in digest.trending:
-            related = " + ".join([item.record.source, *item.record.related_projects])
+            record = item.record
+            related = " + ".join([record.source, *record.related_projects])
+            llm_info = digest.llm_importance.get(record.id, {})
+            title_text = _t_title(record, llm_info, lang)
+            desc_text = _t_desc(record, llm_info, lang)
             lines.append(
-                f"| {_escape(item.record.title)} | {related} | "
-                f"{item.score.overall:.1f} | {item.record.category.value} | "
-                f"{_escape(_short_desc(item.record.description))} |"
+                f"| {_title_link(record, llm_info, lang)} | {related} | "
+                f"{item.score.overall:.1f} | {record.category.value} | "
+                f"{_escape(desc_text)} |"
             )
     else:
-        lines.append("（无）")
+        lines.append(get_text("none", lang))
     lines.append("")
 
-    lines.append("## 新增候选特性")
+    # ── Summary ──
+    lines.append(f"## {get_text('section_summary', lang)}")
+    lines.append("")
+    lines.append(digest.summary.strip() or get_text("no_activity", lang))
+    lines.append("")
+
+    # ── New candidate features (by category) ──
+    lines.append(f"## {get_text('section_new_features', lang)}")
     lines.append("")
     if digest.new_features:
         current_cat: FeatureCategory | None = None
@@ -118,51 +207,66 @@ def _render_inline_markdown(
                 current_cat = record.category
                 lines.append(f"### {current_cat.value}")
                 lines.append("")
-            related = "（仅此项目）"
             if record.related_projects:
-                related = "同时出现于: " + ", ".join(record.related_projects)
+                related = f"{get_text('also_in', lang)}: " + ", ".join(record.related_projects)
+            else:
+                related = get_text("this_project_only", lang)
+            llm_info = digest.llm_importance.get(record.id, {})
+            title_text = _t_title(record, llm_info, lang)
+            desc_text = _t_desc(record, llm_info, lang)
+            url_suffix = _make_url_suffix(record.url, lang)
             lines.append(
-                f"- **{_escape(record.title)}** — "
-                f"{_escape(_short_desc(record.description))} "
+                f"- **{_escape(title_text)}** — "
+                f"{_escape(desc_text)} "
                 f"({record.feature_type.value}; {related})"
+                f"{url_suffix}"
             )
         lines.append("")
     else:
-        lines.append("（无）")
+        lines.append(get_text("none", lang))
         lines.append("")
 
-    lines.append("## 破坏性变更预警")
+    # ── Breaking changes ──
+    lines.append(f"## {get_text('section_breaking', lang)}")
     lines.append("")
     if digest.breaking_changes:
-        lines.append("| 项目 | 特性 | 影响评估 |")
+        lines.append(
+            f"| {get_text('th_project', lang)} | {get_text('th_feature', lang)} | "
+            f"{get_text('th_impact', lang)} |"
+        )
         lines.append("|------|------|---------|")
         for record in digest.breaking_changes:
-            lines.append(f"| {record.source} | {_escape(record.title)} | {_impact_for(record)} |")
+            lines.append(
+                f"| {record.source} | {_title_link(record, digest.llm_importance.get(record.id, {}), lang)} | {_impact_for(record, lang)} |"
+            )
     else:
-        lines.append("（无）")
+        lines.append(get_text("none", lang))
     lines.append("")
 
-    lines.append("## 分类分布")
+    # ── Category distribution ──
+    lines.append(f"## {get_text('section_distribution', lang)}")
     lines.append("")
     if digest.stats.by_root_category:
-        lines.append("### 按领域")
+        lines.append(f"### {get_text('section_by_domain', lang)}")
         lines.append("")
         for parent_name, count in sorted(
             digest.stats.by_root_category.items(), key=lambda kv: -kv[1]
         ):
             lines.append(f"- {parent_name}: {count}")
         lines.append("")
-        lines.append("### 按子分类")
+        lines.append(f"### {get_text('section_by_subcategory', lang)}")
         lines.append("")
     if digest.stats.by_category:
-        for category, count in sorted(digest.stats.by_category.items(), key=lambda kv: -kv[1]):
+        for category, count in sorted(
+            digest.stats.by_category.items(), key=lambda kv: -kv[1]
+        ):
             lines.append(f"- {category}: {count}")
     else:
-        lines.append("（无）")
+        lines.append(get_text("none", lang))
     lines.append("")
 
     if digest.errors:
-        lines.append("## 抓取错误")
+        lines.append(f"## {get_text('section_errors', lang)}")
         lines.append("")
         for err in digest.errors:
             lines.append(f"- {err}")
@@ -194,6 +298,7 @@ def _render_jinja_markdown(
     template_dir: Path,
     *,
     comparison: HistoryComparison | None = None,
+    lang: str = "zh",
 ) -> str | None:
     """Render via Jinja2; returns ``None`` when jinja2 is unavailable."""
     try:
@@ -205,6 +310,7 @@ def _render_jinja_markdown(
     period_to_template = {
         "weekly": "weekly_digest.md.j2",
         "monthly": "monthly_digest.md.j2",
+        "full": "weekly_digest.md.j2",
     }
     template_name = period_to_template.get(digest.period)
     if template_name is None:
@@ -226,53 +332,75 @@ def _render_jinja_markdown(
         _log.warning("failed to load %s: %s; falling back", template_path, exc)
         return None
 
-    period_label = {"weekly": "周报", "monthly": "月报"}.get(digest.period, digest.period)
-    llm_assisted = digest.summary.endswith("(LLM-assisted)") or "LLM 辅助" in digest.summary
+    labels = build_template_labels(lang, period=digest.period, period_start=digest.period_start)
+    period_label = get_text(f"period_{digest.period}", lang)
+    llm_assisted = digest.summary.endswith("(LLM-assisted)") or get_text("llm_assisted", lang) in digest.summary
 
-    by_category = sorted(digest.stats.by_category.items(), key=lambda kv: -kv[1])
-    by_root_category = sorted(digest.stats.by_root_category.items(), key=lambda kv: -kv[1])
+    by_category = sorted(
+        digest.stats.by_category.items(), key=lambda kv: -kv[1]
+    )
+    by_root_category = sorted(
+        digest.stats.by_root_category.items(), key=lambda kv: -kv[1]
+    )
+
+    # Highlights rows — prefer LLM-generated text when available
+    highlight_rows = []
+    for item in digest.highlights:
+        record = item.record
+        related = " + ".join([record.source, *record.related_projects])
+        llm_info = digest.llm_importance.get(record.id, {})
+        highlight_rows.append({
+            "title": _t_title(record, llm_info, lang),
+            "desc": _t_desc(record, llm_info, lang),
+            "sources": related,
+            "score": item.score.overall,
+            "category": record.category.value,
+            "url": record.url or "",
+        })
+
+    # Detail table rows
     trending_rows = []
     for item in digest.trending:
-        related = " + ".join([item.record.source, *item.record.related_projects])
-        trending_rows.append(
-            {
-                "title": item.record.title,
-                "sources": related,
-                "score": item.score.overall,
-                "category": item.record.category.value,
-                "desc": _short_desc(item.record.description),
-            }
-        )
+        record = item.record
+        related = " + ".join([record.source, *record.related_projects])
+        llm_info = digest.llm_importance.get(record.id, {})
+        trending_rows.append({
+            "title": _t_title(record, llm_info, lang),
+            "sources": related,
+            "score": item.score.overall,
+            "category": record.category.value,
+            "desc": _t_desc(record, llm_info, lang),
+            "url": record.url or "",
+        })
 
     new_feature_rows = []
     for record in digest.new_features:
         related = (
-            "同时出现于: " + ", ".join(record.related_projects)
+            f"{labels['also_in']}: " + ", ".join(record.related_projects)
             if record.related_projects
-            else "（仅此项目）"
+            else labels["this_project_only"]
         )
-        new_feature_rows.append(
-            {
-                "title": record.title,
-                "desc": _short_desc(record.description),
-                "feature_type": record.feature_type.value,
-                "related": related,
-            }
-        )
+        llm_info = digest.llm_importance.get(record.id, {})
+        new_feature_rows.append({
+            "title": _t_title(record, llm_info, lang),
+            "desc": _t_desc(record, llm_info, lang),
+            "feature_type": record.feature_type.value,
+            "related": related,
+            "url": record.url or "",
+        })
 
     breaking_rows = [
         {
             "source": record.source,
-            "title": record.title,
-            "impact": _impact_for(record),
+            "title": _t_title(record, digest.llm_importance.get(record.id, {}), lang),
+            "impact": _impact_for(record, lang),
+            "url": record.url or "",
         }
         for record in digest.breaking_changes
     ]
 
     comparison_data: dict[str, Any] | None = None
     if comparison is not None:
-        # Build feature-list rows for the comparison section.  Use distinct
-        # variable names to avoid shadowing the "新增候选特性" rows above.
         cmp_new_rows = [
             {
                 "title": rec.title,
@@ -307,14 +435,16 @@ def _render_jinja_markdown(
 
     try:
         return template.render(
-            title="ClawCodex 社区动态报告",
+            title=get_text("report_title", lang),
             period_label=period_label,
             generated_at=digest.generated_at,
             sources_count=len(digest.sources_used),
             total_versions=digest.stats.total_versions,
             total_features=digest.stats.total_features,
+            filtered_count=digest.stats.filtered_count,
             llm_assisted=llm_assisted,
-            summary=digest.summary.strip() or "（本期暂无显著动态。）",
+            summary=digest.summary.strip() or get_text("no_activity", lang),
+            highlights=highlight_rows,
             trending=trending_rows,
             new_features=new_feature_rows,
             breaking_changes=breaking_rows,
@@ -323,6 +453,7 @@ def _render_jinja_markdown(
             top_projects=digest.stats.top_projects,
             errors=list(digest.errors),
             comparison=comparison_data or {},
+            labels=labels,
         )
     except Exception as exc:  # noqa: BLE001 — StrictUndefined or bad var
         _log.warning("template render failed (%s): %s; falling back", template_name, exc)
@@ -337,6 +468,10 @@ def _render_jinja_markdown(
 def _build_stats(
     new_features: Iterable[FeatureRecord],
     versions_total: int,
+    *,
+    filtered_count: int = 0,
+    major_count: int = 0,
+    minor_count: int = 0,
 ) -> DigestStats:
     new_list = list(new_features)
     by_cat: Counter[str] = Counter()
@@ -352,6 +487,9 @@ def _build_stats(
     return DigestStats(
         total_versions=versions_total,
         total_features=len(new_list),
+        filtered_count=filtered_count,
+        major_count=major_count,
+        minor_count=minor_count,
         by_category=dict(by_cat),
         by_root_category=dict(by_parent),
         top_projects=top_projects,
@@ -362,13 +500,13 @@ def _split_breaking(features: list[FeatureRecord]) -> list[FeatureRecord]:
     return [r for r in features if r.feature_type == FeatureType.BREAKING]
 
 
-def _summarise(features: list[FeatureRecord]) -> str:
+def _summarise(features: list[FeatureRecord], lang: str = "zh") -> str:
     if not features:
-        return "本期没有新的候选特性。"
+        return get_text("no_new_features_summary", lang)
     counts = Counter(r.category.value for r in features)
     top_categories = [name for name, _ in counts.most_common(3)]
-    bullet = "、".join(top_categories) if top_categories else "无"
-    return f"本期共发现 {len(features)} 条候选特性，主要集中在 {bullet} 方向。"
+    bullet = "、".join(top_categories) if top_categories else get_text("none", lang)
+    return get_text("summary_template", lang, n=len(features), cats=bullet)
 
 
 # ---------------------------------------------------------------------------
@@ -410,7 +548,10 @@ def _load_digest_from_json(path: Path) -> CommunityDigest | None:
     if not isinstance(data, dict) or "period" not in data:
         return None
     try:
-        new_features = [FeatureRecord.from_dict(r) for r in data.get("new_features", []) or []]
+        new_features = [
+            FeatureRecord.from_dict(r)
+            for r in data.get("new_features", []) or []
+        ]
         trending_raw = data.get("trending", []) or []
         trending = []
         for item in trending_raw:
@@ -427,21 +568,49 @@ def _load_digest_from_json(path: Path) -> CommunityDigest | None:
                 architecture_fit=float(score_dims.get("architecture_fit", 0)),
             )
             trending.append(ScoredFeature(record=record, score=score))
-        breaking = [FeatureRecord.from_dict(r) for r in data.get("breaking_changes", []) or []]
+        breaking = [
+            FeatureRecord.from_dict(r)
+            for r in data.get("breaking_changes", []) or []
+        ]
         stats_raw = data.get("stats", {})
         stats = DigestStats(
             total_versions=int(stats_raw.get("total_versions", 0)),
             total_features=int(stats_raw.get("total_features", 0)),
+            filtered_count=int(stats_raw.get("filtered_count", 0)),
+            major_count=int(stats_raw.get("major_count", 0)),
+            minor_count=int(stats_raw.get("minor_count", 0)),
             by_category=stats_raw.get("by_category", {}),
             by_root_category=stats_raw.get("by_root_category", {}),
-            top_projects=[tuple(item) for item in stats_raw.get("top_projects", [])],
+            top_projects=[
+                tuple(item) for item in stats_raw.get("top_projects", [])
+            ],
         )
+        highlights_raw = data.get("highlights", []) or []
+        highlights = []
+        for item in highlights_raw:
+            record = FeatureRecord.from_dict(item.get("record", {}))
+            s = item.get("score", {})
+            score_dims = s.get("dimensions", s)
+            score = FeatureScore(
+                record_id=s.get("record_id", record.id),
+                overall=float(s.get("overall", 0)),
+                popularity=float(score_dims.get("popularity", 0)),
+                maturity=float(score_dims.get("maturity", 0)),
+                adaptation_cost=float(score_dims.get("adaptation_cost", 0)),
+                strategic_value=float(score_dims.get("strategic_value", 0)),
+                architecture_fit=float(score_dims.get("architecture_fit", 0)),
+            )
+            highlights.append(ScoredFeature(record=record, score=score))
+        llm_importance_raw = data.get("llm_importance", {}) or {}
         return CommunityDigest(
             period=str(data["period"]),
             generated_at=str(data.get("generated_at", "")),
+            period_start=str(data.get("period_start", "")),
             summary=str(data.get("summary", "")),
             new_features=new_features,
             trending=trending,
+            highlights=highlights,
+            llm_importance=llm_importance_raw,
             breaking_changes=breaking,
             stats=stats,
             sources_used=data.get("sources_used", []),
@@ -481,23 +650,29 @@ def compare_digests(
         if sf.record.id not in curr_ids:
             curr_ids[sf.record.id] = sf.record
 
-    new = [curr_ids[fid] for fid in curr_ids if fid not in prev_ids]
-    disappeared = [prev_ids[fid] for fid in prev_ids if fid not in curr_ids]
+    new = [
+        curr_ids[fid]
+        for fid in curr_ids
+        if fid not in prev_ids
+    ]
+    disappeared = [
+        prev_ids[fid]
+        for fid in prev_ids
+        if fid not in curr_ids
+    ]
 
     score_changed: list[dict[str, Any]] = []
     for fid in set(prev_scores) & set(curr_scores):
         delta = curr_scores[fid] - prev_scores[fid]
         if abs(delta) >= score_delta_threshold:
             rec = curr_ids.get(fid) or prev_ids.get(fid)
-            score_changed.append(
-                {
-                    "id": fid,
-                    "title": rec.title if rec else fid,
-                    "old_score": round(prev_scores[fid], 1),
-                    "new_score": round(curr_scores[fid], 1),
-                    "delta": round(delta, 1),
-                }
-            )
+            score_changed.append({
+                "id": fid,
+                "title": rec.title if rec else fid,
+                "old_score": round(prev_scores[fid], 1),
+                "new_score": round(curr_scores[fid], 1),
+                "delta": round(delta, 1),
+            })
 
     return HistoryComparison(
         previous_period=previous.period,
@@ -511,19 +686,22 @@ def compare_digests(
     )
 
 
-def _render_comparison_section(comparison: HistoryComparison) -> str:
+def _render_comparison_section(
+    comparison: HistoryComparison, lang: str = "zh"
+) -> str:
     """Render the "变化对比" markdown block for a history comparison."""
     lines: list[str] = []
-    prev_label = {"weekly": "周报", "monthly": "月报"}.get(
-        comparison.previous_period, comparison.previous_period
-    )
-    lines.append("## 变化对比 (vs 上期)")
+    prev_label = get_text(f"period_{comparison.previous_period}", lang)
+    lines.append(f"## {get_text('section_comparison', lang)}")
     lines.append("")
-    lines.append(f"> 对比基准: {comparison.previous_generated_at} ({prev_label})")
+    lines.append(
+        f"> {get_text('comparison_baseline', lang)}: "
+        f"{comparison.previous_generated_at} ({prev_label})"
+    )
     lines.append("")
 
     # New features
-    lines.append(f"### 新增特性 ({comparison.new_count})")
+    lines.append(f"### {get_text('comparison_new', lang, n=comparison.new_count)}")
     lines.append("")
     if comparison.new_features:
         for rec in comparison.new_features:
@@ -531,14 +709,14 @@ def _render_comparison_section(comparison: HistoryComparison) -> str:
             lines.append(
                 f"- **{_escape(rec.title)}** — "
                 f"{_escape(_short_desc(rec.description))} "
-                f"({cat}, 来源: {rec.source})"
+                f"({cat}, {get_text('source_from', lang)}: {rec.source})"
             )
     else:
-        lines.append("（无新增特性）")
+        lines.append(get_text("no_new_features", lang))
     lines.append("")
 
     # Disappeared features
-    lines.append(f"### 消失特性 ({comparison.disappeared_count})")
+    lines.append(f"### {get_text('comparison_disappeared', lang, n=comparison.disappeared_count)}")
     lines.append("")
     if comparison.disappeared_features:
         for rec in comparison.disappeared_features:
@@ -546,17 +724,20 @@ def _render_comparison_section(comparison: HistoryComparison) -> str:
             lines.append(
                 f"- ~~**{_escape(rec.title)}**~~ — "
                 f"{_escape(_short_desc(rec.description))} "
-                f"({cat}, 来源: {rec.source})"
+                f"({cat}, {get_text('source_from', lang)}: {rec.source})"
             )
     else:
-        lines.append("（无消失特性）")
+        lines.append(get_text("no_disappeared", lang))
     lines.append("")
 
     # Score changes
-    lines.append(f"### 评分变化 ({len(comparison.score_changed)})")
+    lines.append(f"### {get_text('comparison_score', lang, n=len(comparison.score_changed))}")
     lines.append("")
     if comparison.score_changed:
-        lines.append("| 特性 | 旧评分 | 新评分 | 变化 |")
+        lines.append(
+            f"| {get_text('th_feature', lang)} | {get_text('th_old_score', lang)} | "
+            f"{get_text('th_new_score', lang)} | {get_text('th_change', lang)} |"
+        )
         lines.append("|------|:------:|:------:|:----:|")
         for item in comparison.score_changed:
             direction = "↑" if item["delta"] > 0 else "↓"
@@ -567,7 +748,7 @@ def _render_comparison_section(comparison: HistoryComparison) -> str:
                 f"| {direction} {abs(item['delta']):.1f} |"
             )
     else:
-        lines.append("（无显著评分变化）")
+        lines.append(get_text("no_score_changes", lang))
     lines.append("")
 
     return "\n".join(lines)
@@ -597,7 +778,9 @@ class CommunityReporter:
         template_dir: Path | str | None = None,
     ) -> None:
         self.config = config or RadarConfig()
-        self._explicit_template_dir = Path(template_dir) if template_dir is not None else None
+        self._explicit_template_dir = (
+            Path(template_dir) if template_dir is not None else None
+        )
 
     # ------------------------------------------------------------------
     # Digest construction
@@ -614,19 +797,62 @@ class CommunityReporter:
         summary: str | None = None,
         generated_at: str | None = None,
         versions_total: int = 0,
+        filtered_count: int = 0,
+        lang: str = "zh",
+        llm_importance: dict[str, dict[str, str]] | None = None,
     ) -> CommunityDigest:
         ranked = sorted(scored, key=lambda s: s.score.overall, reverse=True)
         max_features = max(1, int(self.config.max_features_per_report))
         trending = ranked[:max_features]
         new_features = [s.record for s in trending]
+
+        # ── Split: highlights (major) vs detail table ──
+        hl_categories_lower = {c.lower() for c in self.config.highlight_categories}
+        hl_min_score = float(self.config.highlight_min_score)
+        llm_imp = llm_importance or {}
+        highlights: list[ScoredFeature] = []
+        highlight_ids: set[str] = set()
+        rest: list[ScoredFeature] = []
+        for item in trending:
+            rid = item.record.id
+            # LLM override takes precedence
+            if rid in llm_imp and llm_imp[rid].get("level") == "MAJOR":
+                highlights.append(item)
+                highlight_ids.add(rid)
+            elif (
+                item.score.overall >= hl_min_score
+                and item.record.category.value.lower() in hl_categories_lower
+                and rid not in llm_imp  # only rule-classify when LLM didn't classify
+            ):
+                highlights.append(item)
+            else:
+                rest.append(item)
+
+        # ── Enforce highlight count bounds ──
+        # If we have too few MAJOR items, fill from the highest-scored
+        # MINOR features so the report always has a meaningful summary.
+        while len(highlights) < 5 and rest:
+            highlights.append(rest.pop(0))
+        # Cap at 15 so the section stays scannable even in busy weeks.
+        highlights = highlights[:15]
+        highlight_ids = {s.record.id for s in highlights}
+
         breaking = _split_breaking(features)
-        stats = _build_stats(features, versions_total)
+        stats = _build_stats(
+            features,
+            versions_total,
+            filtered_count=filtered_count,
+            major_count=len(highlights),
+            minor_count=len(trending) - len(highlights),
+        )
         digest = CommunityDigest(
             period=period,
             generated_at=generated_at or utc_now_iso(),
-            summary=summary if summary is not None else _summarise(features),
+            summary=summary if summary is not None else _summarise(features, lang),
             new_features=new_features,
             trending=trending,
+            highlights=highlights,
+            llm_importance=llm_imp,
             breaking_changes=breaking,
             stats=stats,
             sources_used=list(sources_used),
@@ -680,10 +906,13 @@ class CommunityReporter:
         # inline renderer when templates or jinja2 itself are missing.
         template_dir = _resolve_template_dir(self._explicit_template_dir)
         rendered: str | None = None
+        lang = self.config.language
         if template_dir is not None:
-            rendered = _render_jinja_markdown(digest, template_dir, comparison=comparison)
+            rendered = _render_jinja_markdown(
+                digest, template_dir, comparison=comparison, lang=lang
+            )
         if rendered is None:
-            rendered = _render_inline_markdown(digest, comparison=comparison)
+            rendered = _render_inline_markdown(digest, comparison=comparison, lang=lang)
         md_path.write_text(rendered, encoding="utf-8")
 
         json_path.write_text(
@@ -774,28 +1003,26 @@ def render_proposals(digest: CommunityDigest) -> dict[str, Any]:
         record = item.record
         score = item.score
         candidate_action = _candidate_action(record, score)
-        proposals.append(
-            {
-                "id": record.id,
-                "title": record.title,
-                "description": record.description,
-                "category": record.category.value,
-                "feature_type": record.feature_type.value,
-                "source_projects": [record.source, *record.related_projects],
-                "score": {
-                    "overall": score.overall,
-                    "popularity": score.popularity,
-                    "maturity": score.maturity,
-                    "adaptation_cost": score.adaptation_cost,
-                    "strategic_value": score.strategic_value,
-                    "architecture_fit": score.architecture_fit,
-                },
-                "candidate_action": candidate_action,
-                "tags": list(record.tags),
-                "released_at": record.released_at,
-                "url": record.url,
-            }
-        )
+        proposals.append({
+            "id": record.id,
+            "title": record.title,
+            "description": record.description,
+            "category": record.category.value,
+            "feature_type": record.feature_type.value,
+            "source_projects": [record.source, *record.related_projects],
+            "score": {
+                "overall": score.overall,
+                "popularity": score.popularity,
+                "maturity": score.maturity,
+                "adaptation_cost": score.adaptation_cost,
+                "strategic_value": score.strategic_value,
+                "architecture_fit": score.architecture_fit,
+            },
+            "candidate_action": candidate_action,
+            "tags": list(record.tags),
+            "released_at": record.released_at,
+            "url": record.url,
+        })
     return {
         "schema_version": "1.0",
         "generated_at": digest.generated_at,
