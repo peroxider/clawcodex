@@ -573,6 +573,9 @@ def run_cli(argv: list[str] | None = None) -> int:
                 workspace_root=runtime_opts.workspace_root or Path.cwd(),
                 append_system_prompt=runtime_opts.append_system_prompt,
                 startup_agent=runtime_opts.startup_agent,
+                record=runtime_opts.record,
+                record_width=runtime_opts.record_width,
+                record_height=runtime_opts.record_height,
             )
         )
         _telemetry_record_end(

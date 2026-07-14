@@ -158,9 +158,42 @@ class HeadlessOptions:
     # want to exercise the in-memory path only.
     persist_on_exit: bool = True
 
+    # F-REC-H: headless asciicast recording support.
+    record: str | None = None
+    record_width: int | None = None
+    record_height: int | None = None
+    capture: Any | None = None
+
 
 def run_headless(options: HeadlessOptions) -> int:
     """Run one or more prompts in headless mode. Returns the exit code."""
+
+    # F-REC-H: open the side-channel recorder before anything else. The
+    # recorder is responsible for closing itself; ``options.capture`` is
+    # injected so _run_one_agent_loop can bridge tool/text events.
+    recorder: Any | None = None
+    if options.record:
+        from extensions.recording.headless_source import open_headless_recorder
+
+        recorder = open_headless_recorder(
+            options.record,
+            width=options.record_width,
+            height=options.record_height,
+            command=f"clawcodex --record {options.record} -p ...",
+        )
+        capture = recorder.__enter__()
+        if capture is not None:
+            options.capture = recorder
+
+    try:
+        return _run_headless_core(options)
+    finally:
+        if options.capture is not None:
+            recorder.__exit__(None, None, None)
+
+
+def _run_headless_core(options: HeadlessOptions) -> int:
+    """Original ``run_headless`` body, split so recording can wrap it."""
 
     # F-108 P108-D: start the opt-in freeze-detection watchdog when the
     # env var is set. Headless runs are the primary failure mode F-108
@@ -581,6 +614,9 @@ def run_headless(options: HeadlessOptions) -> int:
         def _run_cron_prompt(prompt: str, task_id: str, run_id: str) -> bool:
             """Execute a single drained cron prompt and finalize its run."""
             _claim_cron_task(workspace_root, active_tasks, task_id)
+            # F-REC-H: record automated cron prompts as input too.
+            if options.capture is not None:
+                options.capture.emit_input(prompt)
             session.conversation.add_user_message(prompt)
             try:
                 result = _run_one_agent_loop(
@@ -843,6 +879,10 @@ def run_headless(options: HeadlessOptions) -> int:
 
                 if _skip_agent_loop:
                     continue
+
+                # F-REC-H: record the user prompt as an "i" frame.
+                if options.capture is not None:
+                    options.capture.emit_input(text)
 
                 session.conversation.add_user_message(text)
 
@@ -1529,6 +1569,30 @@ def _run_one_agent_loop(
                 _ext_cb(event)
             except Exception:
                 pass
+
+    # F-REC-H: bridge tool events and text chunks to the asciicast recorder.
+    _recorder = options.capture
+    if _recorder is not None:
+        _orig_on_event = on_event
+
+        def on_event(event: ToolEvent) -> None:  # type: ignore[misc]
+            _orig_on_event(event)
+            try:
+                _recorder.emit_tool_event(event)
+            except Exception:
+                pass
+
+        _orig_text_chunk = on_text_chunk
+
+        def _rec_text_chunk(chunk: str) -> None:
+            if _orig_text_chunk is not None:
+                _orig_text_chunk(chunk)
+            try:
+                _recorder.emit_text(chunk)
+            except Exception:
+                pass
+
+        on_text_chunk = _rec_text_chunk
 
     if (
         on_text_chunk is None

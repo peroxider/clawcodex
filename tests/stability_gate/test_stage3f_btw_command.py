@@ -433,7 +433,9 @@ class TestHeadlessBtwDispatcher:
 
         from clawcodex_ext.entrypoints import headless
 
-        src = inspect.getsource(headless.run_headless)
+        src = inspect.getsource(headless.run_headless) + inspect.getsource(
+            headless._run_headless_core
+        )
         assert "_run_btw_headless" in src, (
             "headless.run_headless must delegate /btw to _run_btw_headless"
         )

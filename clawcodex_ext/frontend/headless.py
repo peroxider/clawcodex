@@ -46,6 +46,9 @@ class HeadlessFrontend(FrontendPlugin):
             fork_session_id=getattr(ctx.options, "fork_session_id", None),
             resume_session_at=getattr(ctx.options, "resume_session_at", None),
             external_session=getattr(ctx, "session", None),
+            record=getattr(ctx.options, "record", None),
+            record_width=getattr(ctx.options, "record_width", None),
+            record_height=getattr(ctx.options, "record_height", None),
         )
         # F-125 C14: release the TailFollower that ``RuntimeContext.build``
         # obtained from ``resume_session_with_tail``. Headless never

@@ -67,14 +67,14 @@ def _translate(event: Any) -> AsciicastEvent | None:
 
     if isinstance(event, ToolCallEvent):
         # Two-space indent matches the orchestrator transcript dump.
-        params = _summarize_params(event.params)
+        params = summarize_tool_params(event.params)
         line = f"  Tool Use: {event.tool_name} {params}".rstrip()
         return AsciicastEvent(t=0.0, kind="o", data=line + "\n")
 
     if isinstance(event, ToolResultEvent):
         is_error = bool(event.result.get("is_error"))
         output = event.result.get("output")
-        summary = _summarize_output(output)
+        summary = summarize_tool_output(output)
         marker = " [ERROR]" if is_error else ""
         line = f"  Tool Result: {event.tool_name}{marker} {summary}".rstrip()
         return AsciicastEvent(t=0.0, kind="o", data=line + "\n")
@@ -99,7 +99,7 @@ def _translate(event: Any) -> AsciicastEvent | None:
     return None
 
 
-def _summarize_params(params: dict[str, Any] | None) -> str:
+def summarize_tool_params(params: dict[str, Any] | None) -> str:
     """Render a tool-call input dict as a compact one-liner."""
     if not params:
         return ""
@@ -115,7 +115,11 @@ def _summarize_params(params: dict[str, Any] | None) -> str:
     return f"({rendered[:120]}{'…' if len(rendered) > 120 else ''})"
 
 
-def _summarize_output(output: Any) -> str:
+# Backward-compat aliases used by earlier F-REC adapters.
+_summarize_params = summarize_tool_params
+
+
+def summarize_tool_output(output: Any) -> str:
     """Render a tool-result output as a compact one-liner."""
     if output is None:
         return ""
@@ -128,4 +132,12 @@ def _summarize_output(output: Any) -> str:
     return f"({rendered[:80]}{'…' if len(rendered) > 80 else ''})"
 
 
-__all__ = ["forward_event"]
+# Backward-compat aliases used by earlier F-REC adapters.
+_summarize_output = summarize_tool_output
+
+
+__all__ = [
+    "forward_event",
+    "summarize_tool_output",
+    "summarize_tool_params",
+]
