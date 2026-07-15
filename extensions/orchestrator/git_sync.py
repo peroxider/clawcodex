@@ -122,6 +122,7 @@ class GitSyncService:
             "*.log",
             "analysis.md",
             "changes_summary.md",
+            "verification_report.md",
         ]
 
     async def sync(
@@ -963,6 +964,7 @@ class GitSyncService:
         "daemon.pid",
         "analysis.md",
         "changes_summary.md",
+        "verification_report.md",
     )
 
     _WORKFLOW_ARTIFACT_PATTERNS: tuple[str, ...] = (
@@ -1177,6 +1179,17 @@ class GitSyncService:
                     raw = summary_file.read_text(encoding="utf-8")
                     if raw.strip():
                         changes_summary_text = self._strip_think_blocks(raw).strip()
+                except Exception:
+                    pass
+
+        # Read verification_report.md (Stage 3 output) if available
+        if workspace_path:
+            verify_file = Path(workspace_path) / "verification_report.md"
+            if verify_file.exists():
+                try:
+                    verify_text = verify_file.read_text(encoding="utf-8").strip()
+                    if verify_text:
+                        lines.extend(["", verify_text])
                 except Exception:
                     pass
 

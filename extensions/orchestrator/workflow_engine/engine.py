@@ -365,8 +365,8 @@ class DeclarativeWorkflowEngine:
 
                 # GATE 拒绝处理 (F-112 补充)
                 if stage.is_gate_stage and result.status == StageStatus.GATE_REJECTED:
-                    error_msg = result.error or f"GATE stage {stage.id} rejected"
                     if stage.on_error == "rollback" or stage.gate_rollback_to is not None:
+                        error_msg = result.error or f"GATE stage {stage.id} rejected"
                         idx = await self._handle_gate_rejection(stage, result)
                         continue
                     elif stage.on_error == "skip":
@@ -375,6 +375,7 @@ class DeclarativeWorkflowEngine:
                         continue
                     else:
                         # on_error == "fail" (default)
+                        error_msg = result.error or f"GATE stage {stage.id} rejected"
                         break
 
                 # DECISION 阶段：计算下一个阶段
