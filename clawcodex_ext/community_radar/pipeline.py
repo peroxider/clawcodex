@@ -156,6 +156,113 @@ def _llm_classify_importance(
     return merged
 
 
+# ── LLM classification cache ────────────────────────────────────────────────
+# Avoids non-deterministic LLM output causing different highlights between
+# consecutive scans with different --language values.  The cache is keyed by
+# a content-fingerprint (sorted feature IDs + scores) with a 1-hour TTL.
+
+
+def _feature_fingerprint(scored: list[ScoredFeature]) -> str:
+    """Stable hash over the features being classified."""
+    import hashlib as _hl
+
+    parts: list[str] = []
+    for sf in sorted(scored, key=lambda s: s.record.id):
+        parts.append(f"{sf.record.id}:{sf.score.overall:.1f}")
+    return _hl.sha256("|".join(parts).encode()).hexdigest()[:16]
+
+
+def _llm_cache_path(cache_dir: str | None) -> Path | None:
+    """Return the cache file path or None when cache_dir is unset."""
+    if not cache_dir:
+        return None
+    return Path(cache_dir) / "llm_classification_cache.json"
+
+
+def _llm_classify_importance_cached(
+    scored: list[ScoredFeature],
+    cache_dir: str | None = None,
+) -> dict[str, dict[str, str]]:
+    """Call the LLM, using a 1-hour cache to ensure repeatable results."""
+    cache_path = _llm_cache_path(cache_dir)
+    fingerprint = _feature_fingerprint(scored)
+
+    # ── Try cache ──
+    if cache_path is not None and cache_path.exists():
+        try:
+            raw = cache_path.read_text(encoding="utf-8")
+            cache = json.loads(raw)
+            entry = cache.get(fingerprint)
+            if isinstance(entry, dict):
+                ts = entry.get("_ts", 0)
+                age_s = (datetime.now(timezone.utc).timestamp() - ts)
+                if age_s < 3600:  # 1-hour TTL
+                    result = _validate_cache_result(entry.get("data", {}), scored)
+                    if result is not None:
+                        _log.info("LLM classification cache hit (age=%.0fs)", age_s)
+                        return result
+        except Exception:  # noqa: BLE001
+            pass
+
+    # ── Call LLM ──
+    result = _llm_classify_importance(scored)
+
+    # ── Write cache ──
+    if cache_path is not None and result:
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            existing: dict[str, Any] = {}
+            if cache_path.exists():
+                try:
+                    existing = json.loads(cache_path.read_text(encoding="utf-8"))
+                except Exception:  # noqa: BLE001
+                    pass
+            if not isinstance(existing, dict):
+                existing = {}
+            existing[fingerprint] = {
+                "_ts": datetime.now(timezone.utc).timestamp(),
+                "data": result,
+            }
+            # Prune entries older than 24 hours
+            cutoff = datetime.now(timezone.utc).timestamp() - 86400
+            existing = {
+                k: v for k, v in existing.items()
+                if isinstance(v, dict) and v.get("_ts", 0) > cutoff
+            }
+            cache_path.write_text(
+                json.dumps(existing, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception:  # noqa: BLE001
+            _log.debug("failed to write LLM classification cache", exc_info=True)
+
+    return result
+
+
+def _validate_cache_result(
+    cached: dict[str, Any],
+    scored: list[ScoredFeature],
+) -> dict[str, dict[str, str]] | None:
+    """Check that the cached result covers all the features we need."""
+    needed = {sf.record.id for sf in scored}
+    if not needed:
+        return None
+    # At least 90% of needed features must be in the cache
+    got = set(cached.keys())
+    coverage = len(got & needed) / len(needed)
+    if coverage < 0.9:
+        return None
+    # Return only the entries for features we still care about
+    return {
+        fid: {str(k): str(v) for k, v in entry.items()}
+        for fid, entry in cached.items()
+        if fid in needed
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+
+
 def _call_and_parse_batch(prompt: str) -> dict[str, dict[str, str]] | None:
     """Call LLM + parse response for a single batch.  Top-level helper so
     ThreadPoolExecutor can pickle it."""
@@ -588,6 +695,9 @@ class CommunityRadarPipeline:
             # Always uses the zh prompt so MAJOR/MINOR decisions are identical
             # regardless of report language, and title_zh/desc_zh are generated
             # in the same call.
+            # Results are cached (keyed by feature-id fingerprint) so that
+            # consecutive scans with different --language produce the same
+            # highlights — only the display language differs, not the content.
             llm_importance: dict[str, dict[str, str]] = {}
             if scored:
                 _llm_limit = max(
@@ -599,7 +709,9 @@ class CommunityRadarPipeline:
                     "LLM classification starting for top-%d/%d features",
                     len(_top_for_llm), len(scored),
                 )
-                llm_importance = _llm_classify_importance(_top_for_llm)
+                llm_importance = _llm_classify_importance_cached(
+                    _top_for_llm, self.config.cache_dir,
+                )
                 _log.info("LLM classification complete: %d features classified", len(llm_importance))
 
             versions_total = sum(len(fr.releases) for fr in fetch_results)

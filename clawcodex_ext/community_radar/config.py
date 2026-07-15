@@ -28,7 +28,7 @@ _log = logging.getLogger(__name__)
 
 DEFAULT_OUTPUT_DIR = ".reports/community-radar"
 DEFAULT_CRON_SCHEDULE = "0 8 * * 1"  # Mondays 08:00 UTC
-DEFAULT_MAX_FEATURES = 20
+DEFAULT_MAX_FEATURES = 30
 DEFAULT_LANGUAGE = "zh"
 # Feature types excluded from reports (case-insensitive, matched against
 # FeatureType.value). BUGFIX and DEPRECATION are excluded by default because
@@ -45,6 +45,8 @@ DEFAULT_HIGHLIGHT_CATEGORIES: list[str] = [
     "provider",
     "memory",
     "mcp",
+    "permission",
+    "observability",
 ]
 DEFAULT_HIGHLIGHT_MIN_SCORE = 55.0
 DEFAULT_WEIGHTS: dict[str, float] = {

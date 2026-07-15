@@ -870,6 +870,63 @@ class Fetcher:
         return releases
 
     # ------------------------------------------------------------------
+    # GitHub Search API
+    # ------------------------------------------------------------------
+
+    def search_repositories(
+        self,
+        query: str,
+        *,
+        per_page: int = 30,
+        sort: str = "stars",
+        order: str = "desc",
+    ) -> list[dict[str, Any]]:
+        """Search GitHub repositories via ``GET /search/repositories``.
+
+        Args:
+            query: The raw ``q`` parameter value (already assembled by
+                   :func:`build_search_query`).
+            per_page: Results per page (max 100).
+            sort: Sort field — ``stars``, ``forks``, ``updated``, or
+                  ``help-wanted-issues``.
+            order: ``desc`` or ``asc``.
+
+        Returns:
+            List of repository ``items`` from the GitHub response, or an
+            empty list on any error.
+        """
+        params: dict[str, Any] = {
+            "q": query,
+            "sort": sort,
+            "order": order,
+            "per_page": min(per_page, 100),
+        }
+        url = f"{GITHUB_API_ROOT}/search/repositories"
+
+        try:
+            resp = self._client.get(url, params=params, timeout=self.timeout)
+        except Exception as exc:
+            _log.warning("search_repositories request failed: %s", exc)
+            return []
+
+        self._check_rate_limit(resp)
+
+        if resp.status_code == 200:
+            data = resp.json()
+            items = data.get("items")
+            if isinstance(items, list):
+                total = data.get("total_count", 0)
+                _log.info("GitHub Search returned %d total, %d in page", total, len(items))
+                return items
+            return []
+        elif resp.status_code == 422:
+            _log.warning("GitHub Search query invalid (422): %s", resp.text[:500])
+            return []
+        else:
+            _log.warning("search_repositories returned %s", resp.status_code)
+            return []
+
+    # ------------------------------------------------------------------
     # Internal HTTP wrapper (also reused by tests via monkeypatch)
     # ------------------------------------------------------------------
 

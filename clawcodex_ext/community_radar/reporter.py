@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 from collections import Counter
 from dataclasses import dataclass
@@ -31,7 +32,6 @@ from .i18n import get_text, build_template_labels, _format_date_range
 from .models import (
     CommunityDigest,
     DigestStats,
-    FeatureCategory,
     FeatureRecord,
     FeatureScore,
     FeatureType,
@@ -55,6 +55,24 @@ def _short_desc(text: str, *, limit: int = 120) -> str:
     return cleaned[: limit - 1].rstrip() + "…"
 
 
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001F300-\U0001F9FF"  # Misc symbols, emoticons, supplementals
+    "\U0001FA00-\U0001FAFF"  # Chess symbols, symbols extended-A
+    "\U00002600-\U000027BF"  # Misc symbols (dingbats, etc.)
+    "\U00002B50"             # ⭐ (white medium star)
+    "]+",
+    flags=re.UNICODE,
+)
+
+
+def _strip_emoji(text: str) -> str:
+    cleaned = _EMOJI_RE.sub("", text)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    cleaned = re.sub(r"^\*\*\s*\*\*\s*", "", cleaned)
+    return cleaned.strip()
+
+
 def _escape(text: str) -> str:
     return (text or "").replace("|", "\\|").replace("\n", " ")
 
@@ -68,8 +86,8 @@ def _impact_for(record: FeatureRecord, lang: str = "zh") -> str:
 def _t_title(record: FeatureRecord, llm_info: dict[str, str], lang: str) -> str:
     """Return the translated title when lang is zh and LLM data is available."""
     if lang == "zh" and llm_info.get("title_zh"):
-        return llm_info["title_zh"]
-    return record.title
+        return _strip_emoji(llm_info["title_zh"])
+    return _strip_emoji(record.title)
 
 
 def _t_desc(record: FeatureRecord, llm_info: dict[str, str], lang: str) -> str:
@@ -81,11 +99,11 @@ def _t_desc(record: FeatureRecord, llm_info: dict[str, str], lang: str) -> str:
     if lang == "zh":
         hl = llm_info.get("highlight", "")
         if hl:
-            return hl
+            return _strip_emoji(hl)
         desc_zh = llm_info.get("desc_zh", "")
         if desc_zh:
-            return desc_zh
-    return _short_desc(record.description)
+            return _strip_emoji(desc_zh)
+    return _strip_emoji(_short_desc(record.description))
 
 
 def _make_url_suffix(url: str, lang: str) -> str:
@@ -166,25 +184,31 @@ def _render_inline_markdown(
         lines.append(get_text("no_activity", lang))
         lines.append("")
 
-    # ── Detail table (all trending features) ──
+    # ── Detail table (all trending features, with new-feature markers) ──
     lines.append(f"## {get_text('section_detail_table', lang)}")
     lines.append("")
     if digest.trending:
         lines.append(
             f"| {get_text('th_feature', lang)} | {get_text('th_source', lang)} | "
             f"{get_text('th_score', lang)} | {get_text('th_category', lang)} | "
+            f"{get_text('th_type', lang)} | {get_text('th_new', lang)} | "
             f"{get_text('th_desc', lang)} |"
         )
-        lines.append("|------|------|:----:|------|------|")
+        lines.append("|------|------|:----:|------|:----:|------|------|")
         for item in digest.trending:
             record = item.record
             related = " + ".join([record.source, *record.related_projects])
+            if record.related_projects:
+                new_marker = f"{get_text('also_in', lang)}: " + ", ".join(record.related_projects)
+            else:
+                new_marker = get_text("this_project_only", lang)
             llm_info = digest.llm_importance.get(record.id, {})
             title_text = _t_title(record, llm_info, lang)
             desc_text = _t_desc(record, llm_info, lang)
             lines.append(
                 f"| {_title_link(record, llm_info, lang)} | {related} | "
                 f"{item.score.overall:.1f} | {record.category.value} | "
+                f"{record.feature_type.value} | {new_marker} | "
                 f"{_escape(desc_text)} |"
             )
     else:
@@ -196,35 +220,6 @@ def _render_inline_markdown(
     lines.append("")
     lines.append(digest.summary.strip() or get_text("no_activity", lang))
     lines.append("")
-
-    # ── New candidate features (by category) ──
-    lines.append(f"## {get_text('section_new_features', lang)}")
-    lines.append("")
-    if digest.new_features:
-        current_cat: FeatureCategory | None = None
-        for record in digest.new_features:
-            if record.category != current_cat:
-                current_cat = record.category
-                lines.append(f"### {current_cat.value}")
-                lines.append("")
-            if record.related_projects:
-                related = f"{get_text('also_in', lang)}: " + ", ".join(record.related_projects)
-            else:
-                related = get_text("this_project_only", lang)
-            llm_info = digest.llm_importance.get(record.id, {})
-            title_text = _t_title(record, llm_info, lang)
-            desc_text = _t_desc(record, llm_info, lang)
-            url_suffix = _make_url_suffix(record.url, lang)
-            lines.append(
-                f"- **{_escape(title_text)}** — "
-                f"{_escape(desc_text)} "
-                f"({record.feature_type.value}; {related})"
-                f"{url_suffix}"
-            )
-        lines.append("")
-    else:
-        lines.append(get_text("none", lang))
-        lines.append("")
 
     # ── Breaking changes ──
     lines.append(f"## {get_text('section_breaking', lang)}")
@@ -358,35 +353,27 @@ def _render_jinja_markdown(
             "url": record.url or "",
         })
 
-    # Detail table rows
+    # Detail table rows (merged trending + new-feature markers)
     trending_rows = []
     for item in digest.trending:
         record = item.record
-        related = " + ".join([record.source, *record.related_projects])
+        sources = " + ".join([record.source, *record.related_projects])
         llm_info = digest.llm_importance.get(record.id, {})
-        trending_rows.append({
-            "title": _t_title(record, llm_info, lang),
-            "sources": related,
-            "score": item.score.overall,
-            "category": record.category.value,
-            "desc": _t_desc(record, llm_info, lang),
-            "url": record.url or "",
-        })
-
-    new_feature_rows = []
-    for record in digest.new_features:
-        related = (
+        # New-feature marker: "仅此项目" or "同时出现于: X, Y"
+        new_marker = (
             f"{labels['also_in']}: " + ", ".join(record.related_projects)
             if record.related_projects
             else labels["this_project_only"]
         )
-        llm_info = digest.llm_importance.get(record.id, {})
-        new_feature_rows.append({
+        trending_rows.append({
             "title": _t_title(record, llm_info, lang),
+            "sources": sources,
+            "score": item.score.overall,
+            "category": record.category.value,
             "desc": _t_desc(record, llm_info, lang),
-            "feature_type": record.feature_type.value,
-            "related": related,
             "url": record.url or "",
+            "feature_type": record.feature_type.value,
+            "new_marker": new_marker,
         })
 
     breaking_rows = [
@@ -446,7 +433,6 @@ def _render_jinja_markdown(
             summary=digest.summary.strip() or get_text("no_activity", lang),
             highlights=highlight_rows,
             trending=trending_rows,
-            new_features=new_feature_rows,
             breaking_changes=breaking_rows,
             by_category=by_category,
             by_root_category=by_root_category,
@@ -828,9 +814,104 @@ class CommunityReporter:
             else:
                 rest.append(item)
 
+        # ── Pull in LLM MAJOR features from outside trending ──
+        # LLM importance and scoring are independent axes: a feature the LLM
+        # considers MAJOR may rank outside the top-N by score (e.g. a
+        # strategically important but niche change).  Scan the full scored
+        # list for any LLM MAJOR features that were missed and promote them.
+        # Only promote features with score ≥ 55 — in small feature pools
+        # (e.g. weekly), the LLM tends to be over-generous with MAJOR
+        # labels because it judges relative to a weaker comparison set.
+        if llm_imp:
+            scored_by_id: dict[str, ScoredFeature] = {s.record.id: s for s in scored}
+            llm_major_outside = [
+                scored_by_id[rid]
+                for rid, v in llm_imp.items()
+                if v.get("level") == "MAJOR"
+                and rid not in highlight_ids
+                and rid in scored_by_id
+                and scored_by_id[rid].score.overall >= hl_min_score
+            ]
+            llm_major_outside.sort(key=lambda s: s.score.overall, reverse=True)
+            for sf in llm_major_outside:
+                highlights.append(sf)
+
+        # ── Merge: group by (source, url), combine into single highlight ──
+        # When multiple features from the same release appear in highlights
+        # (e.g. two bullets from open-design v0.10.0), merge them into one
+        # entry that summarizes all sub-features.  The combined entry uses
+        # the highest score and presents a semicolon-joined title.
+        grouped: dict[tuple[str, str], list[ScoredFeature]] = {}
+        for sf in highlights:
+            key = (sf.record.source, sf.record.url)
+            if key not in grouped:
+                grouped[key] = []
+            grouped[key].append(sf)
+
+        merged_highlights: list[ScoredFeature] = []
+        for key, group in grouped.items():
+            if len(group) == 1:
+                merged_highlights.append(group[0])
+            else:
+                group.sort(key=lambda s: s.score.overall, reverse=True)
+                best = group[0]
+                # Combine titles and descriptions
+                titles: list[str] = []
+                titles_zh: list[str] = []
+                highlight_texts: list[str] = []
+                for sf in group:
+                    info = llm_imp.get(sf.record.id, {})
+                    titles.append(sf.record.title)
+                    titles_zh.append(info.get("title_zh") or sf.record.title)
+                    highlight_texts.append(info.get("highlight") or sf.record.description[:120])
+                combined_title = "；".join(titles)
+                combined_title_zh = "；".join(titles_zh)
+                combined_desc = "；".join(highlight_texts)
+
+                import hashlib as _hl
+                merged_id = "merged:" + _hl.sha256(
+                    f"{key[0]}|{key[1]}".encode()
+                ).hexdigest()[:12]
+
+                merged_record = FeatureRecord(
+                    id=merged_id,
+                    source=best.record.source,
+                    title=combined_title,
+                    description=combined_desc,
+                    category=best.record.category,
+                    feature_type=best.record.feature_type,
+                    url=best.record.url,
+                    related_projects=list(best.record.related_projects),
+                    tags=list(best.record.tags),
+                )
+                merged_feature = ScoredFeature(
+                    record=merged_record,
+                    score=FeatureScore(
+                        record_id=merged_id,
+                        overall=best.score.overall,
+                        popularity=best.score.popularity,
+                        maturity=best.score.maturity,
+                        adaptation_cost=best.score.adaptation_cost,
+                        strategic_value=best.score.strategic_value,
+                        architecture_fit=best.score.architecture_fit,
+                    ),
+                )
+                merged_highlights.append(merged_feature)
+                # Register merged LLM importance so _t_title / _t_desc pick up
+                # the combined Chinese text for i18n rendering.
+                llm_imp[merged_id] = {
+                    "level": "MAJOR",
+                    "highlight": combined_desc,
+                    "title_zh": combined_title_zh,
+                    "desc_zh": combined_desc,
+                }
+
+        highlights = merged_highlights
+
         # ── Enforce highlight count bounds ──
-        # If we have too few MAJOR items, fill from the highest-scored
-        # MINOR features so the report always has a meaningful summary.
+        # If we still have too few items, fill from the highest-scored
+        # features so the report always has a meaningful summary.
+        rest.sort(key=lambda s: s.score.overall, reverse=True)
         while len(highlights) < 5 and rest:
             highlights.append(rest.pop(0))
         # Cap at 15 so the section stays scannable even in busy weeks.
