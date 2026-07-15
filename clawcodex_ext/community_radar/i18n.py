@@ -79,8 +79,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "All major feature updates with high scores and core-module impact.",
     },
     "section_detail_table": {
-        "zh": "特性详表",
-        "en": "Feature Details",
+        "zh": "新增特性详表",
+        "en": "New Feature Details",
     },
     "section_summary": {
         "zh": "摘要",
@@ -154,6 +154,14 @@ STRINGS: dict[str, dict[str, str]] = {
     "th_desc": {
         "zh": "简述",
         "en": "Description",
+    },
+    "th_type": {
+        "zh": "类型",
+        "en": "Type",
+    },
+    "th_new": {
+        "zh": "新增",
+        "en": "New",
     },
     "th_project": {
         "zh": "项目",
@@ -288,7 +296,18 @@ STRINGS: dict[str, dict[str, str]] = {
             "你是一个开源社区分析助手。以下是本周从各开源项目收集到的 {n} 条特性更新。\n"
             "请完成三件事：\n"
             "1. 判断每条特性属于「重大更新」(MAJOR)还是「小更新」(MINOR)。\n"
-            "   重大更新的标准：对架构/核心能力有实质影响、被多个项目采纳、或代表了行业趋势。\n"
+            "   请用以下绝对标准独立判断每条特性，不要与列表中的其他特性比较：\n"
+            "   MAJOR（重大更新）——满足以下至少 2 条：\n"
+            "     a. 引入了一个全新的架构层、子系统或核心能力（不只是改进已有功能）\n"
+            "     b. 改变了 Agent/工具/模型的使用范式或工作流（不只是增加配置选项）\n"
+            "     c. 被至少 2 个不同的知名项目独立采纳或实现（跨项目趋势信号）\n"
+            "     d. 解决了 AI 编程/智能体领域一个公认的痛点（不只是修了一个 bug）\n"
+            "   MINOR（小更新）——不满足以上任何一条，或只满足一条。\n"
+            "   校准规则（非常重要）：\n"
+            "     - 用相同的绝对尺度评判每条特性，不受当前批次质量高低的影响。\n"
+            "     - 一个批次中 MAJOR 通常不超过 10%，如果远超此比例请重新逐条审视。\n"
+            "     - 标题含 'fix'、'chore'、'docs'、'refactor'、'test' 的通常是 MINOR。\n"
+            "     - 纯 CLI 参数调整、日志改进、内部重构、依赖升级一律是 MINOR。\n"
             "2. 对每条 MAJOR 特性，写一句 50-100 字的中文介绍，概括它的核心价值和影响面。\n"
             "3. 将所有特性的 title 翻译为中文填入 title_zh，将 description 翻译为中文（60字以内）填入 desc_zh。\n\n"
             "返回一个 JSON 数组（不要包含 markdown 代码块或其他文字）：\n"
@@ -298,14 +317,24 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": (
             "You are an open-source community analyst. Below are {n} feature updates "
             "collected from various open-source projects this period.\n"
-            "Please do two things:\n"
+            "Please do three things:\n"
             "1. Classify each feature as MAJOR or MINOR.\n"
-            "   MAJOR criteria: substantial architecture/core impact, adopted by "
-            "multiple projects, or represents an industry trend.\n"
-            "2. For each MAJOR feature, write a one-sentence English introduction "
-            "(50-100 chars) summarizing its core value and impact scope.\n\n"
-            "Return a JSON array (no markdown code blocks, no other text):\n"
-            '[{{"id": "feature_id", "level": "MAJOR", "highlight": "intro text"}}, ...]\n\n'
+            "   Use these absolute criteria for each feature independently:\n"
+            "   MAJOR — meets at least 2 of:\n"
+            "     a. Introduces a new architectural layer, subsystem, or core capability (not just improvements)\n"
+            "     b. Changes the paradigm or workflow for agents/tools/models (not just a config option)\n"
+            "     c. Adopted or implemented independently by at least 2 well-known projects\n"
+            "     d. Solves a recognized pain point in AI coding/agents (not just a bugfix)\n"
+            "   MINOR — meets 0 or 1 of the above.\n"
+            "   Calibration rules (important):\n"
+            "     - Judge every feature by the same absolute scale, regardless of batch quality.\n"
+            "     - MAJOR should typically not exceed 10% of the batch. Re-check if much higher.\n"
+            "     - Titles with 'fix', 'chore', 'docs', 'refactor', 'test' are usually MINOR.\n"
+            "     - CLI flag tweaks, logging changes, internal refactors, dep bumps are always MINOR.\n"
+            "2. For each MAJOR, write a one-sentence introduction (50-100 chars) summarizing its value.\n"
+            "3. Translate every title and description to English (title_en, desc_en).\n\n"
+            "Return a JSON array (no markdown blocks):\n"
+            '[{{"id": "feature_id", "level": "MAJOR", "highlight": "intro text", "title_en": "English title", "desc_en": "English description"}}, ...]\n\n'
             "Feature list:\n{features_json}"
         ),
     },
@@ -398,6 +427,8 @@ def build_template_labels(lang: str = "zh", *, period: str = "weekly", period_st
         "th_score": get_text("th_score", lang),
         "th_category": get_text("th_category", lang),
         "th_desc": get_text("th_desc", lang),
+        "th_type": get_text("th_type", lang),
+        "th_new": get_text("th_new", lang),
         "th_project": get_text("th_project", lang),
         "th_impact": get_text("th_impact", lang),
         "th_old_score": get_text("th_old_score", lang),

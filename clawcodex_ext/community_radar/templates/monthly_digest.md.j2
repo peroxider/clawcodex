@@ -67,10 +67,10 @@
 {% if trending %}
 ## {{ labels.section_detail_table }}
 
-| {{ labels.th_feature }} | {{ labels.th_source }} | {{ labels.th_score }} | {{ labels.th_category }} | {{ labels.th_desc }} |
-|------|------|:----:|------|------|
+| {{ labels.th_feature }} | {{ labels.th_source }} | {{ labels.th_score }} | {{ labels.th_category }} | {{ labels.th_type }} | {{ labels.th_new }} | {{ labels.th_desc }} |
+|------|------|:----:|------|:----:|------|------|
 {% for item in trending %}
-| {% if item.url %}[{{ item.title }}]({{ item.url }}){% else %}{{ item.title }}{% endif %} | {{ item.sources }} | {{ "%.1f"|format(item.score) }} | {{ item.category }} | {{ item.desc }} |
+| {% if item.url %}[{{ item.title }}]({{ item.url }}){% else %}{{ item.title }}{% endif %} | {{ item.sources }} | {{ "%.1f"|format(item.score) }} | {{ item.category }} | {{ item.feature_type }} | {{ item.new_marker }} | {{ item.desc }} |
 {% endfor %}
 {% else %}
 ## {{ labels.section_detail_table }}
@@ -81,19 +81,6 @@
 ## {{ labels.section_summary }}
 
 {{ summary }}
-
-{% if new_features %}
-## {{ labels.section_new_features }}
-
-{% for record in new_features %}
-- **{{ record.title }}** — {{ record.desc }}（{{ record.feature_type }}；{{ record.related }}）{% if record.url %} — [{{ labels.view_detail_link }}]({{ record.url }}){% endif %}
-
-{% endfor %}
-{% else %}
-## {{ labels.section_new_features }}
-
-{{ labels.none }}
-{% endif %}
 
 {% if breaking_changes %}
 ## {{ labels.section_breaking }}

@@ -25,6 +25,13 @@ from pathlib import Path
 from typing import Any, Callable, Sequence
 
 from .config import RadarConfig, apply_env_overrides, default_config_path
+from .discover import (
+    MAX_COUNT_PER_DISCOVER,
+    MAX_SOURCES_TOTAL,
+    DiscoverResult,
+    _format_stars,
+    discover_sources,
+)
 from .models import WatchSource
 from .pipeline import CommunityRadarPipeline
 from .registry import SourceRegistry, default_registry_path
@@ -42,6 +49,9 @@ USAGE = (
     "                         --track-prs] [--tag-filter REGEX]\n"
     "                         [--changelog PATH] [--notes TEXT]\n"
     "                         [--roadmap-keyword KW]...\n"
+    "  source discover [--domain DOMAIN] [--min-stars N] [--count N]\n"
+    "                         [--lang LANG]\n"
+    "                         Auto-discover GitHub repos and add them as sources.\n"
     "  source remove NAME     Remove a configured source.\n"
     "  source show NAME       Print a single source's full record.\n"
     "  config show            Print the active RadarConfig.\n"
@@ -187,6 +197,63 @@ def _cmd_source_show(args: argparse.Namespace) -> int:
         return 1
     print(json.dumps(source.to_dict(), indent=2, ensure_ascii=False))
     return 0
+
+
+def _cmd_source_discover(args: argparse.Namespace) -> int:
+    """``source discover`` — search GitHub and add repos to the registry."""
+    from .fetcher import make_fetcher
+
+    registry = _maybe_load_registry(args.registry)
+
+    result = discover_sources(
+        make_fetcher(cache_dir=".cache/community-radar"),
+        registry,
+        domain=args.domain,
+        min_stars=args.min_stars,
+        count=args.count,
+        lang=args.lang,
+    )
+
+    _print_discover_result(result, args)
+    return 0 if result.added else 1
+
+
+# ---------------------------------------------------------------------------
+# discover output formatting
+# ---------------------------------------------------------------------------
+
+
+def _print_discover_result(result: DiscoverResult, args: argparse.Namespace) -> None:
+    """Print a user-friendly summary of a :class:`DiscoverResult`."""
+
+    # ── Warnings ──────────────────────────────────────────────────────
+    if result.search_total == 0:
+        print("GitHub Search returned no results — try relaxing --min-stars or --domain.")
+        return
+
+    if result.total_limit_warning:
+        print(f"\u26a0  Config already has {MAX_SOURCES_TOTAL} sources (the maximum) "
+              f"— cannot add more.")
+
+    if result.count_ceiling_warning:
+        print(f"\u26a0  --count capped at {MAX_COUNT_PER_DISCOVER} "
+              f"(requested {result.requested_count}).")
+
+    if result.not_enough_warning and not result.total_limit_warning:
+        added_n = len(result.added)
+        wanted = min(args.count, MAX_COUNT_PER_DISCOVER)
+        if added_n < wanted:
+            print(f"\u26a0  Only {added_n} qualifying repos found (requested {wanted}).")
+
+    # ── Additions ─────────────────────────────────────────────────────
+    if result.added:
+        print(f"Added {len(result.added)} source(s):")
+        for s in result.added:
+            stars = result.added_stars.get(s.repo, 0)
+            star_str = _format_stars(stars)
+            print(f"  - {s.repo} ({s.domain}) \u2b50 {star_str}")
+    elif not result.total_limit_warning:
+        print("No new sources added.")
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +418,25 @@ def _build_parser() -> argparse.ArgumentParser:
     show_p = source_sub.add_parser("show")
     show_p.add_argument("name")
 
+    discover_p = source_sub.add_parser("discover")
+    discover_p.add_argument(
+        "--domain", choices=("code_agent", "embodied_ai", "spatial_intelligence"),
+        default=None,
+        help="Only search for repos in this domain.",
+    )
+    discover_p.add_argument(
+        "--min-stars", type=int, default=100,
+        help="Minimum stars filter (default: 100, set to 0 to disable).",
+    )
+    discover_p.add_argument(
+        "--count", type=int, default=5,
+        help=f"Number of sources to add (max: {MAX_COUNT_PER_DISCOVER}).",
+    )
+    discover_p.add_argument(
+        "--lang", type=str, default=None,
+        help="Filter by programming language (e.g. python, typescript).",
+    )
+
     # config
     cfg_p = sub.add_parser("config")
     cfg_sub = cfg_p.add_subparsers(dest="config_cmd", required=True)
@@ -371,6 +457,7 @@ _DISPATCH: dict[str, Callable[[argparse.Namespace], int]] = {
     "source_add": _cmd_source_add,
     "source_remove": _cmd_source_remove,
     "source_show": _cmd_source_show,
+    "source_discover": _cmd_source_discover,
     "config_show": _cmd_config_show,
     "config_init": _cmd_config_init,
     "status": _cmd_status,

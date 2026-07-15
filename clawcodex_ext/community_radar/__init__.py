@@ -22,6 +22,15 @@ from .config import (
     apply_env_overrides,
     default_config_path,
 )
+from .discover import (
+    MAX_COUNT_PER_DISCOVER,
+    MAX_SOURCES_TOTAL,
+    DiscoverCandidate,
+    DiscoverResult,
+    build_search_query,
+    discover_sources,
+    quick_domain_match,
+)
 from .cron_integration import (
     DEFAULT_CRON_PROMPT,
     DEFAULT_CRON_TASK_ID,
@@ -134,4 +143,12 @@ __all__ = [
     "DigestWriteResult",
     "copy_to_persistent",
     "render_proposals",
+    # discover
+    "MAX_COUNT_PER_DISCOVER",
+    "MAX_SOURCES_TOTAL",
+    "DiscoverCandidate",
+    "DiscoverResult",
+    "build_search_query",
+    "discover_sources",
+    "quick_domain_match",
 ]
