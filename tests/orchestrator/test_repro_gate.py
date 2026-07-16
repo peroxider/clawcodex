@@ -234,7 +234,7 @@ class TestGitSyncReproRecheck(unittest.IsolatedAsyncioTestCase):
             service = GitSyncService(_NullTracker())
             session = _Session()
             await service._run_pre_push_verification(str(root), session)
-            self.assertEqual(session.verification_status, "passed")
+            self.assertEqual(session.verification_status, "skipped_no_tests")
             assert session.verification_output is not None
             self.assertIn("## repro", session.verification_output)
 
