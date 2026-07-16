@@ -105,6 +105,21 @@ def test_main_transcript_path_honors_sessions_dir_override(
     assert p == str(sessions_dir / "session-123" / "transcript.jsonl")
 
 
+def test_nested_transcript_path_honors_sessions_dir_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from clawcodex_ext.agent.transcript import nested_session_path_resolver
+
+    sessions_dir = tmp_path / "debug-state" / "sessions"
+    monkeypatch.setenv("CLAWCODEX_SESSIONS_DIR", str(sessions_dir))
+
+    path = nested_session_path_resolver("child-123", "session-123")
+
+    assert path == str(sessions_dir / "session-123" / "subagents" / "agent-child-123.jsonl")
+    assert Path(path).parent.is_dir()
+
+
 def test_ensure_transcript_dir_creates_and_returns_path() -> None:
     root = ensure_transcript_dir()
     assert Path(root).is_dir()

@@ -282,6 +282,42 @@ def _translate_legacy_notification_entry(
     return target
 
 
+def load_hooks_from_mapping(
+    data: dict[str, Any],
+    *,
+    source_path: str | Path | None = None,
+    source: HookSource = HookSource.USER_SETTINGS,
+) -> HookConfigSnapshot:
+    """Parse a settings mapping while retaining the hook source."""
+
+    hooks_raw = data.get("hooks", {})
+    if not isinstance(hooks_raw, dict):
+        return HookConfigSnapshot(
+            timestamp=time.time(),
+            source_path=str(source_path) if source_path is not None else None,
+        )
+
+    hooks: dict[str, list[HookConfig]] = {}
+    for event_name, hook_list in hooks_raw.items():
+        if not isinstance(hook_list, list):
+            continue
+        for hook_raw in hook_list:
+            if not isinstance(hook_raw, dict):
+                continue
+            target_event: str = event_name
+            if event_name == "Notification":
+                translated = _translate_legacy_notification_entry(hook_raw)
+                if translated is not None:
+                    target_event = translated
+            hooks.setdefault(target_event, []).append(_parse_hook_config(hook_raw, source))
+
+    return HookConfigSnapshot(
+        hooks=hooks,
+        timestamp=time.time(),
+        source_path=str(source_path) if source_path is not None else None,
+    )
+
+
 def load_hooks_from_settings(
     settings_path: str | Path | None = None,
 ) -> HookConfigSnapshot:
@@ -292,35 +328,11 @@ def load_hooks_from_settings(
 
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as e:
-        logger.warning("Failed to read hooks settings from %s: %s", path, e)
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to read hooks settings from %s: %s", path, exc)
         return HookConfigSnapshot(timestamp=time.time(), source_path=str(path))
 
-    hooks_raw = data.get("hooks", {})
-    if not isinstance(hooks_raw, dict):
-        return HookConfigSnapshot(timestamp=time.time(), source_path=str(path))
-
-    hooks: dict[str, list[HookConfig]] = {}
-    for event_name, hook_list in hooks_raw.items():
-        if not isinstance(hook_list, list):
-            continue
-        for hook_raw in hook_list:
-            if not isinstance(hook_raw, dict):
-                continue
-            # Phase-1 / WI-1.1 — legacy ``Notification + matcher`` form
-            # translates to first-class lifecycle events.
-            target_event: str = event_name
-            if event_name == "Notification":
-                translated = _translate_legacy_notification_entry(hook_raw)
-                if translated is not None:
-                    target_event = translated
-            hooks.setdefault(target_event, []).append(_parse_hook_config(hook_raw))
-
-    return HookConfigSnapshot(
-        hooks=hooks,
-        timestamp=time.time(),
-        source_path=str(path),
-    )
+    return load_hooks_from_mapping(data, source_path=path)
 
 
 class HookConfigManager:

@@ -116,6 +116,8 @@ class ToolContext:
     # Values override inherited daemon env. Populated by the headless
     # entrypoint from workflow AgentConfig.
     env: dict[str, str] = field(default_factory=dict)
+    # Base environment captured before live configuration overlays are applied.
+    _configuration_env_base: dict[str, str] | None = None
     _aggregate_lock: threading.Lock = field(default_factory=threading.Lock)
     # Custom agent directory override (set by ``--agent <dir>``).
     # When non-None, ``get_agent_definitions`` will also scan this
@@ -241,6 +243,21 @@ class ToolContext:
     goal_thread_id: str | None = None
     goal_service: Any | None = None
     goal_runtime: Any | None = None
+
+    # Request-scoped overrides installed by the canonical Skill runtime.
+    skill_model_override: str | None = None
+    skill_effort_override: str | int | None = None
+    _skill_permission_base: ToolPermissionContext | None = None
+    _skill_options_base: ToolUseOptions | None = None
+    skill_scope_pending: bool = False
+    skill_resource_roots: tuple[str, ...] = ()
+    _skill_resource_roots_base: tuple[str, ...] | None = None
+    skill_scope_active: bool = False
+    active_skill_names: tuple[str, ...] = ()
+
+    # Skill-declared hooks are merged with the frozen settings snapshot.
+    skill_hooks: dict[str, list[Any]] = field(default_factory=dict)
+    skill_hook_keys: set[str] = field(default_factory=set)
 
     # Chapter-12 / Phase 0 / WI-0.1 — frozen snapshot of hook config.
     # The snapshot is built once at startup by ``HookConfigManager.load()``

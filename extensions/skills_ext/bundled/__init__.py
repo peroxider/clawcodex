@@ -15,11 +15,11 @@ from clawcodex_ext.skills.bundled_skills import BundledSkillDefinition, register
 from .dream import register_dream_skill
 
 
-def register_convert_sop_skill() -> None:
+def register_convert_sop_skill() -> bool:
     """Register the convert-sop-to-agent bundled skill."""
     from extensions.sop_converter.convert_sop_skill import get_prompt_for_command
 
-    register_bundled_skill(
+    registered = register_bundled_skill(
         BundledSkillDefinition(
             name="convert-sop-to-agent",
             description=(
@@ -37,9 +37,13 @@ def register_convert_sop_skill() -> None:
             argument_hint="<sdk_spec> [--requirements '<requirements>']",
             allowed_tools=[],
             user_invocable=True,
+            disable_model_invocation=True,
             context="inline",
         )
     )
+    if not registered:
+        raise ValueError("convert-sop-to-agent definition was rejected")
+    return True
 
 
 __all__ = [

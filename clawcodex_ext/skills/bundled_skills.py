@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import hashlib
+from importlib import metadata
+import inspect
 import logging
+import os
 import re
+import secrets
+import stat
+import tempfile
+import threading
 from dataclasses import dataclass, field
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Callable, Sequence
 
 from .model import Skill
@@ -25,51 +34,138 @@ class SkillValidationError:
 class BundledSkillDefinition:
     name: str
     description: str
-    get_prompt_for_command: Callable[[str], str]
+    get_prompt_for_command: Callable[..., str]
     aliases: list[str] = field(default_factory=list)
     when_to_use: str | None = None
     argument_hint: str | None = None
     allowed_tools: list[str] = field(default_factory=list)
     model: str | None = None
+    effort: str | int | None = None
     disable_model_invocation: bool = False
     user_invocable: bool = True
     is_enabled: Callable[[], bool] | None = None
     context: str = "inline"
     agent: str | None = None
+    hooks: dict[str, Any] | None = None
     files: dict[str, str] | None = None
 
 
 _bundled_skills: list[Skill] = []
 
-# Lazy-init guard — populated on first read so callers don't need to
-# explicitly invoke ``init_bundled_skills`` at runtime startup. Tests
-# that wipe state via ``clear_bundled_skills`` also reset this flag,
-# leaving them in full control.
+# One unpredictable, owner-private directory per process. A skill's path is
+# assigned at registration, while its directory and files remain lazy.
+_bundled_skills_root: Path | None = None
+_bundled_skills_root_lock = threading.Lock()
+
+# Core initialization calls back into register_bundled_skill, hence RLock.
+_registry_lock = threading.RLock()
+_registry_condition = threading.Condition(_registry_lock)
 _LAZY_INITIALIZED: bool = False
+_LAZY_INITIALIZING: bool = False
+
+_BUNDLED_VERSION = "dev"
+for _distribution_name in ("clawcodex-dev-mind", "clawcodex"):
+    try:
+        _BUNDLED_VERSION = metadata.version(_distribution_name)
+        break
+    except metadata.PackageNotFoundError:
+        continue
+_BUNDLED_VERSION = re.sub(r"[^a-zA-Z0-9_.-]", "_", _BUNDLED_VERSION)
+_PROCESS_NONCE = secrets.token_hex(16)
+
+
+def _chmod_private(path: Path, mode: int) -> None:
+    """Apply POSIX owner-only modes, tolerating Windows ACL semantics."""
+
+    if os.name == "nt":
+        return
+    os.chmod(path, mode)
+
+
+def _directory_create_mode() -> int:
+    return 0o777 if os.name == "nt" else 0o700
+
+
+def _file_create_mode() -> int:
+    return 0o666 if os.name == "nt" else 0o600
+
+
+def _create_bundled_skills_root() -> Path:
+    """Create ``clawcodex/bundled-skills/<version>/<nonce>`` safely."""
+    parent = Path(tempfile.gettempdir())
+    for component in ("clawcodex", "bundled-skills", _BUNDLED_VERSION):
+        parent = parent / component
+        _ensure_private_directory(parent)
+    process_root = parent / _PROCESS_NONCE
+    _ensure_private_directory(process_root)
+    return process_root
+
+
+def get_bundled_skills_root() -> str:
+    """Return the process-private root used for lazily extracted files."""
+
+    global _bundled_skills_root
+    if _bundled_skills_root is not None:
+        return str(_bundled_skills_root)
+    with _bundled_skills_root_lock:
+        if _bundled_skills_root is None:
+            root = _create_bundled_skills_root()
+            _chmod_private(root, 0o700)
+            _bundled_skills_root = root
+    return str(_bundled_skills_root)
+
+
+def get_bundled_skill_extract_dir(
+    skill_name: str,
+    *,
+    registration_nonce: str | None = None,
+) -> str:
+    """Allocate a private path for one registered skill definition."""
+
+    identity = skill_name if registration_nonce is None else f"{skill_name}:{registration_nonce}"
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
+    readable = re.sub(r"[^a-zA-Z0-9_.-]", "_", skill_name).strip("._-")
+    readable = (readable or "skill")[:32]
+    return str(Path(get_bundled_skills_root()) / f"{readable}-{digest}")
+
+
+def is_bundled_skill_path(path: str | os.PathLike[str]) -> bool:
+    """Return whether *path* resolves inside the private bundled root."""
+
+    try:
+        root = Path(get_bundled_skills_root()).resolve(strict=True)
+        candidate = Path(path).expanduser().resolve(strict=False)
+        candidate.relative_to(root)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return False
+    return True
 
 
 def _lazy_init() -> None:
-    """Run ``init_bundled_skills`` once on first registry consumer.
+    """Seed the core catalogue once without inverting init/registry locks."""
 
-    Imported lazily to break the import cycle (``bundled.*`` modules
-    import from this file). The first call seeds the registry; later
-    calls are no-ops until ``clear_bundled_skills`` resets the flag.
-    """
-    global _LAZY_INITIALIZED
-    if _LAZY_INITIALIZED:
-        return
-    # Set BEFORE the import to avoid recursion if a register_*_skill
-    # callable somehow calls back into ``get_bundled_skills`` mid-init.
-    _LAZY_INITIALIZED = True
+    global _LAZY_INITIALIZED, _LAZY_INITIALIZING
+    with _registry_condition:
+        while _LAZY_INITIALIZING:
+            _registry_condition.wait()
+        if _LAZY_INITIALIZED:
+            return
+        _LAZY_INITIALIZING = True
+
+    succeeded = False
     try:
         from .bundled import init_bundled_skills
 
-        init_bundled_skills()
+        succeeded = init_bundled_skills()
     except Exception:
-        # Fail open: if a bundled-skill module is malformed at import
-        # time, surface the failure as "no bundled skills" rather than
-        # crashing every SkillTool.call.
+        # Bundled skills must not make every SkillTool call unusable. Keep
+        # any extension/core entries registered before the failure.
         logger.exception("failed to initialize bundled skills")
+    finally:
+        with _registry_condition:
+            _LAZY_INITIALIZING = False
+            _LAZY_INITIALIZED = succeeded
+            _registry_condition.notify_all()
 
 
 def validate_skill_definition(
@@ -89,18 +185,33 @@ def validate_skill_definition(
 
     if not definition.description or not definition.description.strip():
         errors.append(SkillValidationError("description", "Skill description is required"))
+    if not callable(definition.get_prompt_for_command):
+        errors.append(SkillValidationError("get_prompt_for_command", "Prompt builder is required"))
 
     if definition.context not in VALID_CONTEXTS:
         errors.append(
             SkillValidationError(
                 "context",
-                f"Invalid context '{definition.context}', must be one of: {', '.join(sorted(VALID_CONTEXTS))}",
+                f"Invalid context '{definition.context}', must be one of: "
+                f"{', '.join(sorted(VALID_CONTEXTS))}",
             )
         )
 
+    seen_aliases: set[str] = set()
     for alias in definition.aliases:
         if not alias or not alias.strip():
             errors.append(SkillValidationError("aliases", "Alias cannot be empty"))
+            continue
+        if not VALID_NAME_RE.match(alias):
+            errors.append(SkillValidationError("aliases", f"Invalid alias: {alias}"))
+            continue
+        if alias == definition.name:
+            errors.append(SkillValidationError("aliases", "Alias duplicates canonical name"))
+            continue
+        if alias in seen_aliases:
+            errors.append(SkillValidationError("aliases", f"Duplicate alias: {alias}"))
+            continue
+        seen_aliases.add(alias)
 
     return errors
 
@@ -161,70 +272,274 @@ def skill_from_mcp_tool(
     )
 
 
-def register_bundled_skill(definition: BundledSkillDefinition) -> None:
-    """Append a bundled-skill definition to the in-process registry.
+def _builder_accepts_context(builder: Callable[..., str]) -> bool:
+    try:
+        signature = inspect.signature(builder)
+        signature.bind("", None)
+    except (TypeError, ValueError):
+        return False
+    return True
 
-    Suppresses the lazy-init seeding for the rest of this fixture
-    cycle: if a caller (test or app) is explicitly registering, they
-    own the catalogue contents. ``clear_bundled_skills`` re-arms the
-    lazy-init flag so the next caller-driven cycle starts fresh.
-    """
-    global _LAZY_INITIALIZED
+
+def _invoke_prompt_builder(
+    builder: Callable[..., str],
+    accepts_context: bool,
+    args: str,
+    context: Any | None,
+) -> str:
+    if accepts_context:
+        return builder(args, context)
+    return builder(args)
+
+
+def _resolve_skill_file_path(base_dir: Path, relative_path: str) -> Path:
+    """Resolve a bundled relative path, rejecting every escape spelling."""
+
+    if not isinstance(relative_path, str) or not relative_path:
+        raise ValueError("bundled skill file path must be a non-empty string")
+
+    windows_path = PureWindowsPath(relative_path)
+    posix_path = PurePosixPath(relative_path.replace("\\", "/"))
+    if (
+        windows_path.is_absolute()
+        or bool(windows_path.drive)
+        or posix_path.is_absolute()
+        or ".." in posix_path.parts
+        or not posix_path.parts
+        or posix_path == PurePosixPath(".")
+    ):
+        raise ValueError(f"bundled skill file path escapes skill dir: {relative_path}")
+
+    target = base_dir.joinpath(*posix_path.parts)
+    try:
+        target.resolve(strict=False).relative_to(base_dir.resolve(strict=False))
+    except ValueError as exc:
+        raise ValueError(f"bundled skill file path escapes skill dir: {relative_path}") from exc
+    return target
+
+
+def _ensure_private_directory(path: Path) -> None:
+    try:
+        os.mkdir(path, _directory_create_mode())
+    except FileExistsError:
+        info = os.lstat(path)
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+            raise OSError(f"unsafe bundled skill directory: {path}")
+    _chmod_private(path, 0o700)
+
+
+def _write_exclusive_private_file(path: Path, content: str) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    no_follow = getattr(os, "O_NOFOLLOW", 0)
+    if no_follow:
+        flags |= no_follow
+    if hasattr(os, "O_BINARY"):
+        flags |= os.O_BINARY
+
+    descriptor = os.open(path, flags, _file_create_mode())
+    try:
+        payload = content.encode("utf-8")
+        with os.fdopen(descriptor, "wb", closefd=False) as handle:
+            handle.write(payload)
+            handle.flush()
+        _chmod_private(path, 0o600)
+    finally:
+        os.close(descriptor)
+
+
+def _extract_bundled_skill_files(
+    skill_name: str,
+    files: dict[str, str],
+    skill_root: str,
+) -> str | None:
+    """Safely extract bundled files once; return None on every failure."""
+
+    skill_dir = Path(skill_root)
+    try:
+        if not is_bundled_skill_path(skill_dir):
+            raise ValueError(f"bundled skill root escaped process root: {skill_dir}")
+
+        resolved_files: list[tuple[Path, str]] = []
+        identities: set[str] = set()
+        for relative_path, content in files.items():
+            if not isinstance(content, str):
+                raise TypeError(f"bundled skill file content must be text: {relative_path}")
+            target = _resolve_skill_file_path(skill_dir, relative_path)
+            identity = os.path.normcase(str(target.resolve(strict=False)))
+            if identity in identities:
+                raise ValueError(f"duplicate bundled skill file path: {relative_path}")
+            identities.add(identity)
+            resolved_files.append((target, content))
+
+        try:
+            os.mkdir(skill_dir, _directory_create_mode())
+            _chmod_private(skill_dir, 0o700)
+        except FileExistsError as exc:
+            raise OSError(
+                f"bundled skill extraction directory already exists: {skill_dir}"
+            ) from exc
+
+        for target, content in resolved_files:
+            current = skill_dir
+            relative = target.relative_to(skill_dir)
+            for part in relative.parts[:-1]:
+                current = current / part
+                _ensure_private_directory(current)
+            _write_exclusive_private_file(target, content)
+        return str(skill_dir)
+    except Exception as exc:  # noqa: BLE001 - bundled files are fail-open
+        logger.warning("failed to extract files for bundled skill %s: %s", skill_name, exc)
+        return None
+
+
+def _build_prompt_wrapper(
+    definition: BundledSkillDefinition,
+    skill_root: str | None,
+) -> Callable[..., str]:
+    builder = definition.get_prompt_for_command
+    accepts_context = _builder_accepts_context(builder)
+    files = dict(definition.files or {})
+    extraction_lock = threading.Lock()
+    extraction_attempted = False
+    extracted_dir: str | None = None
+
+    def get_prompt(args: str, context: Any | None = None) -> str:
+        nonlocal extraction_attempted, extracted_dir
+        prompt = _invoke_prompt_builder(builder, accepts_context, args, context)
+        if not files or skill_root is None:
+            return prompt
+
+        if not extraction_attempted:
+            with extraction_lock:
+                if not extraction_attempted:
+                    extracted_dir = _extract_bundled_skill_files(
+                        definition.name,
+                        files,
+                        skill_root,
+                    )
+                    extraction_attempted = True
+        setattr(get_prompt, "_bundled_resource_root", extracted_dir)
+        diagnostic = (
+            None
+            if extracted_dir is not None
+            else (
+                f"Bundled skill {definition.name!r} resources could not be extracted; "
+                "continuing without a base directory"
+            )
+        )
+        setattr(get_prompt, "_bundled_resource_diagnostic", diagnostic)
+        if extracted_dir is None:
+            return prompt
+        return f"Base directory for this skill: {extracted_dir}\n\n{prompt}"
+
+    setattr(get_prompt, "_bundled_resource_root", None)
+    setattr(get_prompt, "_bundled_resource_diagnostic", None)
+    return get_prompt
+
+
+def register_bundled_skill(definition: BundledSkillDefinition) -> bool:
+    """Register or replace one bundled skill without changing core init state."""
+    errors = validate_skill_definition(definition)
+    if errors:
+        for error in errors:
+            logger.warning(
+                "bundled skill %r rejected: %s: %s", definition.name, error.field, error.message
+            )
+        return False
+
+    skill_root = (
+        get_bundled_skill_extract_dir(
+            definition.name,
+            registration_nonce=secrets.token_hex(16),
+        )
+        if definition.files
+        else None
+    )
     skill = Skill(
         name=definition.name,
         description=definition.description,
         content="",
         source="bundled",
         loaded_from="bundled",
-        aliases=definition.aliases,
-        allowed_tools=definition.allowed_tools,
+        aliases=list(definition.aliases),
+        allowed_tools=list(definition.allowed_tools),
         argument_hint=definition.argument_hint,
         when_to_use=definition.when_to_use,
         model=definition.model,
+        effort=definition.effort,
         disable_model_invocation=definition.disable_model_invocation,
         user_invocable=definition.user_invocable,
         context=definition.context,
         agent=definition.agent,
-        get_prompt_for_command=definition.get_prompt_for_command,
+        hooks=dict(definition.hooks) if definition.hooks is not None else None,
+        get_prompt_for_command=_build_prompt_wrapper(definition, skill_root),
+        is_enabled_fn=definition.is_enabled,
         is_hidden=not definition.user_invocable,
+        has_user_specified_description=True,
+        skill_root=skill_root,
     )
-    _bundled_skills.append(skill)
-    _LAZY_INITIALIZED = True
+
+    with _registry_lock:
+        for index, existing in enumerate(_bundled_skills):
+            if existing.name == skill.name:
+                _bundled_skills[index] = skill
+                break
+        else:
+            _bundled_skills.append(skill)
+
+    try:
+        from .catalog import _invalidate_catalog_cache_only
+    except ImportError:  # pragma: no cover - package import boundary
+        pass
+    else:
+        _invalidate_catalog_cache_only()
+    return True
+
+
+def get_registered_bundled_skills() -> list[Skill]:
+    """Return current registrations without triggering core initialization."""
+
+    with _registry_lock:
+        return list(_bundled_skills)
 
 
 def get_bundled_skills() -> list[Skill]:
     _lazy_init()
-    return list(_bundled_skills)
+    return get_registered_bundled_skills()
 
 
 def get_bundled_skill_by_name(name: str) -> Skill | None:
+    """Resolve a bundled name with canonical names ahead of every alias."""
+
     _lazy_init()
-    for skill in _bundled_skills:
-        if skill.name == name:
-            return skill
-        if name in skill.aliases:
-            return skill
+    with _registry_lock:
+        for skill in _bundled_skills:
+            if skill.name == name:
+                return skill
+        for skill in _bundled_skills:
+            if name in skill.aliases:
+                return skill
     return None
 
 
 def clear_bundled_skills() -> None:
-    """Wipe the registry and reset the lazy-init flag.
+    """Wipe registrations and re-arm core lazy initialization."""
 
-    Resetting the flag ensures the next ``get_bundled_skills`` /
-    ``register_bundled_skill`` cycle re-seeds the catalogue, which is
-    what test fixtures want — otherwise a clear-then-read would return
-    an empty list and silently mask "did init_bundled_skills get
-    called?" bugs.
-    """
-    global _LAZY_INITIALIZED
-    _bundled_skills.clear()
-    _LAZY_INITIALIZED = False
+    global _LAZY_INITIALIZED, _LAZY_INITIALIZING
+    with _registry_lock:
+        _bundled_skills.clear()
+        try:
+            from .bundled import reset_bundled_skills_init_flag
+
+            reset_bundled_skills_init_flag()
+        except Exception:
+            pass
+        _LAZY_INITIALIZED = False
+        _LAZY_INITIALIZING = False
+
     try:
-        from .bundled import reset_bundled_skills_init_flag
-
-        reset_bundled_skills_init_flag()
-    except Exception:
-        # If the bundled package can't import, the lazy-init flag in
-        # this module is enough; the bundled-side flag is just a
-        # belt-and-braces idempotency check.
+        from .catalog import _invalidate_catalog_cache_only
+    except ImportError:  # pragma: no cover - package import boundary
         pass
+    else:
+        _invalidate_catalog_cache_only()

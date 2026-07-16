@@ -165,8 +165,8 @@ def _build_debug_prompt(args: str) -> str:
     )
 
 
-def register_debug_skill() -> None:
-    register_bundled_skill(
+def register_debug_skill() -> bool:
+    return register_bundled_skill(
         BundledSkillDefinition(
             name="debug",
             description=("Enable debug logging for this session and help diagnose issues"),

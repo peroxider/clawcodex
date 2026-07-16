@@ -39,15 +39,7 @@ from clawcodex_ext.command_system.types import (
 _log = logging.getLogger(__name__)
 
 
-def register_dream_skill() -> None:
-    """Register the ``/dream`` LocalCommand in the global command registry.
-
-    Idempotent — calling twice replaces the prior registration with
-    the same command instance (the registry's name-keyed dict makes
-    this a clean overwrite).
-    """
-    from clawcodex_ext.command_system.registry import get_command_registry
-
+def _build_dream_command() -> LocalCommand:
     command = LocalCommand(
         name="dream",
         description=(
@@ -58,7 +50,21 @@ def register_dream_skill() -> None:
         loaded_from="bundled",
     )
     command.set_call(_dream_call)
-    get_command_registry().register(command)
+    return command
+
+
+def get_dream_command() -> LocalCommand:
+    """Return the extension-owned command for common builtin registration."""
+
+    return DREAM_COMMAND
+
+
+def register_dream_skill(registry: Any | None = None) -> None:
+    """Register /dream in the supplied or global command registry."""
+
+    from clawcodex_ext.command_system.registry import get_command_registry
+
+    (registry or get_command_registry()).register(DREAM_COMMAND)
 
 
 def _dream_call(args: str, context: Any) -> LocalCommandResult:
@@ -167,4 +173,7 @@ def _dream_help(unknown: str | None = None) -> LocalCommandResult:
     return LocalCommandResult(type="text", value="\n".join(body))
 
 
-__all__ = ["register_dream_skill"]
+DREAM_COMMAND = _build_dream_command()
+
+
+__all__ = ["DREAM_COMMAND", "get_dream_command", "register_dream_skill"]

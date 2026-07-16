@@ -217,8 +217,8 @@ AGENT_INPUT_SCHEMA: dict[str, Any] = {
         "provider": {
             "type": "string",
             "description": (
-                "Optional provider override for this agent (e.g. \"anthropic\", "
-                "\"openai\", \"deepseek\", \"gemini\"). Takes precedence over "
+                'Optional provider override for this agent (e.g. "anthropic", '
+                '"openai", "deepseek", "gemini"). Takes precedence over '
                 "the agent definition's provider frontmatter. When set, the "
                 "sub-agent uses its own provider instance independent of the parent."
             ),
@@ -254,6 +254,13 @@ AGENT_INPUT_SCHEMA: dict[str, Any] = {
     },
     "required": ["prompt"],
 }
+
+
+def _resolve_agent_background(tool_input: dict[str, Any], agent_definition: Any) -> bool:
+    """Resolve caller intent against an agent's default execution mode."""
+    if tool_input.get("_force_foreground") is True:
+        return False
+    return bool(tool_input.get("run_in_background", False) or agent_definition.background)
 
 
 def make_agent_tool(
@@ -350,10 +357,13 @@ def make_agent_tool(
         if not prompt:
             raise ToolInputError("prompt is required")
 
+        force_fork = tool_input.get("_force_fork") is True
+        refresh_skill_listing = tool_input.get("_refresh_skill_listing") is True
+
         description = tool_input.get("description", prompt[:50])
         subagent_type = tool_input.get("subagent_type")
         model = tool_input.get("model")
-        run_in_background = bool(tool_input.get("run_in_background", False))
+        inherit_context = tool_input.get("_inherit_context") is True
         # Chapter-10 / WI-6.1 — optional human-readable name. We
         # validate / register it AFTER agent_id is generated so the
         # collision-on-running check can compare against the registry
@@ -377,7 +387,7 @@ def make_agent_tool(
         # ``subagent_type`` so the existing dispatch (below) selects the
         # right one-shot agent. Explicit ``subagent_type`` from the model
         # still wins because we only inject when it's absent.
-        if not subagent_type:
+        if not subagent_type and not force_fork:
             try:
                 from src.agent.routing import (
                     GENERAL_PURPOSE_FALLBACK,
@@ -408,7 +418,7 @@ def make_agent_tool(
         except ImportError:
             pass
 
-        is_fork_path = subagent_type is None and is_fork_subagent_enabled(context)
+        is_fork_path = force_fork or (subagent_type is None and is_fork_subagent_enabled(context))
 
         if is_fork_path:
             # Recursive-fork guard. Primary check: querySource on the parent's
@@ -440,6 +450,8 @@ def make_agent_tool(
             )
             if agent_def is None:
                 raise ToolInputError("No agent definitions available")
+
+        run_in_background = _resolve_agent_background(tool_input, agent_def)
 
         # --- Resolve provider and model overrides ---
         #
@@ -608,6 +620,9 @@ def make_agent_tool(
         fork_parent_system_prompt: str | None = None
         fork_prompt = prompt
 
+        if inherit_context and not is_fork_path:
+            fork_context_messages = list(context.messages)
+
         if is_fork_path:
             from clawcodex_ext.types.messages import AssistantMessage, create_user_message
 
@@ -663,6 +678,7 @@ def make_agent_tool(
             use_exact_tools=fork_use_exact_tools,
             query_source=fork_query_source,
             parent_system_prompt=fork_parent_system_prompt,
+            refresh_skill_listing=refresh_skill_listing,
         )
 
         if is_async:

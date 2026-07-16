@@ -26,7 +26,7 @@ class Skill:
     model: Optional[str] = None
     context: str = "inline"
     agent: Optional[str] = None
-    effort: Optional[str] = None
+    effort: str | int | None = None
     paths: Optional[list[str]] = None
     display_name: Optional[str] = None
     has_user_specified_description: bool = False

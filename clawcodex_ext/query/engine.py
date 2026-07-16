@@ -56,6 +56,17 @@ class QueryEngineConfig:
     mcp_servers: list[Any] | None = None
 
 
+def _skill_tool_is_available(config: QueryEngineConfig) -> bool:
+    """Return whether this query can actually expose the Skill tool."""
+    from clawcodex_ext.skills.visibility import skill_tool_is_available
+
+    return skill_tool_is_available(
+        context=config.tool_context,
+        tool_registry=config.tool_registry,
+        tools=config.tools,
+    )
+
+
 class QueryEngine:
     def __init__(self, config: QueryEngineConfig) -> None:
         self._config = config
@@ -177,9 +188,22 @@ class QueryEngine:
             # ``skills=`` is what finally emits the section that the
             # ``Skill`` tool's prompt already promises. Without this the
             # parameter defaults to None and the section is never built.
-            # Local import keeps the command_system package off the
-            # module-load path of every query.
-            from clawcodex_ext.command_system import get_skill_tool_commands
+            # Local imports keep skill discovery off query paths that cannot
+            # expose the Skill tool.
+            skill_commands: list[Any] = []
+            if _skill_tool_is_available(self._config):
+                from clawcodex_ext.command_system import get_skill_tool_commands
+                from clawcodex_ext.skills.visibility import filter_model_visible_skills
+
+                skill_commands = filter_model_visible_skills(
+                    get_skill_tool_commands(
+                        cwd,
+                        str(self._config.tool_context.session_id)
+                        if self._config.tool_context.session_id is not None
+                        else None,
+                    ),
+                    self._config.tool_context,
+                )
 
             blocks = build_full_system_prompt_blocks(
                 cwd=cwd,
@@ -197,7 +221,7 @@ class QueryEngine:
                 # privacy guarantee at line 91).
                 provider=self._config.provider,
                 mcp_servers=self._config.mcp_servers,
-                skills=get_skill_tool_commands(cwd),
+                skills=skill_commands,
             )
             system_prompt = append_system_context_blocks(
                 blocks,

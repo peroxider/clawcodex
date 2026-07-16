@@ -23,6 +23,7 @@ from .types import (
     LocalCommandResult,
     NullUIHost,
     PromptCommand,
+    SkillPromptCommand,
     attach_downstream_context,
 )
 
@@ -36,8 +37,9 @@ class CommandResult:
     result_type: str = "text"  # "text" | "prompt" | "skip"
     text: str = ""
     prompt_content: list[dict[str, Any]] = field(default_factory=list)
+    prompt_is_meta: bool = False
     should_query: bool = False
-    display: str = "system"  # "skip" | "system" | "user"
+    display: str = "system"  # "skip" | "system" | "user" | "assistant"
     meta_messages: list[str] = field(default_factory=list)
     error: Optional[str] = None
     # F-122-F: propagated from InteractiveOutcome.scrollable — surfaces that
@@ -57,11 +59,25 @@ class CommandResult:
         )
 
     @classmethod
+    def success_assistant(cls, command_name: str, text: str) -> "CommandResult":
+        """Create a completed assistant result that must not be queried again."""
+        return cls(
+            success=True,
+            command_name=command_name,
+            result_type="text",
+            text=text,
+            prompt_is_meta=True,
+            should_query=False,
+            display="assistant",
+        )
+
+    @classmethod
     def success_prompt(
         cls,
         command_name: str,
         prompt_content: list[dict[str, Any]],
         should_query: bool = True,
+        prompt_is_meta: bool = False,
     ) -> "CommandResult":
         """Create a successful prompt result."""
         return cls(
@@ -69,6 +85,7 @@ class CommandResult:
             command_name=command_name,
             result_type="prompt",
             prompt_content=prompt_content,
+            prompt_is_meta=prompt_is_meta,
             should_query=should_query,
             display="user",
         )
@@ -217,10 +234,32 @@ class CommandEngine:
         """Execute a prompt command."""
         try:
             prompt_content = await command.get_prompt_for_command(args, self.context)
+            if isinstance(command, SkillPromptCommand) and command.context == "fork":
+                result_text = next(
+                    (
+                        item.get("text", "")
+                        for item in prompt_content
+                        if isinstance(item, dict)
+                        and item.get("type") == "text"
+                        and item.get("text")
+                    ),
+                    "",
+                )
+                if not result_text:
+                    return CommandResult.error(
+                        command.name,
+                        f"Forked skill produced empty result: {command.name}",
+                    )
+                conversation = getattr(self.context, "conversation", None)
+                add_assistant = getattr(conversation, "add_assistant_message", None)
+                if callable(add_assistant):
+                    add_assistant(result_text)
+                return CommandResult.success_assistant(command.name, result_text)
             return CommandResult.success_prompt(
                 command.name,
                 prompt_content,
                 should_query=True,
+                prompt_is_meta=isinstance(command, SkillPromptCommand),
             )
         except Exception as e:
             return CommandResult.error(

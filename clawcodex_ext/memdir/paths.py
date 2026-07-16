@@ -233,34 +233,42 @@ def find_canonical_git_root(start: str | os.PathLike[str] | None = None) -> str 
     return None
 
 
-def _get_project_root() -> str:
-    """Best-effort current project root: canonical git root, else cwd."""
-    canonical = find_canonical_git_root()
+def _get_project_root(
+    start: str | os.PathLike[str] | None = None,
+) -> str:
+    """Best-effort project root: canonical git root, else *start* or cwd."""
+    canonical = find_canonical_git_root(start)
     if canonical:
         return canonical
-    return os.getcwd()
+    return str(Path(start).resolve()) if start is not None else os.getcwd()
 
 
-def get_auto_mem_path() -> str:
+def get_auto_mem_path(
+    start: str | os.PathLike[str] | None = None,
+) -> str:
     """Resolve the auto-memory directory.
 
     Memoizing here would be wrong for tests that switch project roots
     between calls; callers re-enter cheaply. Returns NFC-normalized path
-    with a trailing separator.
+    with a trailing separator.  *start* lets request-scoped callers resolve
+    memory for their active workspace even when the host process has a
+    different working directory.
     """
     override = _get_auto_mem_path_override()
     if override:
         return override
     base = get_memory_base_dir()
-    project_root = _get_project_root()
+    project_root = _get_project_root(start)
     sanitized = sanitize_path(project_root)
     path = os.path.join(base, "projects", sanitized, _AUTO_MEM_DIRNAME) + os.sep
     return unicodedata.normalize("NFC", path)
 
 
-def get_auto_mem_entrypoint() -> str:
+def get_auto_mem_entrypoint(
+    start: str | os.PathLike[str] | None = None,
+) -> str:
     """Path to ``MEMORY.md`` inside the auto-memory dir."""
-    return os.path.join(get_auto_mem_path(), _AUTO_MEM_ENTRYPOINT_NAME)
+    return os.path.join(get_auto_mem_path(start), _AUTO_MEM_ENTRYPOINT_NAME)
 
 
 def get_auto_mem_daily_log_path(date: _date | None = None) -> str:

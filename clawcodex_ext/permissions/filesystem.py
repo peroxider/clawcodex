@@ -343,6 +343,22 @@ def _readable_internal_dirs(context: Any) -> list[Path]:
     except Exception:
         pass
 
+    # Bundled skill resources are readable only while their invocation scope
+    # is active. Validate every root against the process-private extraction
+    # tree and ignore stale roots independently.
+    try:
+        from clawcodex_ext.skills.bundled_skills import is_bundled_skill_path
+
+        for raw_root in tuple(getattr(context, "skill_resource_roots", ()) or ()):
+            try:
+                root = Path(raw_root).expanduser().resolve(strict=True)
+            except (OSError, RuntimeError, ValueError):
+                continue
+            if is_bundled_skill_path(root):
+                dirs.append(root)
+    except Exception:
+        pass
+
     # NOTE: TS ``checkReadableInternalPath`` also allowlists session-plan files,
     # the current project's transcript dir (``isProjectDirPath``), project-temp
     # (``/tmp/claude/<cwd>/``), agent-memory, ``~/.claude/tasks``,

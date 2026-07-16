@@ -179,11 +179,13 @@ def get_main_transcript_path(session_id: str) -> str:
     sub-agent resolver would only complicate the call sites.
     """
     safe_id = _sanitize_agent_id(session_id)
+    return str(_sessions_root() / safe_id / "transcript.jsonl")
+
+
+def _sessions_root() -> Path:
+    """Return the configured session root shared by main and child transcripts."""
     override = os.environ.get("CLAWCODEX_SESSIONS_DIR", "").strip()
-    sessions_dir = (
-        Path(override).expanduser() if override else Path.home() / ".clawcodex" / "sessions"
-    )
-    return str(sessions_dir / safe_id / "transcript.jsonl")
+    return Path(override).expanduser() if override else Path.home() / ".clawcodex" / "sessions"
 
 
 def get_workflow_run_path(run_id: str) -> str:
@@ -638,7 +640,7 @@ def nested_session_path_resolver(
         return None  # 回退到 flat ~/.clawcodex/transcripts/
 
     _safe_session = _sanitize_for_path(parent_session_id)
-    root = Path.home() / ".clawcodex" / "sessions" / _safe_session / "subagents"
+    root = _sessions_root() / _safe_session / "subagents"
     root.mkdir(parents=True, exist_ok=True)
     return str(root / f"agent-{agent_id}.jsonl")
 

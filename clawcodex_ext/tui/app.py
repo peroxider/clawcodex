@@ -791,6 +791,11 @@ class ClawCodexTUI(App):
                 style="muted",
                 render=result.system_render,
             )
+        if result.assistant_text:
+            transcript.append_assistant(
+                result.assistant_text,
+                agent_name=result.assistant_name or "",
+            )
         if result.prompt_text:
             transcript.append_user(f"(from slash command) {result.prompt_text[:80]}…")
             self.submit_to_agent(result.prompt_text)

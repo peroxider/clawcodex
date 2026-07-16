@@ -389,6 +389,37 @@ def _is_hook_stopped_continuation(msg: Message | None) -> bool:
     return False
 
 
+def _skill_effort_kwargs(provider: BaseProvider, effort: str | int | None) -> dict[str, Any]:
+    """Translate a skill effort override only for providers that support it."""
+    if effort is None or effort == "":
+        return {}
+
+    module_name = type(provider).__module__.lower()
+    class_name = type(provider).__name__.lower()
+    if "anthropic_provider" in module_name and "minimax" not in class_name:
+        return {"output_config": {"effort": effort}}
+    if "kimi_provider" in module_name:
+        return {"reasoning_config": {"effort": effort}}
+    if any(marker in module_name for marker in ("openai", "litellm", "grok")):
+        return {"reasoning_effort": effort}
+
+    mapper = getattr(provider, "skill_effort_kwargs", None)
+    if callable(mapper):
+        try:
+            mapped = mapper(effort)
+            return dict(mapped or {})
+        except Exception:
+            logger.warning("provider skill effort mapping failed", exc_info=True)
+            return {}
+
+    logger.warning(
+        "Provider %s does not support skill effort override %r; continuing without it",
+        type(provider).__name__,
+        effort,
+    )
+    return {}
+
+
 async def _call_model_sync(
     *,
     provider: BaseProvider,
@@ -396,6 +427,7 @@ async def _call_model_sync(
     system_prompt: str,
     tools: Tools,
     model: str | None = None,
+    effort_override: str | int | None = None,
     max_output_tokens_override: int | None = None,
     abort_signal: Any = None,
     on_text_chunk: Callable[[str], None] | None = None,
@@ -552,6 +584,7 @@ async def _call_model_sync(
     # provider's default model.
     if model:
         call_kwargs["model"] = model
+    call_kwargs.update(_skill_effort_kwargs(provider, effort_override))
 
     if advisor_mode == ADVISOR_MODE_SERVER_SIDE:
         # Opt into the server-side advisor tool. ``betas`` lives outside
@@ -1705,7 +1738,8 @@ async def query(
                     messages=messages,
                     system_prompt=current_system_prompt,
                     tools=effective_tools,
-                    model=params.model,
+                    model=tool_use_context.skill_model_override or params.model,
+                    effort_override=tool_use_context.skill_effort_override,
                     max_output_tokens_override=max_output_tokens_override,
                     abort_signal=params.abort_controller.signal,
                     on_text_chunk=params.on_text_chunk,
@@ -2091,6 +2125,49 @@ async def query(
             pending_tool_use_summary=state.pending_tool_use_summary,
             transition=Transition(reason="next_turn"),
         )
+
+
+def _restore_skill_runtime_scope(context: ToolContext) -> None:
+    """Restore request-private Skill overrides without touching session hooks."""
+    if context._skill_permission_base is not None:
+        context.permission_context = context._skill_permission_base
+    if context._skill_options_base is not None:
+        context.options = context._skill_options_base
+    if context._skill_resource_roots_base is not None:
+        context.skill_resource_roots = context._skill_resource_roots_base
+    context._skill_permission_base = None
+    context._skill_options_base = None
+    context._skill_resource_roots_base = None
+    context.skill_model_override = None
+    context.skill_effort_override = None
+    context.skill_scope_pending = False
+    context.skill_scope_active = False
+    context.active_skill_names = ()
+
+
+def _begin_skill_runtime_scope(context: ToolContext) -> None:
+    if context.skill_scope_pending:
+        context.skill_scope_pending = False
+    else:
+        _restore_skill_runtime_scope(context)
+    context.skill_scope_active = True
+
+
+_query_impl = query
+
+
+async def query(
+    params: QueryParams,
+    *,
+    terminal_holder: TerminalHolder | None = None,
+) -> AsyncGenerator[Message | StreamEvent, None]:
+    context = params.tool_use_context
+    _begin_skill_runtime_scope(context)
+    try:
+        async for item in _query_impl(params, terminal_holder=terminal_holder):
+            yield item
+    finally:
+        _restore_skill_runtime_scope(context)
 
 
 async def run_query(

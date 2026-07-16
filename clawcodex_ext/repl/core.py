@@ -786,7 +786,14 @@ class ClawcodexREPL:
                 is_loading=lambda: self._active_live_status is not None,
             )
         self._cron_active_tasks: dict[str, str] = {}
-        self.tool_context.session_id = session_id
+        from clawcodex_ext.runtime.tool_context_binding import bind_tool_context_runtime
+
+        bind_tool_context_runtime(
+            self.tool_context,
+            tool_registry=self.tool_registry,
+            session=self.session,
+            provider=self.provider,
+        )
         self.tool_context.ask_user = self._ask_user_questions
         # Permission handler with status control for proper input handling
         self._current_status = None
@@ -1966,6 +1973,7 @@ class ClawcodexREPL:
         from src.command_system import (
             CommandRegistry,
             create_command_context,
+            load_and_register_skills,
             register_builtin_commands,
         )
 
@@ -2001,6 +2009,23 @@ class ClawcodexREPL:
 
             register_tool_commands(self.command_registry)
             register_tool_commands(None)  # also register in global registry
+        except Exception:
+            pass
+
+        # Prompt skills must be present in both registries: the instance
+        # registry drives REPL recognition/completion, while
+        # ``execute_command_async`` resolves from the global registry.
+        # Without this wiring, a typed ``/<skill>`` falls through as ordinary
+        # model input and only works if the model happens to call SkillTool.
+        try:
+            load_and_register_skills(
+                project_root=Path.cwd(),
+                registry=self.command_registry,
+            )
+            load_and_register_skills(
+                project_root=Path.cwd(),
+                registry=None,
+            )
         except Exception:
             pass
 
@@ -2155,6 +2180,14 @@ class ClawcodexREPL:
 
         if result.result_type == "text":
             if result.text:
+                if result.display == "assistant":
+                    self.console.print()
+                    self.console.print(Markdown(result.text))
+                    from clawcodex_ext.types.messages import create_message
+
+                    self._engine_messages.append(create_message("assistant", result.text))
+                    self.console.print()
+                    return True
                 # F-122-F: long /btw answers carry scrollable=True. Route
                 # them through the keyboard-scrolled viewer so the user
                 # can navigate instead of seeing a wall of text scroll

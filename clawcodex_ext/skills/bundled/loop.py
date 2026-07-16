@@ -203,7 +203,7 @@ def _build_fixed_prompt(parsed: ParsedLoopArgs) -> str:
         "\n"
         "The user invoked /loop with a fixed interval.\n"
         "\n"
-        f"Requested interval: **{parsed.interval}**\n"
+        f"Requested interval: {parsed.interval}\n"
         "\n"
         "IMPORTANT: Use the parsed interval above exactly as given. "
         "Do NOT infer or substitute a different interval from the prompt text.\n"
@@ -295,8 +295,8 @@ def _is_loop_enabled() -> bool:
     return True
 
 
-def register_loop_skill() -> None:
-    register_bundled_skill(
+def register_loop_skill() -> bool:
+    return register_bundled_skill(
         BundledSkillDefinition(
             name="loop",
             description=(

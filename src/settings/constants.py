@@ -11,20 +11,20 @@ from .types import (
 )
 
 DEFAULT_SETTINGS = SettingsSchema(
-    model='claude-sonnet-4-20250514',
-    small_fast_model='claude-3-5-haiku-20241022',
-    provider='anthropic',
+    model="claude-sonnet-4-20250514",
+    small_fast_model="claude-3-5-haiku-20241022",
+    provider="anthropic",
     # F-47: top-level permission_mode left as "" (the new back-compat default).
     # The actual default mode for new binaries is `default`; if a user wants
     # to start in a non-default mode, they set ``permissions.defaultMode``
     # (preferred) or this top-level field (legacy).
-    permission_mode='',
+    permission_mode="",
     # F-47: structured permissions block — empty default keeps the binary
     # in ``default`` mode with no allow/deny rules and bypass disabled.
     permissions=PermissionsConfig(),
     tools={},
     output_style=OutputStyleSettings(
-        style='default',
+        style="default",
         max_width=120,
         show_thinking=False,
     ),
@@ -41,11 +41,11 @@ DEFAULT_SETTINGS = SettingsSchema(
     mcp_servers={},
     max_turns=0,
     max_cost_usd=0.0,
-    effort='',
+    effort="",
     plan_mode=False,
     non_interactive=False,
-    custom_system_prompt='',
-    append_system_prompt='',
+    custom_system_prompt="",
+    append_system_prompt="",
     allowed_tools=[],
     denied_tools=[],
     fast_mode=False,
@@ -53,13 +53,19 @@ DEFAULT_SETTINGS = SettingsSchema(
 )
 
 # Known valid effort values
-VALID_EFFORT_VALUES = ('', 'low', 'medium', 'high', 'max')
+VALID_EFFORT_VALUES = ("", "low", "medium", "high", "max")
 
 # Known valid output styles
-VALID_OUTPUT_STYLES = ('default', 'concise', 'verbose', 'markdown')
+VALID_OUTPUT_STYLES = ("default", "concise", "verbose", "markdown")
 
 # Known valid spinner-verb merge modes (TS settings/types.ts:696)
 VALID_SPINNER_VERB_MODES = ("append", "replace")
 
 # Known valid permission modes
-VALID_PERMISSION_MODES = ('default', 'plan', 'bypassPermissions')
+VALID_PERMISSION_MODES = (
+    "default",
+    "plan",
+    "acceptEdits",
+    "bypassPermissions",
+    "dontAsk",
+)

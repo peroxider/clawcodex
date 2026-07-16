@@ -118,7 +118,9 @@ def is_team_memory_enabled() -> bool:
     return _is_env_truthy(os.environ.get("CLAUDE_CODE_TEAM_MEMORY"))
 
 
-def get_team_mem_path() -> str:
+def get_team_mem_path(
+    start: str | os.PathLike[str] | None = None,
+) -> str:
     """Team-memory directory: ``<auto_mem>/team/`` with trailing sep.
 
     NFC-normalized to match the auto-memory contract (see
@@ -126,12 +128,14 @@ def get_team_mem_path() -> str:
     is load-bearing for the prefix-attack check
     (``team-evil/`` must not match ``team/``).
     """
-    return unicodedata.normalize("NFC", os.path.join(get_auto_mem_path(), "team") + os.sep)
+    return unicodedata.normalize("NFC", os.path.join(get_auto_mem_path(start), "team") + os.sep)
 
 
-def get_team_mem_entrypoint() -> str:
+def get_team_mem_entrypoint(
+    start: str | os.PathLike[str] | None = None,
+) -> str:
     """``MEMORY.md`` inside the team-memory directory."""
-    return os.path.join(get_auto_mem_path(), "team", "MEMORY.md")
+    return os.path.join(get_auto_mem_path(start), "team", "MEMORY.md")
 
 
 def _realpath_deepest_existing(absolute_path: str) -> str:

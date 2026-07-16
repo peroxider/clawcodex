@@ -1,63 +1,59 @@
 from __future__ import annotations
 
+"""Compatibility registry facade for the canonical skill catalog.
+
+Historically extensions.skills_ext performed a second discovery pass and kept
+a process-global list cache. The canonical implementation now lives in
+clawcodex_ext.skills; this module preserves the public extension API while
+delegating discovery, alias resolution, and invalidation to that implementation.
 """
-SkillRegistry Extension
 
-Wraps upstream skills loader with clawcodex-specific functionality.
-Uses composition to avoid modifying upstream code.
-
-Mirrors ToolRegistryExt pattern for consistency.
-"""
-
+import importlib
 import logging
-import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Sequence
+from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from clawcodex_ext.skills.loader import get_all_skills as upstream_get_all_skills
-    from clawcodex_ext.skills.model import Skill
-    from .agent_config import AgentSkillConfig
-    from .bundles import SKILL_BUNDLES
+from clawcodex_ext.skills.catalog import (
+    get_skill_catalog,
+    invalidate_skill_catalog,
+)
 
 from .hooks import SkillRegistrationCallback
+
+if TYPE_CHECKING:
+    from clawcodex_ext.skills.model import Skill
+
+    from .agent_config import AgentSkillConfig
 
 logger = logging.getLogger(__name__)
 
 
 class SkillRegistryExt:
-    """
-    Extended registry that wraps upstream loader with bundle support.
-
-    Does not modify upstream loader. Uses composition to provide
-    selective skill loading per agent configuration.
-    """
+    """Backward-compatible view over workspace-scoped catalog snapshots."""
 
     def __init__(
         self,
-        loader_module=None,
+        loader_module: Any | None = None,
         project_root: str | Path | None = None,
     ) -> None:
-        """
-        Initialize SkillRegistryExt.
+        """Create a facade without owning discovery or registry state.
 
-        Args:
-            loader_module: Module containing upstream get_all_skills function.
-                         Defaults to clawcodex_ext.skills.loader.
-            project_root: Project root path for skill resolution.
+        loader_module remains accepted for callers that inspect
+        upstream_loader; it is no longer used to run an independent discovery
+        pass.
         """
-        if loader_module is None:
-            import importlib
 
-            loader_module = importlib.import_module("clawcodex_ext.skills.loader")
-        self._loader = loader_module
+        self._loader = loader_module or importlib.import_module("clawcodex_ext.skills.loader")
         self._callbacks: list[SkillRegistrationCallback] = []
         self._project_root = project_root
-        self._cached_skills: list[Skill] | None = None
+        self._last_project_root = project_root
+        self._last_user_skills_dir: str | Path | None = None
+        self._last_notified_version: int | None = None
 
     @property
-    def upstream_loader(self):
-        """Access the upstream loader module."""
+    def upstream_loader(self) -> Any:
+        """Return the legacy loader module exposed by the old wrapper."""
+
         return self._loader
 
     def get_all_skills(
@@ -67,208 +63,87 @@ class SkillRegistryExt:
         user_skills_dir: str | Path | None = None,
         force_refresh: bool = False,
     ) -> list[Skill]:
+        """Return skills from the canonical workspace catalog.
+
+        force_refresh invalidates the canonical catalog and all dependent skill
+        views before rebuilding it. No extension-local discovery result is
+        retained.
         """
-        Get all skills (upstream + clawcodex extensions).
 
-        Args:
-            project_root: Project root path
-            user_skills_dir: Custom user skills directory
-            force_refresh: Skip cache and reload
-
-        Returns:
-            List of all available Skills
-        """
-        cache_key = f"{project_root}:{user_skills_dir}"
-        if not force_refresh and self._cached_skills is not None:
-            return list(self._cached_skills)
-
-        # Get upstream skills
-        try:
-            base_skills = self._loader.get_all_skills(
-                project_root=project_root,
-                user_skills_dir=user_skills_dir,
-            )
-        except Exception as e:
-            logger.warning(
-                "[skills_ext] upstream get_all_skills failed: %s",
-                e,
-            )
-            base_skills = []
-
-        # Get clawcodex-specific skills
-        clawcodex_skills = self._load_clawcodex_paths(
-            project_root or self._project_root,
-            user_skills_dir,
+        resolved_root = project_root if project_root is not None else self._last_project_root
+        resolved_user_dir = (
+            user_skills_dir if user_skills_dir is not None else self._last_user_skills_dir
         )
+        if force_refresh:
+            invalidate_skill_catalog(
+                "skills_ext force refresh",
+                workspace=resolved_root if resolved_root is not None else Path.cwd(),
+            )
 
-        # Merge with first-source-wins precedence
-        merged = self._merge_skills(base_skills, clawcodex_skills)
+        snapshot = get_skill_catalog(
+            project_root=resolved_root,
+            user_skills_dir=resolved_user_dir,
+        )
+        self._last_project_root = resolved_root
+        self._last_user_skills_dir = resolved_user_dir
+        if snapshot.diagnostics:
+            logger.debug(
+                "[skills_ext] catalog diagnostics for %s: %s",
+                snapshot.project_root,
+                "; ".join(snapshot.diagnostics),
+            )
 
-        # Notify callbacks
-        for skill in merged:
-            self._notify_skill_registered(skill)
+        if snapshot.version != self._last_notified_version:
+            for skill in snapshot.skills:
+                self._notify_skill_registered(skill)
+            self._last_notified_version = snapshot.version
 
-        self._cached_skills = merged
-        return list(merged)
-
-    def _load_clawcodex_paths(
-        self,
-        project_root: str | Path | None,
-        user_skills_dir: str | Path | None,
-    ) -> list[Skill]:
-        """Load skills from clawcodex-specific paths."""
-        from clawcodex_ext.skills.loader import load_skills_from_skills_dir
-
-        skills: list[Skill] = []
-
-        # Load from CLAWCODEX_SKILLS_DIR and ~/.clawcodex/skills
-        clawcodex_dirs = self._get_clawcodex_dirs(user_skills_dir)
-        for d in clawcodex_dirs:
-            if Path(d).is_dir():
-                try:
-                    loaded = load_skills_from_skills_dir(d, "userSettings")
-                    skills.extend(loaded)
-                except Exception as e:
-                    logger.debug(
-                        "[skills_ext] failed to load from %s: %s",
-                        d,
-                        e,
-                    )
-
-        # Load from project .clawcodex/skills
-        if project_root is not None:
-            project_clawcodex = Path(project_root) / ".clawcodex" / "skills"
-            if project_clawcodex.is_dir():
-                try:
-                    loaded = load_skills_from_skills_dir(
-                        str(project_clawcodex),
-                        "projectSettings",
-                    )
-                    skills.extend(loaded)
-                except Exception as e:
-                    logger.debug(
-                        "[skills_ext] failed to load project skills: %s",
-                        e,
-                    )
-
-        return skills
-
-    def _get_clawcodex_dirs(
-        self,
-        user_skills_dir: str | Path | None,
-    ) -> list[str]:
-        """Get clawcodex-specific skill directories."""
-        dirs: list[str] = []
-
-        if user_skills_dir is not None:
-            dirs.append(str(Path(user_skills_dir).expanduser().resolve()))
-            return dirs
-
-        env_primary = os.environ.get("CLAWCODEX_SKILLS_DIR")
-        if env_primary:
-            dirs.append(env_primary)
-
-        ts_env = os.environ.get("CLAUDE_SKILLS_DIR")
-        if ts_env:
-            p = str(Path(ts_env).expanduser().resolve())
-            if p not in dirs:
-                dirs.append(p)
-
-        clawcodex_dir = str(Path.home() / ".clawcodex" / "skills")
-        if clawcodex_dir not in dirs:
-            dirs.append(clawcodex_dir)
-
-        return dirs
-
-    def _merge_skills(
-        self,
-        base_skills: Sequence[Skill],
-        extra_skills: Sequence[Skill],
-    ) -> list[Skill]:
-        """
-        Merge base and extra skills with first-source-wins.
-
-        Args:
-            base_skills: Upstream skills
-            extra_skills: clawcodex-specific skills
-
-        Returns:
-            Merged skill list
-        """
-        seen: dict[str, Skill] = {}
-
-        for skill in base_skills:
-            if skill.name not in seen:
-                seen[skill.name] = skill
-
-        for skill in extra_skills:
-            if skill.name not in seen:
-                seen[skill.name] = skill
-
-        return list(seen.values())
+        return list(snapshot.skills)
 
     def get_skill(self, name: str) -> Skill | None:
-        """
-        Get a skill by name.
+        """Resolve a live skill by canonical name or alias."""
 
-        Args:
-            name: Skill name
-
-        Returns:
-            Skill or None if not found
-        """
-        skills = self.get_all_skills()
-        for skill in skills:
-            if skill.name == name:
-                return skill
-        return None
+        return get_skill_catalog(
+            project_root=self._last_project_root,
+            user_skills_dir=self._last_user_skills_dir,
+        ).resolve(name)
 
     def list_skills(self) -> list[Skill]:
-        """List all available skills."""
+        """List all definitions available in the current catalog."""
+
         return self.get_all_skills()
 
     def on_skill_registered(self, callback: SkillRegistrationCallback) -> None:
-        """
-        Register a callback to be notified when skills are registered.
+        """Register a callback notified once per snapshot version."""
 
-        Args:
-            callback: Callable that takes a Skill as argument
-        """
         if callback not in self._callbacks:
             self._callbacks.append(callback)
 
     def off_skill_registered(self, callback: SkillRegistrationCallback) -> None:
-        """
-        Remove a previously registered callback.
+        """Remove a previously registered callback."""
 
-        Args:
-            callback: Previously registered callback to remove
-        """
         if callback in self._callbacks:
             self._callbacks.remove(callback)
 
     def _notify_skill_registered(self, skill: Skill) -> None:
-        """Notify all callbacks of a skill registration."""
-        for cb in self._callbacks:
+        """Notify callbacks without letting compatibility hooks break discovery."""
+
+        for callback in self._callbacks:
             try:
-                cb(skill)
+                callback(skill)
             except Exception:
-                pass
+                logger.debug(
+                    "[skills_ext] skill registration callback failed",
+                    exc_info=True,
+                )
 
     def get_skills_for_config(
         self,
         config: AgentSkillConfig,
     ) -> list[Skill]:
-        """
-        Get filtered skill list based on AgentSkillConfig.
+        """Filter the canonical catalog using the legacy bundle configuration."""
 
-        Args:
-            config: Agent skill configuration
-
-        Returns:
-            Filtered Skills list matching the configuration
-        """
-        from .bundles import SKILL_BUNDLES, MODE_BUNDLES
+        from .bundles import MODE_BUNDLES, SKILL_BUNDLES
 
         if config.mode == "bare":
             return []
@@ -281,64 +156,49 @@ class SkillRegistryExt:
                 skill_names_in_bundle.update(bundle_skills)
         elif config.bundles is not None:
             for bundle in config.bundles:
-                if bundle in SKILL_BUNDLES:
-                    skill_names_in_bundle.update(SKILL_BUNDLES[bundle])
+                skill_names_in_bundle.update(SKILL_BUNDLES.get(bundle, ()))
         else:
-            default_bundles = MODE_BUNDLES.get(config.mode, ["default"])
-            for bundle in default_bundles:
-                if bundle in SKILL_BUNDLES:
-                    skill_names_in_bundle.update(SKILL_BUNDLES[bundle])
+            for bundle in MODE_BUNDLES.get(config.mode, ["default"]):
+                skill_names_in_bundle.update(SKILL_BUNDLES.get(bundle, ()))
 
-        result: list[Skill] = []
-        for skill in all_skills:
-            if skill.name in config.exclude:
-                continue
-            if config.mode == "all" or skill.name in skill_names_in_bundle:
-                result.append(skill)
-
-        return result
+        return [
+            skill
+            for skill in all_skills
+            if skill.name not in config.exclude
+            and (config.mode == "all" or skill.name in skill_names_in_bundle)
+        ]
 
     def load_bundle(self, bundle_name: str) -> list[str]:
-        """
-        Verify bundle skills are available.
+        """Return names from a legacy bundle that exist in the catalog."""
 
-        Args:
-            bundle_name: Name of the bundle to load
-
-        Returns:
-            List of skill names that were found
-        """
         from .bundles import SKILL_BUNDLES
 
         if bundle_name not in SKILL_BUNDLES:
             raise KeyError(f"unknown bundle: {bundle_name}")
 
-        all_skills = self.get_all_skills()
-        skill_names = {s.name for s in all_skills}
-
-        loaded: list[str] = []
-        for skill_name in SKILL_BUNDLES[bundle_name]:
-            if skill_name in skill_names:
-                loaded.append(skill_name)
-        return loaded
+        available = {skill.name for skill in self.get_all_skills()}
+        return [name for name in SKILL_BUNDLES[bundle_name] if name in available]
 
     def get_available_bundle_names(self) -> list[str]:
-        """Return all known bundle names."""
+        """Return all known legacy bundle names."""
+
         from .bundles import ALL_BUNDLE_NAMES
 
-        return ALL_BUNDLE_NAMES
+        return list(ALL_BUNDLE_NAMES)
 
     def clear_cache(self) -> None:
-        """Clear the cached skills list."""
-        self._cached_skills = None
+        """Invalidate canonical skill caches (legacy method name)."""
+
+        self._last_notified_version = None
+        invalidate_skill_catalog("skills_ext compatibility clear")
 
 
-# Module-level convenience functions
 _default_registry: SkillRegistryExt | None = None
 
 
 def get_default_registry() -> SkillRegistryExt:
-    """Get the default SkillRegistryExt instance."""
+    """Return the process-wide compatibility facade."""
+
     global _default_registry
     if _default_registry is None:
         _default_registry = SkillRegistryExt()
@@ -346,8 +206,11 @@ def get_default_registry() -> SkillRegistryExt:
 
 
 def clear_default_registry_cache() -> None:
-    """Clear the default registry's cache."""
+    """Invalidate canonical caches and reset the legacy facade singleton."""
+
     global _default_registry
     if _default_registry is not None:
         _default_registry.clear_cache()
+    else:
+        invalidate_skill_catalog("skills_ext default registry clear")
     _default_registry = None

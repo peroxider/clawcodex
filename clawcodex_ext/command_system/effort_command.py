@@ -27,7 +27,8 @@ picker raises there.
     ``Cancelled`` and help (this differs from ``/theme``'s ``system`` cancel). ``display``
     is behaviorally inert on today's surfaces (engine maps both to ``result_type="text"``).
 
-**Persistence:** writes ``settings.effort`` via :func:`src.config.set_effort` (the
+**Persistence:** writes ``settings.effort`` via
+:func:`clawcodex_ext.configuration.set_effort` (the
 validated settings channel, mirroring TS ``updateSettingsForSource('userSettings',
 {effortLevel})``). NOTE — the persisted value is **not yet consumed by inference**:
 Python's effort pipeline is inert end-to-end (``settings.effort`` is read by no request
@@ -54,7 +55,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.config import set_effort
+from clawcodex_ext.configuration import set_effort
 
 from .types import (
     CommandContext,

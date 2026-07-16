@@ -41,6 +41,7 @@ from clawcodex_ext.command_system.security_review import SECURITY_REVIEW_COMMAND
 from clawcodex_ext.command_system.proactive_command import PROACTIVE_COMMAND
 from clawcodex_ext.command_system.btw_command import BTW_COMMAND
 from clawcodex_ext.command_system.monitor_command import MONITOR_COMMAND
+
 # F-120 Agent Dashboard — ``/dashboard`` cross-system read-only view.
 from clawcodex_ext.command_system.dashboard_command import DASHBOARD_COMMAND
 
@@ -138,7 +139,17 @@ description: <what it does>
 <Instructions>
 ```
 
-## Step 7: Summary
+## Step 7: Create hooks (if user chose hooks)
+
+Before constructing the first hook, invoke the Skill tool once with
+`skill: "update-config"` and args beginning with `[hooks-only]`, followed by a
+one-line summary of the hook being built. Follow that skill's ClawCodex hook
+schema and verification workflow. Reuse the loaded instructions for subsequent
+hooks; do not invoke it again for every hook.
+
+Persist hooks only through the Config tool. Do not edit settings JSON directly.
+
+## Step 8: Summary
 
 Tell the user what was set up and suggest any additional optimizations."""
 
@@ -1760,6 +1771,13 @@ def get_builtin_commands() -> list[Command]:
         cmds.append(ULTRAPLAN_COMMAND)
     except Exception:
         pass
+    try:
+        from extensions.skills_ext.bundled.dream import get_dream_command
+
+        cmds.append(get_dream_command())
+    except Exception:
+        logger.warning("failed to load the /dream command adapter", exc_info=True)
+
     from src.command_system.buddy_command import is_buddy_command_enabled, BUDDY_COMMAND
 
     if is_buddy_command_enabled():

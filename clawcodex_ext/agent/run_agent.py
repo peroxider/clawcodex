@@ -66,6 +66,8 @@ class RunAgentParams:
     # Identifier threaded into ``ToolUseOptions.query_source`` for the
     # primary recursive-fork guard. Mirrors the TS ``querySource`` argument.
     query_source: str | None = None
+    # Rebuild model-visible skill listing from the isolated child context.
+    refresh_skill_listing: bool = False
 
 
 @dataclass
@@ -345,6 +347,17 @@ async def run_agent(params: RunAgentParams) -> AsyncGenerator[Message, None]:
     # Always scope subagent tools to the resolved agent definition — do not
     # inherit the parent overview's full tool pool (SOP bundle isolation).
     subagent_context.options.tools = list(agent_tools)
+
+    if params.refresh_skill_listing:
+        from clawcodex_ext.skills.visibility import refresh_agent_skill_listing
+
+        system_prompt = refresh_agent_skill_listing(
+            system_prompt,
+            context=subagent_context,
+            tool_registry=params.tool_registry,
+            tools=agent_tools,
+            provider=params.provider,
+        )
 
     # Build initial messages.
     # When ``params.prompt`` is empty (e.g. fork path, where the directive is

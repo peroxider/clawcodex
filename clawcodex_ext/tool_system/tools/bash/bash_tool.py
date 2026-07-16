@@ -231,7 +231,11 @@ def _try_extract_cd(command: str) -> Path | None:
         parts = shlex.split(stripped, posix=True)
     except ValueError:
         return None
-    if len(parts) >= 2 and parts[0] == "cd":
+    # Only short-circuit a standalone ``cd <path>``.  Compound commands such
+    # as ``cd /repo && pytest`` must reach the shell; treating their first
+    # argument as a pure directory change silently drops every command after
+    # the path and returns an empty successful result.
+    if len(parts) == 2 and parts[0] == "cd":
         return Path(parts[1])
     return None
 

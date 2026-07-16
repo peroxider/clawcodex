@@ -74,8 +74,8 @@ def _build_simplify_prompt(args: str) -> str:
     return prompt
 
 
-def register_simplify_skill() -> None:
-    register_bundled_skill(
+def register_simplify_skill() -> bool:
+    return register_bundled_skill(
         BundledSkillDefinition(
             name="simplify",
             description=(

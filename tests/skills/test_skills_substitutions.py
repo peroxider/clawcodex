@@ -231,12 +231,12 @@ def test_skilltool_invocation_substitutes_all_placeholders(
     result = SkillTool.call({"skill": "showctx", "args": "ada"}, ctx)
     out = result.output
     assert out["success"] is True
-    prompt = out["prompt"]
+    assert "prompt" not in out
+    assert result.new_messages is not None
+    prompt = result.new_messages[0].content
 
     # All four expected substitutions:
-    assert prompt.startswith("Base directory for this skill:"), (
-        f"missing base-dir header in: {prompt!r}"
-    )
+    assert "\n\nBase directory for this skill:" in prompt, f"missing base-dir header in: {prompt!r}"
     assert str(skill_dir.resolve()) in prompt or str(skill_dir) in prompt
     assert "Hi ada from" in prompt
     assert "(session S-12345)" in prompt
@@ -257,7 +257,10 @@ def test_skilltool_unknown_session_id_renders_empty(tmp_path: Path, isolated_hom
     assert ctx.session_id is None
 
     result = SkillTool.call({"skill": "sess"}, ctx)
-    prompt = result.output["prompt"]
+    assert result.is_error is False
+    assert "prompt" not in result.output
+    assert result.new_messages is not None
+    prompt = result.new_messages[0].content
     assert "session=[]" in prompt
 
 
@@ -275,7 +278,10 @@ def test_bundled_skill_invocation_does_not_get_base_dir_header(
     project.mkdir()
     ctx = ToolContext(workspace_root=project)
     result = SkillTool.call({"skill": "bcheck", "args": "x"}, ctx)
-    prompt = result.output["prompt"]
+    assert result.is_error is False
+    assert "prompt" not in result.output
+    assert result.new_messages is not None
+    prompt = result.new_messages[0].content
     # Bundled skills route through their own get_prompt_for_command
     # callable; the header (which is render_skill_prompt's job) must
     # not appear.

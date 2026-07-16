@@ -187,6 +187,7 @@ class HookSource(str, Enum, metaclass=_HookSourceMeta):
     LOCAL_SETTINGS = "localSettings"
     POLICY_SETTINGS = "policySettings"
     SESSION_HOOK = "sessionHook"
+    SKILL = "skill"
     PLUGIN_HOOK = "pluginHook"
 
     @property
@@ -206,6 +207,7 @@ class HookSource(str, Enum, metaclass=_HookSourceMeta):
             HookSource.LOCAL_SETTINGS: 2,
             HookSource.POLICY_SETTINGS: 3,
             HookSource.SESSION_HOOK: 4,
+            HookSource.SKILL: 5,
             HookSource.PLUGIN_HOOK: 999,
         }[self]
 

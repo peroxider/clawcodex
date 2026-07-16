@@ -556,6 +556,33 @@ class TestREPL(unittest.TestCase):
         self.assertTrue(handled)
         repl._continue_goal_if_idle.assert_called_once_with()
 
+    def test_forked_skill_result_is_rendered_without_second_model_query(self):
+        from clawcodex_ext.command_system.engine import CommandResult
+
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl.console = Mock()
+        repl.chat = Mock()
+        repl._engine_messages = []
+
+        handled = repl._handle_command_result(
+            CommandResult.success_assistant(
+                "verify",
+                "runtime evidence\nVERDICT: PASS",
+            )
+        )
+
+        self.assertTrue(handled)
+        repl.chat.assert_not_called()
+        self.assertEqual(len(repl._engine_messages), 1)
+        self.assertEqual(repl._engine_messages[0].role, "assistant")
+        self.assertIn("VERDICT: PASS", repr(repl._engine_messages[0].content))
+        self.assertTrue(
+            any(
+                args and isinstance(args[0], Markdown)
+                for args, _kwargs in repl.console.print.call_args_list
+            )
+        )
+
     def test_handle_command_goal_starts_continuation_without_live_provider(self):
         goal_home = Path(self.temp_dir) / "goal-home"
 

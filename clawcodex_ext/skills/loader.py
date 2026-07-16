@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Sequence
@@ -812,10 +813,18 @@ _conditional_skills: dict[str, Skill] = {}
 _activated_conditional_names: set[str] = set()
 _dynamic_skill_dirs: set[str] = set()
 _dynamic_skills: dict[str, Skill] = {}
+_dynamic_skill_dirs_by_workspace: dict[str, set[str]] = {}
+_dynamic_skills_by_workspace: dict[str, dict[str, Skill]] = {}
 
 
-def get_dynamic_skills() -> list[Skill]:
-    return list(_dynamic_skills.values())
+def _workspace_key(workspace: str | Path | None = None) -> str:
+    return str(Path(workspace or os.getcwd()).expanduser().resolve())
+
+
+def get_dynamic_skills(project_root: str | Path | None = None) -> list[Skill]:
+    if project_root is None:
+        return list(_dynamic_skills.values())
+    return list(_dynamic_skills_by_workspace.get(_workspace_key(project_root), {}).values())
 
 
 def _is_path_gitignored(path: str, cwd: str) -> bool:
@@ -883,13 +892,22 @@ def discover_skill_dirs_for_paths(
     return sorted(new_dirs, key=lambda d: d.count(os.sep), reverse=True)
 
 
-def add_skill_directories(dirs: list[str]) -> None:
+def add_skill_directories(
+    dirs: list[str],
+    *,
+    project_root: str | Path | None = None,
+) -> None:
     if not dirs:
         return
-    for d in dirs:
-        loaded = load_skills_from_skills_dir(d, "projectSettings")
+    if project_root is None:
+        target = _dynamic_skills
+    else:
+        target = _dynamic_skills_by_workspace.setdefault(_workspace_key(project_root), {})
+    for directory in dirs:
+        loaded = load_skills_from_skills_dir(directory, "projectSettings")
         for skill in loaded:
-            _dynamic_skills[skill.name] = skill
+            target[skill.name] = skill
+    _invalidate_catalog_cache_only(project_root)
 
 
 def activate_conditional_skills_for_paths(
@@ -983,17 +1001,43 @@ def _path_matches_pattern(path: str, pattern: str) -> bool:
     return spec.match_file(path)
 
 
-def clear_skill_caches() -> None:
+def _invalidate_catalog_cache_only(workspace: str | Path | None = None) -> None:
+    try:
+        from clawcodex_ext.skills.catalog import _invalidate_catalog_cache_only as invalidate
+    except ImportError:
+        return
+    invalidate(workspace)
+
+
+def clear_skill_caches(workspace: str | Path | None = None) -> None:
     _skill_dir_cache.clear()
     _conditional_skills.clear()
     _activated_conditional_names.clear()
+    if workspace is None:
+        _dynamic_skill_dirs.clear()
+        _dynamic_skills.clear()
+        _dynamic_skill_dirs_by_workspace.clear()
+        _dynamic_skills_by_workspace.clear()
+    else:
+        key = _workspace_key(workspace)
+        _dynamic_skill_dirs_by_workspace.pop(key, None)
+        _dynamic_skills_by_workspace.pop(key, None)
+    _invalidate_catalog_cache_only(workspace)
 
 
-def clear_dynamic_skills() -> None:
-    _dynamic_skill_dirs.clear()
-    _dynamic_skills.clear()
-    _conditional_skills.clear()
-    _activated_conditional_names.clear()
+def clear_dynamic_skills(workspace: str | Path | None = None) -> None:
+    if workspace is None:
+        _dynamic_skill_dirs.clear()
+        _dynamic_skills.clear()
+        _dynamic_skill_dirs_by_workspace.clear()
+        _dynamic_skills_by_workspace.clear()
+        _conditional_skills.clear()
+        _activated_conditional_names.clear()
+    else:
+        key = _workspace_key(workspace)
+        _dynamic_skill_dirs_by_workspace.pop(key, None)
+        _dynamic_skills_by_workspace.pop(key, None)
+    _invalidate_catalog_cache_only(workspace)
 
 
 def get_conditional_skill_count() -> int:
@@ -1019,13 +1063,19 @@ def get_conditional_skill_count() -> int:
 # ----------------------------------------------------------------------
 
 from .model import PromptSkill  # noqa: E402  (re-exported for back-compat)
-from .bundled_skills import get_bundled_skills, get_bundled_skill_by_name  # noqa: E402
+from .bundled_skills import (  # noqa: E402
+    get_bundled_skill_by_name,
+    get_bundled_skills,
+    get_registered_bundled_skills,
+)
 
 _skill_registry: dict[str, Skill] = {}
+_skill_registry_lock = threading.RLock()
 
 
 def clear_skill_registry() -> None:
-    _skill_registry.clear()
+    with _skill_registry_lock:
+        _skill_registry.clear()
 
 
 def _legacy_user_skill_dirs(
@@ -1088,26 +1138,33 @@ def get_all_skills(
     project_root: str | Path | None = None,
     user_skills_dir: str | Path | None = None,
 ) -> Sequence[Skill]:
-    """Return the unified set of skills available to the model.
+    """Refresh the legacy registry atomically from canonical discovery."""
+    from .bundled import init_bundled_skills
 
-    Sources, in priority order (first occurrence of a name wins):
+    init_bundled_skills()
+    discovered = list(
+        discover_all_skills(
+            project_root=project_root,
+            user_skills_dir=user_skills_dir,
+        )
+    )
+    replacement = {skill.name: skill for skill in discovered}
+    with _skill_registry_lock:
+        _skill_registry.clear()
+        _skill_registry.update(replacement)
+    return discovered
 
-    1. Managed/policy skills (``/etc/claude/.claude/skills`` by default)
-    2. User skills (``~/.claude/skills`` plus any clawcodex/env-specified
-       user-skill dirs)
-    3. Project skills (walking up from ``project_root`` to ``$HOME`` for
-       ``.claude/skills`` plus ``<project_root>/.clawcodex/skills``)
-    4. Managed override via ``CLAWCODEX_MANAGED_SKILLS_DIR``
-    5. Bundled skills registered via ``register_bundled_skill``
-    6. MCP-loaded skills returned by registered MCP skill builders
 
-    Disk skills support nested namespacing (``category/skill/SKILL.md``
-    becomes ``category:skill``) via ``get_skill_dir_commands``.
-
-    The returned set is also stored in ``_skill_registry`` so legacy
-    callers of ``get_registered_skill`` see every source.
-    """
-    clear_skill_registry()
+def discover_all_skills(
+    *,
+    project_root: str | Path | None = None,
+    user_skills_dir: str | Path | None = None,
+    session_id: str | None = None,
+    diagnostics: list[str] | None = None,
+) -> Sequence[Skill]:
+    """Discover one workspace/session skill set without mutating legacy state."""
+    _ = session_id, diagnostics
+    cwd = _workspace_key(project_root)
 
     try:
         from extensions.sop_converter.bundle_context import get_active_bundle
@@ -1115,111 +1172,79 @@ def get_all_skills(
         bundle = get_active_bundle()
     except ImportError:
         bundle = None
-
     if bundle is not None:
-        dynamic_skills = [
-            skill for skill in get_dynamic_skills() if skill.name in bundle.skill_names
+        return [
+            skill for skill in get_dynamic_skills(project_root) if skill.name in bundle.skill_names
         ]
-        deduped = {skill.name: skill for skill in dynamic_skills}
-        _skill_registry.update(deduped)
-        return list(deduped.values())
 
-    cwd = (
-        str(Path(project_root).expanduser().resolve()) if project_root is not None else os.getcwd()
-    )
-
-    # 1-3: Managed + user + project disk skills via the unified TS-port loader
+    bare_mode = _is_bare_mode()
     disk_skills: list[Skill] = list(get_skill_dir_commands(cwd))
-
-    # 2b: Additional user-skill dirs (clawcodex-specific + env overrides)
-    extra_user_skills = _load_dirs_as(
-        _legacy_user_skill_dirs(user_skills_dir),
-        source="userSettings",
-        loaded_from="user",
-    )
-
-    # 3b: Additional project-skill dir for the clawcodex layout
+    extra_user_skills: list[Skill] = []
     extra_project_skills: list[Skill] = []
-    if project_root is not None:
-        extra_project_skills = _load_dirs_as(
-            _legacy_project_skill_dirs(project_root),
-            source="projectSettings",
-            loaded_from="project",
-        )
-
-    # 4: Managed override env (separate from /etc/claude policy dir)
     extra_managed_skills: list[Skill] = []
-    managed_env = os.environ.get("CLAWCODEX_MANAGED_SKILLS_DIR")
-    if managed_env:
-        extra_managed_skills = _load_dirs_as(
-            [managed_env],
-            source="policySettings",
-            loaded_from="managed",
+    if not bare_mode:
+        extra_user_skills = _load_dirs_as(
+            _legacy_user_skill_dirs(user_skills_dir),
+            source="userSettings",
+            loaded_from="user",
         )
+        if project_root is not None:
+            extra_project_skills = _load_dirs_as(
+                _legacy_project_skill_dirs(project_root),
+                source="projectSettings",
+                loaded_from="project",
+            )
+        managed_env = os.environ.get("CLAWCODEX_MANAGED_SKILLS_DIR")
+        if managed_env:
+            extra_managed_skills = _load_dirs_as(
+                [managed_env],
+                source="policySettings",
+                loaded_from="managed",
+            )
 
-    # 5: Bundled skills (always present)
-    bundled = get_bundled_skills()
-
-    # 6: MCP skills (if a builder is registered)
+    bundled = get_registered_bundled_skills()
     mcp_skills: list[Skill] = []
-    builders = None
     try:
         from .mcp_skill_builders import get_mcp_skill_builders
 
-        builders = get_mcp_skill_builders()
+        builders = get_mcp_skill_builders() or {}
     except Exception:
-        builders = None
-    if builders:
-        for builder in builders.values():
-            try:
-                produced = builder()
-            except Exception:
-                continue
-            if produced:
-                mcp_skills.extend(produced)
+        builders = {}
+    for builder in builders.values():
+        try:
+            produced = builder()
+        except Exception:
+            continue
+        if produced:
+            mcp_skills.extend(produced)
 
-    # Activated conditional skills + skills introduced by
-    # ``add_skill_directories`` live in ``_dynamic_skills``. They must be
-    # merged last so explicit user/project skills with the same name win
-    # — a conditional skill is by definition the "lowest-priority"
-    # entry. Without this, ``activate_conditional_skills_for_paths``
-    # would silently move a skill into ``_dynamic_skills`` while the
-    # canonical ``SkillTool`` lookup (which goes through
-    # ``get_registered_skill`` → ``_skill_registry``) still returns
-    # "Unknown skill". (QA bug #14.)
-    dynamic_skills = get_dynamic_skills()
-
-    # Merge with first-source-wins precedence. The order below mirrors
-    # the priority list above: managed env override first (so admins can
-    # force a version), then policy/user/project from the unified loader,
-    # then clawcodex extras, then bundled and MCP as fallbacks, with
-    # dynamic (activated conditional / runtime-added) entries last.
-    merge_order: list[Skill] = (
-        list(extra_managed_skills)
-        + list(disk_skills)
+    dynamic_skills = [] if bare_mode else get_dynamic_skills(project_root)
+    disk_managed = [skill for skill in disk_skills if skill.loaded_from == "managed"]
+    disk_user = [skill for skill in disk_skills if skill.loaded_from == "user"]
+    disk_project = [skill for skill in disk_skills if skill.loaded_from == "project"]
+    disk_other = [
+        skill for skill in disk_skills if skill.loaded_from not in {"managed", "user", "project"}
+    ]
+    merge_order = (
+        list(bundled)
+        + list(extra_managed_skills)
+        + disk_managed
+        + disk_user
         + list(extra_user_skills)
+        + disk_project
         + list(extra_project_skills)
-        + list(bundled)
+        + disk_other
         + list(mcp_skills)
         + list(dynamic_skills)
     )
-
     deduped: dict[str, Skill] = {}
     for skill in merge_order:
-        if skill.name not in deduped:
-            deduped[skill.name] = skill
-
-    _skill_registry.update(deduped)
+        deduped.setdefault(skill.name, skill)
     return list(deduped.values())
 
 
 def get_registered_skill(name: str) -> Skill | None:
-    """Look up a skill in the unified registry.
-
-    Falls back to ``get_bundled_skill_by_name`` so callers that rely on
-    bundled-skill aliases keep working even before ``get_all_skills`` is
-    populated for the current cwd.
-    """
+    """Look up a skill in the atomically refreshed compatibility registry."""
     try:
         from extensions.sop_converter.bundle_context import get_active_bundle
 
@@ -1228,8 +1253,8 @@ def get_registered_skill(name: str) -> Skill | None:
             return None
     except ImportError:
         pass
-
-    found = _skill_registry.get(name)
+    with _skill_registry_lock:
+        found = _skill_registry.get(name)
     if found is not None:
         return found
     return get_bundled_skill_by_name(name)
@@ -1245,3 +1270,31 @@ def load_skills_from_dir(base_dir: str | Path, *, loaded_from: str = "skills") -
         source="userSettings",
         loaded_from=loaded_from,
     )
+
+
+# The unchanged ``src.skills.loader`` facade uses ``import *``. Include the
+# historical private helpers that older plugins and tests imported from that
+# facade while keeping the implementation owned by the extension layer.
+_PRIVATE_COMPAT_EXPORTS = [
+    "_activated_conditional_names",
+    "_coerce_allowed_tools",
+    "_coerce_description",
+    "_coerce_effort",
+    "_coerce_hooks",
+    "_coerce_model",
+    "_coerce_shell",
+    "_compile_path_spec",
+    "_conditional_skills",
+    "_dedup_by_realpath",
+    "_dynamic_skills",
+    "_extract_description_from_markdown",
+    "_get_additional_skill_dirs",
+    "_get_file_identity",
+    "_is_bare_mode",
+    "_is_path_gitignored",
+    "_is_restricted_to_plugin_only",
+    "_is_skills_policy_disabled",
+    "_path_matches_pattern",
+    "_skill_registry",
+]
+__all__ = [name for name in globals() if not name.startswith("_")] + _PRIVATE_COMPAT_EXPORTS

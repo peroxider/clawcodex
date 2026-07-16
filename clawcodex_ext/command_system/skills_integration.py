@@ -7,22 +7,15 @@ Bridges the existing skills system to the command system.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Any, Optional
 
-from src.skills.argument_substitution import (
-    substitute_arguments as skills_substitute_args,
-)
-from src.skills.frontmatter import parse_frontmatter
-from src.skills.loader import (
+from clawcodex_ext.skills.catalog import get_skill_catalog
+from clawcodex_ext.skills.loader import (
     PromptSkill,
-    get_all_skills,
-    get_registered_skill,
     load_skills_from_dir,
 )
-from src.skills.model import Skill as BaseSkill
-from .argument_substitution import substitute_arguments
 from .registry import CommandRegistry, register_command
-from .types import Command, CommandType, PromptCommand, SkillPromptCommand
+from .types import PromptCommand, SkillPromptCommand
 
 
 def skill_to_prompt_command(skill: PromptSkill) -> PromptCommand:
@@ -31,7 +24,7 @@ def skill_to_prompt_command(skill: PromptSkill) -> PromptCommand:
 
     Returns a ``SkillPromptCommand`` (a ``PromptCommand`` subclass) so that when
     this command is executed via the registry, its prompt is rendered through the
-    same ``_run_markdown_skill`` path the Skill tool uses — preserving the
+    same canonical user invocation service the Skill surfaces use — preserving the
     base-dir header, ``${CLAUDE_SKILL_DIR}`` / ``${CLAUDE_SESSION_ID}``
     substitution, and gated shell-exec. The plain base ``PromptCommand`` renderer
     would drop all of that (P0-6 Option B / Phase 3.5).
@@ -45,12 +38,16 @@ def skill_to_prompt_command(skill: PromptSkill) -> PromptCommand:
     return SkillPromptCommand(
         name=skill.name,
         description=skill.description,
+        aliases=list(skill.aliases),
+        is_enabled=skill.is_enabled,
+        argument_hint=skill.argument_hint,
         progress_message=f"Executing {skill.name}...",
         content_length=skill.content_length,
         arg_names=list(skill.arg_names),
         allowed_tools=list(skill.allowed_tools),
         model=skill.model,
         source=skill.loaded_from,
+        hooks=dict(skill.hooks or {}),
         skill_root=skill.skill_root,
         context=skill.context or "inline",
         agent=skill.agent,
@@ -98,10 +95,10 @@ def load_and_register_skills(
     Returns:
         List of registered PromptCommands
     """
-    skills = get_all_skills(
+    skills = get_skill_catalog(
         project_root=project_root,
         user_skills_dir=user_skills_dir,
-    )
+    ).skills
 
     registered_commands: list[PromptCommand] = []
     for skill in skills:
@@ -125,7 +122,7 @@ def get_skill_command(name: str) -> Optional[PromptCommand]:
     Returns:
         PromptCommand if found, None otherwise
     """
-    skill = get_registered_skill(name)
+    skill = get_skill_catalog().resolve(name, include_disabled=True)
     if skill:
         return skill_to_prompt_command(skill)
     return None
@@ -198,9 +195,4 @@ async def execute_skill_command(
     Returns:
         Prompt content blocks
     """
-    content = substitute_arguments(
-        command.markdown_content,
-        args,
-        command.arg_names,
-    )
-    return [{"type": "text", "text": content}]
+    return await command.get_prompt_for_command(args, context)

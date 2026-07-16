@@ -187,6 +187,25 @@ def create_subagent_context(
         bundle_context=parent_context.bundle_context,
         tool_registry=parent_context.tool_registry,
         user_modified=parent_context.user_modified,
+        session_id=parent_context.session_id,
+        _active_provider=parent_context._active_provider,
+        hook_config_manager=parent_context.hook_config_manager,
+        workspace_trusted=parent_context.workspace_trusted,
+        skill_model_override=parent_context.skill_model_override,
+        skill_effort_override=parent_context.skill_effort_override,
+        skill_resource_roots=tuple(parent_context.skill_resource_roots),
+        skill_scope_pending=bool(
+            parent_context.skill_scope_pending
+            or parent_context.skill_scope_active
+            or bool(parent_context.active_skill_names)
+            or parent_context.skill_model_override
+            or parent_context.skill_effort_override is not None
+            or parent_context._skill_permission_base is not None
+            or bool(parent_context.skill_resource_roots)
+        ),
+        active_skill_names=tuple(parent_context.active_skill_names),
+        skill_hooks=copy.deepcopy(parent_context.skill_hooks),
+        skill_hook_keys=set(parent_context.skill_hook_keys),
     )
 
 
