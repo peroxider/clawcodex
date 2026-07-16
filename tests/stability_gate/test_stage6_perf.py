@@ -283,7 +283,7 @@ class TestStage6Perf:
             "import sys, os, time;"
             "os.environ.setdefault('HOME', '/tmp');"
             "os.environ.setdefault('CLAWCODEX_API_KEY', 'sk-perf-test');"
-            "os.environ.setdefault('ANTHROPIC_AUTH_TOKEN', 'sk-perf-test');"
+            "os.environ.setdefault('ANTHROPIC_API_KEY', 'sk-perf-test');"
             "sys.path.insert(0, '.');"
             "from src.repl import ClawcodexREPL;"
             "repl = ClawcodexREPL(provider_name='anthropic', stream=False);"
