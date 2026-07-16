@@ -222,6 +222,9 @@ def get_agent_system_prompt(
     # Use agent's own prompt generator
     prompt = agent_definition.get_system_prompt()
     if prompt:
+        reminder = agent_definition.critical_system_reminder
+        if reminder and reminder not in prompt:
+            return f"{prompt}\n\n{reminder}"
         return prompt
 
     # Fallback to default

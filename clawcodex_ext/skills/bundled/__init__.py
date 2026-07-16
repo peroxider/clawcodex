@@ -14,11 +14,15 @@ forces re-init on the next call.
 from __future__ import annotations
 
 import logging
+import threading
 
 from .debug import register_debug_skill
 from .loop import register_loop_skill
+from .remember import register_remember_skill
 from .simplify import register_simplify_skill
 from .stuck import register_stuck_skill
+from .update_config import register_update_config_skill
+from .verify import register_verify_skill
 from .verify_content import register_verify_content_skill
 
 logger = logging.getLogger(__name__)
@@ -28,9 +32,10 @@ logger = logging.getLogger(__name__)
 # registry. Reset by ``clear_bundled_skills`` (via the hook below) so
 # tests that wipe state can re-init cleanly.
 _INITIALIZED: bool = False
+_INIT_LOCK = threading.RLock()
 
 
-def init_bundled_skills() -> None:
+def init_bundled_skills() -> bool:
     """Register every always-on bundled skill exactly once.
 
     Calls each ``register_*_skill()`` function in a fixed order. Skills
@@ -43,15 +48,41 @@ def init_bundled_skills() -> None:
     reset state in tests.
     """
     global _INITIALIZED
-    if _INITIALIZED:
-        return
-    register_simplify_skill()
-    register_debug_skill()
-    register_loop_skill()
-    register_stuck_skill()
-    register_verify_content_skill()
-    _INITIALIZED = True
-    logger.debug("bundled skills initialized")
+    from ..bundled_skills import _registry_lock
+
+    registrars = (
+        register_simplify_skill,
+        register_debug_skill,
+        register_loop_skill,
+        register_stuck_skill,
+        register_verify_content_skill,
+        register_verify_skill,
+        register_update_config_skill,
+        register_remember_skill,
+    )
+    with _INIT_LOCK, _registry_lock:
+        if _INITIALIZED:
+            return True
+
+        all_ok = True
+        for registrar in registrars:
+            try:
+                outcome = registrar()
+            except Exception:
+                all_ok = False
+                logger.exception("failed to register bundled skill via %s", registrar.__name__)
+            else:
+                if outcome is False:
+                    all_ok = False
+                    logger.warning(
+                        "bundled skill registrar %s rejected its definition",
+                        registrar.__name__,
+                    )
+
+        _INITIALIZED = all_ok
+        if all_ok:
+            logger.debug("bundled skills initialized")
+        return all_ok
 
 
 def reset_bundled_skills_init_flag() -> None:
@@ -68,6 +99,9 @@ __all__ = [
     "register_simplify_skill",
     "register_debug_skill",
     "register_loop_skill",
+    "register_remember_skill",
     "register_stuck_skill",
+    "register_update_config_skill",
+    "register_verify_skill",
     "register_verify_content_skill",
 ]

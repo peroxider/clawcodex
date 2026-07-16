@@ -28,6 +28,7 @@ from clawcodex_ext.hooks.hook_types import (
     HookConfig,
     HookEvent,
     HookResult,
+    HookSource,
 )
 from clawcodex_ext.hooks.trust_gate import should_skip_hook_due_to_trust
 from clawcodex_ext.types.messages import (
@@ -62,6 +63,23 @@ def _get_hooks_from_snapshot(tool_use_context: Any) -> dict[str, list[HookConfig
 
     # Legacy fallback — emit DeprecationWarning if options.hooks carries data.
     return _get_hooks_from_options_legacy(tool_use_context)
+
+
+# Skill hooks are invocation/session state and do not mutate the frozen
+# settings snapshot. Merge them after settings hooks for deterministic order.
+_settings_hook_snapshot_reader = _get_hooks_from_snapshot
+
+
+def _get_hooks_from_snapshot(tool_use_context: Any) -> dict[str, list[HookConfig]]:
+    merged = _settings_hook_snapshot_reader(tool_use_context)
+    skill_hooks = getattr(tool_use_context, "skill_hooks", None)
+    if not isinstance(skill_hooks, dict) or not skill_hooks:
+        return merged
+    result = {event: list(configs) for event, configs in merged.items()}
+    for event, configs in skill_hooks.items():
+        if isinstance(configs, list):
+            result.setdefault(event, []).extend(configs)
+    return result
 
 
 def _get_hooks_from_options_legacy(tool_use_context: Any) -> dict[str, list[HookConfig]]:
@@ -370,6 +388,51 @@ async def _execute_command_hook(
         )
 
 
+async def _execute_hook_config(
+    hook: HookConfig,
+    stdin_data: dict[str, Any],
+    *,
+    abort_signal: Any | None,
+    timeout_ms: int,
+    tool_use_context: Any,
+) -> HookResult:
+    """Dispatch every validated hook type through its canonical executor."""
+
+    if hook.type == "command":
+        return await _execute_command_hook(
+            hook,
+            stdin_data,
+            abort_signal=abort_signal,
+            timeout_ms=timeout_ms,
+            tool_use_context=tool_use_context,
+        )
+    if hook.type == "http":
+        from .exec_http_hook import execute_http_hook
+
+        return await execute_http_hook(hook, stdin_data, timeout_ms=timeout_ms)
+    if hook.type == "prompt":
+        from .exec_prompt_hook import execute_prompt_hook
+
+        return await execute_prompt_hook(hook, stdin_data)
+    if hook.type == "agent":
+        from .exec_agent_hook import execute_agent_hook
+
+        options = getattr(tool_use_context, "options", None)
+        model = getattr(tool_use_context, "skill_model_override", None) or getattr(
+            options,
+            "main_loop_model",
+            None,
+        )
+        return await execute_agent_hook(
+            hook,
+            stdin_data,
+            provider=getattr(tool_use_context, "_active_provider", None),
+            model=model,
+            timeout_ms=timeout_ms,
+        )
+    return HookResult(blocking_error=f"Unsupported hook type: {hook.type}", exit_code=-1)
+
+
 async def _run_hooks_for_event(
     event: str,
     tool_name: str | None,
@@ -413,7 +476,7 @@ async def _run_hooks_for_event(
             ),
         }
 
-        result = await _execute_command_hook(
+        result = await _execute_hook_config(
             hook,
             {**stdin_data, "hook_event": event},
             abort_signal=abort_signal,
@@ -478,6 +541,18 @@ async def _run_hooks_for_event(
                     }
                 ),
             }
+            if hook.once and hook.source == HookSource.SKILL:
+                registered = getattr(tool_use_context, "skill_hooks", None)
+                if isinstance(registered, dict):
+                    registered[event] = [
+                        candidate
+                        for candidate in registered.get(event, [])
+                        if candidate is not hook
+                    ]
+                registration_key = getattr(hook, "_skill_registration_key", None)
+                keys = getattr(tool_use_context, "skill_hook_keys", None)
+                if registration_key and isinstance(keys, set):
+                    keys.discard(registration_key)
 
 
 async def execute_pre_tool_hooks(

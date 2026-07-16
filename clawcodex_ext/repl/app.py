@@ -349,7 +349,14 @@ class ClawCodexExtREPL(ClawcodexREPL):
                 mode=self._permission_mode,  # type: ignore[arg-type]
                 is_bypass_permissions_mode_available=(self._is_bypass_permissions_mode_available),
             )
-        self.tool_context.session_id = getattr(self.session, "session_id", None)
+        from clawcodex_ext.runtime.tool_context_binding import bind_tool_context_runtime
+
+        bind_tool_context_runtime(
+            self.tool_context,
+            tool_registry=self.tool_registry,
+            session=self.session,
+            provider=self.provider,
+        )
         self.tool_context.ask_user = self._ask_user_questions
         self._current_status = None
         if self._permission_mode == "bypassPermissions":
@@ -670,6 +677,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
         from src.command_system import (
             CommandRegistry,
             create_command_context,
+            load_and_register_skills,
             register_builtin_commands,
         )
 
@@ -707,6 +715,21 @@ class ClawCodexExtREPL(ClawcodexREPL):
             from extensions.skills_ext import init_skills_ext
 
             init_skills_ext()
+        except Exception:
+            pass
+
+        # Keep the private REPL registry and the global async-dispatch registry
+        # on the same workspace-scoped skill catalog. Both are required: the
+        # former recognizes/completes slash input and the latter executes it.
+        try:
+            load_and_register_skills(
+                project_root=self.workspace_root,
+                registry=self.command_registry,
+            )
+            load_and_register_skills(
+                project_root=self.workspace_root,
+                registry=None,
+            )
         except Exception:
             pass
 

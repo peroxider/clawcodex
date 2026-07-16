@@ -25,6 +25,7 @@ Design notes
 
 from __future__ import annotations
 
+import asyncio
 import io
 import os
 import signal as _signal
@@ -62,7 +63,7 @@ from clawcodex_ext.command_system.builtins import (
 from clawcodex_ext.command_system.engine import CommandEngine, create_command_context
 from clawcodex_ext.command_system.input_processing import parse_user_input
 from clawcodex_ext.command_system.registry import CommandRegistry, get_command_registry
-from clawcodex_ext.command_system.types import LocalCommand
+from clawcodex_ext.command_system.types import LocalCommand, PromptCommand
 from clawcodex_ext.cron_system.runtime import attach_cron_runtime, replace_cron_tools
 from clawcodex_ext.cron_system.runs import claim_cron_run, finalize_cron_run
 from clawcodex_ext.query.agent_loop_compat import (
@@ -484,7 +485,14 @@ def _run_headless_core(options: HeadlessOptions) -> int:
     )
     tool_context.mcp_clients = getattr(options, "mcp_clients", {}) or {}
     tool_context.mcp_manager_loop = getattr(options, "mcp_manager_loop", None)
-    tool_context.session_id = session.session_id
+    from clawcodex_ext.runtime.tool_context_binding import bind_tool_context_runtime
+
+    bind_tool_context_runtime(
+        tool_context,
+        tool_registry=tool_registry,
+        session=session,
+        provider=provider,
+    )
     tool_context.goal_thread_id = session.session_id
     tool_context.options.is_non_interactive_session = True
 
@@ -638,9 +646,7 @@ def _run_headless_core(options: HeadlessOptions) -> int:
                     in_agent_loop=in_agent_loop,
                 )
             except AbortError:
-                _finalize_cron_task(
-                    workspace_root, active_tasks, task_id, "cancelled"
-                )
+                _finalize_cron_task(workspace_root, active_tasks, task_id, "cancelled")
                 raise
             except Exception as exc:
                 _finalize_cron_task(
@@ -653,9 +659,7 @@ def _run_headless_core(options: HeadlessOptions) -> int:
                 return False
             if writer is not None:
                 writer.write(AssistantEvent(text=result.response_text))
-            _finalize_cron_task(
-                workspace_root, active_tasks, task_id, "completed"
-            )
+            _finalize_cron_task(workspace_root, active_tasks, task_id, "completed")
             return True
 
         try:
@@ -722,16 +726,10 @@ def _run_headless_core(options: HeadlessOptions) -> int:
                 try:
                     parsed = parse_user_input(text)
                     if parsed.input_type == "command":
-                        cmd = get_command_registry().get(parsed.command_name)
-                        if cmd is None:
-                            for builtin_cmd in get_builtin_commands():
-                                if (
-                                    builtin_cmd.name.lower() == parsed.command_name.lower()
-                                    or parsed.command_name.lower()
-                                    in [a.lower() for a in builtin_cmd.aliases]
-                                ):
-                                    cmd = builtin_cmd
-                                    break
+                        cmd = _find_command_for_workspace(
+                            parsed.command_name,
+                            workspace_root=workspace_root,
+                        )
 
                         if (
                             cmd is not None
@@ -759,13 +757,94 @@ def _run_headless_core(options: HeadlessOptions) -> int:
                             exit_code = 1
                             break
 
+                        if isinstance(cmd, PromptCommand):
+                            if cmd.disable_non_interactive:
+                                err = (
+                                    f"Command /{parsed.command_name} is not "
+                                    f"available in non-interactive mode"
+                                )
+                                if writer is not None:
+                                    writer.write(
+                                        ResultEvent(
+                                            subtype="error",
+                                            session_id=session.session_id,
+                                            num_turns=0,
+                                            result="",
+                                            duration_ms=0,
+                                            is_error=True,
+                                            error=err,
+                                        )
+                                    )
+                                else:
+                                    print(f"error: {err}", file=stderr)
+                                exit_code = 1
+                                break
+
+                            cmd_ctx = create_command_context(
+                                workspace_root=workspace_root,
+                                conversation=session.conversation,
+                                tool_registry=tool_registry,
+                                tool_context=tool_context,
+                            )
+                            prompt_registry = CommandRegistry()
+                            prompt_registry.register(cmd)
+                            prompt_result = asyncio.run(
+                                CommandEngine(
+                                    registry=prompt_registry,
+                                    workspace_root=workspace_root,
+                                    context=cmd_ctx,
+                                ).execute(text)
+                            )
+                            if not prompt_result.success:
+                                err = prompt_result.error or (
+                                    f"Command /{parsed.command_name} failed"
+                                )
+                                if writer is not None:
+                                    writer.write(
+                                        ResultEvent(
+                                            subtype="error",
+                                            session_id=session.session_id,
+                                            num_turns=0,
+                                            result="",
+                                            duration_ms=0,
+                                            is_error=True,
+                                            error=err,
+                                        )
+                                    )
+                                else:
+                                    print(f"error: {err}", file=stderr)
+                                exit_code = 1
+                                break
+
+                            prompt_text = next(
+                                (
+                                    item.get("text", "")
+                                    for item in prompt_result.prompt_content
+                                    if isinstance(item, dict)
+                                    and item.get("type") == "text"
+                                    and item.get("text")
+                                ),
+                                "",
+                            )
+                            if prompt_result.should_query and prompt_text:
+                                # Match REPL/TUI: the expanded skill prompt, not
+                                # the literal slash command, becomes the user turn.
+                                text = prompt_text
+                            else:
+                                if prompt_result.text:
+                                    if writer is not None:
+                                        writer.write(AssistantEvent(text=prompt_result.text))
+                                    else:
+                                        aggregate_text.append(prompt_result.text)
+                                _skip_agent_loop = True
+
                         # F-120: ``/dashboard`` is an InteractiveCommand, but
                         # it has no UI dependencies (pure read-only text
                         # rendering). ``execute_command_sync`` would reject it,
                         # so we special-case it here and emit the rendered
                         # snapshot synchronously. Scrollable mode is dropped in
                         # headless.
-                        if (
+                        elif (
                             parsed.command_name.lower() in ("dashboard", "dash")
                             and cmd is not None
                             and getattr(cmd, "command_type", None)
@@ -1199,6 +1278,28 @@ def _find_builtin_or_registered_command(command_name: str) -> Any | None:
     return None
 
 
+def _find_command_for_workspace(
+    command_name: str,
+    *,
+    workspace_root: Path,
+) -> Any | None:
+    """Resolve builtins, registered commands, and workspace skill commands."""
+
+    command = _find_builtin_or_registered_command(command_name)
+    if command is not None:
+        return command
+
+    from clawcodex_ext.command_system.aggregator import get_commands
+
+    lowered = command_name.lower()
+    for candidate in get_commands(workspace_root):
+        if candidate.name.lower() == lowered:
+            return candidate
+        if lowered in [alias.lower() for alias in candidate.aliases]:
+            return candidate
+    return None
+
+
 class _InAgentLoopFlag:
     """Mutable shared flag indicating whether ``run_agent_loop`` is in flight.
 
@@ -1603,11 +1704,7 @@ def _run_one_agent_loop(
 
         on_text_chunk = _rec_text_chunk
 
-    if (
-        on_text_chunk is None
-        and writer is not None
-        and options.include_partial_messages
-    ):
+    if on_text_chunk is None and writer is not None and options.include_partial_messages:
 
         def _emit_partial(chunk: str) -> None:
             writer.write(PartialTextEvent(text=chunk))
@@ -1626,9 +1723,7 @@ def _run_one_agent_loop(
         tool_context,
     )
     if options.append_system_prompt:
-        effective_system_prompt = (
-            f"{effective_system_prompt}\n\n{options.append_system_prompt}"
-        )
+        effective_system_prompt = f"{effective_system_prompt}\n\n{options.append_system_prompt}"
 
     def _persist(msg: Any) -> None:
         try:
@@ -1677,11 +1772,7 @@ def _wrap_cron_prompt(prompt: str, *, task_id: str = "") -> str:
     header = f"✻ Running scheduled task ({time_str})"
     if task_id:
         header += f" · {task_id}"
-    return (
-        f"{header}\n\n"
-        "This prompt was generated automatically from a scheduled task.\n\n"
-        f"{prompt}"
-    )
+    return f"{header}\n\nThis prompt was generated automatically from a scheduled task.\n\n{prompt}"
 
 
 def _drain_cron_outbox(
@@ -1709,15 +1800,9 @@ def _drain_cron_outbox(
             else str(getattr(entry, "prompt", "")).strip()
         )
         task_id = (
-            entry.get("task_id", "")
-            if hasattr(entry, "get")
-            else getattr(entry, "task_id", "")
+            entry.get("task_id", "") if hasattr(entry, "get") else getattr(entry, "task_id", "")
         )
-        run_id = (
-            entry.get("run_id", "")
-            if hasattr(entry, "get")
-            else getattr(entry, "run_id", "")
-        )
+        run_id = entry.get("run_id", "") if hasattr(entry, "get") else getattr(entry, "run_id", "")
         if task_id and task_id in active_tasks:
             try:
                 finalize_cron_run(tool_context.workspace_root, run_id, "cancelled")

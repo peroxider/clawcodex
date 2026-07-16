@@ -1,20 +1,24 @@
 from __future__ import annotations
 
-"""
-Extension Layer Cache Management
+"""Compatibility cache API backed by canonical catalog invalidation.
 
-Provides caching for skill discovery and loading to improve performance.
-Mirrors patterns from tool_system_ext/cache.py.
+The extension layer no longer owns TTL discovery or registry caches. Legacy
+callers may retain their imports, but reads deliberately miss and every clear or
+invalidation is forwarded to clawcodex_ext.skills.invalidate_skill_catalog.
 """
 
+import logging
 import time
 from typing import Any, Generic, TypeVar
 
+from clawcodex_ext.skills.catalog import invalidate_skill_catalog
+
 T = TypeVar("T")
+logger = logging.getLogger(__name__)
 
 
 class CacheEntry(Generic[T]):
-    """A single cache entry with expiration."""
+    """Legacy value object retained for import compatibility."""
 
     __slots__ = ("value", "expires_at")
 
@@ -27,84 +31,68 @@ class CacheEntry(Generic[T]):
 
 
 class SkillCache:
-    """
-    Generic cache with TTL support for skill operations.
+    """Stateless facade over canonical skill-catalog invalidation.
 
-    Attributes:
-        default_ttl: Default time-to-live in seconds (default: 300)
+    set and get remain callable for older integrations, but values are never
+    retained. This prevents an extension-local result from outliving the
+    workspace-scoped catalog snapshot.
     """
 
-    def __init__(self, default_ttl: float = 300.0) -> None:
-        self._store: dict[str, CacheEntry[Any]] = {}
+    __slots__ = ("default_ttl", "_label")
+
+    def __init__(
+        self,
+        default_ttl: float = 300.0,
+        *,
+        label: str = "legacy",
+    ) -> None:
         self.default_ttl = default_ttl
+        self._label = label
 
     def get(self, key: str) -> Any | None:
-        """
-        Get a value from cache.
+        """Always miss because discovery results belong to the catalog."""
 
-        Args:
-            key: Cache key
-
-        Returns:
-            Cached value or None if not found/expired
-        """
-        entry = self._store.get(key)
-        if entry is None:
-            return None
-        if entry.is_expired():
-            del self._store[key]
-            return None
-        return entry.value
+        logger.debug("[skills_ext] ignored legacy %s cache get: %s", self._label, key)
+        return None
 
     def set(self, key: str, value: Any, ttl: float | None = None) -> None:
-        """
-        Set a value in cache.
+        """Accept but do not retain a legacy cache value."""
 
-        Args:
-            key: Cache key
-            value: Value to cache
-            ttl: Time-to-live in seconds, uses default if None
-        """
-        ttl_seconds = ttl if ttl is not None else self.default_ttl
-        self._store[key] = CacheEntry(value, ttl_seconds)
+        del value, ttl
+        logger.debug("[skills_ext] ignored legacy %s cache set: %s", self._label, key)
 
     def invalidate(self, key: str) -> None:
-        """Remove a key from cache."""
-        self._store.pop(key, None)
+        """Invalidate the canonical catalog."""
+
+        invalidate_skill_catalog(f"skills_ext {self._label} cache key invalidated: {key}")
 
     def clear(self) -> None:
-        """Clear all cache entries."""
-        self._store.clear()
+        """Invalidate all canonical skill views."""
+
+        invalidate_skill_catalog(f"skills_ext {self._label} cache cleared")
 
     def cleanup_expired(self) -> int:
-        """
-        Remove all expired entries.
+        """Return zero because this facade owns no entries."""
 
-        Returns:
-            Number of entries removed
-        """
-        expired_keys = [k for k, v in self._store.items() if v.is_expired()]
-        for key in expired_keys:
-            del self._store[key]
-        return len(expired_keys)
+        return 0
 
 
-# Global caches for skill operations
-_skill_discovery_cache = SkillCache(default_ttl=60.0)
-_skill_registry_cache = SkillCache(default_ttl=300.0)
+_catalog_cache_facade = SkillCache(label="catalog")
 
 
 def get_discovery_cache() -> SkillCache:
-    """Get the skill discovery cache."""
-    return _skill_discovery_cache
+    """Return the stateless canonical-catalog compatibility facade."""
+
+    return _catalog_cache_facade
 
 
 def get_registry_cache() -> SkillCache:
-    """Get the skill registry cache."""
-    return _skill_registry_cache
+    """Return the same canonical-catalog compatibility facade."""
+
+    return _catalog_cache_facade
 
 
 def clear_all_caches() -> None:
-    """Clear all global skill caches."""
-    _skill_discovery_cache.clear()
-    _skill_registry_cache.clear()
+    """Invalidate the canonical catalog and all dependent skill views."""
+
+    invalidate_skill_catalog("skills_ext clear_all_caches")

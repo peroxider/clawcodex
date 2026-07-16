@@ -84,7 +84,7 @@ def _glob_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     if not isinstance(limit, int) or limit < 1 or limit > 10_000:
         raise ToolInputError("limit must be an integer between 1 and 10000")
 
-    base_dir = context.cwd if base is None else context.ensure_allowed_path(base)
+    base_dir = context.cwd if base is None else context.ensure_readable_path(base)
     if not base_dir.exists():
         hint = suggest_path_under_cwd(str(base_dir), context.cwd) if base else None
         msg = f"path does not exist: {base_dir}"

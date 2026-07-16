@@ -147,6 +147,59 @@ def test_headless_text_reads_prompt_from_stdin_when_dash(fake_wiring, tmp_path):
     assert "from-stdin" in out.getvalue()
 
 
+def test_headless_bundled_skill_slash_expands_before_agent_loop(
+    fake_wiring,
+    tmp_path,
+    monkeypatch,
+):
+    """Prompt skills use the workspace catalogue and the bound ToolContext."""
+    import clawcodex_ext.entrypoints.headless as ext_headless
+
+    monkeypatch.delenv("CLAUDE_CODE_DISABLE_AUTO_MEMORY", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_SIMPLE", raising=False)
+    monkeypatch.delenv("CLAUDE_CODE_REMOTE", raising=False)
+    captured: dict[str, object] = {}
+
+    async def _capture_expanded_prompt(*args, **kwargs):
+        del args
+        messages = kwargs["initial_messages"]
+        captured["content"] = messages[-1].content
+        captured["tool_context"] = kwargs["tool_context"]
+        return AgentLoopResult(
+            response_text="remember reviewed",
+            usage={"input_tokens": 1, "output_tokens": 1},
+            num_turns=1,
+        )
+
+    monkeypatch.setattr(
+        ext_headless,
+        "run_query_as_agent_loop",
+        _capture_expanded_prompt,
+    )
+
+    stdout = io.StringIO()
+    code = run_headless(
+        HeadlessOptions(
+            prompt="/remember focus on testing preferences",
+            output_format="text",
+            stdout=stdout,
+            stderr=io.StringIO(),
+            workspace_root=tmp_path,
+            persist_on_exit=False,
+        )
+    )
+
+    assert code == 0
+    assert stdout.getvalue().strip() == "remember reviewed"
+    assert captured["tool_context"] is not None
+    content = captured["content"]
+    assert isinstance(content, str)
+    assert "# Memory Review" in content
+    assert "## Additional context from user" in content
+    assert "focus on testing preferences" in content
+    assert not content.startswith("/remember")
+
+
 def test_headless_goal_summary_runs_without_provider_config(monkeypatch, tmp_path):
     """A provider is only needed once a slash command invokes the model."""
     import clawcodex_ext.entrypoints.headless as ext_headless

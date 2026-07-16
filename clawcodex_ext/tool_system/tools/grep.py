@@ -371,7 +371,7 @@ def _grep_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     elif ctx_c is not None:
         ctx_before = ctx_after = ctx_c
 
-    base_path = context.cwd if base is None else context.ensure_allowed_path(base)
+    base_path = context.cwd if base is None else context.ensure_readable_path(base)
     if not base_path.exists():
         hint = suggest_path_under_cwd(str(base_path), context.cwd) if base else None
         msg = f"path does not exist: {base_path}"

@@ -8,6 +8,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 
+from clawcodex_ext.agent.constants import VERIFICATION_AGENT_TYPE
+from clawcodex_ext.agent.verification import (
+    VERIFICATION_CRITICAL_REMINDER,
+    VERIFICATION_SYSTEM_PROMPT,
+    VERIFICATION_WHEN_TO_USE,
+)
 from clawcodex_ext.permissions.types import PermissionMode
 from clawcodex_ext.logical_kanban.flags import is_logical_kanban_enabled
 
@@ -270,6 +276,28 @@ PLAN_AGENT = AgentDefinition(
 )
 
 
+VERIFICATION_AGENT = AgentDefinition(
+    agent_type=VERIFICATION_AGENT_TYPE,
+    when_to_use=VERIFICATION_WHEN_TO_USE,
+    tools=["*"],
+    disallowed_tools=[
+        "Agent",
+        "ExitPlanMode",
+        "Edit",
+        "Write",
+        "NotebookEdit",
+        "SkillSearch",
+    ],
+    source="built-in",
+    base_dir="built-in",
+    model="inherit",
+    background=True,
+    color="red",
+    get_system_prompt=lambda **_kwargs: VERIFICATION_SYSTEM_PROMPT,
+    critical_system_reminder=VERIFICATION_CRITICAL_REMINDER,
+)
+
+
 FORK_AGENT = AgentDefinition(
     agent_type="fork",
     when_to_use=(
@@ -296,6 +324,7 @@ def get_built_in_agents() -> list[AgentDefinition]:
         GENERAL_PURPOSE_AGENT,
         EXPLORE_AGENT,
         PLAN_AGENT,
+        VERIFICATION_AGENT,
     ]
 
 

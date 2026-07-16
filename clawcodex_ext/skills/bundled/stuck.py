@@ -35,8 +35,8 @@ def _build_stuck_prompt(args: str) -> str:
     return f"{_STUCK_PROMPT}\n\n## User Context\n\n{args}\n"
 
 
-def register_stuck_skill() -> None:
-    register_bundled_skill(
+def register_stuck_skill() -> bool:
+    return register_bundled_skill(
         BundledSkillDefinition(
             name="stuck",
             description=(

@@ -66,6 +66,8 @@ class CommandDispatchResult:
     * ``handled`` — command was fully resolved locally, no agent call.
     * ``prompt_text`` — the command resolved into a prompt (e.g. ``/init``)
       that should be forwarded to the agent as a user turn.
+    * ``assistant_text`` — a forked skill's completed result, rendered without
+      forwarding it through the main agent again.
     * ``system_text`` — text to append to the transcript as a system
       message (from commands that emit a textual response).
     * ``open_dialog`` — name of a Phase 2 dialog screen to push
@@ -77,6 +79,8 @@ class CommandDispatchResult:
 
     handled: bool
     prompt_text: str | None = None
+    assistant_text: str | None = None
+    assistant_name: str | None = None
     system_text: str | None = None
     system_render: str = "plain"
     open_dialog: str | None = None
@@ -416,6 +420,12 @@ async def dispatch_registry_command(
         return CommandDispatchResult(handled=True, error=result.error)
 
     if result.result_type == "text":
+        if result.display == "assistant":
+            return CommandDispatchResult(
+                handled=True,
+                assistant_text=result.text or "",
+                assistant_name=result.command_name,
+            )
         return CommandDispatchResult(
             handled=True,
             system_text=result.text or "",

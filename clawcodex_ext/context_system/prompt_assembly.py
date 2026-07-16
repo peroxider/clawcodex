@@ -52,6 +52,7 @@ _system_context_cache: dict[str, str] | None = None
 # without modifying this file.  See ``register_memory_section_builder()``.
 # ---------------------------------------------------------------------------
 
+
 def register_memory_section_builder(builder: Any) -> None:
     """Register a callable that builds the memory system-prompt section.
 
@@ -1327,7 +1328,9 @@ def _build_agent_section(
 def _build_skill_section(
     skills: list[Any] | None,
     use_cache: bool,
+    context_window_tokens: int | None = None,
 ) -> SystemPromptSection | None:
+    _ = context_window_tokens
     override = consult_section_builders("skills")
     if override is not None:
         return override
@@ -1346,7 +1349,10 @@ def _build_skill_section(
     for skill in skills:
         name = getattr(skill, "name", str(skill))
         desc = getattr(skill, "description", "")
-        parts.append(f"- **{name}**: {desc}")
+        when_to_use = getattr(skill, "when_to_use", None)
+        if when_to_use:
+            desc = f"{desc} - {when_to_use}"
+        parts.append(f"- {name}: {desc}")
 
     content = "\n".join(parts)
     if use_cache:

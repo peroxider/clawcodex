@@ -22,6 +22,10 @@ from ..context import ToolContext
 from clawcodex_ext.tool_system.protocol import ToolResult
 
 
+def _result(output: Any, *, is_error: bool = False) -> ToolResult:
+    return ToolResult(name="SkillSearch", output=output, is_error=is_error)
+
+
 def _get_searcher():
     """Lazily create and cache a SkillSearcher singleton."""
     from extensions.skills_ext.registry_ext import get_default_registry
@@ -59,9 +63,9 @@ def _skill_search_call(input_data: dict[str, Any], context: ToolContext) -> Tool
         return _handle_rebuild()
     if action == "stats":
         return _handle_stats()
-    return ToolResult(
-        output="",
-        error=f"Unknown action: {action}. Valid actions: search, pin, unpin, inspect, rebuild, stats",
+    return _result(
+        f"Unknown action: {action}. Valid actions: search, pin, unpin, inspect, rebuild, stats",
+        is_error=True,
     )
 
 
@@ -75,7 +79,7 @@ def _handle_search(input_data: dict[str, Any]) -> ToolResult:
 
     query = input_data.get("query", "")
     if not query:
-        return ToolResult(output="", error="query is required for search action")
+        return _result("query is required for search action", is_error=True)
 
     top_k = input_data.get("top_k")
     tags = input_data.get("tags")
@@ -86,12 +90,12 @@ def _handle_search(input_data: dict[str, Any]) -> ToolResult:
     try:
         results = asyncio.run(searcher.search(query, top_k=top_k, tags=tags, source=source))
     except Exception as e:
-        return ToolResult(output="", error=f"Search failed: {e}")
+        return _result(f"Search failed: {e}", is_error=True)
 
     if not results:
-        return ToolResult(output="No matching skills found.")
+        return _result("No matching skills found.")
 
-    lines = [f"Search results for \"{query}\":", ""]
+    lines = [f'Search results for "{query}":', ""]
     for i, r in enumerate(results, 1):
         doc = r.document
         lines.append(f"{i}. {doc.name}  (score: {r.score:.3f}, source: {doc.source})")
@@ -101,27 +105,27 @@ def _handle_search(input_data: dict[str, Any]) -> ToolResult:
             lines.append(f"   {r.reason}")
         lines.append("")
 
-    return ToolResult(output="\n".join(lines))
+    return _result("\n".join(lines))
 
 
 def _handle_pin(input_data: dict[str, Any]) -> ToolResult:
     name = input_data.get("name", "")
     if not name:
-        return ToolResult(output="", error="name is required for pin action")
+        return _result("name is required for pin action", is_error=True)
 
     searcher = _get_searcher()
     searcher.pin(name)
-    return ToolResult(output=f"Pinned skill: {name}")
+    return _result(f"Pinned skill: {name}")
 
 
 def _handle_unpin(input_data: dict[str, Any]) -> ToolResult:
     name = input_data.get("name", "")
     if not name:
-        return ToolResult(output="", error="name is required for unpin action")
+        return _result("name is required for unpin action", is_error=True)
 
     searcher = _get_searcher()
     searcher.unpin(name)
-    return ToolResult(output=f"Unpinned skill: {name}")
+    return _result(f"Unpinned skill: {name}")
 
 
 def _handle_inspect(input_data: dict[str, Any]) -> ToolResult:
@@ -129,18 +133,18 @@ def _handle_inspect(input_data: dict[str, Any]) -> ToolResult:
 
     name = input_data.get("name", "")
     if not name:
-        return ToolResult(output="", error="name is required for inspect action")
+        return _result("name is required for inspect action", is_error=True)
 
     searcher = _get_searcher()
 
     try:
         asyncio.run(searcher.ensure_index())
     except Exception as e:
-        return ToolResult(output="", error=f"Cannot inspect: {e}")
+        return _result(f"Cannot inspect: {e}", is_error=True)
 
     result = searcher.inspect(name)
     if result is None:
-        return ToolResult(output=f"Skill not found in index: {name}")
+        return _result(f"Skill not found in index: {name}")
 
     lines = [
         f"Inspect: {result.name}",
@@ -155,7 +159,7 @@ def _handle_inspect(input_data: dict[str, Any]) -> ToolResult:
             sample = ", ".join(field_info.token_sample[:10])
             lines.append(f"      sample: {sample}")
 
-    return ToolResult(output="\n".join(lines))
+    return _result("\n".join(lines))
 
 
 def _handle_rebuild() -> ToolResult:
@@ -166,12 +170,10 @@ def _handle_rebuild() -> ToolResult:
         asyncio.run(searcher.refresh())
         stats = searcher.stats()
         if stats:
-            return ToolResult(
-                output=f"Index rebuilt: {stats.total_docs} docs, {stats.total_terms} terms"
-            )
-        return ToolResult(output="Index rebuilt successfully.")
+            return _result(f"Index rebuilt: {stats.total_docs} docs, {stats.total_terms} terms")
+        return _result("Index rebuilt successfully.")
     except Exception as e:
-        return ToolResult(output="", error=f"Rebuild failed: {e}")
+        return _result(f"Rebuild failed: {e}", is_error=True)
 
 
 def _handle_stats() -> ToolResult:
@@ -182,11 +184,11 @@ def _handle_stats() -> ToolResult:
     try:
         asyncio.run(searcher.ensure_index())
     except Exception:
-        return ToolResult(output="Index not loaded (feature flag may be off).")
+        return _result("Index not loaded (feature flag may be off).")
 
     stats = searcher.stats()
     if stats is None:
-        return ToolResult(output="Index not loaded.")
+        return _result("Index not loaded.")
 
     pinned = searcher.get_pinned()
     lines = [
@@ -201,7 +203,7 @@ def _handle_stats() -> ToolResult:
     if pinned:
         lines.append(f"    {', '.join(pinned)}")
 
-    return ToolResult(output="\n".join(lines))
+    return _result("\n".join(lines))
 
 
 # ---------------------------------------------------------------------------

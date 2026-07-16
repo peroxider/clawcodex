@@ -269,9 +269,12 @@ class ToolRegistry:
         if tool.validate_input is not None:
             validation = tool.validate_input(call.input, context)
             if not validation.result:
+                validation_output: dict[str, Any] = {"error": validation.message}
+                if validation.error_code:
+                    validation_output["error_code"] = validation.error_code
                 return ToolResult(
                     name=tool.name,
-                    output={"error": validation.message},
+                    output=validation_output,
                     is_error=True,
                     tool_use_id=call.tool_use_id,
                 )

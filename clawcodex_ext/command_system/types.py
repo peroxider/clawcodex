@@ -206,68 +206,61 @@ class PromptCommand(CommandBase):
 
 @dataclass(frozen=True)
 class SkillPromptCommand(PromptCommand):
-    """A PromptCommand backed by a markdown skill (P0-6 Option B / Phase 3.5).
-
-    The base ``PromptCommand.get_prompt_for_command`` does only bare argument
-    substitution, which is lossy for skills (it drops the base-dir header,
-    ``${CLAUDE_SKILL_DIR}`` / ``${CLAUDE_SESSION_ID}`` substitution, and gated
-    shell-exec). This subclass overrides it with a render that is identical *by
-    construction* to the model's Skill-tool path: when the surface threads its
-    ``ToolContext`` onto the ``CommandContext`` (REPL/TUI execution), it
-    delegates to ``_run_markdown_skill`` — the same function the Skill tool runs
-    — re-resolving the skill by ``self.name`` so session id and shell-exec are
-    byte-for-byte the same. Off that path (no ToolContext: SDK / listing
-    callers) it degrades to a headless render with no shell executor.
-    """
+    """Prompt command whose every surface uses the canonical user Skill service."""
 
     async def get_prompt_for_command(
         self,
         args: str,
         context: CommandContext,
     ) -> list[dict[str, Any]]:
+        """Invoke the canonical user Skill service on every execution path."""
+
         tc = getattr(context, "tool_context", None)
-        if tc is not None:
-            # Function-scope import: command_system must not import tool_system
-            # at module load (would cycle). The edge is one private helper, and
-            # command_system already imports ..skills.
-            from clawcodex_ext.tool_system.tools.skill import _run_markdown_skill
+        if tc is None:
+            from src.bootstrap.state import get_session_id
+            from clawcodex_ext.tool_system.context import ToolContext
+            from clawcodex_ext.tool_system.defaults import build_default_registry
 
-            # ``_run_markdown_skill`` is sync and may block (disk I/O + a gated
-            # BashTool subprocess for embedded shell blocks). Run it off the
-            # event loop so neither the REPL thread-pool loop nor the Textual
-            # loop stalls. Note: it mutates a process-global skill registry
-            # (clear + re-resolve), which is unsynchronized — safe only because
-            # both surfaces serialize command dispatch, so no two renders run
-            # concurrently. A future concurrent-dispatch change would need a lock.
-            res = await asyncio.to_thread(_run_markdown_skill, self.name, args or "", tc)
-            payload = res.output if isinstance(res.output, dict) else {}
-            prompt = payload.get("prompt")
-            if isinstance(prompt, str) and prompt.strip():
-                return [{"type": "text", "text": prompt}]
-            # error / empty (e.g. the skill was removed since registration) →
-            # fall through to a headless render from the cached fields.
-        return self._render_headless(args)
+            registry = getattr(context, "tool_registry", None)
+            if registry is None:
+                registry = build_default_registry(provider=getattr(context, "provider", None))
+            tc = ToolContext(
+                workspace_root=context.workspace_root,
+                cwd=context.cwd,
+                tool_registry=registry,
+                session_id=get_session_id(),
+            )
+            tc._active_provider = getattr(context, "provider", None)
+            context.tool_context = tc
+            context.tool_registry = registry
 
-    def _render_headless(self, args: str) -> list[dict[str, Any]]:
-        """Best-effort render with no ToolContext: base-dir header + argument /
-        ``${CLAUDE_SKILL_DIR}`` / ``${CLAUDE_SESSION_ID}`` substitution, with
-        embedded shell blocks left verbatim (no executor). Only reachable off
-        the REPL/TUI execution paths, which always thread a ToolContext."""
-        from clawcodex_ext.bootstrap.state import get_session_id
-        from clawcodex_ext.skills.runtime_substitution import render_skill_prompt
+        from clawcodex_ext.tool_system.tools.skill import run_user_invoked_skill
 
-        text = render_skill_prompt(
-            body=self.markdown_content,
-            args=args or "",
-            base_dir=self.skill_root,
-            argument_names=self.arg_names,
-            session_id=get_session_id(),
-            loaded_from=self.loaded_from,
-            slash_command_name=f"/{self.name}",
-            shell_executor=None,
-            allowed_tool_count=len(self.allowed_tools or []),
-        )
-        return [{"type": "text", "text": text}]
+        res = run_user_invoked_skill(self.name, args or "", tc)
+        payload = res.output if isinstance(res.output, dict) else {}
+        if res.is_error or not payload.get("success"):
+            message = payload.get("error")
+            raise RuntimeError(
+                message
+                if isinstance(message, str) and message
+                else f"Unable to invoke skill: {self.name}"
+            )
+
+        messages = getattr(res, "new_messages", None) or ()
+        if messages:
+            content = getattr(messages[0], "content", None)
+            if isinstance(content, str) and content.strip():
+                return [{"type": "text", "text": content}]
+
+        if payload.get("status") in {"fork", "forked"}:
+            result = payload.get("result")
+            if isinstance(result, str) and result.strip():
+                return [{"type": "text", "text": result}]
+
+        prompt = payload.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise RuntimeError(f"Skill produced empty prompt: {self.name}")
+        return [{"type": "text", "text": prompt}]
 
 
 @dataclass(frozen=True)
@@ -486,7 +479,12 @@ def meets_availability_requirement(
     if not cmd.availability:
         return True
 
-    for availability in cmd.availability:
+    availabilities = (
+        (cmd.availability,)
+        if isinstance(cmd.availability, CommandAvailability)
+        else cmd.availability
+    )
+    for availability in availabilities:
         if availability == CommandAvailability.CLAUDE_AI and is_claude_ai_subscriber:
             return True
         if availability == CommandAvailability.CONSOLE and is_console_user:

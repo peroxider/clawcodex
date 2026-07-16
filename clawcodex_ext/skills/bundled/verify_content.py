@@ -43,8 +43,8 @@ def _build_verify_prompt(args: str) -> str:
     return f"{_VERIFY_PROMPT}\n\n## User-Supplied Intent\n\n{args}\n"
 
 
-def register_verify_content_skill() -> None:
-    register_bundled_skill(
+def register_verify_content_skill() -> bool:
+    return register_bundled_skill(
         BundledSkillDefinition(
             name="verify-content",
             description=(

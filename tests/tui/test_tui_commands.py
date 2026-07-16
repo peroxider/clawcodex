@@ -20,6 +20,7 @@ from src.tui.commands import (
     build_command_suggestions,
     build_command_words,
     dispatch_local_command,
+    dispatch_registry_command,
 )
 from src.tool_system.registry import ToolRegistry
 from src.tool_system.context import ToolContext
@@ -136,6 +137,29 @@ def test_all_suggestion_commands_have_handlers(tmp_path: Path):
         assert slash in _KNOWN_HANDLED_COMMANDS, (
             f"{slash} (source={s.source}) is in suggestions but has no known handler"
         )
+
+
+@pytest.mark.asyncio
+async def test_registry_fork_result_is_returned_as_assistant_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from clawcodex_ext.command_system.engine import CommandResult
+
+    async def _execute_command_async(name, args, context):
+        del args, context
+        return CommandResult.success_assistant(name, "VERDICT: PASS")
+
+    monkeypatch.setattr(
+        "src.command_system.builtins.execute_command_async",
+        _execute_command_async,
+    )
+
+    result = await dispatch_registry_command("/verify", command_context=MagicMock())
+
+    assert result.handled is True
+    assert result.assistant_text == "VERDICT: PASS"
+    assert result.assistant_name == "verify"
+    assert result.prompt_text is None
 
 
 # ---------------------------------------------------------------------------
