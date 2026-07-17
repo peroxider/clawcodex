@@ -64,7 +64,14 @@ class TestInitOrchestrator(unittest.TestCase):
         init_bundled_skills()
         names = {s.name for s in get_bundled_skills()}
         self.assertGreaterEqual(len(names), 5)
-        for required in ("simplify", "debug", "loop", "stuck", "verify-content"):
+        for required in (
+            "simplify",
+            "debug",
+            "loop",
+            "spec-audit",
+            "stuck",
+            "verify-content",
+        ):
             self.assertIn(required, names)
 
     def test_init_idempotent(self) -> None:

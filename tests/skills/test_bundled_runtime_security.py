@@ -22,6 +22,7 @@ from clawcodex_ext.skills.bundled_skills import (
     register_bundled_skill,
 )
 from clawcodex_ext.skills.invocation import (
+    SkillInvocationErrorCode,
     SkillInvocationOrigin,
     SkillInvocationRequest,
     SkillInvocationService,
@@ -198,6 +199,35 @@ def test_unsafe_resource_paths_fail_open_without_exposing_a_root(
     assert result.success is True
     assert records[0][1] == f"bundled:{name}"
     assert any("continuing without a base directory" in item for item in result.diagnostics)
+
+
+def test_required_resource_extraction_failure_blocks_invocation() -> None:
+    name = _unique_name("required-resource")
+    assert register_bundled_skill(
+        BundledSkillDefinition(
+            name=name,
+            description="required resource failure probe",
+            files={"../escape.txt": "must never be written"},
+            requires_resources=True,
+            get_prompt_for_command=lambda _args: "MUST NOT BE RETURNED",
+        )
+    )
+    skill = get_bundled_skill_by_name(name)
+    assert skill is not None
+
+    result = SkillInvocationService(
+        resolver=lambda _name, _context: skill,
+        recorder=lambda *_args: None,
+    ).invoke(
+        SkillInvocationRequest(name, origin=SkillInvocationOrigin.USER),
+        ToolContext(workspace_root=Path.cwd()),
+    )
+
+    assert result.success is False
+    assert result.prompt is None
+    assert result.error is not None
+    assert result.error.code is SkillInvocationErrorCode.PROMPT_BUILD_FAILED
+    assert f"required bundled resources for skill '{name}'" in result.error.message.lower()
 
 
 def test_symlinked_extraction_root_is_rejected(tmp_path: Path) -> None:

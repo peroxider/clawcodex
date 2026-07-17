@@ -378,6 +378,15 @@ exclude = [
     "src/upstream*",
 ]
 
+[tool.setuptools.package-data]
+"clawcodex_ext.skills.bundled.spec_audit_resources" = [
+    "SKILL.md",
+    "agents/*.yaml",
+    "assets/templates/*.md",
+    "references/*.md",
+    "scripts/*.py",
+]
+
 # Excluded paths:
 #   src/upstream*        — vendor snapshot (git archive artifact), not runtime
 #                         see: src/upstream/PHASE1_SKELETON.txt

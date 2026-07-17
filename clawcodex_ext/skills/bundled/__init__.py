@@ -20,6 +20,7 @@ from .debug import register_debug_skill
 from .loop import register_loop_skill
 from .remember import register_remember_skill
 from .simplify import register_simplify_skill
+from .spec_audit import register_spec_audit_skill
 from .stuck import register_stuck_skill
 from .update_config import register_update_config_skill
 from .verify import register_verify_skill
@@ -59,6 +60,7 @@ def init_bundled_skills() -> bool:
         register_verify_skill,
         register_update_config_skill,
         register_remember_skill,
+        register_spec_audit_skill,
     )
     with _INIT_LOCK, _registry_lock:
         if _INITIALIZED:
@@ -97,6 +99,7 @@ __all__ = [
     "init_bundled_skills",
     "reset_bundled_skills_init_flag",
     "register_simplify_skill",
+    "register_spec_audit_skill",
     "register_debug_skill",
     "register_loop_skill",
     "register_remember_skill",
