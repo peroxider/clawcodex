@@ -157,6 +157,9 @@ class _SessionTailer:
         # Byte offsets
         self._events_offset = 0
         self._transcript_offset = 0
+        # True once events.ndjson yields any data — prevents double-counting
+        # tool_call events from transcript.jsonl's tool_use blocks.
+        self._events_ndjson_seen = False
         # tool_use_id → tool_name mapping, so tool_result events can show
         # the human-readable tool name instead of the opaque ID.
         self._tool_name_map: dict[str, str] = {}
@@ -183,7 +186,7 @@ class _SessionTailer:
             time.sleep(_TAIL_POLL_INTERVAL_S)
 
     def _tail_events_ndjson(self) -> None:
-        """Tail events.ndjson — 每个 tool 调用事件。"""
+        """Tail events.ndjson — 每个 tool 调用事件（含 params、approved 等）。"""
         path = self._resolve_events_path()
         if path is None:
             return
@@ -198,6 +201,7 @@ class _SessionTailer:
                         entry = json.loads(line)
                     except json.JSONDecodeError:
                         continue
+                    self._events_ndjson_seen = True
                     self._emit_event(
                         "tool_call",
                         {
@@ -249,7 +253,13 @@ class _SessionTailer:
             pass
 
     def _process_assistant_message(self, entry: dict[str, Any]) -> None:
-        """Extract tool_use + text events from an assistant message."""
+        """Extract tool_use + text events from an assistant message.
+
+        If events.ndjson already provided tool_call events (richer data with
+        approved/deny_reason), skip tool_use blocks here to avoid double-counting.
+        Always emit text blocks (events.ndjson doesn't contain agent text).
+        Always register tool_use_id → tool_name for tool_result lookups.
+        """
         content = entry.get("content")
         if isinstance(content, list):
             for block in content:
@@ -261,17 +271,20 @@ class _SessionTailer:
                     tool_use_id = block.get("id")
                     if tool_use_id:
                         self._tool_name_map[tool_use_id] = tool_name
-                    self._emit_event(
-                        "tool_call",
-                        {
-                            "tool": tool_name,
-                            "approved": True,
-                            "turn": 0,
-                            "deny_reason": None,
-                            "tool_use_id": tool_use_id,
-                            "params": block.get("input"),
-                        },
-                    )
+                    # Only emit tool_call from transcript if events.ndjson
+                    # hasn't already provided it (audit_log=minimal/none case)
+                    if not self._events_ndjson_seen:
+                        self._emit_event(
+                            "tool_call",
+                            {
+                                "tool": tool_name,
+                                "approved": True,
+                                "turn": 0,
+                                "deny_reason": None,
+                                "tool_use_id": tool_use_id,
+                                "params": block.get("input"),
+                            },
+                        )
                 elif block_type == "text":
                     text = block.get("text", "")
                     if text and text.strip():
