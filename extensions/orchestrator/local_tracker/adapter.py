@@ -68,11 +68,15 @@ class LocalTrackerAdapter(TrackerAdapter):
 
     async def fetch_candidate_issues(self) -> list[Issue]:
         documents = self._load_documents()
-        issues = [
-            document.issue
-            for document in documents
-            if _normalize_state(document.issue.state) in self._active_state_set
-        ]
+        issues = []
+        for document in documents:
+            if not document.issue.state:
+                logger.warning(
+                    "Issue %s has no state field, defaulting to active",
+                    document.issue.id or document.path.stem,
+                )
+            if _normalize_state(document.issue.state or "open") in self._active_state_set:
+                issues.append(document.issue)
         return sorted(
             issues,
             key=lambda issue: (
@@ -191,6 +195,10 @@ class LocalTrackerAdapter(TrackerAdapter):
                 title=_string_or_none(document.metadata.get("pr_title")),
             )
         return None
+
+    async def list_pull_requests(self) -> list[PullRequestRef]:
+        """Local tracker has no remote PRs — return empty list."""
+        return []
 
     async def fetch_issue_comments(self, issue_id: str) -> list[Comment]:
         comment_path = self._comments_path(issue_id)

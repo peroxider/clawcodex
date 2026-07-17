@@ -88,19 +88,19 @@ stages:
     on_error: fail
     max_retries: 5
 
-  # Stage 3: 代码质量门禁
-  # 使用 git diff --check 验证，失败时跳过（on_error: skip）
+  # Stage 3: Lint & Test Gate
   - id: 3
     name: 代码质量门禁
     kind: gate
     gate_mode: auto
     validators:
       - type: custom
-        command: git diff --check
+        command: ruff check .
         expected_exit: 0
       - type: custom
-        command: git diff --stat | head -20
+        command: pytest --tb=short -x
         expected_exit: 0
+        timeout: 300
     depends_on: [2]
     on_error: skip
     max_retries: 1
