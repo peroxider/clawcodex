@@ -348,6 +348,9 @@ class DashboardState:
         self._event_by_type: dict[str, int] = {}
         # Track completed issues whose historical events have been loaded
         self._loaded_historical: set[str] = set()
+        # Track run_ids that were ever actively tailed, to prevent
+        # load_historical() from re-reading files the tailer already consumed
+        self._ever_tailed: set[str] = set()
 
     def refresh_snapshot(self, force: bool = False) -> dict[str, Any]:
         now = time.time()
@@ -365,17 +368,18 @@ class DashboardState:
                         ws = issue.get("workspace_path")
                         if ws:
                             run_id_map[rid] = (issue["issue_id"], Path(ws))
+                            self._ever_tailed.add(rid)
                 self.tailer_manager.sync_active_run_ids(run_id_map)
 
                 # 2b. One-shot historical load for completed issues with run_id
-                # that haven't been loaded yet. This populates the feed and
-                # distribution panels after a dashboard restart.
+                # that haven't been loaded yet AND were never actively tailed.
                 for issue in issues.get("issues", []):
                     rid = issue.get("run_id")
                     if (
                         rid
                         and issue.get("status") not in ACTIVE_STATUSES
                         and rid not in self._loaded_historical
+                        and rid not in self._ever_tailed
                     ):
                         ws = issue.get("workspace_path")
                         if ws:
@@ -399,7 +403,7 @@ class DashboardState:
                     "events": {
                         "total": sum(self._event_by_type.values()),
                         "by_type": dict(self._event_by_type),
-                        "recent": list(self._recent_events)[:50],
+                        "recent": list(self._recent_events)[:200],
                     },
                     "token_activity": self._build_token_activity(issues),
                 }
