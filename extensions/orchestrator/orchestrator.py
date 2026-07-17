@@ -3147,6 +3147,9 @@ class Orchestrator:
                             "followup"
                             if session.run_kind
                             in ("agent_followup", "review_followup", "review_retry")
+                            and not isinstance(self.tracker, __import__(
+                                "extensions.orchestrator.local_tracker.adapter", fromlist=["LocalTrackerAdapter"]
+                            ).LocalTrackerAdapter)
                             else "default"
                         )
                         sync_result = await self.git_sync.sync(session, mode=sync_mode)
