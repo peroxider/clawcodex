@@ -8,4 +8,5 @@ recursive-include extensions *.json
 recursive-include extensions *.html
 recursive-include extensions *.css
 recursive-include extensions *.js
+recursive-include clawcodex_ext/skills/bundled/spec_audit_resources *.md *.py *.yaml
 prune src/upstream

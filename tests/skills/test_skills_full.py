@@ -94,6 +94,18 @@ class TestValidateSkillDefinition:
         )
         assert validate_skill_definition(defn) == []
 
+    def test_required_resources_need_declared_files(self):
+        defn = BundledSkillDefinition(
+            name="resource-dependent",
+            description="requires a resource tree",
+            requires_resources=True,
+            get_prompt_for_command=lambda a: a,
+        )
+
+        errors = validate_skill_definition(defn)
+
+        assert any(error.field == "files" for error in errors)
+
     def test_empty_alias(self):
         defn = BundledSkillDefinition(
             name="my-skill",

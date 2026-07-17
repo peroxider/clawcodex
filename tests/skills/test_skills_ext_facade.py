@@ -225,6 +225,7 @@ def test_catalog_initializes_converter_without_expanding_core_bundled_skills(
         "verify-content",
         "update-config",
         "remember",
+        "spec-audit",
         "verify",
     }
     clear_bundled_skills()

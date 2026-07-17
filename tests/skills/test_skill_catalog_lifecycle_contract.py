@@ -247,7 +247,15 @@ def test_bare_catalog_only_keeps_additional_bundled_and_mcp_skills(
     )
     names = {skill.name for skill in snapshot.skills}
 
-    assert {"simplify", "debug", "loop", "stuck", "verify-content", "update-config"} <= names
+    assert {
+        "simplify",
+        "debug",
+        "loop",
+        "spec-audit",
+        "stuck",
+        "verify-content",
+        "update-config",
+    } <= names
     assert {"explicit-additional", "mcp-visible"} <= names
     assert {
         "project-standard",

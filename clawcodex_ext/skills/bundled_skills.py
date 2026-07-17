@@ -48,6 +48,7 @@ class BundledSkillDefinition:
     agent: str | None = None
     hooks: dict[str, Any] | None = None
     files: dict[str, str] | None = None
+    requires_resources: bool = False
 
 
 _bundled_skills: list[Skill] = []
@@ -187,6 +188,13 @@ def validate_skill_definition(
         errors.append(SkillValidationError("description", "Skill description is required"))
     if not callable(definition.get_prompt_for_command):
         errors.append(SkillValidationError("get_prompt_for_command", "Prompt builder is required"))
+    if definition.requires_resources and not definition.files:
+        errors.append(
+            SkillValidationError(
+                "files",
+                "Resource-dependent bundled skills must declare at least one file",
+            )
+        )
 
     if definition.context not in VALID_CONTEXTS:
         errors.append(
@@ -429,6 +437,11 @@ def _build_prompt_wrapper(
         )
         setattr(get_prompt, "_bundled_resource_diagnostic", diagnostic)
         if extracted_dir is None:
+            if definition.requires_resources:
+                raise RuntimeError(
+                    f"Required bundled resources for skill {definition.name!r} "
+                    "could not be extracted"
+                )
             return prompt
         return f"Base directory for this skill: {extracted_dir}\n\n{prompt}"
 
