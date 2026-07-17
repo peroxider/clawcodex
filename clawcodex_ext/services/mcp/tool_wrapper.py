@@ -211,6 +211,10 @@ def wrap_mcp_tool(
     bound_validator = _get_input_validator(server_name, mcp_tool.name, input_schema)
 
     def _call(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
+        manager_loop = getattr(ctx, "mcp_manager_loop", None)
+        if manager_loop is not None and not manager_loop.is_closed():
+            return _run_on_mcp_loop(_async_call(args, ctx), manager_loop)
+
         # Detect whether we're inside a running event loop. In 3.14+,
         # ``get_event_loop()`` raises when no loop is set in the current
         # thread, so use ``get_running_loop()`` (the running-only API)
@@ -355,6 +359,25 @@ def wrap_mcp_tool(
         always_load=always_load_val,
         input_json_schema=input_schema,
     )
+
+
+def _run_on_mcp_loop(
+    coroutine: Any,
+    loop: asyncio.AbstractEventLoop,
+) -> ToolResult:
+    """Run a wrapped MCP call on the loop that owns its client transport."""
+    import concurrent.futures
+
+    try:
+        if loop.is_running():
+            return asyncio.run_coroutine_threadsafe(coroutine, loop).result()
+
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            return pool.submit(loop.run_until_complete, coroutine).result()
+    except Exception:
+        if hasattr(coroutine, "close"):
+            coroutine.close()
+        raise
 
 
 def wrap_mcp_tools_for_server(
