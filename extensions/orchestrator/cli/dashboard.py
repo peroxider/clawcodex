@@ -11,14 +11,25 @@ dashboard server reads these logs to render a web UI.
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
+import logging
 import os
+import signal
+import sys
 import threading
 import time
+from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
+
+# Local import for the on-demand Visualizer session viewer.
+from ..session_viewer import SessionViewerManager  # noqa: E402
+from ..event_tailer import EventTailerManager  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -230,6 +241,9 @@ def _gather_issue_metadata(workspace: Path) -> dict[str, Any]:
                 "updated_at": updated_at,
                 "age_seconds": age_seconds,
                 "idle_seconds": idle_seconds,
+                "run_id": record.get("run_id"),
+                "run_turn_count": record.get("run_turn_count", 0),
+                "run_tool_count": record.get("run_tool_count", 0),
             }
         )
 
@@ -299,20 +313,6 @@ def _gather_metadata(workspace: Path) -> dict[str, Any]:
     }
 
 
-def build_state_snapshot(workspace: Path) -> dict[str, Any]:
-    """Assemble a complete snapshot for the dashboard."""
-    issues = _gather_issue_metadata(workspace)
-    meta = _gather_metadata(workspace)
-    return {
-        "type": "snapshot",
-        "ts": time.time(),
-        "workspace": str(workspace),
-        "workspace_exists": workspace.exists(),
-        "metadata": meta,
-        "issues": issues,
-    }
-
-
 # ---------------------------------------------------------------------------
 # HTTP handler
 # ---------------------------------------------------------------------------
@@ -323,18 +323,99 @@ class DashboardState:
 
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace
-        self.snapshot: dict[str, Any] = build_state_snapshot(workspace)
+        self.snapshot: dict[str, Any] = {
+            "type": "snapshot",
+            "ts": time.time(),
+            "workspace": str(workspace),
+            "workspace_exists": workspace.exists(),
+            "metadata": _gather_metadata(workspace),
+            "issues": _gather_issue_metadata(workspace),
+            "events": {"total": 0, "by_type": {}, "recent": []},
+            "token_activity": {
+                "active_sessions": 0,
+                "total_turns": 0,
+                "total_tools": 0,
+            },
+        }
         self.last_snapshot_at: float = time.time()
-        self.snapshot_interval: float = 1.0
+        self.snapshot_interval: float = 0.5
         self._lock = threading.Lock()
+        # Event tailer for live per-session events
+        self.tailer_manager = EventTailerManager(workspace)
+        atexit.register(self.tailer_manager.stop_all)
+        # Rolling event buffers
+        self._recent_events: deque[dict[str, Any]] = deque(maxlen=200)
+        self._event_by_type: dict[str, int] = {}
+        # Track completed issues whose historical events have been loaded
+        self._loaded_historical: set[str] = set()
 
     def refresh_snapshot(self, force: bool = False) -> dict[str, Any]:
         now = time.time()
         with self._lock:
             if force or (now - self.last_snapshot_at) >= self.snapshot_interval:
-                self.snapshot = build_state_snapshot(self.workspace)
+                # 1. Read registry + metadata
+                issues = _gather_issue_metadata(self.workspace)
+                meta = _gather_metadata(self.workspace)
+
+                # 2. Sync tailers: extract active run_id → (issue_id, workspace_path) mapping
+                run_id_map: dict[str, tuple[str, Path]] = {}
+                for issue in issues.get("issues", []):
+                    rid = issue.get("run_id")
+                    if rid and issue.get("status") in ACTIVE_STATUSES:
+                        ws = issue.get("workspace_path")
+                        if ws:
+                            run_id_map[rid] = (issue["issue_id"], Path(ws))
+                self.tailer_manager.sync_active_run_ids(run_id_map)
+
+                # 2b. One-shot historical load for completed issues with run_id
+                # that haven't been loaded yet. This populates the feed and
+                # distribution panels after a dashboard restart.
+                for issue in issues.get("issues", []):
+                    rid = issue.get("run_id")
+                    if (
+                        rid
+                        and issue.get("status") not in ACTIVE_STATUSES
+                        and rid not in self._loaded_historical
+                    ):
+                        ws = issue.get("workspace_path")
+                        if ws:
+                            self.tailer_manager.load_historical(rid, issue["issue_id"], Path(ws))
+                            self._loaded_historical.add(rid)
+
+                # 3. Drain events, update rolling buffers
+                for evt in self.tailer_manager.drain_events():
+                    self._recent_events.appendleft(evt)
+                    et = evt.get("event_type", "unknown")
+                    self._event_by_type[et] = self._event_by_type.get(et, 0) + 1
+
+                # 4. Assemble snapshot with events + token_activity
+                self.snapshot = {
+                    "type": "snapshot",
+                    "ts": time.time(),
+                    "workspace": str(self.workspace),
+                    "workspace_exists": self.workspace.exists(),
+                    "metadata": meta,
+                    "issues": issues,
+                    "events": {
+                        "total": sum(self._event_by_type.values()),
+                        "by_type": dict(self._event_by_type),
+                        "recent": list(self._recent_events)[:50],
+                    },
+                    "token_activity": self._build_token_activity(issues),
+                }
                 self.last_snapshot_at = now
             return self.snapshot
+
+    def _build_token_activity(self, issues: dict[str, Any]) -> dict[str, Any]:
+        """从 registry 计数组装 token_activity（活跃会话数 + turns/tools）。"""
+        issue_list = issues.get("issues", [])
+        all_with_run = [i for i in issue_list if i.get("run_id")]
+        active = [i for i in all_with_run if i.get("status") in ACTIVE_STATUSES]
+        return {
+            "active_sessions": len(active),
+            "total_turns": sum(i.get("run_turn_count", 0) for i in all_with_run),
+            "total_tools": sum(i.get("run_tool_count", 0) for i in all_with_run),
+        }
 
 
 # JavaScript payload of the dashboard HTML. Kept in a module-level constant so
@@ -581,6 +662,9 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
       font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
       color: var(--c, var(--fg-2));
     }
+    .events-mini .row > span:last-child {
+      white-space: pre-wrap; word-break: break-word;
+    }
     .empty {
       padding: 28px 16px; text-align: center; color: var(--fg-3); font-size: 12px;
     }
@@ -644,6 +728,20 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     .nowrap { white-space: nowrap; }
     .right { text-align: right; }
     .hidden { display: none !important; }
+    .session-link {
+      display: inline-flex; align-items: center; gap: 4px;
+      margin-left: 6px; padding: 1px 7px;
+      font-size: 11px; font-weight: 500;
+      border-radius: 4px;
+      background: rgba(88,166,255,0.10);
+      color: var(--accent);
+      border: 1px solid rgba(88,166,255,0.20);
+      text-decoration: none;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+    .session-link:hover { background: rgba(88,166,255,0.20); text-decoration: none; }
+    .session-link::before { content: "▶"; font-size: 8px; }
   </style>
 </head>
 <body>
@@ -722,8 +820,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         <h3>Token Activity</h3>
         <div class="small" id="tok-summary" style="color:var(--fg-1)">
           <div>Active sessions: <b id="tok-active">0</b></div>
-          <div>Aggregate events: <b id="tok-events">0</b></div>
-          <div class="muted" style="margin-top:6px">Per-session counters stream from orchestrator state.</div>
+          <div>Turns: <b id="tok-turns">0</b> | Tools: <b id="tok-events">0</b></div>
         </div>
       </div>
     </div>
@@ -735,10 +832,9 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         <div class="actions">
           <select id="feed-type">
             <option value="">All event types</option>
-            <option value="tool_call">tool_call</option>
-            <option value="tool_result">tool_result</option>
-            <option value="text_delta">text_delta</option>
-            <option value="phase_complete">phase_complete</option>
+            <option value="tool_call">Tool Call</option>
+            <option value="tool_result">Tool Result</option>
+            <option value="agent_text">Agent Text</option>
           </select>
           <button id="feed-clear" style="background:var(--bg-2);border:1px solid var(--line);color:var(--fg-1);border-radius:6px;padding:4px 8px;cursor:pointer;">Clear</button>
         </div>
@@ -761,8 +857,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     const EVENT_TYPE_META = {
       tool_call:      { color: "#a371f7", label: "Tool Call" },
       tool_result:    { color: "#3fb950", label: "Tool Result" },
-      text_delta:     { color: "#79c0ff", label: "Text Delta" },
-      phase_complete: { color: "#d29922", label: "Phase Complete" },
+      agent_text:     { color: "#79c0ff", label: "Agent Text" },
     };
     const MAX_FEED_ROWS = 500;
 
@@ -770,6 +865,8 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     const state = {
       snapshot: null,
       selectedIssueId: null,
+      _lastDetailSig: "",   // signature of last rendered detail panel
+      _feedClearedTs: 0,    // Unix ts of last "Clear" click; events older than this are suppressed
       filter: "",
       statusFilter: "",
       feedTypeFilter: "",
@@ -793,6 +890,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
       detail: $("detail"), detailSub: $("detail-sub"),
       distBar: $("dist-bar"), distLegend: $("dist-legend"),
       tokActive: $("tok-active"), tokEvents: $("tok-events"),
+      tokTurns: $("tok-turns"),
     };
 
     // ---- Utilities ---------------------------------------------------------
@@ -827,6 +925,49 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     function truncate(s, n) {
       s = s == null ? "" : String(s);
       return s.length > n ? s.slice(0, n - 1) + "…" : s;
+    }
+
+    // ---- Event body helpers (shared by renderFeed + renderDetail) --------
+    function toolCallBody(ev) {
+      const name = escapeHtml(ev.tool_name || "?");
+      const p = ev.params;
+      let detail = "";
+      if (p && typeof p === "object" && !Array.isArray(p)) {
+        // Tool-specific extraction for readability
+        const cmd = p.command || p.cmd;
+        const path = p.file_path || p.path || p.pathname;
+        const pattern = p.pattern || p.query || p.regex;
+        const url = p.url;
+        if (cmd) detail = truncate(cmd, 120);
+        else if (path) detail = truncate(path, 100);
+        else if (pattern) detail = truncate(pattern, 80);
+        else if (url) detail = truncate(url, 100);
+        else {
+          const vals = Object.values(p).filter(v => v != null);
+          if (vals.length > 0) detail = truncate(String(vals[0]), 100);
+        }
+      } else if (typeof p === "string") {
+        detail = truncate(p, 120);
+      }
+      return `<b>${name}</b>` + (detail ? ` <span class="muted">${escapeHtml(detail)}</span>` : "");
+    }
+    function toolResultBody(ev) {
+      const name = escapeHtml(ev.tool_name || "?");
+      const err = ev.is_error ? ' <span style="color:var(--bad)">[error]</span>' : "";
+      let detail = "";
+      const c = ev.result_content;
+      if (c) {
+        detail = typeof c === "string" ? c : (Array.isArray(c) ? c.map(b => (b && b.text) || "").join("") : JSON.stringify(c));
+        detail = truncate(detail, 200);
+      }
+      return `<b>${name}</b>${err}` + (detail ? ` <span class="muted">${escapeHtml(detail)}</span>` : "");
+    }
+    function eventBody(ev) {
+      const t = ev.type || "?";
+      if (t === "tool_call") return toolCallBody(ev);
+      if (t === "tool_result") return toolResultBody(ev);
+      if (t === "agent_text") return `<span>${escapeHtml(truncate(ev.content || "", 160))}</span>`;
+      return `<span class="mono">${escapeHtml(truncate(JSON.stringify(ev), 140))}</span>`;
     }
 
     function pillFor(status) {
@@ -878,10 +1019,13 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
           ? `<span class="mono" title="${escapeHtml(i.workspace_path || "")}">${escapeHtml(truncate(i.workspace_short, 30))}</span>`
           : `<span class="muted">—</span>`;
         const sel = i.issue_id === state.selectedIssueId ? " selected" : "";
+        const sessionLink = i.run_id
+          ? `<a class="session-link" href="#" onclick="openSessionViewer('${escapeHtml(i.run_id)}');return false;">Session</a>`
+          : '';
         return `
           <tr class="issue-row${sel}" data-id="${escapeHtml(i.issue_id)}">
             <td>${pillFor(i.status)}</td>
-            <td class="identifier">${escapeHtml(i.identifier)}</td>
+            <td class="identifier">${escapeHtml(i.identifier)} ${sessionLink}</td>
             <td class="branch">${branch}</td>
             <td>${pr}</td>
             <td class="workspace">${ws}</td>
@@ -930,8 +1074,11 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
       }
       el.hdrPrs.textContent = (snap.issues && snap.issues.totals && snap.issues.totals.prs) || 0;
       el.hdrEvents.textContent = (snap.events && snap.events.total) || 0;
-      el.tokActive.textContent = (snap.issues && snap.issues.totals && snap.issues.totals.active) || 0;
-      el.tokEvents.textContent = (snap.events && snap.events.total) || 0;
+      // Token Activity: active sessions / turns / tools
+      const ta = snap.token_activity || {};
+      el.tokActive.textContent = ta.active_sessions || 0;
+      el.tokTurns.textContent = ta.total_turns || 0;
+      el.tokEvents.textContent = ta.total_tools || 0;
     }
 
     function renderDetail(issueId) {
@@ -952,6 +1099,9 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         ["Identifier",   `<b>${escapeHtml(issue.identifier)}</b>`],
         ["Issue ID",     `<span class="mono">${escapeHtml(issue.issue_id)}</span>`],
         ["Status",       pillFor(issue.status)],
+        ["Session",      issue.run_id
+            ? `<a href="#" onclick="openSessionViewer('${escapeHtml(issue.run_id)}');return false;">View Session Timeline →</a>`
+            : `<span class="muted">—</span>`],
         ["Branch",       issue.branch_name ? `<span class="mono">${escapeHtml(issue.branch_name)}</span>` : `<span class="muted">—</span>`],
         ["Base branch",  `<span class="mono">${escapeHtml(issue.base_branch || "main")}</span>`],
         ["Commit",       issue.commit_sha ? `<span class="mono">${escapeHtml(shortSha(issue.commit_sha))}</span> <span class="muted">${escapeHtml(issue.commit_sha)}</span>` : `<span class="muted">—</span>`],
@@ -974,19 +1124,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             const ev = e.event || {};
             const t = ev.type || "?";
             const m2 = EVENT_TYPE_META[t] || { color: "#8b949e", label: t.toUpperCase() };
-            let body = "";
-            if (t === "tool_call") {
-              const params = ev.params ? JSON.stringify(ev.params) : "";
-              body = `<span class="mono">${escapeHtml(truncate(params, 120))}</span>`;
-            } else if (t === "tool_result") {
-              body = `<span class="mono">${escapeHtml(ev.tool_name || "")}</span>${ev.is_error ? ' <span style="color:var(--bad)">[error]</span>' : ""}`;
-            } else if (t === "text_delta") {
-              body = `<span>${escapeHtml(truncate(ev.content || "", 120))}</span>`;
-            } else if (t === "phase_complete") {
-              body = `phase ${ev.phase || "?"} · turn ${ev.turn_count || "?"}`;
-            } else {
-              body = `<span class="mono">${escapeHtml(truncate(JSON.stringify(ev), 120))}</span>`;
-            }
+            const body = eventBody(ev);
             return `<div class="row" style="--c:${m2.color}"><span class="ts">${escapeHtml(e.timestamp || "")}</span><span class="type" style="color:${m2.color}">${m2.label}</span><span>${body}</span></div>`;
           }).join("");
 
@@ -1013,19 +1151,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         const ev = e.event || {};
         const t = ev.type || "?";
         const m = EVENT_TYPE_META[t] || { color: "#8b949e", label: t.toUpperCase() };
-        let body = "";
-        if (t === "tool_call") {
-          const params = ev.params ? JSON.stringify(ev.params) : "";
-          body = `<b>${escapeHtml(ev.tool_name || "?")}</b> <span class="muted">${escapeHtml(truncate(params, 100))}</span>`;
-        } else if (t === "tool_result") {
-          body = `<b>${escapeHtml(ev.tool_name || "?")}</b>${ev.is_error ? ' <span style="color:var(--bad)">[error]</span>' : ""}`;
-        } else if (t === "text_delta") {
-          body = `<span>${escapeHtml(truncate(ev.content || "", 160))}</span>`;
-        } else if (t === "phase_complete") {
-          body = `<span>phase ${escapeHtml(String(ev.phase || "?"))} · turn ${escapeHtml(String(ev.turn_count || "?"))}</span>`;
-        } else {
-          body = `<span class="mono">${escapeHtml(truncate(JSON.stringify(ev), 140))}</span>`;
-        }
+        const body = eventBody(ev);
         return `<div class="row" style="--c:${m.color}"><span class="ts">${escapeHtml(e.timestamp || "")}</span><span class="type" style="color:${m.color}">${m.label}</span><span class="ident">${escapeHtml(identifierFor(e.issue_id))}</span><span class="msg">${body}</span></div>`;
       }).join("");
     }
@@ -1052,18 +1178,71 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
       renderStatusGrid(state.snapshot.issues.by_status || {});
       renderStatusFilter();
       renderIssues(state.snapshot.issues.issues || []);
-      renderDistribution(state.snapshot.events.by_type || {});
-      if (state.selectedIssueId) renderDetail(state.selectedIssueId);
+      renderDistribution((state.snapshot.events && state.snapshot.events.by_type) || {});
+      // Only re-render detail panel when its data actually changed.
+      // This prevents the "Recent Events" list from being rebuilt every 0.5s,
+      // which would reset scroll position and make it unreadable.
+      if (state.selectedIssueId) {
+        const issue = (state.snapshot.issues.issues || []).find(i => i.issue_id === state.selectedIssueId);
+        if (issue) {
+          const evtCount = (state.snapshot.events && state.snapshot.events.recent || [])
+            .filter(e => e.issue_id === state.selectedIssueId).length;
+          const sig = state.selectedIssueId + '|' + issue.status + '|' + issue.updated_at + '|' + evtCount;
+          if (sig !== state._lastDetailSig) {
+            renderDetail(state.selectedIssueId);
+            state._lastDetailSig = sig;
+          }
+        }
+      }
       renderFeed();
     }
 
     function applySnapshot(snap) {
       state.snapshot = snap;
+      if (!snap.events) snap.events = { by_type: {}, total: 0, recent: [] };
+
+      // Normalize events.recent in-place (EventTailerManager format → renderFeed/renderDetail format)
+      if (snap.events.recent) {
+        snap.events.recent = snap.events.recent.map(function(e) {
+          // Already normalized (e.g. from a previous applySnapshot pass)
+          if (e.event) return e;
+          return {
+            event: {
+              type: e.event_type || '?',
+              tool_name: (e.data && e.data.tool) || (e.data && e.data.tool_name) || '?',
+              approved: e.data && e.data.approved,
+              turn: e.data && e.data.turn,
+              deny_reason: e.data && e.data.deny_reason,
+              is_error: e.data && e.data.is_error,
+              params: e.data && e.data.params,
+              result_content: e.data && e.data.result_content,
+              content: e.data && e.data.content,
+            },
+            timestamp: e.ts ? new Date(e.ts * 1000).toLocaleTimeString("en-GB", { hour12: false }) : "",
+            issue_id: e.issue_id,
+            ts: e.ts,
+          };
+        });
+      }
+
+      // Incremental feed update: de-duplicate by ts+issue_id, respect Clear timestamp
+      if (snap.events.recent && snap.events.recent.length > 0) {
+        const clearedTs = state._feedClearedTs || 0;
+        const existingKeys = new Set(state.feed.map(e => e.ts + '|' + e.issue_id));
+        const newEvents = snap.events.recent
+          .filter(e => !existingKeys.has(e.ts + '|' + e.issue_id))
+          .filter(e => !clearedTs || e.ts > clearedTs)
+          .reverse();
+        newEvents.forEach(e => state.feed.unshift(e));
+        if (state.feed.length > MAX_FEED_ROWS * 2) state.feed.length = MAX_FEED_ROWS * 2;
+      }
+
       renderAll();
     }
 
     function selectIssue(issueId) {
       state.selectedIssueId = state.selectedIssueId === issueId ? null : issueId;
+      state._lastDetailSig = "";  // force re-render on manual selection
       renderIssues(state.snapshot.issues.issues || []);
       if (state.selectedIssueId) renderDetail(state.selectedIssueId);
       else {
@@ -1078,6 +1257,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
       if (state.feed.length > MAX_FEED_ROWS * 2) state.feed.length = MAX_FEED_ROWS * 2;
       // Increment by_type counter and update distribution live.
       if (state.snapshot && evt.event && evt.event.type) {
+        if (!state.snapshot.events) state.snapshot.events = { by_type: {}, total: 0, recent: [] };
         const bt = state.snapshot.events.by_type || (state.snapshot.events.by_type = {});
         bt[evt.event.type] = (bt[evt.event.type] || 0) + 1;
         state.snapshot.events.total = (state.snapshot.events.total || 0) + 1;
@@ -1085,6 +1265,34 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         el.hdrEvents.textContent = state.snapshot.events.total;
       }
       renderFeed();
+    }
+
+    // ---- Session Viewer ----------------------------------------------------
+    let _viewerPort = null;
+
+    async function openSessionViewer(runId) {
+      try {
+        // If we have a cached port, probe it first; reset on failure.
+        if (_viewerPort) {
+          try {
+            const probe = await fetch(`http://localhost:${_viewerPort}/api/viz/health`, { method: 'HEAD' });
+            if (probe.ok) {
+              window.open(`http://localhost:${_viewerPort}/session/${encodeURIComponent(runId)}`, '_blank');
+              return;
+            }
+          } catch (_) { /* viewer was killed (idle timeout) — reset and retry */ }
+          _viewerPort = null;
+        }
+        const resp = await fetch('/api/session-viewer/start', { method: 'POST' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const { port } = await resp.json();
+        _viewerPort = port;
+        window.open(`http://localhost:${port}/session/${encodeURIComponent(runId)}`, '_blank');
+      } catch (e) {
+        console.error('Failed to start session viewer:', e);
+        _viewerPort = null;
+        alert('无法启动会话查看器，请稍后重试。');
+      }
     }
 
     // ---- SSE ---------------------------------------------------------------
@@ -1125,6 +1333,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
       renderFeed();
     });
     el.feedClear.addEventListener("click", () => {
+      state._feedClearedTs = Date.now() / 1000;
       state.feed = [];
       renderFeed();
     });
@@ -1221,6 +1430,49 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         self.send_error(404, "Not Found")
 
+    def do_POST(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        path = parsed.path or "/"
+
+        if path == "/api/session-viewer/start":
+            try:
+                viewer = getattr(self.__class__, "viewer_manager", None)
+                if viewer is None:
+                    self._send_json({"error": "viewer manager not available"}, 503)
+                    return
+                port = viewer.ensure_running()
+                self._send_json({"port": port, "pid": viewer.pid})
+            except Exception as exc:
+                logger.error("Failed to start session viewer: %s", exc)
+                self._send_json({"error": str(exc)}, 500)
+            return
+
+        if path == "/api/session-viewer/stop":
+            try:
+                viewer = getattr(self.__class__, "viewer_manager", None)
+                if viewer is not None:
+                    viewer.stop()
+                self._send_json({"ok": True})
+            except Exception as exc:
+                self._send_json({"error": str(exc)}, 500)
+            return
+
+        if path == "/api/session-viewer/status":
+            viewer = getattr(self.__class__, "viewer_manager", None)
+            if viewer is None:
+                self._send_json({"running": False, "port": 0})
+            else:
+                self._send_json(
+                    {
+                        "running": viewer.is_running,
+                        "port": viewer.port,
+                        "uptime_s": viewer.uptime_s,
+                    }
+                )
+            return
+
+        self.send_error(404, "Not Found")
+
     # ----- SSE streaming ---------------------------------------------------
 
     def _stream_events(self) -> None:
@@ -1288,6 +1540,22 @@ def run(args: argparse.Namespace) -> int:
     # Bind the per-process state to the handler class.
     DashboardHandler.state = state
 
+    # Initialize the on-demand session viewer manager.
+    viewer_manager = SessionViewerManager(idle_timeout_s=300)
+    DashboardHandler.viewer_manager = viewer_manager
+
+    # Convert SIGTERM / SIGHUP into KeyboardInterrupt so the existing
+    # except-block + atexit hooks clean up the Visualizer subprocess and
+    # tailer threads.  Without this, `kill <pid>` or closing the terminal
+    # would orphan the subprocess (it's in a separate process group via
+    # os.setsid, so the signal doesn't reach it directly).
+    def _graceful_signal(signum: int, frame: Any) -> None:
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _graceful_signal)
+    if hasattr(signal, "SIGHUP"):
+        signal.signal(signal.SIGHUP, _graceful_signal)
+
     print(f"[dashboard] Workspace : {workspace}")
     print(f"[dashboard] Starting LiveView dashboard on http://{host}:{port}")
     if not workspace.exists():
@@ -1307,8 +1575,8 @@ def run(args: argparse.Namespace) -> int:
             except Exception:
                 pass
 
-        print(f"[dashboard] Serving at http://{host}:{port}", file=__import__("sys").stderr)
-        print("[dashboard] Press Ctrl+C to stop", file=__import__("sys").stderr)
+        print(f"[dashboard] Serving at http://{host}:{port}", file=sys.stderr)
+        print("[dashboard] Press Ctrl+C to stop", file=sys.stderr)
 
         # Park the main thread.
         while True:
@@ -1316,7 +1584,11 @@ def run(args: argparse.Namespace) -> int:
     except KeyboardInterrupt:
         print("\n[dashboard] stopped")
     except OSError as exc:
-        print(f"[dashboard] error: {exc}", file=__import__("sys").stderr)
+        print(f"[dashboard] error: {exc}", file=sys.stderr)
         return 1
+    finally:
+        # Explicit cleanup (belt-and-suspenders alongside atexit hooks).
+        viewer_manager.stop()
+        state.tailer_manager.stop_all()
 
     return 0
