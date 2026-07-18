@@ -1604,3 +1604,76 @@ class TestStage5ExtPromptLab:
 
         for mod in ("src.tui.app", "src.repl.core", "src.tool_system.registry"):
             assert mod not in sys.modules, f"{mod} was pulled in by prompt_lab import"
+
+
+
+class TestStage5ExtContextProviders:
+    """P119-I: context_providers reference implementations smoke tests.
+
+    Validates that all three example providers are importable and
+    register sections with the correct metadata.
+    """
+
+    def test_from_issue_import_and_registration(self):
+        """from_issue registers 'issue-context' with correct order/tags."""
+        from extensions.context_providers.from_issue import _issue_context_builder
+        from clawcodex_ext.context_system.section_registry import (
+            _registry,
+            get_sections_by_tag,
+        )
+
+        assert "issue-context" in _registry
+        sec = _registry["issue-context"]
+        assert sec.order == 55
+        assert "workflow" in sec.tags
+        assert "issue-tracker" in sec.tags
+
+        # Builder returns content when issue_info is present
+        content = sec.builder({"issue_info": {"title": "T", "description": "D", "labels": []}})
+        assert content is not None
+        assert "T" in content
+
+        # Builder returns None when issue_info is absent
+        assert sec.builder({}) is None
+
+    def test_from_ci_import_and_registration(self):
+        """from_ci registers 'ci-status' with correct order/tags."""
+        from extensions.context_providers.from_ci import _ci_status_builder
+        from clawcodex_ext.context_system.section_registry import _registry
+
+        assert "ci-status" in _registry
+        sec = _registry["ci-status"]
+        assert sec.order == 56
+        assert "ci" in sec.tags
+
+        # Builder returns content when ci_status is present
+        content = sec.builder({"ci_status": "passing"})
+        assert content is not None
+        assert "passing" in content
+
+        # Builder returns None when ci_status is absent
+        assert sec.builder({}) is None
+
+    def test_from_config_import_and_registration(self):
+        """from_config registers 'declared-config' with correct order/tags."""
+        from extensions.context_providers.from_config import _config_sections_builder
+        from clawcodex_ext.context_system.section_registry import _registry
+
+        assert "declared-config" in _registry
+        sec = _registry["declared-config"]
+        assert sec.order == 57
+        assert "config" in sec.tags
+
+        # Builder returns content when custom.declared_sections is present
+        content = sec.builder({
+            "custom": {
+                "declared_sections": [
+                    {"title": "Cfg", "content": "Config content"},
+                ],
+            },
+        })
+        assert content is not None
+        assert "Config content" in content
+
+        # Builder returns None without config
+        assert sec.builder({}) is None
