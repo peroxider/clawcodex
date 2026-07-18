@@ -1,18 +1,23 @@
-"""Generic section builder registry for system prompt assembly.
+"""Unified section registry for system prompt assembly (P119-A/B/H).
 
-Generalises the ``register_memory_section_builder`` pattern so that every
-section (7 static + 11 dynamic) can be overridden or extended by downstream
-code without modifying ``prompt_assembly.py``.
+Consolidates the three-way split (builder list + inserted list + canonical
+maps) into a single ``_registry: dict[str, RegisteredSection]`` where every
+section — whether it overrides a known slot or injects a new one — lives in
+one place with its builder, order, cache_scope, and tags.
 
-Provides the low-level builder registry (P119-A) and the high-level
-override API (P119-B): ``override_section``, ``disable_section``,
-``insert_section``.
+Sub-features:
+  P119-A — ``register_section(id, *, builder, order, cache_scope, tags)``
+  P119-B — ``override_section`` / ``disable_section`` / ``insert_section``
+           thin wrappers around ``register_section``
+  P119-H — tags metadata, ``get_sections_by_tag``,
+           ``collect_new_sections(runtime_ctx)``
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Protocol
+from typing import Any, Callable
 
 from clawcodex_ext.context_system.system_prompt_cache import (
     CacheScope,
@@ -22,33 +27,44 @@ from clawcodex_ext.context_system.system_prompt_cache import (
 )
 
 
-class SectionScope(str, Enum):
-    """Cache scope for a section builder registration.
+# ---------------------------------------------------------------------------
+# SectionScope — cache-scope enum independent of system_prompt_cache
+# ---------------------------------------------------------------------------
 
-    Mirrors the values of ``CacheScope`` from
-    ``clawcodex_ext.context_system.system_prompt_cache``, but is defined
-    independently here to avoid a circular dependency at import time.
+class SectionScope(str, Enum):
+    """Cache scope for a section registration.
+
+    Mirrors ``CacheScope`` from ``system_prompt_cache`` but is defined
+    here to avoid a circular dependency at import time.
     """
     GLOBAL = "global"
     SESSION = "session"
     REQUEST = "request"
 
 
-class SectionBuilder(Protocol):
-    """A callable that builds a :class:`SystemPromptSection` or returns ``None``.
+# ---------------------------------------------------------------------------
+# RegisteredSection — one structure holds all metadata
+# ---------------------------------------------------------------------------
 
-    Builders are called with no arguments.  Returning ``None`` signals
-    "no override — use the default section", allowing the next builder
-    (or the default) to be tried.
+@dataclass
+class RegisteredSection:
+    """A registered section with builder, position, and tags.
+
+    The builder receives the per-call ``runtime_ctx`` dict and returns
+    content (or ``None`` to suppress the section).
     """
-    def __call__(self) -> "SystemPromptSection | None": ...
+    id: str
+    builder: Callable[[dict[str, Any]], str | None]
+    order: int
+    cache_scope: SectionScope
+    tags: set[str] = field(default_factory=set)
 
 
 # ---------------------------------------------------------------------------
-# Canonical section metadata (order, scope) for all 18 known sections.
+# Canonical defaults (used when builder does not supply order / scope)
 # ---------------------------------------------------------------------------
 
-_SECTION_ORDER: dict[str, int] = {
+_CANONICAL_ORDER: dict[str, int] = {
     # Static modules (0-6)
     "intro": 0,
     "system": 1,
@@ -57,7 +73,7 @@ _SECTION_ORDER: dict[str, int] = {
     "using_tools": 4,
     "tone_style": 5,
     "output_efficiency": 6,
-    # Dynamic modules (10-90)
+    # Dynamic modules (10-95)
     "tool_docs": 10,
     "environment": 20,
     "memory": 25,
@@ -72,7 +88,7 @@ _SECTION_ORDER: dict[str, int] = {
     "iteration_meta": 95,
 }
 
-_SECTION_SCOPE: dict[str, SectionScope] = {
+_CANONICAL_SCOPE: dict[str, SectionScope] = {
     "intro": SectionScope.GLOBAL,
     "system": SectionScope.GLOBAL,
     "doing_tasks": SectionScope.GLOBAL,
@@ -94,119 +110,196 @@ _SECTION_SCOPE: dict[str, SectionScope] = {
     "iteration_meta": SectionScope.REQUEST,
 }
 
+# IDs of built-in sections (used by ``_build_*_section`` in prompt_assembly.py).
+# ``collect_new_sections`` skips these — they are handled by the dedicated
+# builder functions.
+_CANONICAL_IDS: frozenset[str] = frozenset(_CANONICAL_ORDER.keys())
+
 
 def get_section_order(section_id: str) -> int:
     """Return the canonical order for a known section, or 0 for unknown."""
-    return _SECTION_ORDER.get(section_id, 0)
+    return _CANONICAL_ORDER.get(section_id, 0)
 
 
 def get_section_scope(section_id: str) -> SectionScope:
     """Return the canonical scope for a known section, or SESSION for unknown."""
-    return _SECTION_SCOPE.get(section_id, SectionScope.SESSION)
+    return _CANONICAL_SCOPE.get(section_id, SectionScope.SESSION)
 
 
 # ---------------------------------------------------------------------------
-# Registry: section_id → list[SectionBuilder]
+# The registry: section_id → RegisteredSection
 # ---------------------------------------------------------------------------
 
-_section_builders: dict[str, list[SectionBuilder]] = {}
+_registry: dict[str, RegisteredSection] = {}
 
 
-def register_section_builder(
-    section_id: str,
-    builder: SectionBuilder,
-) -> None:
-    """Register a section builder for *section_id*.
+def register_section(
+    id: str,
+    *,
+    builder: Callable[[dict[str, Any]], str | None],
+    order: int | None = None,
+    cache_scope: SectionScope | None = None,
+    tags: list[str] | None = None,
+) -> RegisteredSection:
+    """Register a section provider.
 
-    Multiple builders can be registered for the same section; they are
-    consulted in registration order and the first non-``None`` result
-    wins.  This is the same semantics as the existing
-    ``register_memory_section_builder``.
+    If *id* matches a known built-in section (e.g. ``"intro"``), the
+    provider overrides its content.  Otherwise a new section is injected.
 
-    The canonical order and scope are derived from the internal
-    ``_SECTION_ORDER`` and ``_SECTION_SCOPE`` mappings — the caller does
-    not need to specify them.
+    The *builder* is called with the per-call ``runtime_ctx`` dict every
+    time the prompt is assembled.  Return ``None`` to suppress the section.
+
+    Args:
+        id: Unique identifier.  Known IDs override built-in sections;
+            unknown IDs inject a new section.
+        builder: ``(runtime_ctx: dict) -> str | None``.
+        order: Sort order.  ``None`` → infer from canonical map (or 50).
+        cache_scope: Cache scope.  ``None`` → infer from canonical map
+                     (or ``SESSION``).
+        tags: Optional list of tags for filtering/grouping.
+
+    Returns:
+        The created ``RegisteredSection``.
     """
-    _section_builders.setdefault(section_id, []).append(builder)
+    sec = RegisteredSection(
+        id=id,
+        builder=builder,
+        order=order if order is not None else _CANONICAL_ORDER.get(id, 50),
+        cache_scope=cache_scope if cache_scope is not None else _CANONICAL_SCOPE.get(id, SectionScope.SESSION),
+        tags=set(tags or []),
+    )
+    _registry[id] = sec
+    return sec
 
+
+def unregister_section(id: str) -> None:
+    """Remove a previously registered section (for hot-unload or tests)."""
+    _registry.pop(id, None)
+
+
+# ---------------------------------------------------------------------------
+# Query API
+# ---------------------------------------------------------------------------
 
 def consult_section_builders(
     section_id: str,
-) -> "SystemPromptSection | None":
-    """Consult registered builders for *section_id*.
+    runtime_ctx: dict[str, Any] | None = None,
+) -> SystemPromptSection | None:
+    """Consult the registry for *section_id*.
 
-    Builders are called in registration order.  The first non-``None``
-    result is returned.  If no builder is registered, or all return
-    ``None``, returns ``None`` — the caller should fall back to its
-    default section.
+    If a ``RegisteredSection`` exists for *section_id*, its builder is
+    called with the given *runtime_ctx*.  Returns a ``SystemPromptSection``
+    with the canonical order and scope, or ``None`` if the builder returned
+    ``None`` / raised / wasn't registered.
+
+    This is the primary entry point from ``prompt_assembly.py``'s
+    ``_build_*_section`` functions — they call it with the same ``id``
+    they pass to every other step, keeping call sites simple.
     """
-    builders = _section_builders.get(section_id)
-    if builders is None:
+    sec = _registry.get(section_id)
+    if sec is None:
         return None
-    for builder in builders:
-        result = builder()
-        if result is not None:
-            return result
-    return None
+    try:
+        content = sec.builder(runtime_ctx or {})
+    except Exception:
+        return None
+    # None  = "no override — caller should fall back to default"
+    # str   = "use this content" (may be empty = suppress)
+    if content is None:
+        return None
+    return SystemPromptSection(
+        id=sec.id,
+        content=content,
+        cache_scope=_to_cache_scope(sec.cache_scope),
+        order=sec.order,
+    )
+
+
+def collect_new_sections(
+    runtime_ctx: dict[str, Any],
+    *,
+    tags: list[str] | None = None,
+) -> list[SystemPromptSection]:
+    """Build all registered sections whose *id* is NOT a built-in slot.
+
+    This replaces the old ``get_inserted_sections()`` pattern.  New
+    sections have their own ``id`` and ``order``, so they sort naturally
+    alongside the built-in ones.
+
+    Args:
+        runtime_ctx: Per-call runtime context passed to every builder.
+        tags: Optional OR-filter — only build sections with any of the
+              given tags.
+
+    Returns:
+        A list of ``SystemPromptSection``, sorted by ``order``.
+    """
+    result: list[SystemPromptSection] = []
+    for sec in _registry.values():
+        if sec.id in _CANONICAL_IDS:
+            continue
+        if tags and not (sec.tags & set(tags)):
+            continue
+        try:
+            content = sec.builder(runtime_ctx)
+        except Exception:
+            continue
+        if content:
+            result.append(SystemPromptSection(
+                id=sec.id, content=content,
+                cache_scope=_to_cache_scope(sec.cache_scope),
+                order=sec.order,
+            ))
+    result.sort(key=lambda s: s.order)
+    return result
 
 
 # ---------------------------------------------------------------------------
-# Inserted sections — new sections injected between known sections (P119-B).
+# Tags
 # ---------------------------------------------------------------------------
 
-_inserted_sections: list["SystemPromptSection"] = []
+def get_sections_by_tag(*tags: str) -> list[RegisteredSection]:
+    """Return all registered sections matching ANY of *tags* (OR logic).
 
-
-def register_inserted_section(section: "SystemPromptSection") -> None:
-    """Register a new section to be inserted into the prompt.
-
-    Unlike :func:`register_section_builder` which overrides an existing
-    slot, this adds a brand-new section with a custom id and order. The
-    section is appended to the prompt after all known sections are built,
-    and sorted by order alongside them.
+    If no tags are given, returns **all** registered sections.
     """
-    _inserted_sections.append(section)
+    if not tags:
+        return list(_registry.values())
+    tag_set = set(tags)
+    return [sec for sec in _registry.values() if sec.tags & tag_set]
 
 
-def get_inserted_sections() -> list["SystemPromptSection"]:
-    """Return all registered inserted sections.
+def get_sections_by_all_tags(*tags: str) -> list[RegisteredSection]:
+    """Return sections matching ALL of *tags* (AND logic)."""
+    tag_set = set(tags)
+    if not tag_set:
+        return list(_registry.values())
+    return [sec for sec in _registry.values() if tag_set.issubset(sec.tags)]
 
-    The caller should append these to the sections list before sorting.
-    """
-    return list(_inserted_sections)
 
+def get_section_tags(section_id: str) -> set[str]:
+    """Return the tags for *section_id*, or an empty set."""
+    sec = _registry.get(section_id)
+    return sec.tags if sec else set()
+
+
+# ---------------------------------------------------------------------------
+# Test helper
+# ---------------------------------------------------------------------------
 
 def clear_section_registry() -> None:
-    """Clear all registered builders and inserted sections.
+    """Clear all registered sections.
 
-    Primarily used in tests to ensure clean state between test cases.
+    Primarily used by tests to ensure clean state between test cases.
     """
-    _section_builders.clear()
-    _inserted_sections.clear()
-
-
-def _clear_builders_for(section_id: str) -> None:
-    """Remove all builders registered for *section_id*.
-
-    Used by the override API (P119-B) to ensure that ``override_section``
-    and ``disable_section`` take highest priority — they clear any
-    previously registered builders before registering their own.
-    """
-    _section_builders.pop(section_id, None)
+    _registry.clear()
 
 
 # ---------------------------------------------------------------------------
-# High-level override / insert / disable API (P119-B)
+# High-level override / disable / insert API (P119-B) — thin wrappers
 # ---------------------------------------------------------------------------
-
-#: Sentinel content value for disabled sections.  When
-#: ``consult_section_builders`` returns a section with this as content,
-#: the caller treats it as ``None`` (section suppressed).
-_DISABLE_SENTINEL = ""
-
 
 def _to_cache_scope(scope: SectionScope) -> CacheScope:
-    """Convert a :class:`SectionScope` to the equivalent :class:`CacheScope`."""
     return CacheScope(scope.value)
 
 
@@ -221,19 +314,16 @@ def override_section(
     """Replace the content of *section_id* with *content*.
 
     The section is built as *cache-breaking* (recomputed every turn) to
-    prevent stale cached content from leaking through.  The override is
-    registered via the generic section builder registry and takes effect
-    on the next ``build_full_system_prompt`` call.
+    prevent stale cached content from leaking through.
 
-    The *reason* parameter is required by the
-    ``DANGEROUS_uncachedSystemPromptSection`` factory — it forces code
-    review to acknowledge that a cache break is being introduced.
+    The *reason* parameter is required by
+    ``DANGEROUS_uncachedSystemPromptSection`` — it forces code review to
+    acknowledge the cache break.
 
-    Returns the created :class:`SystemPromptSection` so callers can
-    inspect or chain it.
+    Returns the created :class:`SystemPromptSection` for inspection.
     """
-    canonical_order = order if order is not None else get_section_order(section_id)
-    canonical_scope = get_section_scope(section_id)
+    canonical_scope = _CANONICAL_SCOPE.get(section_id, SectionScope.SESSION)
+    canonical_order = order if order is not None else _CANONICAL_ORDER.get(section_id, 0)
 
     section = DANGEROUS_uncachedSystemPromptSection(
         name=section_id,
@@ -242,48 +332,33 @@ def override_section(
         cache_scope=cache_scope or _to_cache_scope(canonical_scope),
         order=canonical_order,
     )
-    # P119-B: override takes highest priority — clear any previously
-    # registered builders for this section before registering ours.
-    _clear_builders_for(section_id)
-    register_section_builder(section_id, lambda: section)
-    # P119-F: immediately invalidate the cache for this section so the
-    # override takes effect on the very next build.  Only invalidate(id)
-    # is needed — the build path checks cache first, and a cache miss
-    # causes it to consult builders (which will find the override).
-    from clawcodex_ext.context_system.prompt_assembly import get_system_prompt_cache
-
-    get_system_prompt_cache().invalidate(section_id)
+    register_section(
+        section_id,
+        builder=lambda _ctx: content,
+        order=canonical_order,
+        cache_scope=canonical_scope,
+        tags=["_override"],
+    )
+    # P119-F: invalidate cache so the override takes effect immediately.
+    _invalidate_section_cache(section_id)
     return section
 
 
 def disable_section(section_id: str) -> None:
     """Suppress *section_id* from the prompt.
 
-    Registers a builder that returns a section with empty content.  When
-    ``consult_section_builders`` returns a non-``None`` section whose
-    ``content`` is empty, the caller treats it as disabled (same as if
-    the section returned ``None``).
-
-    Note: this only works because the assembly layer filters out sections
-    with falsy ``content`` via ``if s.content`` guards.
+    Registers a builder that returns an empty string.  ``consult_section_builders``
+    treats ``""`` (non-``None``) as "use this content" so the empty section
+    replaces the default.  The build loop then filters it out with
+    ``if s.content`` — net effect: the section disappears.
     """
-    canonical_order = get_section_order(section_id)
-    canonical_scope = get_section_scope(section_id)
-
-    disabled = system_prompt_section(
-        name=section_id,
-        content=_DISABLE_SENTINEL,
-        cache_scope=_to_cache_scope(canonical_scope),
-        order=canonical_order,
+    register_section(
+        section_id,
+        builder=lambda _ctx: "",
+        order=_CANONICAL_ORDER.get(section_id, 0),
+        tags=["_disabled"],
     )
-    # P119-B: disable takes highest priority — clear any previously
-    # registered builders for this section before registering ours.
-    _clear_builders_for(section_id)
-    register_section_builder(section_id, lambda: disabled)
-    # P119-F: invalidate cache so the disable takes effect immediately.
-    from clawcodex_ext.context_system.prompt_assembly import get_system_prompt_cache
-
-    get_system_prompt_cache().invalidate(section_id)
+    _invalidate_section_cache(section_id)
 
 
 def insert_section(
@@ -294,20 +369,12 @@ def insert_section(
     cache_scope: CacheScope = CacheScope.SESSION,
     reason: str = "downstream insertion",
 ) -> SystemPromptSection:
-    """Insert a new section *new_id* after the section *after_id*.
+    """Insert a new section *new_id* after *after_id*.
 
-    The new section's order is set to *after_id*'s order + 0.5, so it
-    sorts directly after *after_id* in the prompt (all known sections
-    use integer orders).
-
-    Unlike ``override_section``, the new section does NOT go through the
-    builder registry (it has no corresponding ``_build_*_section``
-    function to consult).  Instead, it is stored in the
-    ``_inserted_sections`` list and appended by the assembly layer.
-
-    Returns the created :class:`SystemPromptSection`.
+    The new section's order = *after_id*'s order + 0.5 (all canonical
+    sections use integer orders).
     """
-    base_order = get_section_order(after_id)
+    base_order = _CANONICAL_ORDER.get(after_id, 50)
     new_order = base_order + 0.5
 
     section = DANGEROUS_uncachedSystemPromptSection(
@@ -317,5 +384,25 @@ def insert_section(
         cache_scope=cache_scope,
         order=new_order,
     )
-    register_inserted_section(section)
+    register_section(
+        new_id,
+        builder=lambda _ctx: content,
+        order=new_order,
+        cache_scope=SectionScope(cache_scope.value),
+    )
     return section
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _invalidate_section_cache(section_id: str) -> None:
+    """Invalidate the prompt cache for *section_id*.
+
+    Import is deferred to avoid a circular dependency:
+    ``prompt_assembly → section_registry → prompt_assembly``.
+    """
+    from clawcodex_ext.context_system.prompt_assembly import get_system_prompt_cache
+
+    get_system_prompt_cache().invalidate(section_id)

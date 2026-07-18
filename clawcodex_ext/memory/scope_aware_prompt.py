@@ -104,31 +104,15 @@ def build_scope_aware_memory_prompt(
     return combined
 
 
-def _memory_section_builder():
-    """Builder callback for ``register_memory_section_builder``.
-
-    Produces a scope-aware ``SystemPromptSection`` using the default scopes.
-    Returns ``None`` if scope-aware memory is not available or has no content,
-    allowing the upstream default memory path to take over.
-    """
-    from src.context_system.prompt_assembly import SystemPromptSection, CacheScope
-
-    prompt = build_scope_aware_memory_prompt(_default_memory_scopes)
-    if prompt is None:
-        return None
-    return SystemPromptSection(
-        id="memory",
-        content=prompt,
-        cache_scope=CacheScope.REQUEST,
-        order=25,
-    )
-
-
 def install_memory_extension() -> None:
     """Register the scope-aware memory builder with the prompt-assembly registry.
 
     Idempotent — safe to call more than once.
     """
-    from src.context_system.prompt_assembly import register_memory_section_builder
+    from clawcodex_ext.context_system.section_registry import register_section
 
-    register_memory_section_builder(_memory_section_builder)
+    def _wrapped(_ctx: dict) -> str | None:
+        prompt = build_scope_aware_memory_prompt(_default_memory_scopes)
+        return prompt  # str | None — builder contract is (runtime_ctx) -> str | None
+
+    register_section("memory", builder=_wrapped)

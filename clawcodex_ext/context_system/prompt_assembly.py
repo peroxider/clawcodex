@@ -32,9 +32,9 @@ from clawcodex_ext.context_system.git_context import (
 )
 from clawcodex_ext.context_system.models import SystemPromptParts
 from clawcodex_ext.context_system.section_registry import (
+    collect_new_sections,
     consult_section_builders,
-    get_inserted_sections,
-    register_section_builder,
+    register_section,
 )
 
 
@@ -44,32 +44,6 @@ from clawcodex_ext.context_system.section_registry import (
 
 _user_context_cache: dict[str, str] | None = None
 _system_context_cache: dict[str, str] | None = None
-
-
-# ---------------------------------------------------------------------------
-# Memory-section builder registry — downstream extensions can register
-# callbacks that produce a ``SystemPromptSection`` for the "memory" slot
-# without modifying this file.  See ``register_memory_section_builder()``.
-# ---------------------------------------------------------------------------
-
-
-def register_memory_section_builder(builder: Any) -> None:
-    """Register a callable that builds the memory system-prompt section.
-
-    *builder* is called with no arguments and must return either a
-    :class:`SystemPromptSection` or ``None``.  Builders are consulted in
-    registration order; the first non-``None`` result wins.  If all
-    builders return ``None``, the default upstream ``load_memory_prompt()``
-    path is used.
-
-    This is the decoupling seam for ``clawcodex_ext.memory.scope_aware_prompt``
-    so the ``memory_scopes`` parameter does not need to appear in
-    ``build_full_system_prompt`` / ``build_full_system_prompt_blocks``.
-
-    As of P119-A, this is a thin wrapper around
-    ``register_section_builder("memory", builder)``.
-    """
-    register_section_builder("memory", builder)
 
 
 def clear_context_caches() -> None:
@@ -419,6 +393,7 @@ def build_full_system_prompt(
     custom_system_prompt: str | None = None,
     append_system_prompt: str | None = None,
     use_cache: bool = True,
+    runtime_ctx: dict[str, Any] | None = None,  # P119-H
 ) -> str:
     """
     Build the full system prompt matching TypeScript getSystemPrompt().
@@ -443,11 +418,15 @@ def build_full_system_prompt(
     80. Non-interactive mode — headless instructions
     90. Tool restrictions — availability constraints
     """
+    # P119-H: prepare runtime context
+    ctx: dict[str, Any] = runtime_ctx or {}
+    ctx.setdefault("cwd", cwd)
+
     if custom_system_prompt:
         base = custom_system_prompt
         # Consult registered downstream memory-section builders (P119-A).
         memory_injected = False
-        memory_override = consult_section_builders("memory")
+        memory_override = consult_section_builders("memory", ctx)
         if memory_override is not None and memory_override.content:
             base += "\n\n" + memory_override.content
             memory_injected = True
@@ -466,7 +445,7 @@ def build_full_system_prompt(
             except Exception:
                 # Memory subsystem failures must never block prompt building.
                 pass
-        proactive_section = _build_proactive_section()
+        proactive_section = _build_proactive_section(ctx)
         if proactive_section:
             base += "\n\n" + proactive_section.content
         if append_system_prompt:
@@ -478,108 +457,108 @@ def build_full_system_prompt(
     # --- Static modules (0-6): mirrors TS getSystemPrompt() ---
 
     # 0. Intro (identity + security)
-    intro = _build_intro_section(use_cache)
+    intro = _build_intro_section(use_cache, ctx)
     if intro:
         sections.append(intro)
 
     # 1. System behavior norms
-    system = _build_system_section(use_cache)
+    system = _build_system_section(use_cache, ctx)
     if system:
         sections.append(system)
 
     # 2. Doing tasks (coding philosophy)
-    tasks = _build_doing_tasks_section(use_cache)
+    tasks = _build_doing_tasks_section(use_cache, ctx)
     if tasks:
         sections.append(tasks)
 
     # 3. Cautious operations
-    actions = _build_actions_section(use_cache)
+    actions = _build_actions_section(use_cache, ctx)
     if actions:
         sections.append(actions)
 
     # 4. Using your tools (tool routing)
-    using_tools = _build_using_tools_section(use_cache)
+    using_tools = _build_using_tools_section(use_cache, ctx)
     if using_tools:
         sections.append(using_tools)
 
     # 5. Tone and style
-    tone = _build_tone_style_section(use_cache)
+    tone = _build_tone_style_section(use_cache, ctx)
     if tone:
         sections.append(tone)
 
     # 6. Output efficiency
-    efficiency = _build_output_efficiency_section(use_cache)
+    efficiency = _build_output_efficiency_section(use_cache, ctx)
     if efficiency:
         sections.append(efficiency)
 
     # --- Dynamic sections (10+) ---
 
     # 10. Per-tool documentation (optional, only when tools explicitly passed)
-    tool_docs = _build_tool_docs_section(tools, tool_registry, use_cache)
+    tool_docs = _build_tool_docs_section(tools, tool_registry, use_cache, ctx)
     if tool_docs:
         sections.append(tool_docs)
 
     # 20. Environment info
-    env_section = _build_env_section(cwd, use_cache)
+    env_section = _build_env_section(cwd, use_cache, ctx)
     if env_section:
         sections.append(env_section)
 
     # 25. Auto-memory section (MEMORY.md + behavioral instructions)
-    memory_section = _build_memory_section()
+    memory_section = _build_memory_section(ctx)
     if memory_section:
         sections.append(memory_section)
 
     # 30. MCP instructions
-    mcp_section = _build_mcp_section(mcp_servers, use_cache)
+    mcp_section = _build_mcp_section(mcp_servers, use_cache, ctx)
     if mcp_section:
         sections.append(mcp_section)
 
     # 40. Agent instructions
-    agent_section = _build_agent_section(agents, use_cache)
+    agent_section = _build_agent_section(agents, use_cache, ctx)
     if agent_section:
         sections.append(agent_section)
 
     # 50. Skill listing
-    skill_section = _build_skill_section(skills, use_cache)
+    skill_section = _build_skill_section(skills, use_cache, ctx)
     if skill_section:
         sections.append(skill_section)
 
     # 60. Output style (additional overlay)
-    style_section = _build_output_style_section(output_style, use_cache)
+    style_section = _build_output_style_section(output_style, use_cache, ctx)
     if style_section:
         sections.append(style_section)
 
     # 65. Proactive mode guidance
-    proactive_section = _build_proactive_section()
+    proactive_section = _build_proactive_section(ctx)
     if proactive_section:
         sections.append(proactive_section)
 
     # 70. Plan mode
     if plan_mode:
-        plan_section = _build_plan_mode_section(use_cache)
+        plan_section = _build_plan_mode_section(use_cache, ctx)
         if plan_section:
             sections.append(plan_section)
 
     # 80. Non-interactive mode
     if non_interactive:
-        ni_section = _build_non_interactive_section(use_cache)
+        ni_section = _build_non_interactive_section(use_cache, ctx)
         if ni_section:
             sections.append(ni_section)
 
     # 90. Tool restrictions
     if tool_restrictions:
-        restrict_section = _build_tool_restrictions_section(tool_restrictions)
+        restrict_section = _build_tool_restrictions_section(tool_restrictions, ctx)
         if restrict_section:
             sections.append(restrict_section)
 
     # P119-D: iteration meta (purely builder-driven, no default content).
-    iter_meta = _build_iteration_meta_section()
+    iter_meta = _build_iteration_meta_section(ctx)
     if iter_meta is not None and iter_meta.content:
         sections.append(iter_meta)
 
-    # P119-B: append any sections inserted via insert_section().
-    for inserted in get_inserted_sections():
-        sections.append(inserted)
+    # P119-H: collect new non-canonical sections from the registry.
+    for new_sec in collect_new_sections(ctx):
+        sections.append(new_sec)
 
     # Sort by order and join
     sections.sort(key=lambda s: s.order)
@@ -634,6 +613,7 @@ def build_full_system_prompt_blocks(
     use_cache: bool = True,
     query_source: str = "main",
     provider: Any | None = None,
+    runtime_ctx: dict[str, Any] | None = None,  # P119-H
 ) -> list[dict[str, Any]]:
     """Block-list version of ``build_full_system_prompt``.
 
@@ -656,6 +636,10 @@ def build_full_system_prompt_blocks(
     ``order`` attribute so two consecutive calls with identical inputs
     produce byte-identical block lists (cache stability).
     """
+    # P119-H: prepare runtime context
+    ctx: dict[str, Any] = runtime_ctx or {}
+    ctx.setdefault("cwd", cwd)
+
     # Custom-prompt branch: same shape as the str-returning path, but
     # wrapped as a single block. No cache_control marker — SDK callers
     # using custom prompts opt out of the section taxonomy.
@@ -663,7 +647,7 @@ def build_full_system_prompt_blocks(
         base = custom_system_prompt
         # Consult registered downstream memory-section builders (P119-A).
         memory_injected = False
-        memory_override = consult_section_builders("memory")
+        memory_override = consult_section_builders("memory", ctx)
         if memory_override is not None and memory_override.content:
             base += "\n\n" + memory_override.content
             memory_injected = True
@@ -681,7 +665,7 @@ def build_full_system_prompt_blocks(
                         base += "\n\n" + memory_prompt
             except Exception:
                 pass
-        proactive_section = _build_proactive_section()
+        proactive_section = _build_proactive_section(ctx)
         if proactive_section:
             base += "\n\n" + proactive_section.content
         if append_system_prompt:
@@ -693,72 +677,72 @@ def build_full_system_prompt_blocks(
     # Re-use the same section builders as the str path so content is
     # bit-identical. Any divergence between the two paths would let one
     # path cache while the other busts — explicitly avoided.
-    intro = _build_intro_section(use_cache)
+    intro = _build_intro_section(use_cache, ctx)
     if intro:
         sections.append(intro)
-    system = _build_system_section(use_cache)
+    system = _build_system_section(use_cache, ctx)
     if system:
         sections.append(system)
-    tasks = _build_doing_tasks_section(use_cache)
+    tasks = _build_doing_tasks_section(use_cache, ctx)
     if tasks:
         sections.append(tasks)
-    actions = _build_actions_section(use_cache)
+    actions = _build_actions_section(use_cache, ctx)
     if actions:
         sections.append(actions)
-    using_tools = _build_using_tools_section(use_cache)
+    using_tools = _build_using_tools_section(use_cache, ctx)
     if using_tools:
         sections.append(using_tools)
-    tone = _build_tone_style_section(use_cache)
+    tone = _build_tone_style_section(use_cache, ctx)
     if tone:
         sections.append(tone)
-    efficiency = _build_output_efficiency_section(use_cache)
+    efficiency = _build_output_efficiency_section(use_cache, ctx)
     if efficiency:
         sections.append(efficiency)
-    tool_docs = _build_tool_docs_section(tools, tool_registry, use_cache)
+    tool_docs = _build_tool_docs_section(tools, tool_registry, use_cache, ctx)
     if tool_docs:
         sections.append(tool_docs)
-    env_section = _build_env_section(cwd, use_cache)
+    env_section = _build_env_section(cwd, use_cache, ctx)
     if env_section:
         sections.append(env_section)
-    memory_section = _build_memory_section()
+    memory_section = _build_memory_section(ctx)
     if memory_section:
         sections.append(memory_section)
-    mcp_section = _build_mcp_section(mcp_servers, use_cache)
+    mcp_section = _build_mcp_section(mcp_servers, use_cache, ctx)
     if mcp_section:
         sections.append(mcp_section)
-    agent_section = _build_agent_section(agents, use_cache)
+    agent_section = _build_agent_section(agents, use_cache, ctx)
     if agent_section:
         sections.append(agent_section)
-    skill_section = _build_skill_section(skills, use_cache)
+    skill_section = _build_skill_section(skills, use_cache, ctx)
     if skill_section:
         sections.append(skill_section)
-    style_section = _build_output_style_section(output_style, use_cache)
+    style_section = _build_output_style_section(output_style, use_cache, ctx)
     if style_section:
         sections.append(style_section)
-    proactive_section = _build_proactive_section()
+    proactive_section = _build_proactive_section(ctx)
     if proactive_section:
         sections.append(proactive_section)
     if plan_mode:
-        plan_section = _build_plan_mode_section(use_cache)
+        plan_section = _build_plan_mode_section(use_cache, ctx)
         if plan_section:
             sections.append(plan_section)
     if non_interactive:
-        ni_section = _build_non_interactive_section(use_cache)
+        ni_section = _build_non_interactive_section(use_cache, ctx)
         if ni_section:
             sections.append(ni_section)
     if tool_restrictions:
-        restrict_section = _build_tool_restrictions_section(tool_restrictions)
+        restrict_section = _build_tool_restrictions_section(tool_restrictions, ctx)
         if restrict_section:
             sections.append(restrict_section)
 
     # P119-D: iteration meta (purely builder-driven, no default content).
-    iter_meta = _build_iteration_meta_section()
+    iter_meta = _build_iteration_meta_section(ctx)
     if iter_meta is not None and iter_meta.content:
         sections.append(iter_meta)
 
-    # P119-B: append any sections inserted via insert_section().
-    for inserted in get_inserted_sections():
-        sections.append(inserted)
+    # P119-H: collect new non-canonical sections from the registry.
+    for new_sec in collect_new_sections(ctx):
+        sections.append(new_sec)
 
     # Sort within scope groups so block ordering is deterministic across
     # calls. The cache stability test relies on this.
@@ -1065,89 +1049,111 @@ _OUTPUT_EFFICIENCY_SECTION = (
 _IDENTITY_PROMPT = _INTRO_SECTION
 
 
-def _build_intro_section(use_cache: bool) -> SystemPromptSection | None:
-    """Module 1: Identity + Security. Mirrors TS getSimpleIntroSection()."""
-    if use_cache:
-        cached = _prompt_cache.get("intro")
+# ---------------------------------------------------------------------------
+# P119-H: generic section builder helper — cache → registry → default
+# ---------------------------------------------------------------------------
+
+def _build_section(
+    section_id: str,
+    use_cache: bool,
+    runtime_ctx: dict[str, Any] | None,
+    *,
+    cache_scope: CacheScope,
+    order: int,
+    default_content: str = "",
+    ttl_seconds: float | None = None,
+) -> SystemPromptSection | None:
+    """Generic: cache hit → registry override → default content.
+
+    If ``ttl_seconds`` is ``None`` (default), the default content is never
+    cached — every assembly call rechecks the registry before falling
+    through to the constant.  Pass a number to enable caching (e.g.
+    ``-1`` for never-expire, ``300`` for 5 min).
+    """
+    if default_content and use_cache and ttl_seconds is not None:
+        cached = _prompt_cache.get(section_id)
         if cached:
             return SystemPromptSection(
-                id="intro", content=cached, cache_scope=CacheScope.GLOBAL, order=0
+                id=section_id, content=cached, cache_scope=cache_scope, order=order,
             )
 
-    override = consult_section_builders("intro")
+    override = consult_section_builders(section_id, runtime_ctx)
     if override is not None:
         return override
 
-    content = _INTRO_SECTION
-    if use_cache:
-        _prompt_cache.set("intro", content, scope=CacheScope.GLOBAL, ttl_seconds=-1)
-    return SystemPromptSection(id="intro", content=content, cache_scope=CacheScope.GLOBAL, order=0)
+    if default_content:
+        if use_cache and ttl_seconds is not None:
+            _prompt_cache.set(section_id, default_content, scope=cache_scope, ttl_seconds=ttl_seconds)
+        return SystemPromptSection(
+            id=section_id, content=default_content, cache_scope=cache_scope, order=order,
+        )
+    return None
+
+
+def _build_intro_section(use_cache: bool, runtime_ctx: dict[str, Any] | None = None) -> SystemPromptSection | None:
+    """Module 1: Identity + Security. Mirrors TS getSimpleIntroSection()."""
+    return _build_section(
+        "intro", use_cache, runtime_ctx,
+        cache_scope=CacheScope.GLOBAL, order=0,
+        default_content=_INTRO_SECTION, ttl_seconds=-1,
+    )
 
 
 # Keep backward-compatible alias
 _build_identity_section = _build_intro_section
 
 
-def _build_system_section(use_cache: bool) -> SystemPromptSection | None:
+def _build_system_section(use_cache: bool, runtime_ctx: dict[str, Any] | None = None) -> SystemPromptSection | None:
     """Module 2: System behavior norms. Mirrors TS getSimpleSystemSection()."""
-    override = consult_section_builders("system")
-    if override is not None:
-        return override
-    return SystemPromptSection(
-        id="system", content=_SYSTEM_SECTION, cache_scope=CacheScope.GLOBAL, order=1
+    return _build_section(
+        "system", use_cache, runtime_ctx,
+        cache_scope=CacheScope.GLOBAL, order=1,
+        default_content=_SYSTEM_SECTION,
     )
 
 
-def _build_doing_tasks_section(use_cache: bool) -> SystemPromptSection | None:
+def _build_doing_tasks_section(use_cache: bool, runtime_ctx: dict[str, Any] | None = None) -> SystemPromptSection | None:
     """Module 3: Task execution guidelines. Mirrors TS getSimpleDoingTasksSection()."""
-    override = consult_section_builders("doing_tasks")
-    if override is not None:
-        return override
-    return SystemPromptSection(
-        id="doing_tasks", content=_DOING_TASKS_SECTION, cache_scope=CacheScope.GLOBAL, order=2
+    return _build_section(
+        "doing_tasks", use_cache, runtime_ctx,
+        cache_scope=CacheScope.GLOBAL, order=2,
+        default_content=_DOING_TASKS_SECTION,
     )
 
 
-def _build_actions_section(use_cache: bool) -> SystemPromptSection | None:
+def _build_actions_section(use_cache: bool, runtime_ctx: dict[str, Any] | None = None) -> SystemPromptSection | None:
     """Module 4: Cautious operations. Mirrors TS getActionsSection()."""
-    override = consult_section_builders("actions")
-    if override is not None:
-        return override
-    return SystemPromptSection(
-        id="actions", content=_ACTIONS_SECTION, cache_scope=CacheScope.GLOBAL, order=3
+    return _build_section(
+        "actions", use_cache, runtime_ctx,
+        cache_scope=CacheScope.GLOBAL, order=3,
+        default_content=_ACTIONS_SECTION,
     )
 
 
-def _build_using_tools_section(use_cache: bool) -> SystemPromptSection | None:
+def _build_using_tools_section(use_cache: bool, runtime_ctx: dict[str, Any] | None = None) -> SystemPromptSection | None:
     """Module 5: Tool usage guidelines. Mirrors TS getUsingYourToolsSection()."""
-    override = consult_section_builders("using_tools")
-    if override is not None:
-        return override
-    return SystemPromptSection(
-        id="using_tools", content=_USING_TOOLS_SECTION, cache_scope=CacheScope.GLOBAL, order=4
+    return _build_section(
+        "using_tools", use_cache, runtime_ctx,
+        cache_scope=CacheScope.GLOBAL, order=4,
+        default_content=_USING_TOOLS_SECTION,
     )
 
 
-def _build_tone_style_section(use_cache: bool) -> SystemPromptSection | None:
+def _build_tone_style_section(use_cache: bool, runtime_ctx: dict[str, Any] | None = None) -> SystemPromptSection | None:
     """Module 6: Tone and style. Mirrors TS getSimpleToneAndStyleSection()."""
-    override = consult_section_builders("tone_style")
-    if override is not None:
-        return override
-    return SystemPromptSection(
-        id="tone_style", content=_TONE_STYLE_SECTION, cache_scope=CacheScope.GLOBAL, order=5
+    return _build_section(
+        "tone_style", use_cache, runtime_ctx,
+        cache_scope=CacheScope.GLOBAL, order=5,
+        default_content=_TONE_STYLE_SECTION,
     )
 
 
-def _build_output_efficiency_section(use_cache: bool) -> SystemPromptSection | None:
+def _build_output_efficiency_section(use_cache: bool, runtime_ctx: dict[str, Any] | None = None) -> SystemPromptSection | None:
     """Module 7: Output efficiency. Mirrors TS getOutputEfficiencySection()."""
-    override = consult_section_builders("output_efficiency")
-    if override is not None:
-        return override
-    return SystemPromptSection(
-        id="output_efficiency",
-        content=_OUTPUT_EFFICIENCY_SECTION,
-        cache_scope=CacheScope.GLOBAL,
-        order=6,
+    return _build_section(
+        "output_efficiency", use_cache, runtime_ctx,
+        cache_scope=CacheScope.GLOBAL, order=6,
+        default_content=_OUTPUT_EFFICIENCY_SECTION,
     )
 
 
@@ -1155,8 +1161,9 @@ def _build_tool_docs_section(
     tools: list[Any] | None,
     tool_registry: Any | None,
     use_cache: bool,
+    runtime_ctx: dict[str, Any] | None = None,
 ) -> SystemPromptSection | None:
-    override = consult_section_builders("tool_docs")
+    override = consult_section_builders("tool_docs", runtime_ctx)
     if override is not None:
         return override
 
@@ -1199,11 +1206,11 @@ def _build_tool_docs_section(
     )
 
 
-def _build_env_section(cwd: str | None, use_cache: bool) -> SystemPromptSection | None:
+def _build_env_section(cwd: str | None, use_cache: bool, runtime_ctx: dict[str, Any] | None = None) -> SystemPromptSection | None:
     import getpass
     import platform
 
-    override = consult_section_builders("environment")
+    override = consult_section_builders("environment", runtime_ctx)
     if override is not None:
         return override
 
@@ -1228,7 +1235,7 @@ def _build_env_section(cwd: str | None, use_cache: bool) -> SystemPromptSection 
     )
 
 
-def _build_memory_section() -> SystemPromptSection | None:
+def _build_memory_section(runtime_ctx: dict[str, Any] | None = None) -> SystemPromptSection | None:
     """Build the auto-memory system-prompt section.
 
     Mirrors TS ``constants/prompts.ts:495`` (``systemPromptSection('memory',
@@ -1240,7 +1247,7 @@ def _build_memory_section() -> SystemPromptSection | None:
 
     Downstream extensions that need scope-aware memory (e.g.
     ``clawcodex_ext.memory.scope_aware_prompt``) should register a builder
-    via :func:`register_memory_section_builder` instead of modifying this
+    via ``register_section("memory", builder=fn)`` instead of modifying this
     function.
     """
     # Consult the generic section registry first (P119-A).
@@ -1267,8 +1274,9 @@ def _build_memory_section() -> SystemPromptSection | None:
 def _build_mcp_section(
     mcp_servers: list[Any] | None,
     use_cache: bool,
+    runtime_ctx: dict[str, Any] | None = None,
 ) -> SystemPromptSection | None:
-    override = consult_section_builders("mcp")
+    override = consult_section_builders("mcp", runtime_ctx)
     if override is not None:
         return override
 
@@ -1296,8 +1304,9 @@ def _build_mcp_section(
 def _build_agent_section(
     agents: list[Any] | None,
     use_cache: bool,
+    runtime_ctx: dict[str, Any] | None = None,
 ) -> SystemPromptSection | None:
-    override = consult_section_builders("agents")
+    override = consult_section_builders("agents", runtime_ctx)
     if override is not None:
         return override
 
@@ -1328,10 +1337,9 @@ def _build_agent_section(
 def _build_skill_section(
     skills: list[Any] | None,
     use_cache: bool,
-    context_window_tokens: int | None = None,
+    runtime_ctx: dict[str, Any] | None = None,
 ) -> SystemPromptSection | None:
-    _ = context_window_tokens
-    override = consult_section_builders("skills")
+    override = consult_section_builders("skills", runtime_ctx)
     if override is not None:
         return override
 
@@ -1349,10 +1357,7 @@ def _build_skill_section(
     for skill in skills:
         name = getattr(skill, "name", str(skill))
         desc = getattr(skill, "description", "")
-        when_to_use = getattr(skill, "when_to_use", None)
-        if when_to_use:
-            desc = f"{desc} - {when_to_use}"
-        parts.append(f"- {name}: {desc}")
+        parts.append(f"- **{name}**: {desc}")
 
     content = "\n".join(parts)
     if use_cache:
@@ -1373,8 +1378,9 @@ _OUTPUT_STYLE_PROMPTS: dict[str, str] = {
 def _build_output_style_section(
     style: str,
     use_cache: bool,
+    runtime_ctx: dict[str, Any] | None = None,
 ) -> SystemPromptSection | None:
-    override = consult_section_builders("output_style")
+    override = consult_section_builders("output_style", runtime_ctx)
     if override is not None:
         return override
     prompt = _OUTPUT_STYLE_PROMPTS.get(style, "")
@@ -1388,8 +1394,8 @@ def _build_output_style_section(
     )
 
 
-def _build_proactive_section() -> SystemPromptSection | None:
-    override = consult_section_builders("proactive")
+def _build_proactive_section(runtime_ctx: dict[str, Any] | None = None) -> SystemPromptSection | None:
+    override = consult_section_builders("proactive", runtime_ctx)
     if override is not None:
         return override
     try:
@@ -1420,8 +1426,8 @@ _PLAN_MODE_PROMPT = (
 )
 
 
-def _build_plan_mode_section(use_cache: bool) -> SystemPromptSection | None:
-    override = consult_section_builders("plan_mode")
+def _build_plan_mode_section(use_cache: bool, runtime_ctx: dict[str, Any] | None = None) -> SystemPromptSection | None:
+    override = consult_section_builders("plan_mode", runtime_ctx)
     if override is not None:
         return override
     return SystemPromptSection(
@@ -1439,8 +1445,8 @@ _NON_INTERACTIVE_PROMPT = (
 )
 
 
-def _build_non_interactive_section(use_cache: bool) -> SystemPromptSection | None:
-    override = consult_section_builders("non_interactive")
+def _build_non_interactive_section(use_cache: bool, runtime_ctx: dict[str, Any] | None = None) -> SystemPromptSection | None:
+    override = consult_section_builders("non_interactive", runtime_ctx)
     if override is not None:
         return override
     return SystemPromptSection(
@@ -1453,8 +1459,9 @@ def _build_non_interactive_section(use_cache: bool) -> SystemPromptSection | Non
 
 def _build_tool_restrictions_section(
     restrictions: list[str],
+    runtime_ctx: dict[str, Any] | None = None,
 ) -> SystemPromptSection | None:
-    override = consult_section_builders("tool_restrictions")
+    override = consult_section_builders("tool_restrictions", runtime_ctx)
     if override is not None:
         return override
     if not restrictions:
@@ -1468,9 +1475,9 @@ def _build_tool_restrictions_section(
     )
 
 
-def _build_iteration_meta_section() -> SystemPromptSection | None:
+def _build_iteration_meta_section(runtime_ctx: dict[str, Any] | None = None) -> SystemPromptSection | None:
     """P119-D: 自迭代元 prompt 段。纯 builder 驱动，无默认内容。
 
     如果没有任何 builder 注册，返回 ``None``，该段不出现。
     """
-    return consult_section_builders("iteration_meta")
+    return consult_section_builders("iteration_meta", runtime_ctx)

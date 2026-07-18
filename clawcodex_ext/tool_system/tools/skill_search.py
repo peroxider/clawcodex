@@ -79,7 +79,7 @@ def _handle_search(input_data: dict[str, Any]) -> ToolResult:
 
     query = input_data.get("query", "")
     if not query:
-        return _result("query is required for search action", is_error=True)
+        return _result("query is required for search action — provide a natural language description of the skill you need", is_error=True)
 
     top_k = input_data.get("top_k")
     tags = input_data.get("tags")
@@ -90,7 +90,7 @@ def _handle_search(input_data: dict[str, Any]) -> ToolResult:
     try:
         results = asyncio.run(searcher.search(query, top_k=top_k, tags=tags, source=source))
     except Exception as e:
-        return _result(f"Search failed: {e}", is_error=True)
+        return _result(f"Search for '{query}' failed: {e}", is_error=True)
 
     if not results:
         return _result("No matching skills found.")
@@ -111,7 +111,7 @@ def _handle_search(input_data: dict[str, Any]) -> ToolResult:
 def _handle_pin(input_data: dict[str, Any]) -> ToolResult:
     name = input_data.get("name", "")
     if not name:
-        return _result("name is required for pin action", is_error=True)
+        return _result("name is required for pin action — use a skill name from search results", is_error=True)
 
     searcher = _get_searcher()
     searcher.pin(name)
@@ -121,7 +121,7 @@ def _handle_pin(input_data: dict[str, Any]) -> ToolResult:
 def _handle_unpin(input_data: dict[str, Any]) -> ToolResult:
     name = input_data.get("name", "")
     if not name:
-        return _result("name is required for unpin action", is_error=True)
+        return _result("name is required for unpin action — specify the skill name to unpin", is_error=True)
 
     searcher = _get_searcher()
     searcher.unpin(name)
@@ -133,14 +133,14 @@ def _handle_inspect(input_data: dict[str, Any]) -> ToolResult:
 
     name = input_data.get("name", "")
     if not name:
-        return _result("name is required for inspect action", is_error=True)
+        return _result("name is required for inspect action — use a skill name from search results", is_error=True)
 
     searcher = _get_searcher()
 
     try:
         asyncio.run(searcher.ensure_index())
     except Exception as e:
-        return _result(f"Cannot inspect: {e}", is_error=True)
+        return _result(f"Cannot inspect '{name}': {e}", is_error=True)
 
     result = searcher.inspect(name)
     if result is None:
@@ -173,7 +173,7 @@ def _handle_rebuild() -> ToolResult:
             return _result(f"Index rebuilt: {stats.total_docs} docs, {stats.total_terms} terms")
         return _result("Index rebuilt successfully.")
     except Exception as e:
-        return _result(f"Rebuild failed: {e}", is_error=True)
+        return _result(f"Index rebuild failed: {e}. The feature gate or index may be unavailable.", is_error=True)
 
 
 def _handle_stats() -> ToolResult:
