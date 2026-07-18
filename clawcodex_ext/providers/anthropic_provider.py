@@ -37,6 +37,7 @@ from clawcodex_ext.providers.base import (
     TextChunkCallback,
 )
 from clawcodex_ext.providers._stream_drain import drain_text_stream_with_abort_poll
+from clawcodex_ext.services.api.errors import normalize_httpx_transport_error
 
 if TYPE_CHECKING:
     from src.utils.abort_controller import AbortSignal
@@ -481,7 +482,15 @@ class AnthropicProvider(BaseProvider):
                     # M3 — bare ``except: pass`` swallowed the fallback
                     # error and re-raised only the streaming one.
                     raise fallback_exc from streaming_exc
-            raise
+
+            # Translate httpx transport-layer errors (chunked-read
+            # interruption, RST, idle-timeout close) into the
+            # domain-specific ``APIConnectionError`` so the retry
+            # classifier recognises them as transient. Aborts have
+            # already been handled by ``reraise_if_aborted`` above,
+            # so this branch only fires for genuine transport
+            # failures.
+            raise normalize_httpx_transport_error(streaming_exc) from streaming_exc
 
         # Stream completed normally but abort may have fired between
         # ``stream.__exit__`` and here. Surface it at the same boundary
@@ -681,7 +690,13 @@ class ClawcodexAnthropicProvider(AnthropicProvider):
                     # observers see the original streaming error AND
                     # the fallback failure that prevented recovery.
                     raise streaming_exc from fallback_exc
-            raise
+
+            # Translate httpx transport-layer errors (chunked-read
+            # interruption, RST, idle-timeout close) into the
+            # domain-specific ``APIConnectionError`` so the retry
+            # classifier recognises them as transient. Aborts have
+            # already been handled by ``reraise_if_aborted`` above.
+            raise normalize_httpx_transport_error(streaming_exc) from streaming_exc
 
         # Stream exited normally but abort may have fired between
         # ``__exit__`` and here.

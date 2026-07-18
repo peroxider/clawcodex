@@ -4,6 +4,26 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+try:
+    import httpx
+
+    _HTTPX_TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
+        httpx.RemoteProtocolError,
+        httpx.ReadError,
+        httpx.WriteError,
+        httpx.ConnectError,
+        httpx.ConnectTimeout,
+        httpx.ReadTimeout,
+        httpx.WriteTimeout,
+        httpx.PoolTimeout,
+        httpx.NetworkError,
+        httpx.ProxyError,
+        httpx.UnsupportedProtocol,
+    )
+except ImportError:  # httpx is optional at runtime for some embed paths
+    httpx = None  # type: ignore[assignment]
+    _HTTPX_TRANSPORT_ERRORS = ()
+
 API_ERROR_MESSAGE_PREFIX = "API Error"
 PROMPT_TOO_LONG_ERROR_MESSAGE = "Prompt is too long"
 # Surfaced when the provider rejects an image because the selected model
@@ -185,6 +205,65 @@ def is_transient_upstream_not_found_error(error: Exception) -> bool:
     )
 
 
+def is_httpx_transport_error(error: BaseException) -> bool:
+    """True when ``error`` is an httpx transport-layer exception.
+
+    ``httpx.RemoteProtocolError`` (the source of the
+    ``peer closed connection without sending complete message body
+    (incomplete chunked read)`` message), ``ReadError``, ``ConnectError``
+    and friends do NOT inherit from ``ConnectionError`` / ``OSError`` —
+    they live on the ``httpx.HTTPError`` branch. So the broad
+    ``isinstance(error, ConnectionError)`` check in
+    :func:`categorize_retryable_api_error` misses them and they fall
+    through to the unknown-error bail-out, even though they are
+    transient and retryable.
+    """
+    if httpx is None:
+        return False
+    return isinstance(error, _HTTPX_TRANSPORT_ERRORS)
+
+
+def normalize_httpx_transport_error(error: BaseException) -> BaseException:
+    """Wrap httpx transport errors in :class:`APIConnectionError` if applicable.
+
+    Provider stream loops encounter raw ``httpx.RemoteProtocolError`` etc.
+    when a chunked response is interrupted by a gateway timeout, RST, or
+    idle-timeout close. By the time those exceptions reach the retry
+    classifier, wrapping them as :class:`APIConnectionError` keeps the
+    downstream error-handling story (retry decisions, user-facing
+    messages) uniform with the legacy ``ConnectionError`` /
+    ``httpx.ConnectError`` paths.
+
+    If the input is not an httpx transport error, it is returned
+    unchanged so callers can use this helper as a no-op passthrough.
+    """
+    if is_httpx_transport_error(error):
+        return APIConnectionError(str(error) or "upstream stream interrupted")
+    return error
+
+
+#: Phrases that reliably identify an interrupted chunked HTTP response,
+#: independent of which library wrapped the failure. Used as a string
+#: fallback when ``isinstance`` cannot classify (e.g. the SDK wrapped
+#: the original exception in a custom class).
+_TRANSPORT_ERROR_PHRASES: tuple[str, ...] = (
+    "peer closed connection",
+    "incomplete chunked read",
+    "response ended prematurely",
+    "connection reset",
+    "connection aborted",
+    "connection broken",
+    "broken pipe",
+    "unexpected eof",
+)
+
+
+def is_transport_chunked_read_error(raw: str) -> bool:
+    """Substring-based fallback for interrupted chunked HTTP responses."""
+    low = raw.lower()
+    return any(phrase in low for phrase in _TRANSPORT_ERROR_PHRASES)
+
+
 @dataclass(frozen=True)
 class ErrorClassification:
     retryable: bool
@@ -230,6 +309,20 @@ def categorize_retryable_api_error(error: Exception) -> ErrorClassification:
             retryable=True,
             error_type="upstream_not_found",
             message="Transient upstream NotFound (404)",
+        )
+
+    if is_httpx_transport_error(error):
+        return ErrorClassification(
+            retryable=True,
+            error_type="transport_error",
+            message=str(error),
+        )
+
+    if is_transport_chunked_read_error(str(error)):
+        return ErrorClassification(
+            retryable=True,
+            error_type="transport_error",
+            message=str(error),
         )
 
     if is_overloaded_error(error):

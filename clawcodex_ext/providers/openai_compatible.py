@@ -14,6 +14,7 @@ from typing import Any, Callable, Generator, Optional
 
 from clawcodex_ext.providers._stream_abort import StreamAbortGuard
 from clawcodex_ext.providers.base import BaseProvider, ChatResponse, MessageInput, TextChunkCallback
+from clawcodex_ext.services.api.errors import normalize_httpx_transport_error
 
 logger = logging.getLogger(__name__)
 
@@ -692,7 +693,16 @@ class OpenAICompatibleProvider(BaseProvider):
                     for c in stream:
                         chunk_queue.put(c)
             except BaseException as exc:  # noqa: BLE001 — surface to consumer
-                chunk_queue.put(exc)
+                # Normalize httpx transport-layer errors (e.g. the
+                # ``peer closed connection without sending complete
+                # message body (incomplete chunked read)`` chunked-read
+                # failure that surfaces when a gateway / proxy /
+                # LiteLLM upstream times out mid-stream) into the
+                # domain-specific ``APIConnectionError`` so the retry
+                # classifier recognises them as transient. ``AbortError``
+                # is left untouched so the consumer's
+                # ``guard.reraise_if_aborted`` still fires.
+                chunk_queue.put(normalize_httpx_transport_error(exc))
             finally:
                 chunk_queue.put(_DONE)
 
