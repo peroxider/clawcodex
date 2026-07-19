@@ -520,10 +520,18 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
         # couldn't be generated (e.g. due to syntax errors).
         try:
             for skill in grouped_skills:
-                skill.allowed_tools = [
-                    registered.get(t, _to_kebab_case(t)) if registered else _to_kebab_case(t)
-                    for t in skill.allowed_tools
-            ]
+                seen_tools: set[str] = set()
+                ordered_tools: list[str] = []
+                for t in skill.allowed_tools:
+                    mapped = (
+                        registered.get(t, _to_kebab_case(t))
+                        if registered
+                        else _to_kebab_case(t)
+                    )
+                    if mapped not in seen_tools:
+                        seen_tools.add(mapped)
+                        ordered_tools.append(mapped)
+                skill.allowed_tools = ordered_tools
         except NameError:
             # _to_kebab_case not imported (ImportError path taken above) — skip
             pass
