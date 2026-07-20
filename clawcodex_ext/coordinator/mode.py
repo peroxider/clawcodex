@@ -28,6 +28,8 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Final, Iterable, Literal, TYPE_CHECKING
 
 from clawcodex_ext.agent.constants import ASYNC_AGENT_ALLOWED_TOOLS
@@ -41,6 +43,25 @@ logger = logging.getLogger(__name__)
 
 # Env-var gate. Mirrors ``coordinatorMode.ts:36-41``.
 _COORDINATOR_MODE_ENV: Final[str] = "CLAUDE_CODE_COORDINATOR_MODE"
+_COORDINATOR_MODE_CONTEXT: ContextVar[bool | None] = ContextVar(
+    "clawcodex_coordinator_mode",
+    default=None,
+)
+
+
+@contextmanager
+def coordinator_mode_context(enabled: bool):
+    """Set coordinator mode for one async execution context.
+
+    Environment variables are process-global and race when the orchestrator
+    runs multiple issues concurrently. Context variables follow each asyncio
+    task (and ``asyncio.to_thread`` calls), keeping mode selection session-local.
+    """
+    token = _COORDINATOR_MODE_CONTEXT.set(bool(enabled))
+    try:
+        yield
+    finally:
+        _COORDINATOR_MODE_CONTEXT.reset(token)
 
 
 def is_coordinator_mode() -> bool:
@@ -51,6 +72,9 @@ def is_coordinator_mode() -> bool:
     this flow, a coordinator session resumed as a regular agent
     would lose awareness of its workers (and vice versa).
     """
+    contextual = _COORDINATOR_MODE_CONTEXT.get()
+    if contextual is not None:
+        return contextual
     return is_env_truthy(_COORDINATOR_MODE_ENV)
 
 
@@ -80,7 +104,12 @@ def match_session_mode(session_mode: SessionMode | None) -> str | None:
     if current_is_coordinator == session_is_coordinator:
         return None
 
-    if session_is_coordinator:
+    contextual = _COORDINATOR_MODE_CONTEXT.get()
+    if contextual is not None:
+        # Keep resume mode session-local when running under the
+        # orchestrator's per-task context.
+        _COORDINATOR_MODE_CONTEXT.set(session_is_coordinator)
+    elif session_is_coordinator:
         os.environ[_COORDINATOR_MODE_ENV] = "1"
     else:
         # ``del`` rather than setting to "" so future reads return
@@ -234,6 +263,7 @@ def get_coordinator_user_context(
 
 __all__ = [
     "is_coordinator_mode",
+    "coordinator_mode_context",
     "match_session_mode",
     "INTERNAL_WORKER_TOOLS",
     "filter_coordinator_tools",

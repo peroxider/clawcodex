@@ -32,6 +32,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_CLARIFICATION_MARKER_PREFIX = "<!-- clawcodex-clarification:"
+
 
 @dataclass
 class ClarificationConfig:
@@ -96,7 +98,7 @@ class ClarificationResolver:
         Called each orchestrator poll cycle to check for operator/author responses.
         Handles simultaneous answer detection and conflict resolution.
         """
-        pending_items = self._queue.poll_pending()
+        pending_items = self._queue.poll_active()
         for item in pending_items:
             await self._check_for_answer(item)
 
@@ -107,6 +109,9 @@ class ClarificationResolver:
         question: str,
         context: str = "",
         options: list[str] | None = None,
+        start_with_author: bool = False,
+        since_comment_id: str | None = None,
+        author_login: str | None = None,
     ) -> ClarificationResult:
         """Request clarification for an issue via the three-channel flow.
 
@@ -144,17 +149,39 @@ class ClarificationResolver:
             question=question,
             options=options,
             context_summary=context,
-            timeout_seconds=self._config.timeout_local_seconds,
+            timeout_seconds=(
+                self._config.timeout_author_seconds
+                if start_with_author
+                else self._config.timeout_local_seconds
+            ),
+            since_comment_id=since_comment_id,
+            author_login=author_login,
         )
 
-        # Start with Channel 1 (Dashboard) — orchestrator will detect pending
-        self._queue.mark_awaiting_local(issue_id)
+        if start_with_author:
+            item = self._queue.mark_awaiting_author(
+                issue_id,
+                timeout_seconds=self._config.timeout_author_seconds,
+            )
+            if item is not None:
+                try:
+                    await self._send_author_mention(issue_id, item)
+                except Exception:
+                    # The request was never delivered. Remove the orphaned
+                    # queue item so a later poll can retry from a clean state.
+                    self._queue.remove(issue_id)
+                    raise
+            status = ClarificationStatus.AWAITING_AUTHOR
+        else:
+            # Start with Channel 1 (Dashboard) — orchestrator will detect pending
+            self._queue.mark_awaiting_local(issue_id)
+            status = ClarificationStatus.AWAITING_LOCAL
 
         # Return in-progress status (orchestrator poll will pick up)
         return ClarificationResult(
             answer=None,
             source=None,
-            status=ClarificationStatus.AWAITING_LOCAL,
+            status=status,
         )
 
     # ------------------------------------------------------------------
@@ -221,7 +248,31 @@ class ClarificationResolver:
                 item.last_checked_comment_id,
             )
             if new_comments:
-                latest = new_comments[-1]  # Chronologically last
+                last_seen_id = new_comments[-1].id
+                if not item.author_login:
+                    # Author-first clarification is an authorization boundary.
+                    # Adapters that cannot identify the issue author must not
+                    # let an arbitrary commenter unblock automated execution.
+                    self._queue.mark_comment_checked(issue_id, last_seen_id)
+                    logger.warning(
+                        "Ignoring issue comments for clarification %s: author identity unavailable",
+                        issue_id,
+                    )
+                    return candidates
+                expected_author = item.author_login.strip().casefold()
+                authorized = [
+                    comment
+                    for comment in new_comments
+                    if comment.author_login
+                    and comment.author_login.strip().casefold() == expected_author
+                    and not self._is_own_clarification_comment(comment, item)
+                ]
+                # Advance across every observed comment, including rejected
+                # ones, so unauthorized traffic is not re-fetched forever.
+                self._queue.mark_comment_checked(issue_id, last_seen_id)
+                if not authorized:
+                    return candidates
+                latest = authorized[-1]  # Chronologically last authorized reply
                 if latest.body and latest.body.strip():
                     ts = self._parse_comment_timestamp(latest.created_at)
                     candidates.append(
@@ -318,7 +369,10 @@ class ClarificationResolver:
         if current_status == ClarificationStatus.AWAITING_LOCAL:
             # Channel 1/2 timeout → escalate to Channel 3 (@mention author)
             self._queue.mark_expired(issue_id)
-            self._queue.mark_awaiting_author(issue_id)
+            self._queue.mark_awaiting_author(
+                issue_id,
+                timeout_seconds=self._config.timeout_author_seconds,
+            )
 
             # Send @mention comment to author
             try:
@@ -343,14 +397,16 @@ class ClarificationResolver:
     ) -> None:
         """Send @mention comment to issue author requesting clarification."""
         body = self._build_mention_body(item)
-        mentions = []  # Could extract from issue author_login
+        mentions = [item.author_login] if item.author_login else []
 
         try:
-            await self._tracker.create_clarification_comment(
+            comment = await self._tracker.create_clarification_comment(
                 issue_id=issue_id,
                 body=body,
                 mentions=mentions,
             )
+            if comment is not None and getattr(comment, "id", None):
+                self._queue.mark_comment_checked(issue_id, comment.id)
             logger.info("Sent @mention clarification for issue %s", issue_id)
         except Exception as exc:
             logger.error("Failed to send @mention for issue %s: %s", issue_id, exc)
@@ -359,6 +415,7 @@ class ClarificationResolver:
     def _build_mention_body(self, item: "ClarificationItem") -> str:
         """Build the @mention comment body."""
         question = item.question
+        marker = f"{_CLARIFICATION_MARKER_PREFIX}{item.issue_id} -->"
         if item.options:
             options_text = "\n".join(f"{i + 1}. {opt}" for i, opt in enumerate(item.options))
             body = (
@@ -375,7 +432,24 @@ class ClarificationResolver:
                 f"**Question:** {question}\n\n"
                 f"Please reply with your answer."
             )
-        return body
+        return f"{marker}\n\n{body}"
+
+    def _is_own_clarification_comment(
+        self,
+        comment: Comment,
+        item: "ClarificationItem",
+    ) -> bool:
+        """Reject bot-authored prompts even when bot and author share a login."""
+        body = str(comment.body or "")
+        marker = f"{_CLARIFICATION_MARKER_PREFIX}{item.issue_id} -->"
+        if marker in body:
+            return True
+        # Compatibility for pending questions posted before markers existed.
+        return (
+            "## Clarification Needed" in body
+            and "**Question:**" in body
+            and item.question in body
+        )
 
     def _handle_escalation(self, issue_id: str) -> None:
         """Handle escalation policy when all channels have timed out.
@@ -461,6 +535,12 @@ class ClarificationResolver:
     def get_pending_count(self) -> int:
         """Return count of pending clarification items."""
         return len(self._queue.poll_pending())
+
+    def get_item(self, issue_id: str) -> "ClarificationItem | None":
+        return self._queue.get(issue_id)
+
+    def clear(self, issue_id: str) -> None:
+        self._queue.remove(issue_id)
 
     def get_stale_answers(self, issue_id: str) -> list[str]:
         """Return stale answers for an issue (for notification)."""

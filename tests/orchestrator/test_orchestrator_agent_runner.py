@@ -5,6 +5,7 @@ import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from extensions.api.query import (
@@ -13,18 +14,39 @@ from extensions.api.query import (
     ToolCallEvent,
     ToolResultEvent,
 )
-from extensions.orchestrator.agent_runner import AgentRunner, AgentSession
+from extensions.orchestrator.agent_runner import (
+    AgentRunner,
+    AgentSession,
+    _megaturn_idle_stop_enabled,
+)
 from extensions.orchestrator.config.schema import AgentConfig, SandboxConfig, WorkflowConfig
 from extensions.orchestrator.issue import Issue
 from extensions.orchestrator.workspace import Workspace
 from clawcodex_ext.services.api.errors import RateLimitError
 
 
+def test_megaturn_idle_stop_is_disabled_for_swarm() -> None:
+    assert not _megaturn_idle_stop_enabled(SimpleNamespace(run_kind="swarm"))
+
+
+def test_megaturn_idle_stop_remains_enabled_for_regular_runs() -> None:
+    assert _megaturn_idle_stop_enabled(SimpleNamespace(run_kind="issue"))
+
+
 class _QueryRunnerStub:
+    observed_coordinator_modes: list[bool] = []
+    observed_config_modes: list[bool] = []
+
     def __init__(self, config) -> None:
         self.config = config
 
     async def stream(self):
+        from clawcodex_ext.coordinator.mode import is_coordinator_mode
+
+        self.observed_coordinator_modes.append(is_coordinator_mode())
+        self.observed_config_modes.append(
+            self.config.env.get("CLAUDE_CODE_COORDINATOR_MODE") == "1"
+        )
         yield SessionComplete(reason="success")
 
 
@@ -356,7 +378,7 @@ class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
         self.assertRegex(run_id, r"^run-3-followup-2-\d{8}T\d{6}Z$")
 
 
-class TestAgentRunnerCoordinatorEnvFlip(unittest.IsolatedAsyncioTestCase):
+class TestAgentRunnerCoordinatorContext(unittest.IsolatedAsyncioTestCase):
     """agent_config.coordinator_mode must flip CLAUDE_CODE_COORDINATOR_MODE.
 
     The headless entrypoint and the Agent tool both gate on the env var
@@ -390,22 +412,32 @@ class TestAgentRunnerCoordinatorEnvFlip(unittest.IsolatedAsyncioTestCase):
                     "extensions.orchestrator.agent_runner.QueryRunner",
                     _QueryRunnerStub,
                 ):
+                    _QueryRunnerStub.observed_coordinator_modes.clear()
+                    _QueryRunnerStub.observed_config_modes.clear()
                     await runner.run(session, WorkflowConfig.from_dict({}))
+                    self.assertEqual(
+                        _QueryRunnerStub.observed_coordinator_modes,
+                        [coordinator_mode],
+                    )
+                    self.assertEqual(
+                        _QueryRunnerStub.observed_config_modes,
+                        [coordinator_mode],
+                    )
 
-    async def test_coordinator_mode_true_sets_env(self) -> None:
+    async def test_coordinator_mode_true_does_not_set_env(self) -> None:
         import os
 
         os.environ.pop("CLAUDE_CODE_COORDINATOR_MODE", None)
         await self._run_once(coordinator_mode=True)
-        self.assertEqual(os.environ.get("CLAUDE_CODE_COORDINATOR_MODE"), "1")
-        os.environ.pop("CLAUDE_CODE_COORDINATOR_MODE", None)
+        self.assertIsNone(os.environ.get("CLAUDE_CODE_COORDINATOR_MODE"))
 
-    async def test_coordinator_mode_false_clears_leftover_env(self) -> None:
+    async def test_normal_mode_ignores_leftover_env(self) -> None:
         import os
 
         os.environ["CLAUDE_CODE_COORDINATOR_MODE"] = "1"
         await self._run_once(coordinator_mode=False)
-        self.assertIsNone(os.environ.get("CLAUDE_CODE_COORDINATOR_MODE"))
+        self.assertEqual(os.environ.get("CLAUDE_CODE_COORDINATOR_MODE"), "1")
+        os.environ.pop("CLAUDE_CODE_COORDINATOR_MODE", None)
 
 
 class TestAgentRunnerMaxTurns(unittest.IsolatedAsyncioTestCase):

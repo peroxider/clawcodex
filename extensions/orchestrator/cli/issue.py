@@ -405,7 +405,7 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
     clarify_parser.add_argument(
         "--id",
         type=str,
-        required=True,
+        required=False,
         metavar="ISSUE_ID",
         help="Issue ID being clarified",
     )
@@ -419,6 +419,37 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "--forward-to-author",
         action="store_true",
         help="Skip local answer, forward directly to author (@mention)",
+    )
+    clarify_action = clarify_parser.add_mutually_exclusive_group()
+    clarify_action.add_argument(
+        "--list",
+        dest="list_clarifications",
+        action="store_true",
+        help="List current clarification records",
+    )
+    clarify_action.add_argument(
+        "--recheck",
+        action="store_true",
+        help="Clear the cached clarity decision so the daemon analyzes the issue again",
+    )
+    clarify_action.add_argument(
+        "--resolve",
+        action="store_true",
+        help="Manually mark the clarity gate resolved and allow dispatch",
+    )
+    clarify_parser.add_argument(
+        "--workspace",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Explicit orchestrator workspace root",
+    )
+    clarify_parser.add_argument(
+        "--workflow",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Path to WORKFLOW.md (workspace discovery hint)",
     )
 
     # --- issue inject ---
@@ -869,7 +900,7 @@ def run(args: argparse.Namespace) -> int:
     elif cmd == "takeover":
         return _run_takeover(registry_path, ws, args)
     elif cmd == "clarify":
-        return _run_clarify(args)
+        return _run_clarify(args, registry_path=registry_path, workspace_root=ws)
     elif cmd == "inject":
         return _run_inject(args)
     elif cmd == "workspace":
@@ -1782,23 +1813,93 @@ def _run_resume(args: argparse.Namespace, workspace_root: str | Path | None = No
 # ---------------------------------------------------------------------------
 
 
-def _run_clarify(args: argparse.Namespace) -> int:
+def _run_clarify(
+    args: argparse.Namespace,
+    *,
+    registry_path: Path | None = None,
+    workspace_root: Path | None = None,
+) -> int:
     """Answer a clarification request. Idempotent — re-answering updates in place."""
     issue_id = getattr(args, "id", None)
-    if not issue_id:
+    list_clarifications = bool(getattr(args, "list_clarifications", False))
+    if not issue_id and not list_clarifications:
         print("error: --id is required", file=sys.stderr)
         return 2
 
     answer = getattr(args, "answer", None)
     forward = getattr(args, "forward_to_author", False)
 
-    if not answer and not forward:
+    recheck = bool(getattr(args, "recheck", False))
+    resolve = bool(getattr(args, "resolve", False))
+    if not answer and not forward and not list_clarifications and not recheck and not resolve:
         print("error: --answer is required unless --forward-to-author is used", file=sys.stderr)
         return 2
 
     from extensions.orchestrator.clarification_queue import ClarificationQueue
+    from extensions.orchestrator.issue_registry import IssueRegistry
 
-    queue = ClarificationQueue()
+    queue_path = (
+        Path(workspace_root) / ".clawcodex_clarification_queue.json"
+        if workspace_root is not None
+        else None
+    )
+    queue = ClarificationQueue(queue_path)
+
+    if list_clarifications:
+        items = queue.list_items()
+        if not items:
+            print("No clarification records.")
+            return 0
+        for item in items:
+            print(f"{item.issue_id}\t{item.status.value}\t{item.question}")
+        return 0
+
+    registry = IssueRegistry(registry_path) if registry_path is not None else None
+    if recheck:
+        queue.remove(issue_id)
+        record = registry.get(issue_id) if registry is not None else None
+        if record is None:
+            print(f"Issue {issue_id} is not present in the registry.", file=sys.stderr)
+            return 1
+        record.clarification_status = None
+        record.open_questions = []
+        record.clarification_round = 0
+        record.clarifier_fingerprint = None
+        record.clarification_replies = []
+        record.local_answer = None
+        record.local_answer_source = None
+        record.touch()
+        registry._save()
+        print(f"Issue {issue_id} will be rechecked on the next poll cycle.")
+        return 0
+
+    if resolve:
+        queue.remove(issue_id)
+        if registry is None:
+            print("Could not locate the issue registry.", file=sys.stderr)
+            return 1
+        record = registry.get(issue_id)
+        if record is None:
+            print(f"Issue {issue_id} is not present in the registry.", file=sys.stderr)
+            return 1
+        registry.mark_clarification_resolved(
+            issue_id,
+            fingerprint=record.clarifier_fingerprint or "manual",
+            answer=answer or "Manually resolved by operator",
+            source="operator",
+            status="manual_resolved",
+        )
+        print(f"Issue {issue_id} clarification marked resolved.")
+        return 0
+
+    if forward:
+        item = queue.mark_awaiting_author(issue_id)
+        if item is None:
+            print(f"No pending clarification for issue {issue_id}.", file=sys.stderr)
+            return 1
+        print(f"Issue {issue_id} marked for author clarification.")
+        return 0
+
     resolved = queue.resolve(issue_id, answer or "", source="clarification_queue")
     if resolved is None:
         print(f"Failed to write answer for issue {issue_id}.", file=sys.stderr)

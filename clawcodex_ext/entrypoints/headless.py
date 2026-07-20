@@ -1718,10 +1718,33 @@ def _run_one_agent_loop(
         getattr(tool_context, "output_style_name", None),
         getattr(tool_context, "output_style_dir", None),
     ).prompt
-    effective_system_prompt = build_effective_system_prompt(
-        _style_prompt,
-        tool_context,
+    from clawcodex_ext.coordinator.mode import (
+        get_coordinator_user_context,
+        is_coordinator_mode,
     )
+
+    if is_coordinator_mode():
+        from clawcodex_ext.coordinator.prompt import get_coordinator_system_prompt
+
+        # Coordinator mode is a distinct agent role, not just a restricted
+        # tool set.  Keep workspace context, but replace the normal agent/style
+        # prompt so the model knows it must delegate implementation to workers.
+        workspace_context = build_effective_system_prompt("", tool_context).strip()
+        worker_context = get_coordinator_user_context().get("workerToolsContext", "")
+        effective_system_prompt = "\n\n".join(
+            part
+            for part in (
+                get_coordinator_system_prompt(),
+                worker_context,
+                workspace_context,
+            )
+            if part
+        )
+    else:
+        effective_system_prompt = build_effective_system_prompt(
+            _style_prompt,
+            tool_context,
+        )
     if options.append_system_prompt:
         effective_system_prompt = f"{effective_system_prompt}\n\n{options.append_system_prompt}"
 

@@ -122,7 +122,13 @@ def run_headless_session(
         append_system_prompt=options.append_system_prompt or "",
         abort_controller=options.abort_controller,
     )
-    return run_headless(options_legacy)
+    from clawcodex_ext.coordinator.mode import coordinator_mode_context
+
+    coordinator_enabled = str(
+        options.env.get("CLAUDE_CODE_COORDINATOR_MODE", "")
+    ).strip().lower() in {"1", "true", "yes", "on"}
+    with coordinator_mode_context(coordinator_enabled):
+        return run_headless(options_legacy)
 
 
 # ---------------------------------------------------------------------------

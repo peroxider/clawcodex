@@ -36,9 +36,9 @@ docs/feature_plan/
 | F-114 | 阶段契约验证器 | 🟡 | [f-114-contract-validator.md](02-orchestrator/f-114-contract-validator.md) |
 | F-115 | 检查点与恢复 | 🟡 | [f-115-checkpoint-recovery.md](02-orchestrator/f-115-checkpoint-recovery.md) |
 | F-116 | 工作流可观测性集成 | 🟡 | [f-116-workflow-observability.md](02-orchestrator/f-116-workflow-observability.md) |
-| F-118 | 动态任务分解引擎 | 🔭 | [f-118-dynamic-decomposition.md](02-orchestrator/f-118-dynamic-decomposition.md) |
+| F-118 | 动态任务分解引擎 | 🟡 | [f-118-dynamic-decomposition.md](02-orchestrator/f-118-dynamic-decomposition.md) |
 | F-121 | PR 代码检视意见规则回灌 | 📋 | [f-121-rules-feedback.md](02-orchestrator/f-121-rules-feedback.md) |
-| F-124 | Issue 澄清器 — 描述不清晰自动检测与澄清闭环 | 📋 | [f-124-issue-clarifier.md](02-orchestrator/f-124-issue-clarifier.md) |
+| F-124 | Issue 澄清器 — 描述不清晰自动检测与澄清闭环 | 🟡 | [f-124-issue-clarifier.md](02-orchestrator/f-124-issue-clarifier.md) |
 | F-127 | PR CI 失败自动修复 — 从 CI 状态到 Agent 修复的闭环 | 📋 | [f-127-ci-auto-fix.md](02-orchestrator/f-127-ci-auto-fix.md) |
 | F-128 | 定时全量代码审查 — 周期性代码扫描与自动化 Issue 归档 | 📋 | [f-128-periodic-code-review.md](02-orchestrator/f-128-periodic-code-review.md) |
 

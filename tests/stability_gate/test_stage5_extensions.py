@@ -61,6 +61,15 @@ class TestStage5ExtRuntime:
         assert RuntimeContext is not None
         assert hasattr(RuntimeContext, "build")
 
+    def test_f118_and_f124_modules_import(self):
+        from extensions.orchestrator.issue_clarifier import IssueClarifierService
+        from extensions.orchestrator.modes.swarm import SwarmModeRunner
+        from extensions.orchestrator.task_decomposition import TaskDecomposer
+
+        assert IssueClarifierService is not None
+        assert SwarmModeRunner is not None
+        assert TaskDecomposer is not None
+
     def test_runtime_observer_import(self):
         from clawcodex_ext.runtime.observer import RuntimeObserver
 

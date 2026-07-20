@@ -407,6 +407,46 @@ def test_headless_stream_json_multi_turn_from_stdin(fake_wiring, tmp_path):
 # permission handling in headless mode
 
 
+def test_headless_coordinator_injects_role_and_worker_context(fake_wiring, tmp_path):
+    fake_wiring.append(_text_response("ok"))
+    import clawcodex_ext.entrypoints.headless as ext_headless
+    from clawcodex_ext.coordinator.mode import (
+        coordinator_mode_context,
+        get_coordinator_user_context,
+    )
+    from clawcodex_ext.coordinator.prompt import get_coordinator_system_prompt
+
+    captured: dict = {}
+    original = ext_headless.run_query_as_agent_loop
+
+    async def _capture(*args, **kwargs):
+        captured["system_prompt"] = kwargs["system_prompt"]
+        return await original(*args, **kwargs)
+
+    ext_headless.run_query_as_agent_loop = _capture  # type: ignore[assignment]
+    try:
+        with coordinator_mode_context(True):
+            worker_context = get_coordinator_user_context()["workerToolsContext"]
+            code = run_headless(
+                HeadlessOptions(
+                    prompt="delegate this task",
+                    append_system_prompt="CALLER CONSTRAINT",
+                    output_format="text",
+                    stdout=io.StringIO(),
+                    stderr=io.StringIO(),
+                    workspace_root=tmp_path,
+                )
+            )
+    finally:
+        ext_headless.run_query_as_agent_loop = original  # type: ignore[assignment]
+
+    assert code == 0
+    prompt = captured["system_prompt"]
+    assert prompt.startswith(get_coordinator_system_prompt())
+    assert worker_context in prompt
+    assert prompt.endswith("CALLER CONSTRAINT")
+
+
 def test_headless_without_skip_permissions_installs_auto_deny_handler(fake_wiring, tmp_path):
     fake_wiring.append(_text_response("ok"))
     import clawcodex_ext.entrypoints.headless as ext_headless

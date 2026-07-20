@@ -89,6 +89,13 @@ class IssueRecord:
     # Clarification-related fields (for three-channel clarification flow)
     clarification_status: str | None = None  # ClarificationStatus value
     question_history: list[str] = field(default_factory=list)
+    # F-124 pre-dispatch clarity gate. ``question_history`` remains the
+    # append-only audit trail; ``open_questions`` is the current unresolved set.
+    open_questions: list[str] = field(default_factory=list)
+    clarification_round: int = 0
+    clarifier_fingerprint: str | None = None
+    clarification_replies: list[str] = field(default_factory=list)
+    clarifier_comment_cursor: str | None = None
     author_login: str | None = None
     local_answer: str | None = None
     local_answer_source: str | None = None  # "dashboard" | "clarification_queue"
@@ -439,6 +446,22 @@ class IssueRegistry:
             record.conflict_files = list(existing.conflict_files)
             record.rebase_attempt_count = existing.rebase_attempt_count
             record.last_rebase_attempt_at = existing.last_rebase_attempt_at
+            # F-124: pre-dispatch clarification is completed before
+            # ``_launch_issue`` re-registers the record with workspace data.
+            # Preserve the answer and audit state so the normal agent session
+            # receives the author's requirements instead of silently losing
+            # them at launch time.
+            record.clarification_status = existing.clarification_status
+            record.question_history = list(existing.question_history)
+            record.open_questions = list(existing.open_questions)
+            record.clarification_round = existing.clarification_round
+            record.clarifier_fingerprint = existing.clarifier_fingerprint
+            record.clarification_replies = list(existing.clarification_replies)
+            record.clarifier_comment_cursor = existing.clarifier_comment_cursor
+            record.local_answer = existing.local_answer
+            record.local_answer_source = existing.local_answer_source
+            record.first_response_source = existing.first_response_source
+            record.stale_answers = list(existing.stale_answers)
         self._records[issue_id] = record
         self._save()
         return record
@@ -757,6 +780,11 @@ class IssueRegistry:
         local_answer: str | None = None,
         local_answer_source: str | None = None,
         first_response_source: str | None = None,
+        open_questions: list[str] | None = None,
+        clarification_round: int | None = None,
+        clarifier_fingerprint: str | None = None,
+        clarification_replies: list[str] | None = None,
+        clarifier_comment_cursor: str | None = None,
     ) -> IssueRecord | None:
         """Update clarification-related fields on an issue record."""
         record = self._records.get(issue_id)
@@ -774,6 +802,83 @@ class IssueRegistry:
             record.local_answer_source = local_answer_source
         if first_response_source is not None:
             record.first_response_source = first_response_source
+        if open_questions is not None:
+            record.open_questions = list(open_questions)
+        if clarification_round is not None:
+            record.clarification_round = max(0, int(clarification_round))
+        if clarifier_fingerprint is not None:
+            record.clarifier_fingerprint = clarifier_fingerprint
+        if clarification_replies is not None:
+            record.clarification_replies = list(clarification_replies)
+        if clarifier_comment_cursor is not None:
+            record.clarifier_comment_cursor = clarifier_comment_cursor
+        record.touch()
+        self._save()
+        return record
+
+    def mark_clarification_blocked(
+        self,
+        issue_id: str,
+        *,
+        questions: list[str],
+        fingerprint: str,
+        round_number: int,
+    ) -> IssueRecord | None:
+        """Record an F-124 clarification wait without abandoning the issue."""
+        record = self._records.get(issue_id)
+        if record is None:
+            return None
+        record.clarification_status = "awaiting_author"
+        record.open_questions = list(questions)
+        record.clarification_round = max(1, int(round_number))
+        record.clarifier_fingerprint = fingerprint
+        for question in questions:
+            if question not in record.question_history:
+                record.question_history.append(question)
+        record.touch()
+        self._save()
+        return record
+
+    def mark_clarification_resolved(
+        self,
+        issue_id: str,
+        *,
+        fingerprint: str,
+        answer: str | None = None,
+        source: str | None = None,
+        status: str = "resolved",
+        replies: list[str] | None = None,
+    ) -> IssueRecord | None:
+        record = self._records.get(issue_id)
+        if record is None:
+            return None
+        record.clarification_status = status
+        record.open_questions = []
+        record.clarifier_fingerprint = fingerprint
+        if answer is not None:
+            record.local_answer = answer
+        if source is not None:
+            record.local_answer_source = source
+            record.first_response_source = source
+        if replies is not None:
+            record.clarification_replies = list(replies)
+        record.touch()
+        self._save()
+        return record
+
+    def mark_clarification_manual_required(
+        self,
+        issue_id: str,
+        *,
+        questions: list[str],
+        fingerprint: str,
+    ) -> IssueRecord | None:
+        record = self._records.get(issue_id)
+        if record is None:
+            return None
+        record.clarification_status = "manual_required"
+        record.open_questions = list(questions)
+        record.clarifier_fingerprint = fingerprint
         record.touch()
         self._save()
         return record
@@ -955,6 +1060,12 @@ class IssueRegistry:
         record.verification_status = None
         record.verification_output = None
         record.last_hook_error = None
+        record.clarification_status = None
+        record.open_questions = []
+        record.clarification_round = 0
+        record.clarifier_fingerprint = None
+        record.clarification_replies = []
+        record.clarifier_comment_cursor = None
         if reset_retry_count:
             record.retry_count = 0
         elif increment_retry:

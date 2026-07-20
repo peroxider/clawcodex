@@ -7,6 +7,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 from extensions.orchestrator.config.schema import (
     AgentConfig,
@@ -216,6 +218,52 @@ class TestGateApplies(unittest.TestCase):
         self.assertFalse(
             Orchestrator._repro_gate_applies(self_stub, _GateSession(labels=["feature"]))
         )
+
+
+class TestReproGateRunner(unittest.IsolatedAsyncioTestCase):
+    async def test_repro_stage_uses_gate_contract_instead_of_tracker_continuation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            command = _exit_script(root, 1)
+            _write(root, REPRO_COMMAND_FILE, command + "\n")
+
+            tracker = object()
+            agent_runner = SimpleNamespace(run=AsyncMock())
+            workflow = SimpleNamespace(
+                agent=SimpleNamespace(repro_first=ReproFirstConfig(enabled=True))
+            )
+            self_stub = SimpleNamespace(
+                workflow=workflow,
+                agent_runner=agent_runner,
+                tracker=tracker,
+                status_dashboard=MagicMock(),
+                _clarification_resolver=object(),
+                _update_run_diagnostics=MagicMock(),
+            )
+            session = SimpleNamespace(
+                issue=_Issue(),
+                workspace=SimpleNamespace(path=root),
+                run_kind="issue",
+                prompt_override=None,
+                timeout_deadline_at=None,
+                turn_count=0,
+                status="running",
+                output_text="",
+                session_end_reason=None,
+                session_end_summary="",
+                run_id="run-repro",
+                consecutive_429_count=0,
+                rate_limit_pending_turn=None,
+            )
+
+            proceed = await Orchestrator._run_repro_gate(self_stub, session, None)
+
+            self.assertTrue(proceed)
+            call = agent_runner.run.await_args
+            self.assertIsNone(call.kwargs["tracker"])
+            self.assertIs(call.kwargs["comment_tracker"], tracker)
+            self.assertEqual(session.repro_command, command)
+            self.assertEqual(session.run_kind, "issue")
 
 
 class TestGitSyncReproRecheck(unittest.IsolatedAsyncioTestCase):

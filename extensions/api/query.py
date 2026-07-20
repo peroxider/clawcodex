@@ -499,11 +499,16 @@ class QueryRunner:
                         last_stdout_pos = stdout_pos
                         last_stdout_change_at = now
                     last_activity_at = max(last_event_at, last_stdout_change_at)
+                    tool_in_flight = bool(wd is not None and wd.has_pending())
                     # WARN tier: a clear diagnosis within stall_warn_s of
                     # the silence starting — long before the abort tier
                     # would consider acting. One event per silence
                     # episode; activity re-arms it.
-                    if stall_warn_s > 0:
+                    if tool_in_flight:
+                        # The per-tool watchdog owns tool_use -> tool_result
+                        # gaps. The stream-stall budget must not preempt it.
+                        stall_warned_at = None
+                    elif stall_warn_s > 0:
                         if stall_warned_at is not None and last_activity_at > stall_warned_at:
                             stall_warned_at = None  # activity resumed — re-arm
                         if (
@@ -531,7 +536,7 @@ class QueryRunner:
                                 stdout_len=stdout_pos,
                                 tool_events=tool_event_count,
                             )
-                    if stall_timeout_s > 0:
+                    if stall_timeout_s > 0 and not tool_in_flight:
                         if (now - last_activity_at) >= stall_timeout_s:
                             stalled = True
                             append_debug_event(

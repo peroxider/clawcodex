@@ -245,6 +245,11 @@ class ToolGapWatchdog:
             self._pending.pop(tool_use_id, None)
             self._tripped.discard(tool_use_id)
 
+    def has_pending(self) -> bool:
+        """Return whether at least one tool_use is awaiting a result."""
+        with self._lock:
+            return bool(self._pending)
+
     def tick(self, *, now: float | None = None) -> list[tuple[str, ToolTimeoutResolution, float]]:
         """Scan pending tool calls; trip any that are over budget.
 

@@ -1,9 +1,48 @@
 # F-124: Issue 澄清器 — 描述不清晰自动检测与澄清闭环
 
-> 状态: 📋 规划中
+> 状态: 🟡 MVP 已实现
 > 章节: docs/feature_plan/02-orchestrator/f-124-issue-clarifier.md
-> 最后更新: 2026-07-03
+> 最后更新: 2026-07-11
 > 关联能力: F-38（验证+报告+PR）、F-39（issue 重跑标签）、F-121（规则回灌）、F-123（Intent Forecast）
+
+---
+
+## §0 当前实现（2026-07-11）
+
+F-124 已完成可运行 MVP，但实现方式与本文最初草案有三处重要调整：
+
+1. **只新增文本清晰度分析层**：`issue_clarifier/` 负责 prompt、JSON 解析、fingerprint
+   缓存和 clear/unclear 判定。
+2. **复用现有澄清基础设施**：问题投递、作者评论检测、超时和回答冲突继续由
+   `ClarificationResolver` + `ClarificationQueue` 负责，没有再创建重复 Poller/Queue。
+3. **不复用永久 `Intent.BLOCKED`**：当前 `agent:blocked` 会把记录转成 abandoned/terminal，
+   不适合“等作者回答后继续”。F-124 使用 `clarification_status=awaiting_author` 暂停分发，
+   回答通过重新分析后再放行。
+
+实际接入点是 `Orchestrator._poll_and_dispatch()` 在 `_launch_issue()` 之前，不是旧草案中的
+`_claim_next_issue()`（当前代码不存在该方法）。
+
+已实现：
+
+- `ClarifierConfig`：默认关闭，支持阻断/观察模式、问题数、轮数、置信度、token 和缓存配置。
+- `IssueClarifierService`：静态 issue 文本分析，provider/解析失败默认 fail-open。
+- `ClarifierCache`：title + description + labels + author replies 的 SHA-256 fingerprint 缓存。
+- `IssueClarificationGate`：入队前分析、作者优先提问、最多两轮、manual_required。
+- `IssueRecord.open_questions`、轮数、fingerprint、回复和评论游标持久化。
+- 作者回复过滤和 bot 评论游标，避免把澄清器自己的评论误当成作者答案。
+- 回答内容注入最终 Agent prompt，作为 issue requirements 的一部分。
+- `orchestrator issue clarify` 支持当前 workspace 队列、list/recheck/resolve。
+- 单元测试覆盖 clear/unclear、缓存、降级、阻断、回复放行、多轮上限、观察模式和 CLI。
+
+尚未完成：
+
+- 真实 provider + GitCode/GitHub tracker 的长期 daemon E2E。
+- 可选的专用“等待澄清”远端标签；不能直接复用当前永久 `agent:blocked`。
+- Dashboard 上的 open questions、轮数和 manual_required 专用视图。
+- Follow-up workspace focus 富化（原 P2）。
+
+以下章节保留完整设计背景；其中新建 `ClarificationPoller`、`open_questions` 重复状态机和
+`_claim_next_issue()` 接入示意，以本节的实际架构为准。
 
 ---
 

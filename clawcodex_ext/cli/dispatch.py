@@ -407,6 +407,32 @@ def run_cli(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv[1:])
     profile_checkpoint("argparse_done")
 
+    swarm_requested = bool(getattr(args, "swarm", False)) or getattr(
+        args, "effort", "normal"
+    ) == "swarm"
+    if swarm_requested:
+        if not getattr(args, "prompt", None):
+            parser.error("--swarm/--decompose requires a prompt")
+        from extensions.orchestrator.issue import Issue
+        from extensions.orchestrator.task_decomposition import (
+            TaskDecomposer,
+            build_swarm_prompt,
+            write_task_plan,
+        )
+
+        workspace_root = Path.cwd()
+        issue = Issue(
+            id="cli-swarm",
+            identifier="cli-swarm",
+            title=str(args.prompt)[:160],
+            description=str(args.prompt),
+        )
+        plan = TaskDecomposer().decompose_issue(issue)
+        plan_path = write_task_plan(plan, workspace_root)
+        args.prompt = build_swarm_prompt(issue, plan, plan_path)
+        args.print = True
+        os.environ["CLAUDE_CODE_COORDINATOR_MODE"] = "1"
+
     if getattr(args, "prompt", None) and not getattr(args, "print", False):
         parser.error(f"unknown command: {args.prompt} (use -p/--print to send a prompt)")
 

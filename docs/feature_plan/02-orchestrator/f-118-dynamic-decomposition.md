@@ -1,63 +1,101 @@
 # F-118: 动态任务分解引擎
 
-> 状态: 🔭 探索中
+> 状态: 🟡 MVP 已实现
 > 章节: docs/feature_plan/02-orchestrator/f-118-dynamic-decomposition.md
-> 最后更新: 2026-06-24
+> 最后更新: 2026-07-11
 
-## §1 设计规划
+## §0 当前实现
 
-### 1.1 目标
+F-118 不再新建一套 subagent 运行时，也不复用仅适用于交互会话的
+`fork_subagent`。当前实现建立在已有的 collaboration mode 和
+`CoordinatorModeRunner` 上：
 
-单次复杂任务实时分解为多个 subagent 并行/串行执行，动态规划子任务、调度 wave、合并结果。
+1. `TaskDecomposer` 从 issue 或 CLI prompt 生成有界的 seed task graph。
+2. `TaskPlan` 校验任务 ID、依赖、wave、并行上限和循环依赖。
+3. 计划写入工作区 `.orchestrator_control/task_decomposition.json`。
+4. `SwarmModeRunner` 把结构化计划交给现有 coordinator，由 coordinator 按 wave
+   调度 worker，并要求每个 worker 返回事实、改动、测试和风险。
+5. Agent 完成后继续走 orchestrator 原有 verification 和同步流程。
 
-### 1.2 能力范围
+实现入口：
 
-| 能力 | 说明 | 对标 Claude Code |
-|------|------|-----------------|
-| 任务复杂度分析 | 判断任务是否需要分解（单步 vs 多步） | Plan Mode |
-| 子任务分解 | 将复杂任务拆分为原子 phase | EnterPlanMode/ExitPlanMode |
-| 依赖分析 | 判断子任务间是否可并行 | 依赖图分析 |
-| 执行模式选择 | sequential vs parallel | sequential / parallel waves |
-| 子 agent 调度 | 调用 fork_subagent/Agent() 执行 | Agent(...) |
-| 结果合并 | 去重、筛选、合并子 agent 输出 | 脚本级合并 |
-| 验证循环 | adversarial verification / loop-until-done | 六种模式组合 |
+- `extensions/orchestrator/task_decomposition/`
+- `extensions/orchestrator/modes/swarm.py`
+- `extensions/orchestrator/mode_selector.py`
+- `clawcodex_ext/cli/parser.py`
+- `clawcodex_ext/cli/dispatch.py`
 
-### 1.3 触发方式
+### 0.1 触发方式
 
 ```bash
-# 单次任务触发
-clawcodex --swarm "create a simple calculator app with NextJS backend"
-# 或
-clawcodex --decompose "refactor this codebase to use async/await"
-
-# Session 设置（自动模式）
-clawcodex --effort swarm
+# 独立 CLI，自动进入 headless coordinator 模式
+clawcodex --swarm "refactor the provider layer and verify compatibility"
+clawcodex --decompose "refactor the provider layer and verify compatibility"
+clawcodex --effort swarm "refactor the provider layer and verify compatibility"
 ```
 
-### 1.4 与声明式工作流引擎的区分
+Orchestrator workflow：
 
-| 决策 | 声明式工作流引擎（F-110） | 动态任务分解（F-118） |
-|------|--------------------------|---------------------|
-| 编排脚本 | 人类可审阅的 YAML | 内部生成的子任务列表（不可见） |
-| 持久化 | workflow.yaml 保存到磁盘 | 不持久化 |
-| 检查点 | per-stage | 无（仅 session 恢复） |
-| 成本预算 | 阶段级 | 累计消耗 |
-| CLI 命令 | `clawcodex-dev workflow run` | `clawcodex --swarm` |
+```yaml
+modes:
+  enabled: [single, swarm]
+  default: single
+  router:
+    kind: heuristic
+  swarm:
+    max_subtasks: 8
+    max_parallel: 3
+    max_waves: 6
+```
 
-### 1.5 设计约束
+Issue 可用 `mode:swarm` 强制触发；`mode:auto` 或无 mode 标签时，router 会把
+`swarm`、`decompose`、`multi-step`、`parallel tasks`、`complex bug` 等描述路由到
+swarm。
 
-1. 动态任务分解**不依赖**声明式工作流引擎的任何代码
-2. 动态任务分解**复用** `fork_subagent`、`Agent()` 工具、现有 `AgentRunner`
-3. 命名上严禁使用 "workflow" 一词，使用 "swarm" / "decompose" / "task_decomposition"
+## §1 能力范围
 
-## §2 进度跟踪
+| 能力 | 当前实现 |
+|------|----------|
+| 任务复杂度分析 | mode router 负责 single/pipeline/coordinator/debate/swarm 选择 |
+| 子任务分解 | 显式列表提取；没有列表时生成 investigate → implement → verify seed plan |
+| 依赖分析 | `depends_on` + 拓扑 wave；循环和未知依赖直接拒绝 |
+| 执行模式 | 同 wave 并行、跨 wave 串行；并行数量有硬上限 |
+| 子 agent 调度 | 复用 coordinator 的 Agent/SendMessage/TaskStop worker 运行时 |
+| 结果合并 | coordinator prompt 强制结构化汇总 worker 事实、改动、测试和风险 |
+| 验证循环 | coordinator 可创建有界 repair task；最终仍走原有 orchestrator verification |
+| 可恢复证据 | seed plan 持久化到 `.orchestrator_control/task_decomposition.json` |
 
-### 2.1 当前瓶颈
+## §2 设计约束
 
-探索阶段，尚未实现。
+1. F-118 不依赖 F-110 声明式工作流引擎。
+2. F-118 不使用 `fork_subagent`。fork 在非交互和 coordinator 场景下有意关闭。
+3. 任务数、wave 数、并行数必须有界，不能让模型无限拆分。
+4. 同一文件不能由两个并行 worker 同时编辑；有重叠时必须串行。
+5. task graph 是运行证据，不是新的持久化 workflow DSL。
 
-## §4 变更记录
+## §3 已完成
+
+- [x] `TaskPlan` / `Subtask` 数据模型和校验
+- [x] 显式任务提取和三阶段 fallback 分解
+- [x] 依赖拓扑排序和 bounded waves
+- [x] 计划 JSON 原子落盘
+- [x] `SwarmModeRunner` + coordinator 调度
+- [x] `mode:swarm`、heuristic router 和 mode registry
+- [x] `--swarm` / `--decompose` / `--effort swarm`
+- [x] 单元测试覆盖计划、路由、配置、runner 和 CLI parser
+
+## §4 后续增强
+
+- [ ] 用可注入 LLM planner 对 seed plan 做结构化重写，而不是只让 coordinator 在 prompt
+  中自行细化。
+- [ ] 将 worker 的完成状态和证据按 schema 回写 task graph，并在缺失时硬失败。
+- [ ] 接入每个 subtask 的独立 token/cost 计量和 issue 级美元预算。
+- [ ] daemon 崩溃后根据 task graph 状态从未完成 wave 恢复，而不是整轮重跑。
+- [ ] 为文件所有权冲突增加静态检查，而不只依赖 coordinator 指令。
+
+## §5 变更记录
 
 | 日期 | 变更 | 原因 |
 |------|------|------|
-| 2026-06-24 | 初始创建（从四源融合） | 四文档合并 |
+| 2026-06-24 | 初始探索文档 | 四文档合并 |
+| 2026-07-11 | 完成 bounded swarm MVP，改为复用 coordinator | 避免重复运行时和非交互 fork 冲突 |

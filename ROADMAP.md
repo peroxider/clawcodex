@@ -184,7 +184,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 交付件 |
 |---------|---------|----------------|--------------------|----------|--------|
 | AR-F-46 | permission_mode 正交拆分 | `WorkflowConfig.audit_log` 字段（none/minimal/full）、`permission_mode` → 三字段语义糖（interactive / default_decision / audit_log）、`permission_mode` 降级为 deprecated shim | 用户可细粒度控制无人值守场景的权限行为和审计级别，旧 workflow.yaml 不破坏 | 🟡 进行中 → F-46（F-46.0 audit_log 部分完成 + headless auto-override 已落地；F-46.1 interactive/default_decision + F-46.2 彻底拆 enum 待实施） | schema 字段、translate 函数、迁移指南 |
-| AR-F-118 | 动态任务分解引擎 | 单次复杂任务实时分解为多个 subagent 并行/串行执行（任务复杂度分析、子任务分解、依赖分析、执行模式 sequential/parallel、子 agent 调度、结果合并、验证循环）；不依赖声明式工作流引擎（F-110），复用 `fork_subagent`/`Agent()` 工具 + 现有 AgentRunner；命名严禁使用 "workflow"，使用 "swarm"/"decompose"/"task_decomposition" | 用户可对单次任务用 `--swarm`/`--decompose` 触发自动分解并行执行；与 F-110 声明式工作流不同（动态、不持久化、不可见内部规划） | 🔭 探索中 → F-118 | py decompose 调度、subagent 调用、结果合并、adversarial verification |
+| AR-F-118 | 动态任务分解引擎 | 单次复杂任务生成 bounded task graph，按依赖 wave 交给现有 coordinator/worker 运行时执行；不依赖 F-110，不使用非交互场景禁用的 `fork_subagent` | `--swarm`/`--decompose`/`--effort swarm` 与 `mode:swarm` 可用；计划落盘到 `.orchestrator_control/task_decomposition.json` | 🟡 MVP 已实现 → F-118 | 后续：LLM planner schema、subtask 成本硬预算、崩溃恢复 |
 
 #### SR-3.2 澄清、重跑与人机协同（→ FEATURE_PLAN §1.1.4 F-39 Issue 重跑、§1.4.2 F-49 会话统一存储、§2.12 Issue 语义澄清流程（F-78））
 
@@ -637,12 +637,12 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | F-114 | 阶段契约验证器 | Orchestrator | 📋 | AR-F-114 | §3.4 SR-3.4 |
 | F-115 | 检查点与恢复 | Orchestrator | ✅ | AR-F-115 | §3.4 SR-3.4 |
 | F-116 | 工作流可观测性集成 | Orchestrator | 📋 | AR-F-116 | §3.4 SR-3.4 |
-| F-118 | 动态任务分解引擎 | Orchestrator | 🔭 | AR-F-118 | §3.1 SR-3.1 |
+| F-118 | 动态任务分解引擎 | Orchestrator | 🟡 | AR-F-118 | §3.1 SR-3.1 |
 | F-119 | System Prompt 段落拼装与自迭代 | Agent Core | 📋 | AR-F-119 | §2.1 SR-1.1 |
 | F-120 | Agent Dashboard 跨系统统一看板 | Agent Dashboard | 📋 | AR-F-120 | §4.2 IR-6 |
 | F-121 | PR 代码检视意见规则回灌 | Orchestrator | 🟡 | AR-F-121 | §3.3 SR-3.3 |
 | F-123 | Intent Forecast 空闲意图预测 | Agent 新增规划 | 📋 | — | §1 / §5 |
-| F-124 | Issue Clarifier 描述澄清 | Agent 新增规划 | 📋 | — | §3.1 |
+| F-124 | Issue Clarifier 描述澄清 | Agent 新增规划 | 🟡 | — | §3.1 |
 | F-125 | Headless 无头模式多轮交互 | Agent 新增规划 | 🟡 | — | §2.1 |
 
 **统计**：31 个 F-N 中，🟡 进行中 13 / 📋 规划中 14 / 🔭 探索中 1 / ⏳ 待开始 1 / ✅ 已完成 1（已从路线图中移除）
