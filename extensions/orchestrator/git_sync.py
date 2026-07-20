@@ -251,8 +251,9 @@ class GitSyncService:
                 await self._run_pre_push_verification(repo_root, session)
             except (VerificationFailed, HookFailedError) as exc:
                 # Roll back the just-created commit since verification failed
-                # But only if we created the commit (not agent)
-                if not agent_committed:
+                # But only if we actually created one this run (`committed`);
+                # otherwise HEAD~1 would pop a pre-existing baseline commit.
+                if committed and not agent_committed:
                     try:
                         await asyncio.to_thread(
                             self._run_git_checked, ["reset", "--mixed", "HEAD~1"], repo_root

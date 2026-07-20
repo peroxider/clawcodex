@@ -71,6 +71,32 @@ class TestFindMissingPaths(unittest.TestCase):
             missing = find_missing_paths(Path(tmp), ["../outside.py", "~/home.py"])
             self.assertEqual(missing, [])
 
+    def test_bare_filename_resolved_by_basename_search(self) -> None:
+        """Issues cite files by bare name or stale directory all the
+        time; both must resolve via basename search instead of being
+        reported as fabricated (observed live: a bare
+        ``base_profiling_parser.py`` reference froze an obedient model
+        with a false "file does not exist" warning)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            deep = root / "pkg" / "sub" / "parsers"
+            deep.mkdir(parents=True)
+            (deep / "real_parser.py").write_text("x = 1\n", encoding="utf-8")
+            missing = find_missing_paths(
+                root,
+                ["real_parser.py", "old_dir/real_parser.py", "fabricated.py"],
+            )
+            self.assertEqual(missing, ["fabricated.py"])
+
+    def test_basename_search_ignores_git_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            git_hooks = root / ".git" / "hooks"
+            git_hooks.mkdir(parents=True)
+            (git_hooks / "shadow.py").write_text("x = 1\n", encoding="utf-8")
+            missing = find_missing_paths(root, ["shadow.py"])
+            self.assertEqual(missing, ["shadow.py"])
+
 
 class TestCheckIssuePremise(unittest.TestCase):
     def test_flags_fabrication_probe(self) -> None:
