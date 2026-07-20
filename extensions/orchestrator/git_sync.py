@@ -535,6 +535,13 @@ class GitSyncService:
                     exc.output,
                 ) from exc
             outputs.append(f"## repro\n$ {repro_command}\n{output}".strip())
+            # A green reproduction is an executable verification of the
+            # reported bug even when the repository has no conventional
+            # test suite for the fallback regression guard to discover.
+            # Keep the guard's note in verification_output, but do not
+            # downgrade the successful repro contract to skipped_no_tests.
+            if verification_status == "skipped_no_tests":
+                verification_status = "passed"
         hook_command = self._hooks_config.pre_push
         if hook_command:
             before = await asyncio.to_thread(self._status_snapshot, repo_root)

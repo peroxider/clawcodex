@@ -184,6 +184,68 @@ async def test_tool_events_count_as_activity() -> None:
 
 
 @pytest.mark.asyncio
+async def test_inflight_tool_pauses_stall_watchdog() -> None:
+    """Silence during a tool call belongs to the per-tool watchdog."""
+
+    with TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        debug_log = tmp_path / "debug.ndjson"
+
+        def fake_run_headless_session(options):
+            options.on_event(
+                SimpleNamespace(
+                    kind="tool_use",
+                    tool_name="Agent",
+                    tool_input={"prompt": "long task"},
+                    tool_use_id="tu-long",
+                    is_error=False,
+                    error=None,
+                )
+            )
+            time.sleep(0.5)
+            options.on_event(
+                SimpleNamespace(
+                    kind="tool_result",
+                    tool_name="Agent",
+                    tool_output="done",
+                    tool_use_id="tu-long",
+                    is_error=False,
+                    error=None,
+                )
+            )
+            return 0
+
+        runner = QueryRunner(
+            QueryConfig(
+                prompt="hello",
+                workspace=tmp_path,
+                run_id="run-inflight",
+                debug_log_path=debug_log,
+                timeout_s=60.0,
+                stall_timeout_s=0.2,
+                stall_warn_s=0.1,
+            )
+        )
+
+        with patch(
+            "extensions.capabilities.headless_runner.run_headless_session",
+            fake_run_headless_session,
+        ):
+            events = [event async for event in runner.stream()]
+
+        rows = _debug_rows(debug_log)
+
+    completes = [event for event in events if isinstance(event, SessionComplete)]
+    assert completes[-1].reason == "success"
+    assert not [
+        row
+        for row in rows
+        if row["stage"]
+        in {"query_runner.stall_suspected", "query_runner.stall_detected"}
+    ]
+
+
+@pytest.mark.asyncio
 async def test_zero_disables_the_watchdog() -> None:
     """``stall_timeout_s=0`` is the escape hatch: a silent run then
     falls through to the wall-clock budget (exit_code=124), proving the

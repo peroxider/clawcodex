@@ -63,21 +63,24 @@ class CoordinatorModeRunner:
         workflow: "WorkflowConfig",
         **hooks: Any,
     ) -> Any:
-        agent_config = self._agent_runner.agent_config
-        original = bool(getattr(agent_config, "coordinator_mode", False))
+        sentinel = object()
+        original = getattr(session, "coordinator_mode", sentinel)
         logger.info(
             "CoordinatorModeRunner: enabling coordinator_mode for issue=%s (was=%s)",
             session.issue.id,
-            original,
+            None if original is sentinel else original,
         )
         try:
-            agent_config.coordinator_mode = True
+            session.coordinator_mode = True
             return await self._agent_runner.run(session, workflow, **hooks)
         finally:
-            agent_config.coordinator_mode = original
+            if original is sentinel:
+                delattr(session, "coordinator_mode")
+            else:
+                session.coordinator_mode = original
             logger.info(
-                "CoordinatorModeRunner: restored coordinator_mode=%s after issue=%s",
-                original,
+                "CoordinatorModeRunner: restored session coordinator_mode=%s after issue=%s",
+                None if original is sentinel else original,
                 session.issue.id,
             )
 

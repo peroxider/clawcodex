@@ -42,6 +42,7 @@ from .modes.coordinator import CoordinatorModeRunner
 from .modes.debate import DebateModeRunner
 from .modes.pipeline import PipelineModeRunner
 from .modes.single import SingleModeRunner
+from .modes.swarm import SwarmModeRunner
 from .premise_check import format_cannot_proceed_comment, read_cannot_proceed
 from .prompt_builder import PromptBuilder
 from .repro_gate import (
@@ -330,6 +331,42 @@ class Orchestrator:
                 escalation=getattr(workflow.agent, "clarification_escalation", "skip"),
             ),
         )
+        self._clarification_gate = None
+        clarifier_config = getattr(workflow, "clarifier", None)
+        if clarifier_config is not None and bool(getattr(clarifier_config, "enabled", False)):
+            from clawcodex_ext.providers.runtime import build_provider_from_config
+
+            from .issue_clarifier import ClarifierCache, IssueClarifierService
+            from .issue_clarifier.gate import IssueClarificationGate
+
+            cache = ClarifierCache(
+                workspace_root / ".clawcodex_issue_clarifier_cache.json",
+                enabled=bool(getattr(clarifier_config, "cache_enabled", True)),
+            )
+
+            def _build_clarifier_provider() -> Any:
+                return build_provider_from_config(
+                    workflow.agent.provider,
+                    getattr(workflow.agent, "model", None),
+                )
+
+            service = IssueClarifierService(
+                config=clarifier_config,
+                cache=cache,
+                provider_factory=_build_clarifier_provider,
+                model=getattr(workflow.agent, "model", None),
+            )
+            self._clarification_gate = IssueClarificationGate(
+                service=service,
+                resolver=self._clarification_resolver,
+                registry=self._registry,
+                config=clarifier_config,
+            )
+            logger.info(
+                "F-124 issue clarifier enabled (block=%s, author_first=%s)",
+                clarifier_config.block_on_unclear,
+                clarifier_config.author_first,
+            )
         self._progress_context = ToolContext(workspace_root=workspace_root)
         # P3 IM event bridge: if set (by the daemon wiring a gateway deliver),
         # :meth:`_build_session_sink` attaches an :class:`OrchestratorEventEmitter`
@@ -639,6 +676,23 @@ class Orchestrator:
         if "coordinator" in enabled:
             _modes.register("coordinator", CoordinatorModeRunner(agent_runner))
             logger.info("Collaboration mode registered: coordinator")
+        if "swarm" in enabled:
+            _modes.register(
+                "swarm",
+                SwarmModeRunner(
+                    agent_runner,
+                    max_subtasks=workflow.modes.swarm_max_subtasks,
+                    max_parallel=workflow.modes.swarm_max_parallel,
+                    max_waves=workflow.modes.swarm_max_waves,
+                ),
+            )
+            logger.info(
+                "Collaboration mode registered: swarm (max_subtasks=%d, "
+                "max_parallel=%d, max_waves=%d)",
+                workflow.modes.swarm_max_subtasks,
+                workflow.modes.swarm_max_parallel,
+                workflow.modes.swarm_max_waves,
+            )
         if "debate" in enabled:
             proposers = tuple(
                 getattr(workflow.modes, "debate_proposers", None) or ("proposer_a", "proposer_b")
@@ -965,6 +1019,8 @@ class Orchestrator:
                 return
 
             available_slots = self._state.max_concurrent_agents - len(self._state.running)
+            if self._clarification_gate is not None:
+                self._clarification_gate.begin_poll()
 
             # Pre-register all unregistered candidates with QUEUED status
             # so the dashboard / registry reflects the full backlog.
@@ -1190,6 +1246,15 @@ class Orchestrator:
                     continue
                 if not await self._dependencies_satisfied(issue):
                     continue
+                if self._clarification_gate is not None:
+                    try:
+                        if not await self._clarification_gate.should_dispatch(issue):
+                            logger.info("Issue %s is waiting for F-124 clarification", issue.id)
+                            continue
+                    except Exception:
+                        logger.exception("F-124 clarity gate failed for issue %s", issue.id)
+                        if not bool(getattr(self.workflow.clarifier, "fail_open", True)):
+                            continue
                 self._state.claimed.add(issue.id)
                 # Thread-local MDC for the orchestrator launch path —
                 # the agent_runner will refill with run_id once available.
@@ -1952,6 +2017,14 @@ class Orchestrator:
             pause_resume_event=asyncio.Event(),
             event_queue=asyncio.Queue(),
         )
+        clarification_record = self._registry.get(issue.id or "")
+        if clarification_record is not None and clarification_record.local_answer:
+            session.clarification_answer = clarification_record.local_answer
+            session.clarification_source = clarification_record.local_answer_source
+            if clarification_record.question_history:
+                session.clarification_question = "\n".join(
+                    f"- {question}" for question in clarification_record.question_history
+                )
         session.run_kind = "agent_rebase"
         # F-120: route the run through the purpose-built rebase prompt
         # (resolve markers -> git add -> git rebase --continue ->
@@ -2635,6 +2708,14 @@ class Orchestrator:
             pause_resume_event=asyncio.Event(),
             event_queue=asyncio.Queue(),
         )
+        clarification_record = self._registry.get(issue.id or "")
+        if clarification_record is not None and clarification_record.local_answer:
+            session.clarification_answer = clarification_record.local_answer
+            session.clarification_source = clarification_record.local_answer_source
+            if clarification_record.question_history:
+                session.clarification_question = "\n".join(
+                    f"- {question}" for question in clarification_record.question_history
+                )
         retry_attempt = self._state.retry_attempts.get(issue.id or "", 0)
         session.attempt = retry_attempt + 1
         session.issue_attempt = session.attempt
@@ -2897,7 +2978,11 @@ class Orchestrator:
                     session,
                     self.workflow,
                     status_dashboard=self.status_dashboard,
-                    tracker=self.tracker,
+                    # The repro stage has its own executable completion
+                    # contract below. Passing the tracker here makes the
+                    # generic runner continue while the issue is still open,
+                    # even after the repro artifacts are complete.
+                    tracker=None,
                     comment_tracker=self.tracker,
                     clarification_resolver=self._clarification_resolver,
                     progress_reporter=progress_sink,
@@ -2971,6 +3056,19 @@ class Orchestrator:
         self._state.failed.add(issue.id or "")
         return False
 
+    def _resolve_session_runner(self, session: AgentSession) -> Any:
+        """Resolve the requested runner without silently changing semantics."""
+        collab_mode = getattr(session, "collaboration_mode", None) or DEFAULT_MODE
+        if collab_mode != "single" and session.run_kind == "issue":
+            try:
+                return _modes.get(collab_mode)
+            except KeyError as exc:
+                raise RuntimeError(
+                    f"Issue {session.issue.id} requested collaboration mode "
+                    f"{collab_mode!r}, but that mode is not enabled in workflow.md"
+                ) from exc
+        return self.stage_runners.get(session.run_kind, self.agent_runner)
+
     async def _run_issue(self, session: AgentSession) -> None:
         """Run agent for one issue with concurrency control."""
         async with self._semaphore:
@@ -3020,25 +3118,7 @@ class Orchestrator:
                         # identically. For non-single modes registered
                         # in later phases, we dispatch to the
                         # ``ModeRunner`` from the registry instead, and
-                        # only fall back to the legacy lookup if the
-                        # requested mode isn't registered (e.g. a
-                        # workflow.md loaded against an older daemon).
-                        collab_mode = getattr(session, "collaboration_mode", None) or DEFAULT_MODE
-                        runner: Any = None
-                        if collab_mode != "single" and session.run_kind == "issue":
-                            try:
-                                runner = _modes.get(collab_mode)
-                            except KeyError:
-                                logger.warning(
-                                    "Issue %s requested mode=%s but it is not "
-                                    "registered; falling back to single",
-                                    session.issue.id,
-                                    collab_mode,
-                                )
-                        if runner is None:
-                            # Per-stage runner lookup by session run_kind.
-                            # Falls back to main runner when no override is configured.
-                            runner = self.stage_runners.get(session.run_kind, self.agent_runner)
+                        runner = self._resolve_session_runner(session)
                         run_timeout_seconds = self.workflow.agent.run_timeout_ms / 1000.0
                         session.timeout_deadline_at = time.time() + run_timeout_seconds
                         await asyncio.wait_for(

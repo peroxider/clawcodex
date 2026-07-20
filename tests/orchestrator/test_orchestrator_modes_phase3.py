@@ -50,6 +50,7 @@ class _StubAgentRunner:
         self.calls.append(
             {
                 "coordinator_mode_at_entry": self.agent_config.coordinator_mode,
+                "session_coordinator_mode": getattr(session, "coordinator_mode", None),
                 "prompt": session.prompt_override,
                 "run_kind": session.run_kind,
                 "run_id": session.run_id,
@@ -83,6 +84,7 @@ def _make_session() -> Any:
     s.consecutive_429_count = 0
     s.rate_limit_pending_turn = None
     s.prompt_override = None
+    s.coordinator_mode = None
     return s
 
 
@@ -97,7 +99,7 @@ class TestCoordinatorModeRunner(unittest.TestCase):
         agent.agent_config.coordinator_mode = False
         runner = CoordinatorModeRunner(agent)
         asyncio.run(runner.run(_make_session(), MagicMock()))
-        self.assertEqual(agent.calls[0]["coordinator_mode_at_entry"], True)
+        self.assertIs(agent.calls[0]["session_coordinator_mode"], True)
 
     def test_restores_original_value_after_run(self) -> None:
         agent = _StubAgentRunner()
@@ -112,7 +114,7 @@ class TestCoordinatorModeRunner(unittest.TestCase):
         runner = CoordinatorModeRunner(agent)
         asyncio.run(runner.run(_make_session(), MagicMock()))
         self.assertTrue(agent.agent_config.coordinator_mode)
-        self.assertEqual(agent.calls[0]["coordinator_mode_at_entry"], True)
+        self.assertIs(agent.calls[0]["session_coordinator_mode"], True)
 
     def test_restores_value_even_if_run_raises(self) -> None:
         agent = _StubAgentRunner(raise_on_call=1)
@@ -1432,9 +1434,9 @@ class TestPipelineNestedStageSpec(unittest.TestCase):
         # 2 calls total (1 agent + 1 coordinator wrapping AgentRunner).
         self.assertEqual(len(agent.calls), 2)
         # analyzer sees coordinator_mode=False (not set for it).
-        self.assertFalse(agent.calls[0]["coordinator_mode_at_entry"])
+        self.assertIsNone(agent.calls[0]["session_coordinator_mode"])
         # impl_coord sees coordinator_mode=True (Coordinator runner set it).
-        self.assertTrue(agent.calls[1]["coordinator_mode_at_entry"])
+        self.assertIs(agent.calls[1]["session_coordinator_mode"], True)
         # Restored after runner returns.
         self.assertFalse(agent.agent_config.coordinator_mode)
 

@@ -256,6 +256,11 @@ class RepositoryIssueClient:
             if len(payload) < _PAGE_SIZE:
                 break
             page += 1
+        if self.platform.name == "gitcode":
+            # GitCode returns issue comments newest-first, unlike GitHub.
+            # Incremental cursor scanning requires a stable oldest-first
+            # sequence or every reply newer than the cursor is skipped.
+            comments.sort(key=_comment_sort_key)
         return comments
 
     async def fetch_comments_since(
@@ -901,7 +906,13 @@ class RepositoryIssueClient:
             headers["Accept"] = self.platform.accept_header
 
         merged_params = dict(params or {})
-        if self.platform.auth_mode == "bearer":
+        if self.platform.name == "gitcode":
+            # GitCode accepts bearer auth while still requiring form bodies
+            # for mutation endpoints. Keeping credentials out of query
+            # parameters prevents httpx/access logs from leaking tokens.
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+        elif self.platform.auth_mode == "bearer":
             if self.api_key:
                 headers["Authorization"] = f"Bearer {self.api_key}"
         elif self.api_key:
@@ -1487,6 +1498,16 @@ def _parse_datetime(value: Any) -> datetime | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def _comment_sort_key(comment: dict[str, Any]) -> tuple[float, int, int | str]:
+    created_at = _parse_datetime(comment.get("created_at") or comment.get("createdAt"))
+    timestamp = created_at.timestamp() if created_at is not None else 0.0
+    raw_id = comment.get("id")
+    try:
+        return timestamp, 0, int(raw_id)
+    except (TypeError, ValueError):
+        return timestamp, 1, str(raw_id or "")
 
 
 def _summarize_body(response: httpx.Response) -> str:

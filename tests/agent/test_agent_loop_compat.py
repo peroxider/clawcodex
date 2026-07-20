@@ -23,6 +23,7 @@ from src.query.agent_loop_compat import (
     AgentLoopRunResult,
     run_query_as_agent_loop,
 )
+from clawcodex_ext.query.agent_loop_compat import _await_turn_with_inflight_pause
 
 
 def _run(coro):
@@ -186,6 +187,34 @@ class TestAgentLoopCompatAdapter(unittest.TestCase):
                     system_prompt="You are helpful.",
                     max_turns=5,
                     cancel_signal=cancel.signal,
+                )
+            )
+
+    def test_turn_timeout_pauses_while_tool_is_in_flight(self):
+        in_flight = {"call-1"}
+
+        async def _slow_tool_turn() -> None:
+            await asyncio.sleep(0.06)
+            in_flight.clear()
+
+        _run(
+            _await_turn_with_inflight_pause(
+                _slow_tool_turn(),
+                timeout_s=0.01,
+                in_flight_tool_ids=in_flight,
+            )
+        )
+
+    def test_turn_timeout_still_fires_without_inflight_tool(self):
+        async def _stalled_model_turn() -> None:
+            await asyncio.sleep(1)
+
+        with self.assertRaises(asyncio.TimeoutError):
+            _run(
+                _await_turn_with_inflight_pause(
+                    _stalled_model_turn(),
+                    timeout_s=0.01,
+                    in_flight_tool_ids=set(),
                 )
             )
 

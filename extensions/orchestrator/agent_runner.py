@@ -146,6 +146,11 @@ _ORCHESTRATOR_INTERNAL_PATHS = frozenset(
 )
 
 
+def _megaturn_idle_stop_enabled(session: Any) -> bool:
+    """Swarm completion is owned by its execution-evidence gate."""
+    return str(getattr(session, "run_kind", "")).strip().lower() != "swarm"
+
+
 def _is_orchestrator_internal_path(path: str | None) -> bool:
     if not path:
         return False
@@ -185,6 +190,12 @@ class AgentSession:
     # Event stream for CLI tail command
     event_queue: "asyncio.Queue | None" = None
     prompt_override: str | None = None
+    # F-124: resolved pre-dispatch clarification context copied from the
+    # persistent IssueRecord before the run starts.
+    clarification_question: str | None = None
+    clarification_answer: str | None = None
+    clarification_source: str | None = None
+    coordinator_mode: bool | None = None
     # F-49 Phase 1: Unix domain socket for live operator control. None if
     # the socket failed to start (or was disabled by configuration). When
     # set, the runner broadcasts every dispatched event and polls for
@@ -867,6 +878,38 @@ class AgentRunner:
         progress_reporter: Any | None = None,
         diagnostics_callback: Callable[[AgentSession], None] | None = None,
     ) -> None:
+        """Execute one session with coordinator mode isolated per task."""
+        from clawcodex_ext.coordinator.mode import coordinator_mode_context
+
+        explicit_mode = getattr(session, "coordinator_mode", None)
+        coordinator_enabled = (
+            bool(explicit_mode)
+            if explicit_mode is not None
+            else bool(getattr(self.agent_config, "coordinator_mode", False))
+        )
+        with coordinator_mode_context(coordinator_enabled):
+            return await self._run_impl(
+                session,
+                workflow,
+                status_dashboard=status_dashboard,
+                tracker=tracker,
+                comment_tracker=comment_tracker,
+                clarification_resolver=clarification_resolver,
+                progress_reporter=progress_reporter,
+                diagnostics_callback=diagnostics_callback,
+            )
+
+    async def _run_impl(
+        self,
+        session: AgentSession,
+        workflow: WorkflowConfig,
+        status_dashboard: Any | None = None,
+        tracker: Any = None,
+        comment_tracker: Any | None = None,
+        clarification_resolver: Any | None = None,
+        progress_reporter: Any | None = None,
+        diagnostics_callback: Callable[[AgentSession], None] | None = None,
+    ) -> None:
         """Execute issue until completion or max_turns.
 
         Runs multi-turn continuation loop: each turn is a QueryRunner
@@ -921,17 +964,14 @@ class AgentRunner:
         # SendMessage / TaskStop + lightweight reads) and is expected to
         # spawn workers via the Agent tool. This flip was lost in the
         # !52 squash-merge — restored from dfa79a7c.
-        if getattr(self.agent_config, "coordinator_mode", False):
-            os.environ["CLAUDE_CODE_COORDINATOR_MODE"] = "1"
+        from clawcodex_ext.coordinator.mode import is_coordinator_mode
+
+        if is_coordinator_mode():
             logger.info(
                 "Coordinator mode ENABLED for issue %s — agent will get "
                 "coordinator tool set and may spawn workers via Agent tool.",
                 issue.id,
             )
-        else:
-            # Explicitly clear so a previous-run leftover doesn't leak
-            # into a normal-mode run when configs differ between issues.
-            os.environ.pop("CLAUDE_CODE_COORDINATOR_MODE", None)
 
         # Thread-local MDC: inject context so every subsequent log
         # record from this thread carries issue_id / run_id automatically.
@@ -1072,22 +1112,44 @@ class AgentRunner:
                         pending_question = None
                         options = None
 
-                        if clarification_resolver is not None and issue.id:
-                            # Review-rejection feedback is a typed one-shot
-                            # instruction.  Use the resolver's public API so
-                            # genuine clarification questions and expired/
-                            # consumed feedback are never replayed here.
-                            get_pending_feedback = getattr(
-                                clarification_resolver,
-                                "get_pending_feedback",
-                                None,
+                        clarification_answer = getattr(session, "clarification_answer", None)
+                        if clarification_answer:
+                            pending_question = getattr(session, "clarification_question", None)
+                            clarification_context = PromptBuilder.build_clarification_context(
+                                pending_question=pending_question,
+                                clarification_answer=clarification_answer,
+                                answer_source=getattr(session, "clarification_source", None),
                             )
-                            pending_item = (
-                                get_pending_feedback(issue.id)
-                                if callable(get_pending_feedback)
-                                else None
-                            )
-                            if pending_item is not None:
+
+                        elif clarification_resolver is not None and issue.id:
+                            get_answer = getattr(clarification_resolver, "get_answer", None)
+                            resolved = get_answer(issue.id) if callable(get_answer) else None
+                            if resolved and resolved.answer:
+                                get_item = getattr(clarification_resolver, "get_item", None)
+                                pending_item = get_item(issue.id) if callable(get_item) else None
+                                pending_question = (
+                                    pending_item.question if pending_item is not None else None
+                                )
+                                clarification_context = PromptBuilder.build_clarification_context(
+                                    pending_question=pending_question,
+                                    clarification_answer=resolved.answer,
+                                    answer_source=resolved.source,
+                                )
+                            else:
+                                # Review-rejection feedback is a typed one-shot
+                                # instruction. Genuine clarification questions
+                                # remain blocked at the dispatch gate.
+                                get_pending_feedback = getattr(
+                                    clarification_resolver,
+                                    "get_pending_feedback",
+                                    None,
+                                )
+                                pending_item = (
+                                    get_pending_feedback(issue.id)
+                                    if callable(get_pending_feedback)
+                                    else None
+                                )
+                            if not clarification_context and pending_item is not None:
                                 pending_question = pending_item.question
                                 options = pending_item.options if pending_item.options else None
                                 clarification_context = PromptBuilder.build_clarification_context(
@@ -1227,7 +1289,10 @@ class AgentRunner:
                     permission_mode=self.agent_config.permission_mode,
                     run_id=session.run_id,
                     debug_log_path=session.debug_log_path,
-                    env=getattr(self.agent_config, "env", None) or {},
+                    env={
+                        **(getattr(self.agent_config, "env", None) or {}),
+                        "CLAUDE_CODE_COORDINATOR_MODE": ("1" if is_coordinator_mode() else "0"),
+                    },
                     timeout_s=self.agent_config.run_timeout_ms / 1000.0,
                     stall_timeout_s=(
                         getattr(self.agent_config, "stall_timeout_ms", 300_000) / 1000.0
@@ -1553,7 +1618,10 @@ class AgentRunner:
                             # ``_MEGATURN_IDLE_STOP_S`` — the work landed and
                             # the model is churning (re-verifying, retrying
                             # blocked tools) without producing anything new.
-                            if time.monotonic() >= megaturn_next_check_at:
+                            if (
+                                _megaturn_idle_stop_enabled(session)
+                                and time.monotonic() >= megaturn_next_check_at
+                            ):
                                 megaturn_next_check_at = time.monotonic() + _MEGATURN_CHECK_EVERY_S
                                 try:
                                     ws_path = getattr(session.workspace, "path", None)

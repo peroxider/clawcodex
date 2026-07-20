@@ -145,6 +145,7 @@ def _parse_modes_config(raw: dict[str, Any]) -> "ModesConfig":
     router_raw = raw.get("router") or {}
     pipeline_raw = raw.get("pipeline") or {}
     debate_raw = raw.get("debate") or {}
+    swarm_raw = raw.get("swarm") or {}
 
     router_kind = str(router_raw.get("kind", "none")).strip().lower()
     if router_kind not in {"none", "heuristic", "llm"}:
@@ -214,6 +215,9 @@ def _parse_modes_config(raw: dict[str, Any]) -> "ModesConfig":
         debate_isolation=_normalize_debate_isolation(debate_raw.get("isolation", "reset")),
         debate_parallel=bool(debate_raw.get("parallel", False)),
         debate_judge_mode=_normalize_debate_judge_mode(debate_raw.get("judge_mode", "pick")),
+        swarm_max_subtasks=max(1, int(swarm_raw.get("max_subtasks", 8))),
+        swarm_max_parallel=max(1, int(swarm_raw.get("max_parallel", 3))),
+        swarm_max_waves=max(1, int(swarm_raw.get("max_waves", 6))),
     )
 
 
@@ -865,6 +869,11 @@ class ModesConfig:
     # so each parallel branch has its own physical workspace. When False
     # (default), proposers run sequentially.
     debate_parallel: bool = False
+    # F-118 dynamic task decomposition. The seed task graph is persisted in
+    # the issue workspace and executed through the existing coordinator mode.
+    swarm_max_subtasks: int = 8
+    swarm_max_parallel: int = 3
+    swarm_max_waves: int = 6
 
 
 # ---------------------------------------------------------------------------
@@ -909,6 +918,28 @@ class PrConflictScanConfig:
 
 
 @dataclass
+class ClarifierConfig:
+    """F-124 pre-dispatch issue clarity analysis.
+
+    This config is deliberately separate from ``ClarificationConfig`` in
+    ``clarification.py``. The clarifier decides *whether* a question is
+    needed; the existing resolver owns delivery, replies, and escalation.
+    """
+
+    enabled: bool = False
+    block_on_unclear: bool = True
+    author_first: bool = True
+    max_questions: int = 3
+    max_rounds: int = 2
+    min_confidence: float = 0.7
+    max_input_tokens: int = 6000
+    max_output_tokens: int = 800
+    fail_open: bool = True
+    cache_enabled: bool = True
+    max_analyses_per_poll: int = 4
+
+
+@dataclass
 class WorkflowConfig:
     tracker: TrackerConfig = field(default_factory=TrackerConfig)
     polling: PollingConfig = field(default_factory=PollingConfig)
@@ -923,6 +954,7 @@ class WorkflowConfig:
     server: ServerConfig = field(default_factory=ServerConfig)
     modes: ModesConfig = field(default_factory=ModesConfig)
     pr_conflict_scan: "PrConflictScanConfig" = field(default_factory=lambda: PrConflictScanConfig())
+    clarifier: "ClarifierConfig" = field(default_factory=lambda: ClarifierConfig())
     source_path: str = ""
 
     @classmethod
@@ -943,6 +975,7 @@ class WorkflowConfig:
         observability_raw = raw.get("observability", {})
         server_raw = raw.get("server", {})
         pr_conflict_scan_raw = raw.get("pr_conflict_scan", {})
+        clarifier_raw = raw.get("clarifier", {}) or {}
 
         tracker_kind = normalize_tracker_kind(tracker_raw.get("kind", "linear"))
         tracker_info = tracker_kind_info(tracker_kind)
@@ -1213,6 +1246,25 @@ class WorkflowConfig:
                 bot_login=_resolve_env_value(pr_conflict_scan_raw.get("bot_login")),
                 scan_states=tuple(
                     _normalize_string_list(pr_conflict_scan_raw.get("scan_states"), ["open"])
+                ),
+            ),
+            clarifier=ClarifierConfig(
+                enabled=bool(clarifier_raw.get("enabled", False)),
+                block_on_unclear=bool(clarifier_raw.get("block_on_unclear", True)),
+                author_first=bool(clarifier_raw.get("author_first", True)),
+                max_questions=max(1, int(clarifier_raw.get("max_questions", 3))),
+                max_rounds=max(1, int(clarifier_raw.get("max_rounds", 2))),
+                min_confidence=max(
+                    0.0,
+                    min(1.0, float(clarifier_raw.get("min_confidence", 0.7))),
+                ),
+                max_input_tokens=max(256, int(clarifier_raw.get("max_input_tokens", 6000))),
+                max_output_tokens=max(128, int(clarifier_raw.get("max_output_tokens", 800))),
+                fail_open=bool(clarifier_raw.get("fail_open", True)),
+                cache_enabled=bool(clarifier_raw.get("cache_enabled", True)),
+                max_analyses_per_poll=max(
+                    1,
+                    int(clarifier_raw.get("max_analyses_per_poll", 4)),
                 ),
             ),
         )

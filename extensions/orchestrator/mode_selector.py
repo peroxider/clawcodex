@@ -41,7 +41,9 @@ logger = logging.getLogger(__name__)
 MODE_LABEL_PREFIX: str = "mode:"
 """Issue labels starting with this prefix request a specific mode."""
 
-KNOWN_MODES: frozenset[str] = frozenset({"single", "pipeline", "coordinator", "debate", "auto"})
+KNOWN_MODES: frozenset[str] = frozenset(
+    {"single", "pipeline", "coordinator", "debate", "swarm", "auto"}
+)
 """All valid mode names the selector / CLI / dashboard accept.
 
 ``auto`` is a meta-mode meaning "let the router decide" and is treated

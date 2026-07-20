@@ -106,6 +106,14 @@ class TestGapWatchdog(unittest.TestCase):
         self.assertEqual(tripped, [])
         self.assertFalse(ac.signal.aborted)
 
+    def test_has_pending_tracks_tool_lifecycle(self):
+        wd = ToolGapWatchdog(abort_controller=AbortController())
+        self.assertFalse(wd.has_pending())
+        wd.observe_tool_use("a", "Agent")
+        self.assertTrue(wd.has_pending())
+        wd.observe_tool_result("a")
+        self.assertFalse(wd.has_pending())
+
     def test_zero_budget_never_trips(self):
         ac = AbortController()
         wd = ToolGapWatchdog(

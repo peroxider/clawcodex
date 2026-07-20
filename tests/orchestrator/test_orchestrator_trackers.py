@@ -1789,12 +1789,13 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(requests[0].url.params["state"], "open")
         self.assertEqual(requests[0].url.params["per_page"], "100")
 
-    async def test_gitcode_issue_create_uses_access_token_query_and_form_body(self) -> None:
+    async def test_gitcode_issue_create_uses_bearer_header_and_form_body(self) -> None:
         seen: dict[str, Any] = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
             seen["path"] = request.url.path
             seen["query"] = dict(request.url.params)
+            seen["auth"] = request.headers.get("Authorization")
             seen["body"] = request.content.decode("utf-8")
             return httpx.Response(201, json={"id": 9, "title": "Telemetry"})
 
@@ -1809,11 +1810,48 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
             issue = await client.create_issue(title="Telemetry", body="daily summary")
 
         self.assertEqual(seen["path"], "/api/v5/repos/acme/widget/issues")
-        self.assertEqual(seen["query"]["access_token"], "gitcode-token")
+        self.assertNotIn("access_token", seen["query"])
+        self.assertEqual(seen["auth"], "Bearer gitcode-token")
         self.assertIn("title=Telemetry", seen["body"])
         self.assertIn("body=daily+summary", seen["body"])
         assert issue is not None
         self.assertEqual(issue["id"], 9)
+
+    async def test_gitcode_comment_cursor_normalizes_newest_first_response(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            self.assertEqual(request.headers.get("Authorization"), "Bearer gitcode-token")
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 3,
+                        "body": "new author reply",
+                        "created_at": "2026-07-13T15:38:40+08:00",
+                    },
+                    {
+                        "id": 2,
+                        "body": "clarification cursor",
+                        "created_at": "2026-07-13T15:37:21+08:00",
+                    },
+                    {
+                        "id": 1,
+                        "body": "older comment",
+                        "created_at": "2026-07-13T15:30:00+08:00",
+                    },
+                ],
+            )
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+            client = RepositoryIssueClient(
+                platform="gitcode",
+                owner="acme",
+                repo="widget",
+                api_key="gitcode-token",
+                http_client=http_client,
+            )
+            comments = await client.fetch_comments_since("30", "2")
+
+        self.assertEqual([comment["id"] for comment in comments], [3])
 
     async def test_github_refresh_by_ids_returns_mapping(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
@@ -2071,7 +2109,8 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
 
         def handler(request: httpx.Request) -> httpx.Response:
             requests.append(request)
-            self.assertEqual(request.url.params.get("access_token"), "gitcode-token")
+            self.assertIsNone(request.url.params.get("access_token"))
+            self.assertEqual(request.headers.get("Authorization"), "Bearer gitcode-token")
             if (
                 request.method == "GET"
                 and request.url.path == "/api/v5/repos/acme/widget/issues/42/comments"
@@ -2225,6 +2264,7 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
         def handler(request: httpx.Request) -> httpx.Response:
             seen["path"] = request.url.path
             seen["query"] = dict(request.url.params)
+            seen["auth"] = request.headers.get("Authorization")
             seen["body"] = request.content.decode("utf-8")
             return httpx.Response(
                 201,
@@ -2257,7 +2297,8 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
             seen["path"],
             "/api/v5/repos/acme/widget/pulls/9/comments/202/replies",
         )
-        self.assertEqual(seen["query"]["access_token"], "gitcode-token")
+        self.assertNotIn("access_token", seen["query"])
+        self.assertEqual(seen["auth"], "Bearer gitcode-token")
         self.assertIn("body=Handled", seen["body"])
         assert comment is not None
         self.assertEqual(comment.in_reply_to_id, "inline_review:202")

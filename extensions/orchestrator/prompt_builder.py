@@ -63,6 +63,13 @@ _CLARIFICATION_TEMPLATE = """
 ---
 ## Clarification Context
 
+{% if clarification_answer %}
+The issue author or operator supplied clarification before this run. Treat the
+answer below as part of the issue requirements.
+
+- Question: "{{ pending_question or 'Pre-dispatch clarification' }}"
+- Answer{% if answer_source %} ({{ answer_source }}){% endif %}: "{{ clarification_answer }}"
+{% else %}
 This issue is currently awaiting clarification. When the answer is available,
 it will be provided below. If you are unsure about any aspect of the issue,
 use the `AskIssueAuthor` tool to request clarification from the issue author
@@ -76,6 +83,7 @@ When requesting clarification:
 - Current pending question: "{{ pending_question }}"
 {% if options %}
 - Available options: {{ options|join(', ') }}
+{% endif %}
 {% endif %}
 {% endif %}
 ---"""
@@ -606,6 +614,8 @@ class PromptBuilder:
     def build_clarification_context(
         pending_question: str | None = None,
         options: list[str] | None = None,
+        clarification_answer: str | None = None,
+        answer_source: str | None = None,
     ) -> str:
         """Build a clarification guidance block for the system prompt.
 
@@ -621,7 +631,7 @@ class PromptBuilder:
             A formatted clarification guidance block, or empty string if
             clarification is not active
         """
-        if not pending_question:
+        if not pending_question and not clarification_answer:
             return ""
 
         template_str = _CLARIFICATION_TEMPLATE.strip()
@@ -634,6 +644,8 @@ class PromptBuilder:
         context = {
             "pending_question": pending_question,
             "options": options or [],
+            "clarification_answer": clarification_answer,
+            "answer_source": answer_source,
         }
         try:
             return template.render(context).strip()

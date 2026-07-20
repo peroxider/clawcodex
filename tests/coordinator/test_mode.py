@@ -15,6 +15,7 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 
@@ -26,8 +27,63 @@ from src.coordinator.mode import (
     filter_worker_tools,
     get_coordinator_user_context,
     is_coordinator_mode,
+    coordinator_mode_context,
     match_session_mode,
 )
+from extensions.capabilities.headless_runner import (
+    HeadlessSessionOptions,
+    run_headless_session,
+)
+
+
+@pytest.mark.asyncio
+async def test_coordinator_mode_context_is_isolated_between_async_tasks() -> None:
+    async def observe(enabled: bool) -> tuple[bool, bool]:
+        with coordinator_mode_context(enabled):
+            before = is_coordinator_mode()
+            await asyncio.sleep(0)
+            return before, is_coordinator_mode()
+
+    assert await asyncio.gather(observe(True), observe(False)) == [
+        (True, True),
+        (False, False),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_coordinator_mode_crosses_headless_executor_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from clawcodex_ext.entrypoints import headless
+
+    observed: list[tuple[bool, bool]] = []
+
+    def fake_run(options) -> int:
+        observed.append(
+            (
+                options.env.get("CLAUDE_CODE_COORDINATOR_MODE") == "1",
+                is_coordinator_mode(),
+            )
+        )
+        return 0
+
+    monkeypatch.setattr(headless, "run_headless", fake_run)
+    options = HeadlessSessionOptions(
+        prompt="demo",
+        workspace_root=tmp_path,
+        env={"CLAUDE_CODE_COORDINATOR_MODE": "1"},
+    )
+    loop = asyncio.get_running_loop()
+    assert await loop.run_in_executor(None, run_headless_session, options) == 0
+    assert observed == [(True, True)]
+
+
+def test_resume_updates_session_local_coordinator_context() -> None:
+    with coordinator_mode_context(False):
+        assert match_session_mode("coordinator") is not None
+        assert is_coordinator_mode() is True
+    assert is_coordinator_mode() is False
 
 
 @pytest.fixture(autouse=True)

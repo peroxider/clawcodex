@@ -65,6 +65,8 @@ class ClarificationItem:
     # review retry.  Keeping them distinct from real clarification questions
     # prevents a later ordinary retry from replaying stale reviewer feedback.
     kind: str = "clarification"
+    last_checked_comment_id: str | None = None
+    author_login: str | None = None
 
     def touch(self) -> None:
         self.updated_at = time.time()
@@ -152,6 +154,9 @@ class ClarificationQueue:
             return None
         return item
 
+    def list_items(self) -> list[ClarificationItem]:
+        return sorted(self._records.values(), key=lambda item: item.created_at)
+
     def poll_pending(self) -> list[ClarificationItem]:
         """Return all pending items that have not expired."""
         now = time.time()
@@ -166,6 +171,19 @@ class ClarificationQueue:
                 ClarificationStatus.AWAITING_AUTHOR,
             )
             and not item.is_expired(now)
+        ]
+
+    def poll_active(self) -> list[ClarificationItem]:
+        """Return unresolved items, including expired ones for escalation."""
+        return [
+            item
+            for item in self._records.values()
+            if item.status
+            in (
+                ClarificationStatus.PENDING,
+                ClarificationStatus.AWAITING_LOCAL,
+                ClarificationStatus.AWAITING_AUTHOR,
+            )
         ]
 
     def get_resolved(self, issue_id: str) -> ClarificationItem | None:
@@ -200,6 +218,8 @@ class ClarificationQueue:
         options: list[str] | None = None,
         context_summary: str = "",
         timeout_seconds: float | None = None,
+        since_comment_id: str | None = None,
+        author_login: str | None = None,
     ) -> ClarificationItem:
         """Create a pending clarification item."""
         now = time.time()
@@ -217,6 +237,8 @@ class ClarificationQueue:
             updated_at=now,
             expires_at=expires_at,
             status=ClarificationStatus.PENDING,
+            last_checked_comment_id=since_comment_id,
+            author_login=author_login,
         )
         self._records[issue_id] = item
         self._save()
@@ -232,12 +254,32 @@ class ClarificationQueue:
         self._save()
         return item
 
-    def mark_awaiting_author(self, issue_id: str) -> ClarificationItem | None:
+    def mark_awaiting_author(
+        self,
+        issue_id: str,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> ClarificationItem | None:
         """Transition to Channel 3 (@mention author)."""
         item = self._records.get(issue_id)
         if item is None:
             return None
         item.status = ClarificationStatus.AWAITING_AUTHOR
+        if timeout_seconds is not None:
+            item.expires_at = time.time() + max(0.0, float(timeout_seconds))
+        item.touch()
+        self._save()
+        return item
+
+    def mark_comment_checked(
+        self,
+        issue_id: str,
+        comment_id: str | None,
+    ) -> ClarificationItem | None:
+        item = self._records.get(issue_id)
+        if item is None:
+            return None
+        item.last_checked_comment_id = comment_id
         item.touch()
         self._save()
         return item

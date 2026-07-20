@@ -22,8 +22,9 @@ prompt before calling the adapter — ``query()`` expects it pre-built.
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Coroutine
 
 from clawcodex_ext.tool_system.context import ToolContext
 from clawcodex_ext.tool_system.registry import ToolRegistry
@@ -78,6 +79,40 @@ def _heartbeat_freeze_detector() -> None:
             det.heartbeat()
     except Exception:
         pass
+
+
+async def _await_turn_with_inflight_pause(
+    drain_turn: Coroutine[Any, Any, None],
+    *,
+    timeout_s: float,
+    in_flight_tool_ids: set[str],
+) -> None:
+    """Apply the turn timeout only while no tool call is in flight.
+
+    Tool implementations have their own timeout policy. Cancelling the whole
+    turn while an Agent/Bash call is still producing work makes the shorter
+    turn budget override that policy and creates false stall detections.
+    """
+    task = asyncio.create_task(drain_turn)
+    try:
+        while True:
+            done, _pending = await asyncio.wait({task}, timeout=timeout_s)
+            if task in done:
+                await task
+                return
+            if in_flight_tool_ids:
+                logging.getLogger(__name__).info(
+                    "turn timeout deferred; %d tool call(s) still in flight",
+                    len(in_flight_tool_ids),
+                )
+                _heartbeat_freeze_detector()
+                continue
+            raise asyncio.TimeoutError
+    finally:
+        if not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
 
 def build_effective_system_prompt(style_prompt: str, tool_context: ToolContext) -> str:
@@ -249,6 +284,7 @@ async def run_query_as_agent_loop(
     while True:
         holder = TerminalHolder()
         params = _make_params(next_messages)
+        in_flight_tool_ids: set[str] = set()
         # F-108 P108-F + P108-D — heartbeat Layer-1 at every turn boundary
         # so the watchdog's ``check()`` never trips on a healthy loop.
         # Falls through silently when ``CLAWCODEX_FREEZE_DIAG`` is unset.
@@ -328,15 +364,17 @@ async def run_query_as_agent_loop(
                         for block in content:
                             if isinstance(block, TextBlock):
                                 text_parts.append(block.text)
-                            elif isinstance(block, ToolUseBlock) and on_event is not None:
-                                on_event(
-                                    ToolEvent(
-                                        kind="tool_use",
-                                        tool_name=block.name,
-                                        tool_input=block.input,
-                                        tool_use_id=block.id,
+                            elif isinstance(block, ToolUseBlock):
+                                in_flight_tool_ids.add(str(block.id))
+                                if on_event is not None:
+                                    on_event(
+                                        ToolEvent(
+                                            kind="tool_use",
+                                            tool_name=block.name,
+                                            tool_input=block.input,
+                                            tool_use_id=block.id,
+                                        )
                                     )
-                                )
                     if text_parts:
                         last_assistant_text = " ".join(text_parts).strip()
                         # NB: do NOT fire on_text_chunk here. It was already
@@ -360,9 +398,10 @@ async def run_query_as_agent_loop(
                         has_tool_result = any(isinstance(block, ToolResultBlock) for block in content)
                         if has_tool_result and on_message is not None:
                             on_message(msg)
-                        if on_event is not None:
-                            for block in content:
-                                if isinstance(block, ToolResultBlock):
+                        for block in content:
+                            if isinstance(block, ToolResultBlock):
+                                in_flight_tool_ids.discard(str(block.tool_use_id))
+                                if on_event is not None:
                                     on_event(
                                         ToolEvent(
                                             kind="tool_result",
@@ -376,9 +415,19 @@ async def run_query_as_agent_loop(
 
         try:
             if turn_timeout_s > 0:
-                await asyncio.wait_for(_drain_turn(), timeout=turn_timeout_s)
+                await _await_turn_with_inflight_pause(
+                    _drain_turn(),
+                    timeout_s=turn_timeout_s,
+                    in_flight_tool_ids=in_flight_tool_ids,
+                )
             else:
                 await _drain_turn()
+        except asyncio.CancelledError:
+            if abort_controller.signal.aborted:
+                raise AbortError(
+                    abort_controller.signal.reason or "user_interrupt"
+                ) from None
+            raise
         except asyncio.TimeoutError:
             logging.getLogger(__name__).warning(
                 "turn timeout after %.1fs; aborting agent loop",

@@ -85,6 +85,17 @@ _COORDINATOR_KEYWORDS: frozenset[str] = frozenset(
         "migrate",
     }
 )
+_SWARM_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "swarm",
+        "decompose",
+        "multi-step",
+        "independent tasks",
+        "parallel tasks",
+        "end-to-end migration",
+        "complex bug",
+    }
+)
 _PIPELINE_KEYWORDS: frozenset[str] = frozenset(
     {
         "implement",
@@ -136,6 +147,7 @@ class HeuristicRouter:
 
         # Order matters; see module-level keyword block.
         for label, keywords in (
+            ("swarm", _SWARM_KEYWORDS),
             ("debate", _DEBATE_KEYWORDS),
             ("coordinator", _COORDINATOR_KEYWORDS),
             ("pipeline", _PIPELINE_KEYWORDS),
@@ -173,7 +185,9 @@ class HeuristicRouter:
 # ---------------------------------------------------------------------------
 
 
-_LLM_ROUTER_VALID_MODES: frozenset[str] = frozenset({"single", "pipeline", "coordinator", "debate"})
+_LLM_ROUTER_VALID_MODES: frozenset[str] = frozenset(
+    {"single", "pipeline", "coordinator", "debate", "swarm"}
+)
 
 
 _LLM_ROUTER_SYSTEM_PROMPT: str = (
@@ -193,8 +207,11 @@ _LLM_ROUTER_SYSTEM_PROMPT: str = (
     "- debate:      two independent proposers + one judge. Best for\n"
     "               design questions where multiple valid approaches\n"
     "               exist and a comparison adds value.\n\n"
+    "- swarm:       dynamically decomposed dependency waves executed by\n"
+    "               coordinator workers. Best for complex multi-step work\n"
+    "               with several bounded sub-tasks.\n\n"
     "Output ONLY a JSON object on a single line. Schema:\n"
-    '  {"mode": "<one of single|pipeline|coordinator|debate>",\n'
+    '  {"mode": "<one of single|pipeline|coordinator|debate|swarm>",\n'
     '   "reason": "<one sentence, under 25 words>",\n'
     '   "confidence": <float between 0.0 and 1.0>}\n\n'
     "Do not include any text outside the JSON. No code fences. No prose."

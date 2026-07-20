@@ -32,6 +32,25 @@ Examples:
         action="store_true",
         help="Enable external-agent REPL debug markers and sandbox-safe local state",
     )
+    decomposition = parser.add_mutually_exclusive_group()
+    decomposition.add_argument(
+        "--swarm",
+        dest="swarm",
+        action="store_true",
+        help="Dynamically decompose the prompt and run it through coordinator workers",
+    )
+    decomposition.add_argument(
+        "--decompose",
+        dest="swarm",
+        action="store_true",
+        help="Alias for --swarm",
+    )
+    parser.add_argument(
+        "--effort",
+        choices=("normal", "swarm"),
+        default="normal",
+        help="Execution effort profile; 'swarm' enables dynamic task decomposition",
+    )
 
     # ---- Interactive UI selection ----
     #

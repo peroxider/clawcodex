@@ -360,10 +360,14 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         body: str,
         mentions: list[str] | None = None,
     ) -> Comment | None:
-        await self.client.create_comment(issue_id, body)
-        # Re-fetch to get the created comment's ID
-        comments = await self.client.fetch_comments(issue_id)
-        created = comments[-1] if comments else None
+        mention_prefix = " ".join(
+            f"@{login.strip()}" for login in (mentions or []) if login.strip()
+        )
+        comment_body = f"{mention_prefix}\n\n{body}" if mention_prefix else body
+        # Use the POST response directly. Re-fetching and selecting the last
+        # comment races with a fast author reply: the reply can become the
+        # cursor and then be skipped forever by incremental polling.
+        created = await self.client.create_comment(issue_id, comment_body)
         if created:
             return Comment(
                 id=str(created.get("id", "")),
