@@ -12,6 +12,7 @@ from .aggregators import (
     ScoringAggregator,
 )
 from .config import GroupConfig, MultiModelConfig, SlotConfig
+from .display import MultiModelBridge
 
 __all__ = [
     "MajorityVoteAggregator",
@@ -21,4 +22,5 @@ __all__ = [
     "GroupConfig",
     "MultiModelConfig",
     "SlotConfig",
+    "MultiModelBridge",
 ]
