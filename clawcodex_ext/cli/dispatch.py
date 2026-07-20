@@ -596,7 +596,7 @@ def run_cli(argv: list[str] | None = None) -> int:
         record_height=getattr(args, "record_height", None),
     )
     runtime_opts.multimodel_group = _multimodel_group
-    if _is_provider_free_goal_summary_print(args):
+    if _is_provider_free_goal_summary_print(args) and not _multimodel_group:
         from src.entrypoints.headless import HeadlessOptions, run_headless
 
         rc = run_headless(

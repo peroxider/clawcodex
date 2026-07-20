@@ -86,6 +86,17 @@ class AssistantMessage(Message):
 
 
 @dataclass
+class MultiModelEvent(Message):
+    """A slot-scoped multi-model update, safe to post from a worker thread."""
+
+    kind: str
+    slot: str = ""
+    chunk: str = ""
+    result: Any | None = None
+    results: list[Any] | None = None
+
+
+@dataclass
 class ToolEventMessage(Message):
     """A ``ToolEvent`` from the agent loop, flattened to dict for thread-safety.
 

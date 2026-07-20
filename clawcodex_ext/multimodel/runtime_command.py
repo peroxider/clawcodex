@@ -31,12 +31,16 @@ def _call(args: str, context: Any) -> LocalCommandResult:
     if tokens[0] == "use" and len(tokens) == 2:
         name = tokens[1]
         if name not in config.groups: return _text(f"error: unknown model group '{name}'")
-        if runtime is not None: runtime.multimodel_group = name
+        if runtime is not None:
+            try: runtime.swap_multimodel(name)
+            except Exception as exc: return _text(f"error: cannot enable model group '{name}': {exc}")
         else: setattr(context, "multimodel_group", name)
         group = config.groups[name]
         return _text(f"✓ 已切换到多模型组 {name}\n策略: {group.strategy} | 模型: {', '.join(slot.name for slot in group.slots)}")
     if tokens == ["off"]:
-        if runtime is not None: runtime.multimodel_group = ""
+        if runtime is not None:
+            try: runtime.disable_multimodel()
+            except Exception as exc: return _text(f"error: cannot disable multi-model mode: {exc}")
         else: setattr(context, "multimodel_group", "")
         return _text("✓ 已切换回单模型模式")
     return _text("Usage: /multimodel [status|use <name>|off]")

@@ -44,6 +44,7 @@ from ..messages import (
     AskUserQuestionResolved,
     AssistantChunk,
     AssistantMessage,
+    MultiModelEvent,
     PermissionModeChanged,
     PermissionModeCycleRequested,
     PermissionRequested,
@@ -60,6 +61,7 @@ from ..widgets.prompt_input import PromptInput, PromptSubmitted
 from ..widgets.status_line import StatusLine
 from ..widgets.transcript_view import Transcript
 from ..messages import QueuedPromptReady
+from ..widgets.multimodel import MultiModelLivePanel
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..app import ClawCodexTUI
@@ -337,6 +339,18 @@ class REPLScreen(Screen):
     def on_assistant_message(self, message: AssistantMessage) -> None:
         ## _log(f'[repl.py] on_assistant_message: {message.text[:100] if message.text else "empty"}...')
         self.transcript.append_assistant(message.text, agent_name=message.agent_name)
+
+    def on_multi_model_event(self, message: MultiModelEvent) -> None:
+        if message.kind == "start":
+            self._multimodel_panel = MultiModelLivePanel(list(message.results or []))
+            self.transcript.mount(self._multimodel_panel)
+        panel = getattr(self, "_multimodel_panel", None)
+        if panel is None:
+            return
+        if message.kind == "progress":
+            panel.progress(message.slot, message.chunk)
+        elif message.kind == "complete" and message.result is not None:
+            panel.complete(message.result)
 
     def on_tool_event_message(self, message: ToolEventMessage) -> None:
         self.transcript.append_tool_event(

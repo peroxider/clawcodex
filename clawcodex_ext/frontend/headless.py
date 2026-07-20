@@ -29,6 +29,7 @@ class HeadlessFrontend(FrontendPlugin):
             output_format=getattr(ctx.options, "output_format", "text"),
             input_format=getattr(ctx.options, "input_format", "text"),
             provider_name=ctx.provider_name,
+            provider_instance=ctx.provider,
             model=ctx.options.model,
             max_turns=ctx.options.max_turns,
             permission_mode=ctx.options.permission_mode,

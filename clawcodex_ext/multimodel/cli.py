@@ -6,7 +6,7 @@ import sys
 from dataclasses import replace
 
 from clawcodex_ext.cli.subcommand_registry import register
-from .config import GroupConfig, MultiModelConfig, MultiModelConfigError, load_config, parse_slot, save_config, validate_group
+from .config import GroupConfig, MultiModelConfig, MultiModelConfigError, RouteConfig, load_config, parse_slot, save_config, validate_group
 from .preset import PRESETS, get_preset
 
 def _parser() -> argparse.ArgumentParser:
@@ -27,14 +27,18 @@ def _group_options(parser: argparse.ArgumentParser, *, required: bool = False) -
     parser.add_argument("--strategy", choices=("parallel", "voting", "routing", "fallback"), required=required, default=None)
     parser.add_argument("--aggregator", choices=("passthrough", "majority", "rank", "scoring"), default=None)
     parser.add_argument("--min-votes", type=int, default=None); parser.add_argument("--max-concurrent", type=int, default=None)
+    parser.add_argument("--scorer-provider", default=None); parser.add_argument("--scorer-model", default=None)
+    parser.add_argument("--route", action="append", default=[], metavar="PATTERN:SLOT")
 
 def _format_group(name: str, group: GroupConfig) -> str:
     lines = [f"Group: {name}", f"Strategy: {group.strategy}"]
     if group.aggregator: lines.append(f"Aggregator: {group.aggregator}")
     lines.append(f"Max concurrent: {group.max_concurrent}")
     if group.min_votes is not None: lines.append(f"Min votes: {group.min_votes}")
+    if group.aggregator in {"scoring", "rank"}: lines.append(f"Scorer: {group.scorer_model} ({group.scorer_provider})")
     lines.append("Slots:")
     lines.extend(f"  - {s.name}: {s.model} ({s.provider}), weight={s.weight:g}, timeout={s.timeout_ms}ms" for s in group.slots)
+    lines.extend(f"  route {route.pattern!r} -> {route.slot}" for route in group.routes)
     return "\n".join(lines)
 
 @register("multimodel")
@@ -70,10 +74,21 @@ def _group_command(args: argparse.Namespace, config: MultiModelConfig) -> int:
     groups = dict(config.groups)
     if args.group_command == "create":
         if args.name in groups: return _error(f"model group '{args.name}' already exists")
-        groups[args.name] = validate_group(GroupConfig(args.strategy or "parallel", tuple(parse_slot(v) for v in args.slot), args.aggregator, args.max_concurrent or 5, args.min_votes)); save_config(MultiModelConfig(config.default_group, groups)); print(f"✓ 已创建模型组 {args.name}"); return 0
+        groups[args.name] = validate_group(GroupConfig(args.strategy or "parallel", tuple(parse_slot(v) for v in args.slot), args.aggregator, args.max_concurrent or 5, args.min_votes, args.scorer_provider or "openai", args.scorer_model or "gpt-4o", _parse_routes(args.route))); save_config(MultiModelConfig(config.default_group, groups)); print(f"✓ 已创建模型组 {args.name}"); return 0
     if args.name not in groups: return _error(f"unknown model group '{args.name}'")
     old = groups[args.name]; slots = [slot for slot in old.slots if slot.name not in set(args.remove_slot)]
     slots.extend(parse_slot(v) for v in args.add_slot)
-    groups[args.name] = validate_group(GroupConfig(args.strategy or old.strategy, tuple(slots), args.aggregator if args.aggregator is not None else old.aggregator, args.max_concurrent or old.max_concurrent, args.min_votes if args.min_votes is not None else old.min_votes)); save_config(MultiModelConfig(config.default_group, groups)); print(f"✓ 已更新模型组 {args.name}"); return 0
+    routes = _parse_routes(args.route) if args.route else old.routes
+    groups[args.name] = validate_group(GroupConfig(args.strategy or old.strategy, tuple(slots), args.aggregator if args.aggregator is not None else old.aggregator, args.max_concurrent or old.max_concurrent, args.min_votes if args.min_votes is not None else old.min_votes, args.scorer_provider or old.scorer_provider, args.scorer_model or old.scorer_model, routes)); save_config(MultiModelConfig(config.default_group, groups)); print(f"✓ 已更新模型组 {args.name}"); return 0
+
+def _parse_routes(values: list[str]) -> tuple[RouteConfig, ...]:
+    routes = []
+    for value in values:
+        try:
+            pattern, slot = value.rsplit(":", 1)
+        except ValueError as exc:
+            raise MultiModelConfigError("route must have the form PATTERN:SLOT") from exc
+        routes.append(RouteConfig(pattern.strip(), slot.strip()))
+    return tuple(routes)
 
 def _error(message: str) -> int: print(f"error: {message}", file=sys.stderr); return 2

@@ -17,6 +17,7 @@ from clawcodex_ext.multimodel import (
     SessionBridge,
 )
 from clawcodex_ext.multimodel.aggregators import PassThroughAggregator
+from clawcodex_ext.multimodel.aggregators import MajorityVoteAggregator
 from clawcodex_ext.providers.base import BaseProvider, ChatResponse
 
 
@@ -96,3 +97,17 @@ def test_router_requires_an_enabled_slot() -> None:
     router = MultiModelRouter([ProviderSlot("off", Provider(), enabled=False)], ParallelStrategy())
     with pytest.raises(RuntimeError, match="No enabled"):
         router.chat([])
+
+
+def test_router_emits_slot_progress_completion_and_weighted_vote() -> None:
+    first, second = Provider("same answer"), Provider("same answer")
+    events: list[tuple[str, dict]] = []
+    router = MultiModelRouter(
+        [ProviderSlot("one", first, weight=1), ProviderSlot("two", second, weight=3)],
+        ParallelStrategy(), MajorityVoteAggregator(),
+    )
+    router.add_event_listener(lambda kind, payload: events.append((kind, payload)))
+    assert router.chat([{"role": "user", "content": "hello"}]).content == "same answer"
+    assert [kind for kind, _ in events].count("progress") == 2
+    assert [kind for kind, _ in events].count("complete") == 2
+    assert router.last_aggregated.vote_summary["majority_weight"] == 4

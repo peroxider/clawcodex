@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from clawcodex_ext.capabilities.multimodel_protocol import AggregatedOutput, MultiModelResult
 
@@ -13,10 +15,29 @@ class SessionBridge:
 
     calls: list[list[MultiModelResult]] = field(default_factory=list)
     aggregated: list[AggregatedOutput | None] = field(default_factory=list)
+    audit_path: Path | None = None
 
     def record(self, results: list[MultiModelResult], output: AggregatedOutput | None = None) -> None:
         self.calls.append(list(results))
         self.aggregated.append(output)
+        if self.audit_path is not None:
+            try:
+                self.audit_path.parent.mkdir(parents=True, exist_ok=True)
+                payload = {
+                    "results": [
+                        {"slot": item.slot_name, "duration_ms": item.duration_ms,
+                         "tokens": item.tokens, "error": item.error,
+                         "cancelled": item.cancelled}
+                        for item in results
+                    ],
+                    "chosen_model": output.chosen.model if output else None,
+                    "vote_summary": output.vote_summary if output else None,
+                }
+                with self.audit_path.open("a", encoding="utf-8") as handle:
+                    handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+            except OSError:
+                # Auditing is best effort and must not discard an answer.
+                pass
 
     @property
     def total_tokens(self) -> dict[str, int]:

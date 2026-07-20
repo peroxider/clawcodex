@@ -7,6 +7,7 @@ from clawcodex_ext.command_system.registry import CommandRegistry
 from clawcodex_ext.command_system.types import CommandContext
 from clawcodex_ext.multimodel.cli import run_multimodel_command
 from clawcodex_ext.multimodel.config import load_config, resolve_active_group
+from clawcodex_ext.multimodel.factory import build_router
 from clawcodex_ext.multimodel.runtime_command import register_multimodel_runtime_command
 
 
@@ -42,3 +43,21 @@ def test_runtime_selection_overrides_config(monkeypatch, tmp_path) -> None:
 
     asyncio.run(exercise())
     assert resolve_active_group(cli_group="cli", runtime_group="runtime", config=load_config()) == "cli"
+
+
+def test_configured_keyword_routes_build_a_working_strategy(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("CLAWCODEX_CONFIG_DIR", str(tmp_path))
+    assert run_multimodel_command([
+        "group", "create", "router", "--slot", "cheap:m1@one", "--slot", "strong:m2@two",
+        "--strategy", "routing", "--route", "security:strong",
+    ]) == 0
+
+    class Provider:
+        def __init__(self, name): self.name, self.model = name, name
+        async def chat_async(self, _messages, **_kwargs):
+            from clawcodex_ext.providers.base import ChatResponse
+            return ChatResponse(self.name, self.name, {}, "stop")
+        def get_available_models(self): return [self.model]
+
+    router = build_router(load_config().groups["router"], lambda provider, _model: Provider(provider))
+    assert router.chat([{"role": "user", "content": "Please perform a security review"}]).content == "two"

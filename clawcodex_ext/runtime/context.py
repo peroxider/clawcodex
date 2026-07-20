@@ -117,11 +117,14 @@ class RuntimeContext:
         # F-157: replace the ordinary provider only after resolving the base
         # runtime settings, keeping the core query loop unaware of ensembles.
         if options.multimodel_group:
-            from clawcodex_ext.multimodel.config import load_config
+            from clawcodex_ext.multimodel.config import default_config_path, load_config
             from clawcodex_ext.multimodel.factory import build_router
 
             group = load_config().groups[options.multimodel_group]
-            provider = build_router(group, build_provider_from_config)
+            provider = build_router(
+                group, build_provider_from_config,
+                audit_path=default_config_path().parent / "multimodel-audit.jsonl",
+            )
             provider_name = "multimodel"
         else:
             provider = build_provider_from_config(provider_name, resolution.model)
@@ -236,6 +239,8 @@ class RuntimeContext:
             tail_follower=tail_follower,
             _mcp_manager=mcp_manager,
         )
+        runtime._single_provider_name = resolution.provider
+        runtime._single_model = resolution.model
         attach_cron_runtime(runtime)
         return runtime
 
@@ -344,6 +349,10 @@ class RuntimeContext:
         self.tool_registry = tool_registry
         self.options.provider_name = provider_name
         self.options.model = getattr(provider, "model", model)
+        self.multimodel_group = ""
+        self.options.multimodel_group = ""
+        self._single_provider_name = provider_name
+        self._single_model = self.options.model
 
         for attr, value in (
             ("provider", provider),
@@ -356,6 +365,45 @@ class RuntimeContext:
         # Fan-out to downstream observers (REPL, TUI, AgentBridge).
         # See clawcodex_ext/runtime/observer.py for the Protocol contract.
         notify_observers(self)
+
+    def swap_multimodel(self, group_name: str) -> None:
+        """Activate a configured ensemble for the current interactive session."""
+        from clawcodex_ext.multimodel.config import default_config_path, load_config
+        from clawcodex_ext.multimodel.factory import build_router
+        from src.providers.runtime import build_provider_from_config
+        from src.tool_system.defaults import build_default_registry
+
+        config = load_config()
+        if group_name not in config.groups:
+            raise ValueError(f"unknown model group '{group_name}'")
+        provider = build_router(
+            config.groups[group_name], build_provider_from_config,
+            audit_path=default_config_path().parent / "multimodel-audit.jsonl",
+        )
+        tool_registry = build_default_registry(
+            provider=provider, load_agent_tools=self.options.bundle_path is None,
+        )
+        replace_cron_tools(tool_registry)
+        _filter_registry(tool_registry, allowed=self.options.allowed_tools, denied=self.options.disallowed_tools)
+        self.provider = provider
+        self.provider_name = "multimodel"
+        self.tool_registry = tool_registry
+        self.multimodel_group = group_name
+        self.options.multimodel_group = group_name
+        for attr, value in (("provider", provider), ("provider_name", "multimodel"), ("tool_registry", tool_registry)):
+            if hasattr(self.tool_context, attr):
+                setattr(self.tool_context, attr, value)
+        notify_observers(self)
+
+    def disable_multimodel(self) -> None:
+        """Return to the single-provider selection that existed before the group."""
+        provider_name = getattr(self, "_single_provider_name", None) or self.options.provider_name
+        model = getattr(self, "_single_model", None) or self.options.model
+        if not provider_name or provider_name == "multimodel":
+            raise RuntimeError("no single-provider selection is available")
+        self.multimodel_group = ""
+        self.options.multimodel_group = ""
+        self.swap_provider(provider_name, model)
 
 
 def _bootstrap_mcp_sync(tool_context: Any) -> Any | None:

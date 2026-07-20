@@ -7,6 +7,7 @@ from .selection_list import MultiModelSelectionList
 from .summary_panel import MultiModelSummaryPanel
 from .tab_bar import ModelTabBar
 from .tab_panel import ModelTabPanel
+from .live_panel import MultiModelLivePanel
 
 __all__ = ["ModelProgressBars", "ModelResultCard", "ModelTabBar", "ModelTabPanel",
-           "MultiModelDiffPanel", "MultiModelSelectionList", "MultiModelSummaryPanel"]
+           "MultiModelDiffPanel", "MultiModelSelectionList", "MultiModelSummaryPanel", "MultiModelLivePanel"]

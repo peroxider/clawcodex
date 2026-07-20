@@ -35,12 +35,26 @@ class SlotConfig:
 
 
 @dataclass(frozen=True)
+class RouteConfig:
+    """A portable keyword route: any matching term selects ``slot``."""
+
+    pattern: str
+    slot: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"pattern": self.pattern, "slot": self.slot}
+
+
+@dataclass(frozen=True)
 class GroupConfig:
     strategy: str
     slots: tuple[SlotConfig, ...]
     aggregator: str | None = None
     max_concurrent: int = 5
     min_votes: int | None = None
+    scorer_provider: str = "openai"
+    scorer_model: str = "gpt-4o"
+    routes: tuple[RouteConfig, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
@@ -51,6 +65,11 @@ class GroupConfig:
             data["aggregator"] = self.aggregator
         if self.min_votes is not None:
             data["min_votes"] = self.min_votes
+        if self.aggregator in {"scoring", "rank"}:
+            data["scorer_provider"] = self.scorer_provider
+            data["scorer_model"] = self.scorer_model
+        if self.routes:
+            data["routes"] = [route.to_dict() for route in self.routes]
         return data
 
 
@@ -116,6 +135,10 @@ def validate_group(group: GroupConfig) -> GroupConfig:
     if len(names) != len(set(names)):
         raise MultiModelConfigError("slot names must be unique")
     for slot in group.slots: _validate_slot(slot)
+    names = set(names)
+    for route in group.routes:
+        if not route.pattern.strip() or route.slot not in names:
+            raise MultiModelConfigError("each route needs a non-empty pattern and an existing slot")
     if group.aggregator is not None and group.aggregator not in VALID_AGGREGATORS:
         raise MultiModelConfigError(f"unknown aggregator: {group.aggregator}")
     if group.max_concurrent <= 0:
@@ -134,10 +157,17 @@ def _group_from_mapping(value: Mapping[str, Any]) -> GroupConfig:
         weight=float(raw.get("weight", 1.0)), timeout_ms=int(raw.get("timeout_ms", 120_000)),
         enabled=bool(raw.get("enabled", True)),
     )) for raw in raw_slots)
+    raw_routes = value.get("routes", [])
+    if not isinstance(raw_routes, list):
+        raise MultiModelConfigError("group routes must be a list")
+    routes = tuple(RouteConfig(str(item.get("pattern", "")), str(item.get("slot", ""))) for item in raw_routes if isinstance(item, Mapping))
     return validate_group(GroupConfig(
         strategy=str(value.get("strategy", "parallel")), slots=slots,
         aggregator=value.get("aggregator"), max_concurrent=int(value.get("max_concurrent", 5)),
         min_votes=(int(value["min_votes"]) if value.get("min_votes") is not None else None),
+        scorer_provider=str(value.get("scorer_provider", "openai")),
+        scorer_model=str(value.get("scorer_model", "gpt-4o")),
+        routes=routes,
     ))
 
 

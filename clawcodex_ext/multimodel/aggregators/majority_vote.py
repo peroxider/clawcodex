@@ -31,25 +31,31 @@ class MajorityVoteAggregator:
     async def aggregate(
         self, results: list[MultiModelResult], context: dict[str, Any]
     ) -> AggregatedOutput:
-        del context
         require_results(results)
         valid = valid_results(results)
         if len(valid) < self.min_votes:
             return fallback_output(results)
 
         clusters = self._cluster_by_similarity(valid)
-        majority = max(clusters, key=len)
+        weights = context.get("slot_weights", {})
+        def score(cluster: list[MultiModelResult]) -> tuple[float, int]:
+            return (sum(float(weights.get(item.slot_name, 1.0)) for item in cluster), len(cluster))
+
+        majority = max(clusters, key=score)
         chosen = majority[0]
+        summary = {
+            "total_votes": len(valid),
+            "majority": len(majority),
+            "clusters": {index: len(cluster) for index, cluster in enumerate(clusters)},
+            "winning_slot": chosen.slot_name,
+        }
+        if any(float(weights.get(item.slot_name, 1.0)) != 1.0 for item in valid):
+            summary["majority_weight"] = score(majority)[0]
         return AggregatedOutput(
             chosen=chosen.response,
             runners_up=[result for result in results if result is not chosen],
             provenance=list(results),
-            vote_summary={
-                "total_votes": len(valid),
-                "majority": len(majority),
-                "clusters": {index: len(cluster) for index, cluster in enumerate(clusters)},
-                "winning_slot": chosen.slot_name,
-            },
+            vote_summary=summary,
         )
 
     def _cluster_by_similarity(

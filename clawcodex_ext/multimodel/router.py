@@ -6,7 +6,7 @@ import asyncio
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Generator, Optional
+from typing import Any, Callable, Generator, Optional
 
 from clawcodex_ext.capabilities.multimodel_protocol import AggregatedOutput, AggregatorProtocol, MultiModelResult, MultiModelStrategy
 from clawcodex_ext.providers.base import BaseProvider, ChatResponse, MessageInput
@@ -49,6 +49,27 @@ class MultiModelRouter(BaseProvider):
         self.session_bridge = session_bridge
         self._last_result: list[MultiModelResult] | None = None
         self._last_aggregated: AggregatedOutput | None = None
+        # Sinks are deliberately provider-local: frontends can subscribe
+        # without changing the query loop or sharing mutable global state.
+        self._event_listeners: list[Callable[[str, dict[str, Any]], None]] = []
+
+    def add_event_listener(self, listener: Callable[[str, dict[str, Any]], None]) -> None:
+        if listener not in self._event_listeners:
+            self._event_listeners.append(listener)
+
+    def remove_event_listener(self, listener: Callable[[str, dict[str, Any]], None]) -> None:
+        try:
+            self._event_listeners.remove(listener)
+        except ValueError:
+            pass
+
+    def _emit(self, event: str, **payload: Any) -> None:
+        for listener in tuple(self._event_listeners):
+            try:
+                listener(event, payload)
+            except Exception:
+                # Rendering/audit listeners must never fail a model request.
+                continue
 
     @property
     def last_result(self) -> list[MultiModelResult] | None:
@@ -69,20 +90,51 @@ class MultiModelRouter(BaseProvider):
             call_kwargs["model"] = slot.model
         try:
             response = await asyncio.wait_for(
-                slot.provider.chat_async(messages, **call_kwargs),
+                self._stream_slot(slot, messages, **call_kwargs),
                 timeout=slot.timeout_ms / 1000,
             )
             duration_ms = int((time.monotonic() - started) * 1000)
             usage = response.usage if isinstance(response.usage, dict) else {}
-            return MultiModelResult(slot.name, response, duration_ms, self._tokens(usage))
+            result = MultiModelResult(slot.name, response, duration_ms, self._tokens(usage))
+            self._emit("complete", result=result)
+            return result
         except asyncio.CancelledError:
             duration_ms = int((time.monotonic() - started) * 1000)
-            return MultiModelResult(slot.name, self._empty_response(slot), duration_ms, {}, cancelled=True)
+            result = MultiModelResult(slot.name, self._empty_response(slot), duration_ms, {}, cancelled=True)
+            self._emit("complete", result=result)
+            return result
         except asyncio.TimeoutError:
-            return MultiModelResult(slot.name, self._empty_response(slot), slot.timeout_ms, {}, error=f"Timeout after {slot.timeout_ms}ms")
+            result = MultiModelResult(slot.name, self._empty_response(slot), slot.timeout_ms, {}, error=f"Timeout after {slot.timeout_ms}ms")
+            self._emit("complete", result=result)
+            return result
         except Exception as exc:
             duration_ms = int((time.monotonic() - started) * 1000)
-            return MultiModelResult(slot.name, self._empty_response(slot), duration_ms, {}, error=str(exc))
+            result = MultiModelResult(slot.name, self._empty_response(slot), duration_ms, {}, error=str(exc))
+            self._emit("complete", result=result)
+            return result
+
+    async def _stream_slot(self, slot: ProviderSlot, messages: list[MessageInput], **kwargs: Any) -> ChatResponse:
+        """Prefer structured streaming, with a compatible async fallback."""
+        def text(chunk: str) -> None:
+            self._emit("progress", slot=slot.name, chunk=chunk, status="streaming")
+
+        def thinking(chunk: str) -> None:
+            self._emit("thinking", slot=slot.name, chunk=chunk, status="streaming")
+
+        try:
+            if not callable(getattr(slot.provider, "chat_stream_response", None)):
+                raise NotImplementedError
+            return await asyncio.to_thread(
+                slot.provider.chat_stream_response, messages,
+                on_text_chunk=text, on_thinking_chunk=thinking, **kwargs,
+            )
+        except NotImplementedError:
+            response = await slot.provider.chat_async(messages, **kwargs)
+            if response.reasoning_content:
+                thinking(response.reasoning_content)
+            if response.content:
+                text(response.content)
+            return response
 
     @staticmethod
     def _empty_response(slot: ProviderSlot) -> ChatResponse:
@@ -106,7 +158,7 @@ class MultiModelRouter(BaseProvider):
             raise RuntimeError("No enabled providers in multi-model router")
         aggregator = self._aggregator or getattr(self.strategy, "aggregator", None)
         if aggregator is not None:
-            aggregated = await aggregator.aggregate(results, {})
+            aggregated = await aggregator.aggregate(results, self._aggregation_context())
             self._last_aggregated = aggregated
             chosen = aggregated.chosen
         else:
@@ -117,7 +169,11 @@ class MultiModelRouter(BaseProvider):
             self._last_aggregated = None
         if self.session_bridge is not None:
             self.session_bridge.record(results, self._last_aggregated)
+        self._emit("aggregated", results=results, output=self._last_aggregated)
         return chosen
+
+    def _aggregation_context(self) -> dict[str, Any]:
+        return {"slot_weights": {slot.name: slot.weight for slot in self.slots}}
 
     def chat_stream_response(self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, on_text_chunk: Any = None, on_thinking_chunk: Any = None, **kwargs: Any) -> ChatResponse:
         response = self._run_sync(self._execute(messages, tools=tools, **kwargs))

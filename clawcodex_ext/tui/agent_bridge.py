@@ -49,6 +49,7 @@ from .messages import (
     AskUserQuestionRequested,
     AssistantChunk,
     AssistantMessage,
+    MultiModelEvent,
     PermissionRequested,
     ToolEventMessage,
 )
@@ -149,6 +150,8 @@ class AgentBridge:
         # Tail-follower for --resume: watches the backgrounded agent's
         # transcript and posts new lines to the UI in real time.
         self._tail_follower = tail_follower
+        self._multimodel_listener = None
+        self._attach_multimodel_listener(provider)
         self._tail_thread: threading.Thread | None = None
         if self._tail_follower is not None:
             self._start_tail_follower()
@@ -156,13 +159,35 @@ class AgentBridge:
     def replace_runtime(
         self, *, provider: Any, tool_registry: ToolRegistry, tool_context: ToolContext
     ) -> None:
+        old_provider = self._provider
+        if self._multimodel_listener is not None and hasattr(old_provider, "remove_event_listener"):
+            old_provider.remove_event_listener(self._multimodel_listener)
         self._provider = provider
+        self._attach_multimodel_listener(provider)
         self._tool_registry = tool_registry
         self._tool_context = tool_context
         tool_context.permission_handler = self._permission_handler
         if tool_context.default_permission_handler is None:
             tool_context.default_permission_handler = self._permission_handler
         tool_context.ask_user = self._ask_user_handler
+
+    def _attach_multimodel_listener(self, provider: Any) -> None:
+        if not hasattr(provider, "add_event_listener") or not hasattr(provider, "slots"):
+            self._multimodel_listener = None
+            return
+        slots = [slot.name for slot in provider.slots]
+
+        def listener(kind: str, payload: dict[str, Any]) -> None:
+            if kind == "progress":
+                self._post(MultiModelEvent("progress", payload["slot"], payload.get("chunk", "")))
+            elif kind == "complete":
+                self._post(MultiModelEvent("complete", result=payload["result"]))
+            elif kind == "aggregated":
+                self._post(MultiModelEvent("aggregated", results=payload.get("results")))
+
+        self._multimodel_listener = listener
+        provider.add_event_listener(listener)
+        self._post(MultiModelEvent("start", results=slots))
 
     def reset_advisor_dedup(self) -> None:
         """Drop the advisor-dedup state.

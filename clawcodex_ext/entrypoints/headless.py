@@ -91,6 +91,7 @@ class HeadlessOptions:
     output_format: str = "text"
     input_format: str = "text"
     provider_name: str | None = None
+    provider_instance: Any | None = None
     model: str | None = None
     max_turns: int = 20
     # ``skip_permissions`` is a backward-compat alias for the boolean form
@@ -251,28 +252,25 @@ def _run_headless_core(options: HeadlessOptions) -> int:
         return provider_free_exit
 
     provider_name = options.provider_name or get_default_provider()
-    try:
-        provider_cfg = get_provider_config(provider_name)
-    except Exception as exc:
-        cli_error(f"error: unable to load provider config: {exc}", 2)
-    # Config api_key wins; fall back to the provider's known env vars (e.g.
-    # ``DEEPSEEK_API_KEY``) so a freshly-added provider works without ``login``.
-    # Local providers (Ollama / vLLM / SGLang) need no key.
-    api_key = resolve_api_key(provider_name, provider_cfg)
-    if not api_key and provider_requires_api_key(provider_name):
-        cli_error(
-            f"error: API key for provider '{provider_name}' is not configured. "
-            "Run `clawcodex login` to set it up.",
-            2,
-        )
-
-    provider_cls = get_provider_class(provider_name)
-    model = options.model or provider_cfg.get("default_model")
-    provider = provider_cls(
-        api_key=api_key,
-        base_url=provider_cfg.get("base_url"),
-        model=model,
-    )
+    provider = options.provider_instance
+    if provider is None:
+        try:
+            provider_cfg = get_provider_config(provider_name)
+        except Exception as exc:
+            cli_error(f"error: unable to load provider config: {exc}", 2)
+        # Config api_key wins; fall back to the provider's known env vars.
+        api_key = resolve_api_key(provider_name, provider_cfg)
+        if not api_key and provider_requires_api_key(provider_name):
+            cli_error(
+                f"error: API key for provider '{provider_name}' is not configured. "
+                "Run `clawcodex login` to set it up.",
+                2,
+            )
+        provider_cls = get_provider_class(provider_name)
+        model = options.model or provider_cfg.get("default_model")
+        provider = provider_cls(api_key=api_key, base_url=provider_cfg.get("base_url"), model=model)
+    else:
+        model = options.model or getattr(provider, "model", None)
 
     # F-125 Phase 1+2: session assembly. Three input sources, in priority
     # order:
@@ -1100,6 +1098,12 @@ def _run_headless_core(options: HeadlessOptions) -> int:
 
     duration_ms = int((time.monotonic() - start) * 1000)
     final_text = "\n\n".join(t for t in aggregate_text if t).strip()
+    multimodel_payload = None
+    if getattr(provider, "last_result", None):
+        from clawcodex_ext.multimodel.display import ModelDisplayState, SummaryBuilder
+        states = [ModelDisplayState.from_result(item) for item in provider.last_result]
+        multimodel_payload = json.loads(SummaryBuilder.build_json(states, strategy=getattr(provider.strategy, "name", "parallel")))
+        final_text = SummaryBuilder.build_text(states)
 
     if options.output_format == "text":
         if final_text:
@@ -1131,6 +1135,8 @@ def _run_headless_core(options: HeadlessOptions) -> int:
             "tool_events": aggregate_tool_events,
             "is_error": exit_code not in (0, 130),
         }
+        if multimodel_payload is not None:
+            payload["multimodel"] = multimodel_payload
         stdout.write(ndjson_safe_dumps(payload) + "\n")
         stdout.flush()
     elif options.output_format == "stream-json" and writer is not None and exit_code == 0:
