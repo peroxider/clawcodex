@@ -4,7 +4,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                     extensions/multimodel/                   │
+│                   clawcodex_ext/multimodel/                  │
 │                                                              │
 │  ┌──────────────────────┐     ┌──────────────────────────┐   │
 │  │   MultiModelRouter   │     │  Strategy Implementations│   │
@@ -41,7 +41,7 @@
 ### 2.1 ProviderSlot — 子 provider 描述
 
 ```python
-# extensions/multimodel/slots.py
+# clawcodex_ext/multimodel/slots.py
 
 @dataclass
 class ProviderSlot:
@@ -57,7 +57,7 @@ class ProviderSlot:
 ### 2.2 MultiModelResult — 单模型调用结果
 
 ```python
-# extensions/capabilities/multimodel_protocol.py
+# clawcodex_ext/capabilities/multimodel_protocol.py
 
 @dataclass
 class MultiModelResult:
@@ -86,7 +86,7 @@ class AggregatedOutput:
 ## 3. MultiModelRouter
 
 ```python
-# extensions/multimodel/router.py
+# clawcodex_ext/multimodel/router.py
 
 class MultiModelRouter(BaseProvider):
     """多模型路由器 — 实现 BaseProvider 接口，对 query() 透明。
@@ -156,7 +156,7 @@ class MultiModelRouter(BaseProvider):
 ```
 
 ```python
-# extensions/multimodel/strategies/parallel.py
+# clawcodex_ext/multimodel/strategies/parallel.py
 
 class ParallelStrategy(MultiModelStrategy):
     """并行策略：所有模型同时接收相同输入，全部返回。"""
@@ -219,7 +219,7 @@ class ParallelStrategy(MultiModelStrategy):
 ```
 
 ```python
-# extensions/multimodel/strategies/voting.py
+# clawcodex_ext/multimodel/strategies/voting.py
 
 class VotingStrategy(MultiModelStrategy):
     """投票策略：并行调用，聚合器选择最佳结果。"""
@@ -252,7 +252,7 @@ class VotingStrategy(MultiModelStrategy):
 ```
 
 ```python
-# extensions/multimodel/strategies/routing.py
+# clawcodex_ext/multimodel/strategies/routing.py
 
 @dataclass
 class RoutingRule:
@@ -285,7 +285,7 @@ class RoutingStrategy(MultiModelStrategy):
 ```
 
 ```python
-# extensions/multimodel/strategies/fallback.py
+# clawcodex_ext/multimodel/strategies/fallback.py
 
 class FallbackStrategy(MultiModelStrategy):
     """故障转移策略：按优先级顺序尝试，成功后返回。"""
@@ -314,7 +314,7 @@ class FallbackStrategy(MultiModelStrategy):
 ## 5. 协议接口
 
 ```python
-# extensions/capabilities/multimodel_protocol.py
+# clawcodex_ext/capabilities/multimodel_protocol.py
 
 class MultiModelStrategy(Protocol):
     """多模型调度策略协议。"""
@@ -367,7 +367,7 @@ RoutingStrategy 通过 `hook_registry` 的 `pre_llm` hook 在每个 turn 前动�
 ## 7. 目录结构
 
 ```
-extensions/
+clawcodex_ext/
   multimodel/
     __init__.py              # 导出 + 自动注册
     router.py                # MultiModelRouter
@@ -391,7 +391,6 @@ extensions/
     cli.py                   # clawcodex-dev multimodel 子命令
     runtime_command.py       # /multimodel slash 命令
 
-extensions/
   capabilities/
     multimodel_protocol.py   # MultiModelStrategy / AggregatorProtocol
 ```
@@ -400,7 +399,7 @@ extensions/
 
 | 阶段 | 内容 | 改动范围 |
 |------|------|---------|
-| **P0** | `extensions/capabilities/multimodel_protocol.py` + `MultiModelRouter` + `ParallelStrategy` | 纯新增文件，零侵入 |
+| **P0** | `clawcodex_ext/capabilities/multimodel_protocol.py` + `MultiModelRouter` + `ParallelStrategy` | 纯新增文件，零侵入 |
 | **P1** | `VotingStrategy` + `MajorityVoteAggregator` + `ScoringAggregator` | 纯新增 |
 | **P2** | `FallbackStrategy` + session_bridge 成本追踪 | 纯新增 |
 | **P3** | `RoutingStrategy` + `pre_llm` hook 注册 | 新增 + 可选 hook 注册 |

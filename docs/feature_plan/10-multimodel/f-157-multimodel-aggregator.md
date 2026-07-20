@@ -3,7 +3,7 @@
 ## 1. 聚合器协议
 
 ```python
-# extensions/capabilities/multimodel_protocol.py
+# clawcodex_ext/capabilities/multimodel_protocol.py
 
 @dataclass
 class AggregatedOutput:

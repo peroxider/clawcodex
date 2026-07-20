@@ -137,7 +137,7 @@ multimodel:
 ## 4. 实现文件
 
 ```
-extensions/multimodel/
+clawcodex_ext/multimodel/
   cli.py                   # clawcodex-dev multimodel 子命令
   runtime_command.py       # /multimodel slash 命令
   config.py                # 配置加载与验证

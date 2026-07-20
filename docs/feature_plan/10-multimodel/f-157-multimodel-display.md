@@ -4,7 +4,7 @@
 
 1. **纯方向键操作**：`← → ↑ ↓ Enter` 完成所有操作，零学习成本，零键位冲突
 2. **两阶段自动切换**：流式阶段 → 完成选择阶段，无需手动切换
-3. **零 TUI 侵入**：所有展示组件在 `extensions/multimodel/display/` 和 `clawcodex_ext/tui/widgets/multimodel/` 中实现，不修改现有 `src/tui/` 文件
+3. **零 TUI 侵入**：所有展示组件在 `clawcodex_ext/multimodel/display/` 和 `clawcodex_ext/tui/widgets/multimodel/` 中实现，不修改现有 `src/tui/` 文件
 4. **Headless 兼容**：非 TUI 模式有纯文本和 JSON 两种输出格式
 
 ## 2. 两阶段交互设计
@@ -216,7 +216,7 @@
 ## 7. 实现架构
 
 ```
-extensions/multimodel/
+clawcodex_ext/multimodel/
   display/
     __init__.py
     protocol.py              # MultiModelDisplayProtocol
@@ -274,7 +274,7 @@ MultiModelBridge
 | `AssistantTextMessage` | 复用，传入 `agent_name` 作为模型名 | 不变 |
 | 新的多模型组件 | 纯新增，`Horizontal` + `Vertical` 组合 | ~500 行 |
 
-所有改动在 `clawcodex_ext/tui/` 和 `extensions/multimodel/display/` 中，**完全不碰 `src/tui/`**。
+所有改动在 `clawcodex_ext/tui/` 和 `clawcodex_ext/multimodel/display/` 中，**完全不碰 `src/tui/`**。
 
 ## 10. Headless 模式下的展示
 
