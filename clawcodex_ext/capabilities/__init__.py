@@ -42,11 +42,19 @@ from extensions.capabilities.tool_protocol import (  # noqa: F401
     ToolRegistryProtocol,
     ToolSystemProtocol,
 )
+from .multimodel_protocol import (  # noqa: F401
+    AggregatedOutput,
+    AggregatorProtocol,
+    MultiModelResult,
+    MultiModelStrategy,
+)
 
 __all__ = [
     "AdapterInfo",
     "AdapterProtocol",
     "AdapterRegistry",
+    "AggregatedOutput",
+    "AggregatorProtocol",
     "AgentLoopProtocol",
     "AgentLoopResultProtocol",
     "ContextBuilderProtocol",
@@ -54,6 +62,8 @@ __all__ = [
     "HeadlessRunnerProtocol",
     "HeadlessSessionOptions",
     "LLMProviderProtocol",
+    "MultiModelResult",
+    "MultiModelStrategy",
     "ToolContextProtocol",
     "ToolEventProtocol",
     "ToolPermissionContextProtocol",
