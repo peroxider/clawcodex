@@ -122,7 +122,7 @@ class QueryConfig:
     # (600 s) so either layer hitting the budget surfaces as
     # ``exit_code=124``. The narrower 600 s lets long plugin installs
     # (which the agent really shouldn't run inline) abort early.
-    agent_loop_timeout_s: float = 600.0
+    agent_loop_timeout_s: float = 7200.0
     # F-REC: optional asciicast capture. When set, every event drained
     # from the headless session queue is forwarded to ``capture.emit``
     # via ``extensions.recording.query_forwarder.forward_event``.

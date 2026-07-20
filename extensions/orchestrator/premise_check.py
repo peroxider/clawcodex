@@ -95,6 +95,15 @@ def find_missing_paths(workspace_root: Path | str, paths: list[str]) -> list[str
     Tokens that escape the workspace (``..``) or are absolute are
     skipped rather than reported — we can only vouch for repository
     contents.
+
+    A candidate whose literal path misses is only reported when its
+    basename cannot be found anywhere in the tree either: issues
+    routinely cite files by bare name (``base_profiling_parser.py``)
+    or through a stale directory, and both are resolvable premises the
+    agent can locate itself. Reporting them as absent injects a false
+    "this file does not exist" warning that stalls obedient models.
+    Only a basename with zero hits — a plausibly fabricated file —
+    stays in the missing list.
     """
     root = Path(workspace_root)
     missing: list[str] = []
@@ -107,8 +116,26 @@ def find_missing_paths(workspace_root: Path | str, paths: list[str]) -> list[str
         except OSError:
             continue
         if not exists:
+            exists = _basename_exists(root, Path(rel).name)
+        if not exists:
             missing.append(candidate)
     return missing
+
+
+def _basename_exists(root: Path, name: str) -> bool:
+    """True when any file with this basename exists under ``root``
+    (ignoring ``.git``). Short-circuits on the first hit so the scan
+    stays cheap on the common resolvable-reference case."""
+    if not name:
+        return False
+    try:
+        for hit in root.rglob(name):
+            if ".git" in hit.parts:
+                continue
+            return True
+    except OSError:
+        pass
+    return False
 
 
 def check_issue_premise(issue: Any, workspace_root: Path | str | None) -> list[str]:

@@ -133,7 +133,7 @@ _READ_ONLY_TOOL_NAMES = frozenset(
 # cut off, and short enough to save most of the wasted wall-clock before
 # the run timeout.
 _MEGATURN_CHECK_EVERY_S = 60.0
-_MEGATURN_IDLE_STOP_S = 300.0
+_MEGATURN_IDLE_STOP_S = 1800.0
 
 _ORCHESTRATOR_INTERNAL_PATH_PREFIXES = (
     ".orchestrator_control/",
