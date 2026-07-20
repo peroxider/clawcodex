@@ -1820,6 +1820,11 @@ def register_builtin_commands(registry: CommandRegistry | None = None) -> None:
         registry: Optional registry to use (uses global if None)
     """
     reg = registry or get_command_registry()
+    try:
+        from clawcodex_ext.multimodel.runtime_command import register_multimodel_runtime_command
+        register_multimodel_runtime_command(reg)
+    except Exception:
+        pass
     for cmd in get_builtin_commands():
         reg.register(cmd)
     try:

@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 from clawcodex_ext.away_summary.controller import AwaySummaryController
 from clawcodex_ext.away_summary.registration import register_away_summary_commands
 from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+from clawcodex_ext.multimodel.runtime_command import register_multimodel_runtime_command
 from clawcodex_ext.intent_forecast.config import load_intent_forecast_config
 from clawcodex_ext.intent_forecast.controller import IntentForecastController
 from clawcodex_ext.intent_forecast.messages import (
@@ -520,6 +521,7 @@ def install_repl_extensions(repl: "ClawcodexREPL", ctx) -> None:
     # registry so the slash-command dispatcher can find them.
     if getattr(repl, "command_registry", None) is not None:
         register_runtime_commands(repl.command_registry)
+        register_multimodel_runtime_command(repl.command_registry)
         register_away_summary_commands(repl.command_registry)
         register_intent_forecast_commands(repl.command_registry)
         register_intent_forecast_commands(None)

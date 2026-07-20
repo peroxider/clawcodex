@@ -35,6 +35,7 @@ def load_builtin_subcommands() -> None:
 
     from clawcodex_ext.cli.provider_cmd import commands as _provider_commands  # noqa: F401
     from clawcodex_ext.cli.model_cmd import commands as _model_commands  # noqa: F401
+    from clawcodex_ext.multimodel import cli as _multimodel_cli  # noqa: F401
     from clawcodex_ext.cli.sop_cmd import commands as _sop_commands  # noqa: F401
     from clawcodex_ext.cli import telemetry_cmd as _telemetry_cmd  # noqa: F401
 

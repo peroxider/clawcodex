@@ -23,6 +23,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+from clawcodex_ext.multimodel.runtime_command import register_multimodel_runtime_command
 from clawcodex_ext.runtime.observer import RuntimeObserver, attach_observer
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -99,10 +100,12 @@ def install_tui_extensions(app: "ClawCodexTUI", ctx) -> None:
             ``app.runtime_context`` is ``None``.
     """
     register_runtime_commands(None)  # global registry for async dispatch
+    register_multimodel_runtime_command(None)
 
     command_registry = getattr(app, "command_registry", None)
     if command_registry is not None:
         register_runtime_commands(command_registry)
+        register_multimodel_runtime_command(command_registry)
 
     runtime = getattr(app, "runtime_context", None)
     if runtime is None:

@@ -11,10 +11,14 @@ from .aggregators import (
     RankAggregator,
     ScoringAggregator,
 )
+from .config import GroupConfig, MultiModelConfig, SlotConfig
 
 __all__ = [
     "MajorityVoteAggregator",
     "PassThroughAggregator",
     "RankAggregator",
     "ScoringAggregator",
+    "GroupConfig",
+    "MultiModelConfig",
+    "SlotConfig",
 ]

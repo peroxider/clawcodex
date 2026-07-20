@@ -550,6 +550,23 @@ def run_cli(argv: list[str] | None = None) -> int:
         if candidate.is_dir():
             bundle_path = candidate
 
+    # F-157: command-line selection wins over an in-process runtime choice,
+    # which in turn wins over config.yaml's default_group.
+    try:
+        from clawcodex_ext.multimodel.config import MultiModelConfigError, load_config, resolve_active_group
+
+        _multimodel_config = load_config()
+        _multimodel_group = resolve_active_group(
+            cli_group=getattr(args, "multimodel", None),
+            runtime_group=getattr(args, "runtime_multimodel", None),
+            config=_multimodel_config,
+        )
+        if _multimodel_group and _multimodel_group not in _multimodel_config.groups:
+            raise MultiModelConfigError(f"unknown model group '{_multimodel_group}'")
+    except MultiModelConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
     # Build RuntimeContext once from resolved args — shared by all frontends.
     runtime_opts = RuntimeOptions(
         provider_name=getattr(args, "provider", None),
@@ -578,6 +595,7 @@ def run_cli(argv: list[str] | None = None) -> int:
         record_width=getattr(args, "record_width", None),
         record_height=getattr(args, "record_height", None),
     )
+    runtime_opts.multimodel_group = _multimodel_group
     if _is_provider_free_goal_summary_print(args):
         from src.entrypoints.headless import HeadlessOptions, run_headless
 
@@ -615,6 +633,7 @@ def run_cli(argv: list[str] | None = None) -> int:
         return rc
     try:
         ctx = RuntimeContext.build(runtime_opts)
+        ctx.multimodel_group = _multimodel_group
     except RuntimeError as exc:
         # Configuration errors (missing API key, no provider selected, etc.)
         # are not programmer errors — surface a clean warning instead of a

@@ -51,6 +51,7 @@ class RuntimeOptions:
     record: str | None = None
     record_width: int | None = None
     record_height: int | None = None
+    multimodel_group: str = ""
 
 
 @dataclass
@@ -68,6 +69,8 @@ class RuntimeContext:
     session: Any | None
     workspace_root: Path
     options: RuntimeOptions
+    # F-157 selection resolved by the CLI or a runtime slash command.
+    multimodel_group: str = ""
     # F-125 C14: ``resume_session_with_tail`` returns a TailFollower that
     # headless never iterates. Without an explicit release the follower
     # holds a reference to the session transcript path and keeps the

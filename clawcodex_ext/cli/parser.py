@@ -123,6 +123,13 @@ Examples:
         help="Override the provider (anthropic, openai, openai-codex, glm, minimax, openrouter, deepseek)",
     )
     noninteractive.add_argument(
+        "--multimodel",
+        type=str,
+        default=None,
+        metavar="GROUP",
+        help="Use a configured multi-model group for this run (highest selection priority)",
+    )
+    noninteractive.add_argument(
         "--allowed-tools",
         type=str,
         default=None,
