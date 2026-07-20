@@ -111,9 +111,20 @@ class RuntimeContext:
             project_root=workspace_root,
         )
         provider_name = resolution.provider
-        provider = build_provider_from_config(provider_name, resolution.model)
         options.provider_name = provider_name
         options.model = resolution.model
+
+        # F-157: replace the ordinary provider only after resolving the base
+        # runtime settings, keeping the core query loop unaware of ensembles.
+        if options.multimodel_group:
+            from clawcodex_ext.multimodel.config import load_config
+            from clawcodex_ext.multimodel.factory import build_router
+
+            group = load_config().groups[options.multimodel_group]
+            provider = build_router(group, build_provider_from_config)
+            provider_name = "multimodel"
+        else:
+            provider = build_provider_from_config(provider_name, resolution.model)
 
         # Build tool registry
         tool_registry = build_default_registry(
