@@ -111,6 +111,11 @@ _DEFAULT_FLAGS: list[FeatureFlag] = [
         default=False,
         description="Enable multi-API provider routing (F-72)",
     ),
+    FeatureFlag(
+        name="MULTIMODEL",
+        default=False,
+        description="Enable F-157 multi-model parallel dispatch and model groups",
+    ),
     # --- Sandbox ---
     FeatureFlag(
         name="SANDBOX_EXECUTION",

@@ -6,6 +6,7 @@ from typing import Any
 
 from src.command_system.types import LocalCommand, LocalCommandResult
 from .config import MultiModelConfigError, load_config, resolve_active_group
+from .feature import disabled_message, is_multimodel_enabled
 
 def register_multimodel_runtime_command(registry: Any | None = None) -> None:
     from src.command_system.registry import get_command_registry
@@ -14,6 +15,8 @@ def register_multimodel_runtime_command(registry: Any | None = None) -> None:
     command.set_call(_call); reg.register(command)
 
 def _call(args: str, context: Any) -> LocalCommandResult:
+    if not is_multimodel_enabled():
+        return _text(disabled_message())
     try: tokens = shlex.split(args); config = load_config()
     except (ValueError, MultiModelConfigError) as exc: return _text(f"error: {exc}")
     runtime = getattr(context, "runtime_context", None) or getattr(context, "runtime", None)

@@ -8,6 +8,7 @@ from dataclasses import replace
 from clawcodex_ext.cli.subcommand_registry import register
 from .config import GroupConfig, MultiModelConfig, MultiModelConfigError, RouteConfig, load_config, parse_slot, save_config, validate_group
 from .preset import PRESETS, get_preset
+from .feature import disabled_message, is_multimodel_enabled
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="clawcodex multimodel")
@@ -43,6 +44,8 @@ def _format_group(name: str, group: GroupConfig) -> str:
 
 @register("multimodel")
 def run_multimodel_command(argv: list[str]) -> int:
+    if not is_multimodel_enabled():
+        return _error(disabled_message())
     try: args = _parser().parse_args(argv); config = load_config()
     except (MultiModelConfigError, SystemExit) as exc:
         return int(exc.code) if isinstance(exc, SystemExit) else _error(str(exc))

@@ -563,7 +563,10 @@ def run_cli(argv: list[str] | None = None) -> int:
         )
         if _multimodel_group and _multimodel_group not in _multimodel_config.groups:
             raise MultiModelConfigError(f"unknown model group '{_multimodel_group}'")
-    except MultiModelConfigError as exc:
+        if _multimodel_group:
+            from clawcodex_ext.multimodel.feature import require_multimodel_enabled
+            require_multimodel_enabled()
+    except (MultiModelConfigError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

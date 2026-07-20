@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from .aggregators.base import parse_score_json
 from .session_bridge import SessionBridge
+from .feature import require_multimodel_enabled
 
 from .aggregators import MajorityVoteAggregator, PassThroughAggregator, RankAggregator, ScoringAggregator
 from .config import GroupConfig
@@ -20,6 +21,7 @@ def build_router(group: GroupConfig, provider_builder: Callable[[str, str], obje
     ``provider_builder`` is injected to keep configuration portable and make
     this construction path straightforward to test without credentials.
     """
+    require_multimodel_enabled()
     slots = [
         ProviderSlot(
             name=item.name,
