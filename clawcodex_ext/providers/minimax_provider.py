@@ -50,6 +50,7 @@ from clawcodex_ext.providers.base import (
     ChatResponse,
     MessageInput,
     TextChunkCallback,
+    ThinkingChunkCallback,
 )
 
 if TYPE_CHECKING:
@@ -196,6 +197,7 @@ class MinimaxProvider(BaseProvider):
         messages: list[MessageInput],
         tools: Optional[list[dict[str, Any]]] = None,
         on_text_chunk: TextChunkCallback | None = None,
+        on_thinking_chunk: ThinkingChunkCallback | None = None,
         abort_signal: Any = None,
         **kwargs,
     ) -> ChatResponse:
@@ -207,6 +209,10 @@ class MinimaxProvider(BaseProvider):
         in ``StreamAbortGuard``; this provider only owns the
         SDK-specific iteration shape (``with client.messages.stream``
         + ``stream.text_stream`` + ``get_final_message``).
+
+        ``on_thinking_chunk`` is accepted for the common provider
+        interface.  The Anthropic-compatible MiniMax stream currently
+        exposes text only, so there is no thinking delta to emit.
         """
         from clawcodex_ext.providers._stream_abort import StreamAbortGuard
 
@@ -303,6 +309,7 @@ class ClawcodexMinimaxProvider(MinimaxProvider):
         messages: list[MessageInput],
         tools: Optional[list[dict[str, Any]]] = None,
         on_text_chunk: TextChunkCallback | None = None,
+        on_thinking_chunk: ThinkingChunkCallback | None = None,
         abort_signal: "AbortSignal | None" = None,
         **kwargs,
     ) -> ChatResponse:

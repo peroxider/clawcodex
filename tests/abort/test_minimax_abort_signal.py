@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.providers.minimax_provider import MinimaxProvider
+from src.providers.minimax_provider import ClawcodexMinimaxProvider, MinimaxProvider
 from src.utils.abort_controller import AbortController, AbortError
 
 
@@ -131,6 +131,24 @@ def test_uncancelled_stream_returns_normally() -> None:
     assert seen == ["hello ", "world"]
     stream.response.close.assert_not_called()
     assert response is not None
+
+
+@pytest.mark.parametrize("provider_class", [MinimaxProvider, ClawcodexMinimaxProvider])
+def test_stream_response_accepts_thinking_callback_without_passing_it_to_sdk(provider_class) -> None:
+    """Multi-model routing supplies both stream callbacks to every provider."""
+    stream = _FakeMessageStream(["ok"])
+    provider = provider_class(api_key="test", model="MiniMax-M2.7")
+    client = MagicMock()
+    client.messages.stream.return_value = stream
+    provider._ensure_client = lambda: client  # type: ignore[method-assign]
+
+    response = provider.chat_stream_response(
+        messages=[{"role": "user", "content": "hi"}],
+        on_thinking_chunk=lambda _chunk: None,
+    )
+
+    assert response is not None
+    assert "on_thinking_chunk" not in client.messages.stream.call_args.kwargs
 
 
 def test_listener_detached_after_normal_completion() -> None:
