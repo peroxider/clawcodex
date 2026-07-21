@@ -173,8 +173,18 @@ class AgentDefinitionGenerator:
         bridge_script: str | None = None,
         write_skills: bool = False,
         existing_agent_names: set[str] | None = None,
+        composite_tools: list[str] | None = None,
     ) -> list[Path]:
-        """Render stage agent markdown files into output_dir."""
+        """Render stage agent markdown files into output_dir.
+
+        Parameters
+        ----------
+        composite_tools:
+            Registered composite (macro) tool kebab-case names to inject into
+            every stage agent's frontmatter ``tools`` list.  These are higher-
+            level orchestration tools (e.g. ``invoke-existing-agent``,
+            ``pipeline-execute``) that stage agents may need to invoke.
+        """
         output_dir = Path(output_dir)
         source_dir = Path(graph.source_dir)
         self.finalize_stage_agent_names(
@@ -202,6 +212,14 @@ class AgentDefinitionGenerator:
             scoped_tools = self._scope_tools(source_dir, stage, profile.recommended_tools)
             profile.recommended_tools = scoped_tools
             tools = stage_agent_tool_names(tools_for_profile(profile, bridge_tool=bridge_tool))
+
+            # F-50 缺口2: inject composite macro tools into every stage agent
+            # frontmatter so they can reference higher-level orchestration
+            # tools (pipeline-execute, invoke-existing-agent, …).
+            if composite_tools:
+                for ct in composite_tools:
+                    if ct not in tools:
+                        tools.append(ct)
 
             contract = graph.contracts.get(stage.id)
             input_files = contract.input_files if contract else []
