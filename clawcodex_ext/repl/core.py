@@ -1576,6 +1576,7 @@ class ClawcodexREPL:
         tool_name: str,
         message: str,
         suggestion: str | None,
+        tool_input: Any = None,
     ) -> tuple[bool, bool]:
         """Handle interactive permission requests from tools.
 
@@ -1583,6 +1584,7 @@ class ClawcodexREPL:
             tool_name: Name of the tool requesting permission.
             message: Message explaining what permission is needed.
             suggestion: Optional suggestion for enabling the setting.
+            tool_input: Optional tool input dict for per-tool preview rendering.
 
         Returns:
             Tuple of (allowed: bool, continue_without_caching: bool).
@@ -1599,6 +1601,8 @@ class ClawcodexREPL:
             self.console.print("")
             self.console.print(f"[bold][warning]⚠ Permission Required[/warning][/bold]")
             self.console.print(f"  {message}")
+            # Render per-tool preview (Bash → command, Write → path+content, etc.)
+            self._render_permission_preview(tool_name, tool_input)
             self.console.print("")
 
             # Determine if this is a setting that can be enabled
@@ -1707,6 +1711,30 @@ class ClawcodexREPL:
             self.console.print("[dim]Invalid choice, defaulting to deny.[/dim]")
             return False, False
 
+    def _render_permission_preview(
+        self,
+        tool_name: str | None,
+        tool_input: Any,
+    ) -> None:
+        """Render a per-tool permission preview (Bash → command, Write → path+content, etc.).
+
+        Reuses the TUI's :func:`preview_for_tool` renderers so both surfaces
+        show the same detail.  Silently degrades when the preview module is
+        unavailable (headless / minimal installs).
+        """
+        if not tool_input:
+            return
+        try:
+            from clawcodex_ext.tui.screens.permission_modal import preview_for_tool
+        except ImportError:
+            return
+        try:
+            renderable = preview_for_tool(tool_name, tool_input)
+        except Exception:
+            renderable = None
+        if renderable is not None:
+            self.console.print(renderable)
+
     def _handle_permission_ask_request(
         self,
         request: PermissionAskRequest,
@@ -1722,6 +1750,8 @@ class ClawcodexREPL:
             self.console.print("")
             self.console.print(f"[bold][warning]⚠ Permission Required[/warning][/bold]")
             self.console.print(f"  {request.message}")
+            # Render per-tool preview (Bash → command, Write → path+content, etc.)
+            self._render_permission_preview(request.tool_name, request.tool_input)
             self.console.print("")
 
             can_enable_setting = False

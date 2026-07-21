@@ -2,9 +2,16 @@
 
 Mirrors ``typescript/src/utils/permissions/getNextPermissionMode.ts``. The TS
 reference has an Anthropic-internal ``USER_TYPE === 'ant'`` branch and a
-``TRANSCRIPT_CLASSIFIER``-gated ``auto`` cycle target; we omit both — Python
-exposes the public cycle only. Auto mode is available via explicit
-`--permission-mode auto` CLI flag or through programmatic activation.
+``TRANSCRIPT_CLASSIFIER``-gated ``auto`` cycle target.
+
+Cycle order (with ``bypassPermissions`` enabled):
+
+    ``default → acceptEdits → plan → bypassPermissions → auto → default``
+
+The ``bypassPermissions → auto`` step is guarded by :func:`can_cycle_to_auto`
+so it only appears when the environment is safe (no protected directory, no
+recent dangerous-operation denials).  When unavailable, the cycle wraps
+``bypassPermissions → default`` directly.
 """
 
 from __future__ import annotations
@@ -30,6 +37,7 @@ _CYCLE_TABLE: list[tuple[str, str]] = [
     ("default", "acceptEdits"),
     ("acceptEdits", "plan"),
     ("plan", "bypassPermissions"),  # guarded by is_bypass_permissions_mode_available
+    ("bypassPermissions", "auto"),  # guarded by can_cycle_to_auto
 ]
 
 
@@ -68,9 +76,11 @@ def get_next_permission_mode(context: ToolPermissionContext) -> PermissionMode:
     - ``default`` → ``acceptEdits``
     - ``acceptEdits`` → ``plan``
     - ``plan`` → ``bypassPermissions`` (when available) else ``default``
-    - ``bypassPermissions`` → ``default``
-    - ``auto`` / ``bubble`` → ``default`` (escape hatch — these
-      modes are not part of the user-facing cycle but we still need a defined
+    - ``bypassPermissions`` → ``auto`` (when :func:`can_cycle_to_auto`)
+      else ``default``
+    - ``auto`` → ``default``
+    - ``bubble`` → ``default`` (escape hatch — this
+      mode is not part of the user-facing cycle but we still need a defined
       transition so Shift+Tab never strands the user.)
 
     Downstream extensions can extend the cycle via :func:`register_cycle_step`.
@@ -83,8 +93,12 @@ def get_next_permission_mode(context: ToolPermissionContext) -> PermissionMode:
         # available.  Fall through to default otherwise.
         if target == "bypassPermissions" and not context.is_bypass_permissions_mode_available:
             return "default"
+        # Guard: "bypassPermissions → auto" is only valid when the environment
+        # is safe.  Fall through to default otherwise.
+        if target == "auto" and not can_cycle_to_auto(context, check_protected_directory=False):
+            return "default"
         return target
-    # auto, bubble, and any unrecognised mode fall through to default.
+    # bubble and any unrecognised mode fall through to default.
     return "default"
 
 

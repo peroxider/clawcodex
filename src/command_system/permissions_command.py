@@ -29,8 +29,10 @@ from .types import (
 )
 
 # User-facing permission modes, in the Shift+Tab cycle order
-# (``src/permissions/cycle.py``). The internal modes (dontAsk / auto / bubble)
+# (``src/permissions/cycle.py``). The internal modes (dontAsk / bubble)
 # are deliberately excluded from the picker — they're not user-addressable.
+# ``auto`` is included because it is now part of the Shift+Tab cycle
+# (bypassPermissions → auto → default, guarded by can_cycle_to_auto).
 _PERMISSION_MODE_OPTIONS: list[UIOption] = [
     UIOption(
         value="default",
@@ -51,6 +53,11 @@ _PERMISSION_MODE_OPTIONS: list[UIOption] = [
         value="bypassPermissions",
         label="bypassPermissions",
         description="Skip all permission prompts",
+    ),
+    UIOption(
+        value="auto",
+        label="auto",
+        description="Automatically classify and allow safe commands",
     ),
 ]
 
