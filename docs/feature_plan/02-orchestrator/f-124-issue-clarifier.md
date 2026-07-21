@@ -1,6 +1,6 @@
 # F-124: Issue 澄清器 — 描述不清晰自动检测与澄清闭环
 
-> 状态: 🟢 MVP 已实现（核心 12/15 落地；仅 F-124-L workspace focus 富化 + 3 项运营增强未做）
+> 状态: 🟢 MVP 已实现（核心 13/15 落地：13 ✅ + 1 ❌ F-124-L workspace focus 富化 P2 + 1 ⚠️ registration.py 偏离合并到 gate.py/cli；另 3 项运营增强未做）
 > 章节: docs/feature_plan/02-orchestrator/f-124-issue-clarifier.md
 > 最后更新: 2026-07-21
 > 关联能力: F-38（验证+报告+PR）、F-39（issue 重跑标签）、F-121（规则回灌）、F-123（Intent Forecast）
@@ -1346,3 +1346,4 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 | 2026-07-21 | 文档同步 | 更新 §1.6 子特性表（13 ✅ + 1 ❌ P2 + 1 ⚠️ 偏离）、§1.7 实现文件清单（标行数与偏离）、§2.1 注 2 配置默认值差异表、§4 验收标准（18/19 勾选）、§6 变更记录 |
 | 2026-07-21 | 补 F-124-G：LinearAdapter.create_clarification_comment override + 文档同步 | 完成 LinearAdapter 评论写入能力（拼接 `@login` 前缀后委托 `create_comment`）；F-124-G 从 ⚠️ 标为 ✅（实现方式偏离原草案，统一走 ClarificationResolver 通道，避免双通道） |
 | 2026-07-21 | 文档补全特性缺口：§0 更新至五处重大调整 + 实现中独有设计清单；§2 同步实际实现（数据模型、prompt 结构、解析器降级行为、确定性门控、gate 状态机、IssueRecord 字段、边界场景）；§3 补充风险与约束；§4 补充验收项；§5 更新依赖与协同模块 | 实现与原始草案存在多处差异，需要同步文档以保持准确；本次补全覆盖所有已发现的特性缺口 |
+| 2026-07-21 | 修正 §0 状态行数字与 §1.6 子特性表不一致 | 原写"核心 12/15"与 §1.6 实际 13 ✅ + 1 ❌ + 1 ⚠️ 不符；改为"13/15 落地"并显式列出偏离项（F-124-L P2 + registration.py 合并） |
