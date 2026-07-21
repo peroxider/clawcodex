@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -18,6 +19,7 @@ from extensions.sop_converter.tool_registry_bridge import (
     _generate_wrapper_script,
     operation_to_spec,
 )
+from extensions.sop_converter import bundle_venv
 
 
 class CounterSource:
@@ -44,13 +46,186 @@ class TestSdkWrapperParsing(unittest.TestCase):
         )
         self.assertEqual(parsed, (Path("/tmp/wrapper.py"), "bump"))
 
+    def test_catalog_hooks_force_subprocess_dispatch(self) -> None:
+        call_impl = (
+            'python3 "/tmp/wrapper.py" create_agent \'{json_args}\' '
+            "--catalog-metadata '{\"resource_type\": \"agent\"}'"
+        )
+        spec = AgentToolSpec(
+            name="create-agent",
+            description="Create agent",
+            input_schema={"type": "object", "properties": {}},
+            call_type="bash",
+            call_impl=call_impl,
+            source="sop-converter",
+            stateful_wrapper=True,
+        )
+
+        self.assertTrue(sdk_wrapper.wrapper_requires_subprocess(call_impl))
+        self.assertFalse(sdk_wrapper.should_use_in_process_sdk_wrapper(spec))
+
+        fallback_call = (
+            'python3 "/tmp/wrapper.py" run_agent \'{json_args}\' '
+            "--catalog-fallback '{\"resource_type\": \"agent\"}'"
+        )
+        self.assertEqual(
+            sdk_wrapper.parse_sdk_wrapper_cli_options(fallback_call)[
+                "--catalog-fallback"
+            ],
+            {"resource_type": "agent"},
+        )
+        self.assertFalse(sdk_wrapper.wrapper_requires_subprocess(fallback_call))
+
+
+class TestSdkWrapperBundleVenvBootstrap(unittest.TestCase):
+    def setUp(self) -> None:
+        sdk_wrapper._MODULE_CACHE.clear()
+        sdk_wrapper._MODULE_CACHE_FINGERPRINT.clear()
+        sdk_wrapper._SCRIPT_USES_INSTANCE_CACHE.clear()
+        sdk_wrapper._SCRIPT_BUNDLE_BOOTSTRAP_CACHE.clear()
+
+    def test_in_process_loader_activates_bundle_imports_without_reexec(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            fake_site = tmp / "fake-site"
+            fake_site.mkdir()
+            (fake_site / "only_bundle_dep.py").write_text(
+                "VALUE = 42\n",
+                encoding="utf-8",
+            )
+            scripts_dir = tmp / "agent-tools" / "scripts"
+            scripts_dir.mkdir(parents=True)
+            bundle_dir = tmp / "bundle"
+            script_path = scripts_dir / "legacy_wrapper.py"
+            script_path.write_text(
+                textwrap.dedent(
+                    f"""
+                    from __future__ import annotations
+
+                    import sys
+                    from pathlib import Path
+
+
+                    def _normalize_bootstrap_path(value):
+                        return str(Path(value).expanduser().resolve())
+
+
+                    _BUNDLE_DIR = _normalize_bootstrap_path({str(bundle_dir)!r})
+                    _SDK_REQUIREMENTS = ("only-bundle-dep>=1",)
+
+
+                    def _ensure_bundle_venv_and_reexec():
+                        from extensions.sop_converter.bundle_venv import (
+                            ensure_bundle_venv_and_reexec,
+                        )
+                        from extensions.sop_converter.sdk_dependency_resolver import (
+                            SdkDependencySpec,
+                        )
+
+                        ensure_bundle_venv_and_reexec(
+                            _BUNDLE_DIR,
+                            SdkDependencySpec(
+                                requirements=tuple(_SDK_REQUIREMENTS),
+                                source="manifest",
+                                raw_path="",
+                            ),
+                            argv=sys.argv,
+                            script_file=__file__,
+                        )
+
+
+                    _ensure_bundle_venv_and_reexec()
+
+                    import only_bundle_dep
+
+
+                    def value():
+                        return only_bundle_dep.VALUE
+                    """
+                ).strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            ensure_calls: list[tuple[str, tuple[str, ...]]] = []
+
+            def fake_ensure(bundle_arg, deps, *, force=False):
+                del force
+                ensure_calls.append((str(bundle_arg), tuple(deps.requirements)))
+                return tmp / "venv" / "bin" / "python"
+
+            def fail_reexec(*_args, **_kwargs):
+                raise AssertionError("legacy wrapper attempted process re-exec")
+
+            with (
+                patch.object(sdk_wrapper, "is_allowed_wrapper_script", return_value=True),
+                patch.object(bundle_venv, "ensure_bundle_venv", fake_ensure),
+                patch.object(
+                    bundle_venv,
+                    "bundle_venv_site_packages",
+                    return_value=(fake_site,),
+                ),
+                patch.object(bundle_venv.os, "execv", fail_reexec),
+            ):
+                result = sdk_wrapper.execute_sdk_wrapper_in_process(
+                    script_path=script_path,
+                    method_name="value",
+                    kwargs={},
+                    session_id="sess-a",
+                    agent_id=None,
+                )
+
+            self.assertEqual(result, 42)
+            self.assertTrue(ensure_calls)
+            self.assertIn(
+                (str(bundle_dir.resolve()), ("only-bundle-dep>=1",)),
+                ensure_calls,
+            )
+
+    def test_module_cache_invalidates_when_wrapper_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            scripts_dir = tmp / "agent-tools" / "scripts"
+            scripts_dir.mkdir(parents=True)
+            script_path = scripts_dir / "cache_wrapper.py"
+            script_path.write_text(
+                "def value():\n    return 1\n",
+                encoding="utf-8",
+            )
+
+            with patch.object(sdk_wrapper, "is_allowed_wrapper_script", return_value=True):
+                first = sdk_wrapper.execute_sdk_wrapper_in_process(
+                    script_path=script_path,
+                    method_name="value",
+                    kwargs={},
+                    session_id="sess-a",
+                    agent_id=None,
+                )
+
+                script_path.write_text(
+                    "def value():\n    return 22\n",
+                    encoding="utf-8",
+                )
+                second = sdk_wrapper.execute_sdk_wrapper_in_process(
+                    script_path=script_path,
+                    method_name="value",
+                    kwargs={},
+                    session_id="sess-a",
+                    agent_id=None,
+                )
+
+            self.assertEqual(first, 1)
+            self.assertEqual(second, 22)
+
 
 class TestSdkInstanceRegistryCrossCall(unittest.TestCase):
     def setUp(self) -> None:
         reset_sdk_instance_registry()
         reset_sdk_context_registry()
         sdk_wrapper._MODULE_CACHE.clear()
+        sdk_wrapper._MODULE_CACHE_FINGERPRINT.clear()
         sdk_wrapper._SCRIPT_USES_INSTANCE_CACHE.clear()
+        sdk_wrapper._SCRIPT_BUNDLE_BOOTSTRAP_CACHE.clear()
 
     def _build_counter_tools(self, tmp: Path) -> tuple[Path, object, object]:
         pkg = tmp / "demo_pkg"
@@ -68,6 +243,7 @@ class TestSdkInstanceRegistryCrossCall(unittest.TestCase):
             module_name="demo_pkg.counter",
             file_stem="counter",
             source_dir=str(tmp),
+            scripts_dir=tmp / "agent-tools" / "scripts",
         )
 
         bump_spec = operation_to_spec(
@@ -144,7 +320,9 @@ class TestSdkContextRegistryCrossCall(unittest.TestCase):
         reset_sdk_instance_registry()
         reset_sdk_context_registry()
         sdk_wrapper._MODULE_CACHE.clear()
+        sdk_wrapper._MODULE_CACHE_FINGERPRINT.clear()
         sdk_wrapper._SCRIPT_USES_INSTANCE_CACHE.clear()
+        sdk_wrapper._SCRIPT_BUNDLE_BOOTSTRAP_CACHE.clear()
 
     def _build_session_tools(self, tmp: Path) -> tuple[object, object]:
         pkg = tmp / "teams_pkg"
@@ -162,6 +340,7 @@ class TestSdkContextRegistryCrossCall(unittest.TestCase):
             module_name="teams_pkg.context",
             file_stem="context",
             source_dir=str(tmp),
+            scripts_dir=tmp / "agent-tools" / "scripts",
         )
         self.assertFalse(sdk_wrapper.wrapper_uses_instance_cache(script_path))
 

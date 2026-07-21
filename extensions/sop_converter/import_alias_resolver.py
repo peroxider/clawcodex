@@ -178,12 +178,19 @@ class ModuleImportIndex:
     ) -> str:
         if level == 0:
             return module or ""
-        parts = current_module.split(".")
-        if level > len(parts):
+        parts = current_module.split(".") if current_module else []
+        current_path = self._file_index.get(current_module)
+        package_parts = (
+            parts
+            if current_path is not None and current_path.name == "__init__.py"
+            else parts[:-1]
+        )
+        ascend = max(level - 1, 0)
+        if ascend > len(package_parts):
             return module or ""
-        base = parts[: len(parts) - level + 1]
+        base = package_parts[: len(package_parts) - ascend] if ascend else list(package_parts)
         if module:
-            base.append(module)
+            base.extend(module.split("."))
         return ".".join(base)
 
     def _parse_module(self, module_path: str, path: Path) -> None:

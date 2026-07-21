@@ -1,0 +1,35 @@
+"""Stable error codes for F-57 Phase 4 macro convert."""
+
+from __future__ import annotations
+
+
+class MacroConvertError(ValueError):
+    """Validation / convert failure with a stable machine-readable code."""
+
+    def __init__(
+        self,
+        error_code: str,
+        message: str,
+        *,
+        manifest: str = "",
+        step_id: str = "",
+        field: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+        self.manifest = manifest
+        self.step_id = step_id
+        self.field = field
+
+    def to_dict(self) -> dict[str, str]:
+        payload = {
+            "error_code": self.error_code,
+            "message": str(self),
+        }
+        if self.manifest:
+            payload["manifest"] = self.manifest
+        if self.step_id:
+            payload["step_id"] = self.step_id
+        if self.field:
+            payload["field"] = self.field
+        return payload

@@ -72,7 +72,9 @@ def build_tool_to_agent_map(skills: list[SkillSpec]) -> dict[str, str]:
 
 def _short_tool_label(tool: str) -> str:
     parts = tool.split("-")
-    if len(parts) >= 2:
+    if len(parts) >= 4:
+        return "-".join(parts[-3:])
+    elif len(parts) >= 2:
         return "-".join(parts[-2:])
     return tool
 
@@ -437,6 +439,74 @@ def discover_orchestration_routes(
     return deduped[:ORCHESTRATION_ROUTES_MAX]
 
 
+def _group_routes_by_first_step(routes: list[OrchestrationRoute]) -> list[OrchestrationRoute]:
+    if len(routes) < 2:
+        return routes
+
+    grouped: dict[tuple[str, str], list[OrchestrationRoute]] = {}
+    for route in routes:
+        if route.steps:
+            first_step = route.steps[0]
+            key = (first_step.agent, first_step.flow)
+        else:
+            key = ("", "")
+        grouped.setdefault(key, []).append(route)
+
+    result: list[OrchestrationRoute] = []
+    for key, group in grouped.items():
+        if len(group) == 1:
+            result.append(group[0])
+        else:
+            first_step = group[0].steps[0] if group[0].steps else None
+            all_second_steps: list[tuple[str, str, str]] = []
+            seen_second: set[str] = set()
+
+            for r in group:
+                if len(r.steps) >= 2:
+                    second = r.steps[1]
+                    second_key = f"{second.agent}:{second.flow}"
+                    if second_key not in seen_second:
+                        seen_second.add(second_key)
+                        all_second_steps.append((second.agent, second.flow, second.param_hint))
+
+            if first_step and all_second_steps:
+                combined_title = f"跨域：{_short_tool_label(group[0].tool_refs[0])} → 多个目标（任选其一）" if group[0].tool_refs else "跨域：多目标路由（任选其一）"
+                combined_steps = [first_step]
+                for agent, flow, hint in all_second_steps[:8]:
+                    combined_steps.append(
+                        OrchestrationStep(
+                            agent=agent,
+                            flow=f"【任选】{flow}",
+                            param_hint=hint,
+                        )
+                    )
+                if len(all_second_steps) > 8:
+                    combined_steps.append(
+                        OrchestrationStep(
+                            agent="",
+                            flow=f"【任选】（另有 {len(all_second_steps) - 8} 个目标，见完整路由表）",
+                            param_hint="",
+                        )
+                    )
+
+                combined_tool_refs: list[str] = []
+                for r in group:
+                    combined_tool_refs.extend(r.tool_refs)
+
+                result.append(
+                    OrchestrationRoute(
+                        title=combined_title,
+                        steps=combined_steps,
+                        tool_refs=combined_tool_refs,
+                        note="以下第二步为互斥选项，根据任务选择其中一个目标",
+                    )
+                )
+            else:
+                result.extend(group)
+
+    return result
+
+
 def generate_orchestration_routes_markdown(
     skills: list[SkillSpec],
     *,
@@ -450,6 +520,12 @@ def generate_orchestration_routes_markdown(
         tool_deps_index=tool_deps_index,
         bundle_path=bundle_path,
     )
+
+    cli_routes = [r for r in routes if _is_single_step_cli_route(r)]
+    multi_step_routes = [r for r in routes if not _is_single_step_cli_route(r)]
+    grouped_multi_step = _group_routes_by_first_step(multi_step_routes)
+    routes = cli_routes + grouped_multi_step
+
     lines = [
         "# 跨域编排路由",
         "",
@@ -473,8 +549,9 @@ def generate_orchestration_routes_markdown(
         lines.append("|------|------|--------------|----------|")
         for idx, step in enumerate(route.steps, start=1):
             param = step.param_hint or "—"
+            agent_display = f"``@{step.agent}``" if step.agent else "—"
             lines.append(
-                f"| {idx} | ``@{step.agent}`` | {step.flow} | {param} |"
+                f"| {idx} | {agent_display} | {step.flow} | {param} |"
             )
         if route.note:
             lines.append("")
@@ -520,16 +597,33 @@ def format_orchestration_routes_block(
     bundle_path: Path | str | None,
     *,
     workspace_root: Path | str | None = None,
-    inline_content: bool = True,
-    max_inline_chars: int = 6000,
+    inline_content: bool = False,
+    max_inline_chars: int = 8000,
 ) -> str:
     if not bundle_path:
         return ""
     bundle = Path(bundle_path).resolve()
     path = bundle / ORCHESTRATION_ROUTES_NAME
 
+    if not inline_content:
+        if not path.is_file():
+            return f"""\
+### 跨域编排（sop convert 生成）
+
+- bundle 内文件：``{path}``（尚未生成）
+- 跨工具链顺序见各工具 JSON schema 的 ``x-sop-dependencies``
+"""
+        return f"""\
+### 跨域编排（sop convert 生成）
+
+- bundle 内文件：``{path}``
+- 跨域委派前 **Read** ``{ORCHESTRATION_ROUTES_NAME}`` 查路由表与「参数提示」（正文不内嵌全文，避免挤占上下文）
+- 委派子 Agent 时 prompt **必须**写入上一步工具返回的路径/对象与表中「参数提示」
+- 表中存在**单步交互式 CLI** 路由时，**禁止**改用跨域 programmatic API 链完成同一类用户任务
+"""
+
     header = f"""\
-### 跨域编排（pos convert 生成）
+### 跨域编排（sop convert 生成）
 
 - bundle 内文件：``{path}`` — Overview 路由时**优先使用下方路由表**
 - 委派子 Agent 时 prompt **必须**写入上一步工具返回的路径/对象与表中「参数提示」
@@ -552,9 +646,6 @@ def format_orchestration_routes_block(
 
     if not body:
         return header + "\n- 跨工具链顺序见各工具 JSON schema 的 ``x-sop-dependencies``\n"
-
-    if not inline_content:
-        return header + f"\n- **先 Read** ``{ORCHESTRATION_ROUTES_NAME}`` 再委派\n"
 
     if len(body) > max_inline_chars:
         body = body[: max_inline_chars - 40].rstrip() + "\n\n…（全文见 Read ORCHESTRATION_ROUTES.md）"

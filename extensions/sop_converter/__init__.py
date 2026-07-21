@@ -44,6 +44,24 @@ from .source_parser import SourceCodeParser, SourceComponent, SourceOperation, P
 from .agent_md_writer import AgentMarkdownWriter, AgentComponentInfo, WorkflowStage
 from .default_agent import resolve_default_agent, resolve_agent_by_type
 from .tool_registry_bridge import register_component_tools
+from .resource_catalog import (
+    ResourceCatalog,
+    ResourceRecord,
+    get_resource_record,
+    resolve_resource_catalog_path,
+)
+from .resource_handlers import (
+    ResourceHandler,
+    get_resource_handler,
+    register_resource_handler,
+    require_resource_handler,
+)
+from .tool_retrieval import (
+    MacroCoverage,
+    ToolRetrievalIndex,
+    ToolRetrievalProfile,
+    load_tool_retrieval_index,
+)
 from .workflow_mode import (
     WorkflowDiscriminator,
     DiscriminationResult,
@@ -91,6 +109,18 @@ __all__ = [
     "resolve_default_agent",
     "resolve_agent_by_type",
     "register_component_tools",
+    "ResourceCatalog",
+    "ResourceRecord",
+    "get_resource_record",
+    "resolve_resource_catalog_path",
+    "ResourceHandler",
+    "get_resource_handler",
+    "register_resource_handler",
+    "require_resource_handler",
+    "MacroCoverage",
+    "ToolRetrievalIndex",
+    "ToolRetrievalProfile",
+    "load_tool_retrieval_index",
     "register_composite_tools",
     "emit_composite_workflow_yaml",
     "WorkflowDiscriminator",

@@ -13,10 +13,17 @@ from clawcodex_ext.tool_system.registry import ToolRegistry
 from clawcodex_ext.tool_system.tools.tool_search import make_tool_search_tool
 from clawcodex_ext.tool_system.tools.tool_search_matching import (
     rank_tool_matches,
+    rank_tools_by_lifecycle,
     resolve_select_tool_names,
     score_tool_match,
     tokenize_query,
     tool_search_document,
+)
+from extensions.sop_converter.dependency import (
+    IntentGroup,
+    PriorityRoute,
+    ToolDependency,
+    ToolDependencyGraph,
 )
 from extensions.sop_converter.search_tags import generate_search_tags
 from extensions.sop_converter.source_parser import SourceOperation
@@ -278,6 +285,87 @@ class TestTeamMemoryToolDisambiguation(unittest.TestCase):
         )
 
 
+class TestToolSearchLifecycleRanking(unittest.TestCase):
+    def _lifecycle_graph(self) -> ToolDependencyGraph:
+        return ToolDependencyGraph(
+            dependencies=[
+                ToolDependency(
+                    from_tool="demo.build-agent",
+                    to_tool="demo.run-agent",
+                    shared_params=["agent_id"],
+                    lifecycle="create -> invoke",
+                )
+            ],
+            intent_groups=[
+                IntentGroup(
+                    name="agent_lifecycle",
+                    description="agent lifecycle",
+                    tools=["demo.build-agent", "demo.run-agent"],
+                    primary_entry="demo.build-agent",
+                )
+            ],
+            priority_routes=[
+                PriorityRoute(
+                    keywords=["create agent", "build agent"],
+                    intent_group="agent_lifecycle",
+                    entry_first=True,
+                ),
+                PriorityRoute(
+                    keywords=["run agent", "invoke agent"],
+                    intent_group="agent_lifecycle",
+                    entry_first=False,
+                ),
+            ],
+        )
+
+    def _tools(self):
+        return [
+            build_tool(
+                name="demo-build-agent",
+                input_schema={"type": "object", "properties": {}},
+                call=lambda _i, _c: None,
+                prompt="create agent run agent lifecycle",
+                search_hint="create agent build agent run agent lifecycle",
+            ),
+            build_tool(
+                name="demo-run-agent",
+                input_schema={"type": "object", "properties": {}},
+                call=lambda _i, _c: None,
+                prompt="run agent create agent lifecycle",
+                search_hint="run agent invoke agent create agent lifecycle",
+            ),
+            build_tool(
+                name="noise-agent-helper",
+                input_schema={"type": "object", "properties": {}},
+                call=lambda _i, _c: None,
+                prompt="agent helper lifecycle",
+                search_hint="agent helper lifecycle",
+            ),
+        ]
+
+    def test_rank_tools_by_lifecycle_orders_create_and_run_routes(self) -> None:
+        graph = self._lifecycle_graph()
+        matches = ["noise-agent-helper", "demo-run-agent", "demo-build-agent"]
+        self.assertEqual(
+            rank_tools_by_lifecycle(matches, "create agent", graph)[:2],
+            ["demo-build-agent", "demo-run-agent"],
+        )
+        self.assertEqual(
+            rank_tools_by_lifecycle(matches, "run agent", graph)[:2],
+            ["demo-run-agent", "demo-build-agent"],
+        )
+
+    def test_lifecycle_chain_query_returns_dependency_chain(self) -> None:
+        matches = rank_tool_matches(
+            "lifecycle-chain agent",
+            self._tools(),
+            max_results=5,
+            lifecycle_graph=self._lifecycle_graph(),
+        )
+        self.assertEqual(matches[:2], ["demo-build-agent", "demo-run-agent"])
+        self.assertNotIn("noise-agent-helper", matches[:2])
+
+
 class TestToolSearchBundleAllowlist(unittest.TestCase):
     def setUp(self) -> None:
         from extensions.sop_converter.bundle_context import set_active_bundle
@@ -455,6 +543,85 @@ class TestToolSearchBundleAllowlist(unittest.TestCase):
             )
             effective = _resolve_effective_tools(params, ctx, messages)
             self.assertIn(spec_name, {t.name for t in effective})
+
+    def test_toolsearch_reads_bundle_lifecycle_chain_query(self) -> None:
+        import tempfile
+
+        from extensions.sop_converter.bundle_context import build_bundle_context
+        from extensions.sop_converter.dependency import write_tool_dependencies
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle_path = Path(tmp) / "bundle"
+            bundle_path.mkdir(parents=True)
+            graph = ToolDependencyGraph(
+                dependencies=[
+                    ToolDependency(
+                        from_tool="demo.build-agent",
+                        to_tool="demo.run-agent",
+                        shared_params=["agent_id"],
+                        lifecycle="create -> invoke",
+                    )
+                ],
+                intent_groups=[
+                    IntentGroup(
+                        name="agent_lifecycle",
+                        description="agent lifecycle",
+                        tools=["demo.build-agent", "demo.run-agent"],
+                        primary_entry="demo.build-agent",
+                    )
+                ],
+                priority_routes=[
+                    PriorityRoute(
+                        keywords=["create agent", "run agent"],
+                        intent_group="agent_lifecycle",
+                        entry_first=True,
+                    )
+                ],
+            )
+            write_tool_dependencies(
+                graph,
+                bundle_path / ".clawcodex" / "tool-dependencies.yaml",
+            )
+
+            registry = ToolRegistry()
+            registry.register(
+                build_tool(
+                    name="demo-build-agent",
+                    input_schema={"type": "object", "properties": {}},
+                    call=lambda _i, _c: None,
+                    prompt="create agent build agent lifecycle",
+                    should_defer=True,
+                )
+            )
+            registry.register(
+                build_tool(
+                    name="demo-run-agent",
+                    input_schema={"type": "object", "properties": {}},
+                    call=lambda _i, _c: None,
+                    prompt="run agent invoke agent lifecycle",
+                    should_defer=True,
+                )
+            )
+            registry.register(make_tool_search_tool(registry))
+
+            bundle = build_bundle_context(
+                bundle_path=bundle_path,
+                skill_names=["demo-skill"],
+                skill_dirs=[],
+                tool_names=["demo-build-agent", "demo-run-agent"],
+            )
+            self._set_active_bundle(bundle)
+            ctx = ToolContext(workspace_root=Path(tmp), bundle_context=bundle)
+            tool_search = registry.get("ToolSearch")
+            assert tool_search is not None
+            result = tool_search.call(
+                {"query": "lifecycle-chain agent"},
+                ctx,
+            )
+            self.assertEqual(
+                result.output["matches"][:2],
+                ["demo-build-agent", "demo-run-agent"],
+            )
 
 
 class TestToolSearchIntegration(unittest.TestCase):

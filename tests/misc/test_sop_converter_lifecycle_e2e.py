@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import subprocess
 import sys
 import tempfile
@@ -27,12 +26,17 @@ import textwrap
 import unittest
 from pathlib import Path
 
+from clawcodex_ext.agent.tool_authoring.call_handlers.bash import execute_bash
+from clawcodex_ext.agent.tool_authoring.factory import build_tool_from_spec
+from clawcodex_ext.agent.tool_authoring.persistence import bundle_tool_dir, load_spec
+from clawcodex_ext.tool_system.context import ToolContext
 from extensions.sop_converter.agent_catalog import AgentCatalog
 from extensions.sop_converter.agent_catalog_resolver import (
     HOME_ONLY_ENV,
     HOME_ROOT_ENV,
 )
 from extensions.sop_converter.source_parser import SourceCodeParser
+from extensions.sop_converter.resource_catalog import ResourceCatalog
 from extensions.sop_converter.tool_registry_bridge import register_component_tools
 
 
@@ -93,12 +97,64 @@ def _write_fake_sdk(parent: Path) -> Path:
 
                 def run_agent(self, agent_id: str, query: str) -> dict[str, Any]:
                     \"\"\"Run an existing agent by id on the provided query.\"\"\"
+                    return {"error_code": "agent_not_found", "agent_id": agent_id}
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+    return parent
+
+
+def _write_factory_sdk(parent: Path) -> Path:
+    """Create a factory-style SDK matching Jiuwen's LLMAgent shape."""
+    sdk_dir = parent / "factory_sdk"
+    sdk_dir.mkdir(parents=True, exist_ok=True)
+    (sdk_dir / "__init__.py").write_text("", encoding="utf-8")
+    (sdk_dir / "factory_agent.py").write_text(
+        textwrap.dedent(
+            """
+            class FactoryAgent:
+                def __init__(self, agent_config: dict):
+                    self.agent_config = agent_config
+
+                def invoke(self, inputs: dict) -> dict:
+                    '''Reply to a message using the configured agent.'''
                     return {
-                        "echo": query,
-                        "agent_id": agent_id,
-                        "model": self.model,
-                        "temperature": self.temperature,
+                        "echo": inputs["query"],
+                        "agent_id": self.agent_config["id"],
+                        "model": self.agent_config["model"]["model_info"]["model"],
                     }
+
+
+            def create_llm_agent(agent_config: dict) -> FactoryAgent:
+                '''Create an agent from its serializable configuration.'''
+                return FactoryAgent(agent_config)
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+    return parent
+
+
+def _write_opaque_factory_sdk(parent: Path) -> Path:
+    """Factory fixture whose returned object exposes no serializable identity."""
+    sdk_dir = parent / "opaque_factory_sdk"
+    sdk_dir.mkdir(parents=True, exist_ok=True)
+    (sdk_dir / "__init__.py").write_text("", encoding="utf-8")
+    (sdk_dir / "factory_agent.py").write_text(
+        textwrap.dedent(
+            """
+            class OpaqueAgent:
+                def __init__(self, agent_config: dict):
+                    self._agent_config = agent_config
+
+                def invoke(self, query: str) -> dict:
+                    return {"echo": query, "agent_id": self._agent_config["id"]}
+
+
+            def create_llm_agent(agent_config: dict) -> OpaqueAgent:
+                '''Create an agent whose identity is only present in the input config.'''
+                return OpaqueAgent(agent_config)
             """
         ).strip(),
         encoding="utf-8",
@@ -158,21 +214,22 @@ class TestCreateToInvokeLifecycleE2E(unittest.TestCase):
 
         # Execute the create wrapper.
         args = {"query": "hello"}
-        command = call_impl.replace("'{json_args}'", shlex.quote(json.dumps(args)))
-        proc = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        self.assertEqual(
-            proc.returncode,
-            0,
-            f"create wrapper failed: stderr={proc.stderr!r} stdout={proc.stdout!r}",
-        )
-        create_result = _last_json_line(proc.stdout)
+        create_stdout = execute_bash(call_impl, {"json_args": json.dumps(args)})
+        create_result = _last_json_line(create_stdout)
         self.assertEqual(create_result.get("agent_id"), "agent-1")
+        self.assertIs(create_result.get("created_persisted"), True)
+        self.assertIs(create_result.get("callable_by_agent_id"), True)
+        self.assertEqual(create_result.get("agent_id_call_contract"), "catalog_persisted")
+        self.assertIn("catalog_path", create_result)
+        self.assertIn("resource_catalog_path", create_result)
+
+        quoted_stdout = execute_bash(
+            call_impl,
+            {"json_args": json.dumps({"query": "it's fine"})},
+        )
+        quoted_result = _last_json_line(quoted_stdout)
+        self.assertEqual(quoted_result.get("agent_id"), "agent-1")
+        self.assertEqual(quoted_result.get("query"), "it's fine")
 
         # Catalog should now exist and contain the agent.
         catalog_path = self.bundle / ".clawcodex" / "agent-catalog.json"
@@ -184,6 +241,51 @@ class TestCreateToInvokeLifecycleE2E(unittest.TestCase):
         assert entry is not None
         self.assertEqual(entry.class_name, "DemoAgent")
         self.assertEqual(entry.module_name, "fake_sdk.agent")
+        resource_catalog_path = self.bundle / ".clawcodex" / "resource-catalog.json"
+        self.assertTrue(resource_catalog_path.exists(), "resource catalog was not written")
+        resource_catalog = ResourceCatalog.load(resource_catalog_path)
+        resource_record = resource_catalog.find_by_resource_id("agent-1")[0]
+        self.assertEqual(resource_record.payload["agent_catalog_entry"]["agent_id"], "agent-1")
+        self.assertEqual(resource_record.materializer["class_name"], "DemoAgent")
+
+        # The native run_agent tool itself should carry catalog fallback metadata.
+        run_tool_name: str | None = None
+        for key, value in name_map.items():
+            if key.endswith(".run_agent"):
+                run_tool_name = value
+                break
+        self.assertIsNotNone(run_tool_name, f"run_agent not found in {name_map}")
+        assert run_tool_name is not None
+        run_spec = json.loads(
+            (self.bundle / "agent-tools" / f"{run_tool_name}.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        run_call_impl = run_spec["call_impl"]
+        self.assertIn("--catalog-fallback", run_call_impl)
+        fallback_args = {"agent_id": "agent-1", "query": "via native run"}
+        # Simulate SDK in-memory state loss: the generated wrapper sees
+        # agent_not_found and must recover via the persisted catalog.
+        persisted_run_spec = load_spec(
+            run_tool_name,
+            tool_dir=bundle_tool_dir(self.bundle),
+        )
+        self.assertIsNotNone(persisted_run_spec)
+        assert persisted_run_spec is not None
+        fallback_tool = build_tool_from_spec(persisted_run_spec)
+        fallback_call_result = fallback_tool.call(
+            fallback_args,
+            ToolContext(workspace_root=self.tmp, session_id="fallback-session"),
+        )
+        self.assertFalse(fallback_call_result.is_error, fallback_call_result.output)
+        fallback_result = fallback_call_result.output
+        self.assertEqual(fallback_result.get("agent_id"), "agent-1")
+        self.assertEqual(
+            fallback_result.get("echo")
+            or fallback_result.get("output", {}).get("echo"),
+            "via native run",
+        )
+        self.assertTrue(fallback_result.get("catalog_fallback_attempted"))
 
         # Execute the invoke-existing-agent macro wrapper.
         invoke_cmd = [
@@ -210,6 +312,212 @@ class TestCreateToInvokeLifecycleE2E(unittest.TestCase):
         self.assertEqual(invoke_result.get("agent_id"), "agent-1")
         self.assertEqual(invoke_result.get("output", {}).get("echo"), "hello")
         self.assertEqual(invoke_result.get("output", {}).get("model"), "gpt-4o")
+
+
+class TestFactoryResultCatalogE2E(unittest.TestCase):
+    """F-56 regression: factories return agent objects, not an agent_id dict."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.bundle = self.tmp / "bundle"
+        self.bundle.mkdir()
+        self.sdk_parent = _write_factory_sdk(self.tmp)
+        self._saved_env = {
+            HOME_ROOT_ENV: os.environ.pop(HOME_ROOT_ENV, None),
+            HOME_ONLY_ENV: os.environ.pop(HOME_ONLY_ENV, None),
+        }
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+        for key, value in self._saved_env.items():
+            if value is not None:
+                os.environ[key] = value
+            else:
+                os.environ.pop(key, None)
+
+    def test_factory_agent_config_id_is_persisted_and_recreated(self) -> None:
+        components = SourceCodeParser(str(self.sdk_parent), extern_only=True).parse()
+        name_map = register_component_tools(
+            components,
+            str(self.sdk_parent),
+            persist=True,
+            bundle_dir=self.bundle,
+            bundle_id="factory-bundle",
+        )
+        create_tool = next(
+            value
+            for key, value in name_map.items()
+            if key.endswith(".create_llm_agent")
+        )
+        spec = json.loads(
+            (self.bundle / "agent-tools" / f"{create_tool}.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertIn("--catalog-metadata", spec["call_impl"])
+        self.assertIn('"factory"', spec["call_impl"])
+
+        agent_config = {
+            "id": "verify-bot",
+            "model": {
+                "model_provider": "deepseek",
+                "model_info": {"model": "deepseek-v4-flash"},
+            },
+        }
+        create_result = _last_json_line(
+            execute_bash(
+                spec["call_impl"],
+                {"json_args": json.dumps({"agent_config": agent_config})},
+            )
+        )
+        self.assertEqual(create_result["agent_id"], "verify-bot")
+        self.assertTrue(create_result["created_persisted"])
+
+        catalog = AgentCatalog.load(self.bundle / ".clawcodex" / "agent-catalog.json")
+        entry = catalog.get("verify-bot")
+        self.assertIsNotNone(entry)
+        assert entry is not None
+        self.assertEqual(entry.model, "deepseek-v4-flash")
+        self.assertEqual(entry.provider, "deepseek")
+        self.assertEqual(entry.class_name, "FactoryAgent")
+        self.assertEqual(entry.metadata["factory"]["name"], "create_llm_agent")
+        self.assertEqual(entry.query_arg, "inputs")
+
+        resource_catalog = ResourceCatalog.load(
+            self.bundle / ".clawcodex" / "resource-catalog.json"
+        )
+        record = resource_catalog.find_by_resource_id("verify-bot")[0]
+        self.assertEqual(record.materializer["kind"], "python_function")
+        self.assertEqual(record.materializer["name"], "create_llm_agent")
+
+        invoke_cmd = [
+            sys.executable,
+            str(INVOKE_WRAPPER),
+            "invoke_existing_agent",
+            json.dumps({"agent_id": "verify-bot", "query": "ping"}),
+        ]
+        env = os.environ.copy()
+        env["CLAWCODEX_BUNDLE_PATH"] = str(self.bundle)
+        invoke_proc = subprocess.run(
+            invoke_cmd,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=30,
+        )
+        self.assertEqual(invoke_proc.returncode, 0, invoke_proc.stderr)
+        invoke_result = _last_json_line(invoke_proc.stdout)
+        self.assertEqual(invoke_result["output"]["echo"], "ping")
+        self.assertEqual(invoke_result["output"]["agent_id"], "verify-bot")
+
+    def test_runtime_tool_call_executes_catalog_cli_hook(self) -> None:
+        components = SourceCodeParser(str(self.sdk_parent), extern_only=True).parse()
+        name_map = register_component_tools(
+            components,
+            str(self.sdk_parent),
+            persist=True,
+            bundle_dir=self.bundle,
+            bundle_id="factory-bundle",
+        )
+        create_tool_name = next(
+            value
+            for key, value in name_map.items()
+            if key.endswith(".create_llm_agent")
+        )
+        spec = load_spec(create_tool_name, tool_dir=bundle_tool_dir(self.bundle))
+        self.assertIsNotNone(spec)
+        assert spec is not None
+
+        tool = build_tool_from_spec(spec)
+        result = tool.call(
+            {
+                "agent_config": {
+                    "id": "verify-bot",
+                    "model": {
+                        "model_provider": "deepseek",
+                        "model_info": {"model": "deepseek-v4-flash"},
+                    },
+                }
+            },
+            ToolContext(workspace_root=self.tmp, session_id="verify-session"),
+        )
+
+        self.assertFalse(result.is_error, result.output)
+        self.assertIsInstance(result.output, dict)
+        self.assertEqual(result.output["agent_id"], "verify-bot")
+        self.assertTrue(result.output["created_persisted"])
+        self.assertIn("resource_catalog_path", result.output)
+        self.assertTrue((self.bundle / ".clawcodex" / "resource-catalog.json").exists())
+
+
+class TestOpaqueFactoryCatalogFallbackE2E(unittest.TestCase):
+    """A config ID is sufficient when a factory result exposes no identity."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.bundle = self.tmp / "bundle"
+        self.bundle.mkdir()
+        self.sdk_parent = _write_opaque_factory_sdk(self.tmp)
+        self._saved_env = {
+            HOME_ROOT_ENV: os.environ.pop(HOME_ROOT_ENV, None),
+            HOME_ONLY_ENV: os.environ.pop(HOME_ONLY_ENV, None),
+        }
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+        for key, value in self._saved_env.items():
+            if value is not None:
+                os.environ[key] = value
+            else:
+                os.environ.pop(key, None)
+
+    def test_agent_config_id_is_used_when_factory_result_is_opaque(self) -> None:
+        components = SourceCodeParser(str(self.sdk_parent), extern_only=True).parse()
+        name_map = register_component_tools(
+            components,
+            str(self.sdk_parent),
+            persist=True,
+            bundle_dir=self.bundle,
+            bundle_id="opaque-factory-bundle",
+        )
+        create_tool = next(
+            value
+            for key, value in name_map.items()
+            if key.endswith(".create_llm_agent")
+        )
+        spec = json.loads(
+            (self.bundle / "agent-tools" / f"{create_tool}.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        create_result = _last_json_line(
+            execute_bash(
+                spec["call_impl"],
+                {"json_args": json.dumps({"agent_config": {"id": "verify-bot"}})},
+            )
+        )
+        self.assertEqual(create_result["agent_id"], "verify-bot")
+        self.assertTrue(create_result["created_persisted"])
+        self.assertTrue((self.bundle / ".clawcodex" / "resource-catalog.json").exists())
+
+        invoke_proc = subprocess.run(
+            [
+                sys.executable,
+                str(INVOKE_WRAPPER),
+                "invoke_existing_agent",
+                json.dumps({"agent_id": "verify-bot", "query": "ping"}),
+            ],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "CLAWCODEX_BUNDLE_PATH": str(self.bundle)},
+            timeout=30,
+        )
+        self.assertEqual(invoke_proc.returncode, 0, invoke_proc.stderr)
+        invoke_result = _last_json_line(invoke_proc.stdout)
+        self.assertEqual(invoke_result["output"]["echo"], "ping")
+        self.assertEqual(invoke_result["output"]["agent_id"], "verify-bot")
 
 
 if __name__ == "__main__":

@@ -208,7 +208,12 @@ def register_bundle_skills(bundle_path: Path, workspace_root: Path) -> BundleSki
     Clears previously registered SOP flat skills so only the active bundle
     remains in the dynamic registry (L2 isolation).
     """
-    from clawcodex_ext.skills.loader import load_skills_from_skills_dir, _dynamic_skills  # noqa: SLF001
+    from clawcodex_ext.skills.loader import (  # noqa: SLF001
+        _dynamic_skills,
+        _dynamic_skills_by_workspace,
+        _workspace_key,
+        load_skills_from_skills_dir,
+    )
 
     try:
         from extensions.sop_converter.bundle_context import get_active_bundle, set_active_bundle
@@ -220,6 +225,7 @@ def register_bundle_skills(bundle_path: Path, workspace_root: Path) -> BundleSki
         pass
 
     search_dirs = _bundle_skill_search_dirs(bundle_path, workspace_root)
+    workspace_key = _workspace_key(workspace_root)
 
     # Drop prior bundle flat skills; standard SKILL.md trees are reloaded below.
     for name in list(_dynamic_skills):
@@ -230,6 +236,15 @@ def register_bundle_skills(bundle_path: Path, workspace_root: Path) -> BundleSki
         elif name.endswith("-skill"):
             del _dynamic_skills[name]
 
+    workspace_skills = _dynamic_skills_by_workspace.setdefault(workspace_key, {})
+    for name in list(workspace_skills):
+        skill = workspace_skills[name]
+        base = str(getattr(skill, "base_dir", "") or "")
+        if base and any(base.startswith(str(d.resolve())) for d in search_dirs):
+            del workspace_skills[name]
+        elif name.endswith("-skill"):
+            del workspace_skills[name]
+
     registered: list[str] = []
     tool_names: dict[str, bool] = {}
 
@@ -238,6 +253,7 @@ def register_bundle_skills(bundle_path: Path, workspace_root: Path) -> BundleSki
             str(base), "projectSettings", loaded_from="project"
         ):
             _dynamic_skills[skill.name] = skill
+            workspace_skills[skill.name] = skill
             registered.append(skill.name)
             for tool in skill.allowed_tools or []:
                 if isinstance(tool, str) and tool:
@@ -249,6 +265,10 @@ def register_bundle_skills(bundle_path: Path, workspace_root: Path) -> BundleSki
             before = set(_dynamic_skills.keys())
             _load_flat_skill_markdown(md)
             new_names = set(_dynamic_skills.keys()) - before
+            for name in new_names:
+                skill = _dynamic_skills.get(name)
+                if skill is not None:
+                    workspace_skills[name] = skill
             registered.extend(sorted(new_names))
             for name in new_names:
                 skill = _dynamic_skills.get(name)

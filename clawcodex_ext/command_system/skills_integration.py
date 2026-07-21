@@ -128,37 +128,48 @@ def get_skill_command(name: str) -> Optional[PromptCommand]:
     return None
 
 
-def get_skill_tool_commands(cwd: str | None = None) -> tuple[PromptCommand, ...]:
+def get_skill_tool_commands(
+    cwd: str | None = None,
+    session_id: str | None = None,
+) -> tuple[PromptCommand, ...]:
     """ALL prompt-based commands the model may invoke.
 
     Source for the model-facing "# Available Skills" system-prompt listing,
     wired into ``build_full_system_prompt_blocks(skills=...)`` at
-    ``src/query/engine.py``. Mirrors b24b8cb's ``getSkillToolCommands(cwd)``
-    behaviour (typescript/src/commands.ts:587-605) without porting the
-    full ``aggregator`` module — the fork has no aggregator yet, so we
-    walk the global command registry and keep every PromptCommand whose
-    ``loaded_from`` is one of the skill-loaded buckets. CWD is accepted
-    for signature parity with b24b8cb but currently unused.
+    ``clawcodex_ext/query/engine.py``. The canonical catalog is keyed by
+    workspace and session, so this view must not use the process-global
+    command registry.
     """
-    del cwd  # signature parity; no per-cwd filtering yet
-    try:
-        from .registry import get_command_registry, list_commands
-    except ImportError:
-        return ()
-    # ``list_commands`` may not exist in every test config; fall back to
-    # the registry's own iteration if needed.
-    reg = get_command_registry()
-    if hasattr(reg, "list_commands"):
-        all_cmds = list(reg.list_commands())
-    else:
-        all_cmds = list_commands()
-    skill_buckets = {"skills", "bundled", "commands_DEPRECATED"}
-    return tuple(
-        cmd
-        for cmd in all_cmds
-        if isinstance(cmd, PromptCommand)
-        and getattr(cmd, "loaded_from", "builtin") in skill_buckets
+    snapshot = get_skill_catalog(
+        project_root=cwd,
+        session_id=session_id,
     )
+    commands: list[PromptCommand] = []
+    skill_buckets = {
+        "skills",
+        "user",
+        "project",
+        "bundled",
+        "commands_DEPRECATED",
+    }
+    for skill in snapshot.skills:
+        if getattr(skill, "type", "prompt") != "prompt":
+            continue
+        if skill.disable_model_invocation or skill.is_hidden:
+            continue
+        try:
+            if not skill.is_enabled():
+                continue
+        except Exception:
+            continue
+        if (
+            skill.loaded_from not in skill_buckets
+            and not skill.has_user_specified_description
+            and not skill.when_to_use
+        ):
+            continue
+        commands.append(skill_to_prompt_command(skill))
+    return tuple(commands)
 
 
 def load_skill_from_directory(

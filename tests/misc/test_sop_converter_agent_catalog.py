@@ -288,7 +288,7 @@ class TestCatalogResolver(unittest.TestCase):
         os.environ[HOME_ONLY_ENV] = "1"
         loc = resolve_catalog_path(bundle)
         self.assertEqual(loc.reason, "home-forced")
-        self.assertTrue(str(loc.path).endswith("sop-agents/mybundle/agents.json"))
+        self.assertEqual(loc.path.parts[-3:], ("sop-agents", "mybundle", "agents.json"))
 
     def test_explicit_home_only_true(self) -> None:
         bundle = _tmp_path() / "mybundle"
@@ -303,7 +303,7 @@ class TestCatalogResolver(unittest.TestCase):
         self.assertEqual(loc.path, bundle / ".clawcodex" / "agent-catalog.json")
         # Falls through to home fallback with the new name.
         home_loc = resolve_catalog_path(bundle, bundle_id="renamed", home_only=True)
-        self.assertTrue(str(home_loc.path).endswith("sop-agents/renamed/agents.json"))
+        self.assertEqual(home_loc.path.parts[-3:], ("sop-agents", "renamed", "agents.json"))
 
     def test_ensure_parent_creates_directory(self) -> None:
         bundle = _tmp_path() / "mybundle"
@@ -331,9 +331,11 @@ class TestCatalogResolver(unittest.TestCase):
         self.assertIsNone(loc.writable)
 
     def test_home_override(self) -> None:
-        with patch.dict(os.environ, {HOME_ROOT_ENV: "/custom/root"}):
+        root = _tmp_path() / "home"
+        root.mkdir()
+        with patch.dict(os.environ, {HOME_ROOT_ENV: str(root)}):
             loc = resolve_catalog_path(None, bundle_id="b")
-            self.assertEqual(loc.path, Path("/custom/root/sop-agents/b/agents.json"))
+            self.assertEqual(loc.path, root.resolve() / "sop-agents" / "b" / "agents.json")
 
 
 class TestCatalogLocationDataclass(unittest.TestCase):

@@ -73,6 +73,8 @@ def validate_spec(spec: AgentToolSpec) -> None:
     """
     _validate_name(spec.name)
     _validate_call_impl(spec.call_type, spec.call_impl)
+    if spec.output_schema is not None and not isinstance(spec.output_schema, dict):
+        raise ValidationError("output_schema must be a JSON schema object")
 
 
 _NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
@@ -93,6 +95,8 @@ def _validate_call_impl(call_type: str, call_impl: str | dict) -> None:
         _validate_http_impl(call_impl)
     elif call_type == "python":
         _validate_python_impl(call_impl)
+    elif call_type == "workflow":
+        _validate_workflow_impl(call_impl)
     else:
         raise ValidationError(f"Unknown call_type: {call_type}")
 
@@ -137,3 +141,30 @@ def _validate_python_impl(call_impl: str | dict) -> None:
     if name not in _PYTHON_FUNCTION_REGISTRY:
         available = ", ".join(sorted(_PYTHON_FUNCTION_REGISTRY.keys())) or "(none registered)"
         raise ValidationError(f"python function '{name}' is not registered. Available: {available}")
+
+
+def _validate_workflow_impl(call_impl: str | dict) -> None:
+    if not isinstance(call_impl, dict):
+        raise ValidationError("workflow call_impl must be a dict catalog reference")
+    keys = [key for key in ("catalog_id", "manifest") if call_impl.get(key)]
+    if len(keys) != 1:
+        raise ValidationError(
+            "workflow call_impl must contain exactly one catalog_id or manifest"
+        )
+    if "catalog_id" in keys:
+        catalog_id = call_impl["catalog_id"]
+        if not isinstance(catalog_id, str) or not re.fullmatch(
+            r"(?:builtin|bundle|session):[A-Za-z0-9][A-Za-z0-9._:-]*",
+            catalog_id,
+        ):
+            raise ValidationError(
+                "workflow catalog_id must use builtin:, bundle:, or session: scope"
+            )
+        return
+    manifest = call_impl["manifest"]
+    if not isinstance(manifest, str) or not manifest.strip():
+        raise ValidationError("workflow manifest must be a non-empty relative path")
+    if manifest.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", manifest):
+        raise ValidationError("workflow manifest must be relative to its bundle")
+    if any(part == ".." for part in re.split(r"[\\/]", manifest)):
+        raise ValidationError("workflow manifest cannot escape its bundle")

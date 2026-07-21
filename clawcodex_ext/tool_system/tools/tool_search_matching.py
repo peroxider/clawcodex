@@ -224,6 +224,301 @@ def _tool_search_parts(tool: Tool) -> tuple[str, str | None, str]:
     return tool.name, search_hint, tool_search_document(tool)
 
 
+def _normalize_tool_ref(value: str) -> str:
+    return re.sub(r"[._\-]+", "-", str(value or "").strip()).strip("-").lower()
+
+
+def _tool_ref_matches_name(tool_name: str, ref: str) -> bool:
+    if not ref:
+        return False
+    lowered_name = tool_name.lower()
+    lowered_ref = str(ref).lower()
+    if lowered_name == lowered_ref:
+        return True
+    return _normalize_tool_ref(tool_name) == _normalize_tool_ref(ref)
+
+
+def _route_keyword_matches(query: str, keyword: str) -> bool:
+    keyword = str(keyword or "").strip().lower()
+    if not keyword:
+        return False
+    query_lower = query.lower().strip()
+    if keyword in query_lower:
+        return True
+    return _compact_query_in_compact_text(keyword, query_lower, min_compact_len=4)
+
+
+def _lifecycle_group_for_tool(
+    tool_name: str,
+    lifecycle_graph: Any,
+) -> tuple[Any, int] | None:
+    groups = getattr(lifecycle_graph, "intent_groups", None) or []
+    for group in groups:
+        tools = getattr(group, "tools", None) or []
+        for idx, ref in enumerate(tools):
+            if _tool_ref_matches_name(tool_name, str(ref)):
+                return group, idx
+    return None
+
+
+def _lifecycle_route_for_query(query: str, lifecycle_graph: Any) -> Any | None:
+    routes = getattr(lifecycle_graph, "priority_routes", None) or []
+    for route in routes:
+        keywords = getattr(route, "keywords", None) or []
+        if any(_route_keyword_matches(query, str(keyword)) for keyword in keywords):
+            return route
+    return None
+
+
+def _dependency_order_for_tool(tool_name: str, lifecycle_graph: Any) -> int:
+    deps = getattr(lifecycle_graph, "dependencies", None) or []
+    for dep in deps:
+        from_tool = str(getattr(dep, "from_tool", "") or "")
+        to_tool = str(getattr(dep, "to_tool", "") or "")
+        if _tool_ref_matches_name(tool_name, from_tool):
+            return 0
+        if _tool_ref_matches_name(tool_name, to_tool):
+            return 1
+    return 2
+
+
+def _lifecycle_sort_key(
+    query: str,
+    tool_name: str,
+    lifecycle_graph: Any | None,
+) -> tuple[int, int, int]:
+    """Return a bias key from F-55 ``tool-dependencies.yaml`` metadata.
+
+    Lower is better.  The key is intentionally coarse; normal ToolSearch scoring
+    still decides relevance, while lifecycle metadata only breaks collisions and
+    lifts the routed intent group when route keywords match.
+    """
+    if lifecycle_graph is None:
+        return (1, 2, 999)
+    route = _lifecycle_route_for_query(query, lifecycle_graph)
+    if route is None:
+        return (1, 2, 999)
+    group_name = str(getattr(route, "intent_group", "") or "")
+    group_hit = _lifecycle_group_for_tool(tool_name, lifecycle_graph)
+    if group_hit is None:
+        return (1, 2, 999)
+    group, group_idx = group_hit
+    if str(getattr(group, "name", "") or "") != group_name:
+        return (1, 2, 999)
+    primary_entry = str(getattr(group, "primary_entry", "") or "")
+    entry_first = bool(getattr(route, "entry_first", True))
+    is_primary = bool(primary_entry and _tool_ref_matches_name(tool_name, primary_entry))
+    dep_order = _dependency_order_for_tool(tool_name, lifecycle_graph)
+    if entry_first:
+        order = 0 if is_primary else (dep_order if dep_order < 2 else 1)
+    else:
+        order = 0 if dep_order == 1 else (1 if is_primary or dep_order == 0 else 2)
+    return (0, order, group_idx)
+
+
+def _lifecycle_chain_query(query: str) -> str | None:
+    lowered = query.lower().strip()
+    for prefix in (
+        "lifecycle-chain:",
+        "lifecycle-chain",
+        "lifecycle chain:",
+        "lifecycle chain",
+    ):
+        if lowered.startswith(prefix):
+            return lowered[len(prefix) :].strip()
+    return None
+
+
+def _lifecycle_chain_tool_names(
+    query: str,
+    tools: list[Tool],
+    lifecycle_graph: Any | None,
+) -> list[str]:
+    if lifecycle_graph is None:
+        return []
+    chain_query = _lifecycle_chain_query(query)
+    if chain_query is None:
+        return []
+    route = _lifecycle_route_for_query(chain_query, lifecycle_graph)
+    group_name = str(getattr(route, "intent_group", "") or "") if route is not None else ""
+    if not group_name:
+        tokens = tokenize_query(chain_query)
+        for group in getattr(lifecycle_graph, "intent_groups", None) or []:
+            haystack = " ".join(
+                [
+                    str(getattr(group, "name", "") or ""),
+                    str(getattr(group, "description", "") or ""),
+                    " ".join(str(t) for t in getattr(group, "tools", None) or []),
+                ]
+            ).lower()
+            if (all(token in haystack for token in tokens) if tokens else True):
+                group_name = str(getattr(group, "name", "") or "")
+                break
+    if not group_name:
+        return []
+    group = None
+    for candidate in getattr(lifecycle_graph, "intent_groups", None) or []:
+        if str(getattr(candidate, "name", "") or "") == group_name:
+            group = candidate
+            break
+    if group is None:
+        return []
+    available = {tool.name: tool for tool in tools}
+    ordered_refs: list[str] = []
+    primary = str(getattr(group, "primary_entry", "") or "")
+    if primary:
+        ordered_refs.append(primary)
+    group_refs = {
+        _normalize_tool_ref(str(ref))
+        for ref in (getattr(group, "tools", None) or [])
+        if ref
+    }
+    for dep in getattr(lifecycle_graph, "dependencies", None) or []:
+        dep_from = str(getattr(dep, "from_tool", "") or "")
+        dep_to = str(getattr(dep, "to_tool", "") or "")
+        if group_refs and not (
+            _normalize_tool_ref(dep_from) in group_refs
+            and _normalize_tool_ref(dep_to) in group_refs
+        ):
+            continue
+        for ref in (
+            str(getattr(dep, "from_tool", "") or ""),
+            str(getattr(dep, "to_tool", "") or ""),
+        ):
+            if ref and ref not in ordered_refs:
+                ordered_refs.append(ref)
+    for ref in getattr(group, "tools", None) or []:
+        ref = str(ref)
+        if ref and ref not in ordered_refs:
+            ordered_refs.append(ref)
+    names: list[str] = []
+    for ref in ordered_refs:
+        for name in available:
+            if _tool_ref_matches_name(name, ref) and name not in names:
+                names.append(name)
+                break
+    return names
+
+
+def _direct_macro_route_names(
+    query: str,
+    tools: list[Tool],
+    macro_route_catalog: Any | None = None,
+) -> tuple[list[str], list[str], bool]:
+    """Return macro tools matched by direct route and excluded tools.
+
+    Macro routes are data-driven and independent of F-55 PriorityRoute.
+    Routes can actively recall a target tool that would not otherwise
+    appear in normal ToolSearch results.
+
+    Only verified routes or routes with selection=prefer are considered.
+    Exclusive routes require verified=true to prevent accidental truncation
+    of candidate lists.
+
+    Returns:
+        Tuple of (matched_tool_names, excluded_tool_names, exclusive).
+        When ``exclusive`` is True, callers should return only matched tools.
+        When False (prefer), callers should prepend matched tools to normal
+        search results.
+    """
+    matched: list[str] = []
+    excluded: list[str] = []
+    exclusive = False
+
+    if macro_route_catalog is None:
+        try:
+            from extensions.sop_converter.macros.routing import (
+                DEFAULT_MACRO_ROUTE_CATALOG,
+                ensure_builtin_routes,
+                resolve_macro_route,
+                get_negative_keyword_exclusions,
+            )
+
+            ensure_builtin_routes(DEFAULT_MACRO_ROUTE_CATALOG)
+            matched, exclusive = resolve_macro_route(
+                query, tools, catalog=DEFAULT_MACRO_ROUTE_CATALOG
+            )
+            excluded = get_negative_keyword_exclusions(
+                query, tools, catalog=DEFAULT_MACRO_ROUTE_CATALOG
+            )
+        except ImportError:
+            pass
+    else:
+        try:
+            from extensions.sop_converter.macros.routing import (
+                resolve_macro_route,
+                get_negative_keyword_exclusions,
+            )
+
+            matched, exclusive = resolve_macro_route(
+                query, tools, catalog=macro_route_catalog
+            )
+            excluded = get_negative_keyword_exclusions(
+                query, tools, catalog=macro_route_catalog
+            )
+        except ImportError:
+            pass
+
+    return matched, excluded, exclusive
+
+
+def _apply_macro_structural_bias(
+    ranked: list[str],
+    score_tiers: Mapping[str, int],
+    retrieval_index: Any | None,
+) -> list[str]:
+    """Place a macro before covered atomics only within the same score tier."""
+
+    if not ranked or retrieval_index is None:
+        return ranked
+    result = list(ranked)
+    for coverage in getattr(retrieval_index, "coverage", None) or []:
+        macro = str(getattr(coverage, "macro_tool", "") or "")
+        if macro not in result:
+            continue
+        try:
+            covered = retrieval_index.covered_names(macro, result)
+        except Exception:
+            continue
+        same_tier = [
+            name
+            for name in covered
+            if name in result and score_tiers.get(name) == score_tiers.get(macro)
+        ]
+        if not same_tier:
+            continue
+        macro_index = result.index(macro)
+        first_atomic = min(result.index(name) for name in same_tier)
+        if macro_index > first_atomic:
+            result.pop(macro_index)
+            first_atomic = min(result.index(name) for name in same_tier)
+            result.insert(first_atomic, macro)
+    return result
+
+
+def rank_tools_by_lifecycle(
+    matches: list[str],
+    query: str,
+    lifecycle_graph: Any | None,
+) -> list[str]:
+    """Sort ToolSearch match names using F-55 lifecycle metadata.
+
+    This implements the documented P2 hook: when ``priority_routes`` match the
+    query, tools in the routed ``intent_group`` are lifted and ordered by the
+    dependency chain with ``primary_entry`` first for create-style routes.
+    """
+    if not matches or lifecycle_graph is None:
+        return matches
+    indexed = list(enumerate(matches))
+    indexed.sort(
+        key=lambda item: (
+            _lifecycle_sort_key(query, item[1], lifecycle_graph),
+            item[0],
+        )
+    )
+    return [name for _, name in indexed]
+
+
 def score_tool_match(
     query: str,
     *,
@@ -409,10 +704,37 @@ def rank_tool_matches(
     tools: list[Tool],
     *,
     max_results: int,
+    lifecycle_graph: Any | None = None,
+    macro_route_catalog: Any | None = None,
+    retrieval_index: Any | None = None,
 ) -> list[str]:
-    """Rank tools for a ToolSearch query and return tool names."""
+    """Rank tools for a ToolSearch query and return tool names.
+
+    Order (F-57 §8.3):
+      direct macro route → lifecycle-chain → normal scoring → lifecycle reorder
+    """
+    macro_route_matches, excluded_tools, exclusive = _direct_macro_route_names(
+        query, tools, macro_route_catalog
+    )
+    # exclusive: truncate to the macro only. prefer: fall through and prepend.
+    if exclusive and macro_route_matches:
+        return macro_route_matches[:max_results]
+
+    chain_matches = _lifecycle_chain_tool_names(query, tools, lifecycle_graph)
+    if chain_matches:
+        if macro_route_matches:
+            merged: list[str] = []
+            for name in macro_route_matches + chain_matches:
+                if name not in merged:
+                    merged.append(name)
+            return merged[:max_results]
+        return chain_matches[:max_results]
+
+    excluded_set = set(excluded_tools)
     scored: list[tuple[tuple[int, int, int, str], str]] = []
     for tool in tools:
+        if tool.name in excluded_set:
+            continue
         name, search_hint, document = _tool_search_parts(tool)
         key = score_tool_match(
             query,
@@ -425,6 +747,7 @@ def rank_tool_matches(
 
     scored.sort(
         key=lambda item: (
+            _lifecycle_sort_key(query, item[1], lifecycle_graph),
             item[0][0],
             item[0][1],
             item[0][2],
@@ -432,7 +755,28 @@ def rank_tool_matches(
             item[1],
         )
     )
-    if scored and scored[0][0][0] == 0:
+    score_tiers = {name: key[0] for key, name in scored}
+    if (
+        scored
+        and scored[0][0][0] == 0
+        and _lifecycle_route_for_query(query, lifecycle_graph) is None
+        and not macro_route_matches
+    ):
         tier_zero = [name for key, name in scored if key[0] == 0]
+        tier_zero = _apply_macro_structural_bias(
+            tier_zero,
+            score_tiers,
+            retrieval_index,
+        )
         return tier_zero[:max_results]
-    return [name for _, name in scored[:max_results]]
+    ranked = [name for _, name in scored]
+    ranked = rank_tools_by_lifecycle(ranked, query, lifecycle_graph)
+    ranked = _apply_macro_structural_bias(ranked, score_tiers, retrieval_index)
+
+    if macro_route_matches:
+        merged: list[str] = []
+        for name in macro_route_matches + ranked:
+            if name not in merged:
+                merged.append(name)
+        return merged[:max_results]
+    return ranked[:max_results]

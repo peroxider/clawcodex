@@ -17,11 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import CompositeStage, CompositeToolSpec
-
-
-_INVOKE_EXISTING_AGENT_WRAPPER = Path(__file__).with_name("scripts").joinpath(
-    "invoke_existing_agent_wrapper.py"
-)
+from ..composite_workflows import invoke_existing_agent_workflow
 
 
 def builtin_composite_tools(*, bundle_dir: Path | None = None) -> list[CompositeToolSpec]:
@@ -206,11 +202,6 @@ def _code_review() -> CompositeToolSpec:
     )
 
 
-def _shell_quote(s: str) -> str:
-    """POSIX single-quote escape: ' -> '\'' ."""
-    return "'" + s.replace("'", "'\\''") + "'"
-
-
 def lifecycle_tools_for_skill(
     skill_allowed_tools: list[str],
     graph: Any,
@@ -223,21 +214,32 @@ def lifecycle_tools_for_skill(
     named intent group (after normalizing graph keys to kebab-case), the
     matching lifecycle recovery composite tools are returned.
     """
-    if graph is None:
-        return []
-
-    get_intent_group = getattr(graph, "get_intent_group", None)
-    if not callable(get_intent_group):
-        return []
-    group = get_intent_group(intent_group_name)
-    if group is None:
-        return []
-
     def _norm(key: str) -> str:
         return key.replace(".", "-").replace("_", "-").lower()
 
-    group_tools = {_norm(t) for t in getattr(group, "tools", []) if isinstance(t, str)}
-    if not any(t in group_tools for t in skill_allowed_tools):
+    skill_tools = {_norm(t) for t in skill_allowed_tools}
+    lifecycle_match = False
+    get_intent_group = getattr(graph, "get_intent_group", None)
+    if callable(get_intent_group):
+        group = get_intent_group(intent_group_name)
+        if group is not None:
+            group_tools = {
+                _norm(t) for t in getattr(group, "tools", []) if isinstance(t, str)
+            }
+            lifecycle_match = bool(skill_tools & group_tools)
+
+    # Some SDK factories lack a return annotation, so dependency inference
+    # cannot place them in agent_lifecycle. Keep the macro discoverable when
+    # the same skill clearly offers both create/build and invoke/run agent APIs.
+    has_create = any(
+        "agent" in tool and ("create" in tool or "build" in tool)
+        for tool in skill_tools
+    )
+    has_invoke = any(
+        "agent" in tool and ("invoke" in tool or "run" in tool or "call" in tool)
+        for tool in skill_tools
+    )
+    if not lifecycle_match and not (has_create and has_invoke):
         return []
 
     recovery_map: dict[str, list[str]] = {
@@ -252,35 +254,29 @@ def lifecycle_tools_for_skill(
 
 
 def _invoke_existing_agent(*, bundle_dir: Path | None = None) -> CompositeToolSpec:
-    """Invoke a previously-created SOP agent by ``agent_id``.
+    """Invoke a previously-created SOP agent by its persisted reference.
 
-    The tool looks up the agent in the bundle-local (or home-fallback)
-    AgentCatalog, materializes the SDK class, and calls its ``invoke`` /
-    ``run`` / ``__call__`` method.  This is the F-55 L1 recovery path
-    for the create-then-invoke workflow break.
+    The tool looks up the agent in the F-56 resource catalog, materializes
+    the stored SDK resource, and calls its persisted invocation contract.
     """
-    escaped_bundle = _shell_quote(str(bundle_dir)) if bundle_dir else ""
-    wrapper = _INVOKE_EXISTING_AGENT_WRAPPER
-    if bundle_dir is not None:
-        call_impl = (
-            f"python3 {wrapper} invoke_existing_agent '{{json_args}}' "
-            f"--bundle-path {escaped_bundle}"
-        )
-    else:
-        call_impl = f"python3 {wrapper} invoke_existing_agent '{{json_args}}'"
+    del bundle_dir
     return CompositeToolSpec(
         name="invoke_existing_agent",
         description=(
-            "Invoke a previously-created agent by stable agent_id.  The tool "
-            "loads the agent catalog, materializes the saved SDK class, and "
-            "calls it with the provided query / inputs."
+            "Invoke a previously-created agent by its stable agent_id or saved name. "
+            "The F-57 workflow loads its F-56 resource record, materializes "
+            "the saved SDK resource, then returns the original invocation output."
         ),
         input_schema={
             "type": "object",
             "properties": {
+                "agent_ref": {
+                    "type": "string",
+                    "description": "Saved agent name or stable agent_id from a prior build/create tool.",
+                },
                 "agent_id": {
                     "type": "string",
-                    "description": "Stable agent_id returned by a prior build/create tool.",
+                    "description": "Deprecated compatibility alias for agent_ref when using a stable ID.",
                 },
                 "query": {
                     "type": "string",
@@ -291,12 +287,12 @@ def _invoke_existing_agent(*, bundle_dir: Path | None = None) -> CompositeToolSp
                     "description": "Optional additional inputs merged into the agent call.",
                 },
             },
-            "required": ["agent_id"],
+            "anyOf": [{"required": ["agent_ref"]}, {"required": ["agent_id"]}],
         },
         stages=[
             CompositeStage(
                 name="resolve-catalog",
-                description="Load the bundle-local agent catalog by agent_id.",
+                description="Resolve the F-56 resource record by saved name or agent_id.",
             ),
             CompositeStage(
                 name="materialize",
@@ -307,9 +303,30 @@ def _invoke_existing_agent(*, bundle_dir: Path | None = None) -> CompositeToolSp
                 description="Call the agent's invoke/run method with the query.",
             ),
         ],
-        tags=("composite", "macro", "agent-lifecycle", "f-55"),
-        aliases=("invoke-existing-agent", "agent-invoke", "run-existing-agent"),
-        call_type="bash",
-        call_impl=call_impl,
+        tags=(
+            "composite",
+            "macro",
+            "agent-lifecycle",
+            "agent",
+            "invoke",
+            "existing",
+            "call-by-reference",
+        ),
+        aliases=("run-existing-agent", "call-agent-by-id", "call-agent-by-reference"),
+        call_type="workflow",
+        call_impl={"catalog_id": "builtin:invoke-existing-agent"},
+        output_schema={
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string"},
+                "output": {},
+                "raw": {},
+                "text": {"type": "string"},
+                "method": {"type": "string"},
+                "trace": {"type": "array"},
+            },
+            "required": ["agent_id", "output", "raw", "text", "trace"],
+        },
         query_arg="query",
+        workflow_spec=invoke_existing_agent_workflow(),
     )

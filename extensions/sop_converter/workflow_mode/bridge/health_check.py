@@ -6,9 +6,11 @@ import importlib.util
 import json
 import logging
 import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
+from ...path_resolver import infer_extra_sys_path_entries
 from .cli_discovery import split_cli_prefix
 
 logger = logging.getLogger(__name__)
@@ -62,6 +64,16 @@ def run_bridge_health_check(
         result["ok"] = False
         result["error"] = "no stages registered in dispatch table"
         return result
+
+    if mode == "python":
+        for meta in stage_dispatch.values():
+            module_path = meta.get("module_path")
+            if module_path:
+                module_name = module_path.replace(".py", "").replace("/", ".")
+                extra_paths = infer_extra_sys_path_entries(str(source_dir), module_name)
+                for path in extra_paths:
+                    if path not in sys.path:
+                        sys.path.insert(0, path)
 
     if mode == "cli":
         if not cli_prefix:

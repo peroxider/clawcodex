@@ -64,6 +64,8 @@ def _spec_to_dict(spec: AgentToolSpec) -> dict[str, Any]:
         data["bundle_id"] = spec.bundle_id
     if spec.stateful_wrapper:
         data["stateful_wrapper"] = True
+    if spec.output_schema is not None:
+        data["output_schema"] = spec.output_schema
     return data
 
 
@@ -79,6 +81,7 @@ def _dict_to_spec(d: dict[str, Any]) -> AgentToolSpec:
         source=d.get("source", "agent-created"),
         bundle_id=d.get("bundle_id"),
         stateful_wrapper=bool(d.get("stateful_wrapper", False)),
+        output_schema=d.get("output_schema"),
     )
 
 

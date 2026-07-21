@@ -8,6 +8,28 @@ from typing import Any
 
 # Inlined into generated wrapper scripts (scripts only have SDK on sys.path).
 WRAPPER_SERIALIZATION_HELPERS = '''
+_RESOLVED_ENV_REFERENCES = {}
+
+
+def _redact_sensitive_fields(value):
+    """Keep factory output and catalog DSL safe for agent-facing transport."""
+    sensitive_tokens = ("api_key", "apikey", "access_token", "secret", "password")
+    if isinstance(value, dict):
+        return {
+            str(key): (
+                _RESOLVED_ENV_REFERENCES.get(str(item), "<redacted>")
+                if any(token in str(key).lower() for token in sensitive_tokens)
+                else _redact_sensitive_fields(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_sensitive_fields(item) for item in value]
+    if isinstance(value, tuple):
+        return [_redact_sensitive_fields(item) for item in value]
+    return value
+
+
 def _to_jsonable(obj):
     if obj is None or isinstance(obj, (str, int, float, bool)):
         return obj
@@ -40,10 +62,26 @@ def _serialize_factory_result(instance):
                 attr_val = getattr(instance, attr_name)
                 if attr_val is not None:
                     try:
-                        info[attr_name] = _to_jsonable(attr_val)
+                        info[attr_name] = _redact_sensitive_fields(_to_jsonable(attr_val))
                     except Exception:
                         pass
         if info:
+            info["_runtime_type"] = {
+                "module": type(instance).__module__,
+                "class_name": type(instance).__name__,
+            }
+            try:
+                import inspect
+                invoke = getattr(instance, "invoke", None)
+                if callable(invoke):
+                    params = list(inspect.signature(invoke).parameters)
+                    if params:
+                        info["_runtime_invoker"] = {
+                            "method": "invoke",
+                            "input_param": params[0],
+                        }
+            except (TypeError, ValueError):
+                pass
             info["_repr"] = result
             return info
     return result
@@ -52,7 +90,7 @@ def _serialize_factory_result(instance):
 def _dumps_sdk_result(result):
     import dataclasses
     import json
-    return json.dumps(_to_jsonable(result), ensure_ascii=False, default=str)
+    return json.dumps(_redact_sensitive_fields(_to_jsonable(result)), ensure_ascii=False, default=str)
 
 
 def _normalize_mapping_inputs(value, *, message_key="query"):
@@ -84,6 +122,40 @@ def _normalize_mapping_inputs(value, *, message_key="query"):
 
 # Runtime type coercion for JSON args -> SDK Pydantic/dataclass instances.
 WRAPPER_COERCION_HELPERS = '''
+def _resolve_env_references(value):
+    """Resolve explicit ``env:NAME`` references without exposing their values."""
+    import os
+    import re
+
+    if isinstance(value, str) and value.startswith("env:"):
+        name = value[4:].strip()
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            raise ValueError(f"invalid environment-variable reference: {value!r}")
+        resolved = os.environ.get(name)
+        if resolved is None:
+            raise ValueError(f"environment variable is not set: {name}")
+        _RESOLVED_ENV_REFERENCES[str(resolved)] = f"env:{name}"
+        return resolved
+    if isinstance(value, dict):
+        resolved_dict = {}
+        for key, item in value.items():
+            if (
+                str(key).lower() in {"api_key", "apikey", "access_token"}
+                and isinstance(item, str)
+                and item.startswith("$")
+            ):
+                raise ValueError(
+                    "shell-style secret references are unsupported; use env:NAME"
+                )
+            resolved_dict[key] = _resolve_env_references(item)
+        return resolved_dict
+    if isinstance(value, list):
+        return [_resolve_env_references(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_resolve_env_references(item) for item in value)
+    return value
+
+
 def _parse_json_config(value):
     """Parse JSON string or dict into a dict."""
     import json
@@ -98,7 +170,7 @@ def _coerce_mapping_value(value):
     """Coerce JSON tool args into a dict for mapping-typed SDK parameters.
 
     Accepts inline dicts or JSON object strings.  Unlike ``_normalize_mapping_inputs``,
-    bare non-JSON strings are rejected — mapping params must be structured objects.
+    bare non-JSON strings are rejected; mapping params must be structured objects.
     """
     import json
 
@@ -137,8 +209,11 @@ def _coerce_sdk_type(cls, value):
     import dataclasses
     from typing import Any, Union, get_args, get_origin, get_type_hints
 
+    value = _resolve_env_references(value)
     if value is None:
         return None
+    if cls is Any or cls is object:
+        return value
     if isinstance(value, cls):
         return value
 
@@ -312,6 +387,111 @@ def coerce_mapping_value(value: Any) -> dict[str, Any] | None:
         "expected a dict or JSON object string for mapping parameter; "
         f"got {type(value).__name__}: {value!r}"
     )
+
+
+def resolve_env_references(value: Any, *, environ: dict[str, str] | None = None) -> Any:
+    """Resolve explicit ``env:NAME`` values recursively.
+
+    Only the ``env:`` syntax is a supported reference. Shell-style forms such
+    as ``$NAME`` remain ordinary strings so secrets are never implicitly
+    expanded or printed by an agent-facing tool response.
+    """
+    import os
+    import re
+
+    environment = os.environ if environ is None else environ
+    if isinstance(value, str) and value.startswith("env:"):
+        name = value[4:].strip()
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            raise ValueError(f"invalid environment-variable reference: {value!r}")
+        resolved = environment.get(name)
+        if resolved is None:
+            raise ValueError(f"environment variable is not set: {name}")
+        return resolved
+    if isinstance(value, dict):
+        resolved_dict: dict[Any, Any] = {}
+        for key, item in value.items():
+            if (
+                str(key).lower() in {"api_key", "apikey", "access_token"}
+                and isinstance(item, str)
+                and item.startswith("$")
+            ):
+                raise ValueError(
+                    "shell-style secret references are unsupported; use env:NAME"
+                )
+            resolved_dict[key] = resolve_env_references(item, environ=environment)
+        return resolved_dict
+    if isinstance(value, list):
+        return [resolve_env_references(item, environ=environment) for item in value]
+    if isinstance(value, tuple):
+        return tuple(resolve_env_references(item, environ=environment) for item in value)
+    return value
+
+
+def coerce_sdk_type(cls: Any, value: Any) -> Any:
+    """Convert JSON-compatible *value* to an SDK annotation type.
+
+    This is the runtime counterpart of the helper embedded into generated SDK
+    wrappers. F-57 uses it before calling a saved factory directly.
+    """
+    import dataclasses
+    from types import UnionType
+    from typing import Any as TypingAny, Union, get_args, get_origin, get_type_hints
+
+    value = resolve_env_references(value)
+    if value is None or cls in (TypingAny, Any, object):
+        return value
+    try:
+        if isinstance(value, cls):
+            return value
+    except TypeError:
+        return value
+
+    origin = get_origin(cls)
+    args = get_args(cls)
+    if origin in (Union, UnionType):
+        candidates = [item for item in args if item is not type(None) and item is not None]
+        if len(candidates) == 1:
+            return coerce_sdk_type(candidates[0], value)
+        for candidate in candidates:
+            try:
+                return coerce_sdk_type(candidate, value)
+            except (TypeError, ValueError):
+                continue
+        raise TypeError(f"Cannot coerce {value!r} to {cls}")
+    if origin in (list, tuple, set, frozenset):
+        inner = args[0] if args else TypingAny
+        coerced = [coerce_sdk_type(inner, item) for item in (value or [])]
+        if origin is tuple:
+            return tuple(coerced)
+        if origin is set:
+            return set(coerced)
+        if origin is frozenset:
+            return frozenset(coerced)
+        return coerced
+    if origin is dict or cls is dict:
+        return value
+    if not isinstance(value, dict):
+        return cls(value)
+    if dataclasses.is_dataclass(cls) and isinstance(cls, type):
+        try:
+            hints = get_type_hints(cls)
+        except Exception:
+            hints = {}
+        kwargs: dict[str, Any] = {}
+        for field in dataclasses.fields(cls):
+            if field.name not in value:
+                continue
+            annotation = hints.get(field.name, field.type)
+            kwargs[field.name] = (
+                value[field.name]
+                if annotation in (TypingAny, Any, None)
+                else coerce_sdk_type(annotation, value[field.name])
+            )
+        return cls(**kwargs)
+    if hasattr(cls, "model_validate"):
+        return cls.model_validate(value)
+    return cls(**value)
 
 
 def to_jsonable(obj: Any) -> Any:

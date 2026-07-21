@@ -337,24 +337,129 @@ def _resolve_operation(
 
 
 def _composite_task_guide_rows(skill: SkillSpec) -> list[tuple[str, str, str, str]]:
-    """Composite macro tools promoted at the top of agent_teams task guides."""
+    """Return executable F-56/F-57 lifecycle guidance for the current skill.
+
+    This intentionally does not import the legacy composite registry: its
+    descriptive-only macro model is not the runtime contract used by F-57.
+    The row is emitted only when the generated skill can actually call the
+    macro or lifecycle create tool, so it cannot direct the model to an
+    unavailable tool.
+    """
+    rows: list[tuple[str, str, str, str]] = []
+    if "invoke-existing-agent" in skill.allowed_tools:
+        rows.append(
+            (
+                "调用已经创建的 Agent（例如让 verify-bot 回复 ping）",
+                "invoke-existing-agent",
+                "select:invoke-existing-agent",
+                "传入创建阶段返回的 agent_id；不要改用 llmagent-invoke、send-to-agent 或 run-agent。",
+            )
+        )
+
+    create_tool = "openjiuwen-core-application-llm-agent-create-llm-agent"
+    if create_tool in skill.allowed_tools:
+        rows.append(
+            (
+                "创建 DeepSeek LLM Agent（例如 verify-bot）",
+                create_tool,
+                f"select:{create_tool}",
+                "直接传入 agent_config；agent_config.id 是稳定 agent_id。API Key 只能写 "
+                "env:DEEPSEEK_API_KEY（运行时解析，绝不通过 Bash 读取或回显），"
+                "DeepSeek 的 api_base 使用 https://api.deepseek.com。创建成功必须返回 "
+                "created_persisted: true 和 resource_catalog_path。",
+            )
+        )
+    return rows
+
+
+def _macro_route_task_guide_rows(
+    skill: SkillSpec,
+    bundle: "str | Path | None",
+) -> list[tuple[str, str, str, str]]:
+    """Emit Task Guide rows for F-57 macros already in ``skill.allowed_tools``.
+
+    Intent and search suggestions come from each macro's ``MacroRoute.phrases``
+    (plus ``select:<macro>``). Notes steer the model to ToolSearch the macro
+    and forbid Bash exploration of macro sources. Rows are skipped when the
+    bundle has no macros dir or the target tool is not allowlisted for this skill.
+    """
+    if bundle is None or not skill.allowed_tools:
+        return []
+
     try:
-        from .composite_tools.registry import composite_task_guide_rows
+        from .bundle_context import load_bundle_macro_routes
     except ImportError:
         return []
 
-    skill_key = skill.name.removesuffix("-skill")
-    if skill_key != "agent_teams":
-        if "start-team-session" not in skill.allowed_tools:
-            return []
+    try:
+        routes = load_bundle_macro_routes(Path(bundle))
+    except OSError:
+        return []
 
+    allowed = set(skill.allowed_tools)
     rows: list[tuple[str, str, str, str]] = []
-    for entry in composite_task_guide_rows():
-        tool = entry["tool"]
-        if skill_key != "agent_teams" and tool not in skill.allowed_tools:
+    seen: set[str] = set()
+    for route in routes:
+        if not getattr(route, "enabled", True):
             continue
-        rows.append((entry["intent"], tool, entry["search"], entry["note"]))
+        target = str(route.target_tool or "").strip()
+        if not target or target not in allowed or target in seen:
+            continue
+        seen.add(target)
+
+        phrases = [str(p).strip() for p in (route.phrases or []) if str(p).strip()]
+        intent = "；".join(phrases[:4]) if phrases else target
+        search_bits = list(phrases[:3])
+        select_q = f"select:{target}"
+        if select_q not in search_bits:
+            search_bits.append(select_q)
+        search = ", ".join(search_bits)
+
+        note = (
+            f"优先调用宏 `{target}`：先 ToolSearch，再调宏。"
+            f"禁止用 Bash 搜索/阅读 macro 源码或自行拼脚本绕过。"
+        )
+        rows.append((intent, target, search, note))
     return rows
+
+
+def _exclusive_covered_tool_refs(
+    skill: SkillSpec,
+    bundle: "str | Path | None",
+) -> list[str]:
+    """Collect F-157 covered atomic refs for macros available to this skill."""
+
+    try:
+        from .macros.routing import MacroRouteCatalog, ensure_builtin_routes
+
+        catalog = MacroRouteCatalog()
+        ensure_builtin_routes(catalog)
+        if bundle is not None:
+            from .bundle_context import load_bundle_macro_routes
+
+            for route in load_bundle_macro_routes(Path(bundle)):
+                catalog.register_route(route, replace=True)
+        allowed = set(skill.allowed_tools)
+        covered: list[str] = []
+        for route in catalog.get_routes():
+            if route.target_tool not in allowed:
+                continue
+            if route.selection != "exclusive" or not route.verified:
+                continue
+            for ref in route.covered_tools:
+                if ref not in covered:
+                    covered.append(ref)
+        return covered
+    except (ImportError, OSError):
+        return []
+
+
+def _task_guide_row_mentions_covered_tool(
+    row: tuple[str, str, str, str],
+    covered_refs: list[str],
+) -> bool:
+    text = " ".join(row).lower()
+    return any(str(ref).lower() in text for ref in covered_refs if str(ref).strip())
 
 
 def _lifecycle_task_guide_rows(
@@ -434,6 +539,7 @@ def generate_task_guide_markdown(
     selected = _ensure_registry_chain_entries(selected, skill, index)
 
     composite_rows = _composite_task_guide_rows(skill)
+    macro_rows = _macro_route_task_guide_rows(skill, bundle)
 
     # F-55 L3: load lifecycle dependency metadata from the bundle, if any.
     lifecycle_rows: list[tuple[str, str, str, str]] = []
@@ -446,7 +552,17 @@ def generate_task_guide_markdown(
         except Exception:  # pragma: no cover — defensive
             pass
 
-    if not selected and not composite_rows and not lifecycle_rows:
+    # F-157: do not emit a lifecycle row that tells the model to use an
+    # atomic tool shadowed by a verified exclusive macro in the same Skill.
+    covered_refs = _exclusive_covered_tool_refs(skill, bundle)
+    if covered_refs:
+        lifecycle_rows = [
+            row
+            for row in lifecycle_rows
+            if not _task_guide_row_mentions_covered_tool(row, covered_refs)
+        ]
+
+    if not selected and not composite_rows and not macro_rows and not lifecycle_rows:
         return ""
 
     skill_name = _skill_invoke_name(skill.name)
@@ -461,11 +577,27 @@ def generate_task_guide_markdown(
         "`ToolSearch(query=...)` 的查询（可直接使用用户原话或同义改写）。"
         "无需让用户提供工具名。",
         "",
-        "| 用户意图（示例） | 工具 | 搜索建议 | 说明 |",
-        "|----------------|------|----------|------|",
     ]
+    if macro_rows:
+        lines.extend(
+            [
+                "表中带宏工具（`call_type=workflow`）的行优先："
+                "直接 ToolSearch 召回宏并调用；"
+                "**禁止**先用 Bash/`find` 探索 `.clawcodex/macros` 或源码来“弄清什么是宏”。",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "| 用户意图（示例） | 工具 | 搜索建议 | 说明 |",
+            "|----------------|------|----------|------|",
+        ]
+    )
 
     for intent, tool_ref, search, summary in composite_rows:
+        lines.append(f"| {intent} | `{tool_ref}` | {search} | {summary} |")
+
+    for intent, tool_ref, search, summary in macro_rows:
         lines.append(f"| {intent} | `{tool_ref}` | {search} | {summary} |")
 
     for intent, tool_ref, search, summary in lifecycle_rows:
@@ -554,6 +686,10 @@ def format_flat_skill_markdown(
     ]
     for tool in allowed_tools:
         lines.append(f"  - {tool}")
+    if bundle is not None:
+        deps_path = Path(bundle) / ".clawcodex" / "tool-dependencies.yaml"
+        if deps_path.exists():
+            lines.append("lifecycle-deps: .clawcodex/tool-dependencies.yaml")
     lines.append("---")
     lines.append("")
     lines.append(f"# Skill: {skill_name}")

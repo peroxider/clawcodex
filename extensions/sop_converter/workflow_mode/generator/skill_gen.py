@@ -44,6 +44,8 @@ def write_stage_skill(
         lines.append("allowed-tools:")
         for tool in tools:
             lines.append(f"  - {tool}")
+    if (output_dir / ".clawcodex" / "tool-dependencies.yaml").exists():
+        lines.append("lifecycle-deps: .clawcodex/tool-dependencies.yaml")
     lines.append("---\n")
     frontmatter = "\n".join(lines) + "\n"
     path.write_text(frontmatter + stage_skill_body(stage, graph), encoding="utf-8")

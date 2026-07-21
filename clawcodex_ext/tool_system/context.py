@@ -66,6 +66,32 @@ class GlobLimits:
 
 
 @dataclass(slots=True)
+class RetrievalPlan:
+    """Turn-local F-157 decision for macro / atomic tool exposure."""
+
+    query: str = ""
+    intent_key: str | None = None
+    selected_macros: list[str] = field(default_factory=list)
+    suppressed_tools: list[str] = field(default_factory=list)
+    selection: str = "normal"
+    route_scope: str | None = None
+    preflight_status: str = "pending"
+    reason_codes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "intent_key": self.intent_key,
+            "selection": self.selection,
+            "selected_layer": "macro" if self.selected_macros else "normal",
+            "selected_macros": list(self.selected_macros),
+            "suppressed_tools": list(self.suppressed_tools),
+            "route_scope": self.route_scope,
+            "preflight": self.preflight_status,
+            "reason_codes": list(self.reason_codes),
+        }
+
+
+@dataclass(slots=True)
 class ToolContext:
     workspace_root: Path
     permission_context: ToolPermissionContext = field(
@@ -227,6 +253,13 @@ class ToolContext:
     # Main-loop agent definition for ``--agent <bundle_dir>`` (overview allowlist).
     startup_agent: Any | None = None
     bundle_context: Any | None = None
+    workflow_stack: list[str] = field(default_factory=list)
+    # F-157 layered ToolSearch.  Suppression is reversible and scoped to the
+    # current search/dispatch decision; it never unregisters or deletes tools.
+    retrieval_plan: RetrievalPlan | None = None
+    retrieval_hidden_tools: list[Any] = field(default_factory=list)
+    retrieval_suppressed_tools: set[str] = field(default_factory=set)
+    retrieval_metrics: dict[str, Any] = field(default_factory=dict)
     tool_use_id: str | None = None
     user_modified: bool = False
     # Identifier of the active query/session. Surfaced to skills (SKILL.md
@@ -414,3 +447,18 @@ class ToolContext:
     def ensure_tool_allowed(self, tool_name: str) -> None:
         if self.permission_context.blocks(tool_name):
             raise ToolPermissionError(f"tool is blocked by permission context: {tool_name}")
+
+    def restore_retrieval_tools(self) -> None:
+        """Clear the active retrieval plan and restore hidden tool objects."""
+
+        current = list(self.options.tools or [])
+        present = {getattr(tool, "name", "") for tool in current}
+        for tool in self.retrieval_hidden_tools:
+            name = str(getattr(tool, "name", "") or "")
+            if name and name not in present:
+                current.append(tool)
+                present.add(name)
+        self.options.tools = current
+        self.retrieval_hidden_tools.clear()
+        self.retrieval_suppressed_tools.clear()
+        self.retrieval_plan = None

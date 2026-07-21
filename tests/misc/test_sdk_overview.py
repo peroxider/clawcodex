@@ -61,7 +61,10 @@ class TestSdkOverview(unittest.TestCase):
             block = format_sdk_overview_block(bundle)
             self.assertIn("SDK_OVERVIEW.md", block)
             self.assertIn("SDK 模块总览", block)
-            self.assertIn("域 Agent 速查", block)
+            self.assertIn("Read", block)
+            self.assertNotIn("域 Agent 速查", block)
+            inlined = format_sdk_overview_block(bundle, inline_content=True)
+            self.assertIn("域 Agent 速查", inlined)
 
 
 class TestSkillForComponentMatching(unittest.TestCase):
@@ -241,6 +244,9 @@ class TestIoSdkOverview(unittest.TestCase):
             self.assertIn("IO 分组", block)
             self.assertIn("禁止", block)
             self.assertIn("工具 → Agent", block)
+            self.assertIn("Read", block)
+            # Default is pointer-only; full tables stay in SDK_OVERVIEW.md
+            self.assertNotIn("## 工具 → Agent", block)
 
     def test_path_strategy_still_uses_module_section(self) -> None:
         comp = SourceComponent(

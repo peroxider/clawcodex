@@ -108,12 +108,17 @@ SOP_OVERVIEW_ROUTING = f"""\
 4. 子代理内部顺序固定：**Skill → ToolSearch → SDK 工具**；工具失败后才可进入有限诊断（见源码探索策略）
 5. 用户已给出工作流或任务指南中的示例参数时，**直接执行**，不要反复向用户确认
 
+### 宏工具意图（阻塞 — 高于源码探索）
+
+若用户话术命中下方 **「宏工具意图」** 表（例如「用手写宏处理文本数据」）：
+**立即**按表委派对应域 Agent，**禁止** Explore / 广搜 SDK / 阅读 macro 源码。
+
 ### 意图不明确时（阻塞 — 优先于源码探索）
 
 当用户请求模糊（例如「初始化团队对话」「启动 JiuwenAgent」「跑一个 agent」）且无法从
-**SDK 模块总览**、子 Agent 描述或 workflow 表唯一确定目标时：
+**宏工具意图表**、**SDK 模块总览**、子 Agent 描述或 workflow 表唯一确定目标时：
 
-1. 使用下方 **SDK 模块总览**（启动时已注入摘要）；仅当摘要不足时再 Read bundle 内 ``SDK_OVERVIEW.md`` 全文
+1. 先查下方 **宏工具意图** 表；未命中再 **Read** bundle 内 ``SDK_OVERVIEW.md``（overview 正文只放路径指针，不内嵌全文）
 2. **禁止** Glob/Grep 广搜 SDK 源码树；**禁止**派 ``Explore`` / ``general-purpose`` 做工具发现
 3. **禁止** overview 自己调用域 ``Skill`` / ``ToolSearch`` 试探（应委派子 Agent）
 4. 若仍有 **2 个及以上**合理候选（域 Agent 或入口 API），**向用户确认**：
@@ -129,9 +134,10 @@ SOP_OVERVIEW_ROUTING = f"""\
 2. **禁止**派 ``Explore`` / ``general-purpose`` 做工具发现
 3. **立即** ``Agent(subagent_type="<domain>-agent", prompt="...")``；子代理 prompt 须写明 Skill 名、ToolSearch 查询、参数
 
-### 跨域编排（pos convert 生成）
+### 跨域编排（sop convert 生成）
 
-跨域任务按步骤委派对应域 Agent；**路由表见下方「跨域编排（pos convert 生成）」块**；
+跨域任务按步骤委派对应域 Agent；需要路由表时 **Read** bundle 内 ``ORCHESTRATION_ROUTES.md``
+（overview 正文只放路径指针，不内嵌全文）。
 Overview prompt 中须把上一步工具返回的路径/对象写入下一步子代理 prompt。
 具体编排路径以当前 bundle 的 Available Skills / workflow.yaml 为准。
 
@@ -475,6 +481,7 @@ def append_sop_overview_routing(
     *,
     sdk_source_dir: str | Path | None = None,
     bundle_path: str | Path | None = None,
+    component_agents: list | None = None,
 ) -> str:
     body = (body or "").strip()
     parts: list[str] = []
@@ -491,7 +498,19 @@ def append_sop_overview_routing(
     from extensions.sop_converter.cross_domain_orchestration import (
         format_orchestration_routes_block,
     )
+    from extensions.sop_converter.macros.overview_intent import (
+        format_overview_macro_intent_block,
+    )
     from extensions.sop_converter.sdk_overview import format_sdk_overview_block
+
+    # Macro intent table must sit above SDK_OVERVIEW pointers so overview
+    # routes handwritten-macro tasks without falling back to source search.
+    macro_block = format_overview_macro_intent_block(
+        Path(bundle_path) if bundle_path is not None else None,
+        component_agents=component_agents,
+    )
+    if macro_block and macro_block.strip() not in body:
+        parts.append(macro_block.strip())
 
     overview_block = format_sdk_overview_block(
         Path(bundle_path) if bundle_path is not None else None

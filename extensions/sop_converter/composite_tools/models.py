@@ -34,7 +34,11 @@ class CompositeToolSpec:
     stages: list[CompositeStage] = field(default_factory=list)
     tags: tuple[str, ...] = field(default_factory=lambda: ("composite", "macro"))
     aliases: tuple[str, ...] = field(default_factory=tuple)
-    call_type: Literal["bash", "http", "python"] | None = None
-    call_impl: str | None = None
+    call_type: Literal["bash", "http", "python", "workflow"] | None = None
+    call_impl: str | dict[str, Any] | None = None
+    output_schema: dict[str, Any] | None = None
     query_arg: str = "query"
     extra_metadata: dict = field(default_factory=dict)
+    # F-57 executable workflow specification. ``Any`` avoids a dependency
+    # cycle between the registry model and the runtime model.
+    workflow_spec: Any | None = None

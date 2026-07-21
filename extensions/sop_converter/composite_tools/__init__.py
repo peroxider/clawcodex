@@ -17,6 +17,7 @@ from typing import Any
 
 from clawcodex_ext.agent.tool_authoring.persistence import (
     bundle_tool_dir,
+    list_persisted_specs,
     save_spec,
 )
 from clawcodex_ext.agent.tool_authoring.spec import AgentToolSpec
@@ -25,6 +26,43 @@ from .builtin import builtin_composite_tools
 from .models import CompositeStage, CompositeToolSpec
 
 logger = logging.getLogger(__name__)
+
+
+def persist_builtin_retrieval_index(bundle_dir: Path) -> Path | None:
+    """Compile F-157 metadata for persisted builtin composite macros."""
+
+    try:
+        from extensions.sop_converter.macros.routing import (
+            MacroRouteCatalog,
+            ensure_builtin_routes,
+        )
+        from extensions.sop_converter.tool_retrieval import (
+            index_from_routes,
+            load_tool_retrieval_index,
+            write_tool_retrieval_index,
+        )
+
+        tool_dir = bundle_tool_dir(bundle_dir)
+        specs = list_persisted_specs(tool_dir=tool_dir)
+        tool_names = [spec.name for spec in specs]
+        catalog = MacroRouteCatalog()
+        ensure_builtin_routes(catalog)
+        routes = [
+            route for route in catalog.get_routes() if route.target_tool in tool_names
+        ]
+        if not routes:
+            return None
+        compiled = index_from_routes(
+            routes,
+            tool_names,
+            tool_specs=specs,
+            require_unique=False,
+        )
+        existing = load_tool_retrieval_index(bundle_dir)
+        return write_tool_retrieval_index(existing.merge(compiled), bundle_dir)
+    except Exception as exc:
+        logger.warning("Failed to persist builtin tool retrieval index: %s", exc)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -61,14 +99,6 @@ def register_composite_tools(
         A mapping from composite tool names to kebab-case registered names
         (e.g. ``{"AgentTeams": "agent-teams"}``).
     """
-    if _SKIP_PLACEHOLDER_COMPOSITE_TOOLS:
-        logger.info(
-            "Skipping composite tool registration: placeholder implementations "
-            "use 'echo' which is not in bash allowlist. Set "
-            "_SKIP_PLACEHOLDER_COMPOSITE_TOOLS=False to re-enable."
-        )
-        return {}
-
     tool_dir = bundle_tool_dir(bundle_dir) if bundle_dir is not None else None
     name_map: dict[str, str] = {}
 
@@ -81,6 +111,15 @@ def register_composite_tools(
             logger.info("Skipping placeholder composite tool: %s", spec.name)
             continue
 
+        if spec.workflow_spec is not None:
+            from extensions.sop_converter.macros import register_macro
+
+            register_macro(
+                f"builtin:{to_kebab_case(spec.name)}",
+                spec.workflow_spec,
+                replace=True,
+            )
+
         tool_spec = _composite_to_agent_tool_spec(spec, bundle_dir=bundle_dir)
         if persist:
             try:
@@ -89,6 +128,9 @@ def register_composite_tools(
                 logger.warning("Failed to persist composite tool %s: %s", spec.name, exc)
                 continue
         name_map[spec.name] = tool_spec.name
+
+    if persist and bundle_dir is not None and name_map:
+        persist_builtin_retrieval_index(bundle_dir)
 
     return name_map
 
@@ -100,10 +142,11 @@ def _composite_to_agent_tool_spec(
 ) -> AgentToolSpec:
     """Convert a ``CompositeToolSpec`` into an ``AgentToolSpec``.
 
-    The generated tool uses ``call_type="bash"``.  When ``spec.call_impl`` is
-    set (e.g. for F-55 L1 ``invoke-existing-agent``) it is used verbatim;
-    otherwise the tool emits a stage manifest so the agent can decide
-    delegation order.
+    When ``spec.call_impl`` is set, preserves ``spec.call_type`` (defaulting to
+    ``bash`` only when unset) so workflow macros such as
+    ``invoke-existing-agent`` register as ``call_type=\"workflow\"``.
+    Placeholder specs without ``call_impl`` still emit a stage-manifest bash
+    echo for backwards compatibility.
     """
     bundle_id = bundle_dir.name if bundle_dir else None
 
@@ -118,6 +161,7 @@ def _composite_to_agent_tool_spec(
             aliases=spec.aliases,
             source="composite-tool",
             bundle_id=bundle_id,
+            output_schema=spec.output_schema,
         )
 
     stages_json = json.dumps(
@@ -147,6 +191,7 @@ def _composite_to_agent_tool_spec(
         aliases=spec.aliases,
         source="composite-tool",
         bundle_id=bundle_id,
+        output_schema=spec.output_schema,
     )
 
 
@@ -228,6 +273,7 @@ __all__ = [
     "CompositeToolSpec",
     "CompositeStage",
     "register_composite_tools",
+    "persist_builtin_retrieval_index",
     "emit_composite_workflow_yaml",
     "to_kebab_case",
 ]

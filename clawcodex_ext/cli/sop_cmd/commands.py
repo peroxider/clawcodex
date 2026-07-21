@@ -25,6 +25,9 @@ Options:
                             interface filtering).  Default: extern-only.
     --no-register-tools     Skip SDK method Tool registration (on by default for
                             source-directory converts).
+    --macros-dir <dir>      Directory of handwritten macro YAML files
+                            (globs *.yaml/*.yml). Use when macros live
+                            outside <sdk_spec>/sop-macros/.
 """
 
 from __future__ import annotations
@@ -72,6 +75,10 @@ class ConvertOptions:
     # (and the start/done markers) land in an asciicast file. Default
     # empty string keeps the existing behaviour (no recording).
     record_path: str = ""
+    # F-57 Phase 4: explicit handwritten macro manifests (repeatable).
+    macro_manifests: list[str] | None = None
+    # F-57: directory of handwritten macros (globs *.yaml/*.yml).
+    macros_dir: str = ""
 
 
 @register("sop")
@@ -135,12 +142,13 @@ def _parse_convert_args(args: list[str]) -> ConvertOptions:
             "[--llm-model <model>] [--preview] [--all] [--mode auto|sdk|hybrid|fwa] "
             "[--extractor <name>] [--emit-workflow-yaml] [--emit-stage-agents] "
             "[--emit-bridge] [--bridge-mode python|cli] [--bridge-cli <cmd>] [--strict-workflow-yaml] "
+            "[--macro-manifest <path>] [--macros-dir <dir>] [--json] [--validate]",
             "[--json] [--validate] [--interactive]",
             file=sys.stderr,
         )
         raise SystemExit(2)
 
-    opts = ConvertOptions(sdk_spec=args[0])
+    opts = ConvertOptions(sdk_spec=args[0], macro_manifests=[])
 
     i = 1
     while i < len(args):
@@ -226,6 +234,14 @@ def _parse_convert_args(args: list[str]) -> ConvertOptions:
         elif token == "--interactive":
             opts.interactive = True
             i += 1
+        elif token == "--macro-manifest" and i + 1 < len(args):
+            if opts.macro_manifests is None:
+                opts.macro_manifests = []
+            opts.macro_manifests.append(args[i + 1])
+            i += 2
+        elif token == "--macros-dir" and i + 1 < len(args):
+            opts.macros_dir = args[i + 1]
+            i += 2
         else:
             print(f"error: unknown argument: {token}", file=sys.stderr)
             raise SystemExit(2)
@@ -292,9 +308,22 @@ def _handle_convert(args: list[str]) -> int:
     return 0
 
 
+def _collect_macro_manifests(opts: ConvertOptions) -> list[Path]:
+    """Resolve --macros-dir + --macro-manifest into a flat deduplicated file list."""
+    paths: list[Path] = [Path(p) for p in (opts.macro_manifests or [])]
+    if opts.macros_dir:
+        d = Path(opts.macros_dir)
+        if d.is_dir():
+            for p in sorted(d.glob("*.yaml")) + sorted(d.glob("*.yml")):
+                if p.is_file() and p not in paths:
+                    paths.append(p)
+    return paths
+
+
 def _handle_convert_from_source(opts: ConvertOptions) -> int:
     """Convert a source code directory into Agents via SourceCodeParser + grouping strategy."""
     sdk_path = Path(opts.sdk_spec)
+    from extensions.sop_converter.type_schema import reset_schema_probe_runtime_state
     from extensions.sop_converter.workflow_mode.pipeline import discriminate_and_extract
     from extensions.sop_converter.workflow_mode.extractors.preview import (
         format_discrimination_summary,
@@ -316,6 +345,8 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
         AgentComponentInfo,
         WorkflowStage,
     )
+
+    reset_schema_probe_runtime_state()
 
     force_mode = opts.mode if opts.mode != "auto" else None
     interactive = opts.interactive
@@ -361,6 +392,29 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
     if not components:
         print("error: No source components found in directory", file=sys.stderr)
         return 2
+
+    from extensions.sop_converter.bundle_venv import (
+        bundle_venv_dir,
+        bundle_venv_python,
+    )
+    from extensions.sop_converter.sdk_dependency_resolver import resolve_sdk_dependencies
+
+    sdk_deps = resolve_sdk_dependencies(sdk_path)
+    bundle_dir_for_tools = Path(opts.output_dir).resolve() if opts.output_dir else None
+    bundle_venv_python_path: str | None = None
+    bundle_venv_dir_path: str | None = None
+    if bundle_dir_for_tools is not None and sdk_deps.requirements:
+        bundle_venv_python_path = str(bundle_venv_python(bundle_dir_for_tools))
+        bundle_venv_dir_path = str(bundle_venv_dir(bundle_dir_for_tools))
+    if sdk_deps.requirements and not opts.json_output:
+        suffix = (
+            "bundle venv will be created before schema probing"
+            if bundle_venv_python_path
+            else "no --out bundle path; venv isolation disabled"
+        )
+        print(
+            f"   SDK dependencies: {len(sdk_deps.requirements)} from {sdk_deps.source} ({suffix})"
+        )
 
     parsed_strategy = opts.strategy.lower() if opts.strategy else ""
     if parsed_strategy == "keyword":
@@ -436,6 +490,37 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
     except Exception:
         tool_deps_index = None
 
+    # F-57 Phase 4: preview / validate handwritten macros without writing
+    if opts.preview or opts.validate_only:
+        try:
+            from extensions.sop_converter.macros import (
+                MacroConvertError,
+                convert_handwritten_macros,
+            )
+
+            macro_preview = convert_handwritten_macros(
+                source_dir=sdk_path,
+                bundle_dir=None,
+                manifest_paths=_collect_macro_manifests(opts),
+                tool_index=None,
+                preview=True,
+                validate_only=opts.validate_only,
+                register_tools=False,
+                persist=False,
+            )
+            if macro_preview.diagnostics:
+                for item in macro_preview.diagnostics:
+                    print(f"   Macro diagnostic: {item}", file=sys.stderr)
+                if opts.validate_only:
+                    return 2
+            elif macro_preview.preview and not opts.json_output:
+                print(f"   Handwritten macros OK: {len(macro_preview.preview)}")
+        except MacroConvertError as exc:
+            print(f"error: {exc.to_dict()}", file=sys.stderr)
+            return 2
+        except Exception as exc:
+            print(f"   Warning: macro preview skipped: {exc}", file=sys.stderr)
+
     registered: dict[str, str] = {}
     if opts.register_tools and not opts.preview and not opts.validate_only:
         try:
@@ -449,11 +534,14 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 components,
                 str(sdk_path),
                 persist=True,
-                bundle_dir=Path(opts.output_dir) if opts.output_dir else None,
-                bundle_id=Path(opts.output_dir).name if opts.output_dir else None,
+                bundle_dir=bundle_dir_for_tools,
+                bundle_id=bundle_dir_for_tools.name if bundle_dir_for_tools else None,
+                bundle_venv_python=bundle_venv_python_path,
+                sdk_requirements=sdk_deps.requirements,
             )
             if registered:
                 print(f"   Registered tools: {len(set(registered.values()))}")
+            composite_registered: dict[str, str] = {}
             try:
                 from extensions.sop_converter.composite_tools import (
                     emit_composite_workflow_yaml,
@@ -465,7 +553,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
 
                 composite_registered = register_composite_tools(
                     persist=True,
-                    bundle_dir=Path(opts.output_dir) if opts.output_dir else None,
+                    bundle_dir=bundle_dir_for_tools,
                     sdk_source_dir=str(sdk_path),
                 )
                 if composite_registered:
@@ -516,6 +604,63 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                     f"   Warning: composite tool registration failed: {exc}",
                     file=sys.stderr,
                 )
+
+            # F-57 Phase 4: handwritten / template macros (sop-macros/ + --macro-manifest)
+            try:
+                from extensions.sop_converter.macros import (
+                    MacroConvertError,
+                    convert_handwritten_macros,
+                )
+
+                tool_index = set(registered.values()) if registered else set()
+                tool_index.update(str(name) for name in composite_registered.values())
+                macro_result = convert_handwritten_macros(
+                    source_dir=sdk_path,
+                    bundle_dir=bundle_dir_for_tools,
+                    manifest_paths=_collect_macro_manifests(opts),
+                    tool_index=tool_index,
+                    preview=False,
+                    validate_only=False,
+                    register_tools=True,
+                    persist=bool(bundle_dir_for_tools),
+                )
+                if macro_result.registered_tools:
+                    print(
+                        f"   Registered handwritten macros: {len(macro_result.registered_tools)}"
+                    )
+                    # One owner skill per macro — never broadcast onto every domain.
+                    from extensions.sop_converter.macros.overview_intent import (
+                        assign_macros_to_owner_skills,
+                    )
+
+                    ownership = assign_macros_to_owner_skills(
+                        grouped_skills,
+                        macro_result.macros,
+                    )
+                    if ownership:
+                        for tool_name, skill_name in ownership.items():
+                            print(f"      macro {tool_name} → skill {skill_name}")
+                    else:
+                        # Fallback only when ownership cannot be resolved from
+                        # covered_tools: keep tools registered but unattached.
+                        print(
+                            "   Warning: no owner skill resolved for handwritten macros; "
+                            "macros stay registered but are not added to domain skills",
+                            file=sys.stderr,
+                        )
+                elif macro_result.written_paths:
+                    print(f"   Persisted handwritten macros: {len(macro_result.written_paths)}")
+            except MacroConvertError as exc:
+                print(
+                    f"error: handwritten macro convert failed: {exc.to_dict()}",
+                    file=sys.stderr,
+                )
+                return 2
+            except Exception as exc:
+                print(
+                    f"   Warning: handwritten macro convert skipped: {exc}",
+                    file=sys.stderr,
+                )
         except ImportError as exc:
             print(
                 f"   Warning: tool registration skipped (missing module: {exc})",
@@ -558,13 +703,32 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                     profile.recommended_tools = list(skill_tool_map[profile.mapped_skill])
 
     # Build per-skill AgentComponentInfo for the overview agent.
+    # Macro tools belong in the overview「宏工具意图」table only — do not list
+    # them under every (or even the owner) domain agent's capabilities.
+    macro_tool_names: set[str] = set()
+    try:
+        from extensions.sop_converter.bundle_context import load_bundle_macro_routes
+
+        if opts.output_dir:
+            for route in load_bundle_macro_routes(Path(opts.output_dir)):
+                target = str(getattr(route, "target_tool", "") or "").strip()
+                if target:
+                    macro_tool_names.add(target)
+    except Exception:
+        pass
+
     overview_info: list[AgentComponentInfo] = []
     for skill in grouped_skills:
+        caps = [
+            t
+            for t in skill.allowed_tools
+            if str(t).strip() and str(t).strip() not in macro_tool_names
+        ][:5]
         overview_info.append(
             AgentComponentInfo(
                 name=f"{skill.name}-agent",
                 description=skill.description,
-                capabilities=skill.allowed_tools[:5],
+                capabilities=caps,
                 invoke_pattern=f"@{skill.name}-agent {{task}}",
             )
         )
@@ -869,6 +1033,8 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
             workflow_yaml=workflow_rel,
             bridge_script=bridge_rel,
             workflow_mode=disc.mode if workflow_graph else None,
+            sdk_requirements=sdk_deps.requirements,
+            bundle_venv_dir=bundle_venv_dir_path,
         )
         print(f"   Bundle manifest: {manifest_path}")
 

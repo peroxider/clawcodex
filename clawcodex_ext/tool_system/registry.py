@@ -236,6 +236,31 @@ class ToolRegistry:
                 tool_use_id=call.tool_use_id,
             )
 
+        plan = context.retrieval_plan
+        selected_macros = set(plan.selected_macros) if plan is not None else set()
+        selected_macro_call = tool.name in selected_macros
+        if (
+            tool.name in context.retrieval_suppressed_tools
+            and not context.workflow_stack
+        ):
+            context.retrieval_metrics["shadowed_atomic_call_count"] = int(
+                context.retrieval_metrics.get("shadowed_atomic_call_count", 0)
+            ) + 1
+            recommended = plan.selected_macros[0] if plan and plan.selected_macros else ""
+            return ToolResult(
+                name=tool.name,
+                output={
+                    "status": "error",
+                    "error": f"tool is shadowed by macro: {recommended}",
+                    "error_code": "tool_shadowed_by_macro",
+                    "recommended_tool": recommended,
+                    "intent_key": plan.intent_key if plan else None,
+                    "retryable": True,
+                },
+                is_error=True,
+                tool_use_id=call.tool_use_id,
+            )
+
         context.ensure_tool_allowed(tool.name)
         coerced_input = coerce_tool_input(
             call.input,
@@ -348,7 +373,15 @@ class ToolRegistry:
                 )
 
         try:
-            result = _invoke_tool_call(tool, call.input, context)
+            try:
+                result = _invoke_tool_call(tool, call.input, context)
+            finally:
+                # Once the selected macro has started, do not carry its
+                # suppression overlay into later unrelated model turns.  The
+                # workflow's internal atomic calls are allowed while
+                # ``workflow_stack`` is non-empty.
+                if selected_macro_call:
+                    context.restore_retrieval_tools()
         finally:
             if restore_permission_context is not None:
                 context.permission_context = restore_permission_context

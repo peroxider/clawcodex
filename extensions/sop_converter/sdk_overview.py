@@ -370,10 +370,10 @@ def write_sdk_overview(
 def format_sdk_overview_block(
     bundle_path: Path | str | None,
     *,
-    inline_content: bool = True,
-    max_inline_chars: int = 8000,
+    inline_content: bool = False,
+    max_inline_chars: int = 10000,
 ) -> str:
-    """Prompt block for overview agents — optionally embeds ``SDK_OVERVIEW.md``."""
+    """Prompt block for overview agents — points at ``SDK_OVERVIEW.md`` (opt-in embed)."""
     if not bundle_path:
         return ""
     path = Path(bundle_path).resolve() / "SDK_OVERVIEW.md"
@@ -386,6 +386,16 @@ def format_sdk_overview_block(
         body = ""
 
     if _is_io_overview_content(body):
+        if not inline_content:
+            return f"""\
+## SDK 类型路由总览（IO 分组，sop convert 生成）
+
+- bundle 内文件：``{path}``
+- 需要查「工具 → Agent」或「入口 API」时 **Read** ``{path.name}``（正文不内嵌全文，避免挤占上下文）
+- **IO 分组**：按**工具名 / 类型锚点**路由，**禁止**按源码路径臆测 Agent
+- 用户意图不明确且多个 ``@io_group_*-agent`` 都合理时，**向用户确认**后再委派
+- 跨工具编排见 ``ORCHESTRATION_ROUTES.md`` 与各工具 schema 的 ``x-sop-dependencies``
+"""
         header = f"""\
 ## SDK 类型路由总览（IO 分组，sop convert 生成）
 
@@ -394,24 +404,24 @@ def format_sdk_overview_block(
 - 用户意图不明确且多个 ``@io_group_*-agent`` 都合理时，**向用户确认**后再委派
 - 跨工具编排见 ``ORCHESTRATION_ROUTES.md`` 与各工具 schema 的 ``x-sop-dependencies``
 """
-        if not inline_content:
-            return (
-                header
-                + f"\n- **先 Read** ``{path.name}`` — 查「工具 → Agent」或「入口 API」表，**禁止**按模块路径路由"
-            )
     else:
+        if not inline_content:
+            return f"""\
+## SDK 模块总览（sop convert 生成）
+
+- bundle 内文件：``{path}``
+- 需要按模块/域 Agent/入口 API 路由时 **Read** ``{path.name}``（正文不内嵌全文，避免挤占上下文）
+- **禁止**无目标广搜 SDK 源码
+- 用户意图不明确且总览表中有 2+ 合理候选时，**向用户确认**选项后再委派
+- 工具链顺序（先 A 产出 B，再调 C）见各工具 JSON schema 的 ``x-sop-dependencies``
+"""
         header = f"""\
-## SDK 模块总览（pos convert 生成）
+## SDK 模块总览（sop convert 生成）
 
 - bundle 内文件：``{path}`` — 路由时**优先使用下方摘要**，必要时再 Read 全文
 - 用户意图不明确且总览表中有 2+ 合理候选时，**向用户确认**选项后再委派
 - 工具链顺序（先 A 产出 B，再调 C）见各工具 JSON schema 的 ``x-sop-dependencies``
 """
-        if not inline_content:
-            return (
-                header
-                + f"\n- **先 Read** ``{path.name}`` — 按模块/域 Agent/入口 API 路由，**禁止**无目标广搜 SDK 源码"
-            )
 
     if not body:
         return header
