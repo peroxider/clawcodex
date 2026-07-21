@@ -226,6 +226,13 @@ def _show_provider_defaults_table() -> None:
 
 def handle_login() -> int:
     """Interactive provider credential configuration."""
+    # Ensure downstream provider registrations (openai-codex, kimi, etc.)
+    # are loaded before reading PROVIDER_INFO. The login fast-path in
+    # dispatch.py bypasses init() → ensure_eager_extensions_installed().
+    from clawcodex_ext import ensure_eager_extensions_installed
+
+    ensure_eager_extensions_installed()
+
     from rich.prompt import Prompt
     from clawcodex_ext.repl.color_scheme import build_oklch_console
 
@@ -244,9 +251,16 @@ def handle_login() -> int:
     info = PROVIDER_INFO[provider]
 
     if provider == "openai-codex":
-        from src.auth.codex_oauth import login_codex_device_flow
+        from src.auth.codex_oauth import CodexAuthError, login_codex_device_flow
 
-        login_codex_device_flow(console=console)
+        try:
+            login_codex_device_flow(console=console)
+        except CodexAuthError as exc:
+            # Device-code login failures (including an unavailable network) are
+            # expected user-facing errors, not fatal CLI exceptions.
+            console.print(f"\n[red]OpenAI Codex login failed:[/red] {exc}")
+            console.print("[dim]Check your network connection and try again.[/dim]\n")
+            return 1
         current = get_provider_config(provider)
         console.print(f"\n[dim]Available models:[/dim] {', '.join(info['available_models'])}")
         console.print(f"[dim]Default:[/dim] [bold]{info['default_model']}[/bold]")
