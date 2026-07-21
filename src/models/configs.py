@@ -151,6 +151,7 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         display_name="DeepSeek V4 Pro",
         context_window=1_000_000,
         max_output_tokens=8_192,
+        supports_vision=False,
         supports_cache=True,
     ),
     "deepseek-v4-flash": ModelConfig(
@@ -158,6 +159,7 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         display_name="DeepSeek V4 Flash",
         context_window=1_000_000,
         max_output_tokens=8_192,
+        supports_vision=False,
         supports_cache=True,
     ),
 }
@@ -172,4 +174,15 @@ def get_model_config(model_id: str) -> ModelConfig | None:
         base = key.rsplit('-', 1)[0]
         if model_id.startswith(base):
             return config
+    # Try stripping a ``provider/`` prefix (e.g. ``deepseek/deepseek-v4-flash``
+    # → ``deepseek-v4-flash``) so OpenRouter-style model IDs find the same
+    # config as the bare model id.
+    if "/" in model_id:
+        bare = model_id.split("/", 1)[1]
+        if bare in MODEL_CONFIGS:
+            return MODEL_CONFIGS[bare]
+        for key, config in MODEL_CONFIGS.items():
+            base = key.rsplit('-', 1)[0]
+            if bare.startswith(base):
+                return config
     return None
