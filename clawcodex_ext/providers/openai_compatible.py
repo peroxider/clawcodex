@@ -120,10 +120,78 @@ def _translate_anthropic_multimodal_block(block: Any) -> dict[str, Any] | None:
     return _anthropic_document_block_to_openai(block)
 
 
+def _strip_images_from_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Strip Anthropic-format ``image`` content blocks from messages.
+
+    Replaces every ``{"type": "image", ...}`` block with a short text
+    placeholder so the model's text context is preserved while the image
+    payload is removed. Handles image blocks at the top level of a
+    message's ``content`` list as well as inside ``tool_result`` nested
+    content arrays.
+
+    This is a no-op when the message list contains no image blocks.
+    """
+    _IMAGE_PLACEHOLDER = "[Image removed: the current model does not support image input]"
+
+    result: list[dict[str, Any]] = []
+    for msg in messages:
+        if not isinstance(msg, dict):
+            result.append(msg)
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            result.append(msg)
+            continue
+
+        new_content: list[Any] = []
+        for block in content:
+            if not isinstance(block, dict):
+                new_content.append(block)
+                continue
+            btype = block.get("type")
+
+            # Strip top-level image blocks
+            if btype == "image":
+                new_content.append({"type": "text", "text": _IMAGE_PLACEHOLDER})
+                continue
+
+            # Strip image blocks nested inside tool_result content
+            if btype == "tool_result":
+                raw_inner = block.get("content")
+                if isinstance(raw_inner, list):
+                    filtered_inner: list[Any] = []
+                    for inner in raw_inner:
+                        if isinstance(inner, dict) and inner.get("type") == "image":
+                            filtered_inner.append(
+                                {"type": "text", "text": _IMAGE_PLACEHOLDER}
+                            )
+                        else:
+                            filtered_inner.append(inner)
+                    new_content.append({**block, "content": filtered_inner})
+                else:
+                    new_content.append(block)
+                continue
+
+            new_content.append(block)
+
+        new_msg = {**msg, "content": new_content}
+        result.append(new_msg)
+
+    return result
+
+
 def _convert_anthropic_messages_to_openai(
     messages: list[dict[str, Any]],
+    *,
+    supports_vision: bool | None = None,
 ) -> list[dict[str, Any]]:
     """Convert Anthropic-format messages to OpenAI chat-completion format.
+
+    When ``supports_vision`` is ``False``, image content blocks are
+    stripped from the messages **before** conversion, preventing the
+    provider from sending ``image_url`` blocks to a model that does not
+    accept them.  ``None`` (default) or ``True`` leaves image blocks in
+    place (backward-compatible behaviour).
 
     Handles four transformations:
     1. Assistant messages with tool_use content blocks → assistant + tool_calls
@@ -139,6 +207,13 @@ def _convert_anthropic_messages_to_openai(
        ever appears it lands in the closest OpenAI shape rather than
        passing through as an unrecognised Anthropic block.
     """
+    # When the model has zero image capability, strip image blocks
+    # BEFORE conversion so the provider never sends ``image_url``
+    # blocks to a model that rejects them.  The text placeholder
+    # preserves the model's awareness that an image was present.
+    if supports_vision is False:
+        messages = _strip_images_from_messages(messages)
+
     result: list[dict[str, Any]] = []
 
     # Pre-scan all assistant messages for tool_use IDs so we can
@@ -446,10 +521,34 @@ class OpenAICompatibleProvider(BaseProvider):
             self._client = self._create_client()
         return self._client
 
-    def _prepare_messages(self, messages: list[MessageInput]) -> list[dict[str, Any]]:
-        """Convert messages to OpenAI format, translating Anthropic tool blocks."""
+    def _prepare_messages(
+        self,
+        messages: list[MessageInput],
+        *,
+        model: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Convert messages to OpenAI format, translating Anthropic tool blocks.
+
+        When ``model`` is provided, the method checks whether the model
+        supports vision.  If it does not, image content blocks are stripped
+        from the messages **before** conversion so the provider never sends
+        ``image_url`` blocks to a model that rejects them.
+
+        Args:
+            messages: List of chat messages (Anthropic-format).
+            model:  The resolved model ID.  When ``None`` (default) the
+                    instance's ``self.model`` is used as fallback; if both
+                    are ``None`` no vision filtering is applied.
+        """
         base = super()._prepare_messages(messages)
-        return _convert_anthropic_messages_to_openai(base)
+        resolved = model or self.model
+        supports_vision: bool | None = None
+        if resolved:
+            from src.models.capabilities import supports_vision as _supports_vision
+            supports_vision = _supports_vision(resolved)
+        return _convert_anthropic_messages_to_openai(
+            base, supports_vision=supports_vision,
+        )
 
     def _build_usage_dict(self, usage: Any) -> dict[str, Any]:
         if usage is None:
@@ -476,7 +575,7 @@ class OpenAICompatibleProvider(BaseProvider):
         model = self._get_model(**kwargs)
 
         # Convert messages
-        provider_messages = self._prepare_messages(messages)
+        provider_messages = self._prepare_messages(messages, model=model)
 
         # OpenAI uses a system message in the messages array rather than
         # a top-level ``system`` parameter (which is Anthropic-specific).
@@ -550,7 +649,7 @@ class OpenAICompatibleProvider(BaseProvider):
         model = self._get_model(**kwargs)
 
         # Convert messages
-        provider_messages = self._prepare_messages(messages)
+        provider_messages = self._prepare_messages(messages, model=model)
 
         # Handle system prompt (OpenAI uses a system message in the messages array)
         system_prompt: str | None = kwargs.pop("system", None)
@@ -614,7 +713,7 @@ class OpenAICompatibleProvider(BaseProvider):
         guard.raise_if_pre_aborted()
 
         model = self._get_model(**kwargs)
-        provider_messages = self._prepare_messages(messages)
+        provider_messages = self._prepare_messages(messages, model=model)
 
         # Handle system prompt (OpenAI uses a system message in the messages array)
         system_prompt: str | None = kwargs.pop("system", None)

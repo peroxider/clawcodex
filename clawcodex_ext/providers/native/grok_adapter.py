@@ -100,10 +100,16 @@ class NativeGrokProvider(NativeProvider):
         # rather than holding a class-level reference so the import
         # cost only pays when a Grok request actually happens.
         from src.providers.openai_compatible import _convert_anthropic_messages_to_openai
+        from src.models.capabilities import supports_vision as _supports_vision
+
+        resolved_model = self._get_model(**kwargs)
+        sv = _supports_vision(resolved_model) if resolved_model else None
 
         request: dict[str, Any] = {
-            "model": self._get_model(**kwargs),
-            "messages": _convert_anthropic_messages_to_openai(self._prepare_messages(messages)),
+            "model": resolved_model,
+            "messages": _convert_anthropic_messages_to_openai(
+                self._prepare_messages(messages), supports_vision=sv,
+            ),
         }
         if tools:
             request["tools"] = tools

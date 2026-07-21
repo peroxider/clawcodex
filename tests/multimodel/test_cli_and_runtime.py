@@ -38,7 +38,9 @@ def test_runtime_selection_overrides_config(monkeypatch, tmp_path) -> None:
     async def exercise() -> None:
         result = await command.call("use quick-compare", context)
         assert "已切换到多模型组" in result.value
-        assert "状态: 已启用" in (await command.call("status", context)).value
+        status = (await command.call("status", context)).value
+        assert "状态: 已启用" in status
+        assert "聚合器: passthrough" in status
         assert "单模型模式" in (await command.call("off", context)).value
 
     asyncio.run(exercise())

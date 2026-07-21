@@ -30,7 +30,17 @@ def _call(args: str, context: Any) -> LocalCommandResult:
         if not active: return _text("当前: 未启用\n可用模型组: " + (", ".join(config.groups) or "(无)") + "\n输入 /multimodel use <name> 启用")
         group = config.groups.get(active)
         if group is None: return _text(f"当前模型组 '{active}' 不存在")
-        return _text("状态: 已启用\n组:   " + active + "\n策略: " + group.strategy + "\n模型:\n" + "\n".join(f"  • {slot.model} ({slot.provider}) 权重: {slot.weight:g}" for slot in group.slots))
+        details = ["状态: 已启用", "组:   " + active, "策略: " + group.strategy]
+        if group.aggregator:
+            details.append("聚合器: " + group.aggregator)
+        if group.aggregator in {"scoring", "rank"}:
+            details.append(f"评分模型: {group.scorer_model} ({group.scorer_provider})")
+        if group.aggregator == "fusion":
+            details.append(f"融合模型: {group.scorer_model} ({group.scorer_provider})")
+        details.append("模型:\n" + "\n".join(
+            f"  • {slot.model} ({slot.provider}) 权重: {slot.weight:g}" for slot in group.slots
+        ))
+        return _text("\n".join(details))
     if tokens[0] == "use" and len(tokens) == 2:
         name = tokens[1]
         if name not in config.groups: return _text(f"error: unknown model group '{name}'")

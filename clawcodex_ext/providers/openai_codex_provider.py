@@ -66,10 +66,10 @@ class OpenAICodexProvider(OpenAICompatibleProvider):
         return super().client
 
     def _prepare_responses_input(
-        self, messages: list[MessageInput]
+        self, messages: list[MessageInput], *, model: str | None = None
     ) -> tuple[str | None, list[dict[str, Any]]]:
         provider_messages = _convert_anthropic_messages_to_openai(
-            super()._prepare_messages(messages)
+            super()._prepare_messages(messages, model=model)
         )
         instructions: list[str] = []
         responses_input: list[dict[str, Any]] = []
@@ -179,7 +179,7 @@ class OpenAICodexProvider(OpenAICompatibleProvider):
         **kwargs: Any,
     ) -> tuple[str, dict[str, Any]]:
         model = self._get_model(**kwargs)
-        instructions, responses_input = self._prepare_responses_input(messages)
+        instructions, responses_input = self._prepare_responses_input(messages, model=model)
         request_kwargs: dict[str, Any] = {
             "model": model,
             "input": responses_input,

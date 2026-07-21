@@ -107,6 +107,14 @@ class NativeOpenAIProvider(NativeProvider):
 
     # ---- request shape ----
 
+    def _check_supports_vision(self, **kwargs: Any) -> bool | None:
+        """Check whether the resolved model supports vision input."""
+        model = self._get_model(**kwargs)
+        if model:
+            from src.models.capabilities import supports_vision as _supports_vision
+            return _supports_vision(model)
+        return None
+
     def _build_request(
         self,
         messages: list[Any],
@@ -121,7 +129,10 @@ class NativeOpenAIProvider(NativeProvider):
         """
         request: dict[str, Any] = {
             "model": self._get_model(**kwargs),
-            "messages": _convert_anthropic_messages_to_openai(self._prepare_messages(messages)),
+            "messages": _convert_anthropic_messages_to_openai(
+                self._prepare_messages(messages),
+                supports_vision=self._check_supports_vision(**kwargs),
+            ),
         }
         if tools:
             request["tools"] = tools
