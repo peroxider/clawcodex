@@ -66,6 +66,7 @@ class ConvertOptions:
     strict_workflow_yaml: bool = False
     json_output: bool = False
     validate_only: bool = False
+    interactive: bool = False  # F-50.11.4: generate TODO templates on empty extraction
     # F-REC: optional .cast output path. When set, the convert call is
     # wrapped in a :class:`SopStageProjector` so the SOP CLI's stdout
     # (and the start/done markers) land in an asciicast file. Default
@@ -134,7 +135,7 @@ def _parse_convert_args(args: list[str]) -> ConvertOptions:
             "[--llm-model <model>] [--preview] [--all] [--mode auto|sdk|hybrid|fwa] "
             "[--extractor <name>] [--emit-workflow-yaml] [--emit-stage-agents] "
             "[--emit-bridge] [--bridge-mode python|cli] [--bridge-cli <cmd>] [--strict-workflow-yaml] "
-            "[--json] [--validate]",
+            "[--json] [--validate] [--interactive]",
             file=sys.stderr,
         )
         raise SystemExit(2)
@@ -221,6 +222,9 @@ def _parse_convert_args(args: list[str]) -> ConvertOptions:
             i += 1
         elif token == "--register-tools":
             opts.register_tools = True
+            i += 1
+        elif token == "--interactive":
+            opts.interactive = True
             i += 1
         else:
             print(f"error: unknown argument: {token}", file=sys.stderr)
@@ -314,10 +318,13 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
     )
 
     force_mode = opts.mode if opts.mode != "auto" else None
+    interactive = opts.interactive
     disc, workflow_graph = discriminate_and_extract(
         sdk_path,
         force_mode=force_mode,
         extractor=opts.extractor,
+        interactive=interactive,
+        out_dir=opts.output_dir or None,
     )
 
     if not opts.json_output:
@@ -330,6 +337,11 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
             )
         elif disc.mode in ("fwa", "hybrid"):
             print("   Warning: workflow mode selected but graph extraction returned empty", file=sys.stderr)
+            if interactive:
+                print(
+                    "   → TODO templates generated. Edit and re-run or fill in manually.",
+                    file=sys.stderr,
+                )
 
     if opts.json_output:
         payload = disc.to_dict()
