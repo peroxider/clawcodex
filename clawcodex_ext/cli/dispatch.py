@@ -427,11 +427,21 @@ def run_cli(argv: list[str] | None = None) -> int:
             title=str(args.prompt)[:160],
             description=str(args.prompt),
         )
-        plan = TaskDecomposer().decompose_issue(issue)
+        import asyncio
+
+        plan = asyncio.run(TaskDecomposer().decompose_issue(issue))
         plan_path = write_task_plan(plan, workspace_root)
         args.prompt = build_swarm_prompt(issue, plan, plan_path)
         args.print = True
         os.environ["CLAUDE_CODE_COORDINATOR_MODE"] = "1"
+        print(
+            "NOTE: CLI --swarm/--decompose mode runs outside the orchestrator's "
+            "normal issue tracking pipeline. There will be no IssueRecord "
+            "persistence, no summary comment, and no PR creation. "
+            "The decomposed plan has been written to "
+            f"{plan_path.relative_to(workspace_root)}.",
+            file=sys.stderr,
+        )
 
     if getattr(args, "prompt", None) and not getattr(args, "print", False):
         parser.error(f"unknown command: {args.prompt} (use -p/--print to send a prompt)")

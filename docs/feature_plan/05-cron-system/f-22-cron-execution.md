@@ -189,13 +189,68 @@ Scheduled fire → queued command / run record → frontend 执行 → status �
 
 #### Phase F — teammate / agent ownership
 
-**目标**: 在 ClawCodex 支持 teammate runtime 时还原 cron ownership 行为。
+**目标**: 在 ClawCodex 支持 teammate runtime 时还原 cron ownership 行为。当前代码中 `CronTask` 模型**没有** `agent_id` 字段，`CronRun` 虽有 `owner_key`/`owner_process_id`/`owner_session_id` 但属于进程级而非 agent 级。Phase F 需要从模型、调度器、工具、前端四个层面补齐 ownership 语义。
+
+##### F-1 模型扩展
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `CronTask.agent_id` | `str \| None` | 创建者 agent 标识；`None` 表示全局任务（任何 agent 可触发） |
+| `CronTask.team_id` | `str \| None` | 团队标识（预留，用于多租户隔离） |
+| `CronRun.owner_agent_id` | `str \| None` | 实际执行该 run 的 agent 标识 |
+
+##### F-2 调度器过滤
+
+`CronScheduler.check_once()` 在查询 due tasks 后增加 agent 过滤层：
+
+```python
+# 伪代码
+if current_agent_id is not None:
+    due = [
+        t for t in due
+        if t.agent_id is None or t.agent_id == current_agent_id
+    ]
+```
+
+- `CronScheduler` 新增 `agent_id: str | None` 构造参数
+- 全局任务（`agent_id=None`）对所有 agent 可见
+- 归属于某 agent 的任务只在该 agent 的会话中被调度器触发
+
+##### F-3 工具层可见性
+
+- `CronList` 新增 `agent_id` 过滤参数，默认只返回当前 agent 的任务 + 全局任务
+- 管理员（`agent_id="*"`）可查看所有任务
+- `CronDelete` 校验归属：非管理员不能删除其他 agent 的任务
+- `CronCreate` 自动填充 `agent_id` 为当前 agent
+
+##### F-4 Teammate 生命周期
 
 | 场景 | 行为 |
 |------|------|
-| teammate 创建 session-only cron | job 带 `agent_id`，只在该 agent 上下文可见/可删 |
-| teammate 已退出 | scheduler 触发 owned task 时记录 failed 或清理 orphaned cron |
-| headless 无 teammate runtime | 创建 failed run，错误说明无法路由 owner |
+| teammate 创建 session-only cron | 任务带 `agent_id`，只在该 agent 上下文可见/可删 |
+| teammate 已退出（graceful shutdown） | 调度器触发 owned task 时记录 failed run，错误说明 "owner agent exited" |
+| teammate 异常退出（crash） | 通过 stale lock 恢复机制发现 owner 失活，标记 orphaned task |
+| headless 无 teammate runtime | `CronScheduler.agent_id` 为 None，只调度全局任务；创建带 `agent_id` 的任务时返回 failed run，错误说明无法路由 owner |
+
+##### F-5 清理孤儿任务
+
+- 新方法 `cleanup_orphaned_tasks(workspace_root, active_agents: set[str])`：
+  - 遍历所有 `agent_id` 非 None 的任务
+  - 如果 `agent_id` 不在 `active_agents` 中，标记为 orphaned
+  - Orphaned 任务在 `CronList` 中显示状态 `orphaned`
+  - 可配置自动删除（默认保留，人工确认）
+
+##### F-6 实现优先级
+
+| 步骤 | 内容 | 优先级 |
+|:----:|------|:------:|
+| 1 | `CronTask.agent_id` 字段 + `from_dict`/`to_dict` 兼容 | P1 |
+| 2 | `CronScheduler.agent_id` + `check_once` 过滤 | P1 |
+| 3 | `CronCreate` 自动填充 `agent_id` | P1 |
+| 4 | `CronList`/`CronDelete` 归属过滤 | P1 |
+| 5 | headless 无 teammate 降级行为 | P1 |
+| 6 | `cleanup_orphaned_tasks` 与调度器集成 | P2 |
+| 7 | Teammate 退出/崩溃时自动标记 failed run | P2 |
 
 ### 1.6 子特性分解
 
@@ -207,6 +262,11 @@ Scheduled fire → queued command / run record → frontend 执行 → status �
 | **Phase D** | 执行队列与结果追踪 | ✅ | P0 |
 | **Phase E** | skills 与用户命令 | ✅ | P0 |
 | **Phase F** | teammate/agent ownership | 📋 | P1 |
+| **F-1** | 模型扩展（CronTask.agent_id, CronRun.owner_agent_id） | 📋 | P1 |
+| **F-2** | 调度器 agent 过滤（check_once agent_id 门控） | 📋 | P1 |
+| **F-3** | 工具层可见性（CronList/Delete 归属过滤） | 📋 | P1 |
+| **F-4** | Teammate 生命周期（退出/崩溃/无 runtime 降级） | 📋 | P1 |
+| **F-5** | 清理孤儿任务（cleanup_orphaned_tasks） | 📋 | P2 |
 | **G1** | isKilled 运行时 kill 开关 | ✅ | P0 |
 | **G2** | 远程 Jitter 实时配置 — 6 参数可配，每 tick 热加载 | ✅ | P0 |
 | **G3** | One-shot 反向 Jitter — 整点 (:00/:30) 提前触发 | ✅ | P0 |
@@ -217,12 +277,12 @@ Scheduled fire → queued command / run record → frontend 执行 → status �
 | **G8** | inFlight 防重复触发 | ✅ | P0 |
 | **G9** | SDK daemon 模式（dir/lockIdentity） | ✅ | P0 |
 | **G10** | cronToHuman(utc) UTC 模式显示 | ✅ | P0 |
-| **D1** | sourceId 级 Active-Run 去重（CCB 第 1 层） | 📋 | P0 |
-| **D2** | PID 活体检测（CCB 第 2 层） | 📋 | P0 |
-| **D3** | inFlight 防重复触发（CCB 第 3 层） | 📋 | P0 |
-| **D4** | 调度锁跨进程互斥（CCB 第 4 层） | 📋 | P0 |
+| **D1** | sourceId 级 Active-Run 去重（CCB 第 1 层） | ✅ | P0 |
+| **D2** | PID 活体检测（CCB 第 2 层） | ✅ | P0 |
+| **D3** | inFlight 防重复触发（CCB 第 3 层） | ✅ | P0 |
+| **D4** | 调度锁跨进程互斥（CCB 第 4 层） | ✅ | P0 |
 
-### 1.7 CCB 补充缺口详情（G1~G10 ✅，D1~D4 📋）
+### 1.7 CCB 补充缺口详情（G1~G10 ✅，D1~D4 ✅）
 
 #### G1 — isKilled 运行时 kill 开关 ✅
 
@@ -257,27 +317,33 @@ One-shot: 反向 jitter（提前触发），只在 `minute % one_shot_minute_mod
 - **G9**: SDK daemon 模式（`dir_override`/`lock_identity` 可选参数）
 - **G10**: `cron_to_human(utc)` UTC 模式（`utc` 参数，实际偏移到本地时区）
 
-#### D1~D4 — CCB 4 层累计防护 📋
+#### D1~D4 — CCB 4 层累计防护 ✅
 
-| 层级 | 机制 | 状态 |
-|:----:|------|:----:|
-| 第 1 层 | sourceId 级 Dedup — `create_queued_run()` 在 storage lock 下按 source_id 扫描活跃 run | 📋 设计完成 |
-| 第 2 层 | PID 活体检测 — `os.kill(pid, 0)` + `/proc/<pid>/comm` 白名单 | 📋 设计完成 |
-| 第 3 层 | inFlight 防重复 — scheduler 内 `_in_flight` Set + Lock 防止异步 IO 期间二次发射 | 📋 设计完成 |
-| 第 4 层 | 调度锁跨进程互斥 — `O_EXCL` 文件锁 + session takeover + stale recovery + atexit 清理 | 📋 设计完成 |
+| 层级 | 机制 | 状态 | 实施细节 |
+|:----:|------|:----:|----------|
+| 第 1 层 | sourceId 级 Dedup — `create_queued_run()` 在 storage lock 下按 source_id 扫描活跃 run | ✅ | `runs.py:get_active_run_for_source()` 在 `create_queued_run()` 内调用，storage lock 保护写路径；`create_queued_run_for_task()` 自动传入 `task.id` 作为 source_id |
+| 第 2 层 | PID 活体检测 — `os.kill(pid, 0)` + `/proc/<pid>/comm` 白名单 | ✅ | `lock.py:_pid_is_alive()` 通过 `os.kill(pid, 0)` 探测存活；`_default_pid_validator()` 额外检查 `/proc/<pid>/comm` 是否以 `python` 或 `clawcodex` 开头，防止 PID 被同名进程复用 |
+| 第 3 层 | inFlight 防重复 — scheduler 内 `_in_flight` Set + Lock 防止异步 IO 期间二次发射 | ✅ | `scheduler.py:CronScheduler._in_flight: set[str]` + `threading.Lock`；`check_once()` 在 fire 前 `_in_flight_add()`，`finally` 块保证 `_in_flight_remove()` 即使回调异常也释放 |
+| 第 4 层 | 调度锁跨进程互斥 — `O_EXCL` 文件锁 + session takeover + stale recovery + atexit 清理 | ✅ | `lock.py:CronTaskLock` 使用 `O_CREAT \| O_EXCL` 原子创建；`_recover_if_stale()` 通过 PID 活体检测判断 stale，自动接管；`register_lock_cleanup()` + `atexit` + `SIGTERM`/`SIGINT` 钩子保证清理 |
+
+**集成验证要点**：
+- D1: 同 task 的 consecutive due fires 应去重（`test_scheduler` 中已有 `due_same_task` 用例）
+- D2: `_pid_is_alive` 对无效 PID 返回 False，对当前进程返回 True
+- D3: `_in_flight` 在 `check_once` 异常路径下仍释放
+- D4: 两个 CLI 实例竞争锁，仅 lock owner 触发任务
 
 ### 1.8 端到端缺口（R1~R8）
 
-| ID | 缺口 | 状态 | 补齐要求 |
-|----|------|:----:|----------|
-| R1 | 真实 frontend/runtime 接线 | ✅ | REPL `_drain_cron_outbox()` 已消费 outbox |
-| R2 | scheduled fire 执行队列 | 📋 | 建立 `CronDispatchBridge`，进入 query pipeline |
-| R3 | run lifecycle finalize | 📋 | claim→running→completed/failed/cancelled；补齐字段 |
-| R4 | 用户管理入口 | 📋 | trigger detail、manual fire、status/runs richer output |
-| R5 | busy gate/filter 语义 | 📋 | `is_loading`、`assistant_mode`、`filter` 接入 frontend |
-| R6 | durable 文件 reload | 📋 | 首期 mtime polling，后续 watcher |
-| R7 | teammate/agent ownership | 📋 | 保留字段、过滤接口和 headless failed run |
-| R8 | CCB-compatible gate 命名 | 📋 | 兼容读取 `CLAUDE_CODE_DISABLE_CRON` |
+| ID | 缺口 | 状态 | 补齐要求 | 代码现状 |
+|----|------|:----:|----------|----------|
+| R1 | 真实 frontend/runtime 接线 | ✅ | REPL `_drain_cron_outbox()` 已消费 outbox | `clawcodex_ext/repl/core.py:_drain_cron_outbox()` + `clawcodex_ext/entrypoints/headless.py:_process_cron_outbox()` 均已实现 |
+| R2 | scheduled fire 执行队列 | 🔄 | 建立 `CronDispatchBridge`，进入 query pipeline | headless 有 `_drain_cron_outbox()` + `_process_cron_outbox()` 函数，REPL 有 `_drain_cron_outbox()`。但无正式 `CronDispatchBridge` 类，outbox 事件类型为原始 dict 而非 typed event |
+| R3 | run lifecycle finalize | ✅ | claim→running→completed/failed/cancelled；补齐字段 | `runs.py:claim_cron_run()` + `finalize_cron_run()` + `update_cron_run_status()` 全链路实现。headless `_claim_cron_task()` 调用 `claim_cron_run()` 并标记 started/failed/completed |
+| R4 | 用户管理入口 | 🔄 | trigger detail、manual fire、status/runs richer output | `CronRunTool`（manual fire）+ `get_cron_task_detail()` + `build_autonomy_status/runs()` + `/cron-status`、`/cron-runs`、`/cron-run` 命令均已实现。缺口：`/cron-trigger` 命令别名、`--deep` 在 `/cron-list` 中的集成 |
+| R5 | busy gate/filter 语义 | 🔄 | `is_loading`、`assistant_mode`、`filter` 接入 frontend | `scheduler.py:_is_loading_gate()` 已实现，`attach_cron_runtime()` 接收 `is_loading`/`assistant_mode` 参数。但 TUI 前端未传递 `is_loading` 回调 |
+| R6 | durable 文件 reload | 📋 | 首期 mtime polling，后续 watcher | 当前每次读文件（`read_cron_tasks()` 从头读），无增量 mtime 轮询或文件 watcher |
+| R7 | teammate/agent ownership | 📋 | 保留字段、过滤接口和 headless failed run | 同 Phase F。`CronTask` 模型无 `agent_id` 字段，`CronScheduler` 无 agent 过滤 |
+| R8 | CCB-compatible gate 命名 | 📋 | 兼容读取 `CLAUDE_CODE_DISABLE_CRON` | 当前仅读 `CLAWCODEX_DISABLE_CRON`，未回退到 `CLAUDE_CODE_DISABLE_CRON` |
 
 ### 1.9 完成标准（端到端）
 
@@ -310,16 +376,27 @@ One-shot: 反向 jitter（提前触发），只在 `minute % one_shot_minute_mod
 
 ### 2.2 当前瓶颈
 
-- Phase F: teammate/agent ownership 未设计
-- R2~R8: 7 个端到端缺口待实现
-- D1~D4: CCB 4 层累计防护设计完成，待集成验证
-- TUI outbox drain 待接线
+| 优先级 | 瓶颈 | 原因 | 影响范围 |
+|:------:|------|------|----------|
+| P0 | TUI outbox drain 未接线 | TUI 前端 (`clawcodex_ext/frontend/tui.py`) 无 cron outbox 消费逻辑 | TUI 模式下 cron 任务不会触发执行 |
+| P0 | R2: 无正式 CronDispatchBridge | headless 和 REPL 各有 ad-hoc drain 函数，但无 typed dispatch 类 | 事件类型不统一，新前端需重复实现 drain 逻辑 |
+| P0 | R5: TUI 未传递 `is_loading` 回调 | `attach_cron_runtime()` 的 `is_loading` 参数在 TUI 前端未传入 | TUI 模式可能错过 busy gate，cron 在 agent 响应期间抢跑 |
+| P1 | Phase F: teammate/agent ownership | `CronTask` 无 `agent_id` 字段，`CronScheduler` 无 agent 过滤 | 多 agent 场景下任务归属混乱 |
+| P1 | R6: 无 durable 文件 mtime 轮询 | 每次读全量文件，多会话场景下高并发 I/O | 大文件场景性能瓶颈 |
+| P1 | R8: 未兼容 CLAUDE_CODE_DISABLE_CRON | 仅读 `CLAWCODEX_DISABLE_CRON` | 从 CCB 迁移的用户环境变量不生效 |
+| P2 | R4: 缺少 `/cron-trigger` 命令别名 | `/cron-run` 已存在但无 `trigger` 别名 | 用户发现成本高 |
+| P2 | R4: `--deep` 未集成到 `/cron-list` | `build_autonomy_status()` 支持 `deep` 参数但 `/cron-list` 命令未传递 | 任务列表默认截断 |
 
 ### 2.3 下一步计划
 
-1. R2: scheduled fire 执行队列（CronDispatchBridge）
-2. R3: run lifecycle finalize + 完整账本字段
-3. R4: 用户入口（trigger detail, manual fire, status/runs)
+1. **P0**: TUI outbox drain 接线 — `clawcodex_ext/frontend/tui.py` 增加 `_drain_cron_outbox()` 类似 headless/REPL
+2. **P0**: CronDispatchBridge 正式化 — 将 ad-hoc drain 函数抽象为 typed dispatch 类，统一 REPL/headless/TUI 三端行为
+3. **P0**: TUI 传递 `is_loading` 回调 — 防止 cron 在 agent 响应期间抢跑
+4. **P1**: Phase F 实施步骤 1-2 — `CronTask.agent_id` 字段 + `CronScheduler` agent 过滤
+5. **P1**: R6 durable 文件 mtime 轮询 — 减少全量读取 I/O
+6. **P1**: R8 兼容 `CLAUDE_CODE_DISABLE_CRON` — 环境变量回退读取
+7. **P2**: Phase F 步骤 3-4 — 工具层归属过滤
+8. **P2**: R4 补齐 — `/cron-trigger` 别名、`--deep` 集成到 `/cron-list`
 
 ## §3 实施细节
 
@@ -366,10 +443,11 @@ One-shot: 反向 jitter（提前触发），只在 `minute % one_shot_minute_mod
 
 ### 3.3 手工验收流程
 
+**基础流程**（Phase A~E + G1~G10 + D1~D4）:
 1. 启动 ClawCodex，确认 cron gate 未禁用
 2. `/loop 1m check status` 创建 session-only recurring task
 3. `/cron-list` 确认任务存在（ID、human schedule、prompt、recurring、durable）
-4. 创建 durable one-shot task，确认 `.claude/scheduled_tasks.json` 写入
+4. 创建 durable one-shot task，确认 `.clawcodex/cron/scheduled_tasks.json` 写入
 5. 构造 due time，确认任务进入 queued/running/completed/failed 记录
 6. 用 status/runs 命令查看结果
 7. `/cron-delete <id>` 删除任务，确认 session store 与 durable file 更新
@@ -377,12 +455,32 @@ One-shot: 反向 jitter（提前触发），只在 `minute % one_shot_minute_mod
 9. 构造 missed durable one-shot，确认提示用户确认
 10. 两个 CLI 实例，确认只有 lock owner 触发任务
 
+**D1~D4 专项验证**:
+11. D1: 同一 task 在 1 秒内连续 due 两次，确认仅生成 1 个 run（D1 去重）
+12. D2: 手动 kill scheduler 进程，新进程接管锁（D2 PID 活体 + D4 stale recovery）
+13. D3: 在 `on_fire_task` 回调中抛出异常，确认 `_in_flight` 释放且后续 due 正常触发
+14. D4: 两个 CLI 实例同时启动，查看 `.clawcodex/cron/scheduled_tasks.lock` 确认仅一个 owner
+
+**TUI 专项验证**（TUI outbox drain 接线后）:
+15. 在 TUI 模式下启动，`/cron-status` 确认任务存在
+16. 等待 due time，确认任务自动触发并显示在输出中
+
+**Phase F 专项验证**（实施后）:
+17. 创建 agent-scoped cron，确认另一 agent 的 `/cron-list` 不显示该任务
+18. 退出 owner agent，确认 orphaned task 状态变为 `orphaned`
+19. headless 模式创建带 `agent_id` 的任务，确认返回 failed run
+
 ### 3.4 风险与约束
 
-- REPL/TUI/headless 三端队列接线需分别验证
-- durable 文件在多会话场景下的热加载稳定性
-- CCB 4 层累计防护的集成验证时间
-- F-22 不应在只有单元测试通过时标记完成，必须端到端 smoke 通过
+| 风险 | 等级 | 影响 | 缓解措施 |
+|------|:----:|------|----------|
+| REPL/TUI/headless 三端队列接线需分别验证 | P0 | TUI 模式下 cron 任务不触发执行 | TUI outbox drain 接线后增加专项验收流程（§3.3 第 15-16 步） |
+| durable 文件在多会话场景下的热加载稳定性 | P1 | 多进程同时读写 `.clawcodex/cron/scheduled_tasks.json` 导致数据竞争 | D4 调度锁 + storage lock 双重保护；`read_cron_tasks()` 每次全量读确保一致性 |
+| TUI 模式缺少 `is_loading` 回调 | P0 | cron 在 agent 响应期间抢跑 | 在 `clawcodex_ext/frontend/tui.py` 中传递 `is_loading` 回调 |
+| F-22 不应在只有单元测试通过时标记完成 | P0 | 端到端行为未验证 | 必须通过 §3.3 手工验收流程才能标记完成 |
+| D1~D4 集成验证覆盖不全 | P1 | 4 层累计防护的单点测试通过但联动行为未验证 | 已增加 D1~D4 专项验证流程（§3.3 第 11-14 步） |
+| Phase F 与 teammate runtime 的时序耦合 | P1 | ownership 行为依赖 teammate 子系统先上线 | Phase F 分步实施：模型扩展 + 调度器过滤可独立交付 |
+| 文件路径从 `.claude/` 迁移到 `.clawcodex/cron/` 的向后兼容 | P2 | 旧版用户升级后无法找到已有任务 | `read_cron_tasks()` 应回退读取 `.claude/scheduled_tasks.json` |
 
 ## §4 变更记录
 
@@ -390,3 +488,4 @@ One-shot: 反向 jitter（提前触发），只在 `minute % one_shot_minute_mod
 |------|------|------|
 | 2026-06-24 | 初始创建（从四源融合） | 四文档合并 |
 | 2026-06-24 | 补全详细设计（架构+Phase A~E+CCB 缺口+文件格式+测试） | 对齐 FEATURE_PLAN.legacy.md |
+| 2026-07-21 | **补全特性缺口**：Phase F 详细设计（F-1~F-6）、D1~D4 状态从 📋→✅ 并补充实施细节、R1~R8 状态基于代码审查更新、§2 瓶颈与下一步计划重排、§3 手工验收流程扩展 + 风险表重构 | 代码审查后发现文档与代码状态脱节 |

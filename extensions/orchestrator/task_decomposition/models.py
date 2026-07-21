@@ -13,10 +13,14 @@ class Subtask:
     description: str
     depends_on: tuple[str, ...] = ()
     verification: str = ""
+    affected_files: tuple[str, ...] = ()
+    token_cost: float = 0.0
+    budget: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         row = asdict(self)
         row["depends_on"] = list(self.depends_on)
+        row["affected_files"] = list(self.affected_files)
         row.update(
             {
                 "status": "pending",
@@ -62,11 +66,33 @@ class TaskPlan:
             raise ValueError("max_parallel must be at least one")
         if any(len(wave) > self.max_parallel for wave in self.waves):
             raise ValueError("execution wave exceeds max_parallel")
+        self._check_file_conflicts()
         wave_index = {task_id: index for index, wave in enumerate(self.waves) for task_id in wave}
         for task in self.subtasks:
             for dependency in task.depends_on:
                 if wave_index[dependency] >= wave_index[task.id]:
                     raise ValueError(f"subtask {task.id} must run after dependency {dependency}")
+
+    def _check_file_conflicts(self) -> None:
+        """Check that no two parallel subtasks (same wave) write to the same file.
+
+        Only subtasks with non-empty ``affected_files`` are considered.
+        """
+        file_owners: dict[str, str] = {}
+        for wave in self.waves:
+            for task_id in wave:
+                task = next(t for t in self.subtasks if t.id == task_id)
+                if not task.affected_files:
+                    continue
+                for f in task.affected_files:
+                    if f in file_owners:
+                        prev_id = file_owners[f]
+                        raise ValueError(
+                            f"file conflict: {f} is claimed by both "
+                            f"subtask {prev_id} and subtask {task_id} (same wave)"
+                        )
+                    file_owners[f] = task_id
+            file_owners.clear()
 
     def to_dict(self) -> dict[str, Any]:
         return {

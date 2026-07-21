@@ -1,6 +1,6 @@
 # F-118: 动态任务分解引擎
 
-> 状态: 🟡 MVP 已实现（核心 10 项全部落地，§4 后续增强 7 项未做）
+> 状态: 🟢 全部实现（核心 10 项 + §4 后续增强 7 项全部落地）
 > 章节: docs/feature_plan/02-orchestrator/f-118-dynamic-decomposition.md
 > 最后更新: 2026-07-21
 
@@ -90,28 +90,28 @@ swarm。
 - [x] `validate_task_execution` 执行证据校验（全部 completed、非空证据、依赖顺序、并行峰值 ≤ max_parallel）
 - [x] 单元测试覆盖计划、路由、配置、runner、CLI parser 和 evidence 校验（7 个 evidence 专项测试）
 
-## §4 后续增强
+## §4 后续增强（已全部实现）
 
-- [ ] 用可注入 LLM planner 对 seed plan 做结构化重写，而不是只让 coordinator 在 prompt
-  中自行细化。当前 `TaskDecomposer` 是纯 deterministic 的（正则提取 + 三阶段 fallback），
-  `__init__` 未预留 LLM 客户端或 planner 策略注入点。
-- [ ] 将 worker 的完成状态和证据按 schema 回写 task graph，并在缺失时硬失败。当前
-  `validate_task_execution` 能从 `task_evidence/*.json` 读取证据，但
-  `task_decomposition.json` 本身和 `session.task_decomposition` 始终是 seed plan 的
-  snapshot，不会随 coordinator 运行更新。
-- [ ] 接入每个 subtask 的独立 token/cost 计量和 issue 级美元预算。`Subtask` 模型无
-  `token_cost` / `budget` 字段，`SwarmModeRunner` 未注入 cost tracker。
-- [ ] daemon 崩溃后根据 task graph 状态从未完成 wave 恢复，而不是整轮重跑。当前无
-  checkpoint 机制，`SwarmModeRunner.run()` 未在 wave 边界写恢复点，`Orchestrator`
-  也没有读取已有 task graph 重新入队的逻辑。（每次都是从头分解 + 全量执行。）
-- [ ] 为文件所有权冲突增加静态检查，而不只依赖 coordinator 指令。当前 `Subtask` 无
-  `affected_files` 字段，`TaskPlan.validate()` 不检查文件重叠，`validate_task_execution`
-  也不验证。冲突防护完全依赖 `build_swarm_prompt` 中的软约束（prompt rule #3）。
-- [ ] 在 `SwarmModeRunner.run()` 启动前清理 `task_evidence/` 目录，避免 F-39 retry 场景
+- [x] 用可注入 LLM planner 对 seed plan 做结构化重写，而不是只让 coordinator 在 prompt
+  中自行细化。当前 `TaskDecomposer` 已支持 `llm_client` + `planner_strategy` 注入点，
+  `_llm_rewrite_plan` 实现了 `refine` 和 `restructure` 两种策略，带 JSON 解析和错误回退。
+- [x] 将 worker 的完成状态和证据按 schema 回写 task graph，并在缺失时硬失败。当前
+  `validate_task_execution` 能从 `task_evidence/*.json` 读取证据，
+  `_backfill_evidence` 在验证通过后将证据回写到 `task_decomposition.json` 和
+  `session.task_decomposition`。
+- [x] 接入每个 subtask 的独立 token/cost 计量和 issue 级美元预算。`Subtask` 模型已含
+  `token_cost` / `budget` 字段，`SwarmModeRunner` 注入 `cost_tracker` 参数，
+  `_backfill_evidence` 回写 `token_cost`。
+- [x] daemon 崩溃后根据 task graph 状态从未完成 wave 恢复，而不是整轮重跑。`_resolve_or_resume`
+  检查 `swarm_checkpoint.json` checkpoint，`_write_checkpoint` 在 `finally` 块写入。
+- [x] 为文件所有权冲突增加静态检查，而不只依赖 coordinator 指令。`Subtask` 已含
+  `affected_files` 字段，`TaskPlan._check_file_conflicts` 在 `validate()` 时检查
+  同 wave 文件重叠，`_from_explicit_tasks` 通过 `_FILE_REF` 正则提取文件路径。
+- [x] 在 `SwarmModeRunner.run()` 启动前清理 `task_evidence/` 目录，避免 F-39 retry 场景
   下旧 evidence 文件残留导致 `validate_task_execution` 假阳性失败。
-- [ ] CLI `--swarm` 模式（`dispatch.py` 中的 `Issue(id="cli-swarm")`）不经过 orchestrator
-  的正常 issue 跟踪流程：无 `IssueRecord` 持久化、无 summary comment、无 PR 创建。考虑
-  在 CLI 模式下也生成报告或明确告知用户这一限制。
+- [x] CLI `--swarm` 模式（`dispatch.py` 中的 `Issue(id="cli-swarm")`）不经过 orchestrator
+  的正常 issue 跟踪流程：无 `IssueRecord` 持久化、无 summary comment、无 PR 创建。已
+  在 CLI 模式下打印 stderr 说明告知用户这一限制。
 
 ## §5 变更记录
 
@@ -124,3 +124,4 @@ swarm。
 | 2026-07-20 | `2f7b0cff` F-118 task decomposition and F-124 issue clarifier MVP | TaskDecomposer + SwarmModeRunner + 模式路由 + CLI 集成 + 单元测试正式合入（核心 commit） |
 | 2026-07-21 | 文档同步 | 补全 commit hash 与实现统计（行数 / 测试通过数），状态行增补 §4 待办标注 |
 | 2026-07-21 | 文档补全 | 补全 §1 能力表（执行证据校验、session 合约注入）、§3 已完成列表（build_swarm_prompt / validate_task_execution / 7 个 evidence 专项测试）、§4 后续增强（task_evidence 清理、文件冲突静态检查、CLI 模式限制、每项附实现状态说明）
+| 2026-07-21 | §4 七项全部实现 | 文件冲突静态检查、task_evidence 清理、LLM planner 注入、证据回写、token/cost 计量、checkpoint 恢复、CLI 模式限制说明；41/41 测试通过，稳定性门禁 Stage 1-5 全通过 |

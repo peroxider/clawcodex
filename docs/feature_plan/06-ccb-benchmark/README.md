@@ -14,7 +14,7 @@
 | 文档 | 范围 | 状态 |
 |------|------|:----:|
 | [f-64-voice-mode.md](./f-64-voice-mode.md) | F-64 Voice Mode 语音输入 | 🔄 |
-| [f-65-voice-dialogue.md](./f-65-voice-dialogue.md) | **F-65 Voice Dialogue 全双工语音对话** | 📋 |
+| [f-65-voice-dialogue.md](./f-65-voice-dialogue.md) | **F-65 Voice Dialogue 全双工语音对话** | ✅ |
 | [f-66-acp-protocol.md](./f-66-acp-protocol.md) | F-66 ACP 协议支持 | 🚧 |
 | [f-69-budget-mode.md](./f-69-budget-mode.md) | F-69 Budget / Poor Mode 资源节俭 | 🔄 |
 | [f-70-plugin.md](./f-70-plugin.md) | F-70 Plugin 插件系统基础框架 | 🔄 |
@@ -37,7 +37,7 @@
 | [f-96-cache-break-detection.md](./f-96-cache-break-detection.md) | F-96 PROMPT_CACHE_BREAK_DETECTION 缓存命中率监测 | 📋 |
 | [f-98-ssh-remote.md](./f-98-ssh-remote.md) | F-98 SSH_REMOTE 远程模式（协同 F-74） | 📋 |
 | [f-99-direct-connect.md](./f-99-direct-connect.md) | F-99 DIRECT_CONNECT 直连模式 | 🔄 |
-| [f-125-headless-multi-turn.md](./f-125-headless-multi-turn.md) | **F-125**: Headless 无头模式多轮交互 + `--resume` 冲突分析 | 🚧 |
+| [f-125-headless-multi-turn.md](./f-125-headless-multi-turn.md) | **F-125**: Headless 无头模式多轮交互 + `--resume` 冲突分析 | ✅ |
 
 ## 阅读建议
 

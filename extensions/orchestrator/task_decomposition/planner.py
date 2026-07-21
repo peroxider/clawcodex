@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Awaitable
 
 from .models import Subtask, TaskPlan
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from ..issue import Issue
+
+    # Optional async LLM client: prompt → response.
+    LLMClient = Callable[[str], str | Awaitable[str]]
 
 
 _LIST_ITEM = re.compile(r"^\s*(?:[-*]\s+|\d+[.)]\s+)(.+?)\s*$")
@@ -38,10 +44,45 @@ _VERIFICATION_MARKERS = (
     "回归",
     "检查",
 )
+_FILE_REF = re.compile(
+    r"(?:^|\s|[,;:])"
+    r"("
+    r"(?:src|tests?|docs?|lib|app|extensions|clawcodex_ext|"
+    r"scripts?|config|tools?|data|assets?|static|public|"
+    r"views?|models?|controllers?|services?|utils?|helpers?|"
+    r"middleware|routes?|api|migrations?|seeds?|fixtures?|"
+    r"hooks?|layouts?|components?|pages?|stores?|composables?|"
+    r"plugins?|providers?|composables?)"
+    r"(?:/[\w.\-]+)+"
+    r")"
+    r"(?:\s|$|[,;:])",
+    re.VERBOSE,
+)
 
 
 class TaskDecomposer:
-    """Create a bounded seed graph that the coordinator may refine at runtime."""
+    """Create a bounded seed graph that the coordinator may refine at runtime.
+
+    Parameters
+    ----------
+    max_subtasks
+        Hard upper bound on the number of subtasks (default 8).
+    max_parallel
+        Max workers allowed in a single wave (default 3).
+    max_waves
+        Max execution waves (default 6).
+    llm_client
+        Optional async callable ``(prompt: str) -> str`` for LLM-based plan
+        restructuring. When ``None`` (default), the decomposer is purely
+        deterministic (regex extraction + three-stage fallback).
+    planner_strategy
+        Controls how the LLM rewrites the seed plan:
+        - ``"none"`` (default): skip LLM rewriting entirely.
+        - ``"refine"``: improve task descriptions, dependencies, and
+          ``affected_files`` without changing the task count or wave structure.
+        - ``"restructure"``: allow the LLM to reorganize tasks, dependencies,
+          and waves within the configured bounds.
+    """
 
     def __init__(
         self,
@@ -49,12 +90,21 @@ class TaskDecomposer:
         max_subtasks: int = 8,
         max_parallel: int = 3,
         max_waves: int = 6,
+        llm_client: "LLMClient | None" = None,
+        planner_strategy: str = "none",
     ) -> None:
         self.max_subtasks = max(1, int(max_subtasks))
         self.max_parallel = max(1, int(max_parallel))
         self.max_waves = max(1, int(max_waves))
+        self._llm_client = llm_client
+        if planner_strategy not in ("none", "refine", "restructure"):
+            raise ValueError(
+                f"planner_strategy={planner_strategy!r}; expected one of: "
+                f"'none', 'refine', 'restructure'"
+            )
+        self._planner_strategy = planner_strategy
 
-    def decompose_issue(self, issue: "Issue") -> TaskPlan:
+    async def decompose_issue(self, issue: "Issue") -> TaskPlan:
         title = str(issue.title or issue.identifier or issue.id or "Complex task").strip()
         description = str(issue.description or "").strip()
         explicit = self._extract_explicit_tasks(description)
@@ -76,8 +126,84 @@ class TaskDecomposer:
             waves=waves,
             max_parallel=self.max_parallel,
         )
+        plan = await self._llm_rewrite_plan(plan, issue)
         plan.validate(max_subtasks=self.max_subtasks, max_waves=self.max_waves)
         return plan
+
+    async def _llm_rewrite_plan(self, plan: TaskPlan, issue: "Issue") -> TaskPlan:
+        """Optionally refine or restructure the seed plan via the configured LLM client.
+
+        Returns the (possibly modified) plan. When no LLM client is configured
+        or the strategy is ``"none"``, the plan is returned unchanged.
+        """
+        if self._llm_client is None or self._planner_strategy == "none":
+            return plan
+
+        instruction = (
+            "Refine the task descriptions, dependencies, and affected_files "
+            "to better match the issue. Keep the same task count and wave structure."
+            if self._planner_strategy == "refine"
+            else (
+                "Reorganize tasks, dependencies, and waves to best solve the issue. "
+                f"Stay within {self.max_subtasks} subtasks, {self.max_waves} waves, "
+                f"and at most {self.max_parallel} parallel tasks per wave."
+            )
+        )
+        prompt = (
+            f"You are a task planner. Given this issue:\n\n"
+            f"Title: {issue.title}\n"
+            f"Description: {issue.description}\n\n"
+            f"Current plan:\n{json.dumps(plan.to_dict(), ensure_ascii=False, indent=2)}\n\n"
+            f"{instruction}\n\n"
+            f"Respond with a JSON object matching the TaskPlan schema exactly: "
+            f'{{"goal": str, "subtasks": [{{"id", "title", "description", '
+            f'"depends_on": [str], "affected_files": [str], "verification": str}}], '
+            f'"waves": [[str]], "max_parallel": int, "version": int}}'
+        )
+        result = self._llm_client(prompt)
+        if isinstance(result, Awaitable):
+            result = await result
+        try:
+            data = json.loads(result)
+            subtasks = tuple(
+                Subtask(
+                    id=s["id"],
+                    title=s.get("title", "")[:120],
+                    description=s.get("description", ""),
+                    depends_on=tuple(s.get("depends_on", [])),
+                    verification=s.get("verification", ""),
+                    affected_files=tuple(s.get("affected_files", [])),
+                )
+                for s in data.get("subtasks", [])
+            )
+            if not subtasks:
+                logger.warning("LLM planner returned empty subtask list; using seed plan")
+                return plan
+            revised = TaskPlan(
+                goal=data.get("goal", plan.goal),
+                subtasks=subtasks,
+                waves=tuple(tuple(w) for w in data.get("waves", [])),
+                max_parallel=data.get("max_parallel", plan.max_parallel),
+            )
+            # Validate the revised plan; fall back to seed on failure.
+            revised.validate(
+                max_subtasks=self.max_subtasks,
+                max_waves=self.max_waves,
+            )
+            logger.info(
+                "LLM planner (%s) revised plan: %d subtasks, %d waves",
+                self._planner_strategy,
+                len(revised.subtasks),
+                len(revised.waves),
+            )
+            return revised
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            logger.warning(
+                "LLM planner (%s) failed; using seed plan. Reason: %s",
+                self._planner_strategy,
+                exc,
+            )
+            return plan
 
     def _extract_explicit_tasks(self, description: str) -> list[str]:
         tasks: list[str] = []
@@ -110,6 +236,9 @@ class TaskDecomposer:
             if index > 1 and any(marker in normalized for marker in _SEQUENTIAL_MARKERS):
                 dependencies.append(f"task-{index - 1}")
             depends_on = tuple(dict.fromkeys(dependencies))
+            affected_files = tuple(
+                sorted(set(m for m in _FILE_REF.findall(row) if m))
+            )
             tasks.append(
                 Subtask(
                     id=task_id,
@@ -117,6 +246,7 @@ class TaskDecomposer:
                     description=row,
                     depends_on=depends_on,
                     verification="Report concrete evidence and changed files.",
+                    affected_files=affected_files,
                 )
             )
             if is_discovery:
@@ -329,7 +459,7 @@ Issue: {issue.title or issue.identifier or issue.id}
 Description:
 {description}
 
-The seed plan below is stored at {plan_path}. Review it before acting. You may refine task descriptions or dependencies, but stay within {len(plan.subtasks)} subtasks, {len(plan.waves)} waves, and at most {plan.max_parallel} active workers.
+The seed plan below is stored at {plan_path}. Review it before acting. You may refine task descriptions, dependencies, or affected_files, but stay within {len(plan.subtasks)} subtasks, {len(plan.waves)} waves, and at most {plan.max_parallel} active workers. The plan has been statically checked for file conflicts: no two parallel subtasks claim the same file. If you add new tasks, preserve this constraint.
 
 {plan_json}
 

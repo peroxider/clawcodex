@@ -41,27 +41,27 @@ class FakeAgentRunner:
         return "done"
 
 
-def test_fallback_plan_is_investigate_implement_verify() -> None:
-    plan = TaskDecomposer().decompose_issue(
+async def test_fallback_plan_is_investigate_implement_verify() -> None:
+    plan = await TaskDecomposer().decompose_issue(
         Issue(id="1", title="Fix race", description="The operation races in production")
     )
     assert [task.id for task in plan.subtasks] == ["task-1", "task-2", "task-3"]
     assert plan.waves == (("task-1",), ("task-2",), ("task-3",))
 
 
-def test_explicit_independent_tasks_share_waves() -> None:
+async def test_explicit_independent_tasks_share_waves() -> None:
     issue = Issue(
         id="1",
         title="Migration",
         description="- Update API\n- Update CLI\n- Update docs\n- Then run integration tests",
     )
-    plan = TaskDecomposer(max_parallel=2).decompose_issue(issue)
+    plan = await TaskDecomposer(max_parallel=2).decompose_issue(issue)
     assert len(plan.subtasks) == 4
     assert all(len(wave) <= 2 for wave in plan.waves)
     assert plan.subtasks[-1].depends_on == ("task-1", "task-2", "task-3")
 
 
-def test_explicit_plan_infers_discovery_implementation_and_verification_dependencies() -> None:
+async def test_explicit_plan_infers_discovery_implementation_and_verification_dependencies() -> None:
     issue = Issue(
         id="1",
         title="Provider refactor",
@@ -73,7 +73,7 @@ def test_explicit_plan_infers_discovery_implementation_and_verification_dependen
             "- 执行验证并整理结果"
         ),
     )
-    plan = TaskDecomposer(max_parallel=3).decompose_issue(issue)
+    plan = await TaskDecomposer(max_parallel=3).decompose_issue(issue)
     assert plan.subtasks[0].depends_on == ()
     assert plan.subtasks[1].depends_on == ("task-1",)
     assert plan.subtasks[2].depends_on == ("task-1",)
@@ -106,19 +106,19 @@ def test_plan_validation_rejects_dependency_in_same_or_later_wave() -> None:
         plan.validate(max_subtasks=4, max_waves=4)
 
 
-def test_long_sequential_plan_falls_back_within_wave_budget() -> None:
+async def test_long_sequential_plan_falls_back_within_wave_budget() -> None:
     issue = Issue(
         id="1",
         title="Long validation",
         description="\n".join(f"- Then verify step {index}" for index in range(1, 9)),
     )
-    plan = TaskDecomposer(max_subtasks=8, max_waves=2).decompose_issue(issue)
+    plan = await TaskDecomposer(max_subtasks=8, max_waves=2).decompose_issue(issue)
     assert len(plan.waves) == 2
     assert [task.id for task in plan.subtasks] == ["task-1", "task-2"]
 
 
-def test_single_wave_fallback_still_requires_end_to_end_verification() -> None:
-    plan = TaskDecomposer(max_subtasks=8, max_waves=1).decompose_issue(
+async def test_single_wave_fallback_still_requires_end_to_end_verification() -> None:
+    plan = await TaskDecomposer(max_subtasks=8, max_waves=1).decompose_issue(
         Issue(id="1", title="Bounded", description="Do a complex migration")
     )
     assert plan.waves == (("task-1",),)
@@ -126,8 +126,8 @@ def test_single_wave_fallback_still_requires_end_to_end_verification() -> None:
     assert "verify" in plan.subtasks[0].title.lower()
 
 
-def test_plan_is_written_as_structured_json(tmp_path) -> None:
-    plan = TaskDecomposer().decompose_issue(Issue(id="1", title="Fix", description="Fix it"))
+async def test_plan_is_written_as_structured_json(tmp_path) -> None:
+    plan = await TaskDecomposer().decompose_issue(Issue(id="1", title="Fix", description="Fix it"))
     path = write_task_plan(plan, tmp_path)
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert path.name == "task_decomposition.json"

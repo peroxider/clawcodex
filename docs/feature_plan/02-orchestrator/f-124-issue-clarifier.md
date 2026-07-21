@@ -1,6 +1,6 @@
 # F-124: Issue 澄清器 — 描述不清晰自动检测与澄清闭环
 
-> 状态: 🟡 MVP 已实现（核心 11/15 落地，仅 F-124-G 评论写入 + F-124-L workspace focus 富化未做）
+> 状态: 🟢 MVP 已实现（核心 12/15 落地；仅 F-124-L workspace focus 富化 + 3 项运营增强未做）
 > 章节: docs/feature_plan/02-orchestrator/f-124-issue-clarifier.md
 > 最后更新: 2026-07-21
 > 关联能力: F-38（验证+报告+PR）、F-39（issue 重跑标签）、F-121（规则回灌）、F-123（Intent Forecast）
@@ -36,7 +36,7 @@ F-124 已完成可运行 MVP，但实现方式与本文最初草案有三处重�
 - `orchestrator issue clarify` 支持当前 workspace 队列、list/recheck/resolve。
 - 单元测试覆盖 clear/unclear、缓存、降级、阻断、回复放行、多轮上限、观察模式和 CLI。
 
-尚未完成：
+尚未完成（仅 F-124-G 评论写入已通过 ClarificationResolver 统一通道实现）：
 
 - 真实 provider + GitCode/GitHub tracker 的长期 daemon E2E。
 - 可选的专用“等待澄清”远端标签；不能直接复用当前永久 `agent:blocked`。
@@ -242,7 +242,7 @@ IssueClarifierService.analyze(issue + replies)
 | F-124-D | 响应解析：`parse_clarify_response()` — `ClarifyResult` dataclass + 降级处理 | P0 | ✅ |
 | F-124-E | Orchestrator 集成：`IssueClarificationGate.should_dispatch()` 在 `_poll_and_dispatch()` 之前（**已偏离 §1.5 原草案的 `_claim_next_issue()`**，因该方法不存在） | P0 | ✅（接入点不同） |
 | F-124-F | IssueRegistry 扩展：`IssueRecord.open_questions` + `clarification_round` + `clarifier_fingerprint` 字段；复用已有 `update_clarification` 底层 | P0 | ✅ |
-| F-124-G | Tracker 评论写入：`TrackerAdapter.post_clarification_comment()` | P0 | ⚠️ 未实现（实际通过 ClarificationResolver 统一处理评论流，避免双通道） |
+| F-124-G | Tracker 评论写入：`TrackerAdapter.create_clarification_comment()` override | P0 | ✅（实现方式偏离 §2.8 原草案；统一走 ClarificationResolver 通道，避免双通道；LocalTracker / RepoTracker / LinearAdapter 全部覆盖） |
 | F-124-H | 澄清回复检测：`IssueClarificationGate.should_dispatch()` 内联检测 author 回复（**已偏离原 `ClarificationPoller` 独立模块设计**，合并到 gate 中） | P1 | ✅（合并实现） |
 | F-124-I | 多轮澄清上限：最多 `max_rounds` 轮自动追问，超过转 `manual_required` | P1 | ✅ |
 | F-124-J | F-39 标签镜像：通过 `ClarificationResolver` 复用，**不复用永久 `Intent.BLOCKED`**（详见 §0 注 3） | P0 | ✅（复用现有机制） |
@@ -268,7 +268,8 @@ IssueClarifierService.analyze(issue + replies)
 | `extensions/orchestrator/config/schema.py` | — | 修改 | `ClarifierConfig` dataclass（L921）+ `WorkflowConfig.clarifier`（L957）+ from_dict 解析（L1251-1267） | ✅ |
 | `extensions/orchestrator/orchestrator.py` | — | 修改 | `_poll_and_dispatch()` 之前调用 `IssueClarificationGate.should_dispatch()` | ✅ |
 | `extensions/orchestrator/issue_registry.py` | — | 修改 | `IssueRecord` 新增 `open_questions`/`clarification_round`/`clarifier_fingerprint`/`clarification_replies` 等字段 | ✅ |
-| `extensions/orchestrator/tracker.py` | — | 修改 | `post_clarification_comment()` 默认 `return None`（**未做**：未单独加方法，统一通过 ClarificationResolver） | ⚠️ 偏离 |
+| `extensions/orchestrator/tracker.py` | — | 已存在 | `create_clarification_comment()` 默认 `return None`（与 F-124 设计偏差：未新建 `post_clarification_comment`，统一走 ClarificationResolver 通道） | ✅ 已有 |
+| `extensions/orchestrator/linear/adapter.py` | — | 修改 | `create_clarification_comment()` override（拼接 `@login` 前缀后委托 `create_comment`） | ✅ |
 | `extensions/orchestrator/prompt_builder.py` | — | 修改 | `render(clarification=...)` 槽位 | ✅ |
 | `extensions/orchestrator/cli/issue.py` | — | 修改 | `orchestrator clarify list/recheck/resolve` 子命令注册 | ✅ |
 | `tests/orchestrator/test_issue_clarifier.py` | 631 | **新增** | 单元测试（clear/unclear/cache/polling/multiround/observation/fallback） | ✅ |
@@ -1018,3 +1019,4 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 | 2026-07-11 | 完成 bounded MVP；§0 三处调整落地：复用 ClarificationResolver / 接入点改为 `_poll_and_dispatch` / 不复用永久 `Intent.BLOCKED`；新增 `IssueClarificationGate` 类合并原 `ClarificationPoller` 职责 | 避免与已有澄清基础设施重复，遵守 CLAUDE.md 解耦原则（模式 B 猴补丁而非新建运行时） |
 | 2026-07-20 | `2f7b0cff` feat(orchestrator): F-118 task decomposition and F-124 issue clarifier MVP | **核心 commit**：F-124 与 F-118 一起合入。issue_clarifier 7 个模块（775 行）+ 单元测试（631 行）正式落地 |
 | 2026-07-21 | 文档同步 | 更新 §1.6 子特性表（13 ✅ + 1 ❌ P2 + 1 ⚠️ 偏离）、§1.7 实现文件清单（标行数与偏离）、§2.1 注 2 配置默认值差异表、§4 验收标准（18/19 勾选）、§6 变更记录 |
+| 2026-07-21 | 补 F-124-G：LinearAdapter.create_clarification_comment override + 文档同步 | 完成 LinearAdapter 评论写入能力（拼接 `@login` 前缀后委托 `create_comment`）；F-124-G 从 ⚠️ 标为 ✅（实现方式偏离原草案，统一走 ClarificationResolver 通道，避免双通道） |

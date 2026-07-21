@@ -181,6 +181,18 @@ class LinearAdapter(TrackerAdapter):
             raise LinearAdapterError("comment_update_failed")
         return _comment_from_node(result.get("comment"))
 
+    async def create_clarification_comment(
+        self,
+        issue_id: str,
+        body: str,
+        mentions: list[str] | None = None,
+    ) -> Comment | None:
+        mention_prefix = " ".join(
+            f"@{login.strip()}" for login in (mentions or []) if login.strip()
+        )
+        comment_body = f"{mention_prefix}\n\n{body}" if mention_prefix else body
+        return await self.create_comment(issue_id, comment_body)
+
     async def update_issue_state(self, issue_id: str, state: str) -> None:
         # Map orchestrator-internal terminal states to Linear-compatible
         # workflow state names. Linear teams commonly name their final
