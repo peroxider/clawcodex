@@ -6,6 +6,7 @@ import asyncio
 
 import pytest
 
+from clawcodex_ext.capabilities.multimodel_protocol import AggregatedOutput
 from clawcodex_ext.multimodel import (
     FallbackStrategy,
     MultiModelRouter,
@@ -123,3 +124,26 @@ def test_router_emits_slot_progress_completion_and_weighted_vote() -> None:
     assert [kind for kind, _ in events].count("progress") == 2
     assert [kind for kind, _ in events].count("complete") == 2
     assert router.last_aggregated.vote_summary["majority_weight"] == 4
+
+
+def test_router_passes_the_latest_user_request_to_aggregators() -> None:
+    class RecordingAggregator:
+        def __init__(self) -> None:
+            self.context: dict = {}
+
+        async def aggregate(self, results, context):
+            self.context = context
+            return AggregatedOutput(results[0].response, [], list(results))
+
+    aggregator = RecordingAggregator()
+    router = MultiModelRouter(
+        [ProviderSlot("one", Provider())], ParallelStrategy(), aggregator
+    )
+
+    router.chat([
+        {"role": "user", "content": "First request"},
+        {"role": "assistant", "content": "Prior response"},
+        {"role": "user", "content": "Current request"},
+    ])
+
+    assert aggregator.context["user_request"] == "Current request"

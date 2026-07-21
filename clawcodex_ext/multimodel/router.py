@@ -169,7 +169,7 @@ class MultiModelRouter(BaseProvider):
             raise RuntimeError("No enabled providers in multi-model router")
         aggregator = self._aggregator or getattr(self.strategy, "aggregator", None)
         if aggregator is not None:
-            aggregated = await aggregator.aggregate(results, self._aggregation_context())
+            aggregated = await aggregator.aggregate(results, self._aggregation_context(messages))
             self._last_aggregated = aggregated
             chosen = aggregated.chosen
         else:
@@ -183,8 +183,23 @@ class MultiModelRouter(BaseProvider):
         self._emit("aggregated", results=results, output=self._last_aggregated)
         return chosen
 
-    def _aggregation_context(self) -> dict[str, Any]:
-        return {"slot_weights": {slot.name: slot.weight for slot in self.slots}}
+    def _aggregation_context(self, messages: list[MessageInput]) -> dict[str, Any]:
+        """Supply aggregators with the actual task as well as slot metadata."""
+        user_request = ""
+        for message in reversed(messages):
+            role = message.get("role") if isinstance(message, dict) else getattr(message, "role", None)
+            if role != "user":
+                continue
+            content = message.get("content") if isinstance(message, dict) else getattr(message, "content", "")
+            if isinstance(content, str):
+                user_request = content
+            elif content is not None:
+                user_request = str(content)
+            break
+        return {
+            "slot_weights": {slot.name: slot.weight for slot in self.slots},
+            "user_request": user_request,
+        }
 
     def chat_stream_response(self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, on_text_chunk: Any = None, on_thinking_chunk: Any = None, **kwargs: Any) -> ChatResponse:
         response = self._run_sync(self._execute(messages, tools=tools, **kwargs))
