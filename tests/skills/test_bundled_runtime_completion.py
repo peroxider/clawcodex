@@ -27,6 +27,7 @@ CORE_BUNDLED_SKILLS = {
     "simplify",
     "debug",
     "loop",
+    "orchestrator",
     "spec-audit",
     "stuck",
     "verify-content",

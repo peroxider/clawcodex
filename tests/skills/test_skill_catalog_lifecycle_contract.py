@@ -251,6 +251,7 @@ def test_bare_catalog_only_keeps_additional_bundled_and_mcp_skills(
         "simplify",
         "debug",
         "loop",
+        "orchestrator",
         "spec-audit",
         "stuck",
         "verify-content",

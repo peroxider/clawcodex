@@ -8,6 +8,7 @@ from clawcodex_ext.skills.bundled import (  # noqa: F401
     init_bundled_skills,
     register_debug_skill,
     register_loop_skill,
+    register_orchestrator_skill,
     register_simplify_skill,
     register_spec_audit_skill,
     register_stuck_skill,

@@ -379,6 +379,11 @@ exclude = [
 ]
 
 [tool.setuptools.package-data]
+"clawcodex_ext.skills.bundled.orchestrator_resources" = [
+    "SKILL.md",
+    "references/*.md",
+    "references/*.template",
+]
 "clawcodex_ext.skills.bundled.spec_audit_resources" = [
     "SKILL.md",
     "agents/*.yaml",

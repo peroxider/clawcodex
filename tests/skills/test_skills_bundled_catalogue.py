@@ -68,6 +68,7 @@ class TestInitOrchestrator(unittest.TestCase):
             "simplify",
             "debug",
             "loop",
+            "orchestrator",
             "spec-audit",
             "stuck",
             "verify-content",

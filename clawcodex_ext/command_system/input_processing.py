@@ -1047,7 +1047,7 @@ def suggest_commands(
     query = partial[1:]  # Remove /
     if not query:
         # Show all commands
-        commands = registry.list_commands()
+        commands = registry.list_invocable_commands()
         return [f"/{cmd.name}" for cmd in commands[:limit]]
 
     matches = registry.find_commands(query, limit=limit)
