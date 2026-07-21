@@ -32,8 +32,10 @@ import ast
 import hashlib
 import json
 import logging
+import os
 import re
 import shlex
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +48,11 @@ from clawcodex_ext.agent.tool_authoring.persistence import (
 from clawcodex_ext.agent.tool_authoring.spec import AgentToolSpec
 from clawcodex_ext.agent.tool_authoring.validators import validate_spec
 
+from .path_resolver import (
+    format_extra_sys_path_inserts,
+    infer_extra_sys_path_entries,
+    resolve_source_file,
+)
 from .search_tags import generate_search_tags
 from .source_parser import SourceComponent, SourceOperation, ParamSpec
 from .sdk_serialization import (
@@ -55,17 +62,23 @@ from .sdk_serialization import (
     WRAPPER_MESSAGER_COERCION,
 )
 from .tool_dependencies import (
+    _PRIMITIVE_TYPES,
     ToolOperationDeps,
     build_tool_dependency_index,
     enrich_input_schema_with_dependencies,
+    extract_type_roots,
     to_kebab_tool_name,
 )
 
 # F-55 L1 / L2 helpers — lifecycle catalog hook + tool-dependencies.yaml generation.
 from .heuristics.lifecycle import (
     infer_lifecycle_kind,
+    inject_resource_ref_schema,
+    invoke_lifecycle_id_param,
+    lifecycle_fallback_payload,
     lifecycle_metadata_payload,
 )
+from .bundle_resources import ResourceBinding, load_resource_bindings
 from .dependency import (
     ToolDependencyGraph,
     write_tool_dependencies,
@@ -73,13 +86,69 @@ from .dependency import (
 
 from .import_alias_resolver import ModuleImportIndex
 from .type_schema import (
+    collect_probe_targets,
     get_model_class_info,
     param_to_json_schema_property,
+    preload_schemas_for_source_dir,
     split_union,
     type_root,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _stable_resource_handle(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (str, int, float, bool)):
+        return str(value).strip()
+    return ""
+
+
+def resolve_catalog_handle_from_args(
+    args: dict[str, Any],
+    catalog_fallback: dict[str, Any],
+) -> str:
+    """Resolve an invoke handle without making an SDK parameter name primary."""
+    candidates = [
+        "resource_ref",
+        str(catalog_fallback.get("handle_field") or ""),
+        str(catalog_fallback.get("id_arg") or ""),
+        "agent_id",
+        "resource_id",
+        "id",
+    ]
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        handle = _stable_resource_handle(args.get(candidate))
+        if handle:
+            return handle
+    return ""
+
+# Backward-compatible test/private helper name kept for older imports.
+_infer_extra_sys_path_entries = infer_extra_sys_path_entries
+
+
+def _bridge_progress_enabled() -> bool:
+    """Show convert progress on interactive CLI, not under unittest/pytest."""
+    if os.environ.get("CLAWCODEX_SOP_QUIET", "").strip().lower() in {"1", "true", "yes"}:
+        return False
+    if os.environ.get("CLAWCODEX_SOP_PROGRESS", "").strip().lower() in {"1", "true", "yes"}:
+        return True
+    argv = " ".join(sys.argv).lower()
+    if "unittest" in argv or "pytest" in argv:
+        return False
+    return sys.stderr.isatty()
+
+
+def _bridge_progress(message: str, *, end: str = "\n") -> None:
+    if not _bridge_progress_enabled():
+        return
+    print(message, end=end, file=sys.stderr, flush=True)
+
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -95,6 +164,83 @@ SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
 # ---------------------------------------------------------------------------
 # Type hint → JSON Schema
 # ---------------------------------------------------------------------------
+
+def _resource_type_from_hint(
+    *,
+    resolver: ModuleImportIndex | None,
+    module_path: str,
+    type_hint: str | None,
+) -> str:
+    """Return the normalized resource token used by dependency metadata."""
+    if not type_hint:
+        return ""
+    if resolver and module_path:
+        try:
+            resolved = resolver.resolve_type_identity(module_path, type_hint)
+            if resolved:
+                return resolved
+        except Exception:
+            pass
+    roots = sorted(extract_type_roots(type_hint))
+    return roots[0] if roots else ""
+
+
+def _resource_type_hint_tokens(type_hint: str | None) -> set[str]:
+    """Return lifecycle-comparison tokens visible in a raw type hint."""
+    if not type_hint:
+        return set()
+    tokens: set[str] = set()
+    for root in extract_type_roots(type_hint):
+        if root and root.rsplit("_", 1)[-1] not in _PRIMITIVE_TYPES:
+            tokens.add(root)
+            if "_" in root:
+                tokens.add(root.rsplit("_", 1)[-1])
+    for name in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", type_hint):
+        if not name or not name[0].isupper():
+            continue
+        token = re.sub(r"[^a-z0-9]+", "", name.lower())
+        if token and token not in _PRIMITIVE_TYPES:
+            tokens.add(token)
+    return tokens
+
+
+def _resource_type_tokens_for_op(op: SourceOperation) -> set[str]:
+    tokens: set[str] = set()
+    tokens.update(_resource_type_hint_tokens(op.return_type))
+    for param in op.parameters:
+        if param.name.startswith("*"):
+            continue
+        tokens.update(_resource_type_hint_tokens(param.type_hint))
+    return tokens
+
+
+def _first_resource_type_for_op(
+    op: SourceOperation,
+    *,
+    resolver: ModuleImportIndex | None,
+    module_path: str,
+    prefer_return: bool,
+) -> str:
+    hints: list[str | None] = []
+    if prefer_return:
+        hints.append(op.return_type)
+    hints.extend(
+        param.type_hint
+        for param in op.parameters
+        if param.required and not param.name.startswith("*")
+    )
+    if not prefer_return:
+        hints.append(op.return_type)
+    for hint in hints:
+        token = _resource_type_from_hint(
+            resolver=resolver,
+            module_path=module_path,
+            type_hint=hint,
+        )
+        if token and token.rsplit("_", 1)[-1] not in _PRIMITIVE_TYPES:
+            return token
+    return ""
+
 
 _TYPE_MAP: dict[str, str] = {
     "str": "string",
@@ -464,7 +610,12 @@ def _generate_get_instance_helper(init_params: list[ParamSpec] | None) -> str:
         if param.default is not None:
             resolver_lines.append(f'    kwargs.setdefault("{param.name}", {param.default})')
         else:
-            resolver_lines.append(f'    if "{param.name}" not in kwargs:')
+            # Treat explicit ``None`` the same as "not provided" so that
+            # the auto-resolution path (module-level factory function) gets a
+            # chance to supply the value.  Otherwise a property-accessor stub
+            # that defaults ``card=None`` would skip resolution and crash the
+            # SDK constructor with ``NoneType … has no attribute …``.
+            resolver_lines.append(f'    if kwargs.get("{param.name}") is None:')
             resolver_lines.append(f'        _fn = getattr(module, "{param.name}", None)')
             resolver_lines.append("        if callable(_fn):")
             resolver_lines.append("            try:")
@@ -480,9 +631,11 @@ def _generate_get_instance_helper(init_params: list[ParamSpec] | None) -> str:
 
     required = [p.name for p in callable_init if p.required and p.default is None]
     if required:
-        missing_check = " or ".join(f'"{name}" not in kwargs' for name in required)
+        missing_check = " or ".join(f'kwargs.get("{name}") is None' for name in required)
         resolver_lines.append(f"    if {missing_check}:")
-        resolver_lines.append(f"        _missing = [n for n in {required!r} if n not in kwargs]")
+        resolver_lines.append(
+            f"        _missing = [n for n in {required!r} if kwargs.get(n) is None]"
+        )
         resolver_lines.append(
             '        raise TypeError("Missing constructor argument(s): " + ", ".join(_missing))'
         )
@@ -607,59 +760,7 @@ def _collect_runtime_symbols(
     return symbols
 
 
-def _resolve_source_file(source_dir: str, module_name: str) -> Path:
-    return Path(source_dir) / Path(*module_name.split(".")).with_suffix(".py")
 
-
-_BACKEND_IMPORT_RE = re.compile(
-    r"^\s*(?:from\s+backend(?:\.|\s)|import\s+backend(?:\.|\s|$))",
-    re.MULTILINE,
-)
-
-
-def _infer_extra_sys_path_entries(source_dir: str, module_name: str) -> list[str]:
-    """Return subproject roots required for ``from backend.*`` imports.
-
-    Some SDK apps (e.g. ``data_generation_platform``) use a top-level ``backend``
-    package relative to their own project directory, not the monorepo root that
-    ``pos convert`` passes as *source_dir*.  When the target module (or its
-    default-symbol imports) references ``backend``, inject that project root
-    into generated wrapper scripts *after* *_SOURCE_DIR* so ``AgentSDK.*`` still
-    resolves from the repo root while ``backend.*`` resolves from the subproject.
-    """
-    source_file = _resolve_source_file(source_dir, module_name)
-    if not source_file.is_file():
-        return []
-
-    try:
-        text = source_file.read_text(encoding="utf-8")
-    except OSError:
-        return []
-
-    if not _BACKEND_IMPORT_RE.search(text):
-        return []
-
-    root = Path(source_dir).resolve()
-    current = source_file.parent.resolve()
-    while True:
-        backend_dir = current / "backend"
-        if backend_dir.is_dir() and any(backend_dir.rglob("*.py")):
-            return [str(current)]
-        if current == root:
-            break
-        parent = current.parent
-        if parent == current:
-            break
-        current = parent
-    return []
-
-
-def _format_extra_sys_path_inserts(extra_sys_path_entries: list[str]) -> str:
-    """Render ``sys.path.insert`` lines for subproject roots (before *_SOURCE_DIR*)."""
-    if not extra_sys_path_entries:
-        return ""
-    lines = [f'sys.path.insert(0, r"{entry}")' for entry in extra_sys_path_entries]
-    return "\n".join(lines) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -690,7 +791,7 @@ def _resolve_module_working_dir(source_dir: str, module_name: str) -> str:
     Nested SDK (e.g. data_generation_platform under mindsdk-referenceapps):
         ``config.json`` at the subproject root → returns the subproject dir.
     """
-    source_file = _resolve_source_file(source_dir, module_name)
+    source_file = resolve_source_file(source_dir, module_name)
     if not source_file.is_file():
         return source_dir
 
@@ -815,7 +916,7 @@ def _is_cli_main_op(
         return False
     if op.name in _CLI_EXCLUDED_HANDLER_NAMES:
         return False
-    source_file = _resolve_source_file(source_dir, module_name)
+    source_file = resolve_source_file(source_dir, module_name)
     return _source_file_uses_argparse(source_file)
 
 
@@ -1063,7 +1164,7 @@ def _interactive_stdin_read(size: int = -1) -> str:
         if size >= 0:
             return value[:size]
         return value
-    # ponytail: match _interactive_input behaviour — raise instead of silent ""
+    # ponytail: match _interactive_input behaviour; raise instead of silent ""
     # so tools that call sys.stdin.read() get a clear error, not empty data
     raise RuntimeError(
         "sys.stdin.read() called but no __interactive_inputs provided. "
@@ -1109,15 +1210,117 @@ import json
 import importlib
 import asyncio
 import dataclasses
+from pathlib import Path
 {serialization_helpers}
 {coercion_helpers}
-{extra_sys_path_inserts}_SOURCE_DIR = r"{source_dir}"
-_SOURCE_FILE = r"{source_file}"
-_REPO_ROOT = r"{repo_root}"
+
+
+def _is_wsl_runtime():
+    if not sys.platform.startswith("linux"):
+        return False
+    if os.environ.get("WSL_DISTRO_NAME") or os.environ.get("WSL_INTEROP"):
+        return True
+    try:
+        release = os.uname().release.lower()
+    except AttributeError:
+        return False
+    return "microsoft" in release or "wsl" in release
+
+
+def _normalize_bootstrap_path(value):
+    if not value:
+        return ""
+    path = os.path.expanduser(os.fspath(value))
+    if os.name == "nt" and path.startswith("/mnt/") and len(path) >= 6:
+        drive = path[5]
+        if drive.isalpha() and (len(path) == 6 or path[6] == "/"):
+            rest = path[7:] if len(path) > 6 else ""
+            path = drive.upper() + ":\\" + rest.replace("/", "\\")
+    elif _is_wsl_runtime() and len(path) >= 2 and path[1] == ":" and path[0].isalpha():
+        rest = path[2:].lstrip("\\/").replace("\\", "/")
+        path = "/mnt/" + path[0].lower() + (("/" + rest) if rest else "")
+    return str(Path(path).expanduser().resolve())
+
+
+_REPO_ROOT = _normalize_bootstrap_path(r"{repo_root}")
+_BUNDLE_DIR = _normalize_bootstrap_path(r"{bundle_dir}")
+_BUNDLE_VENV_PYTHON = _normalize_bootstrap_path(r"{bundle_venv_python}")
+_SDK_REQUIREMENTS = {sdk_requirements_repr}
+
+
+def _seed_converter_repo_root():
+    if _REPO_ROOT and _REPO_ROOT not in sys.path:
+        sys.path.insert(0, _REPO_ROOT)
+
+
+def _ensure_bundle_venv_and_reexec():
+    if not _BUNDLE_DIR or not _SDK_REQUIREMENTS:
+        return
+    _seed_converter_repo_root()
+    from extensions.sop_converter.bundle_venv import (
+        bundle_venv_python,
+        ensure_bundle_venv,
+        ensure_bundle_venv_and_reexec,
+        is_venv_ready,
+    )
+    from extensions.sop_converter.sdk_dependency_resolver import SdkDependencySpec
+
+    bundle_dir = _normalize_bootstrap_path(_BUNDLE_DIR)
+    try:
+        current = Path(sys.executable).resolve()
+        target = bundle_venv_python(bundle_dir).resolve()
+    except OSError:
+        current = Path(sys.executable)
+        target = bundle_venv_python(bundle_dir)
+    deps = SdkDependencySpec(
+        requirements=tuple(_SDK_REQUIREMENTS),
+        source="manifest",
+        raw_path="",
+    )
+    ready = is_venv_ready(bundle_dir, tuple(_SDK_REQUIREMENTS))
+    if current == target:
+        if not ready:
+            print(
+                "[bundle-venv] Completing setup: installing %d SDK dependencies..."
+                % len(_SDK_REQUIREMENTS),
+                file=sys.stderr,
+            )
+            ensure_bundle_venv(bundle_dir, deps)
+        return
+
+    if not ready:
+        print(
+            "[bundle-venv] First-run setup: creating venv and installing %d SDK dependencies..."
+            % len(_SDK_REQUIREMENTS),
+            file=sys.stderr,
+        )
+    ensure_bundle_venv_and_reexec(
+        bundle_dir,
+        deps,
+        argv=sys.argv,
+        script_file=__file__,
+    )
+
+
+# Runtime dependency setup is deliberately opt-in. Tool execution must never
+# create, replace, or install into a virtual environment merely because a
+# generated wrapper was invoked.
+#
+# CLAWCODEX_ENABLE_BUNDLE_VENV_REEXEC=1 only makes this wrapper *call*
+# ensure_bundle_venv_and_reexec. A real os.execv into the bundle python happens
+# only when the wrapper runs as a standalone process (not under in-process
+# SDK dispatch). Agent/REPL in-process calls short-circuit to soft
+# site-packages activation; see ensure_bundle_venv_and_reexec docstring.
+if os.environ.get("CLAWCODEX_ENABLE_BUNDLE_VENV_REEXEC") == "1":
+    _ensure_bundle_venv_and_reexec()
+
+{extra_sys_path_inserts}
+_SOURCE_DIR = _normalize_bootstrap_path(r"{source_dir}")
+_SOURCE_FILE = Path(_normalize_bootstrap_path(r"{source_file}"))
 sys.path.insert(0, _SOURCE_DIR)
 if _REPO_ROOT and _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
-_MODULE_DIR = r"{module_dir}"
+_MODULE_DIR = _normalize_bootstrap_path(r"{module_dir}")
 if os.path.isdir(_MODULE_DIR):
     os.chdir(_MODULE_DIR)
 {extra_imports}{model_imports}
@@ -1139,6 +1342,163 @@ def _run_async_iter(make_gen):
 
     return asyncio.run(_collect())
 
+
+def _agent_not_found_text(text):
+    lowered = str(text or "").lower()
+    if not lowered:
+        return False
+    markers = (
+        "not found",
+        "not exist",
+        "does not exist",
+        "unknown agent",
+        "unknown resource",
+        "missing agent",
+        "missing resource",
+        "resource missing",
+        "agent not",
+        "resource not",
+    )
+    subjects = (
+        "agent", "resource", "config", "session", "team",
+        "handle", "identifier", "resource_id", "agent_id", "id",
+    )
+    return any(marker in lowered for marker in markers) and (
+        any(subject in lowered for subject in subjects)
+    )
+
+
+def _should_catalog_fallback(value):
+    if value is None:
+        return False
+    if isinstance(value, Exception):
+        return _agent_not_found_text(value)
+    if isinstance(value, dict):
+        code = str(value.get("error_code") or value.get("code") or "").lower()
+        if code in {{
+            "agent_not_found",
+            "agent_missing",
+            "missing_agent",
+            "unknown_agent",
+            "resource_not_found",
+            "resource_missing",
+            "missing_resource",
+            "unknown_resource",
+        }}:
+            return True
+        if code == "not_found" and any(k in value for k in ("agent_id", "resource_id", "agent", "resource", "id")):
+            return True
+        return _agent_not_found_text(value.get("error") or value.get("message") or value)
+    return _agent_not_found_text(value)
+
+
+def _stable_resource_handle_from_args(value):
+    if value is None:
+        return ""
+    if isinstance(value, (str, int, float, bool)):
+        text = str(value).strip()
+        return text
+    return ""
+
+
+def _try_catalog_fallback(catalog_fallback, args, original_error=None):
+    if not catalog_fallback:
+        return None
+    resource_type = str(catalog_fallback.get("resource_type") or "")
+    from extensions.sop_converter.tool_registry_bridge import (
+        resolve_catalog_handle_from_args,
+    )
+    agent_id = resolve_catalog_handle_from_args(args, catalog_fallback)
+    if not agent_id and not resource_type:
+        return None
+    query_arg = str(catalog_fallback.get("query_arg") or "query")
+    query_value = args.get(query_arg)
+    if query_value is None and query_arg != "query":
+        query_value = args.get("query")
+    inputs = None
+    query = ""
+    if query_arg == "inputs" or isinstance(query_value, (dict, list)):
+        inputs = query_value
+    elif query_value is not None:
+        query = str(query_value)
+    bundle_path = (
+        catalog_fallback.get("_bundle_path")
+        or os.environ.get("CLAWCODEX_BUNDLE_PATH", "").strip()
+        or None
+    )
+    try:
+        from extensions.sop_converter.resource_handlers import get_resource_handler
+
+        handler = get_resource_handler(resource_type)
+        if handler is not None and handler.resource_type != "agent":
+            from extensions.sop_converter.resource_catalog import get_resource_record
+
+            record = get_resource_record(
+                str(agent_id),
+                resource_type=resource_type,
+                bundle_path=bundle_path,
+            )
+            recovered = handler.invoke(record, query=query, inputs=inputs)
+        elif handler is not None or not resource_type:
+            from extensions.sop_converter.composite_tools.scripts.invoke_existing_agent_wrapper import (
+                invoke_existing_agent,
+            )
+
+            recovered = invoke_existing_agent(
+                agent_id=str(agent_id) if agent_id else "",
+                query=query,
+                inputs=inputs,
+                bundle_path=bundle_path,
+                resource_type=resource_type,
+            )
+        else:
+            from extensions.sop_converter.resource_handlers import (
+                require_resource_handler,
+            )
+
+            require_resource_handler(resource_type)
+    except Exception as exc:
+        error_code = getattr(exc, "error_code", "catalog_fallback_failed")
+        recovered = {{
+            "error": f"catalog_fallback_failed: {{exc}}",
+            "error_code": str(error_code),
+            "agent_id": str(agent_id) if agent_id else "",
+        }}
+    if isinstance(recovered, dict):
+        recovered.setdefault("catalog_fallback_attempted", True)
+        recovered.setdefault("catalog_fallback_reason", "agent_not_found")
+        source_tool = catalog_fallback.get("source_tool")
+        if source_tool:
+            recovered.setdefault("source_tool", source_tool)
+        if original_error is not None:
+            recovered.setdefault("original_error", str(original_error))
+    return recovered
+
+
+def _augment_create_payload(payload, *, persisted, agent_id="", resource_type="", catalog_path="", catalog_reason="", error_code="", error=""):
+    if not isinstance(payload, dict):
+        payload = {{"sdk_output": payload}}
+    payload["created_persisted"] = bool(persisted)
+    payload["callable_by_agent_id"] = bool(persisted and agent_id)
+    payload["callable_by_resource_ref"] = bool(persisted and agent_id)
+    payload["agent_id_call_contract"] = "catalog_persisted" if persisted and agent_id else "not_persisted"
+    payload["resource_ref_call_contract"] = "catalog_persisted" if persisted and agent_id else "not_persisted"
+    if agent_id and not payload.get("agent_id"):
+        payload["agent_id"] = str(agent_id)
+    if agent_id:
+        payload["resource_ref"] = str(agent_id)
+    if resource_type:
+        payload["resource_type"] = str(resource_type)
+    if catalog_path:
+        payload["catalog_path"] = str(catalog_path)
+    if catalog_reason:
+        payload["catalog_reason"] = str(catalog_reason)
+    if error_code:
+        payload["error_code"] = error_code
+    if error:
+        payload["error"] = error
+    return payload
+
 {body}
 
 if __name__ == "__main__":
@@ -1147,25 +1507,45 @@ if __name__ == "__main__":
         sys.exit(1)
     method_name = sys.argv[1]
 
-    # F-55 L1: optional agent-catalog hook.  Created via
-    # ``--catalog-metadata '<json>'`` argv pair on create-kind tools; ignored
-    # otherwise.  We re-use the same sys.argv layout that the bash call_impl
-    # emits so the wrapper can stay self-contained.
+    # F-55 L1: optional agent-catalog hooks.  Created via
+    # ``--catalog-metadata '<json>'`` on create-kind tools and
+    # ``--catalog-fallback '<json>'`` on invoke-kind tools.
     catalog_meta = None
-    catalog_extra_args = []
-    if len(sys.argv) >= 5 and sys.argv[3] == "--catalog-metadata":
-        try:
-            catalog_meta = json.loads(sys.argv[4])
-            catalog_extra_args = sys.argv[5:]
-        except json.JSONDecodeError as exc:
-            print(json.dumps({{"error": f"invalid --catalog-metadata JSON: {{exc}}"}}, ensure_ascii=False), file=sys.stderr)
+    catalog_fallback = None
+    idx = 3
+    while idx < len(sys.argv):
+        flag = sys.argv[idx]
+        if flag not in {{"--catalog-metadata", "--catalog-fallback"}}:
+            idx += 1
+            continue
+        if idx + 1 >= len(sys.argv):
+            print(json.dumps({{"error": f"{{flag}} requires a JSON payload"}}, ensure_ascii=False), file=sys.stderr)
             sys.exit(1)
+        try:
+            payload = json.loads(sys.argv[idx + 1])
+        except json.JSONDecodeError as exc:
+            print(json.dumps({{"error": f"invalid {{flag}} JSON: {{exc}}"}}, ensure_ascii=False), file=sys.stderr)
+            sys.exit(1)
+        if flag == "--catalog-metadata":
+            catalog_meta = payload
+        else:
+            catalog_fallback = payload
+        idx += 2
 
     try:
         args = json.loads(sys.argv[2])
     except json.JSONDecodeError as exc:
         print(f"Invalid JSON args: {{exc}}", file=sys.stderr)
         sys.exit(1)
+
+    catalog_args = dict(args)
+    resource_ref = args.pop("resource_ref", None)
+    args.pop("resource_type", None)
+    if catalog_fallback and resource_ref:
+        recovered = _try_catalog_fallback(catalog_fallback, catalog_args)
+        if recovered is not None:
+            print(_dumps_sdk_result(recovered))
+            sys.exit(0)
 
     interactive_inputs = args.pop("__interactive_inputs", None)
     if interactive_inputs is not None and callable(globals().get("_set_interactive_inputs")):
@@ -1175,51 +1555,169 @@ if __name__ == "__main__":
     if fn is None:
         print(f"Unknown method: {{method_name}}", file=sys.stderr)
         sys.exit(1)
+    original_error = None
     try:
         result = fn(**args)
-        serialized = _dumps_sdk_result(result)
     except SystemExit as exc:
-        print(json.dumps({{"error": f"SDK exited with code {{exc.code}}: {{exc}}"}}, ensure_ascii=False), file=sys.stderr)
-        sys.exit(1)
+        original_error = f"SDK exited with code {{exc.code}}: {{exc}}"
+        if catalog_fallback and _should_catalog_fallback(original_error):
+            result = _try_catalog_fallback(catalog_fallback, catalog_args, original_error=original_error)
+            if result is None:
+                print(json.dumps({{"error": original_error}}, ensure_ascii=False), file=sys.stderr)
+                sys.exit(1)
+        else:
+            print(json.dumps({{"error": original_error}}, ensure_ascii=False), file=sys.stderr)
+            sys.exit(1)
     except Exception as exc:
-        print(json.dumps({{"error": str(exc)}}, ensure_ascii=False), file=sys.stderr)
-        sys.exit(1)
+        original_error = exc
+        if catalog_fallback and _should_catalog_fallback(exc):
+            result = _try_catalog_fallback(catalog_fallback, catalog_args, original_error=exc)
+            if result is None:
+                print(json.dumps({{"error": str(exc)}}, ensure_ascii=False), file=sys.stderr)
+                sys.exit(1)
+        else:
+            print(json.dumps({{"error": str(exc)}}, ensure_ascii=False), file=sys.stderr)
+            sys.exit(1)
+
+    if catalog_fallback and _should_catalog_fallback(result):
+        recovered = _try_catalog_fallback(catalog_fallback, catalog_args, original_error=result)
+        if recovered is not None:
+            result = recovered
+
+    serialized = _dumps_sdk_result(result)
 
     if catalog_meta is not None:
-        # Catalog write: pull agent_id from the return value (or any nested
-        # dict) and merge it with the static metadata emitted by the
-        # tool_registry_bridge.  This makes the create→invoke workflow
+        # Catalog write: pull a stable resource handle from the return value
+        # and merge it with the static metadata emitted by the
+        # tool_registry_bridge.  This makes the create-to-invoke workflow
         # recoverable across wrapper subprocess boundaries.
         try:
             from extensions.sop_converter.agent_catalog import AgentCatalog, AgentCatalogEntry
             from extensions.sop_converter.agent_catalog_resolver import resolve_catalog_path
+            from extensions.sop_converter.resource_catalog import (
+                ResourceCatalog,
+                agent_entry_to_resource_record,
+                resolve_resource_catalog_path,
+            )
 
-            _agent_id = ""
-            if isinstance(result, dict):
-                _agent_id = str(result.get("agent_id") or result.get("id") or "")
-            if not _agent_id and catalog_meta.get("agent_id"):
-                _agent_id = str(catalog_meta["agent_id"])
+            def _stable_resource_handle(_value):
+                if _value is None:
+                    return ""
+                if isinstance(_value, (str, int, float, bool)):
+                    return str(_value).strip()
+                return ""
+
+            def _extract_resource_handle(_payload, _meta):
+                _handle_field = str(_meta.get("handle_field") or "").strip()
+                _candidates = []
+                if _handle_field:
+                    _candidates.append(_handle_field)
+                _candidates.extend([
+                    "agent_id", "resource_id", "id", "handle", "key",
+                    "name", "slug", "uri", "url",
+                ])
+                _seen = set()
+                _ordered = []
+                for _candidate in _candidates:
+                    if _candidate and _candidate not in _seen:
+                        _ordered.append(_candidate)
+                        _seen.add(_candidate)
+                if isinstance(_payload, dict):
+                    for _candidate in _ordered:
+                        _handle = _stable_resource_handle(_payload.get(_candidate))
+                        if _handle:
+                            if _handle_field and _candidate != _handle_field:
+                                _meta["handle_field"] = _candidate
+                            return _handle
+                    # Factory wrappers commonly return a serialised object
+                    # whose stable handle belongs to ``agent_config``. Keep
+                    # this traversal narrow so unrelated nested payloads do
+                    # not become resource handles.
+                    for _nested_key in ("agent_config", "config", "dsl", "payload"):
+                        _nested = _payload.get(_nested_key)
+                        if isinstance(_nested, dict):
+                            _handle = _extract_resource_handle(_nested, _meta)
+                            if _handle:
+                                return _handle
+                _jsonable = _to_jsonable(_payload)
+                if isinstance(_jsonable, dict) and _jsonable is not _payload:
+                    return _extract_resource_handle(_jsonable, _meta)
+                return _stable_resource_handle(_meta.get("agent_id") or _meta.get("resource_id"))
+
+            _catalog_snapshot = _serialize_factory_result(result)
+            _agent_id = _extract_resource_handle(_catalog_snapshot, catalog_meta)
+            # A factory may return an opaque runtime object whose serialized
+            # representation omits its identity. For create-LLM-agent style
+            # APIs, the stable handle is explicitly supplied in the persisted
+            # JSON configuration, so use that as the deterministic fallback.
+            if not _agent_id:
+                _agent_id = _extract_resource_handle(
+                    args.get("agent_config") or args.get("config"),
+                    catalog_meta,
+                )
 
             if _agent_id:
+                _jsonable_result = _to_jsonable(_catalog_snapshot)
+                _runtime_type = (
+                    _jsonable_result.get("_runtime_type", {{}})
+                    if isinstance(_jsonable_result, dict)
+                    else {{}}
+                )
+                _runtime_invoker = (
+                    _jsonable_result.get("_runtime_invoker", {{}})
+                    if isinstance(_jsonable_result, dict)
+                    else {{}}
+                )
+                _agent_config = args.get("agent_config") or args.get("config")
+                if not isinstance(_agent_config, dict) and isinstance(_jsonable_result, dict):
+                    _agent_config = (
+                        _jsonable_result.get("agent_config")
+                        or _jsonable_result.get("config")
+                    )
+                _model_spec = _agent_config.get("model", {{}}) if isinstance(_agent_config, dict) else {{}}
+                _model_info = _model_spec.get("model_info", {{}}) if isinstance(_model_spec, dict) else {{}}
+                _catalog_model = (
+                    catalog_meta.get("model")
+                    or (_model_info.get("model") if isinstance(_model_info, dict) else "")
+                    or (_model_spec.get("model") if isinstance(_model_spec, dict) else "")
+                    or ""
+                )
+                _catalog_provider = (
+                    catalog_meta.get("provider")
+                    or (_model_spec.get("model_provider") if isinstance(_model_spec, dict) else "")
+                    or (_model_spec.get("provider") if isinstance(_model_spec, dict) else "")
+                    or ""
+                )
                 _metadata_keys = {{
                     "sdk_source_dir", "model", "provider", "class_name",
                     "module_name", "query_arg", "invoke_method",
                     "schema_version", "sdk_version", "_bundle_path",
                 }}
+                # Only persist constructor kwargs — method params (e.g. ``query``
+                # on ``build_agent``) must not leak into the re-materialization path.
+                _init_param_allowlist = catalog_meta.get("init_param_names")
+                if _init_param_allowlist is not None:
+                    _init_kwargs = {{k: v for k, v in args.items() if k in _init_param_allowlist}}
+                else:
+                    _init_kwargs = {{k: v for k, v in args.items() if k not in {{"agent_id", "id"}}}}
                 _entry = AgentCatalogEntry(
                     agent_id=str(_agent_id),
                     sdk_source_dir=str(catalog_meta.get("sdk_source_dir") or _SOURCE_DIR),
-                    dsl=result if isinstance(result, dict) else {{"value": result}},
-                    model=str(catalog_meta.get("model") or ""),
-                    provider=str(catalog_meta.get("provider") or ""),
-                    class_name=str(catalog_meta.get("class_name") or ""),
-                    module_name=str(catalog_meta.get("module_name") or ""),
-                    init_kwargs={{k: v for k, v in args.items() if k not in {{"agent_id", "id"}}}},
-                    query_arg=str(catalog_meta.get("query_arg") or "query"),
-                    invoke_method=str(catalog_meta.get("invoke_method") or "invoke"),
+                    dsl=_jsonable_result if isinstance(_jsonable_result, dict) else {{"value": _jsonable_result}},
+                    model=str(_catalog_model),
+                    provider=str(_catalog_provider),
+                    class_name=str(catalog_meta.get("class_name") or _runtime_type.get("class_name") or ""),
+                    module_name=str(catalog_meta.get("module_name") or _runtime_type.get("module") or ""),
+                    init_kwargs=_init_kwargs,
+                    query_arg=str(_runtime_invoker.get("input_param") or catalog_meta.get("query_arg") or "query"),
+                    invoke_method=str(_runtime_invoker.get("method") or catalog_meta.get("invoke_method") or "invoke"),
                     schema_version=int(catalog_meta.get("schema_version") or 1),
                     sdk_version=str(catalog_meta.get("sdk_version") or ""),
                     metadata={{k: v for k, v in catalog_meta.items() if k not in _metadata_keys}},
+                    # §8 type-contract fields: record so invoke-kind tools
+                    # can look up this entry by resource_type without knowing agent_id.
+                    resource_type=str(catalog_meta.get("resource_type") or ""),
+                    handle_field=str(catalog_meta.get("handle_field") or "agent_id"),
                 )
                 _bundle_path = catalog_meta.get("_bundle_path")
                 _loc = resolve_catalog_path(_bundle_path)
@@ -1227,8 +1725,79 @@ if __name__ == "__main__":
                 _cat = AgentCatalog.load(_loc.path)
                 _cat.upsert(_entry, bundle_id=os.path.basename(_bundle_path) if _bundle_path else None)
                 _cat.save(_loc.path)
+                _resource_catalog_path = ""
+                _resource_catalog_error = ""
+                try:
+                    _resource_loc = resolve_resource_catalog_path(
+                        _bundle_path,
+                        bundle_id=str(catalog_meta.get("bundle_id") or "")
+                        or (os.path.basename(_bundle_path) if _bundle_path else None),
+                    )
+                    _resource_loc.ensure_parent()
+                    _resource_cat = ResourceCatalog.load(_resource_loc.path)
+                    _resource_cat.upsert(
+                        agent_entry_to_resource_record(
+                            _entry,
+                            bundle_id=str(catalog_meta.get("bundle_id") or "")
+                            or (os.path.basename(_bundle_path) if _bundle_path else None),
+                            source_tool=str(catalog_meta.get("source_tool") or ""),
+                        )
+                    )
+                    _resource_cat.save(_resource_loc.path)
+                    _resource_catalog_path = str(_resource_loc.path)
+                except Exception as _resource_exc:
+                    _resource_catalog_error = f"resource_catalog_write_failed: {{_resource_exc}}"
+                if _resource_catalog_error:
+                    _payload = _augment_create_payload(
+                        _jsonable_result,
+                        persisted=False,
+                        agent_id=str(_agent_id),
+                        resource_type=str(catalog_meta.get("resource_type") or ""),
+                        catalog_path=str(_loc.path),
+                        catalog_reason=str(_loc.reason),
+                        error_code="resource_catalog_write_failed",
+                        error=_resource_catalog_error,
+                    )
+                    _payload["resource_catalog_error"] = _resource_catalog_error
+                    print(_dumps_sdk_result(_payload), file=sys.stderr)
+                    sys.exit(1)
+                _payload = _augment_create_payload(
+                    _jsonable_result,
+                    persisted=True,
+                    agent_id=str(_agent_id),
+                    resource_type=str(catalog_meta.get("resource_type") or ""),
+                    catalog_path=str(_loc.path),
+                    catalog_reason=str(_loc.reason),
+                )
+                if _resource_catalog_path:
+                    _payload["resource_catalog_path"] = _resource_catalog_path
+                    _payload["resource_catalog_reason"] = "f56_resource_catalog"
+                if _resource_catalog_error:
+                    _payload["resource_catalog_error"] = _resource_catalog_error
+                serialized = _dumps_sdk_result(_payload)
+            else:
+                _payload = _augment_create_payload(
+                    _to_jsonable(result),
+                    persisted=False,
+                    resource_type=str(catalog_meta.get("resource_type") or ""),
+                    error_code="resource_handle_missing",
+                    error="create result did not include a stable resource handle; not persisted to catalog",
+                )
+                # A lifecycle create is not successful unless the returned
+                # resource can be recovered by a later F-57 invocation.
+                # Do not let the Agent summarize this opaque in-memory object
+                # as a usable, persistent Agent.
+                print(_dumps_sdk_result(_payload), file=sys.stderr)
+                sys.exit(1)
         except Exception as exc:
-            print(json.dumps({{"error": f"catalog_write_failed: {{exc}}"}}, ensure_ascii=False), file=sys.stderr)
+            _payload = _augment_create_payload(
+                _to_jsonable(result),
+                persisted=False,
+                resource_type=str(catalog_meta.get("resource_type") or ""),
+                error_code="catalog_write_failed",
+                error=f"catalog_write_failed: {{exc}}",
+            )
+            print(_dumps_sdk_result(_payload), file=sys.stderr)
             sys.exit(1)
 
     print(serialized)
@@ -1651,6 +2220,9 @@ def _generate_wrapper_script(
     cli_dispatch_map: dict[str, str] | None = None,
     cli_prefix_override: str | None = None,
     repo_root: str = "",
+    bundle_dir: str | Path | None = None,
+    bundle_venv_python: str | None = None,
+    sdk_requirements: tuple[str, ...] = (),
 ) -> Path:
     """Generate a wrapper script for a group of related operations.
 
@@ -1679,7 +2251,7 @@ def _generate_wrapper_script(
     script_path = (scripts_dir or SCRIPTS_DIR) / script_name
     script_path.parent.mkdir(parents=True, exist_ok=True)
 
-    source_file = _resolve_source_file(source_dir, module_name)
+    source_file = resolve_source_file(source_dir, module_name)
     if cli_dispatch_map is not None:
         dispatch_map = cli_dispatch_map
     elif file_stem == "cli":
@@ -1757,8 +2329,11 @@ def _generate_wrapper_script(
     if extra_imports:
         extra_imports = f"\n{extra_imports}\n"
 
-    extra_sys_path_entries = _infer_extra_sys_path_entries(source_dir, module_name)
-    extra_sys_path_inserts = _format_extra_sys_path_inserts(extra_sys_path_entries)
+    extra_sys_path_entries = infer_extra_sys_path_entries(source_dir, module_name)
+    extra_sys_path_inserts = format_extra_sys_path_inserts(
+        extra_sys_path_entries,
+        normalizer="_normalize_bootstrap_path",
+    )
     module_dir = _resolve_module_working_dir(source_dir, module_name)
 
     body_text = "\n".join(body_parts)
@@ -1773,6 +2348,9 @@ def _generate_wrapper_script(
     content = _WRAPPER_SCRIPT_TEMPLATE.format(
         header_label=header_label,
         source_dir=source_dir,
+        bundle_dir=str(Path(bundle_dir).resolve()) if bundle_dir is not None else "",
+        bundle_venv_python=bundle_venv_python or "",
+        sdk_requirements_repr=repr(tuple(sdk_requirements)),
         module_dir=module_dir,
         source_file=str(source_file.resolve()),
         repo_root=repo_root,
@@ -1823,6 +2401,24 @@ def _enrich_bridge_params(params: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Spec generation
 # ---------------------------------------------------------------------------
+
+
+def _annotate_env_reference_schema(value: Any, *, property_name: str = "") -> None:
+    """Document the explicit, safe environment-reference contract in schemas."""
+    if isinstance(value, dict):
+        if property_name.lower() in {"api_key", "apikey", "access_token"}:
+            note = (
+                "Use a literal value or an explicit environment reference such as "
+                "env:DEEPSEEK_API_KEY. Environment references are resolved only "
+                "at tool runtime and are never returned in plaintext."
+            )
+            existing = str(value.get("description") or "").strip()
+            value["description"] = f"{existing} {note}".strip()
+        for key, child in value.items():
+            _annotate_env_reference_schema(child, property_name=str(key))
+    elif isinstance(value, list):
+        for child in value:
+            _annotate_env_reference_schema(child, property_name=property_name)
 
 
 def operation_to_spec(
@@ -1897,9 +2493,12 @@ def operation_to_spec(
         }
         required = ["args"]
     else:
+        # F-55 property ops (e.g. DeepAgent.loop_coordinator) carry no method
+        # params themselves but MUST expose the owning class's __init__ params
+        # (e.g. ``card``) so the agent knows to supply them at call time.
         schema_params = (
             _merge_init_and_method_params(init_params or [], op.parameters)
-            if op.class_name and not op.is_property
+            if op.class_name
             else op.parameters
         )
         properties = {}
@@ -1953,6 +2552,7 @@ def operation_to_spec(
     if required:
         input_schema["required"] = required
 
+    _annotate_env_reference_schema(input_schema)
     input_schema = enrich_input_schema_with_dependencies(input_schema, tool_deps)
 
     # Build call_impl template — uses absolute script path.
@@ -2032,6 +2632,50 @@ def operation_to_spec(
 # ---------------------------------------------------------------------------
 
 
+def _binding_for_operation(
+    bindings: list[ResourceBinding],
+    comp: SourceComponent,
+    op: SourceOperation,
+    *,
+    role: str,
+) -> ResourceBinding | None:
+    references = [
+        op.name,
+        _to_kebab_case(op.name),
+        f"{comp.name}.{op.name}",
+        _to_kebab_case(f"{comp.name}.{op.name}"),
+    ]
+    if op.class_name:
+        references.extend(
+            [
+                f"{op.class_name}.{op.name}",
+                f"{comp.name}.{op.class_name}.{op.name}",
+                _to_kebab_case(f"{comp.name}.{op.class_name}.{op.name}"),
+            ]
+        )
+    for binding in bindings:
+        matches = binding.matches_create if role == "create" else binding.matches_invoke
+        if matches(*references):
+            return binding
+    return None
+
+
+def _operation_tool_name(comp: SourceComponent, op: SourceOperation) -> str:
+    if op.class_name:
+        raw_name = (
+            f"{comp.name}.{op.class_name}.{op.name}"
+            if comp.name
+            else f"{op.class_name}.{op.name}"
+        )
+    elif comp.name:
+        raw_name = f"{comp.name}.{op.name}"
+    elif op.file_stem:
+        raw_name = f"{op.file_stem}.{op.name}"
+    else:
+        raw_name = op.name
+    return _to_kebab_case(raw_name)
+
+
 def register_component_tools(
     components: list[SourceComponent],
     source_dir: str,
@@ -2042,6 +2686,8 @@ def register_component_tools(
     bundle_id: str | None = None,
     cli_prefix_override: str | None = None,
     repo_root: str = "",
+    bundle_venv_python: str | None = None,
+    sdk_requirements: tuple[str, ...] = (),
 ) -> dict[str, str]:
     """Bulk-register all operations from a list of SourceComponents as Tools.
 
@@ -2065,8 +2711,12 @@ def register_component_tools(
     source_dir_abs = str(Path(source_dir).resolve())
     bundle_path = Path(bundle_dir).resolve() if bundle_dir is not None else None
     effective_bundle_id = bundle_id or (bundle_path.name if bundle_path else None)
+    resource_bindings = load_resource_bindings(bundle_path)
     tool_dir = bundle_tool_dir(bundle_path) if bundle_path is not None else None
     scripts_dir = scripts_dir_for(tool_dir) if tool_dir is not None else SCRIPTS_DIR
+    effective_repo_root = repo_root
+    if not effective_repo_root:
+        effective_repo_root = str(Path(__file__).resolve().parents[2])
 
     # ── Phase 1: group operations by (class_name, module_path) ──
     # Each group → one wrapper script.
@@ -2097,16 +2747,72 @@ def register_component_tools(
             if op.class_name is None and (op.file_stem or "") == "cli":
                 cli_dispatch_by_module.setdefault(
                     module_path,
-                    _parse_cli_dispatch_map(_resolve_source_file(source_dir_abs, module_path)),
+                    _parse_cli_dispatch_map(resolve_source_file(source_dir_abs, module_path)),
                 )
+
+    # ── Phase 1.5: batch preload pydantic schemas ──
+    # Collect all structured type hints from operation params and init params,
+    # then probe them in a single subprocess (one import per SDK) to fill
+    # the _BATCH_CACHE.  This avoids N separate subprocess spawns during
+    # Phase 2 (wrapper generation) and Phase 3 (spec creation).
+    _collect_type_hints: list[tuple[str, str | None]] = []
+    for comp in components:
+        for op in comp.operations:
+            module_path = op_module_map[id(op)]
+            for param in op.parameters:
+                if param.type_hint and param.name and not param.name.startswith("*"):
+                    _collect_type_hints.append((param.type_hint, module_path))
+            if op.class_name and op.class_name in comp.class_init_params:
+                for param in comp.class_init_params[op.class_name]:
+                    if param.type_hint and param.name and not param.name.startswith("*"):
+                        _collect_type_hints.append((param.type_hint, module_path))
+    if _collect_type_hints:
+        probe_targets = collect_probe_targets(source_dir_abs, _collect_type_hints)
+        if probe_targets:
+            logger.info(
+                "Batch preloading schemas for %d types in %s",
+                len(probe_targets),
+                source_dir_abs,
+            )
+            # 确保 bundle venv 已创建并安装 SDK 依赖，这样 schema probe 子进程
+            # 才能正确 import SDK 的第三方依赖（jsonschema_path、pysbd 等）。
+            effective_venv_python = bundle_venv_python
+            if bundle_path is not None and sdk_requirements:
+                from extensions.sop_converter.bundle_venv import (
+                    ensure_bundle_venv,
+                    is_venv_ready,
+                )
+                from extensions.sop_converter.sdk_dependency_resolver import SdkDependencySpec
+                try:
+                    deps = SdkDependencySpec(
+                        requirements=tuple(sdk_requirements),
+                        source="manifest",
+                        raw_path="",
+                    )
+                    ready = is_venv_ready(bundle_path, tuple(sdk_requirements))
+                    if not ready:
+                        _bridge_progress(
+                            f"   Ensuring bundle venv (installing {len(sdk_requirements)} SDK deps for schema probe)..."
+                        )
+                    effective_venv_python = str(ensure_bundle_venv(bundle_path, deps))
+                except Exception as exc:
+                    logger.warning("Failed to ensure bundle venv for schema probe: %s", exc)
+                    effective_venv_python = None
+            preload_schemas_for_source_dir(
+                source_dir_abs,
+                probe_targets,
+                venv_python=effective_venv_python,
+            )
 
     # ── Phase 2: generate wrapper scripts ──
 
     # Maps (class_name, module_path) → script absolute path
     script_paths: dict[tuple[str | None, str], str] = {}
     skipped_groups: list[tuple[str | None, str]] = []
+    total_groups = len(groups)
 
-    for (class_name, module_path), ops in groups.items():
+    _bridge_progress(f"   Generating wrappers: 0/{total_groups}...", end="")
+    for group_idx, ((class_name, module_path), ops) in enumerate(groups.items(), 1):
         first_op = ops[0]
         file_stem = first_op.file_stem or "functions"
 
@@ -2121,10 +2827,14 @@ def register_component_tools(
                 init_params=group_init_params.get((class_name, module_path)),
                 cli_dispatch_map=cli_dispatch_by_module.get(module_path),
                 cli_prefix_override=cli_prefix_override,
-                repo_root=repo_root,
+                repo_root=effective_repo_root,
+                bundle_dir=bundle_path,
+                bundle_venv_python=bundle_venv_python,
+                sdk_requirements=sdk_requirements,
             )
             script_paths[(class_name, module_path)] = str(script_path.resolve())
-        except Exception:
+        # ponytail: SystemExit — bad SDK modules must not abort convert
+        except (Exception, SystemExit):
             logger.warning(
                 "Failed to generate wrapper for class=%s module=%s, skipping %d ops",
                 class_name, module_path, len(ops),
@@ -2132,99 +2842,317 @@ def register_component_tools(
             )
             skipped_groups.append((class_name, module_path))
 
+    _bridge_progress(f"\r   Generating wrappers: {total_groups}/{total_groups} done")
+
     # ── Phase 3: create AgentToolSpec for each operation ──
 
     name_map: dict[str, str] = {}
     dependency_index = build_tool_dependency_index(components, source_dir=source_dir_abs)
+    binding_roles: dict[int, tuple[str, ResourceBinding]] = {}
+    for binding_comp in components:
+        for binding_op in binding_comp.operations:
+            create_binding = _binding_for_operation(
+                resource_bindings,
+                binding_comp,
+                binding_op,
+                role="create",
+            )
+            invoke_binding = _binding_for_operation(
+                resource_bindings,
+                binding_comp,
+                binding_op,
+                role="invoke",
+            )
+            if create_binding and invoke_binding:
+                raise ValueError(
+                    f"resource sidecar maps {binding_op.name!r} as both create and invoke"
+                )
+            if create_binding:
+                binding_roles[id(binding_op)] = ("create", create_binding)
+            elif invoke_binding:
+                binding_roles[id(binding_op)] = ("invoke", invoke_binding)
+    # §8 type-contract: pre-compute the set of resource types produced by
+    # create-kind ops so invoke-kind ops can be classified via type matching
+    # even when their parameter names don't end with ``_id``.
+    from .heuristics.lifecycle import derive_resource_type, infer_lifecycle_kind as _ilk
+    _type_resolver = ModuleImportIndex(source_dir_abs)
+    _op_resource_types: dict[int, str] = {}
+    _create_tool_names_by_type: dict[str, str] = {}
+    _canonical_create_types: set[str] = set()
+    _known_create_types: set[str] = set()
+    for _comp in components:
+        for _op in _comp.operations:
+            _binding_role = binding_roles.get(id(_op))
+            if _binding_role and _binding_role[0] == "invoke":
+                _op_resource_types[id(_op)] = _binding_role[1].normalized_resource_type
+                continue
+            if (
+                (_binding_role and _binding_role[0] == "create")
+                or _ilk(_op) == "create"
+            ):
+                _module_path = op_module_map.get(id(_op), "")
+                _rt = (
+                    _binding_role[1].normalized_resource_type
+                    if _binding_role
+                    else _first_resource_type_for_op(
+                        resolver=_type_resolver,
+                        module_path=_module_path,
+                        op=_op,
+                        prefer_return=True,
+                    )
+                )
+                if not _rt:
+                    _raw_rt = derive_resource_type(_op)
+                    _rt = _resource_type_from_hint(
+                        resolver=_type_resolver,
+                        module_path=_module_path,
+                        type_hint=_raw_rt,
+                    ) or _raw_rt
+                if _rt:
+                    _op_resource_types[id(_op)] = _rt
+                    _canonical_create_types.add(_rt)
+                    _known_create_types.add(_rt)
+                    _known_create_types.update(_resource_type_tokens_for_op(_op))
+                    _create_tool_names_by_type.setdefault(
+                        _rt,
+                        _operation_tool_name(_comp, _op),
+                    )
+    for _comp in components:
+        for _op in _comp.operations:
+            _module_path = op_module_map.get(id(_op), "")
+            _hints = [_op.return_type, *(param.type_hint for param in _op.parameters)]
+            for _hint in _hints:
+                _resolved = _resource_type_from_hint(
+                    resolver=_type_resolver,
+                    module_path=_module_path,
+                    type_hint=_hint,
+                )
+                if _resolved and _resolved in _canonical_create_types:
+                    _known_create_types.update(_resource_type_hint_tokens(_hint))
+    _known_create_types_frozen = frozenset(_known_create_types)
+    for _comp in components:
+        for _op in _comp.operations:
+            if id(_op) in _op_resource_types:
+                continue
+            _module_path = op_module_map.get(id(_op), "")
+            _rt = _first_resource_type_for_op(
+                op=_op,
+                resolver=_type_resolver,
+                module_path=_module_path,
+                prefer_return=False,
+            )
+            if _rt:
+                _op_resource_types[id(_op)] = _rt
+
     specs: list[AgentToolSpec] = []
+    total_ops = sum(
+        len(comp.operations) for comp in components
+    )
+    spec_idx = 0
+    _bridge_progress(f"   Building tool specs: 0/{total_ops}...", end="")
 
     for comp in components:
         for op in comp.operations:
+            spec_idx += 1
+            if spec_idx % 50 == 0:
+                _bridge_progress(
+                    f"\r   Building tool specs: {spec_idx}/{total_ops}...",
+                    end="",
+                )
             module_path = op_module_map[id(op)]
             key = (op.class_name, module_path)
             if key not in script_paths:
                 continue
             script_path = script_paths[key]
 
-            init_params = (
-                comp.class_init_params.get(op.class_name, [])
-                if op.class_name
-                else None
-            )
-            dispatch_map = cli_dispatch_by_module.get(module_path, {})
-            cli_subcommand = (
-                dispatch_map.get(op.name)
-                if _is_cli_handler_op(op, dispatch_map)
-                else None
-            )
-            is_cli_main = _is_cli_main_op(op, source_dir_abs, module_path)
-            tool_deps = dependency_index.get(to_kebab_tool_name(comp.name, op))
-            spec = operation_to_spec(
-                op,
-                source_dir=source_dir_abs,
-                script_path=script_path,
-                comp_name=comp.name,
-                bundle_id=effective_bundle_id,
-                init_params=init_params,
-                cli_subcommand=cli_subcommand,
-                cli_main=is_cli_main,
-                tool_deps=tool_deps,
-                module_path=module_path,
-            )
-
-            # Validate the spec
-            validate_spec(spec)
-
-            # F-55 L1: create-kind tools get a ``--catalog-metadata`` payload so
-            # the wrapper subprocess can persist the resulting ``agent_id`` to
-            # the bundle-local AgentCatalog.  This makes the create→invoke
-            # workflow recoverable across independent wrapper processes.
-            if infer_lifecycle_kind(op) == "create":
-                catalog_meta = lifecycle_metadata_payload(
+            try:
+                init_params = (
+                    comp.class_init_params.get(op.class_name, [])
+                    if op.class_name
+                    else None
+                )
+                dispatch_map = cli_dispatch_by_module.get(module_path, {})
+                cli_subcommand = (
+                    dispatch_map.get(op.name)
+                    if _is_cli_handler_op(op, dispatch_map)
+                    else None
+                )
+                is_cli_main = _is_cli_main_op(op, source_dir_abs, module_path)
+                tool_deps = dependency_index.get(to_kebab_tool_name(comp.name, op))
+                spec = operation_to_spec(
                     op,
                     source_dir=source_dir_abs,
+                    script_path=script_path,
+                    comp_name=comp.name,
                     bundle_id=effective_bundle_id,
-                    module_name=module_path,
-                    class_name=op.class_name,
-                    tool_name=spec.name,
+                    init_params=init_params,
+                    cli_subcommand=cli_subcommand,
+                    cli_main=is_cli_main,
+                    tool_deps=tool_deps,
+                    module_path=module_path,
                 )
-                if catalog_meta and isinstance(spec.call_impl, str):
-                    if bundle_path is not None:
-                        catalog_meta["_bundle_path"] = str(bundle_path)
-                    catalog_json = json.dumps(catalog_meta, ensure_ascii=False)
-                    enriched_call_impl = (
-                        f"{spec.call_impl} --catalog-metadata {shlex.quote(catalog_json)}"
+
+                # F-55 L1: create-kind tools get a ``--catalog-metadata`` payload so
+                # the wrapper subprocess can persist the resulting ``agent_id`` to
+                # the bundle-local AgentCatalog.  This makes the create→invoke
+                # workflow recoverable across independent wrapper processes.
+                binding_role = binding_roles.get(id(op))
+                lifecycle_kind = (
+                    binding_role[0]
+                    if binding_role
+                    else infer_lifecycle_kind(
+                        op,
+                        known_create_types=_known_create_types_frozen,
                     )
+                )
+                lifecycle_extra = {}
+                if init_params:
+                    lifecycle_extra["init_param_names"] = [p.name for p in _skip_variadic_params(init_params)]
+                op_resource_type = _op_resource_types.get(id(op), "")
+                if op_resource_type:
+                    lifecycle_extra["resource_type"] = op_resource_type
+                if binding_role:
+                    lifecycle_extra["handle_field"] = binding_role[1].handle_field
+
+                if lifecycle_kind == "invoke" and op_resource_type:
+                    consume_param = invoke_lifecycle_id_param(op)
+                    if (
+                        not consume_param
+                        and binding_role
+                        and binding_role[1].handle_field in spec.input_schema.get("properties", {})
+                    ):
+                        consume_param = binding_role[1].handle_field
                     spec = AgentToolSpec(
-                        **{**spec.__dict__, "call_impl": enriched_call_impl}
+                        **{
+                            **spec.__dict__,
+                            "input_schema": inject_resource_ref_schema(
+                                spec.input_schema,
+                                resource_type=op_resource_type,
+                                create_tool_name=_create_tool_names_by_type.get(
+                                    op_resource_type,
+                                    "",
+                                ),
+                                consume_param=consume_param,
+                            ),
+                        }
                     )
-                    validate_spec(spec)
 
-            specs.append(spec)
+                validate_spec(spec)
 
-            # Build name mapping (original → kebab-case).
-            # Primary name: {comp_name}.{op_name} — matches grouper convention
-            # and is used as the tool's registered name.
-            grouper_name = f"{comp.name}.{op.name}"
-            name_map[grouper_name] = spec.name
+                if lifecycle_kind == "create":
+                    catalog_meta = lifecycle_metadata_payload(
+                        op,
+                        source_dir=source_dir_abs,
+                        bundle_id=effective_bundle_id,
+                        module_name=module_path,
+                        class_name=op.class_name,
+                        tool_name=spec.name,
+                        known_create_types=_known_create_types_frozen,
+                        lifecycle_kind_override="create" if binding_role else None,
+                        extra_metadata=lifecycle_extra,
+                    )
+                    if catalog_meta and isinstance(spec.call_impl, str):
+                        if bundle_path is not None:
+                            catalog_meta["_bundle_path"] = str(bundle_path)
+                        catalog_json = json.dumps(catalog_meta, ensure_ascii=False)
+                        enriched_call_impl = (
+                            f"{spec.call_impl} --catalog-metadata {shlex.quote(catalog_json)}"
+                        )
+                        agent_compatible_type = (
+                            not op_resource_type
+                            or op_resource_type.endswith(("agent", "agentconfig"))
+                        )
+                        create_required = (
+                            ["agent_id", "created_persisted", "resource_catalog_path"]
+                            if agent_compatible_type
+                            else [
+                                "resource_ref",
+                                "resource_type",
+                                "created_persisted",
+                                "resource_catalog_path",
+                            ]
+                        )
+                        spec = AgentToolSpec(
+                            **{
+                                **spec.__dict__,
+                                "call_impl": enriched_call_impl,
+                                "output_schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "resource_ref": {"type": "string"},
+                                        "resource_type": {"type": "string"},
+                                        "agent_id": {"type": "string"},
+                                        "created_persisted": {"const": True},
+                                        "resource_catalog_path": {"type": "string"},
+                                        "resource_catalog_reason": {"type": "string"},
+                                        "callable_by_agent_id": {"type": "boolean"},
+                                        "callable_by_resource_ref": {"type": "boolean"},
+                                    },
+                                    "required": create_required,
+                                },
+                            }
+                        )
+                        validate_spec(spec)
+                elif lifecycle_kind == "invoke":
+                    fallback_meta = lifecycle_fallback_payload(
+                        op,
+                        source_dir=source_dir_abs,
+                        bundle_id=effective_bundle_id,
+                        module_name=module_path,
+                        class_name=op.class_name,
+                        tool_name=spec.name,
+                        known_create_types=_known_create_types_frozen,
+                        lifecycle_kind_override="invoke" if binding_role else None,
+                        extra_metadata=lifecycle_extra,
+                    )
+                    if fallback_meta and isinstance(spec.call_impl, str):
+                        if bundle_path is not None:
+                            fallback_meta["_bundle_path"] = str(bundle_path)
+                        fallback_json = json.dumps(fallback_meta, ensure_ascii=False)
+                        enriched_call_impl = (
+                            f"{spec.call_impl} --catalog-fallback {shlex.quote(fallback_json)}"
+                        )
+                        spec = AgentToolSpec(
+                            **{**spec.__dict__, "call_impl": enriched_call_impl}
+                        )
+                        validate_spec(spec)
 
-            # Also register fallback names for robust lookup
-            if op.class_name:
-                class_name_raw = f"{op.class_name}.{op.name}"
-                name_map[class_name_raw] = spec.name
-            if op.file_stem:
-                file_stem_raw = f"{op.file_stem}.{op.name}"
-                if file_stem_raw != grouper_name:
-                    name_map[file_stem_raw] = spec.name
-            # Class-qualified form: {comp}.{class}.{op} — used by
-            # COMPONENT_GROUP / KEYWORD_MATCH strategies after the
-            # skill_grouper fix that includes class_name in allowed_tools.
-            if op.class_name:
-                comp_class_name = f"{comp.name}.{op.class_name}.{op.name}"
-                name_map[comp_class_name] = spec.name
-            # Fully-qualified form used by IO_RELATION strategy
-            full_name = f"{comp.name}.{grouper_name}"
-            name_map[full_name] = spec.name
+                specs.append(spec)
+
+                # Build name mapping (original → kebab-case).
+                # Primary name: {comp_name}.{op_name} — matches grouper convention
+                # and is used as the tool's registered name.
+                grouper_name = f"{comp.name}.{op.name}"
+                name_map[grouper_name] = spec.name
+
+                # Also register fallback names for robust lookup
+                if op.class_name:
+                    class_name_raw = f"{op.class_name}.{op.name}"
+                    name_map[class_name_raw] = spec.name
+                if op.file_stem:
+                    file_stem_raw = f"{op.file_stem}.{op.name}"
+                    if file_stem_raw != grouper_name:
+                        name_map[file_stem_raw] = spec.name
+                # Class-qualified form: {comp}.{class}.{op} — used by
+                # COMPONENT_GROUP / KEYWORD_MATCH strategies after the
+                # skill_grouper fix that includes class_name in allowed_tools.
+                if op.class_name:
+                    comp_class_name = f"{comp.name}.{op.class_name}.{op.name}"
+                    name_map[comp_class_name] = spec.name
+                # Fully-qualified form used by IO_RELATION strategy
+                full_name = f"{comp.name}.{grouper_name}"
+                name_map[full_name] = spec.name
+            # ponytail: one bad op (e.g. sys.exit at import) must not abort convert
+            except (Exception, SystemExit):
+                logger.warning(
+                    "Failed to build tool spec for %s.%s, skipping",
+                    comp.name,
+                    op.name,
+                    exc_info=True,
+                )
+                continue
+
+    _bridge_progress(f"\r   Building tool specs: {spec_idx}/{total_ops} done")
 
     # ── Phase 4: persist specs (JSON files) ──
 

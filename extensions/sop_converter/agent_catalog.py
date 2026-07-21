@@ -92,6 +92,17 @@ class AgentCatalogEntry:
         metadata: User-defined metadata (search tags, intent labels, source
             tool name, etc.). ``upsert`` merges new metadata into existing
             entries on retry.
+        resource_type: §8 type-contract field. Normalized resource type this
+            entry produces (e.g. ``"agentconfig"``). Empty for legacy entries;
+            enables :meth:`AgentCatalog.latest_by_resource_type` lookups so
+            invoke-kind tools can recover an agent without knowing the
+            ``agent_id`` ahead of time — they only need the resource type
+            their parameter annotation declares.
+        handle_field: §8 type-contract field. Name of the field in the
+            create-tool's return value that carries the stable handle
+            (typically ``"agent_id"``). Recorded at create time so the
+            fallback path knows which key to read from the catalog payload
+            without guessing by parameter name.
     """
 
     agent_id: str
@@ -110,6 +121,9 @@ class AgentCatalogEntry:
     schema_version: int = 1
     sdk_version: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    # §8 type-contract fields (default empty for backward compatibility).
+    resource_type: str = ""
+    handle_field: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -363,6 +377,8 @@ class AgentCatalog:
             schema_version=entry.schema_version,
             sdk_version=entry.sdk_version,
             metadata=merged_meta,
+            resource_type=entry.resource_type,
+            handle_field=entry.handle_field,
         )
         self.entries[entry.agent_id] = new_entry
         self._removed_ids.discard(entry.agent_id)
@@ -388,7 +404,32 @@ class AgentCatalog:
             schema_version=entry.schema_version,
             sdk_version=entry.sdk_version,
             metadata=dict(entry.metadata),
+            resource_type=entry.resource_type,
+            handle_field=entry.handle_field,
         )
+
+    def latest_by_resource_type(self, resource_type: str) -> AgentCatalogEntry | None:
+        """§8 type-contract lookup: return the most recently created entry
+        whose ``resource_type`` matches.
+
+        Matches are case-insensitive on the normalized type token.  When
+        multiple entries share the same ``resource_type``, the one with the
+        newest ``created_at`` wins.  Returns ``None`` when no entry matches
+        or when *resource_type* is empty.
+        """
+        if not resource_type:
+            return None
+        target = resource_type.lower()
+        best: AgentCatalogEntry | None = None
+        for entry in self.entries.values():
+            if (entry.resource_type or "").lower() != target:
+                continue
+            if best is None or entry.created_at > best.created_at:
+                best = entry
+        if best is None:
+            return None
+        # Restore redacted fields via get() for consistency.
+        return self.get(best.agent_id)
 
     def delete(self, agent_id: str) -> bool:
         removed = self.entries.pop(agent_id, None) is not None

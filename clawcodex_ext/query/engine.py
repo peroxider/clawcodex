@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, AsyncGenerator, Callable
@@ -30,6 +31,9 @@ from clawcodex_ext.context_system.prompt_assembly import (
 from src.query.query import QueryParams, StreamEvent, query
 from clawcodex_ext.services.compact.pipeline import PipelineConfig
 from clawcodex_ext.services.compact.autocompact import AutoCompactTracking
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -229,7 +233,12 @@ class QueryEngine:
             )
             return system_prompt, parts.user_context, parts.system_context
 
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "system prompt assembly failed; using legacy fallback: %s",
+                exc,
+                exc_info=True,
+            )
             # Fallback to legacy str-shape builder. This branch is only hit
             # on assembly errors; in steady state the production path above
             # always returns the block-list shape.
@@ -240,7 +249,12 @@ class QueryEngine:
                 )
             except Exception:
                 context_prompt = ""
-            return context_prompt, {}, {}
+            fallback_parts = [
+                part
+                for part in (context_prompt, self._config.append_system_prompt)
+                if part and part.strip()
+            ]
+            return "\n\n".join(fallback_parts), {}, {}
 
     async def submit_message(
         self,

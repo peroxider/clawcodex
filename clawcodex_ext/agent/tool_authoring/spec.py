@@ -14,11 +14,12 @@ class AgentToolSpec:
         name: Unique tool name (kebab-case recommended).
         description: Human-readable description of what the tool does.
         input_schema: JSON Schema dict describing required/optional parameters.
-        call_type: How the tool is invoked — ``"bash"``, ``"http"``, or ``"python"``.
+        call_type: How the tool is invoked — ``"bash"``, ``"http"``, ``"python"``, or ``"workflow"``.
         call_impl: Implementation detail (type depends on ``call_type``):
             - bash:  A format-string command template, e.g. ``"glab project view {project_id}"``.
             - http:  A dict with ``method`` and ``url`` keys (both with ``{param}`` placeholders).
             - python: A string naming a registered whitelisted function.
+            - workflow: A dict containing a catalog workflow reference.
         tags: Optional classification labels for searching/filtering.
         aliases: Alternative names that also trigger this tool.
         source: Origin marker; ``"agent-created"`` for agent-authored tools.
@@ -65,7 +66,7 @@ class AgentToolSpec:
     name: str
     description: str
     input_schema: dict
-    call_type: Literal["bash", "http", "python"]
+    call_type: Literal["bash", "http", "python", "workflow"]
     call_impl: str | dict
     tags: tuple[str, ...] = field(default_factory=tuple)
     aliases: tuple[str, ...] = field(default_factory=tuple)
@@ -75,3 +76,4 @@ class AgentToolSpec:
     # - class methods: SdkInstanceRegistry ``_instances`` bucket
     # - standalone functions: SdkContextRegistry ``contextvars.Context`` bucket
     stateful_wrapper: bool = False
+    output_schema: dict | None = None

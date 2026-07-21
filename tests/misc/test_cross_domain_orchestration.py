@@ -234,11 +234,15 @@ class TestCrossDomainOrchestration(unittest.TestCase):
             )
             self.assertTrue(path.is_file())
             block = format_orchestration_routes_block(bundle)
-            self.assertIn("Start the demo CLI", block)
-            self.assertIn("[单步 CLI]", block)
-            self.assertIn("单步交互式 CLI", block)
-            self.assertNotIn("create-agent-team-session", block)
-            self.assertNotIn("run-team-cli", block)
+            self.assertIn("ORCHESTRATION_ROUTES.md", block)
+            self.assertIn("Read", block)
+            self.assertNotIn("Start the demo CLI", block)
+            inlined = format_orchestration_routes_block(bundle, inline_content=True)
+            self.assertIn("Start the demo CLI", inlined)
+            self.assertIn("[单步 CLI]", inlined)
+            self.assertIn("单步交互式 CLI", inlined)
+            self.assertNotIn("create-agent-team-session", inlined)
+            self.assertNotIn("run-team-cli", inlined)
 
     def test_orchestration_routes_max_is_40(self) -> None:
         self.assertEqual(ORCHESTRATION_ROUTES_MAX, 40)
@@ -301,8 +305,9 @@ class TestCrossDomainOrchestration(unittest.TestCase):
             bundle = Path(tmp)
             write_orchestration_routes(bundle, skills, components=components)
             body = append_sop_overview_routing("", bundle_path=bundle)
-            self.assertIn("Start the demo CLI", body)
-            self.assertIn("demo-agent", body)
+            self.assertIn("ORCHESTRATION_ROUTES.md", body)
+            self.assertIn("Read", body)
+            self.assertNotIn("Start the demo CLI", body)
 
 
 if __name__ == "__main__":

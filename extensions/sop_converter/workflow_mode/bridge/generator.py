@@ -8,6 +8,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from ...path_resolver import format_extra_sys_path_inserts, infer_extra_sys_path_entries
 from ..capability.models import StageAgentMap
 from ..extractors.models import WorkflowGraph
 from .cli_discovery import discover_cli_prefix, split_cli_prefix
@@ -90,11 +91,21 @@ class BridgeGenerator:
         stage_dispatch: dict[int, dict[str, Any]],
         stage_outputs: dict[int, list[str]],
     ) -> str:
+        extra_paths: list[str] = []
+        for meta in stage_dispatch.values():
+            module_path = meta.get("module_path")
+            if module_path:
+                module_name = module_path.replace(".py", "").replace("/", ".")
+                extra_paths.extend(infer_extra_sys_path_entries(str(source_dir), module_name))
+        extra_paths = list(dict.fromkeys(extra_paths))
+        extra_sys_path_inserts = format_extra_sys_path_inserts(extra_paths)
+
         template = self._jinja.get_template("python_bridge.py.j2")
         return template.render(
             source_dir=str(source_dir),
             stage_dispatch_json=repr(stage_dispatch),
             stage_outputs_json=repr(stage_outputs),
+            extra_sys_path_inserts=extra_sys_path_inserts,
         )
 
     def _render_cli_bridge(

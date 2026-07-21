@@ -34,6 +34,11 @@ from extensions.sop_converter.agent_catalog_resolver import (
     HOME_ROOT_ENV,
     resolve_catalog_path,
 )
+from extensions.sop_converter.resource_catalog import (
+    ResourceCatalog,
+    agent_entry_to_resource_record,
+    resolve_resource_catalog_path,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -220,6 +225,86 @@ class TestInvokeExistingAgentCrossProcess(unittest.TestCase):
         self.assertEqual(out["output"]["echo"], "ping")
 
 
+class TestInvokeExistingAgentResourceCatalogFallback(unittest.TestCase):
+    """F-56: resource-catalog alone can recover an existing agent."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.bundle = self.tmp / "bundle"
+        self.bundle.mkdir()
+        self.sdk = _write_fake_sdk(self.tmp, method="invoke")
+        self._saved = {
+            HOME_ROOT_ENV: os.environ.pop(HOME_ROOT_ENV, None),
+            HOME_ONLY_ENV: os.environ.pop(HOME_ONLY_ENV, None),
+        }
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+        for k, v in self._saved.items():
+            if v is not None:
+                os.environ[k] = v
+
+    def test_resource_catalog_recovers_when_agent_catalog_missing(self) -> None:
+        entry = AgentCatalogEntry(
+            agent_id="agent-f56",
+            sdk_source_dir=str(self.tmp),
+            dsl={"name": "verify-bot"},
+            model="gpt-4o",
+            provider="openai",
+            class_name="DemoAgent",
+            module_name="fake_sdk.agent",
+            init_kwargs={"model": "gpt-4o-mini"},
+            resource_type="AgentConfig",
+            handle_field="agent_id",
+        )
+        loc = resolve_resource_catalog_path(self.bundle)
+        cat = ResourceCatalog()
+        cat.upsert(agent_entry_to_resource_record(entry, bundle_id="bundle"))
+        cat.save(loc.path)
+
+        self.assertFalse((self.bundle / ".clawcodex" / "agent-catalog.json").exists())
+        out = _run_wrapper(
+            {"agent_id": "agent-f56", "query": "ping"},
+            bundle_path=str(self.bundle),
+        )
+        self.assertEqual(out["agent_id"], "agent-f56")
+        self.assertEqual(out["output"]["echo"], "ping")
+        self.assertEqual(out["output"]["model"], "gpt-4o-mini")
+        self.assertEqual(
+            [step["step_id"] for step in out["trace"]],
+            ["load_agent_record", "materialize_agent", "invoke_agent"],
+        )
+        self.assertTrue(all(step["status"] == "success" for step in out["trace"]))
+
+    def test_resource_catalog_resolves_agent_name_without_agent_id(self) -> None:
+        entry = AgentCatalogEntry(
+            agent_id="agent-by-name",
+            sdk_source_dir=str(self.tmp),
+            dsl={"name": "verify-bot"},
+            model="gpt-4o",
+            provider="openai",
+            class_name="DemoAgent",
+            module_name="fake_sdk.agent",
+            init_kwargs={"model": "gpt-4o-mini"},
+            resource_type="AgentConfig",
+            handle_field="agent_id",
+        )
+        location = resolve_resource_catalog_path(self.bundle)
+        catalog = ResourceCatalog()
+        catalog.upsert(agent_entry_to_resource_record(entry, bundle_id="bundle"))
+        catalog.save(location.path)
+
+        out = _run_wrapper(
+            {"agent_ref": "verify-bot", "query": "ping"},
+            bundle_path=str(self.bundle),
+        )
+
+        self.assertEqual(out["agent_ref"], "verify-bot")
+        self.assertEqual(out["agent_id"], "agent-by-name")
+        self.assertEqual(out["output"]["echo"], "ping")
+
+
 class TestInvokeExistingAgentHomeOnly(unittest.TestCase):
     """Scenario 3: CLAWCODEX_CATALOG_HOME_ONLY=1 → catalog in $HOME."""
 
@@ -297,9 +382,10 @@ class TestInvokeExistingAgentMissingCatalog(unittest.TestCase):
             {"agent_id": "ghost", "query": "ping"},
             bundle_path=str(self.bundle),
         )
-        self.assertEqual(out["error_code"], "agent_catalog_missing")
+        self.assertEqual(out["error_code"], "resource_catalog_missing")
         self.assertEqual(out["agent_id"], "ghost")
-        self.assertIn("agent catalog not found", out["error"])
+        self.assertEqual(out["step_id"], "load_agent_record")
+        self.assertEqual(out["trace"][-1]["status"], "error")
 
     def test_agent_id_absent_from_existing_catalog(self) -> None:
         cat = AgentCatalog()
@@ -316,7 +402,7 @@ class TestInvokeExistingAgentMissingCatalog(unittest.TestCase):
             {"agent_id": "missing", "query": "ping"},
             bundle_path=str(self.bundle),
         )
-        self.assertEqual(out["error_code"], "agent_not_in_catalog")
+        self.assertEqual(out["error_code"], "resource_catalog_missing")
 
 
 class TestInvokeExistingAgentMaterializeFailures(unittest.TestCase):
@@ -356,7 +442,7 @@ class TestInvokeExistingAgentMaterializeFailures(unittest.TestCase):
             {"agent_id": "unloadable", "query": "x"},
             bundle_path=str(self.bundle),
         )
-        self.assertEqual(out["error_code"], "materialize_failed")
+        self.assertEqual(out["error_code"], "resource_materialize_failed")
 
     def test_invoke_falls_back_to_run_method(self) -> None:
         sdk = _write_fake_sdk(self.tmp, method="run")

@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .runtime_paths import normalize_runtime_path
+
 logger = logging.getLogger(__name__)
 
 BUNDLE_MANIFEST_NAME = "bundle.json"
@@ -24,6 +26,8 @@ class BundleManifest:
     workflow_yaml: str | None = None
     bridge_script: str | None = None
     workflow_mode: str | None = None
+    sdk_requirements: tuple[str, ...] = ()
+    bundle_venv_dir: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -37,6 +41,10 @@ class BundleManifest:
             payload["bridge_script"] = self.bridge_script
         if self.workflow_mode:
             payload["workflow_mode"] = self.workflow_mode
+        if self.sdk_requirements:
+            payload["sdk_requirements"] = list(self.sdk_requirements)
+        if self.bundle_venv_dir:
+            payload["bundle_venv_dir"] = self.bundle_venv_dir
         return payload
 
     @classmethod
@@ -48,7 +56,7 @@ class BundleManifest:
         if not isinstance(bundle_id, str) or not bundle_id.strip():
             bundle_id = "unknown"
         try:
-            sdk_path = Path(raw_dir).expanduser().resolve()
+            sdk_path = normalize_runtime_path(raw_dir)
         except OSError:
             return None
         if not sdk_path.is_dir():
@@ -66,6 +74,17 @@ class BundleManifest:
         workflow_mode = data.get("workflow_mode")
         if workflow_mode is not None and not isinstance(workflow_mode, str):
             workflow_mode = None
+        sdk_requirements_raw = data.get("sdk_requirements")
+        sdk_requirements: tuple[str, ...] = ()
+        if isinstance(sdk_requirements_raw, list):
+            sdk_requirements = tuple(
+                item.strip()
+                for item in sdk_requirements_raw
+                if isinstance(item, str) and item.strip()
+            )
+        bundle_venv_dir = data.get("bundle_venv_dir")
+        if bundle_venv_dir is not None and not isinstance(bundle_venv_dir, str):
+            bundle_venv_dir = None
         return cls(
             bundle_id=bundle_id,
             sdk_source_dir=sdk_path,
@@ -73,11 +92,13 @@ class BundleManifest:
             workflow_yaml=workflow_yaml,
             bridge_script=bridge_script,
             workflow_mode=workflow_mode,
+            sdk_requirements=sdk_requirements,
+            bundle_venv_dir=bundle_venv_dir,
         )
 
 
 def manifest_path_for_bundle(bundle_path: Path) -> Path:
-    return bundle_path.resolve() / BUNDLE_MANIFEST_NAME
+    return normalize_runtime_path(bundle_path) / BUNDLE_MANIFEST_NAME
 
 
 def write_bundle_manifest(
@@ -88,17 +109,23 @@ def write_bundle_manifest(
     workflow_yaml: str | None = None,
     bridge_script: str | None = None,
     workflow_mode: str | None = None,
+    sdk_requirements: tuple[str, ...] | list[str] = (),
+    bundle_venv_dir: str | None = None,
 ) -> Path:
     """Write ``bundle.json`` under *bundle_dir* (created if missing)."""
-    bundle_dir = bundle_dir.resolve()
+    bundle_dir = normalize_runtime_path(bundle_dir)
     bundle_dir.mkdir(parents=True, exist_ok=True)
-    resolved_sdk = Path(sdk_source_dir).expanduser().resolve()
+    resolved_sdk = normalize_runtime_path(sdk_source_dir)
     manifest = BundleManifest(
         bundle_id=bundle_id or bundle_dir.name,
         sdk_source_dir=resolved_sdk,
         workflow_yaml=workflow_yaml,
         bridge_script=bridge_script,
         workflow_mode=workflow_mode,
+        sdk_requirements=tuple(
+            item.strip() for item in sdk_requirements if isinstance(item, str) and item.strip()
+        ),
+        bundle_venv_dir=bundle_venv_dir,
     )
     path = manifest_path_for_bundle(bundle_dir)
     path.write_text(
@@ -129,13 +156,13 @@ def resolve_sdk_source_dir(
     workspace_root: Path | None = None,
 ) -> Path | None:
     """Resolve SDK source root from bundle dir or workspace ``.clawcodex/<name>/``."""
-    bundle_path = bundle_path.resolve()
+    bundle_path = normalize_runtime_path(bundle_path)
     manifest = read_bundle_manifest(bundle_path)
     if manifest is not None:
         return manifest.sdk_source_dir
 
     if workspace_root is not None:
-        ws = workspace_root.resolve()
+        ws = normalize_runtime_path(workspace_root)
         alt = ws / ".clawcodex" / bundle_path.name
         if alt != bundle_path:
             manifest = read_bundle_manifest(alt)

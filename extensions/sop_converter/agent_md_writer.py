@@ -113,6 +113,7 @@ user-invocable: true
 {% for tool in allowed_tools %}
   - {{ tool }}
 {% endfor %}{% endif %}
+{% if lifecycle_deps %}lifecycle-deps: {{ lifecycle_deps }}{% endif %}
 ---
 
 # Skill: {{ name }}
@@ -427,6 +428,7 @@ class AgentMarkdownWriter:
                 description=skill.get("description", ""),
                 allowed_tools=allowed_tools,
                 allowed_tool_count=len(allowed_tools),
+                lifecycle_deps=skill.get("lifecycle_deps", ""),
                 parameters=skill.get("parameters", []),
                 source_code=skill.get("source_code", ""),
                 task_guide=skill.get("task_guide", ""),
@@ -545,6 +547,7 @@ class AgentMarkdownWriter:
             content,
             bundle_path=output_dir,
             sdk_source_dir=sdk_source_dir,
+            component_agents=component_agents,
         )
 
         file_path.write_text(content.strip() + "\n", encoding="utf-8")

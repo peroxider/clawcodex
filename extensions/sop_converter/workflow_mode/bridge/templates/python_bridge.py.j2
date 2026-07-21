@@ -45,6 +45,8 @@ SDK_SOURCE_DIR = _resolve_source_dir()
 if str(SDK_SOURCE_DIR) not in sys.path:
     sys.path.insert(0, str(SDK_SOURCE_DIR))
 
+{{ extra_sys_path_inserts }}
+
 # stage_id → dispatch metadata
 STAGE_DISPATCH: dict[int, dict[str, Any]] = {{ stage_dispatch_json }}
 

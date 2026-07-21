@@ -23,7 +23,8 @@ class TestImportAliasResolver(unittest.TestCase):
         legacy_pkg = self.root / "demo_sdk" / "legacy"
         agents_pkg = self.root / "demo_sdk" / "agents"
         app_pkg = self.root / "demo_sdk" / "app"
-        for pkg in (legacy_pkg, agents_pkg, app_pkg):
+        widgets_pkg = self.root / "demo_sdk" / "widgets"
+        for pkg in (legacy_pkg, agents_pkg, app_pkg, widgets_pkg):
             pkg.mkdir(parents=True)
             (pkg / "__init__.py").write_text("", encoding="utf-8")
 
@@ -63,6 +64,31 @@ class TestImportAliasResolver(unittest.TestCase):
 
                 def create_llm_agent(agent_config: AgentConfig):
                     return agent_config
+                """
+            ),
+            encoding="utf-8",
+        )
+        (widgets_pkg / "types.py").write_text(
+            textwrap.dedent(
+                """
+                class WidgetConfig:
+                    pass
+                """
+            ),
+            encoding="utf-8",
+        )
+        (widgets_pkg / "factory.py").write_text(
+            textwrap.dedent(
+                """
+                from .types import WidgetConfig
+                """
+            ),
+            encoding="utf-8",
+        )
+        (widgets_pkg / "runner.py").write_text(
+            textwrap.dedent(
+                """
+                from .types import WidgetConfig as PublicConfig
                 """
             ),
             encoding="utf-8",
@@ -111,6 +137,19 @@ class TestImportAliasResolver(unittest.TestCase):
             resolved,
             ("demo_sdk.agents.react_agent", "AgentConfig"),
         )
+
+    def test_relative_import_aliases_resolve_to_same_type(self) -> None:
+        resolver = ModuleImportIndex(str(self.root))
+        factory_identity = resolver.resolve_type_identity(
+            "demo_sdk.widgets.factory",
+            "WidgetConfig",
+        )
+        runner_identity = resolver.resolve_type_identity(
+            "demo_sdk.widgets.runner",
+            "PublicConfig",
+        )
+        self.assertEqual(factory_identity, "demo_sdk_widgets_types_widgetconfig")
+        self.assertEqual(runner_identity, factory_identity)
 
 
 class TestJiuwenAgentImportAliasResolver(unittest.TestCase):

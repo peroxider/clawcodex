@@ -132,6 +132,14 @@ def _validate(
             issues.append(ValidationIssue(path, f"expected one of {allowed!r}, got {value!r}"))
             return
 
+    if "const" in schema:
+        expected = schema.get("const")
+        if value != expected:
+            issues.append(
+                ValidationIssue(path, f"expected const {expected!r}, got {value!r}")
+            )
+            return
+
 
 def _validate_object(
     value: dict[str, Any], schema: Mapping[str, Any], *, path: str, issues: list[ValidationIssue]

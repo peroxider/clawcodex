@@ -201,6 +201,33 @@ class TestBundleToolAllowlistFallback(unittest.TestCase):
             load = register_bundle_skills(bundle_path, ws)
             self.assertIn("openjiuwen-agent-teams-team-memory-dir", load.tool_names)
 
+    def test_register_bundle_skills_accepts_composite_specs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle_path = Path(tmp) / "JiuwenAgent_tool_test"
+            bundle_path.mkdir(parents=True)
+            ws = Path(tmp)
+            skill_dir = ws / "skills" / "JiuwenAgent_tool_test"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "core_merged-skill.md").write_text(
+                "---\nname: core_merged-skill\ndescription: test\n---\n\n# Core\n",
+                encoding="utf-8",
+            )
+            save_spec(
+                AgentToolSpec(
+                    name="invoke-existing-agent",
+                    description="Invoke a persisted agent",
+                    input_schema={"type": "object", "properties": {}},
+                    call_type="bash",
+                    call_impl='python3 -c "print(1)"',
+                    source="composite-tool",
+                    bundle_id=bundle_path.name,
+                ),
+                tool_dir=bundle_tool_dir(bundle_path),
+            )
+
+            load = register_bundle_skills(bundle_path, ws)
+            self.assertIn("invoke-existing-agent", load.tool_names)
+
     def test_activate_keeps_bundle_tools_when_allowlist_from_specs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             bundle_path = Path(tmp) / "JiuwenAgent_tool_test"

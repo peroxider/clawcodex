@@ -63,7 +63,14 @@ docs/feature_plan/
 | F-Number | 名称 | 状态 | 章节路径 |
 |----------|------|:----:|---------|
 | F-50 | SOP 转换器源码固化 (子特性 A-G) | 🟡 | [f-50-sop-converter.md](04-architecture-sdk/f-50-sop-converter.md) |
-| F-52 | Python SDK 方法注册为 Tool | ✅ | [f-52-sdk-to-tool.md](04-architecture-sdk/f-52-sdk-to-tool.md) |
+| F-52 | Python SDK 方法注册为 Tool | 📋 | [f-52-sdk-to-tool.md](04-architecture-sdk/f-52-sdk-to-tool.md) |
+| F-55 | Tool 生命周期依赖与资源类型契约 | ✅ | [f-55-tool-lifecycle-dependencies.md](04-architecture-sdk/f-55-tool-lifecycle-dependencies.md) |
+| F-56 | SOP Resource Catalog | ✅ | [f-56-sop-resource-catalog.md](04-architecture-sdk/f-56-sop-resource-catalog.md) |
+| F-57 | SOP 可执行组合工作流 | 🔧 | [f-57-sop-executable-composite-workflows.md](04-architecture-sdk/f-57-sop-executable-composite-workflows.md) |
+| F-58 | SOP Resource Contract Schema | 📋 | [f-58-sop-resource-contract-schema.md](04-architecture-sdk/f-58-sop-resource-contract-schema.md) |
+| F-59 | SOP Runtime Guards & Recovery | 📋 | [f-59-sop-runtime-guards-recovery.md](04-architecture-sdk/f-59-sop-runtime-guards-recovery.md) |
+| F-60 | SOP E2E Evaluation & Observability | 📋 | [f-60-sop-e2e-evaluation-observability.md](04-architecture-sdk/f-60-sop-e2e-evaluation-observability.md) |
+| F-157 | ToolSearch 宏工具 / 原子工具分层检索 | 🔧 | [f-157-toolsearch-layered-macro-retrieval.md](04-architecture-sdk/f-157-toolsearch-layered-macro-retrieval.md) |
 
 ### Cron 系统
 
@@ -155,5 +162,6 @@ docs/feature_plan/
 | 2026-07-11 | 删除 F-120 已完成特性规划文档 | F-120 Agent Dashboard 全部 6 个 Phase 完成（124 tests，commit 3639db2b 补齐三个缺口），移除 08-agent-dashboard 章节与 F-120 表行；SOP source 接入点改由 `extensions/agent_dashboard/sources/sop_source.py` 顶部 docstring 记录 |
 | 2026-07-13 | 新增 08-recording 章节与 F-156 Asciicast v2 录制器 | 5 子系统（orchestrator / query / SOP / visualizer / cron）零 src/ 改动落地，60 unit+integration 测试通过，稳定性门禁 Stages 1-5/7-9 全绿 |
 | 2026-07-14 | 新增 F-130 自校正上下文切换 | 在 F-119 section registry 基础上规划元认知换脑机制；模板 + Agent 自定义的 Profile 系统；循环检测器框架；上下文切换引擎 + rollback；默认 4 个 Profile（default/debug/creative/review） |
+| 2026-07-18 | 新增 F-157 ToolSearch 宏/原子分层检索，并回写 F-56/F-57 边界 | 自然语言验收显示 phrase-only route 不能稳定阻止 SDK 原子工具抢占；新增 `intent_key`、`covered_tools`、RetrievalPlan、exclusive suppression 与执行前回滚设计 |
 | 2026-07-21 | 新增 dynamic-context-architecture.md (DC-001 ~ DC-020) | 用户提出"动态上下文切换/装配/生成"挑战性脑暴问题；沉淀 20 项原理特性规划，覆盖上下文生命周期 / 抗幻觉 / 推理扩展 / 元架构 4 组；定位为 brainstorm 文档，不申请 F-Number，落地时按子特性单独立项 |
 | 2026-07-21 | 更新 CCB 对标章节:F-84/F-87/F-88/F-92/F-95 标记为 ✅,F-94 保持 🚧 | 代码确认 5 个特性完全落地,同步 `06-ccb-benchmark/README.md` §A 缺口矩阵与单篇文档状态 |

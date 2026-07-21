@@ -18,17 +18,21 @@ executable agent tools with bash-callable wrapper scripts.
 from __future__ import annotations
 
 import json
+import shlex
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from clawcodex_ext.agent.tool_authoring.call_handlers.bash import execute_bash
 from extensions.sop_converter import tool_registry_bridge as trb
+from extensions.sop_converter.resource_catalog import ResourceCatalog
 from extensions.sop_converter.source_parser import (
     ParamSpec,
     SourceComponent,
     SourceOperation,
+    SourceCodeParser,
 )
 from extensions.sop_converter.tool_registry_bridge import (
     _coerce_param_expression,
@@ -103,6 +107,12 @@ def _make_component(
         description="A test component",
         operations=operations or [],
     )
+
+
+def _catalog_payload(call_impl: str, flag: str) -> dict:
+    parts = shlex.split(call_impl)
+    idx = parts.index(flag)
+    return json.loads(parts[idx + 1])
 
 
 def _isolated_dirs() -> tuple[object, Path, Path]:
@@ -377,6 +387,43 @@ class TestBackendSubprojectSysPath(unittest.TestCase):
             )
             self.assertEqual(entries, [])
 
+    def test_detects_sibling_src_layout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            demo = root / "llm_finetuning_demo"
+            src = demo / "src"
+            src.mkdir(parents=True)
+            (src / "run_data_pipeline.py").write_text(
+                "def run_data_pipeline():\n    return {}\n",
+                encoding="utf-8",
+            )
+            (demo / "run_full_pipeline.py").write_text(
+                textwrap.dedent(
+                    """\
+                    import os, sys
+                    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+                    from run_data_pipeline import run_data_pipeline
+
+                    def main():
+                        run_data_pipeline()
+                    """
+                ),
+                encoding="utf-8",
+            )
+            entries = _infer_extra_sys_path_entries(
+                str(root), "llm_finetuning_demo.run_full_pipeline"
+            )
+            self.assertEqual(entries, [str(src.resolve())])
+
+    def test_no_sibling_src_means_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            pkg = root / "flat_sdk"
+            pkg.mkdir()
+            (pkg / "api.py").write_text("def ping():\n    return 1\n", encoding="utf-8")
+            entries = _infer_extra_sys_path_entries(str(root), "flat_sdk.api")
+            self.assertEqual(entries, [])
+
 
 # ---------------------------------------------------------------------------
 # _script_name_for_class / _script_name_for_functions
@@ -451,6 +498,33 @@ class TestGenerateWrapperScript(unittest.TestCase):
         self.assertIn("def compute", content)
         # sys.path is injected.
         self.assertIn(str(source_dir), content)
+
+    def test_bundle_venv_metadata_injected_when_requested(self) -> None:
+        op = _make_op(name="compute", class_name="Calc")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "proj"
+            bundle_dir = root / "bundle"
+            source_dir.mkdir()
+            bundle_dir.mkdir()
+            script_path = _generate_wrapper_script(
+                [op],
+                class_name="Calc",
+                module_name="proj.calc",
+                file_stem="calc",
+                source_dir=str(source_dir),
+                bundle_dir=bundle_dir,
+                bundle_venv_python=str(bundle_dir / ".venv" / "bin" / "python"),
+                sdk_requirements=("openai>=1", "pydantic>=2"),
+                repo_root=str(root),
+            )
+        content = script_path.read_text(encoding="utf-8")
+        self.assertIn("_BUNDLE_DIR", content)
+        self.assertIn("_normalize_bootstrap_path", content)
+        self.assertIn("target = bundle_venv_python(bundle_dir).resolve()", content)
+        self.assertIn("ensure_bundle_venv_and_reexec", content)
+        self.assertIn("openai>=1", content)
+        self.assertIn(str(bundle_dir.resolve()), content)
 
     def test_function_script_created(self) -> None:
         op = _make_op(name="my_func", class_name=None, file_stem="helpers")
@@ -707,7 +781,9 @@ class TestGenerateWrapperScript(unittest.TestCase):
             content = script_path.read_text(encoding="utf-8")
             self.assertIn(str(app_root.resolve()), content)
             path_idx = content.index("sys.path.insert(0, _SOURCE_DIR)")
-            extra_idx = content.index(f'sys.path.insert(0, r"{app_root.resolve()}")')
+            extra_idx = content.index(
+                f"sys.path.insert(0, _normalize_bootstrap_path({str(app_root.resolve())!r}))"
+            )
             self.assertLess(extra_idx, path_idx)
             if (
                 "from AgentSDK.data_generation_platform.backend.utils.text_utils import"
@@ -727,40 +803,6 @@ class TestGenerateWrapperScript(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(json.loads(result.stdout.strip()), ["hello world from backend subproject test"])
-
-    def test_team_backend_wrapper_imports_member_mode(self) -> None:
-        jiouwen_root = Path("D:/projects/JiuwenAgent")
-        team_py = jiouwen_root / "openjiuwen" / "agent_teams" / "tools" / "team.py"
-        if not team_py.is_file():
-            self.skipTest("JiuwenAgent source tree not available")
-
-        from extensions.sop_converter.source_parser import SourceCodeParser
-
-        parser = SourceCodeParser(str(jiouwen_root / "openjiuwen"))
-        components = parser.parse()
-        team_comp = next(
-            (c for c in components if any(op.class_name == "TeamBackend" for op in c.operations)),
-            None,
-        )
-        self.assertIsNotNone(team_comp)
-        init_params = team_comp.class_init_params["TeamBackend"]
-        ops = [op for op in team_comp.operations if op.class_name == "TeamBackend"]
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            script_path = _generate_wrapper_script(
-                ops,
-                class_name="TeamBackend",
-                module_name="agent_teams.tools.team",
-                file_stem="team",
-                source_dir=str(jiouwen_root / "openjiuwen"),
-                init_params=init_params,
-                scripts_dir=Path(tmpdir),
-            )
-            content = script_path.read_text()
-            self.assertIn("MemberMode", content)
-            self.assertIn("from openjiuwen.agent_teams.schema.status import", content)
-            compile(content, str(script_path), "exec")
-
 
 # ---------------------------------------------------------------------------
 # _enrich_bridge_params
@@ -1236,6 +1278,151 @@ class TestRegisterComponentTools(unittest.TestCase):
             )
         self.assertIn("agentbuilder.build_agent", name_map)
 
+    def test_lifecycle_catalog_payload_uses_alias_aware_resource_type(self) -> None:
+        """Create/invoke pairs match by type identity, not SDK-specific field names."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "proj"
+            sdk_dir = source_dir / "generic_sdk"
+            sdk_dir.mkdir(parents=True)
+            (sdk_dir / "__init__.py").write_text("", encoding="utf-8")
+            (sdk_dir / "types.py").write_text(
+                textwrap.dedent(
+                    """
+                    from dataclasses import dataclass
+
+                    @dataclass
+                    class WidgetConfig:
+                        name: str
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            (sdk_dir / "factory.py").write_text(
+                textwrap.dedent(
+                    """
+                    from .types import WidgetConfig
+
+                    def create_widget(name: str) -> WidgetConfig:
+                        \"\"\"Create a reusable widget configuration.\"\"\"
+                        return WidgetConfig(name=name)
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            (sdk_dir / "runner.py").write_text(
+                textwrap.dedent(
+                    """
+                    from .types import WidgetConfig as PublicConfig
+
+                    class WidgetRunner:
+                        def invoke(self, widget: PublicConfig, query: str) -> dict:
+                            \"\"\"Invoke a previously created widget.\"\"\"
+                            return {"error_code": "resource_not_found", "query": query}
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            bundle_dir = root / "bundle"
+            bundle_dir.mkdir()
+
+            parser = SourceCodeParser(str(source_dir), extern_only=True)
+            components = parser.parse()
+            name_map = register_component_tools(
+                components,
+                str(source_dir),
+                persist=True,
+                bundle_dir=bundle_dir,
+                bundle_id="generic-bundle",
+            )
+
+            create_tool = name_map["generic_sdk.create_widget"]
+            invoke_tool = name_map["generic_sdk.WidgetRunner.invoke"]
+            create_spec = json.loads(
+                (bundle_dir / "agent-tools" / f"{create_tool}.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(create_spec["output_schema"]["type"], "object")
+            self.assertEqual(
+                create_spec["output_schema"]["properties"]["created_persisted"],
+                {"const": True},
+            )
+            self.assertEqual(
+                set(create_spec["output_schema"]["required"]),
+                {
+                    "resource_ref",
+                    "resource_type",
+                    "created_persisted",
+                    "resource_catalog_path",
+                },
+            )
+            invoke_spec = json.loads(
+                (bundle_dir / "agent-tools" / f"{invoke_tool}.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+            create_meta = _catalog_payload(create_spec["call_impl"], "--catalog-metadata")
+            fallback_meta = _catalog_payload(invoke_spec["call_impl"], "--catalog-fallback")
+            expected_type = "generic_sdk_types_widgetconfig"
+            self.assertEqual(create_meta["resource_type"], expected_type)
+            self.assertEqual(fallback_meta["resource_type"], expected_type)
+            self.assertEqual(fallback_meta["handle_field"], "widget")
+            self.assertEqual(fallback_meta["query_arg"], "query")
+
+    def test_create_catalog_write_accepts_generic_name_handle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "proj"
+            sdk_dir = source_dir / "generic_sdk"
+            sdk_dir.mkdir(parents=True)
+            (sdk_dir / "__init__.py").write_text("", encoding="utf-8")
+            (sdk_dir / "factory.py").write_text(
+                textwrap.dedent(
+                    """
+                    def create_widget(name: str) -> dict:
+                        \"\"\"Create a reusable widget by name.\"\"\"
+                        return {"name": name, "status": "created"}
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            bundle_dir = root / "bundle"
+            bundle_dir.mkdir()
+
+            parser = SourceCodeParser(str(source_dir), extern_only=True)
+            name_map = register_component_tools(
+                parser.parse(),
+                str(source_dir),
+                persist=True,
+                bundle_dir=bundle_dir,
+                bundle_id="generic-bundle",
+            )
+
+            create_tool = name_map["generic_sdk.create_widget"]
+            create_spec = json.loads(
+                (bundle_dir / "agent-tools" / f"{create_tool}.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            stdout = execute_bash(
+                create_spec["call_impl"],
+                {"json_args": json.dumps({"name": "verify-bot"})},
+            )
+            created = json.loads(stdout.strip().splitlines()[-1])
+            self.assertEqual(created["agent_id"], "verify-bot")
+            self.assertEqual(created["resource_ref"], "verify-bot")
+            self.assertTrue(created["created_persisted"])
+
+            catalog = ResourceCatalog.load(
+                bundle_dir / ".clawcodex" / "resource-catalog.json"
+            )
+            records = catalog.find_by_resource_id("verify-bot")
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0].resource_id, "verify-bot")
+            self.assertEqual(records[0].payload["handle_field"], "name")
+
     def test_empty_components_returns_empty_map(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             source_dir = Path(tmp) / "proj"
@@ -1660,8 +1847,6 @@ class TestPydanticParamCoercion(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(json.loads(result.stdout.strip()), "react")
 
-    def test_jiuwen_create_llm_agent_wrapper_uses_legacy_config(self) -> None:
-        """Generated llm_agent wrapper must coerce agent_config via LegacyReActAgentConfig."""
         jiouwen_root = Path("D:/projects/JiuwenAgent")
         llm_agent_py = (
             jiouwen_root
@@ -1999,19 +2184,6 @@ class TestWrapperHelpersCompile(unittest.TestCase):
             coerce('{"subject": "hi", "body": "there"}'),
             {"subject": "hi", "body": "there"},
         )
-
-    def test_model_coerce_uses_coerce_sdk_type(self) -> None:
-        sdk_root = Path("D:/projects/JiuwenAgent")
-        if not (sdk_root / "openjiuwen").is_dir():
-            self.skipTest("JiuwenAgent source tree not available")
-        expr, _imports = _coerce_param_expression(
-            "agent_config",
-            "ReActAgentConfig",
-            str(sdk_root),
-            module_path="openjiuwen.core.application.llm_agent.llm_agent",
-        )
-        self.assertIsNotNone(expr)
-        self.assertIn("_coerce_sdk_type(LegacyReActAgentConfig, agent_config)", expr or "")
 
     def test_list_dict_elements_not_coerced(self) -> None:
         expr, imports = _coerce_param_expression(

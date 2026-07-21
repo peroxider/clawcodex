@@ -503,5 +503,114 @@ class TestRegistryChainInjection(unittest.TestCase):
         self.assertIn("resources-add-agent", guide)
 
 
+class TestMacroRouteTaskGuideRows(unittest.TestCase):
+    """F-57: bundle MacroRoute rows appear in Task Guide when allowlisted."""
+
+    def test_macro_rows_from_bundle_macros(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from extensions.sop_converter.task_guide import _macro_route_task_guide_rows
+
+        with tempfile.TemporaryDirectory() as tmp:
+            macros_dir = Path(tmp) / ".clawcodex" / "macros"
+            macros_dir.mkdir(parents=True)
+            (macros_dir / "text-processing-pipeline.yaml").write_text(
+                """
+version: 1
+name: text-processing-pipeline
+enabled: true
+workflow:
+  inputs: {}
+  steps:
+    - id: s1
+      kind: tool
+      callable_ref: skills-skill-handlers-execute-pipeline
+      args: {}
+  outputs: {}
+routing:
+  phrases:
+    - 处理文本数据
+    - 手写宏
+    - 文本处理宏
+  target_tool: text-processing-pipeline
+  covered_tools:
+    - skills-skill-handlers-execute-pipeline
+""",
+                encoding="utf-8",
+            )
+            skill = SkillSpec(
+                name="skill_handlers",
+                description="handlers",
+                allowed_tools=[
+                    "text-processing-pipeline",
+                    "skills-skill-handlers-execute-pipeline",
+                ],
+            )
+            # Minimal component so generate_task_guide_markdown does not early-exit.
+            op = SourceOperation(
+                name="execute_pipeline",
+                description="执行完整 pipeline 并返回结构化摘要",
+                file_stem="execution",
+                has_docstring=True,
+            )
+            components = [
+                SourceComponent(
+                    name="skill_handlers",
+                    file_path="x.py",
+                    description="handlers",
+                    operations=[op],
+                )
+            ]
+            rows = _macro_route_task_guide_rows(skill, tmp)
+            self.assertEqual(len(rows), 1)
+            intent, tool, search, note = rows[0]
+            self.assertEqual(tool, "text-processing-pipeline")
+            self.assertIn("手写宏", intent)
+            self.assertIn("select:text-processing-pipeline", search)
+            self.assertIn("禁止用 Bash", note)
+            self.assertNotIn("勿裸调", note)
+
+            guide = generate_task_guide_markdown(skill, components, bundle=tmp)
+            self.assertIn("text-processing-pipeline", guide)
+            self.assertIn("禁止**先用 Bash", guide)
+            self.assertIn("select:text-processing-pipeline", guide)
+
+    def test_macro_rows_skipped_when_not_allowlisted(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from extensions.sop_converter.task_guide import _macro_route_task_guide_rows
+
+        with tempfile.TemporaryDirectory() as tmp:
+            macros_dir = Path(tmp) / ".clawcodex" / "macros"
+            macros_dir.mkdir(parents=True)
+            (macros_dir / "text-processing-pipeline.yaml").write_text(
+                """
+version: 1
+name: text-processing-pipeline
+enabled: true
+workflow:
+  inputs: {}
+  steps:
+    - id: s1
+      kind: tool
+      callable_ref: skills-skill-handlers-execute-pipeline
+      args: {}
+  outputs: {}
+routing:
+  phrases: [处理文本数据]
+  target_tool: text-processing-pipeline
+""",
+                encoding="utf-8",
+            )
+            skill = SkillSpec(
+                name="other",
+                description="d",
+                allowed_tools=["skills-skill-handlers-list-operations"],
+            )
+            self.assertEqual(_macro_route_task_guide_rows(skill, tmp), [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -106,6 +106,11 @@ def resolve_catalog_path(
     bundle_path: Path | None = None
     resolved_bundle_id: str | None = bundle_id
 
+    # Normalise: empty string → None so that the "no bundle" path uses the
+    # home-directory fallback rather than resolving against CWD.
+    if isinstance(bundle, str) and not bundle.strip():
+        bundle = None
+
     if bundle is not None:
         if isinstance(bundle, (str, Path)):
             bundle_path = Path(bundle).expanduser().resolve()

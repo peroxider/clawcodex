@@ -170,6 +170,9 @@ class AgentBuilder:
                 lifecycle_graph = None
 
         skill_dicts = []
+        lifecycle_deps_ref = ""
+        if (self._output_dir / ".clawcodex" / "tool-dependencies.yaml").exists():
+            lifecycle_deps_ref = ".clawcodex/tool-dependencies.yaml"
         for spec in self._skills:
             guide = ""
             allowed_tools = list(spec.allowed_tools)
@@ -201,6 +204,7 @@ class AgentBuilder:
                     "parameters": [],
                     "source_code": "",
                     "task_guide": guide,
+                    "lifecycle_deps": lifecycle_deps_ref,
                 }
             )
         skill_paths = writer.write_skills(skill_dicts, self._output_dir, bundle=self._output_dir)
@@ -264,6 +268,8 @@ def _write_skill_file(
         frontmatter_lines.append(f"allowed-tools:")
         for tool in spec.allowed_tools:
             frontmatter_lines.append(f"  - {tool}")
+    if bundle is not None and (Path(bundle) / ".clawcodex" / "tool-dependencies.yaml").exists():
+        frontmatter_lines.append("lifecycle-deps: .clawcodex/tool-dependencies.yaml")
     if rule and rule.description:
         frontmatter_lines.append(f"when_to_use: {rule.description}")
     frontmatter_lines.append("---")

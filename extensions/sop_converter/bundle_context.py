@@ -24,10 +24,13 @@ _BUNDLE_BASE_TOOL_NAMES: frozenset[str] = frozenset(POS_PROXY_BASE_TOOLS)
 
 # ``pos convert`` wrote ``pos-converter``; ``sop convert`` writes ``sop-converter``.
 SOP_CONVERTER_SPEC_SOURCES = frozenset({"pos-converter", "sop-converter"})
+SOP_BUNDLE_SPEC_SOURCES = SOP_CONVERTER_SPEC_SOURCES | frozenset(
+    {"composite-tool", "sop-converter-composite", "sop-converter-macro"}
+)
 
 
 def is_sop_converter_spec_source(source: str | None) -> bool:
-    return source in SOP_CONVERTER_SPEC_SOURCES
+    return source in SOP_BUNDLE_SPEC_SOURCES
 
 
 @dataclass(frozen=True)
@@ -128,7 +131,7 @@ def collect_tool_names_from_bundle_specs(bundle_path: Path) -> list[str]:
         if not tool_dir.is_dir():
             continue
         for spec in list_persisted_specs(tool_dir=tool_dir):
-            if is_sop_converter_spec_source(spec.source) and spec.name:
+            if spec.source in SOP_BUNDLE_SPEC_SOURCES and spec.name:
                 names[spec.name] = True
     return sorted(names)
 
@@ -355,3 +358,76 @@ def activate_bundle_isolation(
             loaded,
             removed,
         )
+
+
+def load_bundle_macro_routes(bundle_path: Path | str) -> list[Any]:
+    """Load MacroRoute entries from ``<bundle>/.clawcodex/macros/*.yaml``.
+
+    Each macro definition may embed a ``routing:`` block (F-57 §4 / §8).
+    Routes are tagged ``scope="bundle"``. Missing directory yields ``[]``.
+    """
+    from .macros.models import MacroRoute
+
+    root = Path(bundle_path)
+    macros_dir = root / ".clawcodex" / "macros"
+    if not macros_dir.is_dir():
+        return []
+
+    try:
+        import yaml
+    except ImportError:
+        logger.warning("PyYAML not available; cannot load bundle macro routes from %s", macros_dir)
+        return []
+
+    routes: list[MacroRoute] = []
+    paths = sorted(macros_dir.glob("*.yaml")) + sorted(macros_dir.glob("*.yml"))
+    for path in paths:
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError) as exc:
+            logger.warning("Failed to load macro route file %s: %s", path, exc)
+            continue
+        if not isinstance(data, dict):
+            continue
+        if data.get("enabled", True) is False:
+            continue
+        routing = data.get("routing")
+        if not isinstance(routing, dict):
+            routing = {}
+        target = str(routing.get("target_tool") or data.get("name") or "").strip()
+        if not target:
+            continue
+        match_mode = str(routing.get("match_mode") or "all")
+        if match_mode not in ("exact", "all", "any"):
+            match_mode = "all"
+        selection = str(routing.get("selection") or "prefer")
+        if selection not in ("exclusive", "prefer"):
+            selection = "prefer"
+        try:
+            priority = int(routing.get("priority", 100))
+        except (TypeError, ValueError):
+            priority = 100
+        routes.append(
+            MacroRoute(
+                phrases=[str(p) for p in (routing.get("phrases") or []) if str(p).strip()],
+                keywords=[str(k) for k in (routing.get("keywords") or []) if str(k).strip()],
+                negative_keywords=[
+                    str(k) for k in (routing.get("negative_keywords") or []) if str(k).strip()
+                ],
+                target_tool=target,
+                match_mode=match_mode,  # type: ignore[arg-type]
+                selection=selection,  # type: ignore[arg-type]
+                priority=priority,
+                verified=bool(routing.get("verified", False)),
+                enabled=True,
+                intent_key=str(routing.get("intent_key") or "").strip(),
+                covered_tools=[
+                    str(name)
+                    for name in (routing.get("covered_tools") or [])
+                    if str(name).strip()
+                ],
+                unavailable_policy="restore-covered",
+                scope="bundle",
+            )
+        )
+    return routes

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -68,3 +70,53 @@ def test_preview_includes_workflow(tmp_path, capsys):
     assert rc == 0
     captured = capsys.readouterr()
     assert "Workflow extraction" in captured.out or "Workflow mode" in captured.out
+
+
+def test_convert_writes_sdk_dependency_manifest_and_wrapper_venv(tmp_path):
+    from clawcodex_ext.cli.sop_cmd.commands import _handle_convert
+
+    sdk = tmp_path / "demo_sdk"
+    sdk.mkdir()
+    (sdk / "__init__.py").write_text("", encoding="utf-8")
+    (sdk / "api.py").write_text(
+        textwrap.dedent(
+            """
+            def ping(message: str) -> str:
+                \"\"\"Return the message.\"\"\"
+                return message
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+    (sdk / "pyproject.toml").write_text(
+        """
+[project]
+name = "demo-sdk"
+dependencies = ["openai>=1"]
+""",
+        encoding="utf-8",
+    )
+    out = tmp_path / "bundle"
+
+    rc = _handle_convert(
+        [
+            str(sdk),
+            "--out",
+            str(out),
+            "--all",
+            "--mode",
+            "sdk",
+        ]
+    )
+
+    assert rc == 0
+    manifest = json.loads((out / "bundle.json").read_text(encoding="utf-8"))
+    assert manifest["sdk_requirements"] == ["openai>=1"]
+    assert manifest["bundle_venv_dir"] == str((out / ".venv").resolve())
+
+    scripts = list((out / "agent-tools" / "scripts").glob("*.py"))
+    assert scripts
+    wrapper = scripts[0].read_text(encoding="utf-8")
+    assert "ensure_bundle_venv_and_reexec" in wrapper
+    assert "openai>=1" in wrapper
+    assert str((out / ".venv").resolve()) in wrapper

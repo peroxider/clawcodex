@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -177,6 +178,209 @@ class TestJiuwenModelConfigSchema(unittest.TestCase):
         model_info = prop["properties"]["model_info"]
         self.assertIn("properties", model_info)
         self.assertIn("api_base", model_info["properties"])
+
+
+class TestImportSystemExitIsolation(unittest.TestCase):
+    """SDK demos that call sys.exit() on ImportError must not abort convert."""
+
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmpdir.name)
+        pkg = self.root / "exit_demo"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("", encoding="utf-8")
+        (pkg / "bad_mod.py").write_text(
+            textwrap.dedent(
+                '''
+                import sys
+                from dataclasses import dataclass
+
+                try:
+                    from missing_sibling import something  # noqa: F401
+                except ImportError:
+                    print("Error importing required modules: No module named 'missing_sibling'")
+                    sys.exit(1)
+
+
+                @dataclass
+                class PipelineConfig:
+                    name: str = "default"
+                '''
+            ),
+            encoding="utf-8",
+        )
+        (pkg / "good_mod.py").write_text(
+            textwrap.dedent(
+                '''
+                from dataclasses import dataclass
+
+
+                @dataclass
+                class GoodConfig:
+                    value: int = 1
+                '''
+            ),
+            encoding="utf-8",
+        )
+
+    def tearDown(self) -> None:
+        self._tmpdir.cleanup()
+
+    def test_import_resolved_type_survives_sys_exit(self) -> None:
+        from extensions.sop_converter.type_schema import _import_resolved_type
+
+        result = _import_resolved_type(
+            str(self.root), "PipelineConfig", module_path="exit_demo.bad_mod"
+        )
+        self.assertIsNone(result)
+
+    def test_operation_to_spec_survives_and_continues(self) -> None:
+        bad_op = SourceOperation(
+            name="run_pipeline",
+            description="Runs pipeline.",
+            parameters=[
+                ParamSpec(
+                    name="config",
+                    type_hint="PipelineConfig",
+                    required=True,
+                    description="Pipeline config",
+                )
+            ],
+            file_stem="bad_mod",
+        )
+        good_op = SourceOperation(
+            name="use_good",
+            description="Uses good config.",
+            parameters=[
+                ParamSpec(
+                    name="config",
+                    type_hint="GoodConfig",
+                    required=True,
+                    description="Good config",
+                )
+            ],
+            file_stem="good_mod",
+        )
+
+        bad_spec = operation_to_spec(
+            bad_op,
+            source_dir=str(self.root),
+            script_path="/tmp/fake_bad.py",
+            comp_name="exit_demo",
+            module_path="exit_demo.bad_mod",
+        )
+        good_spec = operation_to_spec(
+            good_op,
+            source_dir=str(self.root),
+            script_path="/tmp/fake_good.py",
+            comp_name="exit_demo",
+            module_path="exit_demo.good_mod",
+        )
+
+        # Bad module degrades; convert must continue for the good op.
+        self.assertEqual(bad_spec.input_schema["properties"]["config"]["type"], "object")
+        good_cfg = good_spec.input_schema["properties"]["config"]
+        self.assertEqual(good_cfg["type"], "object")
+        self.assertIn("value", good_cfg.get("properties", {}))
+
+
+class TestSiblingSrcLayoutImport(unittest.TestCase):
+    """Root script + modules under ./src/ must import during schema extraction."""
+
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmpdir.name)
+        demo = self.root / "demo_app"
+        src = demo / "src"
+        src.mkdir(parents=True)
+        (src / "run_data_pipeline.py").write_text(
+            textwrap.dedent(
+                '''
+                def run_data_pipeline():
+                    return {"ok": True}
+                '''
+            ),
+            encoding="utf-8",
+        )
+        (src / "finetune_qwen3.py").write_text(
+            textwrap.dedent(
+                '''
+                def run_fine_tuning():
+                    return True
+                '''
+            ),
+            encoding="utf-8",
+        )
+        (demo / "run_full_pipeline.py").write_text(
+            textwrap.dedent(
+                '''
+                import os
+                import sys
+                from dataclasses import dataclass
+
+                sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+                try:
+                    from run_data_pipeline import run_data_pipeline
+                    from finetune_qwen3 import run_fine_tuning
+                except ImportError as e:
+                    print(f"Error importing required modules: {e}")
+                    sys.exit(1)
+
+
+                @dataclass
+                class PipelineConfig:
+                    name: str = "default"
+                '''
+            ),
+            encoding="utf-8",
+        )
+
+    def tearDown(self) -> None:
+        for name in list(sys.modules):
+            if name == "demo_app" or name.startswith("demo_app.") or name in {
+                "run_data_pipeline",
+                "finetune_qwen3",
+            }:
+                sys.modules.pop(name, None)
+        self._tmpdir.cleanup()
+
+    def test_import_resolved_type_finds_pipeline_config(self) -> None:
+        from extensions.sop_converter.type_schema import _import_resolved_type
+
+        cls = _import_resolved_type(
+            str(self.root),
+            "PipelineConfig",
+            module_path="demo_app.run_full_pipeline",
+        )
+        self.assertIsNotNone(cls)
+        assert cls is not None
+        self.assertEqual(cls.__name__, "PipelineConfig")
+
+    def test_operation_to_spec_gets_dataclass_fields(self) -> None:
+        op = SourceOperation(
+            name="run_full_pipeline",
+            description="Run full pipeline.",
+            parameters=[
+                ParamSpec(
+                    name="config",
+                    type_hint="PipelineConfig",
+                    required=True,
+                    description="Pipeline config",
+                )
+            ],
+            file_stem="run_full_pipeline",
+        )
+        spec = operation_to_spec(
+            op,
+            source_dir=str(self.root),
+            script_path="/tmp/fake.py",
+            comp_name="demo_app",
+            module_path="demo_app.run_full_pipeline",
+        )
+        cfg = spec.input_schema["properties"]["config"]
+        self.assertEqual(cfg["type"], "object")
+        self.assertIn("name", cfg.get("properties", {}))
 
 
 if __name__ == "__main__":
