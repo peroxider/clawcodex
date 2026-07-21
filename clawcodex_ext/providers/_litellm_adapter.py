@@ -133,9 +133,19 @@ class LiteLLMProvider(BaseProvider):
             return model
         return f"{self.provider_name}/{model}" if self.provider_name else model
 
-    def _prepare_messages(self, messages: list[MessageInput]) -> list[dict[str, Any]]:
+    def _prepare_messages(
+        self,
+        messages: list[MessageInput],
+        *,
+        model: str | None = None,
+    ) -> list[dict[str, Any]]:
         prepared = super()._prepare_messages(messages)
-        return _convert_anthropic_messages_to_openai(prepared)
+        resolved = model or self.model
+        supports_vision: bool | None = None
+        if resolved:
+            from src.models.capabilities import supports_vision as _supports_vision
+            supports_vision = _supports_vision(resolved)
+        return _convert_anthropic_messages_to_openai(prepared, supports_vision=supports_vision)
 
     def _prepare_tools(self, tools: Optional[list[dict[str, Any]]]) -> list[dict[str, Any]] | None:
         if not tools:
