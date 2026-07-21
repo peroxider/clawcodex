@@ -1,6 +1,6 @@
 # F-50: SOP 转换器源码固化（子特性 A-G）
 
-> 状态: 🟡 部分完成（A/B/C/D/E/F/G ✅；F-50.11.4 🔭）
+> 状态: 🟢 已完成（A/B/C/D/E/F/G ✅；F-50.11.4 ✅；Composite Tools ✅；W2 验证 ✅）
 > 章节: docs/feature_plan/04-architecture-sdk/f-50-sop-converter.md
 > 最后更新: 2026-07-21
 
@@ -652,7 +652,7 @@ W1 验证（AutoResearchClaw3）中已复现：Stage 11 完成后用户说「本
 
 ## §2 进度跟踪
 
-**完成度概览（2026-07-21）**：子特性 A/C/D/E/F 与 Generic 提取路径已落地；Arc 提取与映射核心已实现并通过单测；剩余缺口主要为 F-50.11.4、Composite macro 写入 stage agent frontmatter、REPL W2 验证。ARC 全量 bundle E2E 落盘为 AutoResearchClaw 项目自身的集成验证债务，已从 F-50 范围移除。
+**完成度概览（2026-07-21）**：子特性 A/B/C/D/E/F/G 全部落地；Arc 提取与映射核心已实现并通过单测；F-50.11.4 交互补全、Composite Tools macro 注入、REPL W2 验证三个缺口均已补全。ARC 全量 bundle E2E 落盘为 AutoResearchClaw 项目自身的集成验证债务，已从 F-50 范围移除。
 
 ### 2.1 已完成
 
@@ -680,11 +680,13 @@ W1 验证（AutoResearchClaw3）中已复现：Stage 11 完成后用户说「本
 
 ### 2.2 当前瓶颈
 
-| 缺口 | 说明 |
-|------|------|
-| F-50.11.4 交互补全 | 提取失败时 `TODO:` 模板（🔭，未实现） |
-| Composite Tools 集成 | CLI 已接线；**缺口** = stage agent frontmatter **通用**引用 macro tools（目前仅 `agent_teams-skill` / Overview 文档路径） |
-| **REPL 流水线易用性（Q12）** | Stage agent 提示词优化（STOP_LOSS 规则）已落地；委派 compliance 与 stage 编号歧义已改善，**W2 手动验证已完成**（见 `docs/guide/autoresearchclaw-repl-sop-verification.md`） |
+✅ 三个缺口已全部补全（2026-07-21）：
+
+| 缺口 | 说明 | 状态 |
+|------|------|:----:|
+| F-50.11.4 交互补全 | 提取失败时生成 `TODO:` 模板（`completions.py` + `--interactive` CLI 标志） | ✅ 已实现 |
+| Composite Tools 集成 | stage agent frontmatter **通用**引用 macro tools（`composite_tools` 参数注入所有 stage agent） | ✅ 已实现 |
+| **REPL 流水线易用性（Q12）** | W2 手动验证通过（见 `docs/guide/autoresearchclaw-repl-sop-verification.md`） | ✅ 已验证 |
 
 ### 2.3 验证产物（本地）
 
