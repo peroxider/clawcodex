@@ -1,8 +1,8 @@
 # F-87: /ultraplan LLM 驱动 + CLI 完整实现
 
-> 状态: 🟡 原语层已落地(`clawcodex_ext/services/ultraplan/` 6 模块 + 5 测试文件,约 1.5K 行);LLM 驱动 + 斜杠命令 + CCR 远程会话 + 关键字检测 + 彩虹高亮待补
+> 状态: ✅ 已完成(`clawcodex_ext/services/ultraplan/` 15 模块 + `/ultraplan` 斜杠命令 + CCR 远程会话 + LLM Planner + 关键字检测 + 彩虹高亮 + TUI 面板)
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-87-ultraplan.md`
-> 最后更新: 2026-06-30
+> 最后更新: 2026-07-21
 > 缺口来源: [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵)
 
 ## §1 设计规划
@@ -41,35 +41,25 @@
 - 远程桥接已落地: `extensions/ports/bridge/bridge_main.py`(986 行) + `remote_bridge_core.py` 提供 RCS 风格 HTTP/SSE;
 - 输入处理统一入口: `clawcodex_ext/command_system/input_processing.py`(不是 `repl/input_processing.py` —— 缺口分析条目路径需要修正)。
 
-**缺口**(用户面向层):
+**已完成**(用户面向层):
 
-1. **LLM Plan 生成器**: 用户文本 → `clawcodex_ext/providers/BaseProvider.chat_async()` → JSON Schema 校验 → `Plan` 模型,**完全缺失**;
-2. **`/ultraplan` 斜杠命令**: 命令族(`/ultraplan <prompt>`、`/ultraplan status`、`/ultraplan run`、`/ultraplan pause/resume`、`/ultraplan plan ls/show/rm`) **完全缺失**;
-3. **CCR 远程会话**: `ccr_session.py`(通过 F-82 RCS 桥接 Plan 执行到远程 worker) **完全缺失**;
-4. **关键字检测**: `findUltraplanTriggerPositions`(扫描输入中 `/ultraplan` 或缩写 `/ultra` 出现位置,过滤已转义 / 已加引号) **完全缺失**;
-5. **彩虹高亮**: 输入框 TUI 渲染触发词为彩虹(Rich markup `rainbow`),鼠标聚焦态切换 **完全缺失**;
-6. **本地/远程模式切换**: `CCR` 环境变量 + `/ultraplan --local` / `--remote <endpoint>` 命令行参数 **未实现**;
-7. **CLI 状态面板**: Plan 列表 / 进度条 / 当前步骤详情(类 `ccrSession.ts` 349 行的 session view) **未实现**;
-8. **Plan 模板库**: 用户复用常见模式(代码重构 / 写测试 / 文档编写 / Bug 调查)的预制 prompt **缺失**;
-9. **LLM 失败回退**: Provider 异常 / JSON 解析失败 → 重试一次 + 提示用户"LLM 规划失败,请简化目标或手动编辑" **缺失**;
-10. **审计日志 + 进度推送**: Plan 执行时 step 状态变更 → 写入 NDJSON 审计 + 推送 SSE 到 TUI 面板,**未串联**;
-11. **TUI 面板交互键**: `n`(next step)、`p`(pause)、`e`(edit plan)、`q`(quit) 等快捷键 **缺失**。
+P87-A~K 已全部落地:P87-A `llm_planner.py` 接入 Provider 生成 `Plan` JSON;P87-B `templates.py` 内置 4 类预制 prompt;P87-C `ccr_session.py` 支持本地/远程双模式;P87-D `/ultraplan` 命令族 9 子命令;P87-E `keyword_detector.py` 触发词检测;P87-F TUI 彩虹高亮;P87-G 本地/远程切换;P87-H TUI Plan 状态面板;P87-I `audit.py` NDJSON 审计;P87-J `planner_recovery.py` 失败重试 + 提示;P87-K 13 个测试文件覆盖。详见 `clawcodex_ext/services/ultraplan/`、`clawcodex_ext/command_system/ultraplan_command.py`、`tests/services/ultraplan/`。
 
 ### 1.3 子特性分解
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
-| P87-A | LLM Plan 生成器(`llm_planner.py`):Provider + Prompt 模板 + JSON Schema 校验 + 重试 | 📋 | 3-5 天 |
-| P87-B | Plan 模板库(`templates.py`):refactor / write_tests / write_docs / bug_investigate 4 个预制 prompt + 自定义模板加载 | 📋 | 2-3 天 |
-| P87-C | CCR 远程会话客户端(`ccr_session.py`):HTTP + SSE 调用 F-82 RCS,流式推送 step 状态 | 📋 | 5-7 天 |
-| P87-D | `/ultraplan` 斜杠命令族(`command_system/ultraplan_command.py`):7 个子命令 + 参数解析 | 📋 | 3-5 天 |
-| P87-E | 关键字检测(`keyword_detector.py`):`findUltraplanTriggerPositions` + `replaceUltraplanKeyword` + 转义过滤 | 📋 | 2-3 天 |
-| P87-F | 输入框彩虹高亮(`tui/rainbow_highlight.py`):Rich markup 渲染 + TTY 检测 + 退化为单色 | 📋 | 2-3 天 |
-| P87-G | 本地/远程模式切换 + `CCR` env 解析 | 📋 | 1-2 天 |
-| P87-H | TUI Plan 状态面板(`tui/screens/ultraplan_panel.py`):Rich Table + 进度条 + 快捷键 | 📋 | 5-7 天 |
-| P87-I | 审计日志 + NDJSON 增量持久化(`audit.py`):step 状态变更钩子 + 文件锁 + 轮转 | 📋 | 2-3 天 |
-| P87-J | LLM 失败回退策略(`planner_recovery.py`):一次重试 + 用户提示 + fallback 到手动模式 | 📋 | 1-2 天 |
-| P87-K | 单元测试 + 集成测试 + E2E(本地模式 + 模拟 CCR server) | 📋 | 5-7 天 |
+| P87-A | LLM Plan 生成器(`llm_planner.py`):Provider + Prompt 模板 + JSON Schema 校验 + 重试 | ✅ | 3-5 天 |
+| P87-B | Plan 模板库(`templates.py`):refactor / write_tests / write_docs / bug_investigate 4 个预制 prompt + 自定义模板加载 | ✅ | 2-3 天 |
+| P87-C | CCR 远程会话客户端(`ccr_session.py`):HTTP + SSE 调用 F-82 RCS,流式推送 step 状态 | ✅ | 5-7 天 |
+| P87-D | `/ultraplan` 斜杠命令族(`command_system/ultraplan_command.py`):7 个子命令 + 参数解析 | ✅ | 3-5 天 |
+| P87-E | 关键字检测(`keyword_detector.py`):`findUltraplanTriggerPositions` + `replaceUltraplanKeyword` + 转义过滤 | ✅ | 2-3 天 |
+| P87-F | 输入框彩虹高亮(`tui/rainbow_highlight.py`):Rich markup 渲染 + TTY 检测 + 退化为单色 | ✅ | 2-3 天 |
+| P87-G | 本地/远程模式切换 + `CCR` env 解析 | ✅ | 1-2 天 |
+| P87-H | TUI Plan 状态面板(`tui/screens/ultraplan_panel.py`):Rich Table + 进度条 + 快捷键 | ✅ | 5-7 天 |
+| P87-I | 审计日志 + NDJSON 增量持久化(`audit.py`):step 状态变更钩子 + 文件锁 + 轮转 | ✅ | 2-3 天 |
+| P87-J | LLM 失败回退策略(`planner_recovery.py`):一次重试 + 用户提示 + fallback 到手动模式 | ✅ | 1-2 天 |
+| P87-K | 单元测试 + 集成测试 + E2E(本地模式 + 模拟 CCR server) | ✅ | 5-7 天 |
 
 **估算总工时**: 6-8 周(单人)。
 
@@ -674,7 +664,14 @@ def hook_before_submit(text: str, *, context: ToolContext) -> str:
 11. **回归兼容**: 原 `clawcodex_ext/services/ultraplan/` 6 模块接口 100% 兼容,F-83 first iteration 的 5 个测试文件 0 修改通过;
 12. **文档完整**: README 提供 `/ultraplan` 命令族 + 模板列表 + CCR 配置示例 + LLM Prompt 调优建议。
 
-## §6 后续展望(P88+)
+## §6 变更记录
+
+| 日期 | 变更 | 原因 |
+|------|------|------|
+| 2026-07-21 | 代码落地并标记完成 | `clawcodex_ext/services/ultraplan/` 扩展至 15 模块,`/ultraplan` 命令族、`CCRClient`、LLM Planner、关键字检测、彩虹高亮、TUI 面板、审计日志全部落地;P87-A~K 全部 ✅ |
+| 2026-06-30 | 初始创建(从 gap-analysis 派工) | 原语层已存在,需补齐用户面向层 |
+
+## §7 后续展望(P88+)
 
 - **P87-L Plan diff UI**: TUI 面板支持 `diff` 视图(显示 LLM 重新规划前后的 step 变更);
 - **P87-M Plan 回放**: 历史 Plan + audit log 可在 TUI 中按时间线回放(用于调试 LLM 规划质量);

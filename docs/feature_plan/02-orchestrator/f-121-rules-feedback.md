@@ -1,8 +1,8 @@
 # F-121: PR 代码检视意见规则回灌
 
-> 状态: 📋 规划中
+> 状态: ✅ 已完成（P0/P1 子特性 11/12 落地，仅 P2 F-121-L 多 workflow 隔离有单测但无运行时显式保证）
 > 章节: docs/feature_plan/02-orchestrator/f-121-rules-feedback.md
-> 最后更新: 2026-06-30
+> 最后更新: 2026-07-15
 
 ## §1 设计规划
 
@@ -107,32 +107,34 @@ Agent 在适当时机用 Read() 查阅规则文件
 
 ### 1.5 子特性分解
 
-| 子特性 | 描述 | 优先级 |
-|--------|------|:------:|
-| F-121-A | 规则存储与 schema：`workflow.rules.yaml` 文件格式定义 + `RuleStore` 读写实现 | P0 |
-| F-121-B | Config schema 扩展：`RulesConfig` dataclass + `WorkflowConfig.rules` 字段 + from_dict 解析 | P0 |
-| F-121-C | Agent 内生提取：`_REVIEW_FEEDBACK_TEMPLATE` 追加规则提取指令，agent 输出 `## Extracted Rules` 区块 | P0 |
-| F-121-D | 规则提取引擎：`RuleEngine.extract()` — 解析 agent 回复中的规则区块 | P0 |
-| F-121-E | 语义去重引擎：`RuleEmbedder` — text embedding + cosine similarity 判定重复/增强 | P1 |
-| F-121-F | 增强合并：`RuleEngine.merge()` — 相似度 0.70-0.89 时合并两规则为更优版本 | P1 |
-| F-121-G | 质量评分 + 自动修剪：support_count / authority / specificity / criticality / recency 五维度评分，超 20 条时丢弃最低分者 | P1 |
-| F-121-H | Prompt 引用注入：`PromptBuilder.render()` 在 prompt 尾部注入规则文件引用行 | P0 |
-| F-121-I | Orchestrator 集成：`Orchestrator._launch_review_followup()` + `_run_issue()` 完成后调 `RuleEngine.extract()` | P0 |
-| F-121-J | CLI 子命令：`clawcodex-dev orchestrator rules list/review/delete/refresh` | P1 |
-| F-121-K | 单元测试：`tests/orchestrator/test_rules_learner.py` | P1 |
-| F-121-L | 多 workflow 隔离验证：两个不同 workflow 同时运行时规则文件互不干扰 | P2 |
+| 子特性 | 描述 | 优先级 | 状态 |
+|--------|------|:------:|:----:|
+| F-121-A | 规则存储与 schema：`workflow.rules.yaml` 文件格式定义 + `RuleStore` 读写实现 | P0 | ✅ |
+| F-121-B | Config schema 扩展：`RulesConfig` dataclass + `WorkflowConfig.rules` 字段 + from_dict 解析 | P0 | ✅ |
+| F-121-C | Agent 内生提取：`_REVIEW_FEEDBACK_TEMPLATE` 追加规则提取指令，agent 输出 `## Extracted Rules` 区块 | P0 | ✅ |
+| F-121-D | 规则提取引擎：`RuleEngine.extract()` — 解析 agent 回复中的规则区块 | P0 | ✅ |
+| F-121-E | 语义去重引擎：`RuleEmbedder` — text embedding + cosine similarity 判定重复/增强 | P1 | ⚠️ **设计偏离**（见 §2.4 注） |
+| F-121-F | 增强合并：`RuleEngine.merge()` — 相似度 0.70-0.89 时合并两规则为更优版本 | P1 | ✅（实现路径不同，见 §2.4 注） |
+| F-121-G | 质量评分 + 自动修剪：support_count / authority / specificity / criticality / recency 五维度评分，超 20 条时丢弃最低分者 | P1 | ✅ |
+| F-121-H | Prompt 引用注入：`PromptBuilder.render()` 在 prompt 尾部注入规则文件引用行 | P0 | ✅ |
+| F-121-I | Orchestrator 集成：`Orchestrator._launch_review_followup()` + `_run_issue()` 完成后调 `RuleEngine.extract()` | P0 | ✅ |
+| F-121-J | CLI 子命令：`clawcodex-dev orchestrator rules list/review/delete/refresh` | P1 | ✅ |
+| F-121-K | 单元测试：`tests/orchestrator/test_rules_learner.py` | P1 | ✅（98/98 通过） |
+| F-121-L | 多 workflow 隔离验证：两个不同 workflow 同时运行时规则文件互不干扰 | P2 | ⚠️ 路径隔离有单测（`test_orchestrator_f121_rules_isolation.py`），运行时显式并发隔离未做 |
 
 ### 1.6 实现文件清单
 
-| 文件路径 | 变更类型 | 说明 |
-|---------|---------|------|
-| `extensions/orchestrator/rules_learner.py` | **新增** | `RuleEngine` / `RuleStore` / `RuleEmbedder` 核心实现 |
-| `extensions/orchestrator/config/schema.py` | 修改 | 新增 `RulesConfig` dataclass，`WorkflowConfig.rules` 字段 |
-| `extensions/orchestrator/orchestrator.py` | 修改 | follow-up 完成后调用 `RuleEngine.extract()` |
-| `extensions/orchestrator/prompt_builder.py` | 修改 | `_REVIEW_FEEDBACK_TEMPLATE` 追加规则提取指令；`render()` 注入规则文件引用 |
-| `extensions/orchestrator/workflow.py` | 修改 | `WorkflowLoader` 解析 `rules.path` 并暴露给 store |
-| `extensions/orchestrator/dispatch.py` 或 `model_cmd.py` | 修改 | 注册 `orchestrator rules` 子命令 |
-| `tests/orchestrator/test_rules_learner.py` | **新增** | 规则提取/去重/增强/修剪/CLI 的单元测试 |
+| 文件路径 | 行数 | 变更类型 | 说明 | 状态 |
+|---------|:----:|---------|------|:----:|
+| `extensions/orchestrator/rules_learner.py` | 902 | **新增** | `RuleEngine` / `RuleStore` / `BatchedLLMJudge` / `ExtractTracker` / `JudgeResult` | ✅ |
+| `extensions/orchestrator/cli/rules.py` | 600 | **新增** | `list` / `review` / `stats` / `delete` / `refresh` 子命令 + `add_rules_parser` 注册 | ✅ |
+| `extensions/orchestrator/config/schema.py` | — | 修改 | `RulesConfig` dataclass（L885）+ `WorkflowConfig.rules` 字段（L952） | ✅ |
+| `extensions/orchestrator/orchestrator.py` | — | 修改 | F-121 集成点：L2410 review-id 元数据透传 + L3894 review commit metadata | ✅ |
+| `extensions/orchestrator/prompt_builder.py` | — | 修改 | L288 rules file reference injection；L307-322 共用注入逻辑；L490/609 prompt 注入点 | ✅ |
+| `extensions/orchestrator/workflow.py` | — | 修改 | `WorkflowLoader` 解析 `rules.path` 并暴露给 store | ✅ |
+| `tests/orchestrator/test_rules_learner.py` | 1149 | **新增** | 单元测试（extract / dedup / merge / score / prune / store / CLI 解析） | ✅ |
+| `tests/orchestrator/test_rules_cli.py` | 218 | **新增** | CLI 子命令端到端测试 | ✅ |
+| `tests/orchestrator/test_orchestrator_f121_rules_isolation.py` | 67 | **新增** | 多 workflow 路径隔离单测 | ✅ |
 
 ## §2 详细设计
 
@@ -330,7 +332,37 @@ class RuleEmbedder:
     def similarity(self, a: str, b: str) -> float:
         """返回 0.0 ~ 1.0 的相似度。"""
         pass
+
+
+class BatchedLLMJudge:
+    """⚠️ 实际实现偏离原 §2.4 设计（详见注 1）。
+
+    通过子进程调用 ``clawcodex-dev -p`` 做批量判定：
+    - 复用与 ``clawcodex-dev -p --provider --model`` 相同的 provider/model 解析链路
+    - 与 orchestrator 主线 agent 配置保持一致
+    - 单次 LLM 调用同时判定 N 个 candidate 的 action（duplicate / merge / conflict / new）
+    - 比逐条 embedding + cosine 语义判准度高，可处理语义冲突
+    - 代价：每次提取引入 1 次 LLM 调用 + subprocess 启动开销
+    """
+
+    async def judge(
+        self, candidates: list[dict], existing: list[dict]
+    ) -> list[JudgeResult]:
+        """返回每个 candidate 的判定结果。"""
+        pass
 ```
+
+> **⚠️ 注 1：去重引擎设计偏离（commit `1b410b29` 2026-07-07）**
+>
+> 原 §2.4 计划 `RuleEmbedder`（sentence-transformers/all-MiniLM-L6-v2 或 TF-IDF 降级）+ cosine similarity 阈值判定（≥0.90 重复 / 0.70-0.89 增强 / <0.70 新增）。实际实现改用 **`BatchedLLMJudge`**（subprocess `clawcodex-dev -p`），原因：
+>
+> 1. **语义判准率更高**：embedding 模型在短文本（规则摘要几十~几百字符）上的语义判准率不稳定，且 §3.1 风险矩阵中"规则冲突"（语义相反但 embedding 接近）的检测 embedding 无法处理；LLM Judge 可直接判定 `duplicate / merge / conflict / new` 四种 action。
+> 2. **避免重型依赖**：不需要引入 `sentence-transformers` + PyTorch + ~80MB 模型文件；§3.2 约束"不依赖外部 API"扩展为"不引入额外运行时重型依赖"。
+> 3. **provider/model 配置复用**：与编排器主线 agent 走相同的 provider/model 解析链路，运维心智模型统一。
+>
+> 代价：每次提取多 1 次 LLM 调用 + subprocess 启动开销（典型 2-5s）。考虑到 F-121 触发点是 follow-up agent 完成时（按 issue 频率，非热路径），可接受。
+>
+> 评分/合并/修剪逻辑（§2.6/§2.7）保持不变，阈值参数（`similarity_threshold` / `enhancement_threshold`）仍保留在 `RulesConfig` 中以备未来切回 embedding 方案。
 
 ### 2.5 Prompt 引用注入
 
@@ -482,35 +514,37 @@ clawcodex-dev orchestrator rules stats [--workflow <path>]
 
 ### 4.1 功能验收
 
-- [ ] `rules.enabled=true` 的 workflow 在 follow-up 完成后自动从 agent reply 中提取规则
-- [ ] 提取的规则写入 `workflow.rules.yaml`，格式符合 schema
-- [ ] 完全重复的规则（similarity ≥ 0.90）被去重，support_count 累加
-- [ ] 相似规则（0.70-0.89）被自动增强合并
-- [ ] 规则数达到 `max_rules` 后，新规则的加入会触发质量评分最低的规则被丢弃
-- [ ] 下次 issue 运行时 prompt 末尾注入规则文件引用行
-- [ ] `orchestrator rules list/review/delete/refresh/stats` 命令可用
-- [ ] 多 workflow 的规则文件互相隔离，不交错
-- [ ] 用户手动修改的文件（不含 `auto-managed` 注释）不会被覆盖
+- [x] `rules.enabled=true` 的 workflow 在 follow-up 完成后自动从 agent reply 中提取规则
+- [x] 提取的规则写入 `workflow.rules.yaml`，格式符合 schema
+- [x] 完全重复的规则（similarity ≥ 0.90）被去重，support_count 累加（注：实际由 LLM Judge 判定 `action="duplicate"`）
+- [x] 相似规则（0.70-0.89）被自动增强合并（注：实际由 LLM Judge 判定 `action="merge"`）
+- [x] 规则数达到 `max_rules` 后，新规则的加入会触发质量评分最低的规则被丢弃
+- [x] 下次 issue 运行时 prompt 末尾注入规则文件引用行
+- [x] `orchestrator rules list/review/delete/refresh/stats` 命令可用
+- [x] 多 workflow 的规则文件互相隔离，不交错（路径隔离；运行时显式并发隔离未做 — P2）
+- [x] 用户手动修改的文件（不含 `auto-managed` 注释）不会被覆盖
 
 ### 4.2 性能验收
 
-- [ ] 规则提取（解析 agent reply）耗时 < 50ms
-- [ ] 去重/增强合并（20 条规则 × 5 候选）耗时 < 500ms（含 embedding）
-- [ ] embedding 模型首次加载耗时 < 5s，后续推理 < 100ms
-- [ ] Prompt 引用注入逻辑耗时 < 1ms
+- [x] 规则提取（解析 agent reply）耗时 < 50ms
+- [~] 去重/增强合并（20 条规则 × 5 候选）耗时 < 500ms（**已变更**：embedding 改为 LLM Judge，单次提取引入 ~2-5s subprocess 调用；F-121 触发在 follow-up 完成时，非热路径）
+- [N/A] embedding 模型首次加载耗时 < 5s（**已变更**：不再使用本地 embedding 模型；LLM Judge 经 subprocess 调用，provider 冷启动由 provider 配置决定）
+- [x] Prompt 引用注入逻辑耗时 < 1ms
 
 ### 4.3 测试覆盖
 
-- [ ] `test_extract_parses_extracted_rules_section` — 正确解析 agent reply 中的 `## Extracted Rules`
-- [ ] `test_extract_skips_when_no_section` — agent 未输出规则区块时静默跳过
-- [ ] `test_dedup_exact_duplicate` — 完全重复规则被跳过
-- [ ] `test_merge_similar_rules` — 相似规则被合并
-- [ ] `test_prune_exceeds_max` — 超上限时丢弃最低分规则
-- [ ] `test_score_consistency` — 高分规则不会先于低分被丢弃
-- [ ] `test_cli_list_review_delete` — CLI 子命令可用
-- [ ] `test_multiple_workflow_isolation` — 两个 workflow 规则互不干扰
-- [ ] `test_user_managed_file_not_overwritten` — 无 `auto-managed` 注释不写回
-- [ ] `test_prompt_injection_reference_line` — prompt 正确注入引用行
+- [x] `test_extract_parses_extracted_rules_section` — `test_rules_learner.py` 覆盖
+- [x] `test_extract_skips_when_no_section` — 覆盖
+- [x] `test_dedup_exact_duplicate` — 覆盖（含 LLM Judge 路径）
+- [x] `test_merge_similar_rules` — 覆盖
+- [x] `test_prune_exceeds_max` — 覆盖
+- [x] `test_score_consistency` — 覆盖
+- [x] `test_cli_list_review_delete` — `test_rules_cli.py` 覆盖
+- [x] `test_multiple_workflow_isolation` — `test_orchestrator_f121_rules_isolation.py` 覆盖
+- [x] `test_user_managed_file_not_overwritten` — 覆盖
+- [x] `test_prompt_injection_reference_line` — 覆盖
+
+> **测试统计**：3 个测试文件，**98/98 通过**（耗时 5.53s）— `pytest tests/orchestrator/test_rules_learner.py tests/orchestrator/test_rules_cli.py tests/orchestrator/test_orchestrator_f121_rules_isolation.py`
 
 ## §5 依赖与协同
 
@@ -542,3 +576,11 @@ clawcodex-dev orchestrator rules stats [--workflow <path>]
 | 日期 | 变更 | 原因 |
 |------|------|------|
 | 2026-06-30 | 初始创建 | 架构讨论后形成详细设计文档 |
+| 2026-07-02 | `a4e521ee` feat(orchestrator): F-121 PR 代码检视意见规则回灌 | F-121 主特性落地（RuleEngine/RuleStore/RuleEmbedder 初版 + RulesConfig + 集成层） |
+| 2026-07-03 | `c7d1e9ef` fix(F-121): apply() 异常隔离 + 修复 WorkflowConfig 重复字段 | 防止规则提取异常中断 follow-up 主流程；配置 schema 冲突修复 |
+| 2026-07-05 | `8830c4ab` feat(orchestrator): F-121 LLM 辅助规则冲突检测 + 路径解析修复 | 引入 LLM 辅助判定的早期形态（与 TF-IDF 共存） |
+| 2026-07-07 | `1b410b29` F-121: PR 代码检视意见规则回灌 — LLM Judge 架构升级 | **架构偏离**：废弃 RuleEmbedder，统一改用 `BatchedLLMJudge`（subprocess `clawcodex-dev -p`）。详见 §2.4 注 1 |
+| 2026-07-08 | `af0c31dc` 统一代码风格修复 | ruff 风格合规 |
+| 2026-07-13 | `aa56eb44` F-121: PR 代码检视意见规则回灌 — 规则提取解耦 | `extract()` 与 `apply()` 解耦，支持 CLI `rules refresh` 手动触发 |
+| 2026-07-14 | `8c02ec1c` docs(orchestrator): 清理 rules_learner 废弃 TF-IDF/RuleEmbedder docstring | 移除已废弃的 RuleEmbedder 相关注释 |
+| 2026-07-15 | 文档同步 | 更新 F-121 实现状态（覆盖原 📋 规划中标记），标注 §2.4 设计偏离、§4.2 性能基线变更、§4.3 测试统计 |

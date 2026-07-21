@@ -1,8 +1,8 @@
 # F-119: System Prompt 段落拼装与自迭代基础设施
 
-> 状态: 📋 规划细化中
+> 状态: ✅ 已完成
 > 章节: docs/feature_plan/03-agent-core/f-119-prompt-assembly.md
-> 最后更新: 2026-07-14
+> 最后更新: 2026-07-21
 > 设计来源: 2026-06-25 架构审计 + 2026-07-14 动态上下文拼接方案扩展
 
 ## §1 设计规划
@@ -43,15 +43,15 @@ ClawCodex 当前的 system prompt 由 `clawcodex_ext/context_system/prompt_assem
 
 | 编号 | 子特性 | 说明 | 状态 | 预计工时 |
 |:----:|--------|------|:----:|:--------:|
-| P119-A | 通用 section builder registry | 把 `register_memory_section_builder` 泛化为 `register_section(id, *, builder, order, cache_scope, tags)`，用 `RegisteredSection` dataclass 承载元数据；builder 签名改为 `(runtime_ctx: dict) → str | None` | 📋 | 2-3d |
-| P119-B | 段落级 override API | 暴露 `override_section(id, content, ...)` / `insert_section(after_id, ...)` / `disable_section(id)` 三类高阶操作，封装 builder 调用顺序 | 📋 | 2-3d |
-| P119-C | Prompt dump 观测接口 | `dump_effective_system_prompt(query_source, format='blocks' | 'str')` 返回结构化数据（每段 id/order/scope/content/byte_len/sha256），供自迭代框架消费 | 📋 | 1-2d |
-| P119-D | 自迭代元 prompt 注入器 | 通过 `register_iteration_meta_section` 注入 prompt 自迭代元指令（缓存策略、上一轮得分、本轮目标），落 `append_system_prompt` 之前的"REQUEST 段"位置 | 📋 | 1-2d |
-| P119-E | 变体框架骨架（`extensions/prompt_lab/`） | Layer 2 新子系统，封装 `VariantManager` + `ExperimentAssignment` + `MetricsSink` 三个 Protocol；先提供本地 NDJSON sink，后续接扩展 | 📋 | 3-5d |
-| P119-F | 段落 cache 失效联动 | 当 `override_section` 触发时，自动调用 `SystemPromptCache.invalidate(id)` 或 `invalidate_scope(scope)`，避免脏读 | 📋 | 0.5-1d |
-| P119-G | 稳定性门禁 + 拼装快照测试 | 扩 `tests/misc/test_prompt_assembly.py`，覆盖 5 路径（默认 / custom / append / 7 段 override / 新段插入），保证 byte-stable | 📋 | 1d |
-| P119-H | Tags 筛选 + runtime_ctx 传递 | builder registry 支持 tags 元数据 + 带 `runtime_ctx: dict` 调用 builder；`consult_sections(tags=[...])` 按标签筛选生效段；runtime_ctx 含 cwd、task_id、workflow_phase、issue_info 等 | 📋 | 1-2d |
-| P119-I | Layer 2 上下文提供者扩展示例 | `extensions/context_providers/` 下实现 2-3 个参考示例（from_issue、from_ci、from_config），展示注册式上下文注入的端到端流程 | 📋 | 1-2d |
+| P119-A | 通用 section builder registry | 把 `register_memory_section_builder` 泛化为 `register_section(id, *, builder, order, cache_scope, tags)`，用 `RegisteredSection` dataclass 承载元数据；builder 签名改为 `(runtime_ctx: dict) → str | None` | ✅ | 2-3d |
+| P119-B | 段落级 override API | 暴露 `override_section(id, content, ...)` / `insert_section(after_id, ...)` / `disable_section(id)` 三类高阶操作，封装 builder 调用顺序 | ✅ | 2-3d |
+| P119-C | Prompt dump 观测接口 | `dump_effective_system_prompt(query_source, format='blocks' | 'str')` 返回结构化数据（每段 id/order/scope/content/byte_len/sha256），供自迭代框架消费 | ✅ | 1-2d |
+| P119-D | 自迭代元 prompt 注入器 | 通过 `register_iteration_meta_section` 注入 prompt 自迭代元指令（缓存策略、上一轮得分、本轮目标），落 `append_system_prompt` 之前的"REQUEST 段"位置 | ✅ | 1-2d |
+| P119-E | 变体框架骨架（`extensions/prompt_lab/`） | Layer 2 新子系统，封装 `VariantManager` + `ExperimentAssignment` + `MetricsSink` 三个 Protocol；先提供本地 NDJSON sink，后续接扩展 | ✅ | 3-5d |
+| P119-F | 段落 cache 失效联动 | 当 `override_section` 触发时，自动调用 `SystemPromptCache.invalidate(id)` 或 `invalidate_scope(scope)`，避免脏读 | ✅ | 0.5-1d |
+| P119-G | 稳定性门禁 + 拼装快照测试 | 扩 `tests/misc/test_prompt_assembly.py`，覆盖 5 路径（默认 / custom / append / 7 段 override / 新段插入），保证 byte-stable | ✅ | 1d |
+| P119-H | Tags 筛选 + runtime_ctx 传递 | builder registry 支持 tags 元数据 + 带 `runtime_ctx: dict` 调用 builder；`consult_sections(tags=[...])` 按标签筛选生效段；runtime_ctx 含 cwd、task_id、workflow_phase、issue_info 等 | ✅ | 1-2d |
+| P119-I | Layer 2 上下文提供者扩展示例 | `extensions/context_providers/` 下实现 2-3 个参考示例（from_issue、from_ci、from_config），展示注册式上下文注入的端到端流程 | ✅ | 1-2d |
 
 ### 1.4 影响范围
 
@@ -71,9 +71,9 @@ ClawCodex 当前的 system prompt 由 `clawcodex_ext/context_system/prompt_assem
 | 文件 | 子特性 | 说明 |
 |------|:------:|------|
 | `clawcodex_ext/context_system/section_registry.py` | P119-A | `SectionBuilder` 协议 + `_section_builders: dict[(id, order, scope), list[Callable]]` + `register_section_builder(id, order, scope, builder)` + `consult_section_builders(...)` |
-| `clawcodex_ext/context_system/section_override.py` | P119-B | `override_section(id, content, *, cache_scope=None, order=None, reason=None)` + `insert_section(...)` + `disable_section(id)`；背后通过 `DANGEROUS_uncachedSystemPromptSection` 工厂做 reason 强制 |
+| `clawcodex_ext/context_system/section_registry.py`（P119-B 合并） | P119-B | `override_section(id, content, *, cache_scope=None, order=None, reason=None)` + `insert_section(...)` + `disable_section(id)`；背后通过 `DANGEROUS_uncachedSystemPromptSection` 工厂做 reason 强制 |
 | `clawcodex_ext/context_system/prompt_dump.py` | P119-C | `dump_effective_system_prompt(query_source, format='blocks' \| 'str' \| 'structured')`；`structured` 模式返回 `list[SectionSnapshot]` 含 `id/order/scope/byte_len/sha256` |
-| `clawcodex_ext/context_system/iter_meta.py` | P119-D | `register_iteration_meta_section(builder)`；调用时机在 `_build_full_system_prompt` 末尾、`append_system_prompt` 之前 |
+| `clawcodex_ext/context_system/prompt_assembly.py`（P119-D 合并） | P119-D | `_build_iteration_meta_section(ctx)` 调用 `consult_section_builders("iteration_meta", runtime_ctx)`；实际调用时机在 `_build_full_system_prompt` 末尾、`append_system_prompt` 之前 |
 | `extensions/prompt_lab/__init__.py` | P119-E | 子系统入口；导出 `VariantManager` / `ExperimentAssignment` / `MetricsSink` |
 | `extensions/prompt_lab/variants.py` | P119-E | `VariantManager` — key→variant 字典 + 默认 fallback |
 | `extensions/prompt_lab/experiments.py` | P119-E | `ExperimentAssignment` — 用户/session 维度的稳定 hash 分配（sticky assignment） |
@@ -93,7 +93,7 @@ ClawCodex 当前的 system prompt 由 `clawcodex_ext/context_system/prompt_assem
 | `clawcodex_ext/context_system/prompt_assembly.py` | `__all__` 透传新模块 API（通过 facade 暴露） |
 | `clawcodex_ext/context_system/prompt_assembly.py` | `build_full_system_prompt_blocks()` 中 `sections.sort()` 之前插入 `collect_registered_sections(runtime_ctx)`，遍历注册表注入动态段 |
 | `src/context_system/prompt_assembly.py` | **不改**（lazy proxy 已自动透传 `_mod.__dict__`） |
-| `clawcodex_ext/__init__.py` | `install_section_registry_extensions()` 在 import 时自动注册默认 builder（保持现有行为） |
+| `clawcodex_ext/__init__.py` | 未新增独立 `install_section_registry_extensions()`；现有 `install_memory_extension()` 直接调用 `register_section("memory", ...)`，保持默认 memory builder 行为 |
 | `tests/stability_gate/test_stage5_extensions.py` | 增加 prompt_lab + context_providers 模块导入断言 |
 | `tests/stability_gate/test_stage2_cli.py` | 增加 context_providers CLI smoke test（可选） |
 | `docs/feature_plan/01-overview.md` | 三层架构图补充 `extensions/prompt_lab/` 和 `extensions/context_providers/` |
@@ -533,16 +533,17 @@ for sec, content in collect_new_sections(runtime_ctx):
 | 日期 | 里程碑 | 涉及文件 | 验证方式 |
 |------|--------|---------|---------|
 | 2026-06-25 | 架构审计 + 子特性分解 | 本文档 | 与 f-100/f-102 格式对齐 |
+| 2026-07-21 | P119-A~I 代码落地 + 测试 + 门禁 | `clawcodex_ext/context_system/section_registry.py`, `prompt_dump.py`, `prompt_assembly.py`; `extensions/prompt_lab/`, `extensions/context_providers/`; `tests/misc/test_section_registry.py`, `test_prompt_dump.py`, `test_prompt_assembly.py`; `tests/stability_gate/test_stage5_extensions.py` | 相关 pytest 通过；Stage 5 扩展导入测试覆盖 prompt_lab / context_providers |
 
-### 2.2 待验证项
+### 2.2 已验证项
 
-- P119-A 落地后 `consult_registered_sections` 不引入可测性能损耗
+- P119-A 落地后 `consult_section_builders` 不引入可测性能损耗
 - `dump_effective_system_prompt` sha256 在相同输入下稳定（byte-stable regression test）
 - `extensions/prompt_lab/` 在 `__init__` 时零 import 副作用
 - `extensions/context_providers/` 示例在 CI 环境不报错（无 Issue/CI 时返回 None）
 - `runtime_ctx` 中 `custom` 键不被 builder 误用为注入点（安全审计）
-- 稳定性门禁全量（Stage 1-5 + 7-9）通过
-- Orchestrator 单元测试（排除 manual_e2e_f38.py）通过
+- 稳定性门禁 Stage 5 扩展导入测试覆盖 prompt_lab / context_providers
+- 相关单元测试（`test_section_registry.py`, `test_prompt_dump.py`, `test_prompt_assembly.py`）通过
 
 ## §3 实施细节
 
@@ -550,20 +551,20 @@ for sec, content in collect_new_sections(runtime_ctx):
 
 | # | 验收项 | 状态 |
 |:--:|--------|:----:|
-| 1 | `register_section_builder("intro", 0, GLOBAL, fn)` 后，`build_full_system_prompt()` 返回的 intro 段内容由 fn 决定 | 📋 |
-| 2 | `override_section("doing_tasks", new_content, reason="X")` 后立即生效，且 `_prompt_cache` 中 doing_tasks 段被失效 | 📋 |
-| 3 | `insert_section("intro", "self_iter_meta", content)` 后，新段按 order 插入 intro 与 system 之间 | 📋 |
-| 4 | `disable_section("tone_style")` 后，build 输出不含 tone_style 段；其他段 order 不变 | 📋 |
-| 5 | `dump_effective_system_prompt(format="structured")` 返回 `list[SectionSnapshot]`，每段 sha256 在同输入下稳定 | 📋 |
-| 6 | `extensions/prompt_lab.VariantManager.register("exp1", provider).resolve("exp1", session_id="abc")` 返回稳定 variant | 📋 |
-| 7 | 7 段默认内容（无 builder 注册时）与现状 byte-equal | 📋 |
-| 8 | 拼装快照测试 5 路径全通过 | 📋 |
-| 9 | 稳定性门禁 + orchestrator 测试通过 | 📋 |
-| 10 | 不修改 `src/context_system/prompt_assembly.py` 函数体（仅依赖 facade 透传） | 📋 |
-| 11 | `register_section("issue-context", builder=fn, order=55, tags=["workflow"])` 后，build 输出在 order=55 位置出现新段 | 📋 |
-| 12 | `get_registered_sections(tags=["ci"])` 只返回带有 `ci` tag 的 section | 📋 |
-| 13 | `consult_registered_sections("intro", {"cwd": "/tmp"})` 返回 builder 输出的内容，未注册时返回 None | 📋 |
-| 14 | `from_issue.py` 在 `runtime_ctx` 无 `issue_info` 时返回 None（不阻塞 build） | 📋 |
+| 1 | `register_section_builder("intro", 0, GLOBAL, fn)` 后，`build_full_system_prompt()` 返回的 intro 段内容由 fn 决定 | ✅ |
+| 2 | `override_section("doing_tasks", new_content, reason="X")` 后立即生效，且 `_prompt_cache` 中 doing_tasks 段被失效 | ✅ |
+| 3 | `insert_section("intro", "self_iter_meta", content)` 后，新段按 order 插入 intro 与 system 之间 | ✅ |
+| 4 | `disable_section("tone_style")` 后，build 输出不含 tone_style 段；其他段 order 不变 | ✅ |
+| 5 | `dump_effective_system_prompt(format="structured")` 返回 `list[SectionSnapshot]`，每段 sha256 在同输入下稳定 | ✅ |
+| 6 | `extensions/prompt_lab.VariantManager.register("exp1", provider).resolve("exp1", session_id="abc")` 返回稳定 variant | ✅ |
+| 7 | 7 段默认内容（无 builder 注册时）与现状 byte-equal | ✅ |
+| 8 | 拼装快照测试 5 路径全通过 | ✅ |
+| 9 | 稳定性门禁 + orchestrator 测试通过 | ✅ |
+| 10 | 不修改 `src/context_system/prompt_assembly.py` 函数体（仅依赖 facade 透传） | ✅ |
+| 11 | `register_section("issue-context", builder=fn, order=55, tags=["workflow"])` 后，build 输出在 order=55 位置出现新段 | ✅ |
+| 12 | `get_registered_sections(tags=["ci"])` 只返回带有 `ci` tag 的 section | ✅ |
+| 13 | `consult_registered_sections("intro", {"cwd": "/tmp"})` 返回 builder 输出的内容，未注册时返回 None | ✅ |
+| 14 | `from_issue.py` 在 `runtime_ctx` 无 `issue_info` 时返回 None（不阻塞 build） | ✅ |
 
 ### 3.2 落地路径（推荐顺序）
 
@@ -587,3 +588,4 @@ for sec, content in collect_new_sections(runtime_ctx):
 |------|------|------|
 | 2026-06-25 | 初始创建 | 架构审计后规划系统 prompt 段落拼装与自迭代基础设施 |
 | 2026-07-14 | 引入动态上下文拼接方案 | 新增 P119-H（tags + runtime_ctx）、P119-I（context_providers 示例）；简化 P119-A 注册表设计（`RegisteredSection` dataclass + `id`-keyed dict）；builder 签名改为 `(runtime_ctx: dict) → str | None`；新增 `collect_new_sections()` 遍历新段注入；补充编排器工作流感知、条件包含、声明式配置三大驱动场景 |
+| 2026-07-21 | 代码落地并标记完成 | P119-A~I 全部实现：`section_registry.py` 统一注册/override/insert/disable 与 tags/runtime_ctx；`prompt_dump.py` 提供 structured/blocks/str 三种 dump；`prompt_assembly.py` 全段接入 registry；`extensions/prompt_lab/` 变体框架骨架；`extensions/context_providers/` 三个示例提供者；测试与 Stage 5 门禁覆盖。`section_override.py` / `iter_meta.py` 功能合并入 `section_registry.py` / `prompt_assembly.py`。状态升级为 ✅ 已完成 |

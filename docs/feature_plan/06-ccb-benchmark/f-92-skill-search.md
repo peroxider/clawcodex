@@ -1,8 +1,8 @@
 # F-92: experimental_skill_search TF-IDF
 
-> 状态: 📋 规划中(目标模块 `clawcodex_ext/services/skill_search/` 待建)
+> 状态: ✅ 已完成(`clawcodex_ext/services/skill_search/` 8 模块 + `/skills search/inspect/rebuild/stats` 命令 + `SkillSearchConfig` Feature Gate)
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-92-skill-search.md`
-> 最后更新: 2026-07-01
+> 最后更新: 2026-07-21
 > 缺口来源: gap-analysis-2026q2.md §3.3(`#### F-92: experimental_skill_search TF-IDF`,已分解到本文档 §0)
 
 ## §0 缺口摘要
@@ -312,5 +312,12 @@ CLI 默认对用户隐藏(纯内部命令),Agent 通过 Tool 接入。
 | **F-71 Tool Gap** | skill search 可辅助 `ExecuteTool` 选择工具 |
 
 ---
+
+## §5 变更记录
+
+| 日期 | 变更 | 原因 |
+|------|------|------|
+| 2026-07-21 | 代码落地并标记完成 | `clawcodex_ext/services/skill_search/` 8 模块 + `/skills search/inspect/rebuild/stats` 命令集成 + `tests/services/skill_search/` 8 个测试文件 + `SKILL_SEARCH_TFIDF` Feature Gate |
+| 2026-07-01 | 初始创建(从 gap-analysis 派工) | 分解 F-92 缺口并规划实现路径 |
 
 **关联文档**: [README.md 缺口矩阵](./README.md#a-全特性对照矩阵)

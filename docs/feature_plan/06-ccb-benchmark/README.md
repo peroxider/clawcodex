@@ -5,7 +5,7 @@
 > 对标基线: CCB `v2.2.x`（PR #60–#241 累计恢复 13 类特性 + 65+ feature flag）
 > 实现基线: `clawcodex_dev` `2026-06-30`
 > 解耦原则: 三层架构 `src/` → `clawcodex_ext/` → `extensions/`；所有 P0/P1 缺口实现优先落入 `clawcodex_ext/` 或 `extensions/`
-> 最后更新: 2026-07-04
+> 最后更新: 2026-07-21
 >
 > 注: 原 `gap-analysis-2026q2.md` 已分解——各 F-NN 派工条目下沉到对应 `f-NN-*.md` 的 **§0 缺口摘要**;全局对照矩阵与路线图合并到本 README（下方 §A/§B/§C）。
 
@@ -24,16 +24,16 @@
 | [f-74-sandbox.md](./f-74-sandbox.md) | F-74 Sandbox 沙箱远程执行 | 📋 |
 | [f-81-native-modules.md](./f-81-native-modules.md) | F-81 Native 原生模块系统 | 🔭 |
 | [f-82-remote-control.md](./f-82-remote-control.md) | F-82 Remote Control 远程控制 | 🔄 |
-| [f-83-triggers.md](./f-83-triggers.md) | F-83 Triggers 触发器 + cron 调度 | 📋 |
-| [f-84-daemon.md](./f-84-daemon.md) | F-84 Daemon 后台守护进程(Supervisor + Worker) | 🔄 |
-| [f-85-pipe-ipc.md](./f-85-pipe-ipc.md) | F-85 Pipe IPC 多实例协作（UDS + LAN_PIPES） | 📋 |
-| [f-86-computer-use.md](./f-86-computer-use.md) | F-86 Computer Use 三平台 | 📋 |
-| [f-87-ultraplan.md](./f-87-ultraplan.md) | F-87 Ultraplan 工作流计划层 | 🔄 |
-| [f-88-monitor.md](./f-88-monitor.md) | F-88 Monitor 后台监控 + MonitorTool | 📋 |
+| [f-83-triggers.md](./f-83-triggers.md) | F-83 Triggers 触发器 + cron 调度 | 🟡 |
+| [f-84-daemon.md](./f-84-daemon.md) | F-84 Daemon 后台守护进程(Supervisor + Worker) | ✅ |
+| [f-85-pipe-ipc.md](./f-85-pipe-ipc.md) | F-85 Pipe IPC 多实例协作（UDS + LAN_PIPES） | 🟡 |
+| [f-86-computer-use.md](./f-86-computer-use.md) | F-86 Computer Use 三平台 | 🟡 |
+| [f-87-ultraplan.md](./f-87-ultraplan.md) | F-87 Ultraplan 工作流计划层 | ✅ |
+| [f-88-monitor.md](./f-88-monitor.md) | F-88 Monitor 后台监控 + MonitorTool | ✅ |
 | [f-91-mcp-skill-discovery.md](./f-91-mcp-skill-discovery.md) | F-91 MCP Skills 自动发现 | 📋 |
-| [f-92-skill-search.md](./f-92-skill-search.md) | F-92 Skill Search TF-IDF 检索 | 📋 |
+| [f-92-skill-search.md](./f-92-skill-search.md) | F-92 Skill Search TF-IDF 检索 | ✅ |
 | [f-94-bg-sessions.md](./f-94-bg-sessions.md) | F-94 BG_SESSIONS 后台会话统一管理 | 🚧 |
-| [f-95-templates.md](./f-95-templates.md) | F-95 TEMPLATES 模板系统产品化 | 🔄 |
+| [f-95-templates.md](./f-95-templates.md) | F-95 TEMPLATES 模板系统产品化 | ✅ |
 | [f-96-cache-break-detection.md](./f-96-cache-break-detection.md) | F-96 PROMPT_CACHE_BREAK_DETECTION 缓存命中率监测 | 📋 |
 | [f-98-ssh-remote.md](./f-98-ssh-remote.md) | F-98 SSH_REMOTE 远程模式（协同 F-74） | 📋 |
 | [f-99-direct-connect.md](./f-99-direct-connect.md) | F-99 DIRECT_CONNECT 直连模式 | 🔄 |
@@ -63,11 +63,11 @@
 | 5 | Chrome 浏览器控制 | ✅ `clawcodex_ext/services/chrome/`（三后端） | 已完成 | F-62 |
 | 6 | Computer Use 屏幕操控 | 🟠 仅 `linux.py` / `null.py`;macOS+Windows 后端缺 | P1 | [F-86](./f-86-computer-use.md) |
 | 7 | Feature Flags / GrowthBook | ✅ F-68（114 测试，clawcodex_ext/feature_gate/） | 已完成 | — |
-| 8 | /ultraplan 高级规划 | 🟡 数据模型+executor;缺 LLM 生成 + CLI | P1 | [F-87](./f-87-ultraplan.md) |
-| 9 | Daemon 后台守护 | ❌ `src/entrypoints/daemon.py` 占位 stub | P0 | [F-84](./f-84-daemon.md) |
+| 8 | /ultraplan 高级规划 | ✅ `/ultraplan` 命令族 + LLM Planner + CCR 远程 + TUI 面板 | 已完成 | [F-87](./f-87-ultraplan.md) |
+| 9 | Daemon 后台守护 | ✅ `extensions/daemon/` Supervisor + Worker + CLI | 已完成 | [F-84](./f-84-daemon.md) |
 | 10 | Pipe IPC 多实例协作 | 🟡 仅 UDS 传输+registry;无命令族 | P0 | [F-85](./f-85-pipe-ipc.md) |
 | 11 | LAN Pipes 局域网群控 | ❌ 无 TCP/UDP multicast 发现 | P0 | [F-85](./f-85-pipe-ipc.md)（F-85.2） |
-| 12 | Monitor 后台监控 | ❌ 无 `MonitorTool` | P0 | [F-88](./f-88-monitor.md) |
+| 12 | Monitor 后台监控 | ✅ `MonitorTool` + `/monitor` 命令族 + TUI 面板 | 已完成 | [F-88](./f-88-monitor.md) |
 | 13 | Workflow 工作流脚本 | 🟠 `.claude/workflows/*.py` + `/workflows` 面板 | 已完成 | F-110 协同 |
 | 14 | Coordinator 多Worker协调 | ✅ `src/coordinator/` + ext | 已完成 | — |
 | 15 | Proactive 自主模式 | ✅ PROACTIVE/KAIROS Tick 调度 + SleepTool + Remote automation_state | 已完成 | F-89 |
@@ -81,10 +81,10 @@
 |------------------|:----:|:----:|----------|
 | `ACP`（Agent Client Protocol） | ❌ | P1 | [F-66](./f-66-acp-protocol.md) |
 | `MCP_SKILLS`（skill:// 自动发现） | ❌ | P2 | [F-91](./f-91-mcp-skill-discovery.md) |
-| `EXPERIMENTAL_SKILL_SEARCH`（TF-IDF） | ❌ | P2 | [F-92](./f-92-skill-search.md) |
+| `EXPERIMENTAL_SKILL_SEARCH`（TF-IDF） | ✅ `clawcodex_ext/services/skill_search/` 8 模块 + 8 测试 | 已完成 | [F-92](./f-92-skill-search.md) |
 | `TEAMMEM`（Team 共享记忆） | ✅ `extensions/agents/team_memory*.py` + Tool + CLI | 已完成 | F-93 |
-| `BG_SESSIONS`（后台会话） | ✅ `clawcodex_ext/tasks/bg_session*.py` + Tool + CLI;P94-G 待 F-93 协同 | 已完成 | [F-94](./f-94-bg-sessions.md) |
-| `TEMPLATES`（模板系统） | 🟡 `services/templates/` + orchestrator | P2 | [F-95](./f-95-templates.md) |
+| `BG_SESSIONS`（后台会话） | 🚧 `clawcodex_ext/tasks/bg_session*.py` + Tool + CLI 已落地;P94-G Team/SendMessage 待 F-93 协同 | P1 | [F-94](./f-94-bg-sessions.md) |
+| `TEMPLATES`（模板系统） | ✅ `clawcodex_ext/services/templates/` 14 模块 + `/template` 命令族 | 已完成 | [F-95](./f-95-templates.md) |
 | `PROMPT_CACHE_BREAK_DETECTION` | 🟡 usage 采集已具备 | P2 | [F-96](./f-96-cache-break-detection.md) |
 | `LODESTONE`（深度链接） | ✅ `clawcodex_ext/services/lodestone/` 9 模块 + Tool + CLI | 已完成 | F-97 |
 | `SSH_REMOTE`（SSH 远程模式） | ❌ | P2 | [F-98](./f-98-ssh-remote.md)（协同 F-74） |
@@ -93,9 +93,9 @@
 | `TOKEN_BUDGET`（Token 预算） | ✅ F-69 | 已完成 | [F-69](./f-69-budget-mode.md) |
 | `KAIROS`（Tick 调度） | ✅ `kairos/scheduler.py` + proactive emitter | 已完成 | F-89 |
 | `PROACTIVE`（主动模式） | ✅ `/proactive` + tick prompt + SleepTool + automation_state | 已完成 | F-89 |
-| `MONITOR_TOOL`（后台监控） | ❌ | P0 | [F-88](./f-88-monitor.md) |
+| `MONITOR_TOOL`（后台监控） | ✅ `clawcodex_ext/services/monitor/` + `MonitorTool` + `/monitor` 命令族 | 已完成 | [F-88](./f-88-monitor.md) |
 | `UDS_INBOX` / `LAN_PIPES`（Pipe IPC） | 🟡/❌ | P0 | [F-85](./f-85-pipe-ipc.md) |
-| `DAEMON`（后台守护） | 🟡 `extensions/daemon/` 9 模块已落地 | P0 | [F-84](./f-84-daemon.md) |
+| `DAEMON`（后台守护） | ✅ `extensions/daemon/` 14 模块 + CLI + Stage 7 稳定性门禁 | 已完成 | [F-84](./f-84-daemon.md) |
 | `CONTEXT_COLLAPSE` / `AWAY_SUMMARY` | ✅ | 已完成 | — |
 | `SKILL_LEARNING` / `REVIEW_ARTIFACT` / `CONNECTOR_TEXT` | ❌ | P3 | 长期 |
 | `ULTRATHINK`（扩展思考） | 🟡 `thinking.py`（stub） | P2 | 完善 |
@@ -169,3 +169,4 @@
 | 2026-06-30 | 初始创建 `gap-analysis-2026q2.md`（CCB ↔ ClawCodex 缺口快照） | Q2 末特性盘点 |
 | 2026-07-01 | 分解 gap-analysis:F-NN 派工下沉到各 `f-NN-*.md` §0;矩阵/路线图并入本 README | gap-analysis 与详细设计文档并列显得冗余,统一入口 |
 | 2026-07-04 | 删除 F-89/F-93/F-97 已完成特性规划文档;同步目录索引状态(F-66 🚧、F-72/F-84/F-87 🔄、F-94/F-125 🚧) | 全量复核 49 个 F-Number 文档 vs 代码层,识别 3 个 ✅ 完全实现 + 6 处状态不一致 |
+| 2026-07-21 | 同步 F-84/F-87/F-88/F-92/F-95 为 ✅;修正 §A 缺口矩阵中 F-84/F-87/F-88/F-92/F-94/F-95/MONITOR_TOOL/DAEMON 的旧状态;F-94 保持 🚧(P94-G 待 F-93) | 代码确认 5 个特性完全落地,矩阵与目录索引/单篇文档达成一致 |

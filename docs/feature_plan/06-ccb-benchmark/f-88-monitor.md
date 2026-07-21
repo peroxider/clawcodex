@@ -1,8 +1,8 @@
 # F-88: Monitor 后台监控 + MonitorTool
 
-> 状态: 🟡 后台执行原语已落地(`clawcodex_ext/tool_system/tools/bash/background.py`,292 行;`clawcodex_ext/agent/background_runner.py`,449 行);`MonitorTool` + `/monitor` 命令 + TUI 面板待补
+> 状态: ✅ 已完成(`MonitorTool` + `/monitor` 命令族 + `MonitorController` + `kind='monitor'` 后台任务 + TUI 面板)
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-88-monitor.md`
-> 最后更新: 2026-06-30
+> 最后更新: 2026-07-21
 > 缺口来源: [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵)
 
 ## §1 设计规划
@@ -24,28 +24,22 @@
 | `clawcodex_ext/repl/background_escape.py` | (存在) | Ctrl+B 后台化(F-88 不冲突,各管各的) |
 | `clawcodex_ext/command_system/builtins.py` | (存在) | 命名命令注册入口 |
 
-**缺口**:
+**已完成**:
 
-1. **命名命令族**: `/monitor <cmd>` 斜杠命令 **完全缺失**;
-2. **AI 可调工具**: `MonitorTool`(内置工具,允许 AI 触发后台监控) **完全缺失**;
-3. **`kind='monitor'` 标签**: `LocalShellTaskState` 当前无 `kind` 字段,无法区分普通 bash 后台任务 vs 监控任务;
-4. **stall 看门狗豁免**: CCB `LocalShellTask.tsx:64` 对 `kind==='monitor'` 的任务跳过 stall watchdog(否则 `tail -f` 永远不退出,被误判 stall);ClawCodex 缺少对应豁免;
-5. **Windows watch 兼容**: `watch -n <sec> <cmd>` 在 Windows 需转 PowerShell `while(1){cmd; Start-Sleep <sec>}` **未实现**;
-6. **TUI 后台任务面板**: Shift+↓ 展开后台任务列表 + tail 输出 **未接入**;
-7. **输出实时 tail**: TUI 面板需轮询 tail 文件,ClawCodex 缺通用文本 tail(现有 `tail_follower.py` 只解析 JSONL)。
+P88-A~H 已全部落地:P88-A `LocalShellTaskState` 已增加 `kind` 字段区分 shell/monitor;P88-B `MonitorController` 已包装 `spawn_background_bash(kind='monitor')`;P88-C Windows `watch -n` 已转 PowerShell 循环;P88-D `OutputBuffer` + 通用文本 tail 已接入;P88-E stall watchdog 已豁免 monitor 任务;P88-F `/monitor` 命令族已注册;P88-G `MonitorTool` 已内置;P88-H TUI 后台任务面板已接入 Shift+↓。详见 `clawcodex_ext/services/monitor/`、`clawcodex_ext/tool_system/tools/monitor.py`、`clawcodex_ext/command_system/monitor_command.py`、`tests/tool_system/test_monitor_tool.py`。
 
 ### 1.3 子特性分解
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
-| P88-A | `LocalShellTaskState` 增加 `kind: Literal['shell', 'monitor']` 字段 | 📋 | 1 天 |
-| P88-B | `MonitorController`(`clawcodex_ext/services/monitor/controller.py`),复用 `spawn_background_bash` + 加 `kind='monitor'` | 📋 | 2-3 天 |
-| P88-C | `WatchCompat`(`watch_compat.py`),Windows `watch -n <sec> <cmd>` → PowerShell 循环 | 📋 | 1 天 |
-| P88-D | `OutputBuffer` ring buffer + 通用文本 `TailFollower`(`text_tail.py`,与 JSONL 版解耦) | 📋 | 2 天 |
-| P88-E | stall 看门狗豁免:hook `LocalShellTask` 状态变更时跳过 `kind='monitor'` | 📋 | 1 天 |
-| P88-F | `/monitor <cmd>` 斜杠命令(`clawcodex_ext/command_system/builtins.py` 注册) | 📋 | 1-2 天 |
-| P88-G | `MonitorTool`(`clawcodex_ext/tool_system/tools/monitor.py`),AI 可调,接受 `command` + `kind` + `interval_sec` | 📋 | 2-3 天 |
-| P88-H | TUI 监控面板(`clawcodex_ext/tui/screens/monitor_panel.py`),Shift+↓ 展开 + 实时 tail | 📋 | 3-4 天 |
+| P88-A | `LocalShellTaskState` 增加 `kind: Literal['shell', 'monitor']` 字段 | ✅ | 1 天 |
+| P88-B | `MonitorController`(`clawcodex_ext/services/monitor/controller.py`),复用 `spawn_background_bash` + 加 `kind='monitor'` | ✅ | 2-3 天 |
+| P88-C | `WatchCompat`(`watch_compat.py`),Windows `watch -n <sec> <cmd>` → PowerShell 循环 | ✅ | 1 天 |
+| P88-D | `OutputBuffer` ring buffer + 通用文本 `TailFollower`(`text_tail.py`,与 JSONL 版解耦) | ✅ | 2 天 |
+| P88-E | stall 看门狗豁免:hook `LocalShellTask` 状态变更时跳过 `kind='monitor'` | ✅ | 1 天 |
+| P88-F | `/monitor <cmd>` 斜杠命令(`clawcodex_ext/command_system/builtins.py` 注册) | ✅ | 1-2 天 |
+| P88-G | `MonitorTool`(`clawcodex_ext/tool_system/tools/monitor.py`),AI 可调,接受 `command` + `kind` + `interval_sec` | ✅ | 2-3 天 |
+| P88-H | TUI 监控面板(`clawcodex_ext/tui/screens/monitor_panel.py`),Shift+↓ 展开 + 实时 tail | ✅ | 3-4 天 |
 
 **估算总工时**: 12-15 天(单人)
 
@@ -569,4 +563,5 @@ def install_monitor_panel_binding() -> None:
 
 | 日期 | 变更 | 原因 |
 |------|------|------|
+| 2026-07-21 | 代码落地并标记完成 | `clawcodex_ext/services/monitor/` 6 模块 + `MonitorTool` + `/monitor` 命令族 + TUI 面板 + `tests/tool_system/test_monitor_tool.py`;P88-A~H 全部 ✅ |
 | 2026-06-30 | 初始创建(8 子特性,11 验收项,10 风险) | 派工 F-88 P0 缺口,对接 CCB MONITOR_TOOL + `/monitor` 命令 |

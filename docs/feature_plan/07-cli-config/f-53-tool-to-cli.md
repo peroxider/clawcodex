@@ -1,8 +1,8 @@
 # F-53: Tool 自动暴露为 CLI 斜杠命令
 
-> 状态: 📋 规划中
+> 状态: ✅ 已完成
 > 章节: docs/feature_plan/07-other/f-53-tool-to-cli.md
-> 最后更新: 2026-07-14
+> 最后更新: 2026-07-21
 
 ## §1 设计规划
 
@@ -98,7 +98,27 @@ ToolRegistry ──> DynamicCommandDiscovery ──> subcommand_registry 注册 
 
 ## §2 进度跟踪
 
-尚未开始。
+F-53 已完整实现，通过全部 7 项验收标准。
+
+### 2.1 实现组件
+
+| 组件 | 路径 | 状态 |
+|------|------|:----:|
+| `DynamicCommandDiscovery` | `clawcodex_ext/cli/tool_cmd/discovery.py` | ✅ 完整实现（含 `discover()` / `rediscover()` 双模式） |
+| `DynamicToolCommand` | `clawcodex_ext/cli/tool_cmd/command.py` | ✅ 完整实现（228 行，REPL/TUI 双适配器） |
+| 注册钩子 | `clawcodex_ext/cli/tool_cmd/hooks.py` | ✅ 完整实现（CLI 级 + REPL/TUI 级双钩子） |
+| 核心工具过滤 | `clawcodex_ext/cli/tool_cmd/core_filter.py` | ✅ 自动推导自 `ALL_STATIC_TOOLS` + `EXTENSION_TOOLS` |
+| schema→argparse 适配 | `clawcodex_ext/cli/tool_cmd/schema_parser.py` | ✅ 完整映射（string/integer/boolean/array/enum/object） |
+| CLI argv 入口 | `clawcodex_ext/cli/tool_cmd/runtime.py` | ✅ `clawcodex-dev tool <name> [--args]` + `--list` |
+| 测试 | `tests/cli/test_f53_tool_to_cli.py` | ✅ 651 行，20+ 测试用例 |
+
+### 2.2 接线点
+
+- **REPL core**: `clawcodex_ext/repl/core.py:2038-2041`
+- **REPL app**: `clawcodex_ext/repl/app.py:707-710`
+- **TUI commands**: `clawcodex_ext/tui/commands.py:200-202`
+- **TUI app**: `clawcodex_ext/tui/app.py:1320-1322`
+- **CLI subcommand**: `clawcodex_ext/cli/subcommand_registry.py:95-101`
 
 ## §4 变更记录
 

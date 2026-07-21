@@ -164,7 +164,7 @@
 | F-50 | SOP 转换器固化 | P2 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-51 | AgentRunner 空转检测机制（no-op detection） | P0 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-52 | Python SDK 方法注册为 Tool | P2 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
-| F-53 | Tool 自动暴露为 CLI 斜杠命令 | P3 | 📋 规划中 | 已注册的 Tool 自动映射为 REPL/TUI 中的 `/tool-name` 命令（如 `/detect_modality --path /data/raw`），参数从 Tool schema 自动推导。`clawcodex_ext/cli/tool_cmd/`。依赖 F-52。 |
+| F-53 | Tool 自动暴露为 CLI 斜杠命令 | P3 | ✅ 已完成 (2026-07-21) | 已注册的 Tool 自动映射为 REPL/TUI 中的 `/tool-name` 命令（如 `/detect_modality --path /data/raw`），参数从 Tool schema 自动推导。`clawcodex_ext/cli/tool_cmd/` 下 7 个组件完整实现：`DynamicCommandDiscovery`（扫描/过滤非核心工具）、`DynamicToolCommand`（REPL/TUI 双适配器）、`core_filter`（自动推导核心工具名单）、`schema_parser`（JSON Schema → argparse 映射）、`runtime`（`clawcodex-dev tool` CLI 入口）、`hooks`（CLI + REPL/TUI 双钩子）。651 行测试覆盖全部验收标准。依赖 F-52。 |
 | F-54 | AgentRunner / QueryRunner 运行期可观测性 | P0 | 🔄 进行中 | 补齐 headless issue agent 从 provider request 到 `SessionComplete` 之间的 debug 观测点。已落地：`extensions/orchestrator/debug_log.py`（29 行）— `append_debug_event` + `ObservabilityConfig` schema；`agent_runner.py:751` 写 `debug.ndjson`。仪表盘/query-runner heartbeat/CLI 诊断字段待补齐 |
 | F-55 | SOP 分组策略增强 | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-60 | Pipe IPC + LAN 群控系统 | P0 | ✅ 已完成（2026-06-19） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |

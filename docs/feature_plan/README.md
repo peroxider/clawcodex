@@ -63,7 +63,7 @@ docs/feature_plan/
 | F-Number | 名称 | 状态 | 章节路径 |
 |----------|------|:----:|---------|
 | F-50 | SOP 转换器源码固化 (子特性 A-G) | 🟡 | [f-50-sop-converter.md](04-architecture-sdk/f-50-sop-converter.md) |
-| F-52 | Python SDK 方法注册为 Tool | 📋 | [f-52-sdk-to-tool.md](04-architecture-sdk/f-52-sdk-to-tool.md) |
+| F-52 | Python SDK 方法注册为 Tool | ✅ | [f-52-sdk-to-tool.md](04-architecture-sdk/f-52-sdk-to-tool.md) |
 
 ### Cron 系统
 
@@ -88,16 +88,16 @@ docs/feature_plan/
 | F-73 | CI/CD 流水线 | 🔄 | [f-73-cicd.md](06-ccb-benchmark/f-73-cicd.md) |
 | F-74 | Sandbox 沙箱远程执行 | 📋 | [f-74-sandbox.md](06-ccb-benchmark/f-74-sandbox.md) |
 | F-82 | Remote Control 远程控制 | 🔄 | [f-82-remote-control.md](06-ccb-benchmark/f-82-remote-control.md) |
-| F-83 | 远程 Triggers（AGENT_TRIGGERS_REMOTE） | 📋 | [f-83-triggers.md](06-ccb-benchmark/f-83-triggers.md) |
-| F-84 | Daemon 后台守护 | 🔄 | [f-84-daemon.md](06-ccb-benchmark/f-84-daemon.md) |
-| F-85 | Pipe IPC 命令族（UDS + LAN_PIPES） | 📋 | [f-85-pipe-ipc.md](06-ccb-benchmark/f-85-pipe-ipc.md) |
-| F-86 | Computer Use 跨平台 Executor | 📋 | [f-86-computer-use.md](06-ccb-benchmark/f-86-computer-use.md) |
-| F-87 | /ultraplan LLM 驱动 + CLI 完整实现 | 🔄 | [f-87-ultraplan.md](06-ccb-benchmark/f-87-ultraplan.md) |
-| F-88 | Monitor 后台监控 + MonitorTool | 📋 | [f-88-monitor.md](06-ccb-benchmark/f-88-monitor.md) |
+| F-83 | 远程 Triggers（AGENT_TRIGGERS_REMOTE） | 🟡 | [f-83-triggers.md](06-ccb-benchmark/f-83-triggers.md) |
+| F-84 | Daemon 后台守护 | ✅ | [f-84-daemon.md](06-ccb-benchmark/f-84-daemon.md) |
+| F-85 | Pipe IPC 命令族（UDS + LAN_PIPES） | 🟡 | [f-85-pipe-ipc.md](06-ccb-benchmark/f-85-pipe-ipc.md) |
+| F-86 | Computer Use 跨平台 Executor | 🟡 | [f-86-computer-use.md](06-ccb-benchmark/f-86-computer-use.md) |
+| F-87 | /ultraplan LLM 驱动 + CLI 完整实现 | ✅ | [f-87-ultraplan.md](06-ccb-benchmark/f-87-ultraplan.md) |
+| F-88 | Monitor 后台监控 + MonitorTool | ✅ | [f-88-monitor.md](06-ccb-benchmark/f-88-monitor.md) |
 | F-91 | MCP Skills 自动发现 | 📋 | [f-91-mcp-skill-discovery.md](06-ccb-benchmark/f-91-mcp-skill-discovery.md) |
-| F-92 | experimental_skill_search TF-IDF | 📋 | [f-92-skill-search.md](06-ccb-benchmark/f-92-skill-search.md) |
+| F-92 | experimental_skill_search TF-IDF | ✅ | [f-92-skill-search.md](06-ccb-benchmark/f-92-skill-search.md) |
 | F-94 | BG_SESSIONS 后台会话 | 🚧 | [f-94-bg-sessions.md](06-ccb-benchmark/f-94-bg-sessions.md) |
-| F-95 | TEMPLATES 模板系统 | 🔄 | [f-95-templates.md](06-ccb-benchmark/f-95-templates.md) |
+| F-95 | TEMPLATES 模板系统 | ✅ | [f-95-templates.md](06-ccb-benchmark/f-95-templates.md) |
 | F-96 | PROMPT_CACHE_BREAK_DETECTION | 📋 | [f-96-cache-break-detection.md](06-ccb-benchmark/f-96-cache-break-detection.md) |
 | F-98 | SSH_REMOTE 远程模式 | 📋 | [f-98-ssh-remote.md](06-ccb-benchmark/f-98-ssh-remote.md) |
 | F-99 | DIRECT_CONNECT 直连模式 | 🔄 | [f-99-direct-connect.md](06-ccb-benchmark/f-99-direct-connect.md) |
@@ -156,3 +156,4 @@ docs/feature_plan/
 | 2026-07-13 | 新增 08-recording 章节与 F-156 Asciicast v2 录制器 | 5 子系统（orchestrator / query / SOP / visualizer / cron）零 src/ 改动落地，60 unit+integration 测试通过，稳定性门禁 Stages 1-5/7-9 全绿 |
 | 2026-07-14 | 新增 F-130 自校正上下文切换 | 在 F-119 section registry 基础上规划元认知换脑机制；模板 + Agent 自定义的 Profile 系统；循环检测器框架；上下文切换引擎 + rollback；默认 4 个 Profile（default/debug/creative/review） |
 | 2026-07-21 | 新增 dynamic-context-architecture.md (DC-001 ~ DC-020) | 用户提出"动态上下文切换/装配/生成"挑战性脑暴问题；沉淀 20 项原理特性规划，覆盖上下文生命周期 / 抗幻觉 / 推理扩展 / 元架构 4 组；定位为 brainstorm 文档，不申请 F-Number，落地时按子特性单独立项 |
+| 2026-07-21 | 更新 CCB 对标章节:F-84/F-87/F-88/F-92/F-95 标记为 ✅,F-94 保持 🚧 | 代码确认 5 个特性完全落地,同步 `06-ccb-benchmark/README.md` §A 缺口矩阵与单篇文档状态 |

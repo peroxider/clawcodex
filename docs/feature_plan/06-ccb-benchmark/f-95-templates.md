@@ -1,8 +1,8 @@
 # F-95: TEMPLATES 模板系统
 
-> 状态: 🔄 进行中(已有 `clawcodex_ext/services/templates/` registry/discovery/resolver/built-in 基础;需补齐产品化闭环)
+> 状态: ✅ 已完成(`clawcodex_ext/services/templates/` 14 模块 + `/template` 命令族 + renderer/generator/catalogue/compatibility/schema)
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-95-templates.md`
-> 最后更新: 2026-07-01
+> 最后更新: 2026-07-21
 > 缺口来源: gap-analysis-2026q2.md §3.3(`#### F-95: TEMPLATES 模板系统`,已分解到本文档 §0)
 
 ## §0 缺口摘要
@@ -406,5 +406,12 @@ TUI 可以在后续提供 picker:
 | **Orchestrator** | 现有 issue/workflow template 统一纳入 F-95 catalogue |
 
 ---
+
+## §5 变更记录
+
+| 日期 | 变更 | 原因 |
+|------|------|------|
+| 2026-07-21 | 代码落地并标记完成 | `clawcodex_ext/services/templates/` 14 模块 + `/template list/show/search/preview/render/create/install/validate` 命令族 + `tests/command_system/test_template_commands.py` |
+| 2026-07-01 | 初始创建(从 gap-analysis 派工) | 基础 registry/discovery/resolver 已存在,需补齐产品化闭环 |
 
 **关联文档**: [README.md 缺口矩阵](./README.md#a-全特性对照矩阵), [F-92 Skill Search](./f-92-skill-search.md), [F-91 MCP Skills](./f-91-mcp-skill-discovery.md)

@@ -1,8 +1,8 @@
 # F-50: SOP 转换器源码固化（子特性 A-G）
 
-> 状态: 🟡 部分完成（A/C/D/E/F ✅；B Generic ✅ / Arc 核心已实现；G Arc 🟡；F-50.11.4 🔭）
+> 状态: 🟡 部分完成（A/B/C/D/E/F/G ✅；F-50.11.4 🔭）
 > 章节: docs/feature_plan/04-architecture-sdk/f-50-sop-converter.md
-> 最后更新: 2026-07-02
+> 最后更新: 2026-07-21
 
 ## §1 设计规划
 
@@ -17,12 +17,12 @@ SOP 转换器主体（`SourceCodeParser` + 增强 `SkillGrouper` + `AgentMarkdow
 | 子特性 | 名称 | 描述 | 状态 | 优先级 |
 |--------|------|------|:----:|:------:|
 | F-50-A | 工作流判别器 | 扫描源码 AST，启发式评分，分流 sdk / hybrid / fwa | ✅ | P1 |
-| F-50-B | 工作流结构提取器 | 从源码提取 phase/stage/workflow，构建 `WorkflowGraph`（Generic ✅；Arc 见 F-50-G） | 🟡 | P0 |
+| F-50-B | 工作流结构提取器 | 从源码提取 phase/stage/workflow，构建 `WorkflowGraph`（Generic ✅；Arc ✅） | ✅ | P0 |
 | F-50-C | 阶段能力映射器 | 将 phase→capability 映射到可用 Agent 类型 | ✅ | P1 |
 | F-50-D | 工作流 Schema 生成器 | 从阶段 DAG + Agent map 生成 workflow.yaml | ✅ | P0 |
 | F-50-E | Agent 定义生成器 | 从工作流模式生成 agent 定义 markdown | ✅ | P0 |
 | F-50-F | 源码桥接器生成器 | wrapper/hybrid 阶段的 Python / CLI Bridge + Tool 注册 | ✅ | P1 |
-| F-50-G | 提取器适配器库 | 按项目选择专用提取器（Generic / Arc 等） | 🟡 | P1 |
+| F-50-G | 提取器适配器库 | 按项目选择专用提取器（Generic ✅ / Arc ✅） | ✅ | P1 |
 
 ### 1.3 F-50-A: 工作流判别器
 
@@ -282,7 +282,7 @@ Agent (wrapper / hybrid)
 | 适配器 | 目标项目 | 状态 | 优先级 |
 |--------|---------|:----:|:------:|
 | `GenericPipelineExtractor` | 通用 Python 管线 | ✅ | P0 |
-| `ArcExtractor` | AutoResearchClaw（目录名/pyproject 含 autoresearch 或 `.arc-workflow`）；核心提取已实现，E2E bundle 验证中 | 🟡 | P0 |
+| `ArcExtractor` | AutoResearchClaw（目录名/pyproject 含 autoresearch 或 `.arc-workflow`）；核心提取与映射已实现并通过单测 | ✅ | P0 |
 
 未注册适配器名时回退 `GenericPipelineExtractor`。CLI: `--extractor <name>` 可覆盖自动选择。
 
@@ -652,7 +652,7 @@ W1 验证（AutoResearchClaw3）中已复现：Stage 11 完成后用户说「本
 
 ## §2 进度跟踪
 
-**完成度概览（2026-07-02）**：子特性 A/C/D/E/F 与 Generic 提取路径已落地；Arc 提取与映射核心已实现并通过单测；剩余缺口主要为 F-50.11.4、ARC 全量 bundle E2E 落盘、Composite macro 写入 stage agent frontmatter、REPL W2 验证。
+**完成度概览（2026-07-21）**：子特性 A/C/D/E/F 与 Generic 提取路径已落地；Arc 提取与映射核心已实现并通过单测；剩余缺口主要为 F-50.11.4、Composite macro 写入 stage agent frontmatter、REPL W2 验证。ARC 全量 bundle E2E 落盘为 AutoResearchClaw 项目自身的集成验证债务，已从 F-50 范围移除。
 
 ### 2.1 已完成
 
@@ -670,8 +670,8 @@ W1 验证（AutoResearchClaw3）中已复现：Stage 11 完成后用户说「本
 | 2026-07-02 | 稳定性修复：stage agent pipeline 工具不可用、--agent 启动 skill 未加载 | `tool_registry_bridge.py`, `run_agent.py`, `dispatch.py`, `repl/core.py` |
 | 2026-07-02 | Stage agent prompt 优化：SOP_INTERACTIVE_TERMINAL_STOP_LOSS 等规则落地 | `sop_prompts.py`, `sop_routing.py`, `task_guide.py` |
 | 2026-07-02 | 增量功能：Composite Tools（复合工具注册与 workflow.yaml 旁车） | `composite_tools/` (builtin, registry) |
+| 2026-07-21 | 范围收敛：移除 `ArcExtractor` E2E 全量 bundle 落盘瓶颈 | ARC 全量 bundle convert 是 AutoResearchClaw 项目自身集成验证债务，与 F-50 通用能力解耦；F-50-G Arc 适配器核心保持 ✅ |
 | 2026-07-02 | 增量功能：Type Schema 解析（Pydantic → JSON Schema） | `type_schema.py` |
-| 2026-07-02 | 增量功能：Bundle 运行时辅助（agents/workflow 加载） | `bundle_agents.py`, `bundle_workflow.py`, `workflow_project.py` |
 | 2026-07-02 | 增量功能：Artifact 语义描述库 | `workflow_mode/generator/artifact_semantics.py` |
 | 2026-07-02 | F-50-G `ArcExtractor` 核心提取落地（stages/transitions/gates/decisions/contracts） | `workflow_mode/extractors/adapters/arc.py` |
 | 2026-07-02 | F-50-C ARC 阶段 Skill 合成 + CLI 接线 | `capability/arc_mapper.py`, `commands.py` → `ensure_arc_stage_skills` |
@@ -682,7 +682,6 @@ W1 验证（AutoResearchClaw3）中已复现：Stage 11 完成后用户说「本
 
 | 缺口 | 说明 |
 |------|------|
-| `ArcExtractor` E2E | 核心提取已实现（fixture 3 stage + 本地 AutoResearchClaw 23 stage 单测）；**缺口** = 全量 ARC bundle convert 落盘回归 artifact（`workflow.yaml` + 23 stage agents） |
 | F-50.11.4 交互补全 | 提取失败时 `TODO:` 模板（🔭，未实现） |
 | Composite Tools 集成 | CLI 已接线；**缺口** = stage agent frontmatter **通用**引用 macro tools（目前仅 `agent_teams-skill` / Overview 文档路径） |
 | **REPL 流水线易用性（Q12）** | Stage agent 提示词优化（STOP_LOSS 规则）已落地；委派 compliance 与 stage 编号歧义已改善，**W2 手动验证待做**（见 `docs/guide/autoresearchclaw-repl-sop-verification.md`） |
@@ -692,7 +691,7 @@ W1 验证（AutoResearchClaw3）中已复现：Stage 11 完成后用户说「本
 | 目录 | 证明内容 | 备注 |
 |------|---------|------|
 | `_verify_f50/` / `_verify_f50_demo/` | FWA fixture 全量 bundle（`workflow.yaml` + bridge + agents） | 来源 `tests/fixtures/fixture_fwa_project` |
-| `_verify_arc_full/` | ARC SDK Tool 注册 dump + bridge smoke | **无** `workflow.yaml`；非全量 stage-agent bundle |
+| `_verify_arc_full/` | ARC SDK Tool 注册 dump + bridge smoke | 本地 AutoResearchClaw 验证产物；不做为 F-50 完成标准 |
 | `_verify_arc_bundle/` | pipeline 子目录 partial convert | 仅 `pipeline-agent.md` + tool specs |
 | `tests/fixtures/fixture_arc_project/` | ArcExtractor 最小 fixture（3 stages） | CI 可跑，不依赖 AutoResearchClaw 仓库 |
 

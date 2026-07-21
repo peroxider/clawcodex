@@ -1,8 +1,8 @@
 # F-118: 动态任务分解引擎
 
-> 状态: 🟡 MVP 已实现
+> 状态: 🟡 MVP 已实现（核心 8 项全部落地，§4 后续增强未做）
 > 章节: docs/feature_plan/02-orchestrator/f-118-dynamic-decomposition.md
-> 最后更新: 2026-07-11
+> 最后更新: 2026-07-21
 
 ## §0 当前实现
 
@@ -19,11 +19,13 @@ F-118 不再新建一套 subagent 运行时，也不复用仅适用于交互会�
 
 实现入口：
 
-- `extensions/orchestrator/task_decomposition/`
-- `extensions/orchestrator/modes/swarm.py`
-- `extensions/orchestrator/mode_selector.py`
-- `clawcodex_ext/cli/parser.py`
-- `clawcodex_ext/cli/dispatch.py`
+- `extensions/orchestrator/task_decomposition/` — `__init__.py` (18 行) + `models.py` (78 行) + `planner.py` (355 行)
+- `extensions/orchestrator/modes/swarm.py` (79 行) — `SwarmModeRunner` 桥接 `CoordinatorModeRunner`
+- `extensions/orchestrator/mode_selector.py` (191 行) — `mode:swarm` label + heuristic router + `KNOWN_MODES` 注册表
+- `clawcodex_ext/cli/parser.py` — `--swarm` / `--decompose` / `--effort normal|swarm` 三个 CLI flag
+- `clawcodex_ext/cli/dispatch.py` — L410-432 把 swarm 请求转换为 TaskDecomposer + build_swarm_prompt
+
+测试覆盖：`tests/orchestrator/test_task_decomposition.py` + `tests/services/test_swarm.py`，**41/41 通过**（耗时 5.02s）。
 
 ### 0.1 触发方式
 
@@ -98,4 +100,8 @@ swarm。
 | 日期 | 变更 | 原因 |
 |------|------|------|
 | 2026-06-24 | 初始探索文档 | 四文档合并 |
+| 2026-07-02 | `5e1cfdab` enable multi-agent coordinator mode in headless flow | F-118 的运行时前置（coordinator 入口开放） |
+| 2026-07-08 | `af0c31dc` 统一代码风格修复 | ruff 风格合规 |
 | 2026-07-11 | 完成 bounded swarm MVP，改为复用 coordinator | 避免重复运行时和非交互 fork 冲突 |
+| 2026-07-20 | `2f7b0cff` F-118 task decomposition and F-124 issue clarifier MVP | TaskDecomposer + SwarmModeRunner + 模式路由 + CLI 集成 + 单元测试正式合入（核心 commit） |
+| 2026-07-21 | 文档同步 | 补全 commit hash 与实现统计（行数 / 测试通过数），状态行增补 §4 待办标注 |

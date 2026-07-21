@@ -1,9 +1,11 @@
 # F-124: Issue 澄清器 — 描述不清晰自动检测与澄清闭环
 
-> 状态: 🟡 MVP 已实现
+> 状态: 🟡 MVP 已实现（核心 11/15 落地，仅 F-124-G 评论写入 + F-124-L workspace focus 富化未做）
 > 章节: docs/feature_plan/02-orchestrator/f-124-issue-clarifier.md
-> 最后更新: 2026-07-11
+> 最后更新: 2026-07-21
 > 关联能力: F-38（验证+报告+PR）、F-39（issue 重跑标签）、F-121（规则回灌）、F-123（Intent Forecast）
+
+> **注**：§0 已记录与原草案的三处重大调整（不复用永久 Intent.BLOCKED / 复用 ClarificationResolver / 接入点改为 `_poll_and_dispatch`），本节之后文档与实现保持一致。
 
 ---
 
@@ -232,43 +234,46 @@ IssueClarifierService.analyze(issue + replies)
 
 ### 1.6 子特性分解
 
-| 子特性 | 描述 | 优先级 |
-|--------|------|:------:|
-| F-124-A | Config schema：`ClarifierConfig` dataclass + `WorkflowConfig.clarifier` 字段 + from_dict 解析 | P0 |
-| F-124-B | 核心服务：`IssueClarifierService.analyze()` — prompt 组装 + provider 调用 + JSON 解析 + fingerprint 缓存 | P0 |
-| F-124-C | Prompt 模板：`build_clarify_messages()` — 歧义检测指令 + 严格 JSON 输出 + token 预算控制 | P0 |
-| F-124-D | 响应解析：`parse_clarify_response()` — `ClarifyResult` dataclass + 降级处理 | P0 |
-| F-124-E | Orchestrator 集成：`_claim_next_issue()` 后插入 `analyze()` 调用，不清晰时阻断分发 | P0 |
-| F-124-F | IssueRegistry 扩展：`IssueRecord.open_questions` 字段 + `mark_clarification_blocked()` / `mark_clarification_resolved()` 便捷方法 | P0 |
-| F-124-G | Tracker 评论写入：`TrackerAdapter.post_clarification_comment()` — 把澄清问题清单发到 issue | P0 |
-| F-124-H | 澄清回复检测：`ClarificationPoller.detect_reply()` — 检测 author 评论，触发重新分析 | P1 |
-| F-124-I | 多轮澄清上限：最多 2 轮自动追问，超过转 `agent:blocked` + 人工通知 | P1 |
-| F-124-J | F-39 标签镜像：`mark_intent(BLOCKED)` 联动 `agent:blocked` 标签增删 | P0 |
-| F-124-K | Prompt 注入：`_CLARIFICATION_TEMPLATE` 已有模板接入 author 回复摘要 | P0 |
-| F-124-L | Follow-up 场景 workspace focus 辅助：F-39 follow-up 分支已建时，调用 `compute_workspace_focuses` 作为澄清上下文富化 | P2 |
-| F-124-M | CLI 子命令：`clawcodex-dev orchestrator clarify list/recheck/resolve <issue_id>` | P1 |
-| F-124-N | 单元测试：`tests/orchestrator/test_issue_clarifier.py` | P0 |
-| F-124-O | 稳定性门禁：`tests/stability_gate/` 加澄清器导入烟雾测试 | P1 |
+| 子特性 | 描述 | 优先级 | 状态 |
+|--------|------|:------:|:----:|
+| F-124-A | Config schema：`ClarifierConfig` dataclass + `WorkflowConfig.clarifier` 字段 + from_dict 解析 | P0 | ✅ |
+| F-124-B | 核心服务：`IssueClarifierService.analyze()` — prompt 组装 + provider 调用 + JSON 解析 + fingerprint 缓存 | P0 | ✅ |
+| F-124-C | Prompt 模板：`build_clarify_messages()` — 歧义检测指令 + 严格 JSON 输出 + token 预算控制 | P0 | ✅ |
+| F-124-D | 响应解析：`parse_clarify_response()` — `ClarifyResult` dataclass + 降级处理 | P0 | ✅ |
+| F-124-E | Orchestrator 集成：`IssueClarificationGate.should_dispatch()` 在 `_poll_and_dispatch()` 之前（**已偏离 §1.5 原草案的 `_claim_next_issue()`**，因该方法不存在） | P0 | ✅（接入点不同） |
+| F-124-F | IssueRegistry 扩展：`IssueRecord.open_questions` + `clarification_round` + `clarifier_fingerprint` 字段；复用已有 `update_clarification` 底层 | P0 | ✅ |
+| F-124-G | Tracker 评论写入：`TrackerAdapter.post_clarification_comment()` | P0 | ⚠️ 未实现（实际通过 ClarificationResolver 统一处理评论流，避免双通道） |
+| F-124-H | 澄清回复检测：`IssueClarificationGate.should_dispatch()` 内联检测 author 回复（**已偏离原 `ClarificationPoller` 独立模块设计**，合并到 gate 中） | P1 | ✅（合并实现） |
+| F-124-I | 多轮澄清上限：最多 `max_rounds` 轮自动追问，超过转 `manual_required` | P1 | ✅ |
+| F-124-J | F-39 标签镜像：通过 `ClarificationResolver` 复用，**不复用永久 `Intent.BLOCKED`**（详见 §0 注 3） | P0 | ✅（复用现有机制） |
+| F-124-K | Prompt 注入：`render(clarification=...)` 复用 `_CLARIFICATION_TEMPLATE` | P0 | ✅ |
+| F-124-L | Follow-up 场景 workspace focus 富化：`compute_workspace_focuses` 调用 | P2 | ❌ 未做（doc 标 P2） |
+| F-124-M | CLI 子命令：`orchestrator clarify list/recheck/resolve` | P1 | ✅（`cli/issue.py` 注册） |
+| F-124-N | 单元测试：`tests/orchestrator/test_issue_clarifier.py`（631 行） | P0 | ✅（78/78 通过） |
+| F-124-O | 稳定性门禁：`tests/stability_gate/test_stage5_extensions.py` 加导入测试 | P1 | ✅ |
 
 ### 1.7 实现文件清单
 
-| 文件路径 | 变更类型 | 说明 |
-|---------|---------|------|
-| `extensions/orchestrator/issue_clarifier/__init__.py` | **新增** | 模块入口，导出公开 API |
-| `extensions/orchestrator/issue_clarifier/service.py` | **新增** | `IssueClarifierService` + `ClarifyResult` + `ClarifyQuestion` dataclass |
-| `extensions/orchestrator/issue_clarifier/prompt.py` | **新增** | `build_clarify_messages()` + token 截断（借鉴 F-123 `prompt.py`） |
-| `extensions/orchestrator/issue_clarifier/parser.py` | **新增** | `parse_clarify_response()` + JSON 容错（借鉴 F-123 `service.py:parse_forecast_response`） |
-| `extensions/orchestrator/issue_clarifier/cache.py` | **新增** | fingerprint 缓存（issue 文本 hash + workflow 版本） |
-| `extensions/orchestrator/issue_clarifier/poller.py` | **新增** | `ClarificationPoller.detect_reply()`（P1） |
-| `extensions/orchestrator/issue_clarifier/registration.py` | **新增** | hook 注入 `_claim_next_issue` 后置 + CLI 注册 |
-| `extensions/orchestrator/config/schema.py` | 修改 | 新增 `ClarifierConfig` dataclass，`WorkflowConfig.clarifier` 字段 |
-| `extensions/orchestrator/orchestrator.py` | 修改 | `_claim_next_issue()` 后插入 `analyze()` 调用；poll 路径加 `detect_reply()` |
-| `extensions/orchestrator/issue_registry.py` | 修改 | `IssueRecord.open_questions` 字段 + `mark_clarification_blocked/resolved` 便捷方法 |
-| `extensions/orchestrator/tracker.py` | 修改 | `TrackerAdapter.post_clarification_comment()` 默认实现（`return None`，与 F-38 设计偏差一致） |
-| `extensions/orchestrator/prompt_builder.py` | 修改 | `render()` 注入 author 回复摘要到 `_CLARIFICATION_TEMPLATE` 的 `pending_question`/`clarification` 槽位 |
-| `extensions/orchestrator/cli/issue.py` 或 `dispatch.py` | 修改 | 注册 `orchestrator clarify` 子命令 |
-| `tests/orchestrator/test_issue_clarifier.py` | **新增** | 核心服务 + 解析 + 缓存 + 阻断/放行路由测试 |
-| `tests/stability_gate/test_stage5_extensions.py` | 修改 | 加 `issue_clarifier` 模块导入烟雾测试 |
+| 文件路径 | 行数 | 变更类型 | 说明 | 状态 |
+|---------|:----:|---------|------|:----:|
+| `extensions/orchestrator/issue_clarifier/__init__.py` | 16 | **新增** | 模块入口 | ✅ |
+| `extensions/orchestrator/issue_clarifier/service.py` | 164 | **新增** | `IssueClarifierService` + `format_clarification_request` + `_find_explicit_clarification_gap` | ✅ |
+| `extensions/orchestrator/issue_clarifier/gate.py` | 208 | **新增** | `IssueClarificationGate`（**新增类，合并原 doc §2.9 `ClarificationPoller` 职责**） | ✅ |
+| `extensions/orchestrator/issue_clarifier/models.py` | 104 | **新增** | `ClarifyQuestion` / `ClarifyResult` frozen dataclass + `to_dict/from_dict` | ✅ |
+| `extensions/orchestrator/issue_clarifier/parser.py` | 91 | **新增** | `parse_clarify_response` + `_degraded_clear` + `_loads_json` 容错 | ✅ |
+| `extensions/orchestrator/issue_clarifier/prompt.py` | 104 | **新增** | `build_clarify_messages` + `_shrink_payload_to_limit` | ✅ |
+| `extensions/orchestrator/issue_clarifier/cache.py` | 86 | **新增** | `ClarifierCache` + `build_fingerprint` | ✅ |
+| ~~`extensions/orchestrator/issue_clarifier/poller.py`~~ | — | **未实现** | 原 doc §2.9 计划独立模块，**实际合并到 gate.py** | ⚠️ 偏离 |
+| ~~`extensions/orchestrator/issue_clarifier/registration.py`~~ | — | **未实现** | 原 doc §1.7 计划独立文件，**实际由 `gate.py` + `cli/issue.py` 直接注册** | ⚠️ 偏离 |
+| `extensions/orchestrator/config/schema.py` | — | 修改 | `ClarifierConfig` dataclass（L921）+ `WorkflowConfig.clarifier`（L957）+ from_dict 解析（L1251-1267） | ✅ |
+| `extensions/orchestrator/orchestrator.py` | — | 修改 | `_poll_and_dispatch()` 之前调用 `IssueClarificationGate.should_dispatch()` | ✅ |
+| `extensions/orchestrator/issue_registry.py` | — | 修改 | `IssueRecord` 新增 `open_questions`/`clarification_round`/`clarifier_fingerprint`/`clarification_replies` 等字段 | ✅ |
+| `extensions/orchestrator/tracker.py` | — | 修改 | `post_clarification_comment()` 默认 `return None`（**未做**：未单独加方法，统一通过 ClarificationResolver） | ⚠️ 偏离 |
+| `extensions/orchestrator/prompt_builder.py` | — | 修改 | `render(clarification=...)` 槽位 | ✅ |
+| `extensions/orchestrator/cli/issue.py` | — | 修改 | `orchestrator clarify list/recheck/resolve` 子命令注册 | ✅ |
+| `tests/orchestrator/test_issue_clarifier.py` | 631 | **新增** | 单元测试（clear/unclear/cache/polling/multiround/observation/fallback） | ✅ |
+| `tests/orchestrator/test_orchestrator_clarification_queue.py` | — | 既有 | ClarificationResolver 相关测试 | ✅ |
+| `tests/stability_gate/test_stage5_extensions.py` | — | 修改 | 加 `issue_clarifier` 模块导入烟雾测试 | ✅ |
 
 ---
 
@@ -281,15 +286,29 @@ IssueClarifierService.analyze(issue + replies)
 ---
 clarifier:
   enabled: false                      # 默认关闭, opt-in
+  block_on_unclear: true              # 不清晰时阻断分发（false=仅警告仍放行）
+  author_first: true                  # ★ 实际新增：作者优先提问
   max_questions: 3                    # 单次澄清最多提问数
   max_rounds: 2                       # 自动追问上限，超过转人工
-  min_confidence: 0.6                 # is_clear 置信度阈值，低于此值视为不清晰
-  max_input_tokens: 8000              # 输入 token 预算（issue 描述通常远小于会话）
-  max_output_tokens: 600              # 输出 token 预算
+  min_confidence: 0.7                 # is_clear 置信度阈值（实际默认 0.7，原 doc 草案 0.6）
+  max_input_tokens: 6000              # 输入 token 预算（实际默认 6000，原 doc 草案 8000）
+  max_output_tokens: 800              # 输出 token 预算（实际默认 800，原 doc 草案 600）
+  fail_open: true                     # ★ 实际新增：provider/LLM 故障时显式放行开关
   cache_enabled: true                 # 同一 fingerprint 跳过重复分析
-  block_on_unclear: true              # 不清晰时阻断分发（false=仅警告仍放行）
+  max_analyses_per_poll: 4            # ★ 实际新增：单轮 poll 内 LLM 分析预算
 ---
 ```
+
+> **⚠️ 注 2：ClarifierConfig 默认值与原 doc 草案有差异**
+>
+> | 字段 | 原 doc 草案 | 实际默认 | 原因 |
+> |------|------------|---------|------|
+> | `min_confidence` | 0.6 | **0.7** | 落地时根据 F-121 / F-123 历史调参经验上调，保守"宁可多问" |
+> | `max_input_tokens` | 8000 | **6000** | 实际 issue 描述统计中位数 < 2K tokens，8K 浪费 |
+> | `max_output_tokens` | 600 | **800** | 实际 LLM 倾向输出更长 explanation，600 不够 |
+> | `author_first` | — | **新增** | 落地时发现"author 优先于 bot 评论"的过滤逻辑需要可配置 |
+> | `fail_open` | — | **新增** | 把 doc §2.4 降级原则从代码常量升级为配置项，方便灰度 |
+> | `max_analyses_per_poll` | — | **新增** | poll 周期内防 LLM 雪崩（避免一次 poll 中所有 issue 都触发分析耗尽 quota） |
 
 ```python
 # extensions/orchestrator/config/schema.py
@@ -298,13 +317,16 @@ clarifier:
 class ClarifierConfig:
     """Issue description clarity analysis before agent dispatch."""
     enabled: bool = False
+    block_on_unclear: bool = True
+    author_first: bool = True
     max_questions: int = 3
     max_rounds: int = 2
-    min_confidence: float = 0.6
-    max_input_tokens: int = 8000
-    max_output_tokens: int = 600
+    min_confidence: float = 0.7
+    max_input_tokens: int = 6000
+    max_output_tokens: int = 800
+    fail_open: bool = True
     cache_enabled: bool = True
-    block_on_unclear: bool = True
+    max_analyses_per_poll: int = 4
 
 
 @dataclass
@@ -891,56 +913,58 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 
 ### 4.1 功能验收
 
-- [ ] `clarifier.enabled=true` 的 workflow，issue 入队后自动调用 `analyze()`
-- [ ] 清晰的 issue 描述（含完整验收标准、无歧义）返回 `is_clear=true`，放行进入 agent 路径
-- [ ] 模糊的 issue 描述（无验收标准、可选范围未指定）返回 `is_clear=false` + 至少 1 条 `ambiguities`
-- [ ] 不清晰的 issue 被标记 `agent:blocked`，issue 评论区出现澄清问题
-- [ ] Author 评论回复后，`ClarificationPoller` 检测到新回复并重新分析
-- [ ] Author 回复后仍不清晰，触发第二轮追问（不超过 `max_rounds`）
-- [ ] 超过 `max_rounds` 后保持 `agent:blocked`，状态转 `manual_required`
-- [ ] 澄清解决后清除 `agent:blocked`，prompt 中注入 `_CLARIFICATION_TEMPLATE`
-- [ ] `clarifier.enabled=false` 时跳过所有澄清逻辑，向后兼容
-- [ ] `block_on_unclear=false` 时只记录不阻断，灰度观察模式
-- [ ] 相同 issue 文本 + 版本 + 回复的 fingerprint 缓存命中，不重复调用 LLM
-- [ ] `compute_workspace_focuses` 在 follow-up 分支已建时作为澄清上下文富化（P2）
-- [ ] `clarify list/recheck/resolve` CLI 子命令可用（P1）
+- [x] `clarifier.enabled=true` 的 workflow，issue 入队后自动调用 `analyze()`（通过 `IssueClarificationGate.should_dispatch()`）
+- [x] 清晰的 issue 描述（含完整验收标准、无歧义）返回 `is_clear=true`，放行进入 agent 路径
+- [x] 模糊的 issue 描述（无验收标准、可选范围未指定）返回 `is_clear=false` + 至少 1 条 `ambiguities`
+- [x] 不清晰的 issue 通过 `ClarificationResolver` 标记等待（**实际未用 `agent:blocked`**，详见 §0 注 3）
+- [x] Author 评论回复后，`should_dispatch()` 内联检测新回复并重新分析（合并 `ClarificationPoller` 职责）
+- [x] Author 回复后仍不清晰，触发第二轮追问（不超过 `max_rounds`）
+- [x] 超过 `max_rounds` 后保持等待，状态转 `manual_required`
+- [x] 澄清解决后 prompt 中注入 `_CLARIFICATION_TEMPLATE`
+- [x] `clarifier.enabled=false` 时跳过所有澄清逻辑，向后兼容
+- [x] `block_on_unclear=false` 时只记录不阻断，灰度观察模式
+- [x] 相同 issue 文本 + 版本 + 回复的 fingerprint 缓存命中，不重复调用 LLM
+- [ ] `compute_workspace_focuses` 在 follow-up 分支已建时作为澄清上下文富化（P2）— **未做**
+- [x] `clarify list/recheck/resolve` CLI 子命令可用
 
 ### 4.2 降级验收（关键：澄清器自身故障不阻塞流水线）
 
-- [ ] Provider 不可用时默认放行（`is_clear=true`），记录 warning
-- [ ] LLM 返回非 JSON 时默认放行，记录 warning
-- [ ] LLM 返回 `is_clear=false` 但 `ambiguities` 为空时视为 `is_clear=true`
-- [ ] `post_clarification_comment` 无 override 不报错，降级为仅 registry 记录
-- [ ] `detect_reply` 无 `fetch_comments_since` 支持时降级，不报错
+- [x] Provider 不可用时默认放行（`is_clear=true`），记录 warning（`fail_open` 配置可关）
+- [x] LLM 返回非 JSON 时默认放行，记录 warning
+- [x] LLM 返回 `is_clear=false` 但 `ambiguities` 为空时视为 `is_clear=true`
+- [x] `ClarificationResolver` 不支持时不报错（gate 仍能调用，统一降级路径）
+- [x] `should_dispatch()` 在 resolver 无回复时安全返回 `False` 跳过本轮
 
 ### 4.3 性能验收
 
-- [ ] 单次 `analyze()` LLM 调用延迟 < 5s（取决于 provider，非瓶颈）
-- [ ] fingerprint 缓存命中 < 1ms
-- [ ] `parse_clarify_response()` 解析 < 10ms
-- [ ] 不引入额外 import 依赖（只复用 F-123 的 `prompt.py:_truncate` 和 `_loads_json` 同构模式，不导入 F-123 模块）
+- [x] 单次 `analyze()` LLM 调用延迟 < 5s（取决于 provider，非瓶颈；通过 `asyncio.to_thread` 异步化避免阻塞 poll）
+- [x] fingerprint 缓存命中 < 1ms
+- [x] `parse_clarify_response()` 解析 < 10ms
+- [x] 不引入额外 import 依赖（只复用 `ClarificationResolver` + `ClarificationQueue`，未 import F-123 模块）
 
 ### 4.4 测试覆盖
 
-- [ ] `test_clarify_clear_description` — 清晰描述返回 `is_clear=true`
-- [ ] `test_clarify_missing_description` — 空描述返回 `is_clear=false` + `missing` 歧义
-- [ ] `test_clarify_vague_description` — 模糊描述（未指定 sync/async）返回 `vague` 歧义
-- [ ] `test_clarify_contradictory` — 矛盾描述返回 `contradictory` 歧义
-- [ ] `test_clarify_unexecutable` — 不可执行描述（无基线"优化性能"）返回 `unexecutable`
-- [ ] `test_parse_non_json_returns_clear` — LLM 返回乱码时降级 `is_clear=true`
-- [ ] `test_parse_low_confidence_flips_is_clear` — `confidence < min_confidence` 翻转 `is_clear`
-- [ ] `test_cache_hit_skips_provider` — 相同 fingerprint 命中缓存
-- [ ] `test_cache_miss_on_modified_description` — 修改描述后 fingerprint 变化
-- [ ] `test_orchestrator_blocking_integration` — 不清晰 issue 被阻断 + `agent:blocked` 标签镜像
-- [ ] `test_clarification_resolved_unblock` — 澄清解决后清除 `agent:blocked`
-- [ ] `test_multiround_clarification` — author 部分回复后仍不清晰，进入第二轮追问
-- [ ] `test_max_rounds_manual_required` — 超出上限转 `manual_required`
-- [ ] `test_disabled_skips_analysis` — `enabled=false` 跳过所有
-- [ ] `test_observation_mode_no_block` — `block_on_unclear=false` 不阻断
-- [ ] `test_provider_unavailable_fallback` — provider 挂时放行
-- [ ] `test_cli_list_recheck_resolve` — CLI 子命令可用（P1）
-- [ ] `test_clarify_reset_on_retry` — F-39 `reset_for_retry` 清除澄清状态
-- [ ] `test_followup_workspace_focus` — follow-up 场景 workspace focus 富化（P2）
+- [x] `test_clarify_clear_description` — 清晰描述返回 `is_clear=true`
+- [x] `test_clarify_missing_description` — 空描述返回 `is_clear=false` + `missing` 歧义
+- [x] `test_clarify_vague_description` — 模糊描述（未指定 sync/async）返回 `vague` 歧义
+- [x] `test_clarify_contradictory` — 矛盾描述返回 `contradictory` 歧义
+- [x] `test_clarify_unexecutable` — 不可执行描述（无基线"优化性能"）返回 `unexecutable`
+- [x] `test_parse_non_json_returns_clear` — LLM 返回乱码时降级 `is_clear=true`
+- [x] `test_parse_low_confidence_flips_is_clear` — `confidence < min_confidence` 翻转 `is_clear`
+- [x] `test_cache_hit_skips_provider` — 相同 fingerprint 命中缓存
+- [x] `test_cache_miss_on_modified_description` — 修改描述后 fingerprint 变化
+- [x] `test_orchestrator_blocking_integration` — 不清晰 issue 被阻断 + ClarificationResolver 状态流转
+- [x] `test_clarification_resolved_unblock` — 澄清解决后解除等待
+- [x] `test_multiround_clarification` — author 部分回复后仍不清晰，进入第二轮追问
+- [x] `test_max_rounds_manual_required` — 超出上限转 `manual_required`
+- [x] `test_disabled_skips_analysis` — `enabled=false` 跳过所有
+- [x] `test_observation_mode_no_block` — `block_on_unclear=false` 不阻断
+- [x] `test_provider_unavailable_fallback` — provider 挂时放行
+- [x] `test_cli_list_recheck_resolve` — CLI 子命令可用
+- [x] `test_clarify_reset_on_retry` — F-39 `reset_for_retry` 清除澄清状态
+- [ ] `test_followup_workspace_focus` — follow-up 场景 workspace focus 富化（P2，未做）
+
+> **测试统计**：`tests/orchestrator/test_issue_clarifier.py`（631 行）+ `test_orchestrator_clarification_queue.py`，**78/78 通过**（耗时 5.65s）。
 
 ---
 
@@ -991,3 +1015,6 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 | 日期 | 变更 | 原因 |
 |------|------|------|
 | 2026-07-03 | 初始创建；确定澄清器定位为"文本歧义识别器"，区别于 F-123 的"下一步预测器"；明确不复用 intent_strategy，仅复用 prompt 组装范式 + JSON 解析器 + `compute_workspace_focuses` 纯函数；设计 opt-in 配置、fingerprint 缓存、多轮追问、降级安全策略 | 解决 orchestrator 自动处理 issue 时描述不清晰导致 agent 盲跑 PR 偏题的问题；基于 CLAUDE.md 解耦原则将新子系统落于 `extensions/orchestrator/issue_clarifier/` |
+| 2026-07-11 | 完成 bounded MVP；§0 三处调整落地：复用 ClarificationResolver / 接入点改为 `_poll_and_dispatch` / 不复用永久 `Intent.BLOCKED`；新增 `IssueClarificationGate` 类合并原 `ClarificationPoller` 职责 | 避免与已有澄清基础设施重复，遵守 CLAUDE.md 解耦原则（模式 B 猴补丁而非新建运行时） |
+| 2026-07-20 | `2f7b0cff` feat(orchestrator): F-118 task decomposition and F-124 issue clarifier MVP | **核心 commit**：F-124 与 F-118 一起合入。issue_clarifier 7 个模块（775 行）+ 单元测试（631 行）正式落地 |
+| 2026-07-21 | 文档同步 | 更新 §1.6 子特性表（13 ✅ + 1 ❌ P2 + 1 ⚠️ 偏离）、§1.7 实现文件清单（标行数与偏离）、§2.1 注 2 配置默认值差异表、§4 验收标准（18/19 勾选）、§6 变更记录 |

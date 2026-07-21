@@ -1,8 +1,8 @@
 # F-84: Daemon 后台守护进程
 
-> 状态: 📋 规划中
+> 状态: ✅ 已完成
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-84-daemon.md`
-> 最后更新: 2026-06-30
+> 最后更新: 2026-07-21
 > 缺口来源: [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵)
 
 ## §1 设计规划
@@ -23,15 +23,15 @@ ClawCodex 当前 `src/entrypoints/daemon.py` 显式声明"not yet implemented",�
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
-| P84-A | Supervisor 进程入口与状态文件 IO | 📋 | 3-5 天 |
-| P84-B | Worker 生命周期管理(启动/重启/退避/parking) | 📋 | 5-7 天 |
-| P84-C | 优雅关闭与强制 kill(SIGTERM/SIGINT/SIGKILL) | 📋 | 2-3 天 |
-| P84-D | Worker 注册表(Worker kind → Worker 工厂) | 📋 | 3-5 天 |
-| P84-E | `daemon start/stop/status/ps` CLI 子命令 | 📋 | 3-5 天 |
-| P84-F | `daemon bg/attach/logs/kill` 后台会话子命令 | 📋 | 3-5 天 |
-| P84-G | `remoteControl` Worker(对接 `extensions/ports/bridge/`) | 📋 | 5-7 天 |
-| P84-H | Feature Flag 双门控(DAEMON + BRIDGE_MODE) | 📋 | 1 天 |
-| P84-I | 单元测试 + 集成测试(E2E 启动/重启/关闭) | 📋 | 5-7 天 |
+| P84-A | Supervisor 进程入口与状态文件 IO | ✅ | 3-5 天 |
+| P84-B | Worker 生命周期管理(启动/重启/退避/parking) | ✅ | 5-7 天 |
+| P84-C | 优雅关闭与强制 kill(SIGTERM/SIGINT/SIGKILL) | ✅ | 2-3 天 |
+| P84-D | Worker 注册表(Worker kind → Worker 工厂) | ✅ | 3-5 天 |
+| P84-E | `daemon start/stop/status/ps` CLI 子命令 | ✅ | 3-5 天 |
+| P84-F | `daemon bg/attach/logs/kill` 后台会话子命令 | ✅ | 3-5 天 |
+| P84-G | `remoteControl` Worker(对接 `extensions/ports/bridge/`) | ✅ | 5-7 天 |
+| P84-H | Feature Flag 双门控(DAEMON + BRIDGE_MODE) | ✅ | 1 天 |
+| P84-I | 单元测试 + 集成测试(E2E 启动/重启/关闭) | ✅ | 5-7 天 |
 
 **估算总工时**: 6-8 周(单人)
 
@@ -681,4 +681,5 @@ def install_daemon_gate() -> None:
 
 | 日期 | 变更 | 原因 |
 |------|------|------|
+| 2026-07-21 | 代码落地并标记完成 | `extensions/daemon/` 14 模块 + `clawcodex_ext/daemon/` 桥接 + CLI `clawcodex-dev daemon start/stop/status/ps/logs/attach/kill` + 5 个测试文件 + Stage 7 稳定性门禁;P84-A~I 全部 ✅ |
 | 2026-06-30 | 初始创建(详设文档,9 子特性,10 验收项,8 风险) | 派工 F-84 P0 缺口,对接 CCB DAEMON 实现 |
