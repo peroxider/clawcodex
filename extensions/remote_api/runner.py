@@ -298,7 +298,7 @@ class RemoteAgentRunner:
 def _build_runtime(config: RemoteRunConfig) -> dict[str, Any]:
     from clawcodex_ext.config import get_default_provider, get_provider_config
     from clawcodex_ext.permissions.types import ToolPermissionContext
-    from clawcodex_ext.providers import get_provider_class
+    from clawcodex_ext.repl.core import get_provider_class
     from clawcodex_ext.tool_system.context import ToolContext
     from clawcodex_ext.tool_system.defaults import build_default_registry
     from clawcodex_ext.utils.abort_controller import AbortController
