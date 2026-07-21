@@ -684,7 +684,7 @@ W1 验证（AutoResearchClaw3）中已复现：Stage 11 完成后用户说「本
 |------|------|
 | F-50.11.4 交互补全 | 提取失败时 `TODO:` 模板（🔭，未实现） |
 | Composite Tools 集成 | CLI 已接线；**缺口** = stage agent frontmatter **通用**引用 macro tools（目前仅 `agent_teams-skill` / Overview 文档路径） |
-| **REPL 流水线易用性（Q12）** | Stage agent 提示词优化（STOP_LOSS 规则）已落地；委派 compliance 与 stage 编号歧义已改善，**W2 手动验证待做**（见 `docs/guide/autoresearchclaw-repl-sop-verification.md`） |
+| **REPL 流水线易用性（Q12）** | Stage agent 提示词优化（STOP_LOSS 规则）已落地；委派 compliance 与 stage 编号歧义已改善，**W2 手动验证已完成**（见 `docs/guide/autoresearchclaw-repl-sop-verification.md`） |
 
 ### 2.3 验证产物（本地）
 
