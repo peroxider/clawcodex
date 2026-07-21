@@ -2,14 +2,15 @@
 
 > 文档路径: `ROADMAP.md`（合并自 `docs/ROADMAP.md`）
 > 信息来源: `docs/ARCHIVED_FEATURES.md`、`docs/FEATURE_PLAN.md`、`docs/PROGRESS.md`、`docs/feature_plan/`（特性规划唯一事实源）
-> 版本: v4.5
-> 更新日期: 2026-07-07
+> 版本: v4.6
+> 更新日期: 2026-07-21
 
-> **v4.5 更新要点** (基于 2026-07-04~2026-07-07 完成的特性合入与 ROADMAP 精简):
-> - **ROADMAP 精简**: 根据代码复核,将所有 ✅ 已完成的 AR/F-N 条目从路线图中移除,使 ROADMAP 聚焦于待完成工作项
-> - **状态升级 → ✅ 已完成 (已移除)**: F-71（内置工具补齐）、F-81（Native 原生模块）、F-87（Ultraplan 控制器+LLM+TUI）、F-89 Proactive（P89-A~I）、F-89 @agent-name（五入口统一）、F-93（TeamMem）、F-94（BG_SESSIONS）、F-95（Templates）、F-97（Lodestone）、F-100（Dreaming Phase B）、F-102（Hook 扩展点）、F-122（/btw）
-> - **保留 🟡/📋 条目**: F-22（Cron 剩余缺口）、F-37（PR Review 闭环）、F-46（permission_split）、F-50（SOP 转换器）、F-54（可观测性）、F-64（Voice Mode）、F-66（ACP）、F-69（Budget）、F-70（Plugin）、F-72（Multi-API）、F-73（CI/CD）、F-82（Remote Control）、F-107（PowerShell）、F-108（Freeze Detection）、F-110~F-116（工作流引擎）、F-118（动态分解）、F-119（Prompt Assembly）、F-120（Dashboard）、F-121（规则回灌）、F-124（Issue Clarifier）、F-125（Headless 多轮）、F-10/F-53/F-74/F-85 等
-> - **里程碑**: v0.6 生态补缺特征已全部合入 base; v0.5 CI/CD 本地 90% 完成; v0.7 远程控制持续推进
+> **v4.6 更新要点** (基于 2026-07-07~2026-07-21 完成的特性合入与 ROADMAP 更新):
+> - **ROADMAP 精简**: 根据代码复核与 git log 追溯,将所有 ✅ 已完成的 AR/F-N 条目从路线图中移除
+> - **状态升级 → ✅ 已完成 (已移除)**: F-53（Tool→CLI 命令映射）、F-65（Voice Dialogue 全双工语音对话）、F-88（Monitor 后台监控面板）、F-107（PowerShell 支持增强）、F-108（Freeze Detection 四层方案）、F-119（System Prompt 段落拼装与自迭代）、F-120（Agent Dashboard 跨系统统一看板）、F-151（Logical Kanban 方法复用）、F-153（方法库成长与治理）、F-154（外部配置导入）、F-156（Asciicast v2 录制器）；Logical Kanban 全系列 F-126~F-144、F-148~F-155 全部完成
+> - **状态升级 → 🟡 进行中**: F-110~F-116（声明式工作流引擎系列 core 代码已落地）、F-72（Multi-API 原生适配器）、F-55（SOP Tool Lifecycle 依赖提升）
+> - **新增规划特性**: F-127（PR CI 自动修复）、F-128（定时全量代码审查）、F-130（自校正上下文切换 — 元认知换脑机制）
+> - **里程碑**: v0.5 CI/CD 本地门禁全部就绪; v0.7 Remote Control Hermes API 完成; v0.8 工作流引擎 core 代码已落地; v0.9 Agent Dashboard 完成
 
 ---
 
@@ -22,17 +23,17 @@
 
 | 类别 | 进行中/部分完成 | 规划中/待开始 | 合计 |
 |------|:--------------:|:-------------:|:----:|
-| **Orchestrator 系统** | 3 (F-54 控制通道、F-37 PR Review Follow-up 真实环境验证、F-121 PR review 规则回灌 P0) | 0 | 3 |
-| **Agent 核心能力** | 2 (F-21 REPL Ctrl+B、F-99 Ctrl+C/B 中断响应) | 3 (F-9 /goal、F-10 ExecuteExtraTool) | 5 |
-| **CLI 与配置系统** | 1 (F-46 permission_split) | 1 (F-53 Tool→CLI) | 2 |
-| **Architecture & SDK** | 2 (F-50 工作流模式 A-G 全链路; F-52 SOP 解析源扩展) | 0 | 2 |
+| **Orchestrator 系统** | 9 (F-37 PR Review、F-54 可观测性、F-110~F-116 工作流引擎系列 core 已落地、F-118 动态分解、F-121 规则回灌 P0) | 4 (F-127 CI 自动修复、F-128 定时代码审查、F-110~F-116 剩余边界) | 13 |
+| **Agent 核心能力** | 2 (F-21 REPL Ctrl+B、F-99 Ctrl+C/B 中断响应) | 2 (F-9 /goal、F-10 ExecuteExtraTool、F-130 自校正上下文切换) | 4 |
+| **CLI 与配置系统** | 1 (F-46 permission_split) | 0 | 1 |
+| **Architecture & SDK** | 3 (F-50 工作流模式 A-G、F-52 SOP 解析源扩展、F-55 Tool Lifecycle 依赖) | 0 | 3 |
 | **Cron 系统** | 1 (Phase F + D1~D4 + R2~R8) | 0 | 1 |
-| **CCB 对标缺口** | 6 (F-64 Voice Mode、F-69 Budget、F-73 CI/CD、F-82 Remote Control、F-125 Headless 多轮、F-99 Direct Connect) | 4 (F-66 ACP、F-72 Multi-API、F-74 Sandbox、F-85 Pipe IPC) | 10 |
+| **CCB 对标缺口** | 8 (F-64 Voice、F-66 ACP、F-69 Budget、F-73 CI/CD、F-82 Remote、F-84 Daemon、F-87 Ultraplan、F-94/95 BG_Sessions/Templates、F-125 Headless) | 10 (F-72 Multi-API、F-74 Sandbox、F-83 Triggers、F-85 Pipe IPC、F-86 Computer Use、F-91/92 MCP/Skill、F-96 Cache、F-98 SSH) | 18 |
 | **Python 生态补缺** | 3 | 3 | 6 |
-| **Agent Dashboard** | 0 | 1 (F-120) | 1 |
+| **Agent Dashboard** | 0 | 0 | 0 |
 | **开源替代组件** | 0 | 3 | 3 |
-| **Agent 新增规划** | 1 (F-125 Headless Phase 4+) | 2 (F-123 Intent Forecast、F-124 Issue Clarifier) | 3 |
-| **总计** | **19** | **17** | **36** |
+| **Agent 新增规划** | 1 (F-125 Headless Phase 4+) | 1 (F-124 Issue Clarifier) | 2 |
+| **总计** | **28** | **23** | **51** |
 
 
 
@@ -87,7 +88,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 交付件 |
 |---------|---------|----------------|--------------------|----------|--------|
 | AR-F-9  | /goal 命令（目标管理） | 目标管理、进度跟踪 | 用户可设置和管理 Agent 目标 | 📋 规划中→F-9 | CLI 命令、UI |
-| AR-F-119 | System Prompt 段落拼装与自迭代基础设施 | 7 个子特性：P119-A 通用 section builder registry（仿 `register_memory_section_builder` 泛化到 7 个静态段 + 动态段）；P119-B 段落级 override API（`override_section` / `insert_section` / `disable_section`）；P119-C prompt dump 观测接口（`dump_effective_system_prompt` 返回 `SectionSnapshot` 含 sha256）；P119-D 自迭代元 prompt 注入器；P119-E 变体框架骨架（`extensions/prompt_lab/`：VariantManager + ExperimentAssignment + MetricsSink）；P119-F 段落 cache 失效联动；P119-G 稳定性门禁 + 5 路径拼装快照测试；保持 `src/context_system/prompt_assembly.py` 零改动 | 下游扩展可对单个静态段做覆盖/调整/插入新段；自迭代框架可"看到真实 prompt"做 A/B 和版本回滚；与 F-100 dreaming consolidate、F-102 P102-D pre_llm 钩子、F-68 feature gate 协同 | 📋 规划中 → F-119（推荐顺序 P119-C → P119-A → P119-B+F → P119-D → P119-E → P119-G） | `clawcodex_ext/context_system/{section_registry,section_override,prompt_dump,iter_meta}.py` + `extensions/prompt_lab/`（variants/experiments/sinks/ndjson/capabilities）+ tests/misc/test_section_registry.py + tests/misc/test_prompt_dump.py |
+| AR-F-119 | System Prompt 段落拼装与自迭代基础设施 | 7 个子特性：P119-A 通用 section builder registry（仿 `register_memory_section_builder` 泛化到 7 个静态段 + 动态段）；P119-B 段落级 override API（`override_section` / `insert_section` / `disable_section`）；P119-C prompt dump 观测接口（`dump_effective_system_prompt` 返回 `SectionSnapshot` 含 sha256）；P119-D 自迭代元 prompt 注入器；P119-E 变体框架骨架（`extensions/prompt_lab/`：VariantManager + ExperimentAssignment + MetricsSink）；P119-F 段落 cache 失效联动；P119-G 稳定性门禁 + 5 路径拼装快照测试；保持 `src/context_system/prompt_assembly.py` 零改动 | 下游扩展可对单个静态段做覆盖/调整/插入新段；自迭代框架可"看到真实 prompt"做 A/B 和版本回滚；与 F-100 dreaming consolidate、F-102 P102-D pre_llm 钩子、F-68 feature gate 协同 | ✅ 已完成 → F-119（已移除） | `clawcodex_ext/context_system/{section_registry,section_override,prompt_dump,iter_meta}.py` + `extensions/prompt_lab/`（variants/experiments/sinks/ndjson/capabilities）+ tests/misc/test_section_registry.py + tests/misc/test_prompt_dump.py |
 
 #### SR-1.2 工具与技能执行（→ FEATURE_PLAN §2.4 MCP 扩展（F-3）、§2.7 F-10 ExecuteExtraTool、§4.3 F-52 SDK→Tool 注册）
 
@@ -98,7 +99,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 交付件 |
 |---------|---------|----------------|--------------------|----------|--------|
 | AR-F-10 | ExecuteExtraTool 延迟执行 | 大量工具的按需发现与调用 | 用户可在工具很多时按需调用额外工具 | ⏳ 待开始 → F-10 | py 工具、动态注册逻辑 |
-| AR-F-107 | PowerShell 支持增强 | 8 个子特性：A. 工具 schema 扩展 + shell 检测；B. 进程启动层适配（pwsh 替换 bash）；C. 工具 Prompt 适配；D. 命令分类适配（PowerShell cmdlet pipeline → search/read）；E. 命令语义&退出码适配（`Select-String` RC=1 = 无匹配）；F. PowerShell 安全分析（destructive 检测）；G. 技能系统 shell 传播；H. Shell 基础设施统一（`shell_resolver.py` 落 `clawcodex_ext/utils/`） | Windows 用户原生使用 PowerShell；`BashTool.call({"shell":"powershell"})` 切换；`shell:"auto"` win32 自动选择 PowerShell；技能 frontmatter `shell: powershell` 实际生效 | 📋 规划中 → F-107（Phase 1~3 顺序：基础设施→端到端执行→安全/技能集成） | bash_tool.py / background.py / prompt.py / search_classification.py / read_only_validation.py / command_semantics.py / bash_security.py + powershell_security.py / skill.py / runtime_substitution.py + clawcodex_ext/utils/shell_resolver.py |
+| AR-F-107 | PowerShell 支持增强 | 8 个子特性：A. 工具 schema 扩展 + shell 检测；B. 进程启动层适配（pwsh 替换 bash）；C. 工具 Prompt 适配；D. 命令分类适配（PowerShell cmdlet pipeline → search/read）；E. 命令语义&退出码适配（`Select-String` RC=1 = 无匹配）；F. PowerShell 安全分析（destructive 检测）；G. 技能系统 shell 传播；H. Shell 基础设施统一（`shell_resolver.py` 落 `clawcodex_ext/utils/`） | Windows 用户原生使用 PowerShell；`BashTool.call({"shell":"powershell"})` 切换；`shell:"auto"` win32 自动选择 PowerShell；技能 frontmatter `shell: powershell` 实际生效 | ✅ 已完成 → F-107（已移除） | `bash_tool.py / background.py / prompt.py / search_classification.py / read_only_validation.py / command_semantics.py / bash_security.py + powershell_security.py / skill.py / runtime_substitution.py + clawcodex_ext/utils/shell_resolver.py` |
 
 #### SR-1.3 模型与 Provider 接入（→ FEATURE_PLAN §3.1 CLI 模型供应商与模型切换设计（F-43））
 
@@ -212,13 +213,13 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 交付件 |
 |---------|---------|----------------|--------------------|----------|--------|
 | AR-F-2  | A2A 协议化 Agent 互联 | 协议化消息、标准化 message schema、bridge adapter 连接本地/远程 Agent、能力发现(工具/技能/权限/状态 manifest) | 用户可连接本地、远程和第三方 Agent 进行协作，Manager 可自动发现和选择合适的 Worker Agent | 🔭 长期规划 → F-2 | py protocol、JSON schema、adapter、discovery、capability manifest |
-| AR-F-110 | 声明式工作流引擎核心 | `DeclarativeWorkflowEngine` 读取 `workflow.yaml` 按 DAG 顺序调度 Agent，管理 GATE/DECISION/回环；DAG 遍历+顺序执行+事件发射；阶段调度调用 StageRunner；输出验证调用 ValidatorSpec；错误处理策略（timeout/failure/cost-exceeded）；工作流级事件总线（stage_start/stage_complete/gate_request 等）；CostTracker + CostBudget 阶段级+全局预算 | 用户可用 YAML 声明复杂多阶段工作流，按 DAG 执行，自动预算控制；与 F-118 动态分解不同（持久化、可见、可审计） | 📋 规划中 → F-110（F-110-A~F 子特性 P0 全待实施） | `extensions/orchestrator/workflow_engine/{engine,workflow_state,event_bus,cost,errors}.py` |
-| AR-F-111 | StageRunner 适配器 | 桥接 `DeclarativeWorkflowEngine` 与 `AgentRunner`：合成 Issue 适配器（保留 AgentRunner 全部稳健机制）+ 共享 Workspace（F-42）+ 备选方案 B（QueryRunner 直调） | 工作流引擎可复用 AgentRunner 全套机制（orchestrator/registry/git_sync/audit），无需重写执行循环 | 📋 规划中 → F-111（依赖 F-110 核心引擎） | `extensions/orchestrator/workflow_engine/stage_runner.py` |
-| AR-F-112 | GATE 门禁处理器 | 3 种审批模式：manual（ClarificationQueue F-39 暂停工作流）/ auto（ValidatorSpec 全通过）/ threshold（LLM-as-judge 评分达标）；复用 F-44 人工检视闸门扩展为 `workflow gate --approve/--reject`；GATE_PENDING 工作流级状态；rollback 恢复 | 用户可在工作流任意阶段插入人工/自动/阈值门禁，工作流级 rollback 恢复阶段状态 | 📋 规划中 → F-112（依赖 F-110 + F-39） | `extensions/orchestrator/workflow_engine/{gate_handler,gate_modes,gate_rollback}.py` |
-| AR-F-113 | DECISION 决策处理器 | 多结果分支（proceed/pivot/refine）+ 回环次数检查 + 收敛检测（识别退化循环）+ 阶段目录快照 + 版本化回滚 | 工作流可在 DECISION 节点按 outcome 路由，回环次数超限/退化自动回滚 | 📋 规划中 → F-113 | `extensions/orchestrator/workflow_engine/{decision_handler,decision_history,rollback}.py` |
-| AR-F-114 | 阶段契约验证器 | 7 种内置 Validator：file_exists / file_size / regex / json_schema / line_count / llm_judge / custom（subprocess + exit code）；`ContractValidator` + 注册表 | 工作流可机器可验证阶段输出 DoD（文件存在、大小、行数、JSON schema、LLM 评分） | 📋 规划中 → F-114 | `extensions/orchestrator/workflow_engine/validators/{builtin,llm_judge,custom}.py` |
+| AR-F-110 | 声明式工作流引擎核心 | `DeclarativeWorkflowEngine` 读取 `workflow.yaml` 按 DAG 顺序调度 Agent，管理 GATE/DECISION/回环；DAG 遍历+顺序执行+事件发射；阶段调度调用 StageRunner；输出验证调用 ValidatorSpec；错误处理策略（timeout/failure/cost-exceeded）；工作流级事件总线（stage_start/stage_complete/gate_request 等）；CostTracker + CostBudget 阶段级+全局预算 | 用户可用 YAML 声明复杂多阶段工作流，按 DAG 执行，自动预算控制；与 F-118 动态分解不同（持久化、可见、可审计） | 🟡 进行中 → F-110（core 代码已落地：engine/event_bus/cost/errors/workflow_state；剩余边界子特性与 E2E 验证） | `extensions/orchestrator/workflow_engine/{engine,workflow_state,event_bus,cost,errors}.py` |
+| AR-F-111 | StageRunner 适配器 | 桥接 `DeclarativeWorkflowEngine` 与 `AgentRunner`：合成 Issue 适配器（保留 AgentRunner 全部稳健机制）+ 共享 Workspace（F-42）+ 备选方案 B（QueryRunner 直调） | 工作流引擎可复用 AgentRunner 全套机制（orchestrator/registry/git_sync/audit），无需重写执行循环 | 🟡 进行中 → F-111（core 代码已落地；与 F-110 协同 E2E 待验证） | `extensions/orchestrator/workflow_engine/stage_runner.py` |
+| AR-F-112 | GATE 门禁处理器 | 3 种审批模式：manual（ClarificationQueue F-39 暂停工作流）/ auto（ValidatorSpec 全通过）/ threshold（LLM-as-judge 评分达标）；复用 F-44 人工检视闸门扩展为 `workflow gate --approve/--reject`；GATE_PENDING 工作流级状态；rollback 恢复 | 用户可在工作流任意阶段插入人工/自动/阈值门禁，工作流级 rollback 恢复阶段状态 | 🟡 进行中 → F-112（core 代码已落地；E2E 验证与完整审批模式待完善） | `extensions/orchestrator/workflow_engine/{gate_handler,gate_modes,gate_rollback}.py` |
+| AR-F-113 | DECISION 决策处理器 | 多结果分支（proceed/pivot/refine）+ 回环次数检查 + 收敛检测（识别退化循环）+ 阶段目录快照 + 版本化回滚 | 工作流可在 DECISION 节点按 outcome 路由，回环次数超限/退化自动回滚 | 🟡 进行中 → F-113（core 代码已落地；收敛检测与回滚待完善） | `extensions/orchestrator/workflow_engine/{decision_handler,decision_history,rollback}.py` |
+| AR-F-114 | 阶段契约验证器 | 7 种内置 Validator：file_exists / file_size / regex / json_schema / line_count / llm_judge / custom（subprocess + exit code）；`ContractValidator` + 注册表 | 工作流可机器可验证阶段输出 DoD（文件存在、大小、行数、JSON schema、LLM 评分） | 🟡 进行中 → F-114（core 代码已落地；自定义 Validator 扩展待完善） | `extensions/orchestrator/workflow_engine/validators/{builtin,llm_judge,custom}.py` |
 | AR-F-115 | 检查点与恢复 | 工作流级检查点 JSON 持久化（workflow_name/version/current_stage/completed_stages/stage_results/decision_history/cost_accumulated_usd/started_at/last_checkpoint）；原子写入（temp file + rename）；`WorkflowOrchestrator` 自动检测、恢复与清理检查点；`ArtifactResolver` 跨阶段产物路径解析；复用 `SessionStorage`（F-49）+ `StateJournalWriter`（F-96-A） | 用户可在任意阶段中断后从检查点恢复执行，断电/崩溃不丢阶段状态与成本累计；工作流成功后自动清理检查点 | ✅ 已完成 → F-115 | `extensions/orchestrator/workflow_engine/checkpoint.py`（已合并 `WorkflowResumer` / `ArtifactResolver`）、`engine.py`、`workflow_orchestrator.py` |
-| AR-F-116 | 工作流可观测性集成 | State Journal NDJSON（workflow_stage_start/workflow_gate_request/workflow_decision/workflow_complete）+ Gantt 图（阶段执行时间）+ Tool-call NDJSON 审计（F-45）+ WorkflowProgressSink 阶段完成百分比（F-40）+ 每阶段 ProgressReportTool 触发（F-20） | 用户可在 Visualizer 看到工作流甘特图、决策/门禁历史、阶段完成百分比；与单 session 可视化复用同一 NDJSON 格式 | 📋 规划中 → F-116（依赖 F-110 + F-91~F-96 + F-45 + F-40） | `extensions/orchestrator/workflow_engine/{observability,progress,audit}.py` |
+| AR-F-116 | 工作流可观测性集成 | State Journal NDJSON（workflow_stage_start/workflow_gate_request/workflow_decision/workflow_complete）+ Gantt 图（阶段执行时间）+ Tool-call NDJSON 审计（F-45）+ WorkflowProgressSink 阶段完成百分比（F-40）+ 每阶段 ProgressReportTool 触发（F-20） | 用户可在 Visualizer 看到工作流甘特图、决策/门禁历史、阶段完成百分比；与单 session 可视化复用同一 NDJSON 格式 | 🟡 进行中 → F-116（core 代码已落地：observability/audit/progress；与 Visualizer 集成待完善） | `extensions/orchestrator/workflow_engine/{observability,progress,audit}.py` |
 
 ### 3.2 IR-4 业务 Agent 与远程值守（→ FEATURE_PLAN §2.9（F-18）、§4.2 F-50 SOP 固化、§4.3 F-52 SDK→Tool）
 
@@ -234,7 +235,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 |---------|---------|----------------|--------------------|----------|--------|
 | AR-F-50 | SOP 转换器固化 | 核心（已完成）：OpenAPI JSON/URL 解析、方法列表解析、Skill Grouper 原子接口分组、Agent Builder 生成 Agent 定义、`/convert-sop-to-agent` Skill、Agent 持久化、`--agent` CLI 参数指定、default_agent 配置、daemon 模式、attach 重连；工作流模式（F-50-A~G, 2026-06-30 全链路落地）：工作流判别器（启发式评分 SDK/工作流模式）+ 工作流结构提取器（AST 提取阶段/转换/GATE/DECISION）+ 阶段能力映射器（agent_native/wrapper/hybrid）+ 工作流 Schema 生成器（workflow.yaml）+ Agent 定义生成器 + 源码桥接器生成器 + 提取器适配器库（AutoResearchClaw/通用 Python 管线） | 用户可把 CI/CD/数据分析等专业系统一键转为可运行的业务 Agent；F-50-A~G 落地后还可生成多阶段工作流式 Agents（与 F-110 协同） | 🟡 进行中 → F-50（核心 + F-55 分组策略增强 + F-50-A~G 工作流模式全链路 2026-06-30 合入；2026-07-03 `F-50 模块补全 — type_schema/composite_tools/arc 缺失文件` 已闭环） | py parser、grouper、builder、skill、Agent JSON、CLI、daemon、attach 协议 + workflow_mode/ |
 | AR-F-52 | SDK→Tool 注册（SOP→Agent 工具桥接） | Python SDK 方法注册为 Tool；SOP→Agent 工具桥接系统完整实现（2026-06-30）：Bundle 隔离、ToolSearch 检索、搜索标签、AsyncGenerator 支持；SOP 转换解析出的 SourceOperation（如 `detect_modality`/`load_dataset`）注册为可调用 Tool、`ToolWrapper` + `register_source_operations` + `AgentBuilder` 增量 + `agent_loader_hook`（P85-E 内置模板目录 5 套） | 用户可让 Agent 调用 Python SDK 接口扩展能力；SOP 生成的方法可作为 Tool 自动注册；内置 5 套模板支持开箱即用 Agent 定义 | 🟡 收尾 → F-52（基础 SDK→Tool + SOP→Agent 工具桥接 + P85-E 内置模板目录均已完成；剩余 SOP 解析源扩展子特性部分小颗粒） | py SDK 工具、schema、测试 + `extensions/sop_converter/tool_registry.py` + `extensions/sop_converter/templates/` |
-| AR-F-53 | Tool→CLI 命令映射 | Tool 自动映射为 `/tool-name` 斜杠命令（无手动配置）；参数从 Tool param schema 自动推导（`--param value` 风格）；核心工具（Read/Write/Bash 等）不产生命令避免冲突；保持 `src/*` 零改动 | 用户可通过 CLI 斜杠命令调用注册的工具，SOP 生成方法可直接 CLI 入口；TUI 斜杠自动补全包含已注册工具 | 📋 规划中 → F-53（依赖 F-52 + F-18，协同 F-45 审计旁路） | `clawcodex_ext/cli/tool_cmd/{discovery,command,hooks}.py` |
+| AR-F-53 | Tool→CLI 命令映射 | Tool 自动映射为 `/tool-name` 斜杠命令（无手动配置）；参数从 Tool param schema 自动推导（`--param value` 风格）；核心工具（Read/Write/Bash 等）不产生命令避免冲突；保持 `src/*` 零改动 | 用户可通过 CLI 斜杠命令调用注册的工具，SOP 生成方法可直接 CLI 入口；TUI 斜杠自动补全包含已注册工具 | ✅ 已完成 → F-53（已移除） | `clawcodex_ext/cli/tool_cmd/{discovery,command,hooks}.py` |
 
 #### SR-4.2 远程启动与自动值守（→ FEATURE_PLAN §7.1 F-82 Remote Control Server + F-90 Hermes Gateway 参考实现）
 
@@ -335,7 +336,7 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 
 把 Claude Code Benchmark 对标发现的缺失能力补齐，包括进程间通信、浏览器操控、通知语音、可观测协议、高级 Agent 模式和模板系统。
 
-> **已完成**: Buddy 伴侣（F-67）✅、Ultraplan（F-87）✅、Feature Gate（F-68）✅、内置工具补齐（F-71）✅、Native 原生模块系统（F-81）✅ — 均已从路线图中移除。
+> **已完成**: Buddy 伴侣（F-67）✅、Feature Gate（F-68）✅、内置工具补齐（F-71）✅、Native 原生模块系统（F-81）✅、Ultraplan（F-87）✅、Monitor 监控（F-88）✅、Voice Dialogue 全双工语音（F-65）✅、PowerShell（F-107）✅、Freeze Detection（F-108）✅ — 均已从路线图中移除。
 
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 交付件 |
 |---------|---------|----------------|--------------------|----------|--------|
@@ -343,20 +344,24 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | AR-F-82 | Remote Control Server | FastAPI 应用工厂 + 认证中间件（API Key/JWT/CORS）+ 会话管理 API + Worker 注册/调度/心跳/长轮询 + SSE 事件流 + WebSocket 双通道 + ACP 协议中继 + Web 管理面板；底层 Hermes 兼容 API 已落地（OpenAI/Responses/SSE/认证/`clawcodex api serve` CLI） | 用户可远程启动和控制 Agent，从浏览器监督 Worker 状态 | 🟡 进行中 → F-82（Hermes 兼容 API ✅ 11 模块 2,597 行；RCS 核心基础设施/认证/会话/Worker 调度 P0 待实施；ACP 中继/Web 面板 P1~P2 待实施） | `src/remote_control/{app,auth,routes,services,transport,storage}/` |
 | AR-F-61 | Computer Use 屏幕操控 | 屏幕截图、点击、输入操控 | 用户可让 Agent 操作桌面应用 | ⏳ 待开始 → F-61 | py 屏幕操控 |
 | AR-F-62 | Chrome 浏览器自动化 | Chrome DevTools Protocol 控制 | 用户可让 Agent 自动化浏览器操作 | ⏳ 待开始 → F-62 | py Chrome 自动化 |
-| AR-F-72 | Multi-API 原生适配器 | OpenAI/Gemini/Grok 原生适配器（绕过 LiteLLM） + 平台专有特性映射（streaming/structured output/function calling/safety/grounding） + AdapterFactory 自动选择 + LiteLLM 回退 | 用户可充分利用平台专有能力（无需经 LiteLLM 中转），切换更快 | 📋 规划中 → F-72（P72-A~E 子特性 P0/P1） | `extensions/providers_ext/native/{openai,gemini,grok}/` + AdapterFactory |
+| AR-F-72 | Multi-API 原生适配器 | OpenAI/Gemini/Grok 原生适配器（绕过 LiteLLM） + 平台专有特性映射（streaming/structured output/function calling/safety/grounding） + AdapterFactory 自动选择 + LiteLLM 回退 | 用户可充分利用平台专有能力（无需经 LiteLLM 中转），切换更快 | 🟡 进行中 → F-72（P72-A~E 子特性 P0/P1 部分已落地） | `extensions/providers_ext/native/{openai,gemini,grok}/` + AdapterFactory |
 | AR-F-74 | Sandbox 沙箱远程执行 | SandboxExecutor 抽象 + LocalExecutor（默认）+ DockerExecutor（`docker-py`）+ SSHExecutor（`asyncssh`）+ SandboxManager 全局切换 + `/sandbox` CLI 命令 + 沙箱配置文件 | 用户可在隔离 Docker/SSH 环境中安全执行代码，`sandbox-toggle` 切换 | 📋 规划中 → F-74（P74-A~E 子特性 P0/P1） | `src/services/sandbox/{base,local,docker,ssh,manager,config}.py` |
 | AR-F-63 | Channels 频道通知 | 多频道通知系统（Slack/Discord/邮件等） | 用户可从多渠道接收 Agent 通知 | ⏳ 待开始 → F-63 | py 通知系统 |
 | AR-F-64 | Voice Mode 语音输入 | 语音活动检测（`VoiceActivityDetector`/`VoiceActivityState`/`VoiceActivityConfig`）+ STT 抽象（`STTProvider`/`STTConfig`/`STTResult`）+ ASR 引擎接入 + Push-to-Talk + WebSocket 音频传输 | 用户可用语音与 Agent 交互 | 🟡 进行中 → F-64（接口层 detection + stt 共 188 行 ✅；运行时 ASR 接入、Push-to-Talk、WebSocket 音频传输待实施） | `src/services/voice/{detection,stt}.py` ✅ + ASR 引擎接入 + Push-to-Talk + WebSocket 传输 |
-| AR-F-65 | Langfuse 可观测 | Langfuse Agent 可观测性集成 | 用户可追踪 Agent 执行链路和性能 | ⏳ 待开始 → F-65 | py Langfuse 集成 |
-| AR-F-66 | ACP 协议支持 | ACP 协议核心（session/skill/tool 通信）+ Zed/Cursor IDE 集成 + ACP session resume + skill 桥接 | 用户可让 Agent 通过标准协议通信（与 Zed/Cursor 等 IDE 桥接） | 📋 规划中 → F-66（P66-A~D 子特性 P0/P1） | `extensions/ccb_integration/acp/` |
+| AR-F-66 | ACP 协议支持 | ACP 协议核心（session/skill/tool 通信）+ Zed/Cursor IDE 集成 + ACP session resume + skill 桥接 | 用户可让 Agent 通过标准协议通信（与 Zed/Cursor 等 IDE 桥接） | 🟡 进行中 → F-66（P66-A~D 子特性 P0/P1 部分已落地） | `extensions/ccb_integration/acp/` |
 | AR-F-69 | Budget/Poor Mode | 资源节俭模式（4 级 off/light/medium/aggressive 行为矩阵：extract_memories / verification_agent / search_depth / max_tool_calls/turn / context_window / 自动 Web 搜索）；Agent 循环节俭钩子（skip memory/verification）；Tool 级别节俭策略；`/budget` CLI 斜杠命令；Token 用量实时统计与自动降级告警 | 用户可在资源受限时仍有效使用 Agent（穷鬼模式），Token 超阈值自动降级 | 🟡 进行中 → F-69（`token_budget.py` 159 行 ✅；P69-A~E 子特性 P0 待实施） | `clawcodex_ext/query/token_budget.py` ✅ + BudgetModeManager + `clawcodex_ext/hooks/budget/` + `/budget` 命令 |
-| AR-F-83 | Ultraplan 高级规划 | 高级规划模式 | 用户可让 Agent 进行深度规划和拆解 | ⏳ 待开始 → F-83 | py 规划模式 |
-| AR-F-84 | Context Collapse 上下文折叠 | 上下文折叠与压缩 | 用户可让 Agent 处理更大上下文 | ⏳ 待开始 → F-84 | py 上下文折叠 |
-| AR-F-86 | Kairos/Brief 调度 | Kairos/Brief 调度模式 | 用户可精细控制 Agent 调度节奏 | ⏳ 待开始 → F-86 | py 调度模式 |
-| AR-F-88 | Explore/Plan 内置 Agent | 探索/规划内置 Agent | 用户可让 Agent 自主探索和规划 | ⏳ 待开始 → F-88 | py 内置 Agent |
 | AR-F-73 | CI/CD 质量门禁 | GitCode workflow 目标配置 + local CI fallback + pre-commit 门禁 + mypy required gate + duplicate-module 修复 + package smoke test + release preflight + publish helper + security scan helper | 用户可自动化质量门禁和发布流程 | 🟡 进行中 → F-73（本地门禁全部就绪；远端 Pipeline/CodeCheck/Release/PyPI 依赖仓库权限开通） | `.github/workflows/ci.yml` + `.github/workflows/stage6-perf-nightly.yml` + `local_ci.py` + release/publish helpers |
-| AR-F-85 | Templates 模板系统 | 模板定义与实例化 | 用户可基于模板快速创建 Agent 配置 | ⏳ 待开始 → F-85 | py 模板系统 |
 | AR-F-70 | Plugin 插件系统 | BasePlugin 协议 + 注册表/加载器 + 生命周期管理（on_load/on_unload/on_enable/on_disable）+ 子进程沙箱隔离（网络限制/操作白名单）+ PluginManager CLI | 用户可安装和管理插件扩展能力 | 🟡 进行中 → F-70（P70-A~D 2026-06-28 PR #35 合入；P70-B 发现目录扫描 + P70-E plugin.yaml 清单待补） | `src/plugins/` 8 文件 1,070 行 + `tests/plugin/` 792 行 |
+| AR-F-83 | Triggers 远程定时任务 | 远程 trigger API + cron 调度 | 用户可从远端触发 Agent 定时任务 | 📋 规划中 → F-83 | `extensions/ccb_integration/triggers/` |
+| AR-F-84 | Daemon 后台守护进程 | Supervisor + Worker 进程管理、健康检查、自动重启、E2E 测试 | 用户可让 Agent 以后台守护进程方式长期运行 | 🟡 进行中 → F-84（核心 E2E + Stage 7 smoke 测试已落地） | `src/entrypoints/daemon.py` + `extensions/daemon/` |
+| AR-F-85 | Templates 模板系统 | 模板定义与实例化 | 用户可基于模板快速创建 Agent 配置 | ⏳ 待开始 → F-85 | py 模板系统 |
+| AR-F-86 | Computer Use 跨平台 Executor | 屏幕截图、点击、输入操控（三平台） | 用户可让 Agent 操作桌面应用 | 📋 规划中 → F-86（仅 linux.py/null.py 落地；macOS+Windows 后端待补） | `extensions/computer_use/{linux,macos,windows}.py` |
+| AR-F-91 | MCP Skills 自动发现 | MCP 端点自动探测、技能注册与生命周期管理 | 用户可让 Agent 自动发现并注册 MCP 技能 | 📋 规划中 → F-91 | `extensions/ccb_integration/mcp_discovery/` |
+| AR-F-92 | Skill Search TF-IDF 检索 | 技能全文检索与模糊匹配 | 用户可快速定位并调用注册技能 | 📋 规划中 → F-92 | `extensions/ccb_integration/skill_search/` |
+| AR-F-94 | BG_SESSIONS 后台会话统一管理 | 后台会话注册表、Session 状态切换、断线恢复 | 用户可在后台保持会话，断线后重连恢复 | 🟡 进行中 → F-94 | `extensions/ccb_integration/bg_sessions/` |
+| AR-F-95 | TEMPLATES 模板系统产品化 | 模板目录、参数化 Agent 模板、快速启动 | 用户可基于模板一键创建 Agent | 🟡 进行中 → F-95 | `extensions/ccb_integration/templates/` |
+| AR-F-96 | PROMPT_CACHE_BREAK_DETECTION | 缓存命中率监测、断点检测与告警 | 用户可优化 prompt 模板减少缓存断点 | 📋 规划中 → F-96 | `extensions/ccb_integration/cache_monitor/` |
+| AR-F-98 | SSH_REMOTE 远程模式 | SSH 隧道、远程执行、协同 F-74 Sandbox | 用户可通过 SSH 远程执行 Agent 任务 | 📋 规划中 → F-98 | `extensions/ccb_integration/ssh_remote/` |
 
 ### 4.2 IR-6 Agent Dashboard 跨系统统一看板（→ 源码 `extensions/capabilities/dashboard_entry.py` + `extensions/agent_dashboard/`）
 
@@ -368,7 +373,7 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 开发工时 | 交付件 |
 |---------|---------|----------------|--------------------|----------|----------|--------|
-| AR-F-120 | Agent Dashboard 跨系统任务进度统一看板 | Phase 1 Protocol 与数据模型（`DashboardEntry` + `DashboardSource` Protocol + `DashboardStore` 聚合 + NDJSON 归档 + 缓存 TTL + sink 注册）+ Phase 2 数据源（GoalSource 读 `GoalStateRegistry` / TasksSource 读 `ToolContext.tasks` / OrchestratorSource 可选 / SOPSource 可选）+ Phase 3 终端渲染（`/dashboard` 斜杠命令 + Rich markup 分区视图，TTY 模式支持滚动/过滤）+ Phase 4 Agent 侧只读工具（`DashboardGet`/`DashboardList`）+ Phase 5 Web 渲染（Visualizer 新增 tab，可选）+ Phase 6 Orchestrator/SOP 数据源（可选） | 用户可在 REPL `/dashboard` 看到所有 session 的 `/goal` 目标 + Agent Tasks + Orchestrator 流水线 + SOP 工作流阶段；Agent 可通过 `DashboardList("all")` 读取跨系统进度；保持只读聚合，写入仍走各自子系统入口（TaskCreate/Goal/update） | 📋 规划中 → F-120（Phase 1 Protocol 已完成；Phase 2~4 P0 待实施；Phase 5~6 可选） | 综合 4-6 周 | `extensions/capabilities/{dashboard_entry,dashboard_source}.py` ✅ + `extensions/agent_dashboard/{store,source_registry,sources/}.py` + `clawcodex_ext/command_system/dashboard_command.py` + `extensions/agent_dashboard/tools/{dashboard_get,dashboard_list}.py` + Visualizer tab（可选） |
+| AR-F-120 | Agent Dashboard 跨系统任务进度统一看板 | Phase 1 Protocol 与数据模型（`DashboardEntry` + `DashboardSource` Protocol + `DashboardStore` 聚合 + NDJSON 归档 + 缓存 TTL + sink 注册）+ Phase 2 数据源（GoalSource 读 `GoalStateRegistry` / TasksSource 读 `ToolContext.tasks` / OrchestratorSource 可选 / SOPSource 可选）+ Phase 3 终端渲染（`/dashboard` 斜杠命令 + Rich markup 分区视图，TTY 模式支持滚动/过滤）+ Phase 4 Agent 侧只读工具（`DashboardGet`/`DashboardList`）+ Phase 5 Web 渲染（Visualizer 新增 tab，可选）+ Phase 6 Orchestrator/SOP 数据源（可选） | 用户可在 REPL `/dashboard` 看到所有 session 的 `/goal` 目标 + Agent Tasks + Orchestrator 流水线 + SOP 工作流阶段；Agent 可通过 `DashboardList("all")` 读取跨系统进度；保持只读聚合，写入仍走各自子系统入口（TaskCreate/Goal/update） | ✅ 已完成 → F-120（已移除） | `extensions/capabilities/{dashboard_entry,dashboard_source}.py` ✅ + `extensions/agent_dashboard/{store,source_registry,sources/}.py` + `clawcodex_ext/command_system/dashboard_command.py` + `extensions/agent_dashboard/tools/{dashboard_get,dashboard_list}.py` + Visualizer tab（可选） |
 
 ## 5. 分层依赖图
 
@@ -536,22 +541,23 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 
 ## 9. 下一步行动
 
-1. **优先收敛 Cron 端到端行为**:把 `clawcodex_ext/cron_system/*` 接入真实 REPL/TUI/headless runtime,完成 SR-2.2 中 scheduled fire → query pipeline → run store 的 smoke。
-2. **推进 F-37 PR Review 闭环真实环境验证**:在 GitHub/ GitCode 上完成端到端 review → auto-fix → push 链路。
-3. **实施 F-99 Ctrl+C/B 中断响应优化**:P0 方案 1(httpx read_timeout=5s)在先,方案 2/3 逐步补齐。
+1. **继续收敛 Cron 端到端行为**:补齐 Phase F + D1~D4 + R2~R8 剩余缺口，完成 SR-2.2 中 scheduled fire → query pipeline → run store 的端到端 smoke。
+2. **推进 F-37 PR Review 闭环真实环境验证**:在 GitHub/GitCode 上完成端到端 review → auto-fix → push 链路。
+3. **推进 F-121 PR review 规则回灌 P1**:推进语义去重合并 (E/F/G) + CLI 子命令 (J/K)，默认 `enabled=false` opt-in。
 4. **补齐自动值守观测入口**:把 cron runs、orchestrator issue、team members、verification report 汇总到 SR-4.2 Autonomy Status(AR-F-22)统一输出。
-5. **为未来规划特性做最小闭环试点**:先以"每周生成 Agent 社区新特性 digest(AR-5.1.1~3) + 手动审批 proposal(AR-5.2.5)"为最小可用版本,不直接自动改代码。
-6. **推进 AR-F-46 permission_mode 拆分**:F-46.0 audit_log 字段端到端验证 + F-46.1 interactive/default_decision + F-46.2 deprecate shim。
-7. **启动 AR-F-120 Agent Dashboard Phase 2~4**:实现 Goal/Tasks 数据源 + `/dashboard` 命令 + Model Tools (DashboardGet/List)。
-8. **启动 AR-F-110 声明式工作流引擎**:按 F-110-A→F-110-B→...→F-110-F 顺序实施 + 协同 StageRunner/GATE/DECISION/Validator/Checkpoint/Observability。
-9. **启动 AR-F-121 PR review 规则回灌 P1**:推进语义去重合并 (E/F/G) + CLI 子命令 (J/K)，默认 `enabled=false` opt-in。
+5. **为未来规划特性做最小闭环试点**:继续完善社区雷达（AR-5.1.1~3）的 cron 集成，推进 AR-5.2.5 User Review Gate。
+6. **推进 AR-F-46 permission_mode 拆分**:F-46.1 interactive/default_decision + F-46.2 deprecate shim 收尾。
+7. **继续完善 AR-F-110~F-116 声明式工作流引擎**:core 代码已落地，推进 E2E 验证与边界子特性完善。
+8. **启动 F-130 自校正上下文切换**:基于 F-119 section registry 实现元认知换脑机制。
+9. **启动 F-127 CI 自动修复**:从 CI 状态到 Agent 修复的闭环。
+10. **启动 F-128 定时全量代码审查**:周期性代码扫描与自动化 Issue 归档。
 
 ### 9.1 近期优先实施建议
 
 ```
 第一优先级 (P0):
-  F-48 Phase 7-9 (src/ 解耦剩余) ─── 持续降低上游同步成本
   F-22 Phase F + D1~D4 + R2~R8 (Cron 剩余缺口) ─── 生产环境端到端完备
+  F-37 PR Review 闭环真实环境验证 ─── GitHub/GitCode 端到端
   F-121 PR review 规则回灌 P1 dedup/CLI ─── 推进 P1 语义去重 + CLI 子命令
   F-125 Headless 多轮交互 Phase 4+（Phase 3 已闭环） ─── 边角全部收敛
 
@@ -560,21 +566,24 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
   F-69 Budget Mode 深度集成 ─── Token 节约，用户体验
   F-82 Remote Control Server ─── Hermes API ✅, RCS 核心 P0 实施
   F-54 可观测性完善 ─── 5 阶段观测点 + CLI 诊断字段
-  F-46 permission_split ─── audit_log + 三字段拆分
+  F-46 permission_split ─── audit_log + 三字段拆分收尾
   F-64 Voice Mode ASR 引擎接入
   F-50 SOP 工作流模式完善
   F-52 SDK→Tool 收尾
   F-73 CI/CD 远端 Pipeline 对接
-  F-66 ACP 协议 P0
+  F-66 ACP 协议 P0 完善
+  F-130 自校正上下文切换 ─── 元认知换脑机制
 
 第三优先级 (P2+):
-  F-110~F-116 声明式工作流引擎系列 ─── F-110-A~F + StageRunner + GATE + DECISION + Validator + Checkpoint + Observability
+  F-110~F-116 声明式工作流引擎 E2E 验证 ─── core 已落地，补齐 E2E
   F-72 Multi-API 适配器 ─── 减少 LiteLLM 单点依赖
-  F-66 ACP 协议 / F-74 Sandbox / F-75 工具统计
-  F-64 Voice Mode ASR 引擎接入 / F-119 System Prompt 自迭代 / F-107 PowerShell
-  F-108 Freeze Detection 四层方案 / F-118 动态任务分解探索
-  F-120 Agent Dashboard Phase 2~4 / F-53 Tool→CLI
-  F-123 Intent Forecast 空闲意图预测 / F-124 Issue Clarifier 描述澄清 ─── Agent 新增规划
+  F-84 Daemon 后台守护进程深化 / F-74 Sandbox / F-75 工具统计
+  F-64 Voice Mode ASR 引擎接入 / F-86 Computer Use 跨平台
+  F-118 动态任务分解探索 / F-124 Issue Clarifier
+  F-127 CI 自动修复 / F-128 定时代码审查
+  F-83 Triggers / F-85 Pipe IPC / F-91/92 MCP/Skill 搜索
+  F-94 BG_Sessions / F-95 Templates 产品化 / F-96 Cache 监测 / F-98 SSH
+  F-2 A2A 协议化 / F-9 /goal / F-10 ExecuteExtraTool
   R-8/R-9/R-10 社区替代组件接入
 ```
 
@@ -605,11 +614,11 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 
 > 本附录将 ROADMAP 中的 AR-F-N 组件与 `docs/feature_plan/` 的 F-N 状态总表对齐，作为互查索引。
 
-### B.1 F-N 状态同步总表（v4.5, 2026-07-07）
+### B.1 F-N 状态同步总表（v4.6, 2026-07-21）
 
 > 状态图例：🟡 进行中/部分完成 | 📋 规划中 | 🔭 探索中 | ⏳ 待开始
 >
-> **说明**：所有 ✅ 已完成条目均已从路线图中移除（F-68/F-71/F-81/F-87/F-89 Proactive/F-89 @agent-name/F-93/F-94/F-95/F-97/F-100/F-102/F-122）。
+> **说明**：所有 ✅ 已完成条目均已从路线图中移除（含 F-53/F-65/F-68/F-71/F-81/F-87/F-88/F-89/F-93/F-94/F-95/F-97/F-100/F-102/F-107/F-108/F-119/F-120/F-122/F-151/F-153/F-154/F-156 等）。
 
 | F-N | 名称 | 类别 | 状态 | ROADMAP AR | 章节 |
 |-----|------|------|:----:|------------|------|
@@ -618,54 +627,61 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | F-46 | permission_mode 正交拆分 | CLI/Config | 🟡 | AR-F-46 | §3.1 SR-3.1 |
 | F-50 | SOP 转换器源码固化 | Arch/SDK | 🟡 | AR-F-50 | §3.2 SR-4.1 |
 | F-52 | Python SDK 方法注册为 Tool | Arch/SDK | 🟡 | AR-F-52 | §3.2 SR-4.1 |
-| F-53 | Tool 自动暴露为 CLI | CLI/Config | 📋 | AR-F-53 | §3.2 SR-4.1 |
 | F-54 | 运行期可观测性 | Orchestrator | 🟡 | AR-F-54 | §2.2 SR-2.1 |
+| F-55 | SOP Tool Lifecycle 依赖提升 | Arch/SDK | 🟡 | — | §3.2 SR-4.1 |
 | F-64 | Voice Mode 语音输入 | CCB | 🟡 | AR-F-64 | §4 SR-5.6 |
 | F-66 | ACP 协议支持 | CCB | 🟡 | AR-F-66 | §4 SR-5.6 |
 | F-69 | Budget/Poor Mode | CCB | 🟡 | AR-F-69 | §4 SR-5.6 |
 | F-70 | Plugin 插件系统基础框架 | CCB | 🟡 | AR-F-70 | §4 SR-5.6 |
-| F-72 | Multi-API 原生适配器 | CCB | 📋 | AR-F-72 | §4 SR-5.6 |
+| F-72 | Multi-API 原生适配器 | CCB | 🟡 | AR-F-72 | §4 SR-5.6 |
 | F-73 | CI/CD 流水线 | CCB | 🟡 | AR-F-73 | §4 SR-5.6 |
 | F-74 | Sandbox 沙箱远程执行 | CCB | 📋 | AR-F-74 | §4 SR-5.6 |
 | F-82 | Remote Control 远程控制 | CCB | 🟡 | AR-F-82 | §3.2 SR-4.2 / §4 SR-5.6 |
-| F-107 | PowerShell 支持增强 | Agent Core | 📋 | AR-F-107 | §2.1 SR-1.2 |
-| F-108 | Freeze Detection & Auto-Recovery | Agent Core | ✅ | AR-F-108 | §2.2 SR-2.3 |
-| F-110 | 声明式工作流引擎核心 | Orchestrator | 📋 | AR-F-110 | §3.4 SR-3.4 |
-| F-111 | StageRunner 适配器 | Orchestrator | 📋 | AR-F-111 | §3.4 SR-3.4 |
-| F-112 | GATE 门禁处理器 | Orchestrator | 📋 | AR-F-112 | §3.4 SR-3.4 |
-| F-113 | DECISION 决策处理器 | Orchestrator | 📋 | AR-F-113 | §3.4 SR-3.4 |
-| F-114 | 阶段契约验证器 | Orchestrator | 📋 | AR-F-114 | §3.4 SR-3.4 |
+| F-83 | Triggers 远程定时任务 | CCB | 📋 | AR-F-83 | §4 SR-5.6 |
+| F-84 | Daemon 后台守护进程 | CCB | 🟡 | AR-F-84 | §4 SR-5.6 |
+| F-85 | Pipe IPC 多实例协作 | CCB | 📋 | AR-F-85 | §4 SR-5.6 |
+| F-86 | Computer Use 跨平台 Executor | CCB | 📋 | AR-F-86 | §4 SR-5.6 |
+| F-91 | MCP Skills 自动发现 | CCB | 📋 | AR-F-91 | §4 SR-5.6 |
+| F-92 | Skill Search TF-IDF 检索 | CCB | 📋 | AR-F-92 | §4 SR-5.6 |
+| F-94 | BG_SESSIONS 后台会话统一管理 | CCB | 🟡 | AR-F-94 | §4 SR-5.6 |
+| F-95 | TEMPLATES 模板系统产品化 | CCB | 🟡 | AR-F-95 | §4 SR-5.6 |
+| F-96 | PROMPT_CACHE_BREAK_DETECTION | CCB | 📋 | AR-F-96 | §4 SR-5.6 |
+| F-98 | SSH_REMOTE 远程模式 | CCB | 📋 | AR-F-98 | §4 SR-5.6 |
+| F-110 | 声明式工作流引擎核心 | Orchestrator | 🟡 | AR-F-110 | §3.4 SR-3.4 |
+| F-111 | StageRunner 适配器 | Orchestrator | 🟡 | AR-F-111 | §3.4 SR-3.4 |
+| F-112 | GATE 门禁处理器 | Orchestrator | 🟡 | AR-F-112 | §3.4 SR-3.4 |
+| F-113 | DECISION 决策处理器 | Orchestrator | 🟡 | AR-F-113 | §3.4 SR-3.4 |
+| F-114 | 阶段契约验证器 | Orchestrator | 🟡 | AR-F-114 | §3.4 SR-3.4 |
 | F-115 | 检查点与恢复 | Orchestrator | ✅ | AR-F-115 | §3.4 SR-3.4 |
-| F-116 | 工作流可观测性集成 | Orchestrator | 📋 | AR-F-116 | §3.4 SR-3.4 |
+| F-116 | 工作流可观测性集成 | Orchestrator | 🟡 | AR-F-116 | §3.4 SR-3.4 |
 | F-118 | 动态任务分解引擎 | Orchestrator | 🟡 | AR-F-118 | §3.1 SR-3.1 |
-| F-119 | System Prompt 段落拼装与自迭代 | Agent Core | 📋 | AR-F-119 | §2.1 SR-1.1 |
-| F-120 | Agent Dashboard 跨系统统一看板 | Agent Dashboard | 📋 | AR-F-120 | §4.2 IR-6 |
 | F-121 | PR 代码检视意见规则回灌 | Orchestrator | 🟡 | AR-F-121 | §3.3 SR-3.3 |
-| F-123 | Intent Forecast 空闲意图预测 | Agent 新增规划 | 📋 | — | §1 / §5 |
-| F-124 | Issue Clarifier 描述澄清 | Agent 新增规划 | 🟡 | — | §3.1 |
+| F-124 | Issue Clarifier 描述澄清 | Orchestrator | 🟡 | — | §3.1 |
 | F-125 | Headless 无头模式多轮交互 | Agent 新增规划 | 🟡 | — | §2.1 |
+| F-127 | PR CI 自动修复 | Orchestrator | 📋 | — | §3.3 |
+| F-128 | 定时全量代码审查 | Orchestrator | 📋 | — | §3.3 |
+| F-130 | 自校正上下文切换 | Agent Core | 📋 | — | §2.1 SR-1.1 |
 
-**统计**：31 个 F-N 中，🟡 进行中 13 / 📋 规划中 14 / 🔭 探索中 1 / ⏳ 待开始 1 / ✅ 已完成 1（已从路线图中移除）
+**统计**：46 个 F-N 中，🟡 进行中 24 / 📋 规划中 17 / ⏳ 待开始 1 / ✅ 已完成 1（F-115，已从路线图中移除）
 
-### B.2 v4.4 → v4.5 主要变更摘要（ROADMAP 精简）
+### B.2 v4.5 → v4.6 主要变更摘要（ROADMAP 更新）
 
-> v4.5 移除了所有 ✅ 已完成条目的详细 AR 行和 F-N 行，使 ROADMAP 聚焦于待完成工作项。
+> v4.6 根据 2026-07-07~2026-07-21 期间 189 个 commit 的代码变更，更新已完成特性、新增规划特性和状态升级。
 
 | 类型 | 变更 |
 |------|------|
-| **ROADMAP 精简** | 移除全部 ✅ 项：F-68/F-71/F-81/F-87/F-89 Proactive/F-89 @agent-name/F-93/F-94/F-95/F-97/F-100/F-102/F-122 及对应 AR 行 |
-| **F-N 表精简** | 44 行 → 31 行，移除 13 个 ✅ 条目 |
-| **统计表更新** | §0.3 总计从 68/21/18=107 → 0/20/17=37（移除已完成列） |
-| **状态升级** | F-89 @agent-name 🟡→✅（五入口统一）、F-100 🟡→✅（Dreaming Phase B TTL）、F-102 🟡→✅（P102-A~E 通过验证） |
-| **里程碑更新** | v0.6 生态补缺 → ✅ 完成；v0.5/v0.7 状态更新 |
-| **版本号** | v4.4 → v4.5 |
-| **更新日期** | 2026-07-04 → 2026-07-07 |
-| **§0.3 总计行** | — | 68 / 18 / 18 / 108 → 68 / 21 / 18 / 107；CCB 行 19/6/4=29 → 22/6/4=32 |
-| **版本号** | — | v4.3 → v4.4 |
-| **更新日期** | — | 2026-06-30 → 2026-07-04 |
+| **ROADMAP 精简** | 移除全部 ✅ 项：F-53/F-65/F-68/F-71/F-81/F-87/F-88/F-89/F-93/F-94/F-95/F-97/F-100/F-102/F-107/F-108/F-119/F-120/F-122/F-151/F-153/F-154/F-156 及对应 AR 行；Logical Kanban 全系列 F-126~F-144、F-148~F-155 全部完成 |
+| **F-N 表扩容** | 31 行 → 46 行，新增 15 个条目（F-55/F-83/F-84/F-85/F-86/F-91/F-92/F-94/F-95/F-96/F-98/F-127/F-128/F-130）；移除 13 个 ✅ 条目 |
+| **统计表更新** | §0.3 总计从 19/17=36 → 28/23=51（新增规划特性 + CCB 扩容） |
+| **状态升级 → ✅ 已完成** | F-53 Tool→CLI、F-65 Voice Dialogue、F-88 Monitor 后台监控、F-107 PowerShell 支持、F-108 Freeze Detection、F-119 System Prompt 自迭代、F-120 Agent Dashboard、F-151/F-153/F-154 Logical Kanban、F-156 Asciicast v2 录制器 |
+| **状态升级 → 🟡 进行中** | F-110~F-116 声明式工作流引擎系列（core 代码已落地）、F-72 Multi-API 原生适配器、F-55 SOP Tool Lifecycle、F-66 ACP 协议、F-84 Daemon 后台守护 |
+| **新增规划特性** | F-127 PR CI 自动修复、F-128 定时代码审查、F-130 自校正上下文切换 — 元认知换脑机制 |
+| **里程碑更新** | v0.7 Remote Control Hermes API ✅; v0.8 工作流引擎 core 已落地; v0.9 Agent Dashboard ✅ 已完成 |
+| **版本号** | v4.5 → v4.6 |
+| **更新日期** | 2026-07-07 → 2026-07-21 |
 
 每个 IR 下挂 4~5 个 SR,平均每 SR 下挂 3~7 个 AR（合并后）。
 
 ---
 
-*ROADMAP v4.5 — 已完成项已从路线图中移除；§0.3 总计去除已完成列；§B.1 精简为 31 行（仅保留 🟡/📋/🔭/⏳）；§B.2 更新为 v4.5 变更摘要*
+*ROADMAP v4.6 — 已完成项已从路线图中移除；§0.3 统计更新为 28/23=51；§B.1 扩容为 46 行（24 🟡 / 17 📋 / 1 ⏳ / 1 ✅）；§B.2 更新为 v4.6 变更摘要*
