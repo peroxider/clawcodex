@@ -18,6 +18,7 @@ import threading
 
 from .debug import register_debug_skill
 from .loop import register_loop_skill
+from .orchestrator import register_orchestrator_skill
 from .remember import register_remember_skill
 from .simplify import register_simplify_skill
 from .spec_audit import register_spec_audit_skill
@@ -61,6 +62,7 @@ def init_bundled_skills() -> bool:
         register_update_config_skill,
         register_remember_skill,
         register_spec_audit_skill,
+        register_orchestrator_skill,
     )
     with _INIT_LOCK, _registry_lock:
         if _INITIALIZED:
@@ -98,6 +100,7 @@ def reset_bundled_skills_init_flag() -> None:
 __all__ = [
     "init_bundled_skills",
     "reset_bundled_skills_init_flag",
+    "register_orchestrator_skill",
     "register_simplify_skill",
     "register_spec_audit_skill",
     "register_debug_skill",

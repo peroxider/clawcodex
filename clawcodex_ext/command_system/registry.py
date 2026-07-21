@@ -6,7 +6,7 @@ Manages registration and lookup of commands.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 from .types import Command, CommandBase, get_command_name
@@ -17,7 +17,6 @@ class CommandRegistry:
     """Registry for commands."""
 
     _commands: dict[str, Command] = field(default_factory=dict)
-    _aliases: dict[str, str] = field(default_factory=dict)
 
     def register(self, command: Command) -> None:
         """
@@ -29,29 +28,34 @@ class CommandRegistry:
         name = command.name.lower()
         self._commands[name] = command
 
-        # Register aliases
+        # Register aliases as direct command entries so list_commands
+        # and the slash-command display surface them as invocable names.
         for alias in command.aliases:
             alias_lower = alias.lower()
-            if alias_lower not in self._commands and alias_lower not in self._aliases:
-                self._aliases[alias_lower] = name
+            if alias_lower not in self._commands:
+                self._commands[alias_lower] = command
 
     def unregister(self, name: str) -> None:
         """
-        Unregister a command.
+        Unregister a command and its aliases.
 
         Args:
             name: Name of the command to unregister
         """
         name_lower = name.lower()
-        if name_lower in self._commands:
-            del self._commands[name_lower]
+        command = self._commands.get(name_lower)
+        if command is None:
+            return
 
-        # Remove aliases pointing to this command
+        # Remove the primary name
+        del self._commands[name_lower]
+
+        # Remove all alias entries pointing to the same command object
         aliases_to_remove = [
-            alias for alias, target in self._aliases.items() if target == name_lower
+            alias for alias, cmd in self._commands.items() if alias != name_lower and cmd is command
         ]
         for alias in aliases_to_remove:
-            del self._aliases[alias]
+            del self._commands[alias]
 
     def get(self, name: str) -> Optional[Command]:
         """
@@ -64,16 +68,7 @@ class CommandRegistry:
             The command, or None if not found
         """
         name_lower = name.lower()
-
-        # Check direct name
-        if name_lower in self._commands:
-            return self._commands[name_lower]
-
-        # Check aliases
-        if name_lower in self._aliases:
-            return self._commands.get(self._aliases[name_lower])
-
-        return None
+        return self._commands.get(name_lower)
 
     def has(self, name: str) -> bool:
         """
@@ -93,7 +88,12 @@ class CommandRegistry:
         include_disabled: bool = False,
     ) -> list[Command]:
         """
-        List all registered commands.
+        List all registered commands, each with its primary name only.
+
+        Aliases are NOT returned as separate entries here — they are resolved
+        at lookup time by :meth:`get`.  Callers that need to display aliases
+        should read the ``aliases`` field on each returned command, or use
+        :meth:`list_all_names` to get all invocable names.
 
         Args:
             include_hidden: Include hidden commands
@@ -102,19 +102,81 @@ class CommandRegistry:
         Returns:
             List of commands
         """
-        commands = list(self._commands.values())
-
-        if not include_hidden:
-            commands = [cmd for cmd in commands if not cmd.is_hidden]
-
-        if not include_disabled:
-            commands = [cmd for cmd in commands if cmd.is_enabled()]
+        seen: set[int] = set()
+        commands: list[Command] = []
+        for cmd in self._commands.values():
+            cmd_id = id(cmd)
+            if cmd_id in seen:
+                continue
+            seen.add(cmd_id)
+            if not include_hidden and cmd.is_hidden:
+                continue
+            if not include_disabled and not cmd.is_enabled():
+                continue
+            commands.append(cmd)
 
         return sorted(commands, key=lambda c: c.name.lower())
 
+    def list_invocable_commands(
+        self,
+        include_hidden: bool = False,
+        include_disabled: bool = False,
+    ) -> list[Command]:
+        """Return all invocable command entries, one per primary name AND alias.
+
+        Unlike :meth:`list_commands`, this returns a separate entry for each
+        alias so the slash-command display and autocomplete can surface
+        ``/orch`` alongside ``/orchestrator``.  Each alias entry is a shallow
+        copy with the alias name set; the underlying command object is shared.
+
+        These entries are safe for display/autocomplete use.  Command execution
+        should always go through :meth:`get` which returns the canonical entry.
+        """
+        seen_objs: set[int] = set()
+        entries: list[Command] = []
+        for key, cmd in self._commands.items():
+            cmd_id = id(cmd)
+            if cmd_id in seen_objs:
+                continue
+            seen_objs.add(cmd_id)
+
+            # Primary name entry
+            if not include_hidden and cmd.is_hidden:
+                continue
+            if not include_disabled and not cmd.is_enabled():
+                continue
+            entries.append(cmd)
+
+            # Alias entries — shallow copy with alias name for display
+            for alias in cmd.aliases:
+                alias_lower = alias.lower()
+                if alias_lower == key:
+                    continue
+                alias_entry = replace(cmd, name=alias_lower, aliases=[])
+                entries.append(alias_entry)
+
+        return sorted(entries, key=lambda c: c.name.lower())
+
+    def list_all_names(self) -> list[str]:
+        """Return all invocable names (primary names + aliases), lowercased.
+
+        Useful for autocomplete and slash-command listing where aliases
+        should appear as separate entries.
+        """
+        seen_objs: set[int] = set()
+        names: list[str] = []
+        for key, cmd in self._commands.items():
+            cmd_id = id(cmd)
+            if cmd_id not in seen_objs:
+                seen_objs.add(cmd_id)
+                names.append(key)
+                for alias in cmd.aliases:
+                    names.append(alias.lower())
+        return sorted(names)
+
     def find_commands(self, query: str, limit: int = 20) -> list[Command]:
         """
-        Find commands matching a query.
+        Find commands matching a query, deduplicated by object identity.
 
         Args:
             query: Search query
@@ -125,8 +187,13 @@ class CommandRegistry:
         """
         query_lower = query.lower()
         matches: list[tuple[int, Command]] = []
+        seen: set[int] = set()
 
         for command in self._commands.values():
+            cmd_id = id(command)
+            if cmd_id in seen:
+                continue
+            seen.add(cmd_id)
             score = 0
 
             # Exact name match
@@ -157,7 +224,6 @@ class CommandRegistry:
     def clear(self) -> None:
         """Clear all registered commands."""
         self._commands.clear()
-        self._aliases.clear()
 
 
 # Global registry instance

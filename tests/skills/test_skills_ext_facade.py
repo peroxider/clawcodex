@@ -221,6 +221,7 @@ def test_catalog_initializes_converter_without_expanding_core_bundled_skills(
         "simplify",
         "debug",
         "loop",
+        "orchestrator",
         "stuck",
         "verify-content",
         "update-config",

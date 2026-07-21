@@ -57,7 +57,6 @@ def test_ext_repl_lazy_command_system_registers_bundled_skills(
 
     global_registry = get_command_registry()
     saved_commands = dict(global_registry._commands)
-    saved_aliases = dict(global_registry._aliases)
     global_registry.clear()
     try:
         repl._ensure_command_system()
@@ -69,4 +68,3 @@ def test_ext_repl_lazy_command_system_registers_bundled_skills(
     finally:
         global_registry.clear()
         global_registry._commands.update(saved_commands)
-        global_registry._aliases.update(saved_aliases)

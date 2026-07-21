@@ -66,6 +66,11 @@ def test_one_failing_registrar_does_not_block_following_registrars_and_retries(
         "register_update_config_skill",
         succeeding("update-config"),
     )
+    monkeypatch.setattr(
+        bundled_catalog,
+        "register_orchestrator_skill",
+        succeeding("orchestrator"),
+    )
 
     with caplog.at_level(logging.WARNING, logger=bundled_catalog.__name__):
         assert bundled_catalog.init_bundled_skills() is False
@@ -78,6 +83,7 @@ def test_one_failing_registrar_does_not_block_following_registrars_and_retries(
         "verify-content",
         "update-config",
         "spec-audit",
+        "orchestrator",
     ]
     assert "transient registrar failure" in caplog.text
 
@@ -93,6 +99,7 @@ def test_one_failing_registrar_does_not_block_following_registrars_and_retries(
         ("simplify", "register_simplify_skill", "simplify"),
         ("debug", "register_debug_skill", "debug"),
         ("loop", "register_loop_skill", "loop"),
+        ("orchestrator", "register_orchestrator_skill", "orchestrator"),
         ("spec_audit", "register_spec_audit_skill", "spec-audit"),
         ("stuck", "register_stuck_skill", "stuck"),
         ("verify_content", "register_verify_content_skill", "verify-content"),
@@ -136,6 +143,7 @@ def test_rejected_registrar_is_diagnosed_and_retried(
     monkeypatch.setattr(bundled_catalog, "register_simplify_skill", flaky)
     monkeypatch.setattr(bundled_catalog, "register_debug_skill", succeeding)
     monkeypatch.setattr(bundled_catalog, "register_loop_skill", succeeding)
+    monkeypatch.setattr(bundled_catalog, "register_orchestrator_skill", succeeding)
     monkeypatch.setattr(bundled_catalog, "register_spec_audit_skill", succeeding)
     monkeypatch.setattr(bundled_catalog, "register_stuck_skill", succeeding)
     monkeypatch.setattr(bundled_catalog, "register_verify_content_skill", succeeding)
