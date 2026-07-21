@@ -80,6 +80,7 @@ _KNOWN_HANDLED_COMMANDS: set[str] = {
     # Handled by dispatch_registry_command (NOT by dispatch_local_command)
     "/init",
     "/provider",
+    "/multimodel",
     "/lkb",
     "/recap",
     "/btw",
@@ -137,6 +138,15 @@ def test_all_suggestion_commands_have_handlers(tmp_path: Path):
         assert slash in _KNOWN_HANDLED_COMMANDS, (
             f"{slash} (source={s.source}) is in suggestions but has no known handler"
         )
+
+
+def test_command_suggestions_include_multimodel(tmp_path: Path):
+    """The REPL shares this palette, so /multimodel must be completable."""
+    suggestions = build_command_suggestions(tmp_path)
+    entry = next((item for item in suggestions if item.name == "multimodel"), None)
+
+    assert entry is not None
+    assert entry.slash == "/multimodel"
 
 
 @pytest.mark.asyncio

@@ -175,6 +175,7 @@ def build_command_suggestions(
         from clawcodex_ext.away_summary.registration import register_away_summary_commands
         from clawcodex_ext.intent_forecast.registration import register_intent_forecast_commands
         from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+        from clawcodex_ext.multimodel.runtime_command import register_multimodel_runtime_command
 
         # Use a fresh private registry so we don't clobber the global
         # registry's LocalCommand for /model and /provider (F-43).
@@ -187,6 +188,10 @@ def build_command_suggestions(
         register_away_summary_commands(private_reg)
         register_intent_forecast_commands(private_reg)
         register_runtime_commands(private_reg)
+        # Keep the REPL/TUI completion palette aligned with the runtime
+        # registry.  ``/multimodel`` is a local command, so it must be
+        # registered on this private completion registry as well.
+        register_multimodel_runtime_command(private_reg)
 
         # F-53: auto-expose non-core tools as /<tool-name> slash commands
         # in the TUI command registry. Mirrors the REPL wiring in

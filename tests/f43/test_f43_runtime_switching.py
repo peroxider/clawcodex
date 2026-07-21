@@ -275,6 +275,46 @@ def test_install_repl_extensions_attaches_observer(monkeypatch) -> None:
     assert repl.command_context.tool_context is fake_new.tool_context
 
 
+def test_repl_multimodel_renderer_shows_each_slot_result() -> None:
+    """The interactive transcript exposes both candidates, not just the winner."""
+    from clawcodex_ext.frontend.repl_extensions import _ReplMultiModelRenderer
+
+    class _Console:
+        def __init__(self) -> None:
+            self.lines: list[str] = []
+
+        def print(self, value, **_kwargs) -> None:
+            self.lines.append(str(value))
+
+    console = _Console()
+    renderer = _ReplMultiModelRenderer(SimpleNamespace(console=console))
+    results = [
+        SimpleNamespace(
+            slot_name="agnes",
+            duration_ms=9300,
+            error=None,
+            response=SimpleNamespace(model="agnes-2.0-flash", content="AGNES_OK"),
+        ),
+        SimpleNamespace(
+            slot_name="minimax",
+            duration_ms=1400,
+            error=None,
+            response=SimpleNamespace(model="MiniMax-M3", content="MINIMAX_OK"),
+        ),
+    ]
+    renderer._on_router_event(
+        "aggregated",
+        {"results": results, "output": SimpleNamespace(chosen=results[0].response)},
+    )
+
+    rendered = "\n".join(console.lines)
+    assert "agnes-2.0-flash · 9.30s" in rendered
+    assert "MiniMax-M3 · 1.40s" in rendered
+    assert "AGNES_OK" in rendered
+    assert "MINIMAX_OK" in rendered
+    assert "最终采用: agnes-2.0-flash" in rendered
+
+
 def test_install_tui_extensions_attaches_observer(monkeypatch) -> None:
     """``install_tui_extensions`` must wire the TUI observer to the runtime."""
     from clawcodex_ext.frontend.tui_extensions import install_tui_extensions

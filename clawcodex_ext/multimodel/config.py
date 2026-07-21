@@ -11,7 +11,7 @@ from typing import Any, Mapping
 import yaml
 
 VALID_STRATEGIES = frozenset({"parallel", "voting", "routing", "fallback"})
-VALID_AGGREGATORS = frozenset({"passthrough", "majority", "rank", "scoring"})
+VALID_AGGREGATORS = frozenset({"passthrough", "first_success", "majority", "rank", "scoring", "fusion"})
 
 
 class MultiModelConfigError(ValueError):
@@ -65,7 +65,7 @@ class GroupConfig:
             data["aggregator"] = self.aggregator
         if self.min_votes is not None:
             data["min_votes"] = self.min_votes
-        if self.aggregator in {"scoring", "rank"}:
+        if self.aggregator in {"scoring", "rank", "fusion"}:
             data["scorer_provider"] = self.scorer_provider
             data["scorer_model"] = self.scorer_model
         if self.routes:

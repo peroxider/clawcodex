@@ -95,21 +95,32 @@ class MultiModelRouter(BaseProvider):
             )
             duration_ms = int((time.monotonic() - started) * 1000)
             usage = response.usage if isinstance(response.usage, dict) else {}
-            result = MultiModelResult(slot.name, response, duration_ms, self._tokens(usage))
+            result = MultiModelResult(
+                slot.name, response, duration_ms, self._tokens(usage), completed_at=time.monotonic()
+            )
             self._emit("complete", result=result)
             return result
         except asyncio.CancelledError:
             duration_ms = int((time.monotonic() - started) * 1000)
-            result = MultiModelResult(slot.name, self._empty_response(slot), duration_ms, {}, cancelled=True)
+            result = MultiModelResult(
+                slot.name, self._empty_response(slot), duration_ms, {}, cancelled=True,
+                completed_at=time.monotonic(),
+            )
             self._emit("complete", result=result)
             return result
         except asyncio.TimeoutError:
-            result = MultiModelResult(slot.name, self._empty_response(slot), slot.timeout_ms, {}, error=f"Timeout after {slot.timeout_ms}ms")
+            result = MultiModelResult(
+                slot.name, self._empty_response(slot), slot.timeout_ms, {},
+                error=f"Timeout after {slot.timeout_ms}ms", completed_at=time.monotonic(),
+            )
             self._emit("complete", result=result)
             return result
         except Exception as exc:
             duration_ms = int((time.monotonic() - started) * 1000)
-            result = MultiModelResult(slot.name, self._empty_response(slot), duration_ms, {}, error=str(exc))
+            result = MultiModelResult(
+                slot.name, self._empty_response(slot), duration_ms, {}, error=str(exc),
+                completed_at=time.monotonic(),
+            )
             self._emit("complete", result=result)
             return result
 

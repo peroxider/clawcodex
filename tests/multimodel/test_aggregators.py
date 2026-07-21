@@ -7,6 +7,8 @@ import pytest
 from clawcodex_ext.providers.base import ChatResponse
 from clawcodex_ext.capabilities.multimodel_protocol import AggregatorProtocol, MultiModelResult
 from clawcodex_ext.multimodel.aggregators import (
+    FirstSuccessAggregator,
+    FusionAggregator,
     MajorityVoteAggregator,
     PassThroughAggregator,
     RankAggregator,
@@ -15,15 +17,19 @@ from clawcodex_ext.multimodel.aggregators import (
 
 
 def result(
-    slot: str, content: str, *, error: str | None = None, cancelled: bool = False
+    slot: str, content: str, *, error: str | None = None, cancelled: bool = False,
+    completed_at: float = 0.0, tool_uses: list[dict] | None = None,
 ) -> MultiModelResult:
     return MultiModelResult(
         slot_name=slot,
-        response=ChatResponse(content=content, model=slot, usage={}, finish_reason="stop"),
+        response=ChatResponse(
+            content=content, model=slot, usage={}, finish_reason="stop", tool_uses=tool_uses,
+        ),
         duration_ms=12,
         tokens={"input": 2, "output": 3},
         error=error,
         cancelled=cancelled,
+        completed_at=completed_at,
     )
 
 
@@ -35,6 +41,16 @@ async def test_passthrough_uses_first_success_and_preserves_all_results() -> Non
     assert output.chosen is success.response
     assert output.runners_up == [failed]
     assert output.provenance == [failed, success]
+
+
+async def test_first_success_uses_completion_order_not_slot_order() -> None:
+    slow_first_slot = result("agnes", "slow", completed_at=12.0)
+    fast_second_slot = result("minimax", "fast", completed_at=4.0)
+
+    output = await FirstSuccessAggregator().aggregate([slow_first_slot, fast_second_slot], {})
+
+    assert output.chosen is fast_second_slot.response
+    assert output.vote_summary["winning_slot"] == "minimax"
 
 
 async def test_aggregators_reject_empty_results() -> None:
@@ -136,8 +152,44 @@ async def test_rank_requires_a_ranker_only_when_it_has_multiple_candidates() -> 
         await RankAggregator().aggregate([only, result("two", "other")], {})
 
 
+async def test_fusion_combines_candidates_with_designated_provider() -> None:
+    class FusionProvider:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        async def chat_async(self, messages, **kwargs):
+            self.calls.append({"messages": messages, **kwargs})
+            return ChatResponse("combined answer", "fusion-model", {}, "stop")
+
+    provider = FusionProvider()
+    output = await FusionAggregator(fusion_provider=provider, fusion_model="fusion-model").aggregate(
+        [result("agnes", "detail A"), result("minimax", "detail B")], {}
+    )
+
+    assert output.chosen.content == "combined answer"
+    assert output.vote_summary == {"selection": "fusion", "fused_slots": ["agnes", "minimax"]}
+    assert provider.calls[0]["model"] == "fusion-model"
+    assert "detail A" in provider.calls[0]["messages"][0]["content"]
+    assert "detail B" in provider.calls[0]["messages"][0]["content"]
+
+
+async def test_fusion_preserves_tool_use_turns_without_an_extra_llm_call() -> None:
+    class FusionProvider:
+        async def chat_async(self, *_args, **_kwargs):
+            raise AssertionError("tool-use candidates must not be fused")
+
+    first = result("agnes", "", tool_uses=[{"name": "Read"}])
+    second = result("minimax", "text")
+    output = await FusionAggregator(fusion_provider=FusionProvider()).aggregate([first, second], {})
+
+    assert output.chosen is first.response
+    assert output.vote_summary["fusion_skipped"] == "candidate responses contain tool calls"
+
+
 def test_aggregators_implement_runtime_protocol() -> None:
     assert isinstance(PassThroughAggregator(), AggregatorProtocol)
+    assert isinstance(FirstSuccessAggregator(), AggregatorProtocol)
+    assert isinstance(FusionAggregator(), AggregatorProtocol)
     assert isinstance(MajorityVoteAggregator(), AggregatorProtocol)
     assert isinstance(ScoringAggregator(), AggregatorProtocol)
     assert isinstance(RankAggregator(), AggregatorProtocol)

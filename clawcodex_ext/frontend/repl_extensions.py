@@ -25,7 +25,7 @@ import logging
 import shlex
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from clawcodex_ext.away_summary.controller import AwaySummaryController
 from clawcodex_ext.away_summary.registration import register_away_summary_commands
 from clawcodex_ext.cli.runtime_commands import register_runtime_commands
@@ -481,6 +481,63 @@ class _ImReplyController:
         return True
 
 
+class _ReplMultiModelRenderer:
+    """Render per-slot outcomes emitted by a :class:`MultiModelRouter`.
+
+    The router runs provider calls in worker threads, while the regular REPL
+    only receives the selected aggregate response.  Listening at the router
+    boundary lets the interactive transcript show the otherwise-audited
+    candidate responses without changing the query loop.
+    """
+
+    def __init__(self, repl: "ClawcodexREPL") -> None:
+        self._repl = repl
+        self._provider: Any | None = None
+
+    def bind(self, provider: Any) -> None:
+        """Subscribe to the active router, detaching from a prior provider."""
+        if self._provider is provider:
+            return
+        if self._provider is not None:
+            remove = getattr(self._provider, "remove_event_listener", None)
+            if callable(remove):
+                remove(self._on_router_event)
+        self._provider = provider
+        add = getattr(provider, "add_event_listener", None)
+        if callable(add):
+            add(self._on_router_event)
+
+    def _on_router_event(self, event: str, payload: dict[str, Any]) -> None:
+        if event != "aggregated":
+            return
+        results = payload.get("results") or []
+        if not results:
+            return
+
+        console = getattr(self._repl, "console", None)
+        if console is None:
+            return
+        console.print("\n[bold]多模型候选结果[/bold]")
+        for result in results:
+            response = getattr(result, "response", None)
+            slot = getattr(result, "slot_name", "unknown")
+            model = getattr(response, "model", "") or "unknown"
+            elapsed_s = getattr(result, "duration_ms", 0) / 1000
+            console.print(f"  [cyan]{slot}[/cyan] · {model} · {elapsed_s:.2f}s")
+            error = getattr(result, "error", None)
+            if error:
+                console.print(f"    错误: {error}", markup=False)
+                continue
+            content = (getattr(response, "content", "") or "").strip()
+            if content:
+                console.print("    " + content.replace("\n", "\n    "), markup=False)
+
+        output = payload.get("output")
+        chosen = getattr(getattr(output, "chosen", None), "model", None)
+        if chosen:
+            console.print(f"[dim]最终采用: {chosen}[/dim]")
+
+
 class _ReplRuntimeObserver:
     """Sync REPL private state when the runtime swaps provider.
 
@@ -490,8 +547,9 @@ class _ReplRuntimeObserver:
     after a provider swap so the next prompt uses the new model.
     """
 
-    def __init__(self, repl: "ClawcodexREPL") -> None:
+    def __init__(self, repl: "ClawcodexREPL", renderer: _ReplMultiModelRenderer) -> None:
         self._repl = repl
+        self._renderer = renderer
 
     def on_runtime_swap(self, runtime) -> None:
         repl = self._repl
@@ -499,6 +557,7 @@ class _ReplRuntimeObserver:
         repl.provider_name = runtime.provider_name
         repl.tool_registry = runtime.tool_registry
         repl.tool_context = runtime.tool_context
+        self._renderer.bind(runtime.provider)
         if hasattr(repl, "command_context") and repl.command_context is not None:
             repl.command_context.provider = runtime.provider
             repl.command_context.tool_registry = runtime.tool_registry
@@ -544,7 +603,10 @@ def install_repl_extensions(repl: "ClawcodexREPL", ctx) -> None:
     if runtime is None:
         return
 
-    attach_observer(runtime, _ReplRuntimeObserver(repl))
+    renderer = _ReplMultiModelRenderer(repl)
+    renderer.bind(runtime.provider)
+    repl._multimodel_renderer = renderer
+    attach_observer(runtime, _ReplRuntimeObserver(repl, renderer))
 
     # ---- SIGTERM / SIGINT: save session + print resume hint (S-R1) ----
     _register_signal_session_save(repl)

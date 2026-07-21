@@ -26,7 +26,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def _group_options(parser: argparse.ArgumentParser, *, required: bool = False) -> None:
     parser.add_argument("--strategy", choices=("parallel", "voting", "routing", "fallback"), required=required, default=None)
-    parser.add_argument("--aggregator", choices=("passthrough", "majority", "rank", "scoring"), default=None)
+    parser.add_argument("--aggregator", choices=("passthrough", "first_success", "majority", "rank", "scoring", "fusion"), default=None)
     parser.add_argument("--min-votes", type=int, default=None); parser.add_argument("--max-concurrent", type=int, default=None)
     parser.add_argument("--scorer-provider", default=None); parser.add_argument("--scorer-model", default=None)
     parser.add_argument("--route", action="append", default=[], metavar="PATTERN:SLOT")
@@ -37,6 +37,7 @@ def _format_group(name: str, group: GroupConfig) -> str:
     lines.append(f"Max concurrent: {group.max_concurrent}")
     if group.min_votes is not None: lines.append(f"Min votes: {group.min_votes}")
     if group.aggregator in {"scoring", "rank"}: lines.append(f"Scorer: {group.scorer_model} ({group.scorer_provider})")
+    if group.aggregator == "fusion": lines.append(f"Fusion model: {group.scorer_model} ({group.scorer_provider})")
     lines.append("Slots:")
     lines.extend(f"  - {s.name}: {s.model} ({s.provider}), weight={s.weight:g}, timeout={s.timeout_ms}ms" for s in group.slots)
     lines.extend(f"  route {route.pattern!r} -> {route.slot}" for route in group.routes)

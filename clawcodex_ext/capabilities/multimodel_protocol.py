@@ -24,6 +24,9 @@ class MultiModelResult:
     tokens: dict[str, int]
     error: str | None = None
     cancelled: bool = False
+    # Absolute completion time lets aggregators distinguish actual arrival
+    # order from configured slot order when calls run in parallel.
+    completed_at: float = 0.0
 
 
 @dataclass

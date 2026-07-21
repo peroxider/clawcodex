@@ -5,6 +5,8 @@ without changing core query-loop packages.
 """
 
 from .aggregators import (
+    FirstSuccessAggregator,
+    FusionAggregator,
     MajorityVoteAggregator,
     PassThroughAggregator,
     RankAggregator,
@@ -19,6 +21,8 @@ from .slots import ProviderSlot
 from .strategies import FallbackStrategy, ParallelStrategy, RoutingRule, RoutingStrategy, VotingStrategy
 
 __all__ = [
+    "FirstSuccessAggregator",
+    "FusionAggregator",
     "MajorityVoteAggregator",
     "PassThroughAggregator",
     "RankAggregator",

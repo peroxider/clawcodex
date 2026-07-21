@@ -17,6 +17,7 @@ from clawcodex_ext.multimodel import (
     SessionBridge,
 )
 from clawcodex_ext.multimodel.aggregators import PassThroughAggregator
+from clawcodex_ext.multimodel.aggregators import FirstSuccessAggregator
 from clawcodex_ext.multimodel.aggregators import MajorityVoteAggregator
 from clawcodex_ext.providers.base import BaseProvider, ChatResponse
 
@@ -76,6 +77,17 @@ def test_fallback_moves_on_after_error_and_timeout() -> None:
     assert router.chat([{"role": "user", "content": "hello"}]).content == "recovered"
     assert [item.slot_name for item in router.last_result or []] == ["bad", "slow", "good"]
     assert "Timeout" in (router.last_result or [])[1].error
+
+
+def test_first_success_selects_the_fastest_parallel_slot() -> None:
+    slow, fast = Provider("slow", delay=0.05), Provider("fast", delay=0.001)
+    router = MultiModelRouter(
+        [ProviderSlot("slow", slow), ProviderSlot("fast", fast)],
+        ParallelStrategy(),
+        FirstSuccessAggregator(),
+    )
+
+    assert router.chat([{"role": "user", "content": "hello"}]).content == "fast"
 
 
 def test_routing_selects_rule_target_and_sync_api_works_inside_event_loop() -> None:

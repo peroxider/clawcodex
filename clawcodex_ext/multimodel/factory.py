@@ -8,7 +8,14 @@ from .aggregators.base import parse_score_json
 from .session_bridge import SessionBridge
 from .feature import require_multimodel_enabled
 
-from .aggregators import MajorityVoteAggregator, PassThroughAggregator, RankAggregator, ScoringAggregator
+from .aggregators import (
+    FirstSuccessAggregator,
+    FusionAggregator,
+    MajorityVoteAggregator,
+    PassThroughAggregator,
+    RankAggregator,
+    ScoringAggregator,
+)
 from .config import GroupConfig
 from .router import MultiModelRouter, RouterConfig
 from .slots import ProviderSlot
@@ -66,6 +73,8 @@ def _aggregator(group: GroupConfig, provider_builder: Callable[[str, str], objec
         return None
     if group.aggregator == "passthrough":
         return PassThroughAggregator()
+    if group.aggregator == "first_success":
+        return FirstSuccessAggregator()
     if group.aggregator == "majority":
         return MajorityVoteAggregator(group.min_votes or 2)
     if group.aggregator == "rank":
@@ -84,5 +93,10 @@ def _aggregator(group: GroupConfig, provider_builder: Callable[[str, str], objec
         return ScoringAggregator(
             scorer_model=group.scorer_model,
             scorer_provider=provider_builder(group.scorer_provider, group.scorer_model),  # type: ignore[arg-type]
+        )
+    if group.aggregator == "fusion":
+        return FusionAggregator(
+            fusion_model=group.scorer_model,
+            fusion_provider=provider_builder(group.scorer_provider, group.scorer_model),  # type: ignore[arg-type]
         )
     raise ValueError(f"unknown multi-model aggregator: {group.aggregator}")
