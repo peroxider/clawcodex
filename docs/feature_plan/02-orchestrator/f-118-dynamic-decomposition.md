@@ -1,6 +1,6 @@
 # F-118: 动态任务分解引擎
 
-> 状态: 🟡 MVP 已实现（核心 8 项全部落地，§4 后续增强未做）
+> 状态: 🟡 MVP 已实现（核心 10 项全部落地，§4 后续增强 7 项未做）
 > 章节: docs/feature_plan/02-orchestrator/f-118-dynamic-decomposition.md
 > 最后更新: 2026-07-21
 
@@ -66,6 +66,8 @@ swarm。
 | 结果合并 | coordinator prompt 强制结构化汇总 worker 事实、改动、测试和风险 |
 | 验证循环 | coordinator 可创建有界 repair task；最终仍走原有 orchestrator verification |
 | 可恢复证据 | seed plan 持久化到 `.orchestrator_control/task_decomposition.json` |
+| 执行证据校验 | worker 按 schema 写入 `task_evidence/<task-id>.json`（status / evidence / timestamps），`validate_task_execution` 在 coordinator 完成后校验：全部 completed、有非空证据、依赖顺序（mtime 排序）、并行峰值 ≤ max_parallel。**per-task 文件中的 timestamp 仅作为 worker 声明，依赖顺序以 host 文件 mtime 为准。** |
+| session 合约注入 | `SwarmModeRunner.run()` 在 coordinator 运行前注入 4 个 session 属性：`session.task_decomposition_path`（plan 文件路径）、`session.task_decomposition`（seed plan 的 dict snapshot）、`session.prompt_override`（含 evidence 指令的 swarm prompt）、`session.run_kind = "swarm"`。上层调用者（report_writer、dashboard）可通过这些属性感知 swarm 上下文。 |
 
 ## §2 设计约束
 
@@ -80,20 +82,36 @@ swarm。
 - [x] `TaskPlan` / `Subtask` 数据模型和校验
 - [x] 显式任务提取和三阶段 fallback 分解
 - [x] 依赖拓扑排序和 bounded waves
-- [x] 计划 JSON 原子落盘
+- [x] 计划 JSON 原子落盘（`.orchestrator_control/task_decomposition.json`）
 - [x] `SwarmModeRunner` + coordinator 调度
 - [x] `mode:swarm`、heuristic router 和 mode registry
 - [x] `--swarm` / `--decompose` / `--effort swarm`
-- [x] 单元测试覆盖计划、路由、配置、runner 和 CLI parser
+- [x] `build_swarm_prompt` 生成含 evidence 指令的 coordinator prompt（per-task 写入 `task_evidence/<task-id>.json`，host mtime 做依赖排序，不在并行 worker 间共享文件）
+- [x] `validate_task_execution` 执行证据校验（全部 completed、非空证据、依赖顺序、并行峰值 ≤ max_parallel）
+- [x] 单元测试覆盖计划、路由、配置、runner、CLI parser 和 evidence 校验（7 个 evidence 专项测试）
 
 ## §4 后续增强
 
 - [ ] 用可注入 LLM planner 对 seed plan 做结构化重写，而不是只让 coordinator 在 prompt
-  中自行细化。
-- [ ] 将 worker 的完成状态和证据按 schema 回写 task graph，并在缺失时硬失败。
-- [ ] 接入每个 subtask 的独立 token/cost 计量和 issue 级美元预算。
-- [ ] daemon 崩溃后根据 task graph 状态从未完成 wave 恢复，而不是整轮重跑。
-- [ ] 为文件所有权冲突增加静态检查，而不只依赖 coordinator 指令。
+  中自行细化。当前 `TaskDecomposer` 是纯 deterministic 的（正则提取 + 三阶段 fallback），
+  `__init__` 未预留 LLM 客户端或 planner 策略注入点。
+- [ ] 将 worker 的完成状态和证据按 schema 回写 task graph，并在缺失时硬失败。当前
+  `validate_task_execution` 能从 `task_evidence/*.json` 读取证据，但
+  `task_decomposition.json` 本身和 `session.task_decomposition` 始终是 seed plan 的
+  snapshot，不会随 coordinator 运行更新。
+- [ ] 接入每个 subtask 的独立 token/cost 计量和 issue 级美元预算。`Subtask` 模型无
+  `token_cost` / `budget` 字段，`SwarmModeRunner` 未注入 cost tracker。
+- [ ] daemon 崩溃后根据 task graph 状态从未完成 wave 恢复，而不是整轮重跑。当前无
+  checkpoint 机制，`SwarmModeRunner.run()` 未在 wave 边界写恢复点，`Orchestrator`
+  也没有读取已有 task graph 重新入队的逻辑。（每次都是从头分解 + 全量执行。）
+- [ ] 为文件所有权冲突增加静态检查，而不只依赖 coordinator 指令。当前 `Subtask` 无
+  `affected_files` 字段，`TaskPlan.validate()` 不检查文件重叠，`validate_task_execution`
+  也不验证。冲突防护完全依赖 `build_swarm_prompt` 中的软约束（prompt rule #3）。
+- [ ] 在 `SwarmModeRunner.run()` 启动前清理 `task_evidence/` 目录，避免 F-39 retry 场景
+  下旧 evidence 文件残留导致 `validate_task_execution` 假阳性失败。
+- [ ] CLI `--swarm` 模式（`dispatch.py` 中的 `Issue(id="cli-swarm")`）不经过 orchestrator
+  的正常 issue 跟踪流程：无 `IssueRecord` 持久化、无 summary comment、无 PR 创建。考虑
+  在 CLI 模式下也生成报告或明确告知用户这一限制。
 
 ## §5 变更记录
 
@@ -105,3 +123,4 @@ swarm。
 | 2026-07-11 | 完成 bounded swarm MVP，改为复用 coordinator | 避免重复运行时和非交互 fork 冲突 |
 | 2026-07-20 | `2f7b0cff` F-118 task decomposition and F-124 issue clarifier MVP | TaskDecomposer + SwarmModeRunner + 模式路由 + CLI 集成 + 单元测试正式合入（核心 commit） |
 | 2026-07-21 | 文档同步 | 补全 commit hash 与实现统计（行数 / 测试通过数），状态行增补 §4 待办标注 |
+| 2026-07-21 | 文档补全 | 补全 §1 能力表（执行证据校验、session 合约注入）、§3 已完成列表（build_swarm_prompt / validate_task_execution / 7 个 evidence 专项测试）、§4 后续增强（task_evidence 清理、文件冲突静态检查、CLI 模式限制、每项附实现状态说明）
