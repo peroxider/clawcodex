@@ -14,7 +14,6 @@
 | 文档 | 范围 | 状态 |
 |------|------|:----:|
 | [f-64-voice-mode.md](./f-64-voice-mode.md) | F-64 Voice Mode 语音输入 | 🔄 |
-| [f-65-voice-dialogue.md](./f-65-voice-dialogue.md) | **F-65 Voice Dialogue 全双工语音对话** | ✅ |
 | [f-66-acp-protocol.md](./f-66-acp-protocol.md) | F-66 ACP 协议支持 | 🚧 |
 | [f-69-budget-mode.md](./f-69-budget-mode.md) | F-69 Budget / Poor Mode 资源节俭 | 🔄 |
 | [f-70-plugin.md](./f-70-plugin.md) | F-70 Plugin 插件系统基础框架 | 🔄 |
@@ -37,7 +36,6 @@
 | [f-96-cache-break-detection.md](./f-96-cache-break-detection.md) | F-96 PROMPT_CACHE_BREAK_DETECTION 缓存命中率监测 | 📋 |
 | [f-98-ssh-remote.md](./f-98-ssh-remote.md) | F-98 SSH_REMOTE 远程模式（协同 F-74） | 📋 |
 | [f-99-direct-connect.md](./f-99-direct-connect.md) | F-99 DIRECT_CONNECT 直连模式 | 🔄 |
-| [f-125-headless-multi-turn.md](./f-125-headless-multi-turn.md) | **F-125**: Headless 无头模式多轮交互 + `--resume` 冲突分析 | ✅ |
 
 ## 阅读建议
 
@@ -170,3 +168,4 @@
 | 2026-07-01 | 分解 gap-analysis:F-NN 派工下沉到各 `f-NN-*.md` §0;矩阵/路线图并入本 README | gap-analysis 与详细设计文档并列显得冗余,统一入口 |
 | 2026-07-04 | 删除 F-89/F-93/F-97 已完成特性规划文档;同步目录索引状态(F-66 🚧、F-72/F-84/F-87 🔄、F-94/F-125 🚧) | 全量复核 49 个 F-Number 文档 vs 代码层,识别 3 个 ✅ 完全实现 + 6 处状态不一致 |
 | 2026-07-21 | 同步 F-84/F-87/F-88/F-92/F-95 为 ✅;修正 §A 缺口矩阵中 F-84/F-87/F-88/F-92/F-94/F-95/MONITOR_TOOL/DAEMON 的旧状态;F-94 保持 🚧(P94-G 待 F-93) | 代码确认 5 个特性完全落地,矩阵与目录索引/单篇文档达成一致 |
+| 2026-07-21 | 删除 F-65/F-125 已完成特性规划文档;同步目录索引移除对应条目;F-72 更新为 🟡 部分实现 | 代码核查确认 F-65 Voice Dialogue 全双工、F-125 Headless 多轮交互均已落地;F-72 原生适配器已在 `clawcodex_ext/providers/native/` 实现 |
