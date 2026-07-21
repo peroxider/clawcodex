@@ -88,7 +88,6 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 交付件 |
 |---------|---------|----------------|--------------------|----------|--------|
 | AR-F-9  | /goal 命令（目标管理） | 目标管理、进度跟踪 | 用户可设置和管理 Agent 目标 | 📋 规划中→F-9 | CLI 命令、UI |
-| AR-F-119 | System Prompt 段落拼装与自迭代基础设施 | 7 个子特性：P119-A 通用 section builder registry（仿 `register_memory_section_builder` 泛化到 7 个静态段 + 动态段）；P119-B 段落级 override API（`override_section` / `insert_section` / `disable_section`）；P119-C prompt dump 观测接口（`dump_effective_system_prompt` 返回 `SectionSnapshot` 含 sha256）；P119-D 自迭代元 prompt 注入器；P119-E 变体框架骨架（`extensions/prompt_lab/`：VariantManager + ExperimentAssignment + MetricsSink）；P119-F 段落 cache 失效联动；P119-G 稳定性门禁 + 5 路径拼装快照测试；保持 `src/context_system/prompt_assembly.py` 零改动 | 下游扩展可对单个静态段做覆盖/调整/插入新段；自迭代框架可"看到真实 prompt"做 A/B 和版本回滚；与 F-100 dreaming consolidate、F-102 P102-D pre_llm 钩子、F-68 feature gate 协同 | ✅ 已完成 → F-119（已移除） | `clawcodex_ext/context_system/{section_registry,section_override,prompt_dump,iter_meta}.py` + `extensions/prompt_lab/`（variants/experiments/sinks/ndjson/capabilities）+ tests/misc/test_section_registry.py + tests/misc/test_prompt_dump.py |
 
 #### SR-1.2 工具与技能执行（→ FEATURE_PLAN §2.4 MCP 扩展（F-3）、§2.7 F-10 ExecuteExtraTool、§4.3 F-52 SDK→Tool 注册）
 
@@ -99,7 +98,6 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 交付件 |
 |---------|---------|----------------|--------------------|----------|--------|
 | AR-F-10 | ExecuteExtraTool 延迟执行 | 大量工具的按需发现与调用 | 用户可在工具很多时按需调用额外工具 | ⏳ 待开始 → F-10 | py 工具、动态注册逻辑 |
-| AR-F-107 | PowerShell 支持增强 | 8 个子特性：A. 工具 schema 扩展 + shell 检测；B. 进程启动层适配（pwsh 替换 bash）；C. 工具 Prompt 适配；D. 命令分类适配（PowerShell cmdlet pipeline → search/read）；E. 命令语义&退出码适配（`Select-String` RC=1 = 无匹配）；F. PowerShell 安全分析（destructive 检测）；G. 技能系统 shell 传播；H. Shell 基础设施统一（`shell_resolver.py` 落 `clawcodex_ext/utils/`） | Windows 用户原生使用 PowerShell；`BashTool.call({"shell":"powershell"})` 切换；`shell:"auto"` win32 自动选择 PowerShell；技能 frontmatter `shell: powershell` 实际生效 | ✅ 已完成 → F-107（已移除） | `bash_tool.py / background.py / prompt.py / search_classification.py / read_only_validation.py / command_semantics.py / bash_security.py + powershell_security.py / skill.py / runtime_substitution.py + clawcodex_ext/utils/shell_resolver.py` |
 
 #### SR-1.3 模型与 Provider 接入（→ FEATURE_PLAN §3.1 CLI 模型供应商与模型切换设计（F-43））
 
@@ -158,7 +156,6 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 |---------|---------|----------------|--------------------|----------|--------|
 | AR-F-48 | src/ 核心路径二开修改解耦方案 | 架构解耦方案设计（Phase 0-3 已设计，Phase 4-9 待实施） | 用户可安全且更解耦二开扩展 | 📋 设计完成 → F-48 | py 解耦方案、文档 |
 | AR-F-22 | Daemon Soak 测试 | 长期运行不 OOM、不丢事件 | 用户在长值守中不丢会话 | 📋 规划中 → F-22 | py soak 测试、监控 |
-| AR-F-108 | Freeze Detection & Auto-Recovery | 8 个子特性四层方案：Layer 0 快速修复（P108-A Permission/AskUser `done.wait(30)` → auto-deny + P108-B headless `asyncio.wait_for(future, 300)` + P108-C Tool 执行 `asyncio.wait_for(120)`）+ Layer 1 FreezeDetector 冻结检测（60s 阈值 + thread stack dump）+ Layer 2 硬超时（agent_loop 600s / turn 300s / tool 120s / permission 30s / freeze 60s）+ Layer 3 自动恢复（permission 超时→auto-deny / tool 超时→cancel / turn 超时→abort）+ Layer 4 诊断命令（`freeze-report` / `diag viewer` / SIGUSR1 dump）；`CLAWCODEX_FREEZE_DIAG=1` 环境变量启用；8 个卡死风险点审计（2 CRITICAL + 3 HIGH + 2 MEDIUM + 1 LOW） | 用户在卡死发生 <30s 内自动恢复或收到明确诊断；0 个 `src/` 文件被修改（完全解耦扩展实现） | ✅ 已完成 → F-108（Phase 1~6 顺序：Permission+Headless → Tool → FreezeDetector+Schema → 三层硬超时 → 自动恢复 → CLI） | `clawcodex_ext/agent/run_agent.py` / `clawcodex_ext/entrypoints/headless.py` / `clawcodex_ext/tui/agent_bridge.py` / `clawcodex_ext/query/query.py` / `extensions/api/query.py` / `clawcodex_ext/providers/anthropic_provider.py` + `clawcodex_ext/diagnostics/freeze_detector.py` + `extensions/orchestrator/config/schema.py` + `clawcodex-dev diag freeze-report` CLI |
 
 #### SR-2.4 工具使用统计与策略（→ FEATURE_PLAN §2.8 工具/Skill 调用统计（F-75））
 
@@ -218,7 +215,6 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR-F-112 | GATE 门禁处理器 | 3 种审批模式：manual（ClarificationQueue F-39 暂停工作流）/ auto（ValidatorSpec 全通过）/ threshold（LLM-as-judge 评分达标）；复用 F-44 人工检视闸门扩展为 `workflow gate --approve/--reject`；GATE_PENDING 工作流级状态；rollback 恢复 | 用户可在工作流任意阶段插入人工/自动/阈值门禁，工作流级 rollback 恢复阶段状态 | 🟡 进行中 → F-112（core 代码已落地；E2E 验证与完整审批模式待完善） | `extensions/orchestrator/workflow_engine/{gate_handler,gate_modes,gate_rollback}.py` |
 | AR-F-113 | DECISION 决策处理器 | 多结果分支（proceed/pivot/refine）+ 回环次数检查 + 收敛检测（识别退化循环）+ 阶段目录快照 + 版本化回滚 | 工作流可在 DECISION 节点按 outcome 路由，回环次数超限/退化自动回滚 | 🟡 进行中 → F-113（core 代码已落地；收敛检测与回滚待完善） | `extensions/orchestrator/workflow_engine/{decision_handler,decision_history,rollback}.py` |
 | AR-F-114 | 阶段契约验证器 | 7 种内置 Validator：file_exists / file_size / regex / json_schema / line_count / llm_judge / custom（subprocess + exit code）；`ContractValidator` + 注册表 | 工作流可机器可验证阶段输出 DoD（文件存在、大小、行数、JSON schema、LLM 评分） | 🟡 进行中 → F-114（core 代码已落地；自定义 Validator 扩展待完善） | `extensions/orchestrator/workflow_engine/validators/{builtin,llm_judge,custom}.py` |
-| AR-F-115 | 检查点与恢复 | 工作流级检查点 JSON 持久化（workflow_name/version/current_stage/completed_stages/stage_results/decision_history/cost_accumulated_usd/started_at/last_checkpoint）；原子写入（temp file + rename）；`WorkflowOrchestrator` 自动检测、恢复与清理检查点；`ArtifactResolver` 跨阶段产物路径解析；复用 `SessionStorage`（F-49）+ `StateJournalWriter`（F-96-A） | 用户可在任意阶段中断后从检查点恢复执行，断电/崩溃不丢阶段状态与成本累计；工作流成功后自动清理检查点 | ✅ 已完成 → F-115 | `extensions/orchestrator/workflow_engine/checkpoint.py`（已合并 `WorkflowResumer` / `ArtifactResolver`）、`engine.py`、`workflow_orchestrator.py` |
 | AR-F-116 | 工作流可观测性集成 | State Journal NDJSON（workflow_stage_start/workflow_gate_request/workflow_decision/workflow_complete）+ Gantt 图（阶段执行时间）+ Tool-call NDJSON 审计（F-45）+ WorkflowProgressSink 阶段完成百分比（F-40）+ 每阶段 ProgressReportTool 触发（F-20） | 用户可在 Visualizer 看到工作流甘特图、决策/门禁历史、阶段完成百分比；与单 session 可视化复用同一 NDJSON 格式 | 🟡 进行中 → F-116（core 代码已落地：observability/audit/progress；与 Visualizer 集成待完善） | `extensions/orchestrator/workflow_engine/{observability,progress,audit}.py` |
 
 ### 3.2 IR-4 业务 Agent 与远程值守（→ FEATURE_PLAN §2.9（F-18）、§4.2 F-50 SOP 固化、§4.3 F-52 SDK→Tool）
@@ -235,7 +231,6 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 |---------|---------|----------------|--------------------|----------|--------|
 | AR-F-50 | SOP 转换器固化 | 核心（已完成）：OpenAPI JSON/URL 解析、方法列表解析、Skill Grouper 原子接口分组、Agent Builder 生成 Agent 定义、`/convert-sop-to-agent` Skill、Agent 持久化、`--agent` CLI 参数指定、default_agent 配置、daemon 模式、attach 重连；工作流模式（F-50-A~G, 2026-06-30 全链路落地）：工作流判别器（启发式评分 SDK/工作流模式）+ 工作流结构提取器（AST 提取阶段/转换/GATE/DECISION）+ 阶段能力映射器（agent_native/wrapper/hybrid）+ 工作流 Schema 生成器（workflow.yaml）+ Agent 定义生成器 + 源码桥接器生成器 + 提取器适配器库（AutoResearchClaw/通用 Python 管线） | 用户可把 CI/CD/数据分析等专业系统一键转为可运行的业务 Agent；F-50-A~G 落地后还可生成多阶段工作流式 Agents（与 F-110 协同） | 🟡 进行中 → F-50（核心 + F-55 分组策略增强 + F-50-A~G 工作流模式全链路 2026-06-30 合入；2026-07-03 `F-50 模块补全 — type_schema/composite_tools/arc 缺失文件` 已闭环） | py parser、grouper、builder、skill、Agent JSON、CLI、daemon、attach 协议 + workflow_mode/ |
 | AR-F-52 | SDK→Tool 注册（SOP→Agent 工具桥接） | Python SDK 方法注册为 Tool；SOP→Agent 工具桥接系统完整实现（2026-06-30）：Bundle 隔离、ToolSearch 检索、搜索标签、AsyncGenerator 支持；SOP 转换解析出的 SourceOperation（如 `detect_modality`/`load_dataset`）注册为可调用 Tool、`ToolWrapper` + `register_source_operations` + `AgentBuilder` 增量 + `agent_loader_hook`（P85-E 内置模板目录 5 套） | 用户可让 Agent 调用 Python SDK 接口扩展能力；SOP 生成的方法可作为 Tool 自动注册；内置 5 套模板支持开箱即用 Agent 定义 | 🟡 收尾 → F-52（基础 SDK→Tool + SOP→Agent 工具桥接 + P85-E 内置模板目录均已完成；剩余 SOP 解析源扩展子特性部分小颗粒） | py SDK 工具、schema、测试 + `extensions/sop_converter/tool_registry.py` + `extensions/sop_converter/templates/` |
-| AR-F-53 | Tool→CLI 命令映射 | Tool 自动映射为 `/tool-name` 斜杠命令（无手动配置）；参数从 Tool param schema 自动推导（`--param value` 风格）；核心工具（Read/Write/Bash 等）不产生命令避免冲突；保持 `src/*` 零改动 | 用户可通过 CLI 斜杠命令调用注册的工具，SOP 生成方法可直接 CLI 入口；TUI 斜杠自动补全包含已注册工具 | ✅ 已完成 → F-53（已移除） | `clawcodex_ext/cli/tool_cmd/{discovery,command,hooks}.py` |
 
 #### SR-4.2 远程启动与自动值守（→ FEATURE_PLAN §7.1 F-82 Remote Control Server + F-90 Hermes Gateway 参考实现）
 
@@ -363,32 +358,20 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | AR-F-96 | PROMPT_CACHE_BREAK_DETECTION | 缓存命中率监测、断点检测与告警 | 用户可优化 prompt 模板减少缓存断点 | 📋 规划中 → F-96 | `extensions/ccb_integration/cache_monitor/` |
 | AR-F-98 | SSH_REMOTE 远程模式 | SSH 隧道、远程执行、协同 F-74 Sandbox | 用户可通过 SSH 远程执行 Agent 任务 | 📋 规划中 → F-98 | `extensions/ccb_integration/ssh_remote/` |
 
-### 4.2 IR-6 Agent Dashboard 跨系统统一看板（→ 源码 `extensions/capabilities/dashboard_entry.py` + `extensions/agent_dashboard/`）
-
-让用户、Agent（模型）、Operator 通过统一的视图查看当前所有 agent loop 相关的任务执行进度。
-
-**核心定位**：数据聚合层 + 契约接口，**不做独立渲染**。渲染由已有消费端（TUI `/dashboard` 命令、Visualizer Web UI、Model Tools）各自完成。
-
-#### SR-6.1 跨系统聚合 Dashboard（→ 源码 `extensions/agent_dashboard/store.py` 与 `sources/`）
-
-| AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 开发工时 | 交付件 |
-|---------|---------|----------------|--------------------|----------|----------|--------|
-| AR-F-120 | Agent Dashboard 跨系统任务进度统一看板 | Phase 1 Protocol 与数据模型（`DashboardEntry` + `DashboardSource` Protocol + `DashboardStore` 聚合 + NDJSON 归档 + 缓存 TTL + sink 注册）+ Phase 2 数据源（GoalSource 读 `GoalStateRegistry` / TasksSource 读 `ToolContext.tasks` / OrchestratorSource 可选 / SOPSource 可选）+ Phase 3 终端渲染（`/dashboard` 斜杠命令 + Rich markup 分区视图，TTY 模式支持滚动/过滤）+ Phase 4 Agent 侧只读工具（`DashboardGet`/`DashboardList`）+ Phase 5 Web 渲染（Visualizer 新增 tab，可选）+ Phase 6 Orchestrator/SOP 数据源（可选） | 用户可在 REPL `/dashboard` 看到所有 session 的 `/goal` 目标 + Agent Tasks + Orchestrator 流水线 + SOP 工作流阶段；Agent 可通过 `DashboardList("all")` 读取跨系统进度；保持只读聚合，写入仍走各自子系统入口（TaskCreate/Goal/update） | ✅ 已完成 → F-120（已移除） | `extensions/capabilities/{dashboard_entry,dashboard_source}.py` ✅ + `extensions/agent_dashboard/{store,source_registry,sources/}.py` + `clawcodex_ext/command_system/dashboard_command.py` + `extensions/agent_dashboard/tools/{dashboard_get,dashboard_list}.py` + Visualizer tab（可选） |
-
 ## 5. 分层依赖图
 
 ```text
 底层特性:
   IR-1 Agent 可运行底座
-    ├── SR-1.1 会话与上下文管理         (含 AR-F-119 System Prompt 段落拼装)
-    ├── SR-1.2 工具与技能执行           (含 AR-F-107 PowerShell 支持增强)
+    ├── SR-1.1 会话与上下文管理
+    ├── SR-1.2 工具与技能执行
     ├── SR-1.3 模型与 Provider 接入
     ├── SR-1.4 权限与前端交互           (含 AR-F-99 中断响应)
     └── SR-1.5 后台、恢复与远程桥接
   IR-2 可观测、可调度与可维护底座
     ├── SR-2.1 任务进度与可观测         (含 AR-F-54 观测点 + AR-F-102 Hook 扩展点)
     ├── SR-2.2 定时任务与调度
-    ├── SR-2.3 稳定性与开放替代         (含 AR-F-108 Freeze Detection)
+    ├── SR-2.3 稳定性与开放替代
     └── SR-2.4 工具使用统计与策略
         ↓
 场景特性:
@@ -398,7 +381,7 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
     ├── SR-3.3 验证、报告与 PR 质量     (含 AR-F-121 PR review 规则回灌)
     └── SR-3.4 多 Agent 编排与 A2A 协作 (含 AR-F-110~116 声明式工作流引擎系列)
   IR-4 业务 Agent 与远程值守
-    ├── SR-4.1 SOP                      (含 AR-F-50 子特性 A~G + AR-F-52 扩展 + AR-F-53)
+    ├── SR-4.1 SOP                      (含 AR-F-50 子特性 A~G + AR-F-52 扩展)
     ├── SR-4.2 远程启动与自动值守
     └── SR-4.3 业务 Agent 长期运行
         ↓
@@ -410,7 +393,6 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
     ├── SR-5.4 自我更新、发布与回滚
     ├── SR-5.5 经验沉淀与策略优化
     └── SR-5.6 CCB 对标缺口补缺
-  IR-6 Agent Dashboard 跨系统统一看板  (新增, AR-F-120)
         ↓
 解耦方案（独立目录，参见 docs/decoupling/README.md）
 ```
@@ -441,7 +423,6 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | P0 | SR-3.3 PR review follow-up 闭环 | AR-F-37（PR Review 自动修复闭环） |
 | P1 | SR-1.4 F-99 Ctrl+C/B 响应优化 | AR-F-99（httpx read_timeout / 传输关闭 / 工具可取消） |
 | P1 | SR-3.1 F-46 permission_split | AR-F-46（F-46.0 audit_log 端到端验证 + F-46.1/2 字段拆分） |
-| P2 | SR-2.3 Freeze Detection 稳定性补强 | AR-F-108（Freeze Detection 四层方案） |
 | P2 | SR-2.1 F-54 运行期可观测性 | AR-F-54（5 个观测阶段 Phase 1~5 + CLI 诊断字段） |
 
 ### 6.2 中期:业务 Agent 与远程值守
@@ -451,13 +432,10 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | P0 | SR-4.1 SOP MVP | AR-F-50（SOP 转换器固化：OpenAPI 解析/Skill Grouper/Agent Builder/CLI；后续 F-50-A~G 工作流模式） |
 | P1 | SR-4.2 Autonomy Status | AR-F-22（Cron 驱动巡检与自治状态） |
 | P1 | SR-3.4 声明式工作流引擎 | AR-F-110~F-116（F-110-A~F 子特性 + StageRunner + GATE/DECISION + 验证器 + 检查点 + 可观测性集成） |
-| P1 | SR-1.1 System Prompt 自迭代 | AR-F-119（段落拼装 + dump + override + prompt_lab 骨架） |
 | P2 | SR-3.4 A2A 协议雏形 | AR-F-2（A2A 协议化 Agent 互联） |
 | P2 | SR-4.2 Remote Trigger MVP | AR-F-7（RemoteTrigger 远程启动与 WebUI） |
-| P2 | SR-1.2 PowerShell 支持 | AR-F-107（PowerShell 支持增强 8 个子特性） |
 | P2 | SR-3.1 动态任务分解 | AR-F-118（swarm/decompose 触发 + 子 agent 调度） |
 | P2 | SR-3.3 PR review 规则回灌 | AR-F-121（F-121-A~D/H/I P0 配置+提取+注入+orchestrator 集成；F-121-E/F/G/J/K P1 去重合并+CLI；F-121-L P2 多 workflow 隔离） |
-| P2 | IR-6 Agent Dashboard | AR-F-120（Phase 2 数据源 + Phase 3 `/dashboard` 命令 + Phase 4 Model Tools） |
 
 ### 6.4 版本发布里程碑
 
@@ -602,11 +580,10 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 > 
 > | 类别 | 抽象需求 (IR) | 系统需求 (SR) | 组件需求 (AR) | 说明 |
 > |------|---------------|---------------|---------------|------|
-> | 底层特性 | 2 (IR-1, IR-2) | 9 (SR-1.1 ~ SR-1.5, SR-2.1 ~ SR-2.4) | ~108 | AR-F-107/108/119 |
-> | 场景特性 | 2 (IR-3, IR-4) | 7 (SR-3.1 ~ SR-3.4, SR-4.1 ~ SR-4.3) | ~33 | AR-F-46/110/111/112/113/114/115/116/118/121 |
+> | 底层特性 | 2 (IR-1, IR-2) | 9 (SR-1.1 ~ SR-1.5, SR-2.1 ~ SR-2.4) | ~108 | — |
+> | 场景特性 | 2 (IR-3, IR-4) | 7 (SR-3.1 ~ SR-3.4, SR-4.1 ~ SR-4.3) | ~33 | AR-F-46/110/111/112/113/114/116/118/121 |
 > | 未来规划特性 | 1 (IR-5) | 5 (SR-5.1 ~ SR-5.5) + SR-5.6 CCB 缺口 | ~28 | 合并后每 AR 对应一个特性模块 |
-> | Agent Dashboard | 1 (IR-6) | 1 (SR-6.1) | 1 (AR-F-120) | 全新 IR 章节 |
-> | **合计** | **6** | **22** | **~170** | 较原 368 减少 ~54% |
+> | **合计** | **5** | **21** | **~169** | 较原 368 减少 ~54% |
 
 每个 IR 下挂 4~5 个 SR，平均每 SR 下挂 3~7 个 AR（合并后）。
 
@@ -652,7 +629,6 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | F-112 | GATE 门禁处理器 | Orchestrator | 🟡 | AR-F-112 | §3.4 SR-3.4 |
 | F-113 | DECISION 决策处理器 | Orchestrator | 🟡 | AR-F-113 | §3.4 SR-3.4 |
 | F-114 | 阶段契约验证器 | Orchestrator | 🟡 | AR-F-114 | §3.4 SR-3.4 |
-| F-115 | 检查点与恢复 | Orchestrator | ✅ | AR-F-115 | §3.4 SR-3.4 |
 | F-116 | 工作流可观测性集成 | Orchestrator | 🟡 | AR-F-116 | §3.4 SR-3.4 |
 | F-118 | 动态任务分解引擎 | Orchestrator | 🟡 | AR-F-118 | §3.1 SR-3.1 |
 | F-121 | PR 代码检视意见规则回灌 | Orchestrator | 🟡 | AR-F-121 | §3.3 SR-3.3 |
@@ -662,7 +638,7 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | F-128 | 定时全量代码审查 | Orchestrator | 📋 | — | §3.3 |
 | F-130 | 自校正上下文切换 | Agent Core | 📋 | — | §2.1 SR-1.1 |
 
-**统计**：46 个 F-N 中，🟡 进行中 24 / 📋 规划中 17 / ⏳ 待开始 1 / ✅ 已完成 1（F-115，已从路线图中移除）
+**统计**：46 个 F-N 中，🟡 进行中 24 / 📋 规划中 17 / ⏳ 待开始 1（F-10）/ ✅ 已完成 0（全部已从路线图中移除）
 
 ### B.2 v4.5 → v4.6 主要变更摘要（ROADMAP 更新）
 
