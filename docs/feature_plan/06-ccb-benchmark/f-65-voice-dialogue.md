@@ -1,8 +1,8 @@
 # F-65: Voice Dialogue Mode 语音对话模式（全双工）
 
-> 状态: 📋 规划中
+> 状态: ✅ 已完成（P65-A~D 全双工语音对话落地，P65-E OpenAI 备选待后续）
 > 章节: docs/feature_plan/06-ccb-benchmark/f-65-voice-dialogue.md
-> 最后更新: 2026-07-07
+> 最后更新: 2026-07-21
 
 ## §0 缺口摘要
 

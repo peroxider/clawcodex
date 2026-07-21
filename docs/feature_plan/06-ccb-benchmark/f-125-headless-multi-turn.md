@@ -2,11 +2,11 @@
 
 > **标签**: `headless`, `resume`, `entrypoint`, `multi-turn`, `ccb-gap`
 >
-> **状态**: 🚧 实施中（Phase 1+2 已落地，Phase 3 部分完成）
+> **状态**: ✅ 已完成（Phase 1+2+3 全部落地，36 测试通过）
 >
 > **上游对标**: `claude-code-best/src/cli/print.ts`
 >
-> **最后更新**: 2026-07-02
+> **最后更新**: 2026-07-21
 
 ---
 
