@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 CODEX_FALLBACK_MODELS = [
+    "gpt-5.5",
     "gpt-5.3-codex",
     "gpt-5.3-codex-spark",
 ]

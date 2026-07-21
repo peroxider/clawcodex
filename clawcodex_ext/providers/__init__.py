@@ -196,8 +196,9 @@ def _init_provider_extensions() -> None:
         {
             "label": "OpenAI Codex (ChatGPT OAuth)",
             "default_base_url": "https://chatgpt.com/backend-api/codex",
-            "default_model": "gpt-5.3-codex",
+            "default_model": "gpt-5.5",
             "available_models": [
+                "gpt-5.5",
                 "gpt-5.3-codex",
                 "gpt-5.3-codex-spark",
             ],

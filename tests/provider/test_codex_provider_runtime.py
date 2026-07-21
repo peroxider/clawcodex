@@ -27,7 +27,7 @@ class FakeCredentials:
 def test_openai_codex_is_registered_as_first_class_provider() -> None:
     assert PROVIDER_INFO["openai-codex"]["label"] == "OpenAI Codex (ChatGPT OAuth)"
     assert PROVIDER_INFO["openai-codex"]["default_base_url"] == CODEX_BASE_URL
-    assert PROVIDER_INFO["openai-codex"]["default_model"] == "gpt-5.3-codex"
+    assert PROVIDER_INFO["openai-codex"]["default_model"] == "gpt-5.5"
     assert AVAILABLE_PROVIDERS["openai-codex"] == "OpenAI Codex (ChatGPT OAuth)"
     assert get_provider_class("openai-codex") is OpenAICodexProvider
 
