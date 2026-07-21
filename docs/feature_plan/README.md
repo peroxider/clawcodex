@@ -104,6 +104,33 @@ docs/feature_plan/
 | F-125 | Headless 无头模式多轮交互 + `--resume` 冲突分析 | 🚧 | [f-125-headless-multi-turn.md](06-ccb-benchmark/f-125-headless-multi-turn.md) |
 | — | **CCB ↔ ClawCodex 缺口分析** | ✅ | [06-ccb-benchmark/README.md](06-ccb-benchmark/README.md) |
 
+### Agent 元架构 / 动态上下文 (Brainstorm)
+
+> 元架构脑暴规划，不申请 F-Number；落地时按子特性单独立项。详见 [dynamic-context-architecture.md](dynamic-context-architecture.md)。
+
+| 编号 | 名称 | 组别 | 核心杠杆 | 落地门槛 | 章节路径 |
+|:----:|------|------|:--------:|:--------:|---------|
+| DC-001 | 上下文模式热切换 | 生命周期 | 🟡 | 中 | [dynamic-context-architecture.md §3.A](dynamic-context-architecture.md) |
+| DC-002 | 上下文继承链 | 生命周期 | 🟡 | 中 | 同上 |
+| DC-003 | JIT 上下文合成 | 生命周期 | 🔴🔴 | 低 | 同上 |
+| DC-004 | 记忆分层 (W/E/S) | 生命周期 | 🟢 | 低-高 | 同上 |
+| DC-005 | 置信度声明协议 | 抗幻觉 | 🔴🔴🔴 | 低 | 同上 |
+| DC-006 | 工具强制验证 | 抗幻觉 | 🔴🔴 | 低-中 | 同上 |
+| DC-007 | 自相矛盾检测 | 抗幻觉 | 🔴 | 中 | 同上 |
+| DC-008 | 对抗质疑器 | 抗幻觉 | 🔴🔴 | 中 | 同上 |
+| DC-009 | 否定式检索 | 抗幻觉 | 🔴🔴🔴 | 低 | 同上 |
+| DC-010 | 多视角扇出 | 推理扩展 | 🔴🔴 | 中-高 | 同上 |
+| DC-011 | 假设并行情景 | 推理扩展 | 🟡 | 中 | 同上 |
+| DC-012 | 反事实推理 | 推理扩展 | 🔴 | 低 | 同上 |
+| DC-013 | 类比迁移 | 推理扩展 | 🟡 | 中 | 同上 |
+| DC-014 | 上下文即代码 (CaC) | 元架构 | 🟡 | 高 | 同上 |
+| DC-015 | 上下文时序回放 | 元架构 | 🟡 | 中 | 同上 |
+| DC-016 | 上下文市场 | 元架构 | 🟢 | 高 | 同上 |
+| DC-017 | 认知模式混合 | 元架构 | 🟡 | 中 | 同上 |
+| DC-018 | 涌现式上下文发现 | 元架构 | 🔴 | 低 | 同上 |
+| DC-019 | 上下文压力测试 | 元架构 | 🟢 | 高 | 同上 |
+| DC-020 | 边界追踪 | 元架构 | 🔴🔴🔴 | 低 | 同上 |
+
 ### 解耦方案（独立规划）
 
 > 解耦方案不归入 F-Number 体系，作为独立目录存在。详见 [../decoupling/README.md](../decoupling/README.md)。
@@ -128,3 +155,4 @@ docs/feature_plan/
 | 2026-07-11 | 删除 F-120 已完成特性规划文档 | F-120 Agent Dashboard 全部 6 个 Phase 完成（124 tests，commit 3639db2b 补齐三个缺口），移除 08-agent-dashboard 章节与 F-120 表行；SOP source 接入点改由 `extensions/agent_dashboard/sources/sop_source.py` 顶部 docstring 记录 |
 | 2026-07-13 | 新增 08-recording 章节与 F-156 Asciicast v2 录制器 | 5 子系统（orchestrator / query / SOP / visualizer / cron）零 src/ 改动落地，60 unit+integration 测试通过，稳定性门禁 Stages 1-5/7-9 全绿 |
 | 2026-07-14 | 新增 F-130 自校正上下文切换 | 在 F-119 section registry 基础上规划元认知换脑机制；模板 + Agent 自定义的 Profile 系统；循环检测器框架；上下文切换引擎 + rollback；默认 4 个 Profile（default/debug/creative/review） |
+| 2026-07-21 | 新增 dynamic-context-architecture.md (DC-001 ~ DC-020) | 用户提出"动态上下文切换/装配/生成"挑战性脑暴问题；沉淀 20 项原理特性规划，覆盖上下文生命周期 / 抗幻觉 / 推理扩展 / 元架构 4 组；定位为 brainstorm 文档，不申请 F-Number，落地时按子特性单独立项 |
