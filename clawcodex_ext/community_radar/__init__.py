@@ -69,6 +69,19 @@ from .notifier import (
     build_digest_message,
 )
 from .pipeline import CommunityRadarPipeline, ScanResult, run_community_scan
+from .issue_platforms import (
+    IssueClient,
+    IssuePlatform,
+    ResolvedTarget,
+    resolve_target,
+)
+from .issue_sync import (
+    IssueSyncCache,
+    IssueSyncResult,
+    list_candidates_interactive,
+    sync_features_to_issues,
+    sync_single_feature,
+)
 from .registry import (
     DEFAULT_SOURCES,
     PHASE1_SOURCES,
@@ -151,4 +164,14 @@ __all__ = [
     "build_search_query",
     "discover_sources",
     "quick_domain_match",
+    # issue platforms & sync
+    "IssueClient",
+    "IssuePlatform",
+    "ResolvedTarget",
+    "resolve_target",
+    "IssueSyncCache",
+    "IssueSyncResult",
+    "sync_features_to_issues",
+    "list_candidates_interactive",
+    "sync_single_feature",
 ]

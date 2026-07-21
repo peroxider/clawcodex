@@ -33,6 +33,12 @@ from .discover import (
     discover_sources,
 )
 from .models import WatchSource
+from .models import (
+    CommunityDigest,
+    FeatureRecord,
+    FeatureScore,
+    ScoredFeature,
+)
 from .pipeline import CommunityRadarPipeline
 from .registry import SourceRegistry, default_registry_path
 
@@ -43,6 +49,7 @@ USAGE = (
     "usage: clawcodex-dev community-radar <subcommand> [options]\n\n"
     "Subcommands:\n"
     "  scan [--period weekly|monthly|full] [--output DIR] [--no-write]\n"
+    "                         [--sync-issues] [--sync-max N] [--repo REPO]\n"
     "                         Fetch, extract, score, and persist a digest.\n"
     "  source list            List configured WatchSources.\n"
     "  source add NAME --repo OWNER/NAME [--track-releases|--track-commits|\n"
@@ -109,6 +116,48 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     if args.language:
         config.language = args.language
 
+    # Issue sync CLI flags override config
+    sync_enabled = getattr(args, "sync_issues", None)
+    if sync_enabled is not None:
+        config.sync_issues = bool(sync_enabled)
+    sync_max = getattr(args, "sync_max", None)
+    if sync_max is not None:
+        config.sync_issues_max_per_scan = int(sync_max)
+    cli_repo = getattr(args, "repo", None)
+    cli_platform = getattr(args, "platform", None)
+    closed_issue_mode = getattr(args, "closed_issue_mode", None)
+    if closed_issue_mode is not None:
+        config.sync_issues_closed_issue_mode = closed_issue_mode
+
+    if config.sync_issues:
+        # Validate target resolution early for better user feedback
+        from .issue_platforms import resolve_target, _resolve_token
+        target = resolve_target(
+            config_target_repo=config.target_repo,
+            config_api_token=config.api_token,
+            cli_repo=cli_repo,
+            cli_platform=cli_platform,
+        )
+        if target is None:
+            print(
+                "⚠️  无法确定目标仓库。请通过以下方式之一指定：\n"
+                "    1. clawcodex-dev community-radar scan --sync-issues --repo owner/repo\n"
+                "    2. 在 ~/.clawcodex/community-radar/config.yaml 中设置 target_repo\n"
+                "    3. 确保当前 git 项目绑定了 GitCode/GitHub/Gitee remote"
+            )
+            return 1
+        if not target.api_token:
+            env_names = ", ".join(target.platform.token_env_vars)
+            print(f"⚠️  未提供 {target.platform.name} API token。请设置 {env_names} 环境变量。")
+            return 1
+        _resolved_target = target
+        _resolved_cli_repo = cli_repo
+        _resolved_cli_platform = cli_platform
+    else:
+        _resolved_target = None
+        _resolved_cli_repo = None
+        _resolved_cli_platform = None
+
     registry = _maybe_load_registry(args.registry)
     pipeline = CommunityRadarPipeline(config=config, registry=registry)
     result = pipeline.run_scan(
@@ -118,6 +167,10 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         persistent_copy=not args.no_persistent,
         compare=args.compare,
         incremental=args.incremental,
+        issue_sync_target=_resolved_target,
+        issue_sync_cli_repo=_resolved_cli_repo,
+        issue_sync_cli_platform=_resolved_cli_platform,
+        issue_sync_closed_issue_mode=closed_issue_mode,
     )
 
     summary = result.digest.to_dict()["stats"]
@@ -129,6 +182,160 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         print(f"  json:   {result.write_result.json_path}")
     if result.digest.errors:
         print(f"  warnings: {len(result.digest.errors)} (see digest)")
+
+    # ── Issue sync output ──
+    if result.issue_sync:
+        isr = result.issue_sync
+        if isr.created:
+            repo_url = (
+                _resolved_target.web_url if _resolved_target
+                else isr.created[0].get("issue_url", "").rsplit("/issues/", 1)[0]
+            )
+            created_n = len(isr.created)
+            print(f"\nIssue sync: {created_n} created → {repo_url}")
+            for item in isr.created:
+                title_short = item.get("feature_title", "")[:50]
+                issue_no = item.get("issue_number", "?")
+                print(f"  #{issue_no}  {title_short}  → {item.get('issue_url', '')}")
+        if isr.errors:
+            for err in isr.errors:
+                print(f"  issue sync error: {err}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# issue-sync subcommand (Path B: manual single-feature issue creation)
+# ---------------------------------------------------------------------------
+
+
+def _cmd_issue_sync(args: argparse.Namespace) -> int:
+    """Manual single-feature issue creation."""
+    config = apply_env_overrides(RadarConfig.from_dict(_read_config_file()))
+    lang = getattr(args, "language", None)
+    if lang:
+        config.language = lang
+
+    from .issue_platforms import resolve_target
+    from .issue_sync import list_candidates_interactive, sync_single_feature
+
+    target = resolve_target(
+        config_target_repo=config.target_repo,
+        config_api_token=config.api_token,
+        cli_repo=args.repo,
+        cli_platform=args.platform,
+    )
+    if target is None:
+        print(
+            "⚠️  无法确定目标仓库。请通过以下方式之一指定：\n"
+            "    1. clawcodex-dev community-radar issue-sync --repo owner/repo\n"
+            "    2. 在 ~/.clawcodex/community-radar/config.yaml 中设置 target_repo\n"
+            "    3. 确保当前 git 项目绑定了 GitCode/GitHub/Gitee remote"
+        )
+        return 1
+    if not target.api_token:
+        env_names = ", ".join(target.platform.token_env_vars)
+        print(f"⚠️  未提供 {target.platform.name} API token。请设置 {env_names} 环境变量。")
+        return 1
+
+    # Determine feature_id
+    feature_id: str | None = getattr(args, "feature_id", None)
+
+    if args.interactive or not feature_id:
+        candidates = list_candidates_interactive(config=config, cache_dir=config.cache_dir)
+        if not candidates:
+            return 1
+        feature_id = candidates[0]["feature_id"]
+
+    if not feature_id:
+        print("请指定 --feature-id 或使用 --interactive 选择特性。")
+        return 1
+
+    # Resolve closed_issue_mode from CLI
+    closed_mode = getattr(args, "closed_issue_mode", None)
+    if closed_mode is not None:
+        config.sync_issues_closed_issue_mode = closed_mode
+
+    # Load the latest digest for feature lookup and issue body generation
+    digest: CommunityDigest | None = None
+    llm_importance: dict[str, dict[str, str]] | None = None
+    output_dir = Path(config.output_dir)
+    if output_dir.exists():
+        json_files = sorted(
+            [p for p in output_dir.glob("*.json") if ".proposals." not in p.name],
+            key=lambda p: p.stat().st_mtime, reverse=True,
+        )
+        if json_files:
+            try:
+                data = json.loads(json_files[0].read_text(encoding="utf-8"))
+                llm_raw = data.get("llm_importance", {})
+                if isinstance(llm_raw, dict):
+                    llm_importance = {
+                        str(fid): {str(k): str(v) for k, v in entry.items()}
+                        for fid, entry in llm_raw.items()
+                        if isinstance(entry, dict)
+                    }
+
+                def _build_scored_list(raw_list: list[dict[str, Any]]) -> list[ScoredFeature]:
+                    result: list[ScoredFeature] = []
+                    for item in raw_list:
+                        record = FeatureRecord.from_dict(item.get("record", item))
+                        sd = item.get("score", {})
+                        if isinstance(sd, dict):
+                            score = FeatureScore(
+                                record_id=record.id,
+                                overall=float(sd.get("overall", 0)),
+                                popularity=float(sd.get("popularity", 0)),
+                                maturity=float(sd.get("maturity", 0)),
+                                adaptation_cost=float(sd.get("adaptation_cost", 0)),
+                                strategic_value=float(sd.get("strategic_value", 0)),
+                                architecture_fit=float(sd.get("architecture_fit", 0)),
+                            )
+                        else:
+                            score = FeatureScore(
+                                record_id=record.id, overall=0, popularity=0,
+                                maturity=0, adaptation_cost=0, strategic_value=0,
+                                architecture_fit=0,
+                            )
+                        result.append(ScoredFeature(record=record, score=score))
+                    return result
+
+                highlights = _build_scored_list(data.get("highlights", []))
+                trending = _build_scored_list(data.get("trending", []))
+                digest = CommunityDigest(
+                    period=str(data.get("period", "weekly")),
+                    generated_at=str(data.get("generated_at", "")),
+                    summary=str(data.get("summary", "")),
+                    period_start=str(data.get("period_start", "")),
+                    highlights=highlights,
+                    trending=trending,
+                )
+            except Exception as exc:
+                _log.warning("failed to load digest for issue-sync: %s", exc)
+
+    result = sync_single_feature(
+        feature_id=feature_id,
+        config=config,
+        digest=digest,
+        llm_importance=llm_importance,
+        target=target,
+        cache_dir=config.cache_dir,
+        closed_issue_mode=closed_mode,
+    )
+
+    if result.created:
+        repo_url = target.web_url
+        created_n = len(result.created)
+        print(f"\nIssue sync: {created_n} created → {repo_url}")
+        for item in result.created:
+            title_short = item.get("feature_title", "")[:50]
+            issue_no = item.get("issue_number", "?")
+            print(f"  #{issue_no}  {title_short}  → {item.get('issue_url', '')}")
+    if result.errors:
+        for err in result.errors:
+            print(f"  issue sync error: {err}")
+    if result.warned:
+        for w in result.warned:
+            print(f"  ⚠️  {w.get('action', 'cancelled')}: {w.get('feature_title', '')}")
     return 0
 
 
@@ -390,6 +597,51 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Report language: zh (Chinese) or en (English). "
              "Overrides the config file and CLAWCODEX_RADAR_LANGUAGE env var.",
     )
+    # Issue sync flags (Path A: auto-sync after scan)
+    scan_p.add_argument(
+        "--sync-issues", action="store_true", default=None,
+        help="Auto-create issues for top MAJOR features after scan.",
+    )
+    scan_p.add_argument(
+        "--sync-max", type=int, default=None,
+        help="Maximum issues to create (default: 2, from config).",
+    )
+    scan_p.add_argument(
+        "--repo", type=str, default=None,
+        help="Target repository (owner/repo or platform.com/owner/repo).",
+    )
+    scan_p.add_argument(
+        "--platform", type=str, choices=("gitcode", "github", "gitee"), default=None,
+        help="Platform type (auto-detected if not specified).",
+    )
+    scan_p.add_argument(
+        "--closed-issue-mode", type=str, choices=("ask", "skip", "retry"), default=None,
+        help="How to handle features whose previous issue was closed: "
+             "ask (prompt), skip (don't re-create), retry (always re-create). "
+             "Default: ask.",
+    )
+    # issue-sync (Path B: manual single-feature issue creation)
+    issue_sync_p = sub.add_parser("issue-sync")
+    issue_sync_p.add_argument(
+        "--feature-id", type=str, default=None,
+        help="Feature ID from a JSON report to create an issue for.",
+    )
+    issue_sync_p.add_argument(
+        "--interactive", action="store_true", default=False,
+        help="Interactive table to select a feature from the last scan.",
+    )
+    issue_sync_p.add_argument(
+        "--repo", type=str, default=None,
+        help="Target repository (owner/repo or platform.com/owner/repo).",
+    )
+    issue_sync_p.add_argument(
+        "--platform", type=str, choices=("gitcode", "github", "gitee"), default=None,
+        help="Platform type (auto-detected if not specified).",
+    )
+    issue_sync_p.add_argument(
+        "--closed-issue-mode", type=str, choices=("ask", "skip", "retry"), default=None,
+        help="How to handle features whose previous issue was closed.",
+    )
     # source
     source_p = sub.add_parser("source")
     source_sub = source_p.add_subparsers(dest="source_cmd", required=True)
@@ -461,6 +713,7 @@ _DISPATCH: dict[str, Callable[[argparse.Namespace], int]] = {
     "config_show": _cmd_config_show,
     "config_init": _cmd_config_init,
     "status": _cmd_status,
+    "issue-sync": _cmd_issue_sync,
 }
 
 
