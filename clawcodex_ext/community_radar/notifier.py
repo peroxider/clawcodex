@@ -292,6 +292,8 @@ def build_digest_message(
     write_result: DigestWriteResult | None = None,
     *,
     top_n: int = 5,
+    issue_sync_created: list[dict[str, Any]] | None = None,
+    repo_url: str = "",
 ) -> Any:
     """Build the F-63 ``ChannelMessage`` broadcast by :class:`DigestNotifier`.
 
@@ -326,6 +328,18 @@ def build_digest_message(
         lines.append(f"**破坏性变更 ({len(digest.breaking_changes)} 条)**：")
         for record in digest.breaking_changes[:3]:
             lines.append(f"- {record.source}: {record.title}")
+
+    if issue_sync_created:
+        lines.append("")
+        created_n = len(issue_sync_created)
+        lines.append(f"📮 本周已自动创建 {created_n} 个社区雷达 issue")
+        if repo_url:
+            lines.append(f"  目标仓库: {repo_url}")
+        for item in issue_sync_created:
+            iss_num = item.get("issue_number", "?")
+            iss_title = item.get("feature_title", "")[:50]
+            iss_url = item.get("issue_url", "")
+            lines.append(f"  - #{iss_num} {iss_title} → {iss_url}")
 
     text = "\n".join(lines).strip()
     if len(text) > 8_000:  # leave headroom under the 30 000-char hard cap

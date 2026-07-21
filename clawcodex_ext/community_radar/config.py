@@ -49,6 +49,11 @@ DEFAULT_HIGHLIGHT_CATEGORIES: list[str] = [
     "observability",
 ]
 DEFAULT_HIGHLIGHT_MIN_SCORE = 55.0
+# Issue sync defaults
+DEFAULT_SYNC_ISSUES = False
+DEFAULT_SYNC_ISSUES_MAX_PER_SCAN = 2
+DEFAULT_SYNC_ISSUES_LABELS: list[str] = ["community-radar"]
+DEFAULT_SYNC_ISSUES_CLOSED_ISSUE_MODE = "ask"  # "ask" | "skip" | "retry"
 DEFAULT_WEIGHTS: dict[str, float] = {
     "popularity": 0.15,
     "maturity": 0.20,
@@ -136,6 +141,16 @@ class RadarConfig:
     # LLM classification (MAJOR/MINOR + highlights) is always enabled.
     # Translation (title_zh / desc_zh) is controlled by ``language``:
     # when "zh" the LLM prompt includes translation; when "en" it does not.
+    #
+    # --- GitCode / GitHub / Gitee issue sync ---
+    sync_issues: bool = DEFAULT_SYNC_ISSUES
+    target_repo: str = ""                  # "owner/repo" or "platform.com/owner/repo"
+    api_token: str = ""                    # platform API token (prefer env vars)
+    sync_issues_max_per_scan: int = DEFAULT_SYNC_ISSUES_MAX_PER_SCAN
+    sync_issues_labels: list[str] = field(
+        default_factory=lambda: list(DEFAULT_SYNC_ISSUES_LABELS)
+    )
+    sync_issues_closed_issue_mode: str = DEFAULT_SYNC_ISSUES_CLOSED_ISSUE_MODE
 
     # ------------------------------------------------------------------
     # Normalisation helpers
@@ -179,6 +194,13 @@ class RadarConfig:
             "highlight_min_score": self.highlight_min_score,
             "weights": dict(self.weights),
             "roadmap_keywords": list(self.roadmap_keywords),
+            # Issue sync
+            "sync_issues": self.sync_issues,
+            "target_repo": self.target_repo,
+            "api_token": self.api_token,
+            "sync_issues_max_per_scan": self.sync_issues_max_per_scan,
+            "sync_issues_labels": list(self.sync_issues_labels),
+            "sync_issues_closed_issue_mode": self.sync_issues_closed_issue_mode,
         }
 
     @classmethod
@@ -229,6 +251,29 @@ class RadarConfig:
         except (TypeError, ValueError):
             hl_score = DEFAULT_HIGHLIGHT_MIN_SCORE
 
+        # Issue sync
+        sync_issues = bool(data.get("sync_issues", DEFAULT_SYNC_ISSUES))
+        target_repo = str(data.get("target_repo") or data.get("targetRepo") or "")
+        api_token = str(data.get("api_token") or data.get("apiToken") or "")
+        sync_max_raw = data.get("sync_issues_max_per_scan") or data.get("syncIssuesMaxPerScan")
+        try:
+            sync_max = int(sync_max_raw) if sync_max_raw is not None else DEFAULT_SYNC_ISSUES_MAX_PER_SCAN
+        except (TypeError, ValueError):
+            sync_max = DEFAULT_SYNC_ISSUES_MAX_PER_SCAN
+        sync_labels_raw = data.get("sync_issues_labels") or data.get("syncIssuesLabels")
+        if isinstance(sync_labels_raw, list):
+            sync_labels = [str(l) for l in sync_labels_raw]
+        else:
+            sync_labels = list(DEFAULT_SYNC_ISSUES_LABELS)
+        # Closed issue mode
+        closed_mode_raw = str(
+            data.get("sync_issues_closed_issue_mode")
+            or data.get("syncIssuesClosedIssueMode")
+            or DEFAULT_SYNC_ISSUES_CLOSED_ISSUE_MODE
+        )
+        if closed_mode_raw not in ("ask", "skip", "retry"):
+            closed_mode_raw = DEFAULT_SYNC_ISSUES_CLOSED_ISSUE_MODE
+
         return cls(
             enabled=bool(data.get("enabled", True)),
             cron_schedule=str(data.get("cron_schedule") or DEFAULT_CRON_SCHEDULE),
@@ -246,6 +291,13 @@ class RadarConfig:
             highlight_min_score=hl_score,
             weights=weights,
             roadmap_keywords=keywords,
+            # Issue sync
+            sync_issues=sync_issues,
+            target_repo=target_repo,
+            api_token=api_token,
+            sync_issues_max_per_scan=sync_max,
+            sync_issues_labels=sync_labels,
+            sync_issues_closed_issue_mode=closed_mode_raw,
         )
 
 
@@ -322,6 +374,23 @@ def apply_env_overrides(config: RadarConfig) -> RadarConfig:
                 config.weights[dim] = float(raw)
             except ValueError:
                 _log.warning("invalid %s=%r; ignored", env_key, raw)
+
+    # ── Issue sync overrides ──
+    if (v := _bool("CLAWCODEX_RADAR_SYNC_ISSUES")) is not None:
+        config.sync_issues = v
+    if raw := os.environ.get("CLAWCODEX_RADAR_SYNC_MAX"):
+        try:
+            config.sync_issues_max_per_scan = int(raw)
+        except ValueError:
+            _log.warning("invalid CLAWCODEX_RADAR_SYNC_MAX=%r; ignored", raw)
+    if raw := os.environ.get("CLAWCODEX_RADAR_SYNC_LABELS"):
+        config.sync_issues_labels = [
+            l.strip() for l in raw.split(",") if l.strip()
+        ]
+    if raw := os.environ.get("CLAWCODEX_RADAR_CLOSED_ISSUE_MODE"):
+        mode = raw.strip().lower()
+        if mode in ("ask", "skip", "retry"):
+            config.sync_issues_closed_issue_mode = mode
 
     return config
 

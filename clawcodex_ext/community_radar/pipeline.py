@@ -28,8 +28,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .classifier import FeatureClassifier
-from .config import RadarConfig
-from .cron_integration import ensure_cron_installed
+from .config import RadarConfig, apply_env_overrides
+from .cron_integration import _load_config_safely, ensure_cron_installed, load_registry_safely
 from .deduplicator import FeatureDeduplicator
 from .extractor import FeatureExtractor
 from .fetcher import Fetcher
@@ -553,6 +553,7 @@ class ScanResult:
     records: list[FeatureRecord]
     notifications: dict[str, bool] | None = None
     cron_status: dict[str, Any] | None = None
+    issue_sync: Any | None = None  # IssueSyncResult (lazy import avoids circular dep)
 
 
 class CommunityRadarPipeline:
@@ -614,6 +615,10 @@ class CommunityRadarPipeline:
         auto_install_cron: bool | None = None,
         compare: bool = False,
         incremental: bool = False,
+        issue_sync_target: Any = None,  # ResolvedTarget (lazy import)
+        issue_sync_cli_repo: str | None = None,
+        issue_sync_cli_platform: str | None = None,
+        issue_sync_closed_issue_mode: str | None = None,
     ) -> ScanResult:
         """Run the full pipeline and (optionally) persist a digest.
 
@@ -748,6 +753,35 @@ class CommunityRadarPipeline:
                 except Exception as exc:  # noqa: BLE001
                     _log.warning("notification broadcast failed: %s", exc)
                     notifications = {"error": str(exc)}  # type: ignore[assignment]
+
+            # ── GitCode / GitHub / Gitee issue sync ──
+            issue_sync_result = None
+            if self.config.sync_issues:
+                try:
+                    from .issue_sync import sync_features_to_issues
+                    issue_sync_result = sync_features_to_issues(
+                        digest=digest,
+                        llm_importance=llm_importance,
+                        config=self.config,
+                        max_n=self.config.sync_issues_max_per_scan,
+                        target=issue_sync_target,
+                        cli_repo=issue_sync_cli_repo,
+                        cli_platform=issue_sync_cli_platform,
+                        cache_dir=self.config.cache_dir,
+                        closed_issue_mode=issue_sync_closed_issue_mode,
+                    )
+                    if issue_sync_result.created:
+                        _log.info(
+                            "issue sync: created %d issues",
+                            len(issue_sync_result.created),
+                        )
+                    if issue_sync_result.errors:
+                        _log.warning(
+                            "issue sync errors: %s",
+                            "; ".join(issue_sync_result.errors),
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    _log.warning("issue sync failed: %s", exc)
         finally:
             # Always close an owned fetcher so HTTP clients don't leak
             # even when the pipeline short-circuits on empty input.
@@ -760,6 +794,7 @@ class CommunityRadarPipeline:
             records=records,
             notifications=notifications,
             cron_status=cron_status,
+            issue_sync=issue_sync_result,
         )
 
     # ------------------------------------------------------------------
@@ -839,7 +874,48 @@ def run_community_scan(
     durable task (``run_community_scan``) call this. It is intentionally
     side-effect-free aside from the dual-write performed by the
     pipeline, so tests can call it against a temp directory.
+
+    When *config* and *registry* are not provided (the typical cron
+    path), this function auto-loads them from disk so that
+    ``sync_issues``, ``target_repo``, notifications, and other
+    file-based settings take effect.
     """
+    if config is None:
+        config = apply_env_overrides(_load_config_safely())
+    if registry is None:
+        registry = load_registry_safely()
+
+    # Resolve issue-sync target early when sync_issues is enabled so
+    # pipeline.run_scan() receives a validated target (same behaviour
+    # as the CLI path).  Failures are logged as warnings rather than
+    # raised — the scan still completes, and sync_features_to_issues()
+    # has its own internal resolve_target() fallback.
+    issue_sync_target: Any = None
+    issue_sync_cli_repo: str | None = None
+    issue_sync_cli_platform: str | None = None
+    if config.sync_issues:
+        from .issue_platforms import resolve_target  # lazy — avoids circular dep
+
+        target = resolve_target(
+            config_target_repo=config.target_repo,
+            config_api_token=config.api_token,
+        )
+        if target is None:
+            _log.warning(
+                "sync_issues is enabled but no target repo could be resolved. "
+                "Set target_repo in ~/.clawcodex/community-radar/config.yaml "
+                "or configure a git remote."
+            )
+        elif not target.api_token:
+            _log.warning(
+                "sync_issues is enabled but no API token found for %s. "
+                "Set %s environment variables.",
+                target.platform.name,
+                ", ".join(target.platform.token_env_vars),
+            )
+        else:
+            issue_sync_target = target
+
     pipeline = CommunityRadarPipeline(
         config=config,
         registry=registry,
@@ -851,4 +927,7 @@ def run_community_scan(
         output_dir=output_dir,
         persistent_copy=True,
         incremental=incremental,
+        issue_sync_target=issue_sync_target,
+        issue_sync_cli_repo=issue_sync_cli_repo,
+        issue_sync_cli_platform=issue_sync_cli_platform,
     )
