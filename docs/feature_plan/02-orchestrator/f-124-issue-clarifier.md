@@ -5,13 +5,13 @@
 > 最后更新: 2026-07-21
 > 关联能力: F-38（验证+报告+PR）、F-39（issue 重跑标签）、F-121（规则回灌）、F-123（Intent Forecast）
 
-> **注**：§0 已记录与原草案的三处重大调整（不复用永久 Intent.BLOCKED / 复用 ClarificationResolver / 接入点改为 `_poll_and_dispatch`），本节之后文档与实现保持一致。
+> **注**：§0 已记录与原草案的五处重大调整（不复用永久 Intent.BLOCKED / 复用 ClarificationResolver / 接入点改为 `_poll_and_dispatch` / `ClarificationPoller` 合并到 `IssueClarificationGate` / 解析器降级行为差异），本节之后文档与实现保持一致。但部分 §2 详细设计代码片段仍为草案示意，以本节实际架构为准。
 
 ---
 
-## §0 当前实现（2026-07-11）
+## §0 当前实现（2026-07-21）
 
-F-124 已完成可运行 MVP，但实现方式与本文最初草案有三处重要调整：
+F-124 已完成可运行 MVP。实现方式与最初草案有五处重要调整（详见各节注）：
 
 1. **只新增文本清晰度分析层**：`issue_clarifier/` 负责 prompt、JSON 解析、fingerprint
    缓存和 clear/unclear 判定。
@@ -20,23 +20,58 @@ F-124 已完成可运行 MVP，但实现方式与本文最初草案有三处重�
 3. **不复用永久 `Intent.BLOCKED`**：当前 `agent:blocked` 会把记录转成 abandoned/terminal，
    不适合“等作者回答后继续”。F-124 使用 `clarification_status=awaiting_author` 暂停分发，
    回答通过重新分析后再放行。
+4. **`ClarificationPoller` 独立模块合并到 `IssueClarificationGate`**：原草案 §2.9 规划的
+   `ClarificationPoller` 独立类（`detect_reply()`）实际合并到 `IssueClarificationGate.should_dispatch()`
+   的内联检测逻辑中，避免额外轮询循环。
+5. **解析器降级行为差异**：`confidence < min_confidence` 时实际返回 `is_clear=True`（降级
+   放行带 `degraded=True` 标记），而非原草案的“翻转 `is_clear=false`”——保守原则体现在
+   confidence 门槛而非翻转，避免低置信度 LLM 输出阻断 issue。
 
 实际接入点是 `Orchestrator._poll_and_dispatch()` 在 `_launch_issue()` 之前，不是旧草案中的
 `_claim_next_issue()`（当前代码不存在该方法）。
 
 已实现：
 
+### 核心模块
+
 - `ClarifierConfig`：默认关闭，支持阻断/观察模式、问题数、轮数、置信度、token 和缓存配置。
 - `IssueClarifierService`：静态 issue 文本分析，provider/解析失败默认 fail-open。
-- `ClarifierCache`：title + description + labels + author replies 的 SHA-256 fingerprint 缓存。
-- `IssueClarificationGate`：入队前分析、作者优先提问、最多两轮、manual_required。
-- `IssueRecord.open_questions`、轮数、fingerprint、回复和评论游标持久化。
-- 作者回复过滤和 bot 评论游标，避免把澄清器自己的评论误当成作者答案。
-- 回答内容注入最终 Agent prompt，作为 issue requirements 的一部分。
-- `orchestrator issue clarify` 支持当前 workspace 队列、list/recheck/resolve。
-- 单元测试覆盖 clear/unclear、缓存、降级、阻断、回复放行、多轮上限、观察模式和 CLI。
+- `ClarifierCache`：title + description + labels + author replies 的 SHA-256 fingerprint 缓存；
+  缓存文件损坏时自动降级（清空重建），不阻塞分发。
+- `IssueClarificationGate`：入队前分析、作者优先提问、最多两轮、manual_required、per-poll
+  分析预算（`max_analyses_per_poll`）、`fail_open` 配置。
+- `IssueRecord` 扩展：`open_questions`、`clarification_round`、`clarifier_fingerprint`、
+  `clarification_replies`、`clarifier_comment_cursor`、`author_login` 等字段持久化。
+- 作者回复过滤和 bot 评论游标（`clarifier_comment_cursor`），避免把澄清器自己的评论误当成作者答案。
+- `ClarifyResult` 运行时标记：`degraded`（降级）、`cached`（缓存命中）、`metadata`（如确定性门控来源）。
+- 回答内容注入最终 Agent session（通过 `session.clarification_answer` 属性），作为 issue requirements 的一部分。
+- `orchestrator issue clarify` 支持 `--id --answer --forward-to-author --list --recheck --resolve`。
+- 单元测试 78/78 通过（631 行），覆盖 clear/unclear、缓存、降级、阻断、回复放行、多轮上限、观察模式、CLI 和确定性门控。
 
-尚未完成（仅 F-124-G 评论写入已通过 ClarificationResolver 统一通道实现）：
+### 实现中独有的设计（未在原始草案中）
+
+- **确定性门控 `_find_explicit_clarification_gap`**：在 LLM 调用前，用正则匹配 issue 文本中
+  author 声明的“TBD”、“未指定”、“do not guess + ask author”等显式缺口，命中则直接返回
+  `is_clear=false`，不走 LLM。这是实现中独有的“确定性降级”路径，避免 LLM 误判 author 明确
+  表示需要澄清的场景。
+- **`ClarifyResult.degraded` 标记**：LLM 解析失败、confidence 不足、provider 异常时，结果
+  标记 `degraded=True`，调用方可据此判断结果是否可靠。
+- **`ClarifyResult.cached` 标记**：缓存命中时标记 `cached=True`，便于调试和日志追踪。
+- **`ClarifierCache.put()` 跳过 degraded 结果**：降级结果不写入缓存，确保下次 poll 能重新分析。
+- **`ClarifyResult.with_runtime_fields()` 模式**：`parser` 返回不含 fingerprint 的结果，
+  由 `service` 调用 `with_runtime_fields(fingerprint=...)` 注入运行时信息，避免解析器依赖缓存。
+- **`ClarifyQuestion.suggested_options` 为 `tuple`**：frozen dataclass 不可变容器，使用 `tuple`
+  而非 `list`，与 `ClarifyResult.ambiguities` 一致。
+- **`ClarifyResult.questions` property**：便捷提取 `ambiguities[*].question` 列表。
+- **`ClarifyResult.to_dict()`/`from_dict()` 序列化**：支持 `ClarifierCache` 持久化。
+- **`build_clarify_messages` 使用 `system+user` 双消息**：实际 prompt 为 `[{"role":"system"},{"role":"user"}]`，
+  而非原草案的单条 `{"role":"user"}`。`_shrink_payload_to_limit` 按字段长度逐级截断，
+  而非原草案的 `_truncate` 头尾截断。
+- **`ClarifierCache` 写时 atomic rename**：使用 `.tmp` + `os.replace` 原子写入，防崩溃损坏。
+- **所有降级路径均带 `degraded=True` 标记**：`parser.py` 和 `service.py` 的降级路径全部设置
+  `degraded=True`，便于监控和 dashboard 展示。
+
+尚未完成：
 
 - 真实 provider + GitCode/GitHub tracker 的长期 daemon E2E。
 - 可选的专用“等待澄清”远端标签；不能直接复用当前永久 `agent:blocked`。
@@ -347,32 +382,58 @@ class WorkflowConfig:
 
 ### 2.2 核心数据结构
 
-```python
-# extensions/orchestrator/issue_clarifier/service.py
+> **⚠️ 注：与实际实现的差异**
+> - `ClarifyResult` 实际包含 `degraded`、`cached`、`metadata` 三个运行时字段
+> - `ClarifyQuestion.suggested_options` 实际为 `tuple[str, ...]`（frozen dataclass 不可变容器）
+> - `ClarifyResult.ambiguities` 实际为 `tuple[ClarifyQuestion, ...]`
+> - 实际 `ClarifyResult` 有 `questions` property、`with_runtime_fields()`、`to_dict()`/`from_dict()` 序列化
+> - `IssueClarifierService` 构造函数签名不同：接受 `config`、`cache`（cache 对象）、`provider`/`provider_factory`、`model`
+> - `analyze()` 方法无 `force` 参数（缓存穿透通过 `ClarifierCache.enabled` 控制）
+> - 以下为实际实现代码，而非原草案示意
 
-from dataclasses import dataclass, field
+```python
+# extensions/orchestrator/issue_clarifier/models.py
+
+from dataclasses import dataclass, field, replace
 from typing import Any
+
+AMBIGUITY_TYPES = frozenset({"missing", "vague", "contradictory", "unexecutable"})
 
 
 @dataclass(frozen=True)
 class ClarifyQuestion:
     """单条澄清问题。"""
-    question: str                          # 向 author 提问的完整句子
-    ambiguity_type: str                    # missing / vague / contradictory / unexecutable
-    evidence: str                          # 指向描述中哪一部分引发歧义（引用原文片段）
-    suggested_options: list[str] = field(default_factory=list)  # 可选的合理理解（启发 author 回复）
+    question: str
+    ambiguity_type: str
+    evidence: str = ""
+    suggested_options: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]: ...
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "ClarifyQuestion": ...
 
 
 @dataclass(frozen=True)
 class ClarifyResult:
     """澄清分析结果。"""
-    is_clear: bool                         # 是否足够清晰可直接放行
-    confidence: float                      # 0.0-1.0，is_clear 的置信度
-    ambiguities: list[ClarifyQuestion]     # 识别出的歧义点（is_clear=true 时为空）
-    fingerprint: str                       # 输入文本 hash，用于缓存键
-    raw_response: str = ""                 # LLM 原始输出（调试用，默认不持久化）
-    reason: str = ""                       # is_clear 判定理由（is_clear=true 时简述为何清晰）
+    is_clear: bool
+    ambiguities: tuple[ClarifyQuestion, ...] = ()
+    confidence: float = 0.0
+    fingerprint: str = ""
+    reason: str = ""
+    degraded: bool = False                 # ★ 实际新增：降级标记
+    cached: bool = False                   # ★ 实际新增：缓存命中标记
+    metadata: dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def questions(self) -> list[str]: ...  # ★ 实际新增
+    def with_runtime_fields(self, *, fingerprint=None, cached=None) -> "ClarifyResult": ...
+    def to_dict(self) -> dict[str, Any]: ...
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "ClarifyResult": ...
+
+
+# extensions/orchestrator/issue_clarifier/service.py
 
 class IssueClarifierService:
     """issue 描述澄清分析的核心服务。"""
@@ -380,24 +441,33 @@ class IssueClarifierService:
     def __init__(
         self,
         *,
-        provider_getter: Callable[[], Any],
-        model_getter: Callable[[], str | None],
-        config: ClarifierConfig,
-        cache_dir: Path | None = None,
+        config: Any,                       # ClarifierConfig
+        cache: ClarifierCache,             # ★ 注入已构造的 cache 对象
+        provider: Any | None = None,       # ★ 直接接受 provider 实例
+        provider_factory: Callable[[], Any] | None = None,  # ★ 工厂模式
+        model: str | None = None,          # ★ 直接接受 model 字符串
     ) -> None: ...
 
     def analyze(
         self,
         issue: Issue,
         *,
-        prior_replies: list[str] | None = None,   # author 之前的澄清回复（多轮场景）
-        force: bool = False,                       # 忽略缓存
+        prior_replies: Iterable[str] = (),  # ★ 实际为 Iterable
     ) -> ClarifyResult: ...
 ```
-
 ### 2.3 Prompt 模板
 
 借鉴 F-123 `prompt.py:build_forecast_messages` 的范式，但指令聚焦于"识别文本歧义"而非"预测下一步动作"：
+> **⚠️ 注：与实际实现的差异**
+> - 实际 `build_clarify_messages` 返回 `[{"role":"system","content":_SYSTEM_PROMPT}, {"role":"user","content":json_payload}]` 双消息结构，
+>   而非原草案的单条 `{"role":"user"}`。`_SYSTEM_PROMPT` 指令更简洁（不含 `response_language`、`prior_replies` 等运行时指令——这些通过 payload 传入）。
+> - 实际 payload 键名为 `title`/`description`/`labels`/`author_replies`/`max_questions`，而非原草案的 `issue_identifier`/`issue_title`/`issue_description`/`prior_replies`/`workspace_focus`。
+> - 实际无 `workspace_focus` 参数（P2 未实现）。
+> - 实际无 `prior_replies` 参数——`author_replies` 在 payload 中传递。
+> - 实际 `_shrink_payload_to_limit` 按字段长度**逐级截断**（从最长字段开始截），而非原草案的 `_truncate` 头尾截断（`head [...] tail` 模式）。
+> - 以下代码保留原草案示意，实际实现请参考 `extensions/orchestrator/issue_clarifier/prompt.py`。
+> 
+
 
 ```python
 # extensions/orchestrator/issue_clarifier/prompt.py
@@ -542,100 +612,251 @@ def _loads_json(raw: str) -> Any:
         return None
 ```
 
+> **⚠️ 注：与实际实现的差异**
+> - 实际 `confidence < min_confidence` 时行为为：返回 `is_clear=True` + `degraded=True`（**降级放行**），
+>   而非原草案的"翻转为 `is_clear=false`"。保守原则体现在 confidence 门槛而非翻转——因为低置信度通常
+>   意味着 LLM 输出不可靠，此时不应用它来阻断 issue（阻断需要的置信度更高）。
+>   `ClarifierCache.put()` 跳过 `degraded=True` 的结果，确保下次 poll 能重新分析。
+> - 实际 `parse_clarify_response` 无 `reason` 输出（`is_clear=true` 时返回 `reason="provider analysis"`，而非 LLM 输出的 reason）。
+> - 实际无明显 `raw_response` 字段（`ClarifyResult` 无 `raw_response`——调试信息通过 `metadata` 传递）。
+> - 实际 `_loads_json` 使用 `re.search(r"\{.*\}", text, re.DOTALL)` 而非原草案的 `text.find("{")`/`rfind("}")`。
+> - 以下为实际实现代码
+
+```python
+# extensions/orchestrator/issue_clarifier/parser.py
+
+def parse_clarify_response(
+    raw: str,
+    *,
+    min_confidence: float = 0.7,
+    max_questions: int = 3,
+) -> ClarifyResult:
+    data = _loads_json(raw)
+    if not isinstance(data, dict):
+        return _degraded_clear("provider returned non-JSON output")
+
+    try:
+        confidence = float(data.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+
+    # ★ 实际行为：confidence 不足时放行（is_clear=True + degraded=True），而非翻转 is_clear
+    if confidence < min_confidence:
+        return ClarifyResult(
+            is_clear=True,
+            confidence=confidence,
+            reason="clarifier confidence below blocking threshold",
+            degraded=True,
+        )
+
+    rows = data.get("ambiguities")
+    if not isinstance(rows, list):
+        rows = []
+    questions: list[ClarifyQuestion] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        question = ClarifyQuestion.from_dict(row)
+        if question.question:
+            questions.append(question)
+        if len(questions) >= max(1, int(max_questions)):
+            break
+
+    raw_is_clear = data.get("is_clear")
+    if not isinstance(raw_is_clear, bool):
+        return _degraded_clear("provider returned non-boolean is_clear", confidence)
+    is_clear = raw_is_clear
+    if is_clear:
+        questions = []
+    elif not questions:
+        # is_clear=false 但无 actionable questions → 降级放行
+        return _degraded_clear("unclear response contained no actionable questions", confidence)
+
+    return ClarifyResult(
+        is_clear=is_clear,
+        ambiguities=tuple(questions),
+        confidence=confidence,
+        reason="provider analysis",
+    )
+
+
+def _degraded_clear(reason: str, confidence: float = 0.0) -> ClarifyResult:
+    return ClarifyResult(is_clear=True, confidence=confidence, reason=reason, degraded=True)
+
+
+def _loads_json(raw: str) -> Any:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # ★ 实际使用 re.search 而非 find/rfind
+        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+        if match is None:
+            return None
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
+```
+
 **降级策略**（关键：避免澄清器自身故障导致 issue 永久卡死）：
 
-| LLM 输出异常 | 行为 | 理由 |
-|-------------|------|------|
-| 非 JSON / 解析失败 | `is_clear=True` 放行 | 澄清器故障不应阻断 agent，宁可盲跑也不死锁 |
-| `is_clear=true` 但 `confidence < min_confidence` | 翻转为 `is_clear=false` | 保守策略：不确定就问 |
-| `is_clear=false` 但 `ambiguities` 为空 | 视为 `is_clear=true` 放行 | 没有具体歧义点就不应阻断 |
+| LLM 输出异常 | 实际行为 | 理由 |
+|-------------|---------|------|
+| 非 JSON / 解析失败 | `is_clear=True` + `degraded=True` 放行 | 澄清器故障不应阻断 agent，宁可盲跑也不死锁 |
+| `is_clear=true` 但 `confidence < min_confidence` | `is_clear=True` + `degraded=True` **放行**（★ 非翻转） | 低置信度 LLM 输出不可靠，不应用来阻断 issue |
+| `is_clear=false` 但 `ambiguities` 为空 | `is_clear=True` + `degraded=True` 放行 | 没有具体歧义点就不应阻断 |
 | `ambiguities` 超过 `max_questions` | 截取前 N 条 | 与配置上限一致 |
-| provider 调用抛异常 | `is_clear=True` 放行 + 记录 warning | 同降级原则 |
+| provider 调用抛异常 | `is_clear=True` + `degraded=True` 放行 + 记录 warning | 同降级原则 |
+| 降级结果写入缓存 | **跳过**（`cache.put()` 检查 `degraded`） | 确保下次 poll 能重新分析 |
 
 ### 2.5 核心服务实现
 
+> **⚠️ 注：与实际实现的差异**
+> - 实际 `IssueClarifierService` 构造函数签名不同（见 §2.2）
+> - 实际 `analyze()` 方法无 `force` 参数，且 `prior_replies` 为 `Iterable[str]`
+> - 实际实现包含 **确定性门控 `_find_explicit_clarification_gap`**：在 LLM 调用前先用正则匹配
+>   author 声明的显式缺口（TBD、未指定、do not guess + ask author 等），命中则直接返回
+>   `is_clear=false`，不走 LLM。这是原草案未规划的设计。
+> - 实际 `analyze()` 中 `provider.chat()` 的 `TypeError` 回退（无 `max_tokens` 参数兼容性）是原草案未考虑的
+> - 降级结果（`degraded=True`）**不写入缓存**（`ClarifierCache.put()` 跳过）
+> - 以下为实际实现代码
+
 ```python
 # extensions/orchestrator/issue_clarifier/service.py
+
+import re
+
+_EXPLICIT_GAP_PATTERNS = (
+    re.compile(r"\b(?:intentionally|deliberately)\s+(?:left\s+)?unspecified\b", re.I),
+    re.compile(r"\bTBD\b", re.I),
+    re.compile(r"未指定|待定|尚未确定"),
+)
+_DO_NOT_GUESS_PATTERN = re.compile(r"\bdo\s+not\s+guess\b|不要猜", re.I)
+_ASK_AUTHOR_PATTERN = re.compile(r"\bask\s+(?:the\s+)?(?:issue\s+)?author\b|询问作者|向作者确认", re.I)
+
 
 class IssueClarifierService:
     def __init__(
         self,
         *,
-        provider_getter: Callable[[], Any],
-        model_getter: Callable[[], str | None],
-        config: ClarifierConfig,
-        cache_dir: Path | None = None,
+        config: Any,
+        cache: ClarifierCache,
+        provider: Any | None = None,
+        provider_factory: Callable[[], Any] | None = None,
+        model: str | None = None,
     ) -> None:
-        self._provider_getter = provider_getter
-        self._model_getter = model_getter
         self.config = config
-        self._cache = ClarifierCache(cache_dir) if config.cache_enabled and cache_dir else None
+        self.cache = cache
+        self._provider = provider
+        self._provider_factory = provider_factory
+        self.model = model
+
+    def fingerprint(self, issue: "Issue", *, prior_replies: Iterable[str] = ()) -> str:
+        return build_fingerprint(issue, prior_replies=prior_replies)
 
     def analyze(
         self,
-        issue: Issue,
+        issue: "Issue",
         *,
-        prior_replies: list[str] | None = None,
-        workspace_focus: list[dict] | None = None,
-        force: bool = False,
+        prior_replies: Iterable[str] = (),
     ) -> ClarifyResult:
-        if not self.config.enabled:
-            return ClarifyResult(is_clear=True, confidence=1.0, ambiguities=[],
-                                 fingerprint="", reason="Clarifier disabled")
+        replies = tuple(str(reply) for reply in prior_replies if str(reply).strip())
+        fingerprint = self.fingerprint(issue, prior_replies=replies)
+        cached = self.cache.get(fingerprint)
+        if cached is not None:
+            return cached
 
-        fingerprint = self._fingerprint(issue, prior_replies or [])
-        if not force and self._cache is not None:
-            cached = self._cache.get(fingerprint)
-            if cached is not None:
-                return cached
-
-        provider = self._provider_getter()
-        if provider is None:
-            # provider 不可用时降级放行（与 LLM 解析失败同处理）
-            return ClarifyResult(is_clear=True, confidence=0.0, ambiguities=[],
-                                 fingerprint=fingerprint, reason="Provider unavailable, defaulting to clear")
-
-        messages = build_clarify_messages(
-            issue,
-            max_questions=self.config.max_questions,
-            max_input_tokens=self.config.max_input_tokens,
-            prior_replies=prior_replies,
-            workspace_focus=workspace_focus,
-        )
-        try:
-            response = provider.chat(
-                messages=messages,
-                tools=None,
-                model=self._model_getter(),
-                max_tokens=self.config.max_output_tokens,
+        # ★ 确定性门控：先检测 author 声明的显式缺口，不走 LLM
+        explicit_gap = _find_explicit_clarification_gap(issue, replies)
+        if explicit_gap is not None:
+            result = ClarifyResult(
+                is_clear=False,
+                ambiguities=(ClarifyQuestion(
+                    question="The issue explicitly leaves required implementation details open. "
+                             "What exact contract should be implemented?",
+                    ambiguity_type="missing",
+                    evidence=explicit_gap,
+                ),),
+                confidence=1.0,
+                fingerprint=fingerprint,
+                reason="explicit clarification directive in issue text",
+                metadata={"deterministic_gate": "explicit_gap"},
             )
-        except TypeError:
-            response = provider.chat(messages=messages, tools=None, model=self._model_getter())
-        except Exception:
-            logger.warning("Clarifier provider call failed, defaulting to clear", exc_info=True)
-            return ClarifyResult(is_clear=True, confidence=0.0, ambiguities=[],
-                                 fingerprint=fingerprint, reason="Provider call failed")
+            self.cache.put(result)
+            return result
 
-        raw = str(getattr(response, "content", "") or "")
-        result = parse_clarify_response(raw, min_confidence=self.config.min_confidence)
-        result = replace(result, fingerprint=fingerprint)
-        if self._cache is not None:
-            self._cache.put(fingerprint, result)
+        try:
+            provider = self._get_provider()
+            if provider is None:
+                raise RuntimeError("clarifier provider is unavailable")
+            messages = build_clarify_messages(issue, ...)
+            try:
+                response = provider.chat(messages=messages, tools=None, model=self.model,
+                                         max_tokens=self.config.max_output_tokens)
+            except TypeError:
+                # Provider 不支持 max_tokens 参数的回退
+                response = provider.chat(messages=messages, tools=None, model=self.model)
+            raw = str(getattr(response, "content", "") or "")
+            result = parse_clarify_response(raw, ...).with_runtime_fields(fingerprint=fingerprint)
+        except Exception as exc:
+            # 降级放行，标记 degraded=True
+            result = ClarifyResult(
+                is_clear=bool(self.config.fail_open),
+                confidence=0.0, fingerprint=fingerprint,
+                reason=f"clarifier unavailable: {type(exc).__name__}",
+                degraded=True,
+            )
+
+        self.cache.put(result)  # degraded 结果被 cache.put() 跳过
         return result
 
-    def _fingerprint(self, issue: Issue, prior_replies: list[str]) -> str:
-        raw = json.dumps({
-            "id": issue.identifier,
-            "title": issue.title,
-            "description": issue.description or "",
-            "labels": sorted(issue.labels or []),
-            "replies": prior_replies,
-            "config_version": "1",
-        }, sort_keys=True, default=str)
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
-```
 
+def _find_explicit_clarification_gap(
+    issue: "Issue", replies: tuple[str, ...],
+) -> str | None:
+    """Find an author-declared implementation gap before consulting an LLM."""
+    if replies:
+        return None  # 已有回复时不触发确定性门控
+    text = "\n".join(value for value in (
+        str(getattr(issue, "title", "") or ""),
+        str(getattr(issue, "description", "") or ""),
+    ) if value)
+    for pattern in _EXPLICIT_GAP_PATTERNS:
+        match = pattern.search(text)
+        if match is not None:
+            return match.group(0)
+    do_not_guess = _DO_NOT_GUESS_PATTERN.search(text)
+    ask_author = _ASK_AUTHOR_PATTERN.search(text)
+    if do_not_guess is not None and ask_author is not None:
+        return f"{do_not_guess.group(0)}; {ask_author.group(0)}"
+    return None
+```
 ### 2.6 Orchestrator 集成点
+
+
+> **⚠️ 注：与实际实现的差异**
+> - 实际接入点不是 `_claim_next_issue()`（该方法不存在），而是 `Orchestrator._poll_and_dispatch()` 中
+>   的 `_launch_issue()` 之前。具体实现在 `orchestrator.py:1249-1257`：
+>   ```python
+>   if self._clarification_gate is not None:
+>       try:
+>           if not await self._clarification_gate.should_dispatch(issue):
+>               logger.info("Issue %s is waiting for F-124 clarification", issue.id)
+>               continue
+>       except Exception:
+>           logger.exception("F-124 clarity gate failed for issue %s", issue.id)
+>           if not bool(getattr(self.workflow.clarifier, "fail_open", True)):
+>               continue
+>   ```
+> - `IssueClarificationGate` 在 `Orchestrator.__init__()` 中惰性构造（仅 `clarifier.enabled=true` 时），
+>   通过 `build_provider_from_config()` 工厂函数创建 provider，使用 `asyncio.to_thread` 异步化 LLM 调用。
+> - `begin_poll()` 在 `_poll_and_dispatch()` 顶部调用，重置 per-poll 分析预算计数器。
+> - 以下代码片段保留原草案的接入示意，并非实际实现。
+
 
 在 `Orchestrator._claim_next_issue()` 之后、`_prepare_workspace()` 之前插入澄清检查：
 
@@ -691,8 +912,19 @@ def _handle_unclear_issue(
 @dataclass
 class IssueRecord:
     ...
-    open_questions: list[str] = field(default_factory=list)   # ★ F-124 新增
-    clarification_round: int = 0                              # ★ 已追问轮次
+    # F-124 pre-dispatch clarity gate fields
+    clarification_status: str | None = None       # "awaiting_author" / "clear" / "resolved" / "observation" / "manual_required" / "manual_resolved"
+    question_history: list[str] = field(default_factory=list)  # 追加式审计轮迹
+    open_questions: list[str] = field(default_factory=list)    # 当前未解决的问题
+    clarification_round: int = 0                  # 已追问轮次
+    clarifier_fingerprint: str | None = None      # 当前分析结果的 fingerprint
+    clarification_replies: list[str] = field(default_factory=list)  # author 回复历史
+    clarifier_comment_cursor: str | None = None   # bot 评论游标，避免误当 author 回复
+    author_login: str | None = None               # issue author 登录名
+    local_answer: str | None = None               # 本地答案（dashboard/操作员回答）
+    local_answer_source: str | None = None        # "dashboard" / "clarification_queue" / "author"
+    first_response_source: str | None = None      # 第一个回答来源
+    stale_answers: list[str] = field(default_factory=list)  # 过期/被覆盖的答案
 
 
 class IssueRegistry:
@@ -790,42 +1022,99 @@ automatically once clarification is received. (Round 1/2)
 
 ### 2.9 澄清回复检测（P1）
 
-`ClarificationPoller` 在 orchestrator poll 路径中检测 author 回复：
+> **⚠️ 注：原草案 `ClarificationPoller` 独立类已合并到 `IssueClarificationGate`**
+> 
+> 原 §2.9 规划的独立 `ClarificationPoller` 类（`detect_reply()` 方法）**实际不存在**。其全部职责
+> （作者回复检测、重新分析、多轮追问、manual_required 转人工）已内联到 `IssueClarificationGate.should_dispatch()`
+> 和 `_apply_result()` 中。合并原因：
+> 1. 避免额外轮询循环——`should_dispatch()` 已在每个 poll 周期被调用，不需要独立 poller
+> 2. gate 持有全部所需状态（`resolver`、`registry`、`config`），分离到 poller 反而需要重复传递依赖
+> 3. `ClarificationResolver` 已有 `poll_clarification_answers()` 方法（在 orchestrator poll 主循环中调用），
+>    作者评论检测通过 `resolver.get_answer()` 和 `resolver.get_item()` 完成，无需独立 poller
+> 
+> 以下为实际 gate 中回复检测的简化逻辑，省略了完整的状态机判断（`_apply_result` 的完整实现见 gate.py:111-205）：
 
 ```python
-# extensions/orchestrator/issue_clarifier/poller.py
+# extensions/orchestrator/issue_clarifier/gate.py (简化示意)
 
-class ClarificationPoller:
-    def __init__(self, registry: IssueRegistry, tracker: TrackerAdapter,
-                 clarifier: IssueClarifierService, config: ClarifierConfig) -> None: ...
+async def should_dispatch(self, issue: Issue) -> bool:
+    issue_id = str(issue.id or "")
+    if not issue_id or not self.config.enabled:
+        return True
+    record = self.registry.get(issue_id)
+    if record is None:
+        return True
 
-    def detect_reply(self, issue: Issue, record: IssueRecord) -> ClarifyResult | None:
-        """检测 author 是否回复了澄清问题，若回复则重新分析。
+    replies = list(record.clarification_replies)
+    current_fingerprint = self.service.fingerprint(issue, prior_replies=replies)
+    status = str(record.clarification_status or "")
 
-        返回 None = 无新回复；返回 ClarifyResult = 已重新分析（调用方据 is_clear 决定放行/追问）。
-        """
-        if record.clarification_status != "awaiting_answer":
-            return None
-        replies = self.tracker.fetch_comments_since(issue, after=record.clarification_posted_at)
-        author_replies = [r for r in replies if r.author_login == record.author_login]
-        if not author_replies:
-            return None
-        prior = [r.body for r in author_replies]
-        result = self.clarifier.analyze(issue, prior_replies=prior, force=True)
-        if result.is_clear:
-            self.registry.mark_clarification_resolved(issue.id, answer_summary="\n---\n".join(prior))
-            self.registry.unblock(issue.id)
-            self._mirror_intent_label(self.tracker, issue.id, "agent:blocked", remove=True)
+    # 已手工解决 → 放行
+    if status == "manual_resolved":
+        return True
+
+    # 等待 author 回复 → 检测回复
+    if status == "awaiting_author":
+        resolved = self.resolver.get_answer(issue_id)
+        if resolved is None:
+            # 无新回复，检查 issue 文本是否变化
+            if record.clarifier_fingerprint == current_fingerprint:
+                return False  # 无变化，继续等待
+            # issue 文本变化 → 重置澄清状态，重新分析
+            self.resolver.clear(issue_id)
+            record.clarification_round = 0
+            record.open_questions = []
         else:
-            # 多轮追问
-            new_round = record.clarification_round + 1
-            if new_round > self.config.max_rounds:
-                # 超上限，保持 blocked 转人工，记录原因
-                self.registry.update_clarification(issue.id, clarification_status="manual_required")
-                return result
-            self._handle_unclear_issue(issue, record, result, round_num=new_round)
-        return result
+            # 有回复 → 提取答案并重新分析
+            answer = str(resolved.answer or "").strip()
+            if answer and answer not in replies:
+                replies.append(answer)
+            current_fingerprint = self.service.fingerprint(issue, prior_replies=replies)
+            self.resolver.clear(issue_id)
+
+    # 缓存命中且状态为 clear/resolved/observation → 放行
+    if record.clarifier_fingerprint == current_fingerprint and status in {"clear", "resolved", "observation"}:
+        return True
+    if record.clarifier_fingerprint == current_fingerprint and status == "manual_required":
+        return False
+
+    # Per-poll 分析预算控制
+    max_analyses = max(1, int(getattr(self.config, "max_analyses_per_poll", 4)))
+    if self._analyses_this_poll >= max_analyses:
+        return False  # 预算耗尽，推迟到下一轮 poll
+    self._analyses_this_poll += 1
+
+    result = await asyncio.to_thread(self.service.analyze, issue, prior_replies=replies)
+    return await self._apply_result(issue, result, replies)
 ```
+
+**`_apply_result()` 状态流转**（gate.py:111-205）：
+
+```
+analyze() 返回
+    │
+    ├─ is_clear=true
+    │     ├─ replies 非空 → status="resolved", 放行
+    │     └─ replies 为空 → status="clear", 放行
+    │
+    └─ is_clear=false
+          ├─ questions 为空 → mark_clarification_manual_required, 阻断
+          ├─ block_on_unclear=false → status="observation", 放行（观察模式）
+          ├─ clarification_round >= max_rounds → manual_required, 阻断
+          ├─ author_first=true 但 author_login 为空 → manual_required, 阻断
+          └─ 正常 → 通过 resolver.request_clarification() 发评论
+                     → status="awaiting_author", 阻断
+```
+
+**三通道澄清流**（ClarificationResolver 实现）：
+
+| 通道 | 名称 | 流程 |
+|:----:|------|------|
+| 1 | Dashboard | 操作员通过 `issue clarify --answer` CLI 回答 → `ClarificationQueue.mark_awaiting_local()` → orchestrator poll 检测到本地答案 |
+| 2 | ClarificationQueue | 操作员直接编辑 queue JSON → 下一轮 poll 检测到 queue 中的答案 |
+| 3 | Issue Author | 澄清评论发到 issue tracker → author 回复 → `ClarificationResolver.poll_clarification_answers()` 检测到新评论 → 提取回答 |
+
+`IssueClarificationGate` 通过 `resolver.get_answer(issue_id)` 统一检查三个通道，无需关心答案来源。
 
 ### 2.10 Prompt 注入澄清上下文
 
@@ -874,14 +1163,34 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 | `issue.description` 为空 | 仍调用 LLM 分析（仅 title），通常会被判为 `missing` 严重歧义 |
 | Author 修改了原始 issue 描述 | fingerprint 变化，缓存失效，重新分析 |
 | Author 回复但仍然不清晰，已达 `max_rounds` | 保持 `agent:blocked`，状态转 `manual_required`，CLI 高亮提示 |
-| LLM provider 不可用 | 降级 `is_clear=true` 放行，记录 warning，不阻断 |
-| LLM 返回非 JSON | 降级 `is_clear=true` 放行（同上，避免死锁） |
+| LLM provider 不可用 | 降级 `is_clear=true` + `degraded=True` 放行，记录 warning，不阻断 |
+| LLM 返回非 JSON | 降级 `is_clear=true` + `degraded=True` 放行（同上，避免死锁） |
+| `confidence < min_confidence` | 返回 `is_clear=True` + `degraded=True` **放行**（非翻转，见 §2.4） |
+| 降级结果写入缓存 | **跳过**（`ClarifierCache.put()` 检查 `result.degraded`） |
 | `clarifier.enabled=false` | 整个澄清器跳过，走原有路径（向后兼容） |
-| `block_on_unclear=false` 灰度模式 | 调用 LLM 分析并记录 `open_questions` 到 registry，但不阻断、不发评论 |
+| `block_on_unclear=false` 灰度模式 | 调用 LLM 分析并记录 `open_questions` 到 registry，`status="observation"`，但不阻断、不发评论 |
 | LocalTracker 无 `post_clarification_comment` override | 默认 `return None`，澄清问题仅记录到 registry，不发评论（功能降级但不报错） |
-| 同一 issue 被 F-39 `agent:retry` 重置 | `reset_for_retry` 清除 `open_questions` 和 `clarification_round`，重新分析 |
-| Tracker.fetch_comments_since 不支持 | `detect_reply` 降级返回 None，澄清等待转为人工解除（CLI `clarify resolve`） |
+| 同一 issue 被 F-39 `agent:retry` 重置 | `reset_for_retry` 清除 `clarification_status`、`open_questions`、`clarification_round`、`clarifier_fingerprint`、`clarification_replies`、`clarifier_comment_cursor`，重新分析 |
+| Tracker.fetch_comments_since 不支持 | gate 通过 `resolver.get_answer()` 降级，澄清等待转为人工解除（CLI `clarify resolve`） |
+| Per-poll 分析预算耗尽（`max_analyses_per_poll`） | 延迟分析到下一 poll 周期，记录 info 日志 |
+| 新 issue 入队时 `author_login` 为空且 `author_first=true` | 跳过 author 优先通道，直接 `manual_required`（gate 内联处理） |
+| `clarifier_comment_cursor` 游标传递 | 避免把澄清器自己的评论误当成 author 回复；`ClarificationResolver` 和 gate 之间传递 `last_checked_comment_id` |
+| 缓存文件损坏 | `ClarifierCache._load()` 捕获异常，清空缓存重建，不阻塞分发 |
+| 缓存写入失败（磁盘满/权限错误） | `ClarifierCache._save()` 捕获异常，只记录 warning，不影响分发 |
+| Author 回复后 fingerprint 未变化 | `prior_replies` 变化使 fingerprint 不同，自动触发重算 |
+| 多轮追问场景 author 重复回复 | `prior_replies` 追加所有历史回复，LLM 自行判断哪些问题已解答 |
+| 澄清器与 F-39 重跑标签竞争 | `reset_for_retry` 重置时清除所有澄清状态，重跑重新走澄清分析 |
+| 第三方 tracker 不支持评论写入 | `create_clarification_comment` 默认 `return None`，降级为仅 registry 可查，不报错 |
+| 确定性门控命中（TBD/未指定/do not guess + ask author） | 不走 LLM，直接返回 `is_clear=false` + `confidence=1.0` + `metadata={"deterministic_gate": "explicit_gap"}` |
 
+> **新增场景**（★ 实际实现中新增，未在原始草案中）：
+> - `confidence < min_confidence` 放行而非翻转
+> - 降级结果跳过缓存写入
+> - Per-poll 分析预算控制
+> - `author_login` 缺失时降级到 `manual_required`
+> - `clarifier_comment_cursor` 游标传递
+> - 缓存文件损坏/写入失败容错
+> - 确定性门控 `_find_explicit_clarification_gap`
 ---
 
 ## §3 风险与约束
@@ -897,15 +1206,21 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 | Provider 不可用导致所有 issue 被放行 | 低 | 低 | 缓解：降级为 `is_clear=true` 放行，走原始路径。降级是功能退化而非故障 |
 | Author 修改描述后 fingerprint 未变化 | 极低 | 低 | 缓解：只基于 `title`+`description`+`labels`+`replies`，不含元字段如 `updated_at`（后者变化不应触发重算）；若用户只改拼写且实无变化内容，缓存命中可接受 |
 | 多轮追问场景 author 重复回复 | 低 | 低 | 缓解：`prior_replies` 在追加上一轮所有回复的基础上重新分析，LLM 自行判断哪些问题已解答、哪些仍需追问 |
-| 澄清器与 F-39 重跑标签竞争 | 低 | 中 | 缓解：`reset_for_retry` 重置时清除 `clarification_round` 和 `open_questions`，重跑重新走澄清分析 |
-| 第三方 tracker 不支持评论写入 | 低 | 低 | 缓解：`post_clarification_comment` 默认 `return None`，降级为仅 registry 可查，不报错 |
+| 澄清器与 F-39 重跑标签竞争 | 低 | 中 | 缓解：`reset_for_retry` 重置时清除所有澄清状态（`clarification_status`、`open_questions`、`clarification_round`、`clarifier_fingerprint`、`clarification_replies`、`clarifier_comment_cursor`），重跑重新走澄清分析 |
+| 第三方 tracker 不支持评论写入 | 低 | 低 | 缓解：`create_clarification_comment` 默认 `return None`，降级为仅 registry 可查，不报错 |
+| Per-poll 分析预算耗尽（`max_analyses_per_poll`） | 中 | 低 | 缓解：预算耗尽时延迟到下一 poll 周期，不影响分发（返回 `False` 跳过本轮）；`max_analyses_per_poll` 默认 4，可配置；日志记录 `Deferring F-124 analysis` |
+| 确定性门控正则误命中（`_find_explicit_clarification_gap`） | 极低 | 低 | 缓解：模式仅匹配非常明确的标记（TBD、未指定、do not guess + ask author），误报率极低；误命中时 author 回复即可解除 |
+| 缓存文件损坏 | 极低 | 低 | 缓解：`ClarifierCache._load()` 捕获所有异常，清空缓存重建，不阻塞分发；写入时使用 `.tmp` + `os.replace` 原子写入防崩溃 |
+| `author_login` 缺失且 `author_first=true` | 低 | 低 | 缓解：gate 内联检测，直接降级到 `manual_required`，记录 warning，不抛异常 |
+| 多轮追问中 `ClarificationResolver` 状态竞争 | 低 | 低 | 缓解：gate 每次调用 `resolver.clear()` 后再 `request_clarification()`，避免旧状态干扰新问题 |
 
 ### 3.2 约束
 
 - **澄清器不替代人工 code review**：澄清只在 issue 入口层识别"需求是否需要 clarification"，不保证 agent 实现结果正确。验证职责仍由 F-38 的 `test_command` + `verification_failed` 承担。
 - **澄清器不写回 issue tracker 的 description 字段**：不修改原始 issue 文本，只通过评论提问。这保证了 author 对其 issue 资产的控制权。
 - **默认 opt-in**：`clarifier.enabled: false`，避免用户不知情时自动在 issue 下发评论造成噪音。
-- **LLM 调用为同步阻塞**：在 `_claim_next_issue()` 路径中同步调用 provider。issue 入队路径是低频操作（秒级间隔），单次额外 LLM 延迟是可接受的。若需异步化，可扩展到 F-94 BG_SESSIONS 类似的 sidecar 机制（P3）。
+- **LLM 调用通过 `asyncio.to_thread` 异步化**：实际调用在 `gate.py` 中通过 `asyncio.to_thread(self.service.analyze, ...)` 异步执行，避免阻塞 poll 主循环。但 `analyze()` 内部的 provider.chat 仍是同步阻塞（线程池中），单次延迟 < 5s 可接受。
+- **Per-poll 分析预算**：`max_analyses_per_poll`（默认 4）防止单次 poll 中所有 issue 同时触发 LLM 分析耗尽 quota。预算耗尽时延迟到下一 poll 周期。
 - **`compute_workspace_focuses` 只作辅助信号**：仅 follow-up 场景、仅 import 一个纯函数、不引入 F-123 的策略框架（详见 §1.3）。
 
 ---
@@ -927,6 +1242,9 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 - [x] 相同 issue 文本 + 版本 + 回复的 fingerprint 缓存命中，不重复调用 LLM
 - [ ] `compute_workspace_focuses` 在 follow-up 分支已建时作为澄清上下文富化（P2）— **未做**
 - [x] `clarify list/recheck/resolve` CLI 子命令可用
+- [x] 确定性门控 `_find_explicit_clarification_gap` 在 LLM 之前检测 TBD/未指定/do not guess + ask author 等显式缺口
+- [x] 降级结果标记 `degraded=True`，降级结果不写入缓存
+- [x] 所有降级路径（provider 异常/非 JSON/confidence 不足/ambiguities 为空）均返回 `is_clear=True` + `degraded=True`
 
 ### 4.2 降级验收（关键：澄清器自身故障不阻塞流水线）
 
@@ -951,7 +1269,10 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 - [x] `test_clarify_contradictory` — 矛盾描述返回 `contradictory` 歧义
 - [x] `test_clarify_unexecutable` — 不可执行描述（无基线"优化性能"）返回 `unexecutable`
 - [x] `test_parse_non_json_returns_clear` — LLM 返回乱码时降级 `is_clear=true`
-- [x] `test_parse_low_confidence_flips_is_clear` — `confidence < min_confidence` 翻转 `is_clear`
+- [x] `test_parse_low_confidence_flips_is_clear` — `confidence < min_confidence` 返回 `is_clear=True` + `degraded=True`（**放行，非翻转**）
+- [x] `test_explicit_gap_detected` — 确定性门控检测 TBD
+- [x] `test_explicit_gap_chinese` — 确定性门控检测中文"未指定"
+- [x] `test_explicit_gap_do_not_guess` — 确定性门控检测 do not guess + ask author
 - [x] `test_cache_hit_skips_provider` — 相同 fingerprint 命中缓存
 - [x] `test_cache_miss_on_modified_description` — 修改描述后 fingerprint 变化
 - [x] `test_orchestrator_blocking_integration` — 不清晰 issue 被阻断 + ClarificationResolver 状态流转
@@ -975,12 +1296,14 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 
 | 依赖 | 类型 | 说明 |
 |------|------|------|
-| F-38 分发与报告 | 强依赖 | 澄清器插入 `_claim_next_issue` 后、`_prepare_workspace` 前，需要这些路径已就绪 |
-| F-39 issue 重跑标签 | 强依赖 | `agent:blocked` 标签机制 + `mark_intent` + `unblock` 用于澄清阻断/放行闭环 |
-| `IssueRegistry` + `IssueRecord` | 强依赖 | 已有 `update_clarification`、`question_history`、`clarification_status` 字段（来自 F-39） |
-| `PromptBuilder._CLARIFICATION_TEMPLATE` | 强依赖 | 澄清上下文注入已有模板槽位 |
-| `TrackerAdapter` | 强依赖 | `post_clarification_comment` 默认 `return None`；`update_comment` 用于评论 |
-| Provider + model | 强依赖 | 复用 orchestrator 已配置的 provider 和 model，不额外引入 |
+| F-38 分发与报告 | 强依赖 | 澄清器插入 `_poll_and_dispatch()` 中 `_launch_issue()` 之前，需要分发路径已就绪 |
+| F-39 issue 重跑标签 | 强依赖 | `reset_for_retry` 清除澄清状态；`mark_intent` + `unblock` 用于澄清阻断/放行闭环 |
+| `IssueRegistry` + `IssueRecord` | 强依赖 | 扩展 `clarification_status`、`open_questions`、`clarification_round`、`clarifier_fingerprint`、`clarification_replies`、`clarifier_comment_cursor` 等字段 |
+| `ClarificationResolver` + `ClarificationQueue` | 强依赖 | **三通道澄清流**（Dashboard / Queue / Author）统一通过 `resolver.request_clarification()` 和 `resolver.get_answer()` 接入 |
+| `PromptBuilder._CLARIFICATION_TEMPLATE` | 强依赖 | 澄清上下文注入已有模板槽位（通过 `session.clarification_answer` 属性） |
+| `TrackerAdapter` | 强依赖 | `create_clarification_comment()` 默认 `return None`；`update_comment` 用于评论 |
+| Provider + model | 强依赖 | 复用 orchestrator 已配置的 provider 和 model，通过 `build_provider_from_config()` 工厂函数创建 |
+| `ClarifierCache` | 强依赖 | SHA-256 fingerprint 缓存，`ClarifierCache(path, enabled=...)` 构造，`cache.put()` 跳过 degraded 结果 |
 
 ### 5.2 可选复用（F-123）
 
@@ -995,12 +1318,14 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 
 | 模块 | 协作关系 |
 |------|---------|
-| `Orchestrator._claim_next_issue()` | 澄清器插入点 |
-| `Orchestrator.poll()` | 下轮 poll 时 `ClarificationPoller.detect_reply()` |
-| `IssueRegistry` | 记录 `open_questions`、`clarification_round`、状态流转 |
-| `PromptBuilder.render()` | 澄清解决后注入 `_CLARIFICATION_TEMPLATE` |
-| `TrackerAdapter`/`RepositoryIssueClient` | 评论写入与回复检测 |
-| `Issue.cli.subcommand_registry` | CLI `clarify` 子命令注册 |
+| `Orchestrator._poll_and_dispatch()` | 澄清器插入点：`gate.begin_poll()` 在 dispatch 顶部重置预算；`gate.should_dispatch()` 在 `_launch_issue()` 之前调用 |
+| `ClarificationResolver.poll_clarification_answers()` | 澄清器通过 `resolver.get_answer()` 检测 author 回复 |
+| `IssueClarificationGate` | 统一的澄清门控，合并原 `ClarificationPoller` 职责：inbound 分析 + 回复检测 + 状态流转 + 多轮追问 |
+| `IssueRegistry` | 记录 `clarification_status`、`open_questions`、`clarification_round`、`clarifier_fingerprint`、`clarification_replies`、`clarifier_comment_cursor` |
+| `PromptBuilder.render()` | 澄清解决后通过 `session.clarification_answer` 属性注入 `_CLARIFICATION_TEMPLATE` |
+| `TrackerAdapter`/`RepositoryIssueClient`/`LinearAdapter` | 评论写入 `create_clarification_comment()` + 回复检测 |
+| `ClarifierCache` | fingerprint 缓存，减少重复 LLM 调用 |
+| `Issue.cli.subcommand_registry` | CLI `clarify --id --answer --forward-to-author --list --recheck --resolve` 子命令注册 |
 
 ### 5.4 不依赖
 
@@ -1020,3 +1345,4 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 | 2026-07-20 | `2f7b0cff` feat(orchestrator): F-118 task decomposition and F-124 issue clarifier MVP | **核心 commit**：F-124 与 F-118 一起合入。issue_clarifier 7 个模块（775 行）+ 单元测试（631 行）正式落地 |
 | 2026-07-21 | 文档同步 | 更新 §1.6 子特性表（13 ✅ + 1 ❌ P2 + 1 ⚠️ 偏离）、§1.7 实现文件清单（标行数与偏离）、§2.1 注 2 配置默认值差异表、§4 验收标准（18/19 勾选）、§6 变更记录 |
 | 2026-07-21 | 补 F-124-G：LinearAdapter.create_clarification_comment override + 文档同步 | 完成 LinearAdapter 评论写入能力（拼接 `@login` 前缀后委托 `create_comment`）；F-124-G 从 ⚠️ 标为 ✅（实现方式偏离原草案，统一走 ClarificationResolver 通道，避免双通道） |
+| 2026-07-21 | 文档补全特性缺口：§0 更新至五处重大调整 + 实现中独有设计清单；§2 同步实际实现（数据模型、prompt 结构、解析器降级行为、确定性门控、gate 状态机、IssueRecord 字段、边界场景）；§3 补充风险与约束；§4 补充验收项；§5 更新依赖与协同模块 | 实现与原始草案存在多处差异，需要同步文档以保持准确；本次补全覆盖所有已发现的特性缺口 |
