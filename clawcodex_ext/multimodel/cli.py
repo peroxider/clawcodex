@@ -10,26 +10,129 @@ from .config import GroupConfig, MultiModelConfig, MultiModelConfigError, RouteC
 from .preset import PRESETS, get_preset
 from .feature import disabled_message, is_multimodel_enabled
 
+def _build_preset_choices() -> dict[str, str]:
+    """Return a mapping of preset name to a short description."""
+    from .preset import PRESETS
+
+    descriptions: dict[str, str] = {}
+    for name, group in sorted(PRESETS.items()):
+        slots_desc = ", ".join(s.name for s in group.slots)
+        agg_desc = group.aggregator or "none"
+        descriptions[name] = f"{group.strategy}/{agg_desc} [{slots_desc}]"
+    return descriptions
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="clawcodex multimodel")
     sub = parser.add_subparsers(dest="command", required=True)
-    group = sub.add_parser("group"); group_sub = group.add_subparsers(dest="group_command", required=True)
-    create = group_sub.add_parser("create"); create.add_argument("name"); create.add_argument("--slot", action="append", required=True); _group_options(create)
-    group_sub.add_parser("list")
-    show = group_sub.add_parser("show"); show.add_argument("name")
-    delete = group_sub.add_parser("delete"); delete.add_argument("name")
-    update = group_sub.add_parser("update"); update.add_argument("name"); update.add_argument("--add-slot", action="append", default=[]); update.add_argument("--remove-slot", action="append", default=[]); _group_options(update, required=False)
-    use = sub.add_parser("use"); use.add_argument("name")
-    sub.add_parser("off"); sub.add_parser("status")
-    preset = sub.add_parser("preset"); preset.add_argument("name", choices=sorted(PRESETS))
+
+    # --- group subcommand ---
+    group = sub.add_parser(
+        "group",
+        help="Manage model groups (create, list, show, delete, update)",
+    )
+    group_sub = group.add_subparsers(dest="group_command", required=True)
+    create = group_sub.add_parser("create", help="Create a new model group")
+    create.add_argument("name", help="Group name")
+    create.add_argument(
+        "--slot",
+        action="append",
+        required=True,
+        metavar="SPEC",
+        help="Slot definition: name:model@provider[,weight=N][,timeout_ms=N] (repeatable)",
+    )
+    _group_options(create)
+    group_sub.add_parser("list", help="List all configured model groups")
+    show = group_sub.add_parser("show", help="Show details of a model group")
+    show.add_argument("name", help="Group name")
+    delete = group_sub.add_parser("delete", help="Delete a model group")
+    delete.add_argument("name", help="Group name")
+    update = group_sub.add_parser("update", help="Update an existing model group")
+    update.add_argument("name", help="Group name")
+    update.add_argument(
+        "--add-slot",
+        action="append",
+        default=[],
+        metavar="SPEC",
+        help="Slot to add: name:model@provider[,weight=N][,timeout_ms=N] (repeatable)",
+    )
+    update.add_argument(
+        "--remove-slot",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="Name of slot to remove (repeatable)",
+    )
+    _group_options(update, required=False)
+
+    # --- top-level subcommands ---
+    use = sub.add_parser("use", help="Switch to a model group (runtime + config)")
+    use.add_argument("name", help="Group name")
+    sub.add_parser("off", help="Switch back to single-model mode")
+    sub.add_parser("status", help="Show current multi-model status")
+
+    preset_help = _build_preset_choices()
+    preset = sub.add_parser(
+        "preset",
+        help="Apply a built-in preset as a new model group",
+        description=(
+            "Apply a built-in preset. Each preset creates a named group\n"
+            "with preconfigured strategy, slots, and aggregator:\n"
+        )
+        + "\n".join(f"  {k:<22s} {v}" for k, v in preset_help.items()),
+    )
+    preset.add_argument(
+        "name",
+        choices=sorted(PRESETS),
+        metavar="NAME",
+        help="Preset name: " + ", ".join(sorted(PRESETS)),
+    )
     return parser
 
+
 def _group_options(parser: argparse.ArgumentParser, *, required: bool = False) -> None:
-    parser.add_argument("--strategy", choices=("parallel", "voting", "routing", "fallback"), required=required, default=None)
-    parser.add_argument("--aggregator", choices=("passthrough", "first_success", "majority", "rank", "scoring", "fusion"), default=None)
-    parser.add_argument("--min-votes", type=int, default=None); parser.add_argument("--max-concurrent", type=int, default=None)
-    parser.add_argument("--scorer-provider", default=None); parser.add_argument("--scorer-model", default=None)
-    parser.add_argument("--route", action="append", default=[], metavar="PATTERN:SLOT")
+    parser.add_argument(
+        "--strategy",
+        choices=("parallel", "voting", "routing", "fallback"),
+        required=required,
+        default=None,
+        help="Execution strategy for the model group (default: parallel)",
+    )
+    parser.add_argument(
+        "--aggregator",
+        choices=("passthrough", "first_success", "majority", "rank", "scoring", "fusion"),
+        default=None,
+        help="Response aggregation method (default: passthrough)",
+    )
+    parser.add_argument(
+        "--min-votes",
+        type=int,
+        default=None,
+        help="Minimum votes required for consensus (voting/majority only)",
+    )
+    parser.add_argument(
+        "--max-concurrent",
+        type=int,
+        default=None,
+        help="Maximum concurrent slot invocations (default: 5)",
+    )
+    parser.add_argument(
+        "--scorer-provider",
+        default=None,
+        help="Provider for scoring/fusion (default: openai)",
+    )
+    parser.add_argument(
+        "--scorer-model",
+        default=None,
+        help="Model for scoring/fusion (default: gpt-4o)",
+    )
+    parser.add_argument(
+        "--route",
+        action="append",
+        default=[],
+        metavar="PATTERN:SLOT",
+        help="Routing rule: keyword pattern maps to a slot name (repeatable)",
+    )
 
 def _format_group(name: str, group: GroupConfig) -> str:
     lines = [f"Group: {name}", f"Strategy: {group.strategy}"]
@@ -54,13 +157,15 @@ def run_multimodel_command(argv: list[str]) -> int:
         if args.command == "group": return _group_command(args, config)
         if args.command == "use":
             if args.name not in config.groups: return _error(f"unknown model group '{args.name}'")
-            save_config(replace(config, default_group=args.name)); print(f"✓ 已启用多模型组 {args.name}"); return 0
-        if args.command == "off": save_config(replace(config, default_group="")); print("✓ 已切换回单模型模式"); return 0
+            save_config(replace(config, default_group=args.name)); print(f"✓ Switched to model group '{args.name}'"); return 0
+        if args.command == "off": save_config(replace(config, default_group="")); print("✓ Switched back to single-model mode"); return 0
         if args.command == "status":
-            if not config.default_group: print("当前: 未启用\n输入 'clawcodex multimodel use <name>' 启用"); return 0
-            print("状态: 已启用\n" + _format_group(config.default_group, config.groups[config.default_group])); return 0
+            if not config.default_group:
+                print("Status: multi-model mode is off\nRun 'clawcodex multimodel use <name>' to enable.")
+                return 0
+            print("Status: multi-model mode is on\n" + _format_group(config.default_group, config.groups[config.default_group])); return 0
         if args.command == "preset":
-            groups = dict(config.groups); groups[args.name] = get_preset(args.name); save_config(MultiModelConfig(args.name, groups)); print(f"✓ 已应用预设 {args.name} 并启用"); return 0
+            groups = dict(config.groups); groups[args.name] = get_preset(args.name); save_config(MultiModelConfig(args.name, groups)); print(f"✓ Applied preset '{args.name}' and activated"); return 0
     except MultiModelConfigError as exc: return _error(str(exc))
     return _error("unknown multimodel command")
 
@@ -74,16 +179,16 @@ def _group_command(args: argparse.Namespace, config: MultiModelConfig) -> int:
         print(_format_group(args.name, config.groups[args.name])); return 0
     if args.group_command == "delete":
         if args.name not in config.groups: return _error(f"unknown model group '{args.name}'")
-        groups = dict(config.groups); del groups[args.name]; save_config(MultiModelConfig("" if config.default_group == args.name else config.default_group, groups)); print(f"✓ 已删除模型组 {args.name}"); return 0
+        groups = dict(config.groups); del groups[args.name]; save_config(MultiModelConfig("" if config.default_group == args.name else config.default_group, groups)); print(f"✓ Deleted model group '{args.name}'"); return 0
     groups = dict(config.groups)
     if args.group_command == "create":
         if args.name in groups: return _error(f"model group '{args.name}' already exists")
-        groups[args.name] = validate_group(GroupConfig(args.strategy or "parallel", tuple(parse_slot(v) for v in args.slot), args.aggregator, args.max_concurrent or 5, args.min_votes, args.scorer_provider or "openai", args.scorer_model or "gpt-4o", _parse_routes(args.route))); save_config(MultiModelConfig(config.default_group, groups)); print(f"✓ 已创建模型组 {args.name}"); return 0
+        groups[args.name] = validate_group(GroupConfig(args.strategy or "parallel", tuple(parse_slot(v) for v in args.slot), args.aggregator, args.max_concurrent or 5, args.min_votes, args.scorer_provider or "openai", args.scorer_model or "gpt-4o", _parse_routes(args.route))); save_config(MultiModelConfig(config.default_group, groups)); print(f"✓ Created model group '{args.name}'"); return 0
     if args.name not in groups: return _error(f"unknown model group '{args.name}'")
     old = groups[args.name]; slots = [slot for slot in old.slots if slot.name not in set(args.remove_slot)]
     slots.extend(parse_slot(v) for v in args.add_slot)
     routes = _parse_routes(args.route) if args.route else old.routes
-    groups[args.name] = validate_group(GroupConfig(args.strategy or old.strategy, tuple(slots), args.aggregator if args.aggregator is not None else old.aggregator, args.max_concurrent or old.max_concurrent, args.min_votes if args.min_votes is not None else old.min_votes, args.scorer_provider or old.scorer_provider, args.scorer_model or old.scorer_model, routes)); save_config(MultiModelConfig(config.default_group, groups)); print(f"✓ 已更新模型组 {args.name}"); return 0
+    groups[args.name] = validate_group(GroupConfig(args.strategy or old.strategy, tuple(slots), args.aggregator if args.aggregator is not None else old.aggregator, args.max_concurrent or old.max_concurrent, args.min_votes if args.min_votes is not None else old.min_votes, args.scorer_provider or old.scorer_provider, args.scorer_model or old.scorer_model, routes)); save_config(MultiModelConfig(config.default_group, groups)); print(f"✓ Updated model group '{args.name}'"); return 0
 
 def _parse_routes(values: list[str]) -> tuple[RouteConfig, ...]:
     routes = []
