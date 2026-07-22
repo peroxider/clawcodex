@@ -53,6 +53,7 @@ docs/feature_plan/
 | F-159 | JIT 上下文合成 — 按需生成切断"假装知道"幻觉源头 | 📋 | [f-159-jit-context-synthesis.md](03-agent-core/f-159-jit-context-synthesis.md) |
 | F-160 | 反事实推理 — 强制"如果我错了，最可能错在哪"显式化 | 📋 | [f-160-counterfactual-reasoning.md](03-agent-core/f-160-counterfactual-reasoning.md) |
 | F-161 | 涌现式上下文发现 — Agent 主动反思"我可能需要 X"显式化 | 📋 | [f-161-emergent-context-discovery.md](03-agent-core/f-161-emergent-context-discovery.md) |
+| F-162 | 工具强制验证 — 关键事实（API / 版本 / 库 / 路径）必须经工具验证的硬拦截 | 📋 | [f-162-tool-mandatory-verification.md](03-agent-core/f-162-tool-mandatory-verification.md) |
 
 ### CLI 与配置系统
 
@@ -173,4 +174,5 @@ docs/feature_plan/
 | 2026-07-22 | 新增 F-160 反事实推理（覆盖 DC-012） | DC-A §4.4 映射表基础上落地 Wave 1 P0 推理扩展轻量级特性；门槛最低（仅 prompt + 1 Hook）；3 类模板（决策 / 断言 / 推荐）+ 6 档 verdict 标注 + 自检 Hook；与 F-119 / F-102 / F-158-A / F-130 / F-163 协同；解耦落地于 `extensions/counterfactual/`，零 `src/` 侵入 |
 | 2026-07-22 | 新增 F-161 涌现式上下文发现（覆盖 DC-018） | DC-A §4.4 映射表基础上落地 Wave 1 P0 元架构层特性（Wave 1 最后一个落地）；是 F-159 JIT 的隐式反思调度前置（meta-cognition 显式化）；反思 prompt + 4 档门控决策 + 反思缓存 + 调用 F-159 synthesize；与 F-119 / F-102 / F-159 / F-158 / F-160 / F-130 协同；解耦落地于 `extensions/emergent/`，零 `src/` 侵入 |
 | 2026-07-22 | 移除 README.md F-Number 状态总表中 F-119 行 | F-119 已标记为 ✅ 已完成（ROADMAP v4.7 已从路线图移除），但 README.md 仍引用不存在的 `f-119-prompt-assembly.md`；按 ROADMAP 精简口径移除该行；01-overview.md 行 53 同步改为"F-119 已完成，详见 ROADMAP"；代码层 `extensions/prompt_lab/` 目录保留（属已完成特性的实现） |
+| 2026-07-22 | 新增 F-162 工具强制验证（覆盖 DC-006） | DC-A §4.4 映射表基础上落地 Wave 2 P1 工具化组首个特性；是 F-158 软警告的硬约束升级（双层防御：F-158 标注 + F-162 拦截）；6 类规则（API 签名 / 版本号 / import / 库存在 / 路径 / 配置项）+ 三档拦截模式（warn / block / strict）+ 5 维例外判定 + JIT 联动自动抓取 + Profile 映射；与 F-119 / F-102 / F-158 / F-159 / F-130 / F-163 协同；解耦落地于 `extensions/tool_verification/`，零 `src/` 侵入 |
 | 2026-07-21 | 更新 CCB 对标章节:F-84/F-87/F-88/F-92/F-95 标记为 ✅,F-94 保持 🚧 | 代码确认 5 个特性完全落地,同步 `06-ccb-benchmark/README.md` §A 缺口矩阵与单篇文档状态 |
