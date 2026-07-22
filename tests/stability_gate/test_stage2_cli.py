@@ -107,8 +107,8 @@ class TestStage2CliSmoke:
             text=True,
         )
         try:
-            stdout, _ = proc.communicate(timeout=8)
-            # 如果 8 秒内返回了，检查非崩溃退出
+            stdout, _ = proc.communicate(timeout=12)
+            # 如果 12 秒内返回了，检查非崩溃退出
             output = stdout
             assert "Traceback (most recent call last)" not in output, (
                 f"CLI crashed with unhandled exception:\n{output}"

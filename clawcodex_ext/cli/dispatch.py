@@ -562,8 +562,10 @@ def run_cli(argv: list[str] | None = None) -> int:
 
     # F-157: command-line selection wins over an in-process runtime choice,
     # which in turn wins over config.yaml's default_group.
+    from clawcodex_ext.multimodel.config import MultiModelConfigError  # fmt: skip
+
     try:
-        from clawcodex_ext.multimodel.config import MultiModelConfigError, load_config, resolve_active_group
+        from clawcodex_ext.multimodel.config import load_config, resolve_active_group
 
         _multimodel_config = load_config()
         _multimodel_group = resolve_active_group(
@@ -662,6 +664,16 @@ def run_cli(argv: list[str] | None = None) -> int:
 
     # ---- Agent type resolution: --agent flag or auto-detect ----
     _resolve_startup_agent(args, ctx)
+
+    # F-22: print a diagnostic line so piped invocations (e.g. stability gate
+    # tests) can see provider/model info before the agent loop blocks on the
+    # LLM response.  Without this flush, stdout is buffered and the output is
+    # empty when the process is killed after a timeout.
+    if args.print:
+        print(
+            f"Provider: {ctx.provider_name}, Model: {ctx._single_model or getattr(ctx.provider, 'model', None)}",
+            flush=True,
+        )
 
     # Select frontend by name; dispatch stays as the thin orchestration layer.
     if args.print:
