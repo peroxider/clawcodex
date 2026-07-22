@@ -84,6 +84,20 @@ class CronScheduler:
     # F-22-F: agent ownership — when set, only fire tasks belonging to this agent
     # or global tasks (agent_id=None). None means no filtering (all agents).
     agent_id: str | None = None
+    # F-22-F-4: optional hook fired when the owning agent is reported
+    # to have exited (crash / SIGKILL / clean shutdown) via
+    # :meth:`notify_owner_exited`. The teammate subsystem is not yet
+    # wired, so this stays as an optional callable the caller may set
+    # once teammate lifecycle is integrated.
+    on_owner_exited: Callable[[str], None] | None = None
+    # F-22-F-5: optional provider returning the set of currently active
+    # agent ids. When set, :meth:`cleanup_orphaned_tasks` uses it to
+    # find tasks whose owning agent is no longer active. The scheduler
+    # does NOT poll this provider automatically — teammate subsystem
+    # integration will wire the call site once :class:`TeammateManager`
+    # is connected. Until then, callers can invoke
+    # :meth:`cleanup_orphaned_tasks` manually from outside.
+    active_agents_provider: Callable[[], set[str]] | None = None
 
     _thread: threading.Thread | None = field(default=None, init=False)
     _stop_event: threading.Event = field(default_factory=threading.Event, init=False)
@@ -306,6 +320,64 @@ class CronScheduler:
             if self.on_missed is not None:
                 self.on_missed(missed, build_missed_task_notification(missed))
         return missed
+
+    # ---- F-22-F-4 / F-22-F-5 stubs (awaiting teammate subsystem) ----
+    def notify_owner_exited(self, owner_agent_id: str) -> list[str]:
+        """F-22-F-4 stub: notify the scheduler that an owning agent exited.
+
+        Currently a no-op with two side effects:
+
+        1. If ``on_owner_exited`` is set, invoke it with the agent id.
+           Callers (typically the future teammate subsystem) get a
+           single hook point to track agent lifecycle without coupling
+           to scheduler internals.
+        2. Log the exit at debug level. No runs are auto-finalized
+           here yet — once :class:`TeammateManager` exposes an
+           ``active_agents`` API, this method will additionally walk
+           any in-flight cron runs owned by ``owner_agent_id`` and
+           finalize them as ``failed`` with reason ``owner_exited``.
+
+        Returns the list of run ids that were finalized as failed
+        (currently always empty).
+        """
+        if not owner_agent_id:
+            return []
+        _log.debug("notify_owner_exited(agent=%s) — teammate integration pending", owner_agent_id)
+        if self.on_owner_exited is not None:
+            try:
+                self.on_owner_exited(owner_agent_id)
+            except Exception:  # pragma: no cover - defensive
+                _log.exception("on_owner_exited hook raised for agent %s", owner_agent_id)
+        return []
+
+    def cleanup_orphaned_tasks(self) -> list[CronTask]:
+        """F-22-F-5 stub: find tasks whose owning agent is no longer active.
+
+        Requires ``active_agents_provider`` to be set; otherwise the
+        caller has no way to know which agents are alive. The scheduler
+        does NOT poll this provider automatically — that wiring will
+        land once the teammate subsystem (``TeammateManager``) is
+        connected. Until then, callers (REPL/headless shutdown,
+        orchestrator drain) can invoke this method directly when they
+        have a fresh snapshot of the active agent set.
+
+        Returns the list of orphaned tasks. The caller decides whether
+        to delete them — this method is read-only.
+        """
+        from .tasks import cleanup_orphaned_tasks as _cleanup
+
+        if self.active_agents_provider is None:
+            return []
+        try:
+            active = self.active_agents_provider()
+        except Exception:  # pragma: no cover - defensive
+            _log.exception("active_agents_provider raised; skipping cleanup")
+            return []
+        return _cleanup(
+            self.workspace_root,
+            active,
+            session_store=self.session_store,
+        )
 
     def get_next_fire_time(self) -> int | None:
         if self.is_disabled():

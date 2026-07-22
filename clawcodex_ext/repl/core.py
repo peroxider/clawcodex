@@ -521,8 +521,15 @@ _CRON_WAKE = object()
 _CRON_PROMPT_PRELUDE = "This prompt was generated automatically from a scheduled task."
 
 
-def _wrap_cron_prompt(prompt: str, *, task_id: str = "") -> str:
-    """Wrap a cron prompt with context so the LLM knows it's automated."""
+def _wrap_cron_prompt(prompt: str, task_id: str = "", run_id: str = "") -> str:
+    """Wrap a cron prompt with context so the LLM knows it's automated.
+
+    F-22-G-2: signature now matches the
+    ``Callable[[prompt, task_id, run_id], str]`` shape expected by
+    :class:`CronDispatchBridge`. ``run_id`` is currently unused but
+    is reserved for future runs-by-id display.
+    """
+    _ = run_id  # reserved for future display
     now = datetime.now()
     time_str = now.strftime("%b %d %-I:%M%p").lower()
     header = f"✻ Running scheduled task ({time_str})"
@@ -3364,6 +3371,12 @@ class ClawcodexREPL:
         discarded and its run is finalized as "cancelled". This prevents
         outbox pile-up when a recurring task's interval is shorter than
         its execution time.
+
+        F-22-G-2: the typed-or-dict parsing and prompt wrapping is now
+        delegated to :class:`CronDispatchBridge.drain` /
+        :meth:`CronDispatchBridge.drain_missed`. The accumulation
+        guard stays here because it depends on the per-REPL-session
+        ``_cron_active_tasks`` dictionary, not on the bridge.
         """
         if not _HAS_CRON:
             return
@@ -3372,44 +3385,27 @@ class ClawcodexREPL:
         outbox = getattr(self.tool_context, "outbox", None)
         if not outbox:
             return
+        # Lazy import to avoid hard dependency at module import time;
+        # ``_HAS_CRON`` already guards downstream call sites.
+        from clawcodex_ext.cron_system.dispatch import CronDispatchBridge
+
+        bridge = CronDispatchBridge(
+            self.tool_context.workspace_root,
+            wrap_prompt=_wrap_cron_prompt,
+        )
         drained: list[str] = []
-        while outbox:
-            entry = outbox.pop(0)
-            if hasattr(entry, "get"):
-                etype = entry.get("type", "")
-                if etype == "cron_prompt":
-                    prompt = (entry.get("prompt") or "").strip()
-                    task_id = entry.get("task_id", "")
-                    run_id = entry.get("run_id", "")
-                    if task_id and task_id in self._cron_active_tasks:
-                        self._finalize_cron_run(run_id, "cancelled")
-                        continue
-                    if prompt:
-                        if task_id and run_id:
-                            self._cron_active_tasks[task_id] = run_id
-                        drained.append(_wrap_cron_prompt(prompt, task_id=task_id))
-                elif etype == "cron_missed":
-                    notification = (entry.get("notification") or "").strip()
-                    if notification:
-                        drained.append(notification)
-            elif isinstance(entry, dict):
-                # Fallback for legacy dict entries (backward compat)
-                etype = entry.get("type", "")
-                if etype == "cron_prompt":
-                    prompt = (entry.get("prompt") or "").strip()
-                    task_id = entry.get("task_id", "")
-                    run_id = entry.get("run_id", "")
-                    if task_id and task_id in self._cron_active_tasks:
-                        self._finalize_cron_run(run_id, "cancelled")
-                        continue
-                    if prompt:
-                        if task_id and run_id:
-                            self._cron_active_tasks[task_id] = run_id
-                        drained.append(_wrap_cron_prompt(prompt, task_id=task_id))
-                elif etype == "cron_missed":
-                    notification = (entry.get("notification") or "").strip()
-                    if notification:
-                        drained.append(notification)
+        # cron_prompt: typed-or-dict parsing + wrap done by bridge;
+        # accumulation guard stays local.
+        for event in bridge.drain(outbox):
+            if event.task_id and event.task_id in self._cron_active_tasks:
+                self._finalize_cron_run(event.run_id, "cancelled")
+                continue
+            if event.task_id and event.run_id:
+                self._cron_active_tasks[event.task_id] = event.run_id
+            drained.append(event.wrapped_prompt)
+        # cron_missed: notifications are delivered verbatim (no wrap).
+        for missed in bridge.drain_missed(outbox):
+            drained.append(missed.notification)
         for text in drained:
             self._enqueue_cron_prompt(text)
 

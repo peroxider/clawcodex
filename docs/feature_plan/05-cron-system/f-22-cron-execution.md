@@ -1,8 +1,8 @@
 # F-22: Cron 系统执行引擎
 
-> 状态: 🔄 进行中（Phase A~E ✅, G1~G10 ✅, D1~D4 ✅, Phase F~J 📋 设计就绪待实施）
+> 状态: 🔄 进行中（Phase A~E ✅, G1~G10 ✅, D1~D4 ✅, Phase F~J 部分落地）
 > 章节: docs/feature_plan/05-cron-system/f-22-cron-execution.md
-> 最后更新: 2026-07-21
+> 最后更新: 2026-07-22
 
 ## §1 设计规划
 
@@ -30,10 +30,10 @@
 迁移时以 `claude-code-best` 的以下文件作为行为来源：
 
 | 能力 | 参考文件 | 迁移关注点 |
-|------|---------|------------|
+|---|---------|------------|
 | Cron 工具 | `ScheduleCronTool/CronCreateTool.ts` | schema、cron 校验、durable 处理、返回字段、启用 scheduler |
 | Cron 列表 | `ScheduleCronTool/CronListTool.ts` | session + durable 聚合、teammate 过滤、展示字段 |
-| Cron 删除 | `ScheduleCronTool/CronDeleteTool.ts` | ID 校验、权限/归属校验、删除语义 |
+| ConDeleteTool.ts` | ID 校验、权限/归属校验、删除语义 |
 | Feature gate | `ScheduleCronTool/prompt.ts` | `CLAUDE_CODE_DISABLE_CRON`、durable gate |
 | 存储模型 | `src/utils/cronTasks.ts` | session-only 与 durable 分离、8 位 ID |
 | 调度器 | `src/utils/cronScheduler.ts` | 1 秒轮询、busy gate、scheduler lock、missed one-shot、filter |
@@ -603,15 +603,15 @@ def is_cron_disabled(env: dict[str, str] | None = None) -> bool:
 | **Phase C** | scheduler 语义对齐 | ✅ | P0 |
 | **Phase D** | 执行队列与结果追踪 | ✅ | P0 |
 | **Phase E** | skills 与用户命令 | ✅ | P0 |
-| **Phase F** | teammate/agent ownership | 📋 设计就绪 | P1 |
-| **F-1** | 模型扩展（CronTask.agent_id, CronRun.owner_agent_id） | 📋 | P1 |
-| **F-2** | 调度器 agent 过滤（check_once agent_id 门控） | 📋 | P1 |
-| **F-3** | 工具层可见性（CronList/Delete 归属过滤） | 📋 | P1 |
-| **F-4** | Teammate 生命周期（退出/崩溃/无 runtime 降级） | 📋 | P1 |
-| **F-5** | 清理孤儿任务（cleanup_orphaned_tasks） | 📋 | P2 |
-| **Phase G** | 前端集成补齐与 CronDispatchBridge 统一 | 📋 设计就绪 | P0 |
-| **G-1** | TUI 前端 cron 集成（outbox drain + attach_cron_runtime） | 📋 | P0 |
-| **G-2** | CronDispatchBridge 统一抽象 | 📋 | P0 |
+| **Phase F** | teammate/agent ownership | 🔄 部分落地 | P1 |
+| **F-1** | 模型扩展（CronTask.agent_id, CronRun.owner_agent_id） | ✅ | P1 |
+| **F-2** | 调度器 agent 过滤（check_once agent_id 门控） | ✅ | P1 |
+| **F-3** | 工具层可见性（CronList/Delete 归属过滤） | ✅ | P1 |
+| **F-4** | Teammate 生命周期（退出/崩溃/无 runtime 降级） | ⏸ 占位等待 teammate | P2 |
+| **F-5** | 清理孤儿任务（cleanup_orphaned_tasks） | ⏸ 占位等待 teammate | P2 |
+| **Phase G** | 前端集成补齐与 CronDispatchBridge 统一 | 🔄 进行中 | P0 |
+| **G-1** | TUI 前端 cron 集成（outbox drain + attach_cron_runtime） | ✅ | P0 |
+| **G-2** | CronDispatchBridge 统一抽象（含三端替换） | ✅ | P0 |
 | **G-3** | TUI 传递 is_loading 回调 | 📋 | P0 |
 | **Phase H** | durable 文件增量加载（mtime 轮询） | 📋 设计就绪 | P1 |
 | **Phase I** | CCB 兼容门禁命名（CLAUDE_CODE_DISABLE_CRON 回退） | 📋 设计就绪 | P1 |
@@ -726,33 +726,34 @@ One-shot: 反向 jitter（提前触发），只在 `minute % one_shot_minute_mod
 | 2026-06 | G9~G10 daemon + UTC 显示 | scheduler.py, jitter.py | 参数覆盖测试 |
 | 2026-07-21 | Phase F~J 设计就绪 + 文档与代码现状对齐 | f-22-cron-execution.md | 代码审查 + 文档补全（3 轮迭代） |
 | 2026-07-21 | D1~D4 状态从 📋→✅ + 实施细节补全 | f-22-cron-execution.md §1.7 | 对照 runs.py/lock.py/scheduler.py 代码现状 |
+| 2026-07-22 | F-3 (input_schema) + G-2 (headless/REPL 替换) 落地 | tools.py, dispatch.py, headless.py, repl/core.py | 161 cron tests pass |
+| 2026-07-22 | F-4/F-5 占位接口 (notify_owner_exited / cleanup_orphaned_tasks) | scheduler.py | 8 stub tests pass，等待 teammate 子系统 |
 
 ### 2.2 当前瓶颈
 
 | 优先级 | 瓶颈 | 原因 | 影响范围 | 对应 Phase |
 |:------:|------|------|----------|:----------:|
-| P0 | TUI outbox drain 未接线 | `clawcodex_ext/entrypoints/tui.py` 无 cron outbox 消费逻辑，且未调用 `attach_cron_runtime()` | TUI 模式下 cron 任务不会触发执行 | Phase G-1 |
-| P0 | R2: 无正式 CronDispatchBridge | headless 和 REPL 各有 ad-hoc drain 函数，但无 typed dispatch 类 | 事件类型不统一，新前端需重复实现 drain 逻辑 | Phase G-2 |
 | P0 | R5: TUI 未传递 `is_loading` 回调 | `attach_cron_runtime()` 的 `is_loading` 参数在 TUI 前端未传入 | TUI 模式可能错过 busy gate，cron 在 agent 响应期间抢跑 | Phase G-3 |
-| P1 | Phase F: teammate/agent ownership | `CronTask` 无 `agent_id` 字段，`CronScheduler` 无 agent 过滤 | 多 agent 场景下任务归属混乱 | Phase F |
 | P1 | R6: 无 durable 文件 mtime 轮询 | 每次读全量文件，多会话场景下高并发 I/O | 大文件场景性能瓶颈 | Phase H |
 | P1 | R8: 未兼容 CLAUDE_CODE_DISABLE_CRON | `is_cron_disabled()` 仅读 `CLAWCODEX_DISABLE_CRON` | 从 CCB 迁移的用户环境变量不生效 | Phase I |
 | P2 | R4: 缺少 `/cron-trigger` 命令别名 | `/cron-run` 已存在但无 `trigger` 别名 | 用户发现成本高 | Phase J-1 |
 | P2 | R4: `--deep` 未集成到 `/cron-list` | `build_autonomy_status()` 支持 `deep` 参数但 `/cron-list` 命令未传递 | 任务列表默认截断 | Phase J-2 |
 | P2 | R4: `format_cron_task_detail()` 硬编码 `"Agent: —"` | `schedule.py` 中占位符未替换为实际 `agent_id` | 多 agent 场景下信息不准确 | Phase F-1 |
+| P2 | F-4: 缺失 teammate 退出错误写路径 | scheduler 无 `notify_owner_exited` 自动 finalize。当前仅有 hook + stub 方法，等待 teammate 子系统 (`TeammateManager`) 接入 | 多 agent 场景下崩溃 run 残留 queued | Phase F-4 |
+| P2 | F-5: scheduler 未定期调用 `cleanup_orphaned_tasks` | `cleanup_orphaned_tasks` 函数已存在但缺 active_agents 来源；当前提供 `active_agents_provider` 占位 + 公开方法，等待 teammate 子系统接入 | 孤儿任务无清理触发 | Phase F-5 |
 
 ### 2.3 下一步计划
 
-**Phase G — P0 三端集成统一**（当前阶段）:
-1. **G-1**: TUI outbox drain 接线 — `clawcodex_ext/entrypoints/tui.py` 增加 `_drain_cron_outbox()` + `_process_cron_outbox()` + `_run_cron_prompt()` 函数，参考 headless 实现
+**Phase G — P0 三端集成统一**（当前阶段，G-2 已落地）:
+1. **G-1**: TUI outbox drain 接线 — `clawcodex_ext/entrypoints/tui.py` 增加 `_drain_cron_outbox()` + `_process_cron_outbox()` + `_run_cron_prompt()` 函数 ✅
 2. **G-3**: TUI 传递 `is_loading` 回调 — 新增 `_InAgentLoopFlag` 类型，在 `attach_cron_runtime()` 中传入
-3. **G-2**: 新建 `clawcodex_ext/cron_system/dispatch.py` — `CronDispatchBridge` 类，统一三端 drain 行为
-4. **G-2 (续)**: 分别替换 headless/REPL/TUI 三端的 ad-hoc drain 实现
+3. **G-2**: 新建 `clawcodex_ext/cron_system/dispatch.py` — `CronDispatchBridge` 类，统一三端 drain 行为 ✅
+4. **G-2 (续)**: 分别替换 headless/REPL/TUI 三端的 ad-hoc drain 实现 ✅（TUI 已用 bridge.drain，headless/REPL 也于 2026-07-22 替换）
 
-**Phase F — P1 ownership 模型扩展**（G 完成后启动）:
-5. **F-1**: `CronTask.agent_id` + `CronRun.owner_agent_id` + `CronTaskDetail.agent_id` 字段扩展
-6. **F-2**: `CronScheduler.agent_id` + `check_once()` agent 过滤
-7. **F-3**: 工具层 `CronCreate`/`CronList`/`CronDelete` 归属过滤
+**Phase F — P1 ownership 模型扩展**（G-2 已完成，F-1/F-2/F-3 已落地）:
+5. **F-1**: `CronTask.agent_id` + `CronRun.owner_agent_id` + `CronTaskDetail.agent_id` 字段扩展 ✅
+6. **F-2**: `CronScheduler.agent_id` + `check_once()` agent 过滤 ✅
+7. **F-3**: 工具层 `CronCreate`/`CronList`/`CronDelete` 归属过滤 ✅（input_schema 已声明 agent_id；工具函数支持 tool_input.get("agent_id")）
 
 **Phase H+I+J — P1/P2 补齐**（可并行于 F）:
 8. **H-1**: `read_cron_tasks_cached()` mtime 轮询实现
@@ -764,17 +765,26 @@ One-shot: 反向 jitter（提前触发），只在 `minute % one_shot_minute_mod
 **依赖关系图**:
 ```
 Phase G (P0, TUI+CronDispatchBridge)
-    ├── G-1: TUI outbox drain (无前置依赖)
+    ├── G-1: TUI outbox drain ✅
     ├── G-3: TUI is_loading (依赖 G-1)
-    └── G-2: CronDispatchBridge (依赖 G-1)
+    └── G-2: CronDispatchBridge ✅ (含三端替换)
 Phase F (P1, ownership)
-    ├── F-1: 模型扩展 (无前置依赖)
-    ├── F-2: 调度器过滤 (依赖 F-1)
-    └── F-3: 工具层过滤 (依赖 F-1)
+    ├── F-1: 模型扩展 ✅
+    ├── F-2: 调度器过滤 ✅
+    ├── F-3: 工具层过滤 ✅
+    ├── F-4: notify_owner_exited 占位 ⏸ (等待 teammate 子系统)
+    └── F-5: cleanup_orphaned_tasks 占位 ⏸ (等待 teammate 子系统)
 Phase H (P1, mtime polling) — 无前置依赖, 可随时启动
 Phase I (P1, CCB gate) — 无前置依赖, 可随时启动
 Phase J (P2, R4补齐) — 无前置依赖, 可随时启动
 ```
+
+**F-4 / F-5 占位说明（2026-07-22）**:
+
+| 子特性 | 落地状态 | 说明 |
+|--------|---------|------|
+| F-4 notify_owner_exited | 占位 hook | `CronScheduler.on_owner_exited: Callable[[str], None]` + `notify_owner_exited(agent_id)` 方法已添加；当前为 stub（仅 log + 调 hook），不自动 finalize in-flight run。等 `TeammateManager` 接入后扩展为遍历 owner_agent_id 的 run 并 finalize 为 failed。 |
+| F-5 cleanup_orphaned_tasks | 占位 provider + 公开方法 | `CronScheduler.active_agents_provider: Callable[[], set[str]]` + `cleanup_orphaned_tasks()` 公开方法已添加；scheduler 不在 `check_once` 中自动 poll（避免无 source 时噪声）。等 `TeammateManager` 接入后由 caller 调用 `cleanup_orphaned_tasks()` 触发扫描。 |
 
 ## §3 实施细节
 

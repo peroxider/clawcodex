@@ -163,6 +163,11 @@ CronCreateTool: Tool = build_tool(
             "prompt": {"type": "string"},
             "recurring": {"type": "boolean"},
             "durable": {"type": "boolean"},
+            # F-22-F-3: caller-supplied agent identity. Optional — when
+            # absent, the task is global (agent_id=None). The LLM is
+            # expected to populate this from the runtime context when
+            # running under a teammate/agent orchestration layer.
+            "agent_id": {"type": "string"},
         },
         "required": ["cron", "prompt"],
     },
@@ -196,7 +201,15 @@ def _cron_list_call(tool_input: dict[str, Any], context: ToolContext) -> ToolRes
 
 CronListTool: Tool = build_tool(
     name="CronList",
-    input_schema={"type": "object", "additionalProperties": False, "properties": {}},
+    input_schema={
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            # F-22-F-3: when provided and not "*", only return tasks owned
+            # by this agent (or global tasks). "*" returns all tasks (admin).
+            "agent_id": {"type": "string"},
+        },
+    },
     call=_cron_list_call,
     prompt=CRON_LIST_PROMPT,
     description="List scheduled cron jobs.",
@@ -238,7 +251,12 @@ CronDeleteTool: Tool = build_tool(
     input_schema={
         "type": "object",
         "additionalProperties": False,
-        "properties": {"id": {"type": "string"}},
+        "properties": {
+            "id": {"type": "string"},
+            # F-22-F-3: caller agent identity for ownership validation.
+            # Non-admin callers cannot delete tasks owned by another agent.
+            "agent_id": {"type": "string"},
+        },
         "required": ["id"],
     },
     call=_cron_delete_call,

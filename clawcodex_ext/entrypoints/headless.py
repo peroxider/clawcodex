@@ -1792,10 +1792,18 @@ def _run_one_agent_loop(
     )
 
 
-def _wrap_cron_prompt(prompt: str, *, task_id: str = "") -> str:
-    """Wrap a cron prompt with context so the LLM knows it's automated."""
+def _wrap_cron_prompt(prompt: str, task_id: str, run_id: str) -> str:
+    """Wrap a cron prompt with context so the LLM knows it's automated.
+
+    F-22-G-2: kept as the headless-side prompt wrapper passed to
+    :class:`CronDispatchBridge`. Mirrors the previous module-level
+    ``_wrap_cron_prompt(prompt, *, task_id=...)`` signature by
+    accepting positional args in the new (prompt, task_id, run_id)
+    order expected by the bridge.
+    """
     from datetime import datetime
 
+    _ = run_id  # unused — wrapper does not currently show run id
     now = datetime.now()
     time_str = now.strftime("%b %d %-I:%M%p").lower()
     header = f"✻ Running scheduled task ({time_str})"
@@ -1810,38 +1818,40 @@ def _drain_cron_outbox(
 ) -> list[tuple[str, str, str]]:
     """Drain cron_prompt events from ``tool_context.outbox``.
 
+    F-22-G-2: delegates the typed-or-dict parsing and prompt
+    wrapping to :class:`CronDispatchBridge`. The accumulation guard
+    (duplicate task_id in ``active_tasks`` → cancel run) stays here
+    because it depends on the per-run-loop closure dictionary, not
+    on the bridge.
+
     Returns runnable prompts as ``(wrapped_prompt, task_id, run_id)``.
-    Duplicate active tasks are discarded and their runs finalized as
-    ``cancelled`` (accumulation guard).
     """
     outbox = getattr(tool_context, "outbox", None)
     if not outbox:
         return []
+    # Lazy import to avoid circular import with ``runtime.py`` at
+    # module load time. ``dispatch.py`` itself imports from ``runs.py``
+    # which is already loaded above.
+    from clawcodex_ext.cron_system.dispatch import CronDispatchBridge
+
+    bridge = CronDispatchBridge(
+        tool_context.workspace_root,
+        wrap_prompt=_wrap_cron_prompt,
+    )
+    events = bridge.drain(outbox)
     drained: list[tuple[str, str, str]] = []
-    while outbox:
-        entry = outbox.pop(0)
-        etype = entry.get("type", "") if hasattr(entry, "get") else getattr(entry, "type", "")
-        if etype != "cron_prompt":
-            continue
-        prompt = (
-            (entry.get("prompt") or "").strip()
-            if hasattr(entry, "get")
-            else str(getattr(entry, "prompt", "")).strip()
-        )
-        task_id = (
-            entry.get("task_id", "") if hasattr(entry, "get") else getattr(entry, "task_id", "")
-        )
-        run_id = entry.get("run_id", "") if hasattr(entry, "get") else getattr(entry, "run_id", "")
-        if task_id and task_id in active_tasks:
+    for event in events:
+        if event.task_id and event.task_id in active_tasks:
             try:
-                finalize_cron_run(tool_context.workspace_root, run_id, "cancelled")
+                finalize_cron_run(
+                    tool_context.workspace_root, event.run_id, "cancelled"
+                )
             except Exception:
                 pass
             continue
-        if prompt:
-            if task_id and run_id:
-                active_tasks[task_id] = run_id
-            drained.append((_wrap_cron_prompt(prompt, task_id=task_id), str(task_id), str(run_id)))
+        if event.task_id and event.run_id:
+            active_tasks[event.task_id] = event.run_id
+        drained.append((event.wrapped_prompt, event.task_id, event.run_id))
     return drained
 
 
