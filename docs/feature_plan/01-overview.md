@@ -50,7 +50,7 @@ extensions/        Layer 2 — 三方扩展层（Extensions）
   └── ...                 其他三方子系统
 ```
 
-详见 `docs/decoupling/` 解耦方案文档。F-119 规划详见 `docs/feature_plan/03-agent-core/f-119-prompt-assembly.md`。
+详见 `docs/decoupling/` 解耦方案文档。F-119 已完成，详见 ROADMAP。
 
 ## 核心约束
 

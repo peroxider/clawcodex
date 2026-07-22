@@ -966,6 +966,9 @@ Level 4 (基础设施): DC-014, DC-016, DC-019
 | 2026-07-21 | 初始创建 (20 项脑暴规划) | 用户提出"动态上下文切换/装配/生成"挑战性问题，经头脑风暴形成 DC-001 ~ DC-020 方案集，需落盘为单一规划文档指导后续 F-Number 申请与实施 |
 | 2026-07-22 | 新增 §4.4 DC → F-N 映射表 | 把 20 项 DC-NN 收敛为 16 个 F-N 文档（F-158 ~ F-173），按 Wave 1/2/3 三波落地；F-N 编号从 F-158 起（接续 F-157 ToolSearch），同步更新 §5.2 推荐路线与 §9 速查表 |
 | 2026-07-22 | F-158 抗幻觉基线协议文档启动（Wave 1 首个落地） | 在 §4.4 映射表基础上规划 F-158，覆盖 DC-005 置信度声明协议 + DC-009 否定式检索 + DC-020 边界追踪三个 P0 高杠杆项；详见 [03-agent-core/f-158-anti-hallucination-baseline.md](../03-agent-core/f-158-anti-hallucination-baseline.md)；解耦落地于 `extensions/anti_hallucination/`，零 `src/` 侵入 |
+| 2026-07-22 | F-159 JIT 上下文合成文档启动（Wave 1 第二个落地） | 在 §4.4 映射表基础上规划 F-159，覆盖 DC-003；Intent 路由 + Loader 集合（Grep/WebFetch/Bash）+ 合成缓存 + F-119 register_section 动态注入 + 单 turn/session 配额 + 冷却期；与 F-130 / F-158-A / F-161 强协同；详见 [03-agent-core/f-159-jit-context-synthesis.md](../03-agent-core/f-159-jit-context-synthesis.md)；解耦落地于 `extensions/jit_context/`，零 `src/` 侵入 |
+| 2026-07-22 | F-160 反事实推理文档启动（Wave 1 第三个落地） | 在 §4.4 映射表基础上规划 F-160，覆盖 DC-012；门槛最低（仅 prompt 模板 + 1 Hook）；3 类模板（决策 / 断言 / 推荐）+ 6 档 verdict 标注 + 反事实块自检 + INFERRED 降级桥；与 F-119 / F-102 / F-158-A / F-130 / F-163 协同；详见 [03-agent-core/f-160-counterfactual-reasoning.md](../03-agent-core/f-160-counterfactual-reasoning.md)；解耦落地于 `extensions/counterfactual/`，零 `src/` 侵入 |
+| 2026-07-22 | F-161 涌现式上下文发现文档启动（Wave 1 第四个落地 / Wave 1 收官） | 在 §4.4 映射表基础上规划 F-161，覆盖 DC-018；是 F-159 JIT 的隐式反思调度前置（meta-cognition 显式化）；反思 prompt（含 4 反思问题 + 反事实协同）+ 3 个内置触发器（task_start / decision_point / periodic）+ 反思缓存 + 4 档信心门控（PROCEED / FORCE_JIT / ASK_USER / BLOCK）+ bridge_to_jit 调用 F-159 synthesize；与 F-119 / F-102 / F-159 / F-158 / F-160 / F-130 协同；详见 [03-agent-core/f-161-emergent-context-discovery.md](../03-agent-core/f-161-emergent-context-discovery.md)；解耦落地于 `extensions/emergent/`，零 `src/` 侵入 |
 
 ---
 

@@ -48,9 +48,11 @@ docs/feature_plan/
 |----------|------|:----:|---------|
 | F-10 | ExecuteExtraTool 延迟工具系统 | 📋 | [f-10-extratool.md](03-agent-core/f-10-extratool.md) |
 | F-107 | PowerShell 支持增强 | 📋 | [f-107-powershell.md](03-agent-core/f-107-powershell.md) |
-| F-119 | System Prompt 段落拼装与自迭代基础设施 | 📋 | [f-119-prompt-assembly.md](03-agent-core/f-119-prompt-assembly.md) |
 | F-130 | 自校正上下文切换 — 元认知"换脑"机制 | 📋 | [f-130-self-correct-context-switch.md](03-agent-core/f-130-self-correct-context-switch.md) |
 | F-158 | 抗幻觉基线协议 — 置信度 / 否定检索 / 边界追踪 | 📋 | [f-158-anti-hallucination-baseline.md](03-agent-core/f-158-anti-hallucination-baseline.md) |
+| F-159 | JIT 上下文合成 — 按需生成切断"假装知道"幻觉源头 | 📋 | [f-159-jit-context-synthesis.md](03-agent-core/f-159-jit-context-synthesis.md) |
+| F-160 | 反事实推理 — 强制"如果我错了，最可能错在哪"显式化 | 📋 | [f-160-counterfactual-reasoning.md](03-agent-core/f-160-counterfactual-reasoning.md) |
+| F-161 | 涌现式上下文发现 — Agent 主动反思"我可能需要 X"显式化 | 📋 | [f-161-emergent-context-discovery.md](03-agent-core/f-161-emergent-context-discovery.md) |
 
 ### CLI 与配置系统
 
@@ -167,4 +169,8 @@ docs/feature_plan/
 | 2026-07-21 | 新增 dynamic-context-architecture.md (DC-001 ~ DC-020) | 用户提出"动态上下文切换/装配/生成"挑战性脑暴问题；沉淀 20 项原理特性规划，覆盖上下文生命周期 / 抗幻觉 / 推理扩展 / 元架构 4 组；定位为 brainstorm 文档，不申请 F-Number，落地时按子特性单独立项 |
 | 2026-07-22 | dynamic-context-architecture.md 新增 §4.4 DC → F-N 映射表 | 把 20 项 DC-NN 收敛为 16 个 F-N 文档（F-158 ~ F-173，F-N 编号接续 F-157 ToolSearch），按 Wave 1（P0 立竿见影）/ Wave 2（P1 工具化）/ Wave 3（P2/P3 元架构）三波落地；DC-001 / DC-002 / DC-007-部分 保留在 F-130 不单独立项 |
 | 2026-07-22 | 新增 F-158 抗幻觉基线协议（覆盖 DC-005 / DC-009 / DC-020） | DC-A §4.4 映射表基础上落地 Wave 1 P0 高杠杆特性；置信度声明协议 + 否定式检索 + 边界追踪三层防御抑制幻觉；解耦落地于 `extensions/anti_hallucination/`，零 `src/` 侵入 |
+| 2026-07-22 | 新增 F-159 JIT 上下文合成（覆盖 DC-003） | DC-A §4.4 映射表基础上落地 Wave 1 P0 上下文生命周期特性；Intent 解析 + Loader 集合 + 缓存 + register_section 注入 + 触发限流；与 F-130（占位符填充）/ F-158-A（VERIFIED source）/ F-161（执行层）强协同；解耦落地于 `extensions/jit_context/`，零 `src/` 侵入 |
+| 2026-07-22 | 新增 F-160 反事实推理（覆盖 DC-012） | DC-A §4.4 映射表基础上落地 Wave 1 P0 推理扩展轻量级特性；门槛最低（仅 prompt + 1 Hook）；3 类模板（决策 / 断言 / 推荐）+ 6 档 verdict 标注 + 自检 Hook；与 F-119 / F-102 / F-158-A / F-130 / F-163 协同；解耦落地于 `extensions/counterfactual/`，零 `src/` 侵入 |
+| 2026-07-22 | 新增 F-161 涌现式上下文发现（覆盖 DC-018） | DC-A §4.4 映射表基础上落地 Wave 1 P0 元架构层特性（Wave 1 最后一个落地）；是 F-159 JIT 的隐式反思调度前置（meta-cognition 显式化）；反思 prompt + 4 档门控决策 + 反思缓存 + 调用 F-159 synthesize；与 F-119 / F-102 / F-159 / F-158 / F-160 / F-130 协同；解耦落地于 `extensions/emergent/`，零 `src/` 侵入 |
+| 2026-07-22 | 移除 README.md F-Number 状态总表中 F-119 行 | F-119 已标记为 ✅ 已完成（ROADMAP v4.7 已从路线图移除），但 README.md 仍引用不存在的 `f-119-prompt-assembly.md`；按 ROADMAP 精简口径移除该行；01-overview.md 行 53 同步改为"F-119 已完成，详见 ROADMAP"；代码层 `extensions/prompt_lab/` 目录保留（属已完成特性的实现） |
 | 2026-07-21 | 更新 CCB 对标章节:F-84/F-87/F-88/F-92/F-95 标记为 ✅,F-94 保持 🚧 | 代码确认 5 个特性完全落地,同步 `06-ccb-benchmark/README.md` §A 缺口矩阵与单篇文档状态 |
