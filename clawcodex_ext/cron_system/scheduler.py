@@ -188,6 +188,24 @@ class CronScheduler:
         except Exception:  # pragma: no cover - defensive
             return False
 
+    def _agent_owned_only(self, tasks: list[CronTask]) -> list[CronTask]:
+        """F-22-F-2: filter due tasks by agent ownership.
+
+        Returns the input unchanged when ``self.agent_id`` is ``None``
+        (single-agent mode, no ownership tracking). Otherwise keeps global
+        tasks (``agent_id=None``) plus tasks whose ``agent_id`` matches
+        the scheduler's identity. Extracted from :meth:`check_once` so the
+        ownership contract is testable without driving the full scheduler
+        loop.
+        """
+        if self.agent_id is None:
+            return list(tasks)
+        return [
+            task
+            for task in tasks
+            if task.agent_id is None or task.agent_id == self.agent_id
+        ]
+
     def check_once(self, at_ms: int | None = None) -> list[CronTask]:
         if self.is_disabled():
             return []
@@ -233,13 +251,9 @@ class CronScheduler:
             deduped_due.append(task)
         due = deduped_due
         # F-22-F: agent ownership filtering — only fire tasks belonging to the
-        # current agent or global tasks (agent_id=None). When agent_id is None
-        # (no runtime context), skip filtering (all tasks visible).
-        if self.agent_id is not None:
-            due = [
-                t for t in due
-                if t.agent_id is None or t.agent_id == self.agent_id
-            ]
+        # current agent or global tasks (agent_id=None). Delegated to
+        # :meth:`_agent_owned_only` so the contract is testable.
+        due = self._agent_owned_only(due)
         if not due:
             return []
         # Phase B-2: session-only tasks live in this process's memory.

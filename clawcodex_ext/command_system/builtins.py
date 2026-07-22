@@ -548,10 +548,10 @@ def cron_list_command_call(args: str, context: CommandContext) -> LocalCommandRe
     if not _has_cron_tool_runtime(context):
         from clawcodex_ext.cron_system.status import build_schedule_list
 
-        return LocalCommandResult(
-            type="text",
-            value=build_schedule_list(context.workspace_root, deep=deep),
-        )
+        body = build_schedule_list(context.workspace_root, deep=deep)
+        if deep:
+            body = f"{body}\n(deep mode)"
+        return LocalCommandResult(type="text", value=body)
 
     output = _call_cron_tool(context, "CronList", {})
     jobs = output.get("jobs", []) if isinstance(output, dict) else []
@@ -1579,7 +1579,7 @@ COST_COMMAND = LocalCommand(
 CRON_LIST_COMMAND = LocalCommand(
     name="cron-list",
     description="List scheduled cron jobs",
-    argument_hint="",
+    argument_hint="[--deep]",
     supports_non_interactive=True,
 )
 

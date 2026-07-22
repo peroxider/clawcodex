@@ -24,7 +24,12 @@ from .parser import parse_cron_expression
 
 
 # F-22-H: mtime-based incremental read cache
-_MtimeCache: dict[Path, tuple[float, list[CronTask]]] = {}
+# Entry shape: (cached_at_monotonic, cached_file_mtime, tasks).
+# Both timestamps must be tracked separately: the monotonic value drives
+# the TTL gate (clock-independent of file-system mtime changes); the file
+# mtime drives the change-detection gate (new mtime → re-read regardless
+# of TTL).
+_MtimeCache: dict[Path, tuple[float, float, list[CronTask]]] = {}
 _MTIME_CACHE_TTL: float = 1.0  # 1 second cooldown
 
 
@@ -67,9 +72,14 @@ def read_cron_tasks(workspace_root: Path) -> list[CronTask]:
 def read_cron_tasks_cached(workspace_root: Path) -> list[CronTask]:
     """F-22-H: mtime-based incremental read of durable cron tasks.
 
-    Skips full file re-read when the file's mtime is unchanged within
-    the TTL window (``_MTIME_CACHE_TTL`` = 1 s).  Falls back to
-    :func:`read_cron_tasks` on cache miss or IO error.
+    Skips full file re-read when either:
+
+    1. The cached entry is fresh (within ``_MTIME_CACHE_TTL`` seconds of
+       monotonic clock at cache time), **or**
+    2. The cached entry's recorded file mtime still matches the on-disk
+       file mtime (cross-tick dedup when nothing has changed).
+
+    Falls back to :func:`read_cron_tasks` on cache miss or IO error.
     """
     path = tasks_file_path(workspace_root)
     try:
@@ -77,13 +87,17 @@ def read_cron_tasks_cached(workspace_root: Path) -> list[CronTask]:
     except OSError:
         return read_cron_tasks(workspace_root)  # fallback
     cached = _MtimeCache.get(path)
-    if cached is not None and (time.monotonic() - cached[0]) < _MTIME_CACHE_TTL:
-        return cached[1]
-    # Also skip re-read if mtime unchanged
-    if cached is not None and cached[0] == mtime:
-        return cached[1]
+    if cached is not None:
+        cached_at, cached_mtime, cached_tasks = cached
+        if (time.monotonic() - cached_at) < _MTIME_CACHE_TTL:
+            return cached_tasks
+        if cached_mtime == mtime:
+            # Refresh the TTL window so subsequent in-window reads skip
+            # the stat call entirely.
+            _MtimeCache[path] = (time.monotonic(), cached_mtime, cached_tasks)
+            return cached_tasks
     tasks = read_cron_tasks(workspace_root)
-    _MtimeCache[path] = (mtime, tasks)
+    _MtimeCache[path] = (time.monotonic(), mtime, tasks)
     return tasks
 
 

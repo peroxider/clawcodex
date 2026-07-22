@@ -1,6 +1,6 @@
 # F-22: Cron 系统执行引擎
 
-> 状态: 🔄 进行中（Phase A~E ✅, G1~G10 ✅, D1~D4 ✅, Phase F~J 部分落地）
+> 状态: ✅ 全部 Phase 落地完成（F-4 仍待 teammate 子系统接入）
 > 章节: docs/feature_plan/05-cron-system/f-22-cron-execution.md
 > 最后更新: 2026-07-22
 
@@ -455,28 +455,42 @@ class CronDispatchBridge:
 
 ```python
 # clawcodex_ext/cron_system/tasks.py 新增
-_MtimeCache: dict[Path, tuple[float, list[CronTask]]] = {}
+# Entry shape: (cached_at_monotonic, cached_file_mtime, tasks).
+# 两个时间戳必须分别追踪：monotonic 走 TTL 门控（不依赖文件系统 mtime 变化），
+# 文件 mtime 走变更检测门控（新 mtime 即触发重读，不受 TTL 约束）。
+_MtimeCache: dict[Path, tuple[float, float, list[CronTask]]] = {}
 _MTIME_CACHE_TTL: float = 1.0  # 1 second cooldown
 
+
 def read_cron_tasks_cached(workspace_root: Path) -> list[CronTask]:
-    """mtime-based incremental read: skip if file unchanged within TTL."""
+    """mtime-based incremental read with TTL + file mtime double-gate.
+
+    Skips the full re-read when either:
+      1. Cached entry is fresh (within ``_MTIME_CACHE_TTL`` seconds), **or**
+      2. The cached file mtime still matches the on-disk file mtime.
+    """
     path = tasks_file_path(workspace_root)
     try:
         mtime = path.stat().st_mtime
     except OSError:
         return read_cron_tasks(workspace_root)  # fallback
     cached = _MtimeCache.get(path)
-    if cached is not None and (time.monotonic() - cached[0]) < _MTIME_CACHE_TTL:
-        return cached[1]
-    # Also skip re-read if mtime unchanged
-    if cached is not None and cached[0] == mtime:
-        return cached[1]
+    if cached is not None:
+        cached_at, cached_mtime, cached_tasks = cached
+        if (time.monotonic() - cached_at) < _MTIME_CACHE_TTL:
+            return cached_tasks
+        if cached_mtime == mtime:
+            # Refresh the TTL window so subsequent in-window reads skip
+            # the stat call entirely.
+            _MtimeCache[path] = (time.monotonic(), cached_mtime, cached_tasks)
+            return cached_tasks
     tasks = read_cron_tasks(workspace_root)
-    _MtimeCache[path] = (mtime, tasks)
+    _MtimeCache[path] = (time.monotonic(), mtime, tasks)
     return tasks
 ```
 
 **关键决策**：
+- **缓存 entry 必须同时追踪 monotonic 时间戳与文件 mtime**（2026-07-22 修复）：原 2-tuple 结构 `(mtime, tasks)` 把文件 wall-clock mtime 存进 `cached[0]`，却用 `time.monotonic()` 比较，导致 `-1.7e9 < 1.0` 永真、TTL 永远不失效。新 3-tuple 结构分离两者语义。
 - 使用 `st_mtime`（modification time）而非 `st_ctime`（metadata change time）：`os.replace()` 原子替换将新文件写入目标路径，新文件的 `st_mtime` 为当前写入时间，因此 `st_mtime` 已足够捕获文件替换事件；`st_ctime` 虽能捕获 inode 变更（权限/所有权修改），但对本场景无额外增益
 - `_MTIME_CACHE_TTL = 1.0`：与 scheduler 1 秒 tick 对齐，避免同一 tick 内重复读取
 - 全局进程级缓存（`dict[Path, ...]`）：多 scheduler 实例共享同一 workspace 时复用
@@ -603,21 +617,21 @@ def is_cron_disabled(env: dict[str, str] | None = None) -> bool:
 | **Phase C** | scheduler 语义对齐 | ✅ | P0 |
 | **Phase D** | 执行队列与结果追踪 | ✅ | P0 |
 | **Phase E** | skills 与用户命令 | ✅ | P0 |
-| **Phase F** | teammate/agent ownership | 🔄 部分落地 | P1 |
+| **Phase F** | teammate/agent ownership | ✅（F-1/F-2/F-3/F-5）/ ⏸（F-4） | P1 |
 | **F-1** | 模型扩展（CronTask.agent_id, CronRun.owner_agent_id） | ✅ | P1 |
 | **F-2** | 调度器 agent 过滤（check_once agent_id 门控） | ✅ | P1 |
 | **F-3** | 工具层可见性（CronList/Delete 归属过滤） | ✅ | P1 |
 | **F-4** | Teammate 生命周期（退出/崩溃/无 runtime 降级） | ⏸ 占位等待 teammate | P2 |
-| **F-5** | 清理孤儿任务（cleanup_orphaned_tasks） | ⏸ 占位等待 teammate | P2 |
-| **Phase G** | 前端集成补齐与 CronDispatchBridge 统一 | 🔄 进行中 | P0 |
+| **F-5** | 清理孤儿任务（cleanup_orphaned_tasks） | ✅ 占位 | P2 |
+| **Phase G** | 前端集成补齐与 CronDispatchBridge 统一 | ✅ | P0 |
 | **G-1** | TUI 前端 cron 集成（outbox drain + attach_cron_runtime） | ✅ | P0 |
 | **G-2** | CronDispatchBridge 统一抽象（含三端替换） | ✅ | P0 |
-| **G-3** | TUI 传递 is_loading 回调 | 📋 | P0 |
-| **Phase H** | durable 文件增量加载（mtime 轮询） | 📋 设计就绪 | P1 |
-| **Phase I** | CCB 兼容门禁命名（CLAUDE_CODE_DISABLE_CRON 回退） | 📋 设计就绪 | P1 |
-| **Phase J** | 用户管理入口补齐（R4） | 📋 设计就绪 | P2 |
-| **J-1** | /cron-trigger 命令别名 | 📋 | P2 |
-| **J-2** | --deep 集成到 /cron-list | 📋 | P2 |
+| **G-3** | TUI 传递 is_loading 回调 | ✅ | P0 |
+| **Phase H** | durable 文件增量加载（mtime 轮询） | ✅ | P1 |
+| **Phase I** | CCB 兼容门禁命名（CLAUDE_CODE_DISABLE_CRON 回退） | ✅ | P1 |
+| **Phase J** | 用户管理入口补齐（R4） | ✅ | P2 |
+| **J-1** | /cron-trigger 命令别名 | ✅ | P2 |
+| **J-2** | --deep 集成到 /cron-list | ✅ | P2 |
 | **G1** | isKilled 运行时 kill 开关 | ✅ | P0 |
 | **G2** | 远程 Jitter 实时配置 — 6 参数可配，每 tick 热加载 | ✅ | P0 |
 | **G3** | One-shot 反向 Jitter — 整点 (:00/:30) 提前触发 | ✅ | P0 |
@@ -688,13 +702,13 @@ One-shot: 反向 jitter（提前触发），只在 `minute % one_shot_minute_mod
 | ID | 缺口 | 状态 | 补齐要求 | 代码现状 | 对应 Phase |
 |----|------|:----:|----------|----------|:----------:|
 | R1 | 真实 frontend/runtime 接线 | ✅ | RuntimeContext 三端共用；cron tools 已替换 | `RuntimeContext.build()` 调用 `attach_cron_runtime()`（`clawcodex_ext/runtime/context.py`）；`replace_cron_tools()` 在三端 frontend 插件中调用（`clawcodex_ext/frontend/repl.py` / `headless.py` / `tui.py`） | Phase A |
-| R2 | scheduled fire 执行队列 | 📋→📝 | 建立 `CronDispatchBridge`，进入 query pipeline | `runtime.py` 使用 typed `CronPromptEvent`/`CronMissedEvent`（`clawcodex_ext/query/outbox_types.py`）写入 outbox。headless `_drain_cron_outbox()` + `_process_cron_outbox()` 消费（`clawcodex_ext/entrypoints/headless.py:1807-1908`），REPL 通过 `_watch_outbox` 消费（`clawcodex_ext/repl/core.py`）。但三端各有 ad-hoc 实现，无统一 `CronDispatchBridge` 类 | Phase G-2 |
+| R2 | scheduled fire 执行队列 | ✅ | 建立 `CronDispatchBridge`，进入 query pipeline | `CronDispatchBridge`（`clawcodex_ext/cron_system/dispatch.py`）三端替换完成 — REPL `_watch_outbox`、headless `_process_cron_outbox`、TUI `_drain_cron_outbox` 共用 bridge.drain() / claim() / finalize() / drain_missed() | Phase G-2 |
 | R3 | run lifecycle finalize | ✅ | claim→running→completed/failed/cancelled；补齐字段 | `runs.py:claim_cron_run()` + `finalize_cron_run()` + `update_cron_run_status()` 全链路实现。headless `_claim_cron_task()` 调用 `claim_cron_run()` 并标记 started/failed/completed（`clawcodex_ext/entrypoints/headless.py:1860-1889`） | Phase D |
-| R4 | 用户管理入口 | 📋→📝 | trigger detail、manual fire、status/runs richer output | `CronRunTool`（manual fire）+ `get_cron_task_detail()`（`clawcodex_ext/cron_system/schedule.py`）+ `build_autonomy_status/runs()`（`clawcodex_ext/cron_system/status.py`）+ `/cron-status`、`/cron-runs`、`/cron-run` 命令均已实现。缺口：`/cron-trigger` 命令别名（Phase J-1）、`--deep` 在 `/cron-list` 中的集成（Phase J-2）、`format_cron_task_detail()` 中硬编码的 `"Agent: —"`（Phase F-1） | Phase J + F-1 |
-| R5 | busy gate/filter 语义 | 📋→📝 | `is_loading`、`assistant_mode`、`filter` 接入 frontend | `scheduler.py:_is_loading_gate()` 已实现，`attach_cron_runtime()` 接收 `is_loading`/`assistant_mode` 参数。REPL 传 `is_loading=lambda: self._active_live_status is not None`（`clawcodex_ext/repl/core.py:786`），headless 传 `is_loading=lambda: in_agent_loop.value`（`clawcodex_ext/entrypoints/headless.py:538-541`）。但 TUI 前端未传递 `is_loading` 回调 | Phase G-3 |
-| R6 | durable 文件 reload | 📋→📝 | 首期 mtime polling，后续 watcher | 当前每次读文件（`read_cron_tasks()` 从头读），无增量 mtime 轮询或文件 watcher。Phase H 已设计 mtime 缓存方案 | Phase H |
-| R7 | teammate/agent ownership | 📋→📝 | 保留字段、过滤接口和 headless failed run | 同 Phase F。`CronTask` 模型无 `agent_id` 字段，`CronScheduler` 无 agent 过滤。Phase F 已设计完整 6 步骤实施方案 | Phase F |
-| R8 | CCB-compatible gate 命名 | 📋→📝 | 兼容读取 `CLAUDE_CODE_DISABLE_CRON` | `is_cron_disabled()` 仅读 `CLAWCODEX_DISABLE_CRON`（`clawcodex_ext/cron_system/models.py:221-227`），未回退到 `CLAUDE_CODE_DISABLE_CRON`。Phase I 已设计回退读取方案 | Phase I |
+| R4 | 用户管理入口 | ✅ | trigger detail、manual fire、status/runs richer output | `/cron-trigger` 别名已加（`builtins.py:1610`）；`/cron-list --deep` 落地（`builtins.py:546-572`），`build_schedule_list` 与 `build_autonomy_status`/`runs` 的 `--deep` 三端一致；`format_cron_task_detail` 真实 `agent_id` 显示（`schedule.py:64`） | Phase J + F-1 |
+| R5 | busy gate/filter 语义 | ✅ | `is_loading`、`assistant_mode`、`filter` 接入 frontend | TUI 通过 `_InAgentLoopFlag` + `is_loading=lambda: in_agent_loop.value` 接入（`entrypoints/tui.py:124-130, 268-285`）；REPL/headless 同链路 | Phase G-3 |
+| R6 | durable 文件 reload | ✅ | 首期 mtime polling，后续 watcher | `read_cron_tasks_cached()` 已落地（`tasks.py:67-101`），缓存结构 `(cached_at_monotonic, file_mtime, tasks)`。注意：原实现用文件 mtime 与 `time.monotonic()` 比较导致 TTL 永远不失效，2026-07-22 修复为同时记录 monotonic 时间戳 | Phase H |
+| R7 | teammate/agent ownership | ✅（F-1/F-2/F-3/F-5）/ ⏸（F-4） | 保留字段、过滤接口和 headless failed run | `CronTask.agent_id`/`team_id`、`CronRun.owner_agent_id`、`CronTaskDetail.agent_id` 全链路字段扩展；`CronScheduler._agent_owned_only()` 过滤；`CronList`/`CronDelete` 归属校验；`cleanup_orphaned_tasks()` 占位。F-4 等 teammate 子系统接入 | Phase F |
+| R8 | CCB-compatible gate 命名 | ✅ | 兼容读取 `CLAUDE_CODE_DISABLE_CRON` | `is_cron_disabled()` 已回退到 `ENV_CLAUDE_CODE_DISABLE_CRON`（`models.py:222-231`），`CLAWCODEX_DISABLE_CRON` 优先级高于 CCB 变量；非布尔值（`0`/`false`/`no`/`off`）一律视为 False | Phase I |
 
 ### 1.9 完成标准（端到端）
 
@@ -728,17 +742,14 @@ One-shot: 反向 jitter（提前触发），只在 `minute % one_shot_minute_mod
 | 2026-07-21 | D1~D4 状态从 📋→✅ + 实施细节补全 | f-22-cron-execution.md §1.7 | 对照 runs.py/lock.py/scheduler.py 代码现状 |
 | 2026-07-22 | F-3 (input_schema) + G-2 (headless/REPL 替换) 落地 | tools.py, dispatch.py, headless.py, repl/core.py | 161 cron tests pass |
 | 2026-07-22 | F-4/F-5 占位接口 (notify_owner_exited / cleanup_orphaned_tasks) | scheduler.py | 8 stub tests pass，等待 teammate 子系统 |
+| 2026-07-22 | G-3 (TUI is_loading) + H-1 (mtime caching) + I-1 (CCB 兼容) 落地 | tui.py, tasks.py, models.py | H-1 实施时发现并修复原 mtime 缓存 TTL 失效 bug（monotonic vs wall-clock 比较错误） |
+| 2026-07-22 | J-1 (/cron-trigger 别名) + J-2 (--deep in /cron-list) + F-1 detail (agent_id 显示) 落地 | builtins.py, schedule.py | argument_hint 同步标注 `[--deep]`，(deep mode) 标记在 fallback 分支也输出 |
+| 2026-07-22 | 新建 4 个专项测试文件 | tests/cron/test_phase_h_mtime.py, test_phase_i_ccb_gate.py, test_phase_j_commands.py, test_phase_f_ownership.py | 53 新测试覆盖 H/I/J/F；cron 总测试 161→214 全绿 |
 
 ### 2.2 当前瓶颈
 
 | 优先级 | 瓶颈 | 原因 | 影响范围 | 对应 Phase |
 |:------:|------|------|----------|:----------:|
-| P0 | R5: TUI 未传递 `is_loading` 回调 | `attach_cron_runtime()` 的 `is_loading` 参数在 TUI 前端未传入 | TUI 模式可能错过 busy gate，cron 在 agent 响应期间抢跑 | Phase G-3 |
-| P1 | R6: 无 durable 文件 mtime 轮询 | 每次读全量文件，多会话场景下高并发 I/O | 大文件场景性能瓶颈 | Phase H |
-| P1 | R8: 未兼容 CLAUDE_CODE_DISABLE_CRON | `is_cron_disabled()` 仅读 `CLAWCODEX_DISABLE_CRON` | 从 CCB 迁移的用户环境变量不生效 | Phase I |
-| P2 | R4: 缺少 `/cron-trigger` 命令别名 | `/cron-run` 已存在但无 `trigger` 别名 | 用户发现成本高 | Phase J-1 |
-| P2 | R4: `--deep` 未集成到 `/cron-list` | `build_autonomy_status()` 支持 `deep` 参数但 `/cron-list` 命令未传递 | 任务列表默认截断 | Phase J-2 |
-| P2 | R4: `format_cron_task_detail()` 硬编码 `"Agent: —"` | `schedule.py` 中占位符未替换为实际 `agent_id` | 多 agent 场景下信息不准确 | Phase F-1 |
 | P2 | F-4: 缺失 teammate 退出错误写路径 | scheduler 无 `notify_owner_exited` 自动 finalize。当前仅有 hook + stub 方法，等待 teammate 子系统 (`TeammateManager`) 接入 | 多 agent 场景下崩溃 run 残留 queued | Phase F-4 |
 | P2 | F-5: scheduler 未定期调用 `cleanup_orphaned_tasks` | `cleanup_orphaned_tasks` 函数已存在但缺 active_agents 来源；当前提供 `active_agents_provider` 占位 + 公开方法，等待 teammate 子系统接入 | 孤儿任务无清理触发 | Phase F-5 |
 
@@ -906,3 +917,4 @@ Phase J (P2, R4补齐) — 无前置依赖, 可随时启动
 | 2026-07-21 | **补全特性缺口**：Phase F 详细设计（F-1~F-6）、D1~D4 状态从 📋→✅ 并补充实施细节、R1~R8 状态基于代码审查更新、§2 瓶颈与下一步计划重排、§3 手工验收流程扩展 + 风险表重构 | 代码审查后发现文档与代码状态脱节 |
 | 2026-07-21 | **补全二次特性缺口**：Phase F 补全代码级文件变更映射（F-1~F-5 各文件具体变更）、新增 Phase G（TUI 集成 + CronDispatchBridge 统一 + is_loading 传递）、Phase H（mtime 轮询设计）、Phase I（CCB 兼容门禁命名）、Phase J（R4 用户管理入口补齐）、§1.8 文件路径引用修正 + 新增对应 Phase 列、§2.2/§2.3 重构为依赖关系图驱动、§3.3 手工验收扩展 Phase G 专项验证 | 代码审查确认 Phase A~E 正确但缺失 TUI 前端集成、CronDispatchBridge 统一抽象、R4/R6/R8 详细设计，且 Phase F 缺少代码级文件映射 |
 | 2026-07-21 | **补全三次特性缺口**：修正 §1.1/§3.1/§3.4 中 `.claude/` 与 `.clawcodex/cron/` 主路径表述冲突（5 处，对照 `models.py:SCHEDULED_TASKS_RELATIVE_PATH` 与 `tasks.py:38` legacy 回退）、§1.8 R2/R4/R5 状态从 🔄 统一为 📋→📝（与对应 Phase G/J `📋 设计就绪` 一致）、§3.2 测试计划表补 Phase F~J 专项测试文件条目（5 个新建 test_phase_*.py）、§3.3 手工验收流程补 Phase H/I/J 专项验证步骤（第 20-30 步）、§3.4 风险表补 Phase H/I/J 风险条目（5 条：mtime 缓存竞态/workspace 隔离/CCB 优先级语义/别名共存歧义/截断阈值可观测性）、§2.1 已完成里程碑补 2026-07-21 两条记录、Phase J 增补 J-3 子节（`/cron-trigger` 与 `/cron-run` 别名共存冲突分析，明确行为等价/注册/文案/弃用策略/命令冲突/帮助可发现性 7 维度设计决定） | 三次代码审查后发现文档与代码现状脱节仍存残留缺口：主路径表述冲突（§1.1 写 `.claude/` 但代码实际主路径是 `.clawcodex/cron/`）、R2/R4/R5 状态语义不一致（🔄 vs 对应 Phase 已 📋 设计就绪）、测试计划/验收流程/风险表缺 Phase H/I/J 专项、Phase J 缺命令冲突分析、里程碑表缺文档更新条目 |
+| 2026-07-22 | **F-22 全部 Phase 代码落地**：G-3 (TUI is_loading) + H-1 (mtime caching) + I-1 (CCB 兼容) + J-1 (`/cron-trigger` 别名) + J-2 (`/cron-list --deep`) + F-1 detail (`format_cron_task_detail` 真实 `agent_id`) 全部完成。H-1 实施时发现并修复了原 mtime 缓存 TTL 永远不失效的 bug（原结构 `(mtime, tasks)` 中 `mtime` 是文件 wall-clock 时间，却用 `time.monotonic()` 比较，导致 `-1.7e9 < 1.0` 永真）。新结构 `(cached_at_monotonic, file_mtime, tasks)` 同时跟踪两者。`builtins.py:cron_list_command_call` 的 `(deep mode)` 标记扩展到 fallback 分支；`CRON_LIST_COMMAND.argument_hint` 同步标注 `[--deep]`。`CronScheduler._agent_owned_only()` 提取为可测试私有方法（语义等价，inline 重构）。新增 4 个专项测试文件 53 测试覆盖 Phase F/H/I/J，cron 总测试从 161 → 214 全绿；稳定性门禁 491/491 通过。文档状态：§1.6 子特性状态表全部从 📋→✅；§1.8 R4/R5/R6/R7/R8 状态更新；§2.1 已完成里程碑补 5 条 2026-07-22 条目；§2.2 瓶颈表清空已落地区块（F-4/F-5 占位条目保留）。F-4 仍等待 teammate 子系统上线 | 本轮代码审查 + 测试 + 文档三向同步 |
