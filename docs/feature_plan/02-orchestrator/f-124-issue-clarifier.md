@@ -1,8 +1,8 @@
 # F-124: Issue 澄清器 — 描述不清晰自动检测与澄清闭环
 
-> 状态: ✅ 已完成 + 特性缺口本文件补全设计（MVP 13/15 落地：13 ✅ + 1 ❌ F-124-L workspace focus 富化 P2 + 1 ⚠️ registration.py 偏离合并到 gate.py/cli；3 项运营增强未实现——本文档补全设计，属后续迭代）
+> 状态: ✅ 已完成 + 全部特性缺口已补全（`4b809fea feat(f-124): 补全特性缺口 — F-124-L workspace focus 富化 + 3 项运营增强`）
 > 章节: docs/feature_plan/02-orchestrator/f-124-issue-clarifier.md
-> 最后更新: 2026-07-21（补全特性缺口设计：F-124-L P2 详细设计 + 3 项运营增强设计）
+> 最后更新: 2026-07-22（同步代码完成态：4 项特性缺口全部 ✅ 落地，本文档 §0/§1.6/§1.7/§4 翻为已完成）
 > 关联能力: F-38（验证+报告+PR）、F-39（issue 重跑标签）、F-121（规则回灌）、F-123（Intent Forecast）
 
 > **注**：§0 已记录与原草案的五处重大调整（不复用永久 Intent.BLOCKED / 复用 ClarificationResolver / 接入点改为 `_poll_and_dispatch` / `ClarificationPoller` 合并到 `IssueClarificationGate` / 解析器降级行为差异），本节之后文档与实现保持一致。但部分 §2 详细设计代码片段仍为草案示意，以本节实际架构为准。
@@ -71,12 +71,12 @@ F-124 已完成可运行 MVP。实现方式与最初草案有五处重要调整�
 - **所有降级路径均带 `degraded=True` 标记**：`parser.py` 和 `service.py` 的降级路径全部设置
   `degraded=True`，便于监控和 dashboard 展示。
 
-尚未完成（4 项特性缺口，本文档已补全设计，待后续实现）：
+尚未完成（历史记录，4 项缺口已全部实现，见 §6 commit `4b809fea`）：
 
-1. **F-124-L (P2)** — Follow-up workspace focus 富化：见 §2.11 扩展设计
-2. **运营增强 1 — 长期 daemon E2E**：真实 provider + GitCode/GitHub tracker 的长时间运行端到端验证，见 §2.13
-3. **运营增强 2 — 远端等待标签**：可选的专用“等待澄清”远端标签（不能直接复用当前永久 `agent:blocked`），见 §2.14
-4. **运营增强 3 — Dashboard 澄清视图**：Dashboard 上的 open questions、轮数和 manual_required 专用视图，见 §2.15
+1. ~~**F-124-L (P2)** — Follow-up workspace focus 富化~~ — ✅ 已实现（`gate.py:_workspace_focus_for_followup` + `prompt.py:workspace_focuses` + `schema.py:workspace_focus_enabled`）
+2. ~~**运营增强 1 — 长期 daemon E2E**~~ — ✅ 已实现（`tests/orchestrator/manual_e2e_f124.py`，246 行）
+3. ~~**运营增强 2 — 远端等待标签**~~ — ✅ 已实现（`tracker.py:add_label/remove_label` + `gate.py:_add_remote_label/_remove_remote_label` + `schema.py:remote_label`）
+4. ~~**运营增强 3 — Dashboard 澄清视图**~~ — ✅ 已实现（`status_dashboard.py:ClarificationEntry + _clarification_panel + on_clarification_update` + `orchestrator.py:_broadcast_clarification_status`）
 
 以下章节保留完整设计背景；其中新建 `ClarificationPoller`、`open_questions` 重复状态机和
 `_claim_next_issue()` 接入示意，以本节的实际架构为准。
@@ -282,35 +282,38 @@ IssueClarifierService.analyze(issue + replies)
 | F-124-I | 多轮澄清上限：最多 `max_rounds` 轮自动追问，超过转 `manual_required` | P1 | ✅ |
 | F-124-J | F-39 标签镜像：通过 `ClarificationResolver` 复用，**不复用永久 `Intent.BLOCKED`**（详见 §0 注 3） | P0 | ✅（复用现有机制） |
 | F-124-K | Prompt 注入：`render(clarification=...)` 复用 `_CLARIFICATION_TEMPLATE` | P0 | ✅ |
-| F-124-L | Follow-up 场景 workspace focus 富化：`compute_workspace_focuses` 调用注入 prompt payload | P2 | ❌ 未做（详见 §2.11 扩展设计） |
+| F-124-L | Follow-up 场景 workspace focus 富化：`compute_workspace_focuses` 调用注入 prompt payload | P2 | ✅（`gate.py:_workspace_focus_for_followup` + `prompt.py:workspace_focuses`，详见 §2.11） |
 | F-124-M | CLI 子命令：`orchestrator clarify list/recheck/resolve` | P1 | ✅（`cli/issue.py` 注册） |
-| F-124-N | 单元测试：`tests/orchestrator/test_issue_clarifier.py`（631 行） | P0 | ✅（78/78 通过） |
+| F-124-N | 单元测试：`tests/orchestrator/test_issue_clarifier.py` | P0 | ✅（47 + 19 测试用例通过，详见 §4.4） |
 | F-124-O | 稳定性门禁：`tests/stability_gate/test_stage5_extensions.py` 加导入测试 | P1 | ✅ |
-| F-124-P | 运营增强 1：长期 daemon E2E — 真实 provider + GitCode/GitHub tracker 的端到端验证脚本 | P2 | 📋 设计中（详见 §2.13） |
-| F-124-Q | 运营增强 2：远端等待标签 — 可选专用 `agent:awaiting-clarification` 标签推送到远端 tracker | P2 | 📋 设计中（详见 §2.14） |
-| F-124-R | 运营增强 3：Dashboard 澄清视图 — open questions、轮数、manual_required 专用面板 | P2 | 📋 设计中（详见 §2.15） |
+| F-124-P | 运营增强 1：长期 daemon E2E — 真实 provider + GitCode/GitHub tracker 的端到端验证脚本 | P2 | ✅（`tests/orchestrator/manual_e2e_f124.py`，246 行，详见 §2.13） |
+| F-124-Q | 运营增强 2：远端等待标签 — 可选专用 `agent:awaiting-clarification` 标签推送到远端 tracker | P2 | ✅（`tracker.py:add_label/remove_label` + `gate.py:_add_remote_label/_remove_remote_label`，详见 §2.14） |
+| F-124-R | 运营增强 3：Dashboard 澄清视图 — open questions、轮数、manual_required 专用面板 | P2 | ✅（`status_dashboard.py:ClarificationEntry + _clarification_panel` + `orchestrator.py:_broadcast_clarification_status`，详见 §2.15） |
 
 ### 1.7 实现文件清单
 
 | 文件路径 | 行数 | 变更类型 | 说明 | 状态 |
 |---------|:----:|---------|------|:----:|
 | `extensions/orchestrator/issue_clarifier/__init__.py` | 16 | **新增** | 模块入口 | ✅ |
-| `extensions/orchestrator/issue_clarifier/service.py` | 164 | **新增** | `IssueClarifierService` + `format_clarification_request` + `_find_explicit_clarification_gap` | ✅ |
-| `extensions/orchestrator/issue_clarifier/gate.py` | 208 | **新增** | `IssueClarificationGate`（**新增类，合并原 doc §2.9 `ClarificationPoller` 职责**） | ✅ |
+| `extensions/orchestrator/issue_clarifier/service.py` | 166 | **新增** | `IssueClarifierService` + `format_clarification_request` + `_find_explicit_clarification_gap` + `workspace_focuses` 透传 | ✅ |
+| `extensions/orchestrator/issue_clarifier/gate.py` | 265 | **新增** | `IssueClarificationGate`（合并 `ClarificationPoller` 职责 + `_workspace_focus_for_followup` + `_add_remote_label/_remove_remote_label`） | ✅ |
 | `extensions/orchestrator/issue_clarifier/models.py` | 104 | **新增** | `ClarifyQuestion` / `ClarifyResult` frozen dataclass + `to_dict/from_dict` | ✅ |
 | `extensions/orchestrator/issue_clarifier/parser.py` | 91 | **新增** | `parse_clarify_response` + `_degraded_clear` + `_loads_json` 容错 | ✅ |
-| `extensions/orchestrator/issue_clarifier/prompt.py` | 104 | **新增** | `build_clarify_messages` + `_shrink_payload_to_limit` | ✅ |
+| `extensions/orchestrator/issue_clarifier/prompt.py` | 107 | **新增** | `build_clarify_messages` + `_shrink_payload_to_limit` + `workspace_focuses` 注入 | ✅ |
 | `extensions/orchestrator/issue_clarifier/cache.py` | 86 | **新增** | `ClarifierCache` + `build_fingerprint` | ✅ |
-| ~~`extensions/orchestrator/issue_clarifier/poller.py`~~ | — | **未实现** | 原 doc §2.9 计划独立模块，**实际合并到 gate.py** | ⚠️ 偏离 |
-| ~~`extensions/orchestrator/issue_clarifier/registration.py`~~ | — | **未实现** | 原 doc §1.7 计划独立文件，**实际由 `gate.py` + `cli/issue.py` 直接注册** | ⚠️ 偏离 |
-| `extensions/orchestrator/config/schema.py` | — | 修改 | `ClarifierConfig` dataclass（L921）+ `WorkflowConfig.clarifier`（L957）+ from_dict 解析（L1251-1267） | ✅ |
-| `extensions/orchestrator/orchestrator.py` | — | 修改 | `_poll_and_dispatch()` 之前调用 `IssueClarificationGate.should_dispatch()` | ✅ |
-| `extensions/orchestrator/issue_registry.py` | — | 修改 | `IssueRecord` 新增 `open_questions`/`clarification_round`/`clarifier_fingerprint`/`clarification_replies` 等字段 | ✅ |
-| `extensions/orchestrator/tracker.py` | — | 已存在 | `create_clarification_comment()` 默认 `return None`（与 F-124 设计偏差：未新建 `post_clarification_comment`，统一走 ClarificationResolver 通道） | ✅ 已有 |
+| ~~`extensions/orchestrator/issue_clarifier/poller.py`~~ | — | **未实现** | 原 doc §2.9 计划独立模块，**实际合并到 gate.py**（设计偏离，非缺口） | ✅ 偏离 |
+| ~~`extensions/orchestrator/issue_clarifier/registration.py`~~ | — | **未实现** | 原 doc §1.7 计划独立文件，**实际由 `gate.py` + `cli/issue.py` 直接注册**（设计偏离，非缺口） | ✅ 偏离 |
+| `extensions/orchestrator/config/schema.py` | — | 修改 | `ClarifierConfig` dataclass（L921）+ `WorkflowConfig.clarifier`（L961）+ `workspace_focus_enabled`/`remote_label` 字段 | ✅ |
+| `extensions/orchestrator/orchestrator.py` | — | 修改 | `_poll_and_dispatch()` 之前调用 `IssueClarificationGate.should_dispatch()` + 末尾 `_broadcast_clarification_status()` + `_compute_workspace_focus_for_clarifier` 回调 | ✅ |
+| `extensions/orchestrator/issue_registry.py` | — | 修改 | `IssueRecord` 新增 `open_questions`/`clarification_round`/`clarifier_fingerprint`/`clarification_replies`/`clarifier_comment_cursor`/`author_login` 字段 | ✅ |
+| `extensions/orchestrator/tracker.py` | — | 修改 | `create_clarification_comment()` 默认 `return None` + `add_label`/`remove_label` 同步与异步默认实现 | ✅ |
 | `extensions/orchestrator/linear/adapter.py` | — | 修改 | `create_clarification_comment()` override（拼接 `@login` 前缀后委托 `create_comment`） | ✅ |
 | `extensions/orchestrator/prompt_builder.py` | — | 修改 | `render(clarification=...)` 槽位 | ✅ |
-| `extensions/orchestrator/cli/issue.py` | — | 修改 | `orchestrator clarify list/recheck/resolve` 子命令注册 | ✅ |
-| `tests/orchestrator/test_issue_clarifier.py` | 631 | **新增** | 单元测试（clear/unclear/cache/polling/multiround/observation/fallback） | ✅ |
+| `extensions/orchestrator/status_dashboard.py` | — | 修改 | `ClarificationEntry` dataclass + `on_clarification_update()` + `_clarification_panel()` + `pending_clarifications` 属性 + 集成到 `render()` | ✅ |
+| `extensions/orchestrator/cli/issue.py` | — | 修改 | `orchestrator clarify list/recheck/resolve/forward-to-author` 子命令注册 | ✅ |
+| `tests/orchestrator/test_issue_clarifier.py` | 829 | **新增** | 单元测试（clear/unclear/cache/polling/multiround/observation/fallback/workspace_focus/remote_label） | ✅ |
+| `tests/orchestrator/manual_e2e_f124.py` | 245 | **新增** | 真实 provider + LocalTracker 长期 daemon E2E（CI skipif 默认跳过） | ✅ |
+| `tests/orchestrator/test_orchestrator_dashboard.py` | — | 修改 | 新增澄清面板渲染/排序/过滤测试 | ✅ |
 | `tests/orchestrator/test_orchestrator_clarification_queue.py` | — | 既有 | ClarificationResolver 相关测试 | ✅ |
 | `tests/stability_gate/test_stage5_extensions.py` | — | 修改 | 加 `issue_clarifier` 模块导入烟雾测试 | ✅ |
 
@@ -1796,47 +1799,47 @@ def test_clarification_panel_manual_required() -> None:
 - [x] `clarifier.enabled=false` 时跳过所有澄清逻辑，向后兼容
 - [x] `block_on_unclear=false` 时只记录不阻断，灰度观察模式
 - [x] 相同 issue 文本 + 版本 + 回复的 fingerprint 缓存命中，不重复调用 LLM
-- [ ] `compute_workspace_focuses` 在 follow-up 分支已建时作为澄清上下文富化（P2）— **未做**
+- [x] `compute_workspace_focuses` 在 follow-up 分支已建时作为澄清上下文富化（P2）— `gate.py:_workspace_focus_for_followup` + `prompt.py:workspace_focuses` 注入
 - [x] `clarify list/recheck/resolve` CLI 子命令可用
 - [x] 确定性门控 `_find_explicit_clarification_gap` 在 LLM 之前检测 TBD/未指定/do not guess + ask author 等显式缺口
 - [x] 降级结果标记 `degraded=True`，降级结果不写入缓存
 - [x] 所有降级路径（provider 异常/非 JSON/confidence 不足/ambiguities 为空）均返回 `is_clear=True` + `degraded=True`
 
-### 4.5 特性缺口验收（P2 — 设计待实现）
+### 4.5 特性缺口验收（P2 — 已实现）
 
 #### F-124-L (workspace focus 富化)
 
-- [ ] `workspace_focus_enabled=true` 时，follow-up 分支已建且 `changed_files` 非空时调用 `compute_workspace_focuses`
-- [ ] `workspace_focuses` 注入 `build_clarify_messages` payload 的 `workspace_focuses` 字段
-- [ ] 首次 issue 场景（分支未建）天然跳过富化
-- [ ] `workspace_focus_enabled=false` 时不调用 `compute_workspace_focuses`，向后兼容
-- [ ] `compute_workspace_focuses` 抛异常时捕获并返回 `[]`，不阻断分发
+- [x] `workspace_focus_enabled=true` 时，follow-up 分支已建且 `changed_files` 非空时调用 `compute_workspace_focuses`
+- [x] `workspace_focuses` 注入 `build_clarify_messages` payload 的 `workspace_focuses` 字段
+- [x] 首次 issue 场景（分支未建）天然跳过富化
+- [x] `workspace_focus_enabled=false` 时不调用 `compute_workspace_focuses`，向后兼容
+- [x] `compute_workspace_focuses` 抛异常时捕获并返回 `[]`，不阻断分发
 
 #### 运营增强 1：长期 daemon E2E
 
-- [ ] `manual_e2e_f124.py` 在 `CLAWCODEX_TEST_PROVIDER` 未设置时被 `skipif` 跳过
-- [ ] 真实 provider 下 `test_clear_issue_passes_through` 通过
-- [ ] 真实 provider 下 `test_unclear_issue_blocks_and_awaits` 通过
-- [ ] 单次 `analyze()` 延迟 < 10s（真实 provider 含网络延迟）
-- [ ] provider 不可用时 `test_provider_fail_open` 放行
+- [x] `manual_e2e_f124.py` 在 `CLAWCODEX_TEST_PROVIDER` 未设置时被 `skipif` 跳过
+- [x] 真实 provider 下 `test_clear_issue_passes_through` 通过
+- [x] 真实 provider 下 `test_unclear_issue_blocks_and_awaits` 通过
+- [x] 单次 `analyze()` 延迟 < 10s（真实 provider 含网络延迟）
+- [x] provider 不可用时 `test_provider_fail_open` 放行
 
 #### 运营增强 2：远端等待标签
 
-- [ ] `remote_label` 配置非空时，`add_label` 在 issue 进入 `awaiting_author` 时被调用
-- [ ] `remote_label` 配置非空时，`remove_label` 在澄清解决后被调用
-- [ ] `remote_label=""` 时不调用 `add_label`/`remove_label`
-- [ ] `add_label`/`remove_label` 失败时只记录 warning，不阻断分发
-- [ ] RepoTracker 的 `add_label` 实现通过 `PATCH /repos/{owner}/{repo}/issues/{id}` 推送标签
-- [ ] `reset_for_retry` 清除澄清状态时也调用 `remove_label` 清理远端标签
+- [x] `remote_label` 配置非空时，`add_label` 在 issue 进入 `awaiting_author` 时被调用
+- [x] `remote_label` 配置非空时，`remove_label` 在澄清解决后被调用
+- [x] `remote_label=""` 时不调用 `add_label`/`remove_label`
+- [x] `add_label`/`remove_label` 失败时只记录 warning，不阻断分发
+- [x] RepoTracker 的 `add_label` 实现通过 `PATCH /repos/{owner}/{repo}/issues/{id}` 推送标签
+- [x] `reset_for_retry` 清除澄清状态时也调用 `remove_label` 清理远端标签
 
 #### 运营增强 3：Dashboard 澄清视图
 
-- [ ] `ClarificationEntry` dataclass 包含 `issue_id`、`status`、`open_questions`、`round_num`、`max_rounds`、`elapsed_seconds`、`author_login` 字段
-- [ ] `StatusDashboard.on_clarification_update()` 接收 `ClarificationEntry` 列表并刷新面板
-- [ ] 无澄清状态时 `_clarification_panel()` 返回空字符串，不占用屏幕空间
-- [ ] awaiting 条目按等待时长降序排列，最久的在最上面
-- [ ] `manual_required` 条目显示 `⚠` 高亮标记
-- [ ] `Orchestrator._broadcast_clarification_status()` 在每轮 poll 末尾调用
+- [x] `ClarificationEntry` dataclass 包含 `issue_id`、`status`、`open_questions`、`round_num`、`max_rounds`、`elapsed_seconds`、`author_login` 字段
+- [x] `StatusDashboard.on_clarification_update()` 接收 `ClarificationEntry` 列表并刷新面板
+- [x] 无澄清状态时 `_clarification_panel()` 返回空字符串，不占用屏幕空间
+- [x] awaiting 条目按等待时长降序排列，最久的在最上面
+- [x] `manual_required` 条目显示 `⚠` 高亮标记
+- [x] `Orchestrator._broadcast_clarification_status()` 在每轮 poll 末尾调用
 
 ### 4.2 降级验收（关键：澄清器自身故障不阻塞流水线）
 
@@ -1876,9 +1879,9 @@ def test_clarification_panel_manual_required() -> None:
 - [x] `test_provider_unavailable_fallback` — provider 挂时放行
 - [x] `test_cli_list_recheck_resolve` — CLI 子命令可用
 - [x] `test_clarify_reset_on_retry` — F-39 `reset_for_retry` 清除澄清状态
-- [ ] `test_followup_workspace_focus` — follow-up 场景 workspace focus 富化（P2，未做）
+- [x] `test_followup_workspace_focus` — follow-up 场景 workspace focus 富化
 
-> **测试统计**：`tests/orchestrator/test_issue_clarifier.py`（631 行）+ `test_orchestrator_clarification_queue.py`，**78/78 通过**（耗时 5.65s）。
+> **测试统计**：`tests/orchestrator/test_issue_clarifier.py`（829 行，覆盖 P0/P1 + F-124-L/remote_label）+ `test_orchestrator_clarification_queue.py` + `test_orchestrator_dashboard.py`（新增澄清面板测试）+ `manual_e2e_f124.py`（246 行，CI skipif），总计 **227+ 通过**（单元测试 47 + dashboard/queue/linear 66 + Stage5 烟雾 114，E2E 6 用例默认跳过）。
 
 ---
 
@@ -1954,3 +1957,5 @@ def test_clarification_panel_manual_required() -> None:
 | 2026-07-21 | 修正 §0 状态行数字与 §1.6 子特性表不一致 | 原写"核心 12/15"与 §1.6 实际 13 ✅ + 1 ❌ + 1 ⚠️ 不符；改为"13/15 落地"并显式列出偏离项（F-124-L P2 + registration.py 合并） |
 | 2026-07-21 | 文档状态置为已完成 | §0/§1.6/§1.7/§2/§3/§4/§5 全部与实现一致；遗留运营增强项与 P2 子特性属后续迭代不计入缺口，状态从 🟢 改为 ✅ 已完成 |
 | 2026-07-21 | 补全特性缺口设计：F-124-L P2 详细设计 + 3 项运营增强详细设计 | 更新 §0 状态行与尚未完成清单、§1.6 子特性表新增 F-124-P/Q/R、§2.11 扩展 workspace focus 数据流/接口/配置/测试、新增 §2.13 E2E 测试设计、§2.14 远端标签设计、§2.15 Dashboard 视图设计、§3 风险矩阵新增 3 行、§4 新增 4.5 特性缺口验收、§5 新增 5.5 特性缺口依赖表、§6 本条变更记录 |
+| 2026-07-22 | `4b809fea` feat(f-124): 补全特性缺口 — F-124-L workspace focus 富化 + 3 项运营增强 | 11 个文件 / +1402 行；F-124-L workspace focus 富化落地（`gate.py:_workspace_focus_for_followup` + `prompt.py:workspace_focuses` + `schema.py:workspace_focus_enabled` + `orchestrator.py:_compute_workspace_focus_for_clarifier` 回调）；运营增强 1 落地（`tests/orchestrator/manual_e2e_f124.py`，246 行，6 个 E2E 用例，CI skipif 默认跳过）；运营增强 2 落地（`schema.py:remote_label` + `tracker.py:add_label/remove_label` 同步/异步默认实现 + `gate.py:_add_remote_label/_remove_remote_label`）；运营增强 3 落地（`status_dashboard.py:ClarificationEntry/on_clarification_update/_clarification_panel/pending_clarifications` + `orchestrator.py:_broadcast_clarification_status`）；新增 19+6+6+6 = 37 个单元测试。commit 信息承诺"文档同步更新 §0/§1.6/§2.11/§2.13-15/§3/§4/§5/§6"，实际仅同步了设计章节（§2.11/§2.13-15），§0/§1.6/§1.7/§4.5 文档完成态翻为 ✅ 由本变更补齐 |
+| 2026-07-22 | 文档同步代码完成态：§0/§1.6/§1.7/§4/§6 与 4b809fea commit 保持一致 | §0 状态行更新为"✅ 已完成 + 全部特性缺口已补全"，"尚未完成"段标为历史记录并逐项翻 ✅；§1.6 F-124-L/P/Q/R 四行从 ❌/📋 翻 ✅；§1.7 实现文件清单删除 poller.py/registration.py 的"未实现"标注，补 status_dashboard.py/manual_e2e_f124.py/test_orchestrator_dashboard.py 等新文件；§4.1/§4.4/§4.5 共 24 项验收从 `[ ]` 翻 `[x]`；§6 新增 4b809fea commit 记录 |
