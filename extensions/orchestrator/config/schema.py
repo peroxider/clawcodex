@@ -937,6 +937,10 @@ class ClarifierConfig:
     fail_open: bool = True
     cache_enabled: bool = True
     max_analyses_per_poll: int = 4
+    # F-124-L (P2): follow-up workspace focus 富化
+    workspace_focus_enabled: bool = False
+    # 运营增强 2: 可选的专用远端等待标签，空字符串=不推送
+    remote_label: str = ""
 
 
 @dataclass

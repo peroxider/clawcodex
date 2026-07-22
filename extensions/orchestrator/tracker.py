@@ -485,6 +485,30 @@ class TrackerAdapter(ABC):
         """
         return None
 
+    def add_label(self, issue_id: str, label: str) -> bool:
+        """F-124-P2: 为 issue 添加标签。默认 return False（不支持的 tracker 无操作）。
+
+        Args:
+            issue_id: the issue to label
+            label: the label name to add (e.g. ``"agent:awaiting-clarification"``)
+
+        Returns:
+            True if the label was added, False if the operation is not supported.
+        """
+        return False
+
+    def remove_label(self, issue_id: str, label: str) -> bool:
+        """F-124-P2: 移除 issue 上的标签。默认 return False。
+
+        Args:
+            issue_id: the issue to unlabel
+            label: the label name to remove
+
+        Returns:
+            True if the label was removed (or didn't exist), False if not supported.
+        """
+        return False
+
     async def extract_intent_from_labels(
         self,
         labels: list[str] | None,

@@ -73,6 +73,20 @@ class DashboardState:
     retry_queue: list[dict[str, Any]] = field(default_factory=list)
     poll_check_in_progress: bool = False
     next_poll_due_at_ms: int | None = None
+    # F-124-P3: 澄清状态数据
+    clarifications: list["ClarificationEntry"] = field(default_factory=list)
+
+
+@dataclass
+class ClarificationEntry:
+    """F-124-P3: A single issue's clarification status for the dashboard panel."""
+    issue_id: str
+    status: str  # "awaiting_author" | "awaiting_local" | "manual_required" | "resolved"
+    open_questions: list[str] = field(default_factory=list)
+    round_num: int = 0
+    max_rounds: int = 2
+    elapsed_seconds: float = 0.0
+    author_login: str | None = None
 
 
 class StatusDashboard:
@@ -187,6 +201,18 @@ class StatusDashboard:
     def on_retry_queue_update(self, retry_items: list[dict[str, Any]]) -> None:
         self._state.retry_queue = retry_items
 
+    def on_clarification_update(self, entries: list["ClarificationEntry"]) -> None:
+        """F-124-P3: 接收澄清状态更新，刷新 dashboard 面板。"""
+        self._state.clarifications = list(entries)
+
+    @property
+    def pending_clarifications(self) -> list["ClarificationEntry"]:
+        """F-124-P3: 当前需要操作员回答的澄清问题（awaiting_local 或 manual_required）。"""
+        return [
+            e for e in self._state.clarifications
+            if e.status in ("awaiting_local", "manual_required")
+        ]
+
     def state(self) -> DashboardState:
         return self._state
 
@@ -300,6 +326,12 @@ class StatusDashboard:
                     f"  delay={retry.get('delay_seconds', 0):.1f}s"
                     f"  error={retry.get('error', '')[:40]}"
                 )
+
+        # Clarification panel (F-124-P3)
+        clarification_panel = self._clarification_panel()
+        if clarification_panel:
+            lines.append("")
+            lines.append(clarification_panel)
 
         self._last_rendered_at = now
         return "\n".join(lines)
@@ -422,3 +454,36 @@ class StatusDashboard:
         icon = status_icons.get(status, "?")
         timeout_str = f" (timeout in {timeout_seconds}s)" if timeout_seconds else ""
         return f"  {icon} Issue {issue_id}: clarification {status}{timeout_str}"
+
+    def _clarification_panel(self) -> str:
+        """F-124-P3: 渲染澄清状态专用面板。"""
+        entries = self._state.clarifications
+        if not entries:
+            return ""
+
+        awaiting = [e for e in entries if e.status in ("awaiting_author", "awaiting_local")]
+        manual = [e for e in entries if e.status == "manual_required"]
+        resolved = [e for e in entries if e.status == "resolved"]
+
+        lines: list[str] = ["── Clarification ──────────────────────"]
+        if awaiting:
+            lines.append(f"  ⏳ Awaiting ({len(awaiting)}):")
+            for e in sorted(awaiting, key=lambda x: x.elapsed_seconds, reverse=True):
+                icon = "📧" if e.status == "awaiting_author" else "👤"
+                q_count = len(e.open_questions)
+                lines.append(
+                    f"    {icon} #{e.issue_id} Round {e.round_num}/{e.max_rounds} "
+                    f"({q_count} Q, {e.elapsed_seconds:.0f}s)"
+                )
+                if e.open_questions:
+                    first_q = e.open_questions[0][:60]
+                    lines.append(f"       Q: {first_q}...")
+        if manual:
+            lines.append(f"  ❌ Manual required ({len(manual)}):")
+            for e in sorted(manual, key=lambda x: x.elapsed_seconds, reverse=True)[:5]:
+                lines.append(f"    ⚠ #{e.issue_id} (Round {e.round_num}/{e.max_rounds} exhausted)")
+        if resolved:
+            recent = sorted(resolved, key=lambda x: x.elapsed_seconds, reverse=True)[:3]
+            for e in recent:
+                lines.append(f"    ✅ #{e.issue_id} resolved")
+        return "\n".join(lines)

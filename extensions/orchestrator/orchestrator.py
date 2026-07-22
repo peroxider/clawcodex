@@ -361,6 +361,8 @@ class Orchestrator:
                 resolver=self._clarification_resolver,
                 registry=self._registry,
                 config=clarifier_config,
+                tracker=self.tracker,
+                workspace_focus_callback=self._compute_workspace_focus_for_clarifier,
             )
             logger.info(
                 "F-124 issue clarifier enabled (block=%s, author_first=%s)",
@@ -1281,6 +1283,8 @@ class Orchestrator:
         finally:
             self._state.poll_check_in_progress = False
             self.status_dashboard.on_poll_end()
+            # F-124-P3: poll 结束后广播澄清状态到 dashboard
+            self._broadcast_clarification_status()
 
     async def _dependencies_satisfied(self, issue: Issue) -> bool:
         dependencies = [dep for dep in getattr(issue, "depends_on", []) if dep]
@@ -4122,6 +4126,52 @@ class Orchestrator:
             f"retry scheduled in {delay_ms}ms",
             {"attempt": attempt, "delay_ms": delay_ms},
         )
+
+    def _broadcast_clarification_status(self) -> None:
+        """F-124-P3: 收集所有 issue 的澄清状态，推送到 dashboard。"""
+        if self.status_dashboard is None:
+            return
+        from .status_dashboard import ClarificationEntry
+
+        now = time.time()
+        max_rounds = getattr(
+            getattr(self.workflow, "clarifier", None),
+            "max_rounds",
+            2,
+        )
+        entries: list[ClarificationEntry] = []
+        for issue_id, record in self._registry._records.items():
+            status = record.clarification_status
+            if status in ("awaiting_author", "awaiting_local", "manual_required", "resolved"):
+                elapsed = now - (record.updated_at or now)
+                entries.append(ClarificationEntry(
+                    issue_id=issue_id,
+                    status=status or "",
+                    open_questions=list(record.open_questions),
+                    round_num=record.clarification_round,
+                    max_rounds=max_rounds,
+                    elapsed_seconds=elapsed,
+                    author_login=record.author_login,
+                ))
+        self.status_dashboard.on_clarification_update(entries)
+
+    def _compute_workspace_focus_for_clarifier(self, issue: "Issue") -> list[dict]:
+        """F-124-L: 计算 workspace focus 作为澄清上下文富化。
+
+        仅在 follow-up 分支已建时调用。新 issue 场景（分支未建）返回 []。
+        """
+        branch = getattr(issue, "branch_name", None) or getattr(issue, "linked_branch", None)
+        if not branch:
+            return []
+        try:
+            changed = self._git_changed_files(branch)
+            if not changed:
+                return []
+            from clawcodex_ext.intent_forecast.focus import compute_workspace_focuses
+            return compute_workspace_focuses(changed_files=changed, recent_messages=[])
+        except Exception as exc:
+            logger.warning("Workspace focus computation failed for issue %s: %s", issue.id, exc)
+            return []
 
     async def _process_escalated_issues(self) -> None:
         """Check for clarification-exhausted issues and apply escalation policy.

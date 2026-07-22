@@ -49,6 +49,7 @@ class IssueClarifierService:
         issue: "Issue",
         *,
         prior_replies: Iterable[str] = (),
+        workspace_focuses: list[dict] | None = None,  # ★ P2
     ) -> ClarifyResult:
         replies = tuple(str(reply) for reply in prior_replies if str(reply).strip())
         fingerprint = self.fingerprint(issue, prior_replies=replies)
@@ -87,6 +88,7 @@ class IssueClarifierService:
                 prior_replies=replies,
                 max_questions=self.config.max_questions,
                 max_input_tokens=self.config.max_input_tokens,
+                workspace_focuses=workspace_focuses,  # ★ P2
             )
             try:
                 response = provider.chat(

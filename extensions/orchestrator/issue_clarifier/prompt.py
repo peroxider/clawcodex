@@ -41,6 +41,7 @@ def build_clarify_messages(
     prior_replies: Iterable[str] = (),
     max_questions: int = 3,
     max_input_tokens: int = 6000,
+    workspace_focuses: list[dict] | None = None,  # ★ P2: follow-up workspace focus 富化
 ) -> list[dict[str, str]]:
     payload = {
         "title": str(getattr(issue, "title", "") or ""),
@@ -49,6 +50,8 @@ def build_clarify_messages(
         "author_replies": [str(reply) for reply in prior_replies if str(reply).strip()],
         "max_questions": max(1, int(max_questions)),
     }
+    if workspace_focuses:                                   # ★ P2
+        payload["workspace_focuses"] = workspace_focuses    # ★ P2
     # Four characters per token is deliberately conservative for mixed
     # English/CJK issue text and avoids importing a tokenizer in the daemon.
     max_chars = max(1000, int(max_input_tokens) * 4)

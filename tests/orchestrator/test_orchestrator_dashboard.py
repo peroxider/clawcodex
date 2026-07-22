@@ -358,3 +358,129 @@ class TestDashboardRenderingEdgeCases(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --- F-124-P3: 澄清面板 ---
+
+
+def test_clarification_panel_empty() -> None:
+    """无澄清状态时面板不渲染。"""
+    dashboard = StatusDashboard()
+    assert dashboard._clarification_panel() == ""
+
+
+def test_clarification_panel_awaiting() -> None:
+    """awaiting_author 条目渲染正确的图标和轮数。"""
+    dashboard = StatusDashboard()
+    from extensions.orchestrator.status_dashboard import ClarificationEntry
+
+    dashboard.on_clarification_update([
+        ClarificationEntry(
+            issue_id="42",
+            status="awaiting_author",
+            open_questions=["Which behavior is expected?"],
+            round_num=1,
+            max_rounds=2,
+            elapsed_seconds=1250.0,
+        ),
+    ])
+    panel = dashboard._clarification_panel()
+    assert "📧" in panel
+    assert "#42" in panel
+    assert "Round 1/2" in panel
+    assert "Which behavior" in panel
+
+
+def test_clarification_panel_manual_required() -> None:
+    """manual_required 条目显示 ⚠ 标记。"""
+    dashboard = StatusDashboard()
+    from extensions.orchestrator.status_dashboard import ClarificationEntry
+
+    dashboard.on_clarification_update([
+        ClarificationEntry(
+            issue_id="15",
+            status="manual_required",
+            open_questions=[],
+            round_num=2,
+            max_rounds=2,
+            elapsed_seconds=3600.0,
+        ),
+    ])
+    panel = dashboard._clarification_panel()
+    assert "⚠" in panel
+    assert "#15" in panel
+    assert "exhausted" in panel
+
+
+def test_clarification_panel_awaiting_local() -> None:
+    """awaiting_local 条目使用 👤 图标。"""
+    dashboard = StatusDashboard()
+    from extensions.orchestrator.status_dashboard import ClarificationEntry
+
+    dashboard.on_clarification_update([
+        ClarificationEntry(
+            issue_id="38",
+            status="awaiting_local",
+            open_questions=["What is the target QPS?"],
+            round_num=1,
+            max_rounds=2,
+            elapsed_seconds=30.0,
+        ),
+    ])
+    panel = dashboard._clarification_panel()
+    assert "👤" in panel
+    assert "#38" in panel
+
+
+def test_clarification_panel_with_resolved() -> None:
+    """resolved 条目显示最终状态。"""
+    dashboard = StatusDashboard()
+    from extensions.orchestrator.status_dashboard import ClarificationEntry
+
+    dashboard.on_clarification_update([
+        ClarificationEntry(
+            issue_id="10",
+            status="resolved",
+            open_questions=[],
+            round_num=1,
+            max_rounds=2,
+            elapsed_seconds=500.0,
+        ),
+    ])
+    panel = dashboard._clarification_panel()
+    assert "✅" in panel
+    assert "#10" in panel
+
+
+def test_pending_clarifications_property() -> None:
+    """pending_clarifications 返回 awaiting_local 和 manual_required 条目。"""
+    dashboard = StatusDashboard()
+    from extensions.orchestrator.status_dashboard import ClarificationEntry
+
+    dashboard.on_clarification_update([
+        ClarificationEntry(issue_id="1", status="awaiting_author", elapsed_seconds=0.0),
+        ClarificationEntry(issue_id="2", status="awaiting_local", elapsed_seconds=0.0),
+        ClarificationEntry(issue_id="3", status="manual_required", elapsed_seconds=0.0),
+        ClarificationEntry(issue_id="4", status="resolved", elapsed_seconds=0.0),
+    ])
+    pending = dashboard.pending_clarifications
+    assert len(pending) == 2
+    assert {e.issue_id for e in pending} == {"2", "3"}
+
+
+def test_clarification_panel_sorts_by_elapsed_desc() -> None:
+    """awaiting 条目按等待时长降序排列。"""
+    dashboard = StatusDashboard()
+    from extensions.orchestrator.status_dashboard import ClarificationEntry
+
+    dashboard.on_clarification_update([
+        ClarificationEntry(
+            issue_id="old", status="awaiting_author", elapsed_seconds=5000.0),
+        ClarificationEntry(
+            issue_id="new", status="awaiting_author", elapsed_seconds=10.0),
+    ])
+    panel = dashboard._clarification_panel()
+    # "old" 应该出现在 "new" 之前
+    old_pos = panel.index("#old")
+    new_pos = panel.index("#new")
+    assert old_pos < new_pos

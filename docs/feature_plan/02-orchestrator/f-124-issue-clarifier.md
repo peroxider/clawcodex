@@ -1,8 +1,8 @@
 # F-124: Issue 澄清器 — 描述不清晰自动检测与澄清闭环
 
-> 状态: ✅ 已完成（MVP 13/15 落地：13 ✅ + 1 ❌ F-124-L workspace focus 富化 P2 + 1 ⚠️ registration.py 偏离合并到 gate.py/cli；另 3 项运营增强未做——属后续迭代，不计入缺口）
+> 状态: ✅ 已完成 + 特性缺口本文件补全设计（MVP 13/15 落地：13 ✅ + 1 ❌ F-124-L workspace focus 富化 P2 + 1 ⚠️ registration.py 偏离合并到 gate.py/cli；3 项运营增强未实现——本文档补全设计，属后续迭代）
 > 章节: docs/feature_plan/02-orchestrator/f-124-issue-clarifier.md
-> 最后更新: 2026-07-21
+> 最后更新: 2026-07-21（补全特性缺口设计：F-124-L P2 详细设计 + 3 项运营增强设计）
 > 关联能力: F-38（验证+报告+PR）、F-39（issue 重跑标签）、F-121（规则回灌）、F-123（Intent Forecast）
 
 > **注**：§0 已记录与原草案的五处重大调整（不复用永久 Intent.BLOCKED / 复用 ClarificationResolver / 接入点改为 `_poll_and_dispatch` / `ClarificationPoller` 合并到 `IssueClarificationGate` / 解析器降级行为差异），本节之后文档与实现保持一致。但部分 §2 详细设计代码片段仍为草案示意，以本节实际架构为准。
@@ -71,12 +71,12 @@ F-124 已完成可运行 MVP。实现方式与最初草案有五处重要调整�
 - **所有降级路径均带 `degraded=True` 标记**：`parser.py` 和 `service.py` 的降级路径全部设置
   `degraded=True`，便于监控和 dashboard 展示。
 
-尚未完成：
+尚未完成（4 项特性缺口，本文档已补全设计，待后续实现）：
 
-- 真实 provider + GitCode/GitHub tracker 的长期 daemon E2E。
-- 可选的专用“等待澄清”远端标签；不能直接复用当前永久 `agent:blocked`。
-- Dashboard 上的 open questions、轮数和 manual_required 专用视图。
-- Follow-up workspace focus 富化（原 P2）。
+1. **F-124-L (P2)** — Follow-up workspace focus 富化：见 §2.11 扩展设计
+2. **运营增强 1 — 长期 daemon E2E**：真实 provider + GitCode/GitHub tracker 的长时间运行端到端验证，见 §2.13
+3. **运营增强 2 — 远端等待标签**：可选的专用“等待澄清”远端标签（不能直接复用当前永久 `agent:blocked`），见 §2.14
+4. **运营增强 3 — Dashboard 澄清视图**：Dashboard 上的 open questions、轮数和 manual_required 专用视图，见 §2.15
 
 以下章节保留完整设计背景；其中新建 `ClarificationPoller`、`open_questions` 重复状态机和
 `_claim_next_issue()` 接入示意，以本节的实际架构为准。
@@ -282,10 +282,13 @@ IssueClarifierService.analyze(issue + replies)
 | F-124-I | 多轮澄清上限：最多 `max_rounds` 轮自动追问，超过转 `manual_required` | P1 | ✅ |
 | F-124-J | F-39 标签镜像：通过 `ClarificationResolver` 复用，**不复用永久 `Intent.BLOCKED`**（详见 §0 注 3） | P0 | ✅（复用现有机制） |
 | F-124-K | Prompt 注入：`render(clarification=...)` 复用 `_CLARIFICATION_TEMPLATE` | P0 | ✅ |
-| F-124-L | Follow-up 场景 workspace focus 富化：`compute_workspace_focuses` 调用 | P2 | ❌ 未做（doc 标 P2） |
+| F-124-L | Follow-up 场景 workspace focus 富化：`compute_workspace_focuses` 调用注入 prompt payload | P2 | ❌ 未做（详见 §2.11 扩展设计） |
 | F-124-M | CLI 子命令：`orchestrator clarify list/recheck/resolve` | P1 | ✅（`cli/issue.py` 注册） |
 | F-124-N | 单元测试：`tests/orchestrator/test_issue_clarifier.py`（631 行） | P0 | ✅（78/78 通过） |
 | F-124-O | 稳定性门禁：`tests/stability_gate/test_stage5_extensions.py` 加导入测试 | P1 | ✅ |
+| F-124-P | 运营增强 1：长期 daemon E2E — 真实 provider + GitCode/GitHub tracker 的端到端验证脚本 | P2 | 📋 设计中（详见 §2.13） |
+| F-124-Q | 运营增强 2：远端等待标签 — 可选专用 `agent:awaiting-clarification` 标签推送到远端 tracker | P2 | 📋 设计中（详见 §2.14） |
+| F-124-R | 运营增强 3：Dashboard 澄清视图 — open questions、轮数、manual_required 专用面板 | P2 | 📋 设计中（详见 §2.15） |
 
 ### 1.7 实现文件清单
 
@@ -1139,22 +1142,116 @@ def render(self, *, issue, clarification: str | None = None,
 
 Orchestrator 在澄清解决后调用 `render(issue=issue, clarification=answer_summary)`，agent 即可在 prompt 中看到 author 的明确回答，无需猜。
 
-### 2.11 Follow-up 场景 workspace focus 辅助（P2）
+### 2.11 Follow-up 场景 workspace focus 辅助（P2 — 扩展设计）
 
-F-39 follow-up 模式下（PR 已存在、分支已建、有 changed_files），可调用 F-123 的 `compute_workspace_focuses` 作为澄清上下文富化，让澄清问题聚焦于当前 PR 改动模块：
+F-39 follow-up 模式下（PR 已存在、分支已建、有 changed_files），可调用 F-123 的 `compute_workspace_focuses` 作为澄清上下文富化，让澄清问题聚焦于当前 PR 改动模块。
 
-```python
-# 仅在 follow-up 分支已建时调用
-from clawcodex_ext.intent_forecast.focus import compute_workspace_focuses
+#### 2.11.1 数据流
 
-def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
-    if not self._has_followup_branch(issue):
-        return []
-    changed = self._git_changed_files(issue.branch_name)
-    return compute_workspace_focuses(changed_files=changed, recent_messages=[])
+```
+follow-up issue 入队
+    │
+    ▼
+IssueClarificationGate.should_dispatch()
+    │
+    ├─ record 有 linked_branch / follow-up intent
+    │     │
+    │     ▼
+    │   _workspace_focus_for_followup(issue)
+    │     ├─ 无分支 → 返回 []（跳过富化，与首次 issue 行为一致）
+    │     └─ 有分支
+    │           ├─ git diff --name-only <branch>..<base> 收集 changed_files
+    │           └─ compute_workspace_focuses(changed_files=..., recent_messages=[])
+    │                 └─ 返回 [{"module": "...", "focus": "...", "relevance": 0.9}, ...]
+    │
+    ▼
+build_clarify_messages(issue, workspace_focuses=...)
+    │
+    ▼
+JSON payload 注入 workspace_focuses 字段
+    │
+    ▼
+LLM 分析时可见"当前 PR 只改了 config 模块"
+  → 澄清问题更精准（例："新配置项应在 config 模块的哪个位置注册？"）
 ```
 
-**注意**：这是轻量复用（只 import 一个纯函数），不引入 F-123 的策略框架。新 issue 场景（分支未建、changed_files 为空）直接跳过此富化——`compute_workspace_focuses` 在空输入下返回 `[]`，天然安全。
+#### 2.11.2 `build_clarify_messages` 接口扩展
+
+```python
+# extensions/orchestrator/issue_clarifier/prompt.py (修改示意)
+
+def build_clarify_messages(
+    issue: "Issue",
+    *,
+    prior_replies: Iterable[str] = (),
+    max_questions: int = 3,
+    max_input_tokens: int = 6000,
+    workspace_focuses: list[dict] | None = None,  # ★ P2 新增参数
+) -> list[dict[str, str]]:
+    payload = {
+        "title": ...,
+        "description": ...,
+        "labels": ...,
+        "author_replies": ...,
+        "max_questions": ...,
+    }
+    if workspace_focuses:                                   # ★ P2
+        payload["workspace_focuses"] = workspace_focuses    # ★ P2
+    ...
+```
+
+`workspace_focuses` 在 payload 中作为可选字段出现，低版本 LLM 忽略未知字段，不影响兼容性。
+
+#### 2.11.3 配置控制
+
+新增 `ClarifierConfig` 字段：
+
+```python
+@dataclass
+class ClarifierConfig:
+    ...
+    workspace_focus_enabled: bool = False  # ★ P2: 默认关闭，opt-in
+```
+
+- `workspace_focus_enabled: true` 时，gate 在 follow-up 分支已建且 `changed_files` 非空时调用 `compute_workspace_focuses`
+- `false` 时跳过富化（向后兼容，不影响现有行为）
+- 首次 issue 场景（分支未建、changed_files 为空）天然跳过，无需配置判断
+
+#### 2.11.4 实现要点
+
+1. **轻量 import**：`from clawcodex_ext.intent_forecast.focus import compute_workspace_focuses` — 纯函数，无副作用
+2. **空输入安全**：`changed_files=[]` 时返回 `[]`，`gate` 检查 `if not focuses: return []`
+3. **缓存友好**：`compute_workspace_focuses` 无缓存，每次 gate 调用重新计算（changed_files 变化时自动更新）
+4. **不引入 F-123 策略框架**：不 import `intent_strategy`、`build_forecast_messages` 等，仅复用 focus 纯函数
+5. **fingerprint 不受影响**：`workspace_focuses` 不参与 `build_fingerprint` 计算（不属于 issue 文本），避免缓存失效
+6. **降级安全**：`compute_workspace_focuses` 抛异常时捕获并返回 `[]`，不阻断分发
+
+#### 2.11.5 测试
+
+```python
+# tests/orchestrator/test_issue_clarifier.py (新增)
+
+def test_followup_workspace_focus_injected() -> None:
+    """Follow-up 模式下 workspace_focuses 注入 prompt payload。"""
+    issue = _make_issue(title="add config", description="add new config field")
+    focuses = [{"module": "config", "focus": "config schema", "relevance": 0.95}]
+    messages = build_clarify_messages(issue, workspace_focuses=focuses)
+    payload = json.loads(messages[1]["content"])
+    assert "workspace_focuses" in payload
+    assert payload["workspace_focuses"][0]["module"] == "config"
+
+def test_followup_workspace_focus_empty() -> None:
+    """首次 issue（无分支）时 workspace_focuses 为空列表，不注入 payload。"""
+    messages = build_clarify_messages(_make_issue(), workspace_focuses=None)
+    payload = json.loads(messages[1]["content"])
+    assert "workspace_focuses" not in payload
+
+def test_workspace_focus_disabled_skips() -> None:
+    """workspace_focus_enabled=false 时 gate 不调用 compute_workspace_focuses。"""
+    config = ClarifierConfig(workspace_focus_enabled=False)
+    gate = IssueClarificationGate(service=..., resolver=..., registry=..., config=config)
+    # gate.should_dispatch() 内部不调用 _workspace_focus_for_followup
+```
 
 ### 2.12 边界情况处理
 
@@ -1193,7 +1290,461 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 > - 确定性门控 `_find_explicit_clarification_gap`
 ---
 
-## §3 风险与约束
+### 2.13 运营增强 1：长期 daemon E2E 测试（P2 — 设计）
+
+#### 2.13.1 动机
+
+当前 78 个单元测试覆盖了逻辑分支、缓存、降级、状态机，但缺少**真实 provider + 真实 tracker** 的长时间运行端到端验证。以下问题只有真实 E2E 才能暴露：
+
+- provider 长连接稳定性（HTTP 池泄漏、TCP 重连、token 耗尽）
+- `ClarificationResolver` 三通道在真实 poll 循环中的时序竞争
+- `ClarifierCache` 在多轮 poll 间的持久化状态一致性
+- 下游 tracker（GitCode/GitHub）的 API 限流、响应延迟波动
+- 澄清器与 F-39 重跑标签、F-38 分发路径的集成竞争
+
+#### 2.13.2 设计
+
+借鉴 `tests/orchestrator/manual_e2e_f38.py` 的脚本式 E2E 模式，新增 `tests/orchestrator/manual_e2e_f124.py`：
+
+```python
+# tests/orchestrator/manual_e2e_f124.py (设计示意)
+# 运行方式: python3 -m pytest tests/orchestrator/manual_e2e_f124.py -v -s
+# 依赖: 环境变量 CLAWCODEX_TEST_PROVIDER=openai CLAWCODEX_TEST_MODEL=gpt-4o-mini
+#       或 CLAWCODEX_TEST_TRACKER=github CLAWCODEX_TEST_REPO=owner/repo
+
+@pytest.mark.skipif(
+    not os.environ.get("CLAWCODEX_TEST_PROVIDER"),
+    reason="CLAWCODEX_TEST_PROVIDER not set",
+)
+class TestF124LongRunningE2E:
+
+    @pytest.fixture
+    def setup(self) -> Generator:
+        """Setup: LocalTracker (bare-origin temp dir) + real provider."""
+        tracker = LocalTrackerAdapter(temp_dir / "tracker")
+        provider = build_provider_from_config(
+            provider_name=os.environ["CLAWCODEX_TEST_PROVIDER"],
+            model=os.environ.get("CLAWCODEX_TEST_MODEL", "gpt-4o-mini"),
+        )
+        config = ClarifierConfig(enabled=True, block_on_unclear=True, max_rounds=2)
+        cache = ClarifierCache(temp_dir / "cache.json", enabled=True)
+        registry = IssueRegistry(temp_dir / "registry.json")
+        resolver = ClarificationResolver(...)
+        gate = IssueClarificationGate(
+            service=IssueClarifierService(config=config, cache=cache, provider=provider),
+            resolver=resolver, registry=registry, config=config,
+        )
+        yield tracker, gate, registry, resolver, cache
+
+    def test_clear_issue_passes_through(self, setup):
+        """清晰描述：should_dispatch 返回 True，不产生澄清状态。"""
+        issue = Issue(id="1", title="add retry", description="add retry logic to HTTP client")
+        result = asyncio.run(gate.should_dispatch(issue))
+        assert result is True
+        record = registry.get("1")
+        assert record is None or record.clarification_status in (None, "clear", "observation")
+
+    def test_unclear_issue_blocks_and_awaits(self, setup):
+        """模糊描述：阻断 → 等待 → 通过 CLI 回答 → 解除。"""
+        issue = Issue(id="2", title="optimize", description="make it faster, no baseline")
+        blocked = asyncio.run(gate.should_dispatch(issue))
+        assert blocked is False
+        record = registry.get("2")
+        assert record.clarification_status == "awaiting_author"
+        assert len(record.open_questions) > 0
+
+        # 模拟 CLI 回答
+        resolver.mark_answer(issue_id="2", answer="target 1000 QPS", source="dashboard")
+        unblocked = asyncio.run(gate.should_dispatch(issue))
+        assert unblocked is True
+
+    def test_round_trip_api_latency(self, setup):
+        """单次 analyze() 延迟 < 10s（真实 provider 网络延迟）。"""
+        issue = Issue(id="3", title="vague", description="add some kind of cache")
+        t0 = time.time()
+        result = asyncio.run(gate.should_dispatch(issue))
+        elapsed = time.time() - t0
+        assert elapsed < 10.0, f"analyze() took {elapsed:.2f}s"
+
+    def test_provider_fail_open(self, setup):
+        """provider 不可用时降级放行，不阻塞。"""
+        gate.service._provider = None  # 模拟 provider 不可用
+        issue = Issue(id="4", title="anything", description="anything")
+        result = asyncio.run(gate.should_dispatch(issue))
+        assert result is True  # fail-open
+```
+
+#### 2.13.3 运行方式
+
+```bash
+# 真实 provider（默认模型）
+CLAWCODEX_TEST_PROVIDER=openai python3 -m pytest tests/orchestrator/manual_e2e_f124.py -v -s
+
+# 指定模型
+CLAWCODEX_TEST_PROVIDER=openai CLAWCODEX_TEST_MODEL=gpt-4o-mini \
+  python3 -m pytest tests/orchestrator/manual_e2e_f124.py -v -s
+
+# 指定 tracker（GitHub 集成测试）
+CLAWCODEX_TEST_PROVIDER=openai CLAWCODEX_TEST_TRACKER=github \
+  CLAWCODEX_TEST_REPO=myorg/myrepo CLAWCODEX_TEST_TOKEN=ghp_xxx \
+  python3 -m pytest tests/orchestrator/manual_e2e_f124.py -v -s
+```
+
+#### 2.13.4 CI 策略
+
+- **CI 默认跳过**（`skipif` 条件：无 `CLAWCODEX_TEST_PROVIDER` 环境变量）
+- **本地手动运行**：开发者在修改了 `issue_clarifier/` 或 `clarification.py` 后运行
+- **Nightly 可选**：stage6-perf-nightly.yml 可扩展一个 `f124-e2e` job，但需注意 provider API 成本
+
+#### 2.13.5 文件清单
+
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| `tests/orchestrator/manual_e2e_f124.py` | **新增** | 真实 provider + LocalTracker 的 E2E 测试（~150 行） |
+| `tests/orchestrator/__init__.py` | 不变 | 已有包文件 |
+
+### 2.14 运营增强 2：可选专用远端等待标签（P2 — 设计）
+
+#### 2.14.1 动机
+
+当前 F-124 在 issue 不清晰时，通过 `ClarificationResolver` 在本地 registry 标记 `clarification_status=awaiting_author`，但**不推送任何标签到远端 issue tracker**。这意味着：
+
+- 用户在 GitCode/GitHub issue 列表上看不到哪些 issue 正在等待澄清
+- 操作员无法通过 tracker 的 label 过滤快速找到待澄清的 issue
+- 现有的 `agent:blocked` 标签语义是"永久跳过"，不适合临时等待状态
+
+#### 2.14.2 设计
+
+新增 `ClarifierConfig.remote_label` 配置项，当 issue 进入 `awaiting_author` 状态时自动添加标签，解决后自动移除。
+
+```python
+# extensions/orchestrator/config/schema.py (修改示意)
+
+@dataclass
+class ClarifierConfig:
+    ...
+    remote_label: str = ""  # ★ P2: 推送远端标签名，空字符串=不推送
+    # 示例：remote_label: "agent:awaiting-clarification"
+```
+
+#### 2.14.3 数据流
+
+```
+gate.should_dispatch() 判定 is_clear=false
+    │
+    ▼
+resolver.request_clarification(...)
+    │
+    ▼
+IssueRegistry.mark_clarification_blocked(...)
+    │
+    ▼
+if config.remote_label:
+    TrackerAdapter.add_label(issue_id, config.remote_label)
+    │
+    ▼
+远端 issue tracker 出现 agent:awaiting-clarification 标签
+    │
+    ...
+    │
+    ▼
+澄清解决 → mark_clarification_resolved()
+    │
+    ▼
+if config.remote_label:
+    TrackerAdapter.remove_label(issue_id, config.remote_label)
+```
+
+#### 2.14.4 `TrackerAdapter` 接口扩展
+
+```python
+# extensions/orchestrator/tracker.py (修改示意)
+
+class TrackerAdapter(ABC):
+    ...
+    def add_label(self, issue_id: str, label: str) -> bool:
+        """F-124-P2: 为 issue 添加标签。默认 return False（不支持的 tracker 无操作）。"""
+        return False
+
+    def remove_label(self, issue_id: str, label: str) -> bool:
+        """F-124-P2: 移除 issue 上的标签。默认 return False。"""
+        return False
+```
+
+**RepoTracker 实现**（`extensions/orchestrator/repo_tracker/client.py`）：
+
+```python
+class RepositoryIssueClient:
+    def add_label(self, issue_id: str, label: str) -> bool:
+        """PATCH /repos/{owner}/{repo}/issues/{id} - labels append"""
+        url = f"{self._api_url}/repos/{self.owner}/{self.repo}/issues/{issue_id}"
+        try:
+            resp = self._session.patch(url, json={"labels": [label]})
+            resp.raise_for_status()
+            return True
+        except Exception as exc:
+            logger.warning("Failed to add label %s to issue %s: %s", label, issue_id, exc)
+            return False
+
+    def remove_label(self, issue_id: str, label: str) -> bool:
+        """PATCH /repos/{owner}/{repo}/issues/{id} - labels replace (remove one)"""
+        # 先获取当前 labels，再过滤移除
+        current = self._get_issue_labels(issue_id)
+        updated = [l for l in current if l != label]
+        if len(updated) == len(current):
+            return True  # 标签不存在，视为成功
+        url = f"{self._api_url}/repos/{self.owner}/{self.repo}/issues/{issue_id}"
+        try:
+            resp = self._session.patch(url, json={"labels": updated})
+            resp.raise_for_status()
+            return True
+        except Exception as exc:
+            logger.warning("Failed to remove label %s from issue %s: %s", label, issue_id, exc)
+            return False
+```
+
+**LocalTracker 实现**：无操作（`return False`），远端标签对本地文件系统无意义。
+
+**LinearAdapter 实现**：无操作（`return False`），Linear 不支持标准 label 追加。
+
+#### 2.14.5 配置语义
+
+| `remote_label` 值 | 行为 |
+|-------------------|------|
+| `""`（默认） | 不推送任何标签，仅本地 registry 记录澄清状态 |
+| `"agent:awaiting-clarification"` | 进入 `awaiting_author` 时添加该标签，解决后移除 |
+| `"needs-clarification"` | 自定义标签名，与团队现有 label 体系一致 |
+
+#### 2.14.6 配置示例
+
+```yaml
+# WORKFLOW.md front matter
+clarifier:
+  enabled: true
+  remote_label: "agent:awaiting-clarification"
+```
+
+#### 2.14.7 实现要点
+
+1. **幂等添加**：`add_label` 在标签已存在时不应报错（GitHub/GitCode API 自动去重）
+2. **幂等移除**：`remove_label` 在标签不存在时视为成功
+3. **降级安全**：`add_label`/`remove_label` 失败时只记录 warning，不阻断分发
+4. **不参与 fingerprint**：标签变化不触发重新分析
+5. **不参与 CLI 仲裁**：CLI `clarify resolve` 不校验标签是否存在
+6. **`reset_for_retry` 清除**：重跑时调用 `remove_label` 清理远端标签
+
+#### 2.14.8 测试
+
+```python
+# tests/orchestrator/test_issue_clarifier.py (新增)
+
+def test_remote_label_added_on_block() -> None:
+    """remote_label 配置时，阻断后调用 add_label。"""
+    tracker = MockTrackerAdapter()
+    gate = _make_gate(config=ClarifierConfig(remote_label="agent:awaiting-clarification"))
+    issue = Issue(id="1", title="unclear", description="do something")
+    asyncio.run(gate.should_dispatch(issue))
+    assert tracker.add_label_called_with("1", "agent:awaiting-clarification")
+
+def test_remote_label_removed_on_resolve() -> None:
+    """remote_label 配置时，解决后调用 remove_label。"""
+    tracker = MockTrackerAdapter()
+    gate = _make_gate(config=ClarifierConfig(remote_label="agent:awaiting-clarification"))
+    # 先阻断，再回答，再解除
+    ...
+    assert tracker.remove_label_called_with("1", "agent:awaiting-clarification")
+
+def test_remote_label_empty_skips() -> None:
+    """remote_label="" 时不调用 add_label/remove_label。"""
+    tracker = MockTrackerAdapter()
+    gate = _make_gate(config=ClarifierConfig(remote_label=""))
+    ...
+    assert tracker.add_label_call_count == 0
+```
+
+### 2.15 运营增强 3：Dashboard 澄清专用视图（P2 — 设计）
+
+#### 2.15.1 动机
+
+当前 `StatusDashboard` 有 `render_clarification_status()` 方法（单行字符串），但 orchestrator dashboard 主视图（`render()`）中没有澄清状态的专用面板。操作员需要：
+
+- 一眼看到**哪些 issue 正在等待澄清**（`awaiting_author` / `awaiting_local`）
+- 看到**每个 issue 的轮数**（`Round 1/2`）、**等待时长**、**问题数量**
+- 看到**需要人工介入的 issue**（`manual_required` 高亮）
+- 能够**在 dashboard 中直接回答澄清问题**（通过 `prompt_clarification` 交互式提示）
+
+#### 2.15.2 设计
+
+在 `StatusDashboard.render()` 中新增 `_clarification_panel()` 方法，在现有 issue 列表下方渲染一个专用面板。
+
+#### 2.15.3 数据输入
+
+`StatusDashboard` 需要从外部接收澄清状态数据。新增 `DashboardState` 字段和 `on_clarification_update()` 回调：
+
+```python
+# extensions/orchestrator/status_dashboard.py (修改示意)
+
+@dataclass
+class ClarificationEntry:
+    issue_id: str
+    status: str                    # "awaiting_author" | "awaiting_local" | "manual_required" | "resolved"
+    open_questions: list[str]
+    round_num: int
+    max_rounds: int
+    elapsed_seconds: float         # 自进入 awaiting 状态起的秒数
+    author_login: str | None = None
+
+@dataclass
+class DashboardState:
+    ...
+    clarifications: list[ClarificationEntry] = field(default_factory=list)  # ★ P3
+
+class StatusDashboard:
+    ...
+    def on_clarification_update(self, entries: list[ClarificationEntry]) -> None:
+        """F-124-P3: 接收澄清状态更新，刷新 dashboard 面板。"""
+        self._state.clarifications = list(entries)
+```
+
+#### 2.15.4 面板渲染
+
+```python
+# extensions/orchestrator/status_dashboard.py (修改示意)
+
+def _clarification_panel(self) -> str:
+    """Render a dedicated clarification status panel."""
+    entries = self._state.clarifications
+    if not entries:
+        return ""
+
+    awaiting = [e for e in entries if e.status in ("awaiting_author", "awaiting_local")]
+    manual = [e for e in entries if e.status == "manual_required"]
+    resolved = [e for e in entries if e.status == "resolved"]
+
+    lines = ["── Clarification ──────────────────────"]
+    if awaiting:
+        lines.append(f"  ⏳ Awaiting ({len(awaiting)}):")
+        for e in sorted(awaiting, key=lambda x: x.elapsed_seconds, reverse=True):
+            icon = "📧" if e.status == "awaiting_author" else "👤"
+            q_count = len(e.open_questions)
+            lines.append(
+                f"    {icon} #{e.issue_id} Round {e.round_num}/{e.max_rounds} "
+                f"({q_count} Q, {e.elapsed_seconds:.0f}s)"
+            )
+            if e.open_questions:
+                # 显示第一条问题（截断）
+                first_q = e.open_questions[0][:60]
+                lines.append(f"       Q: {first_q}...")
+    if manual:
+        lines.append(f"  ❌ Manual required ({len(manual)}):")
+        for e in sorted(manual, key=lambda x: x.elapsed_seconds, reverse=True):
+            lines.append(f"    ⚠ #{e.issue_id} (Round {e.round_num}/{e.max_rounds} exhausted)")
+    if resolved:
+        # 最近 3 条已解决的
+        recent = sorted(resolved, key=lambda x: x.elapsed_seconds, reverse=True)[:3]
+        for e in recent:
+            lines.append(f"    ✅ #{e.issue_id} resolved")
+    return "\n".join(lines)
+```
+
+#### 2.15.5 渲染示例
+
+```
+── Clarification ──────────────────────
+  ⏳ Awaiting (2):
+    📧 #42 Round 1/2 (3 Q, 1250s)
+       Q: Should the new function be sync or async?...
+    👤 #38 Round 1/2 (1 Q, 30s)
+       Q: What is the target QPS?...
+  ❌ Manual required (1):
+    ⚠ #15 Round 2/2 exhausted
+```
+
+#### 2.15.6 Orchestrator 集成
+
+`Orchestrator` 在每个 poll 周期结束后，收集所有澄清状态并推送到 `StatusDashboard`：
+
+```python
+# extensions/orchestrator/orchestrator.py (修改示意)
+
+def _broadcast_clarification_status(self) -> None:
+    """F-124-P3: 收集所有 issue 的澄清状态，推送到 dashboard。"""
+    entries: list[ClarificationEntry] = []
+    now = time.time()
+    for issue_id, record in self.registry.iter_records():
+        if record.clarification_status in ("awaiting_author", "awaiting_local", "manual_required", "resolved"):
+            elapsed = now - (record.updated_at or now)
+            entries.append(ClarificationEntry(
+                issue_id=issue_id,
+                status=record.clarification_status or "",
+                open_questions=list(record.open_questions),
+                round_num=record.clarification_round,
+                max_rounds=self.config.clarifier.max_rounds,
+                elapsed_seconds=elapsed,
+                author_login=record.author_login,
+            ))
+    if self.status_dashboard:
+        self.status_dashboard.on_clarification_update(entries)
+```
+
+调用时机：`Orchestrator._poll_and_dispatch()` 末尾，所有 `should_dispatch()` 调用之后。
+
+#### 2.15.7 交互式回答
+
+在 `prompt_clarification()` 基础上，新增 `pending_clarifications` 入口：
+
+```python
+# extensions/orchestrator/status_dashboard.py (修改示意)
+
+@property
+def pending_clarifications(self) -> list[ClarificationEntry]:
+    """当前需要操作员回答的澄清问题（awaiting_local 或 manual_required）。"""
+    return [
+        e for e in self._state.clarifications
+        if e.status in ("awaiting_local", "manual_required")
+    ]
+```
+
+操作员在 dashboard 中看到 `👤 #38` 标记后，可通过 `prompt_clarification(issue_id="38")` 直接回答。
+
+#### 2.15.8 实现要点
+
+1. **零开销空状态**：`clarifications` 列表为空时，`_clarification_panel()` 返回空字符串，不占用 dashboard 屏幕空间
+2. **按需排序**：awaiting 条目按等待时长降序排列（最久的在最上面）
+3. **显示上限**：manual_required 最多显示 5 条，resolved 最多显示 3 条，避免面板过长
+4. **颜色编码**（可选）：`awaiting_author` 用黄色，`manual_required` 用红色（通过 `outputStyles` 语义名）
+5. **不引入新依赖**：`ClarificationEntry` 是纯 dataclass，无外部依赖
+
+#### 2.15.9 测试
+
+```python
+# tests/orchestrator/test_status_dashboard.py (新增)
+
+def test_clarification_panel_empty() -> None:
+    """无澄清状态时面板不渲染。"""
+    dashboard = StatusDashboard(...)
+    assert dashboard._clarification_panel() == ""
+
+def test_clarification_panel_awaiting() -> None:
+    """awaiting_author 条目渲染正确的图标和轮数。"""
+    dashboard = StatusDashboard(...)
+    dashboard.on_clarification_update([
+        ClarificationEntry(issue_id="42", status="awaiting_author", ...),
+    ])
+    panel = dashboard._clarification_panel()
+    assert "📧" in panel
+    assert "#42" in panel
+
+def test_clarification_panel_manual_required() -> None:
+    """manual_required 条目显示 ⚠ 标记。"""
+    dashboard = StatusDashboard(...)
+    dashboard.on_clarification_update([
+        ClarificationEntry(issue_id="15", status="manual_required", ...),
+    ])
+    panel = dashboard._clarification_panel()
+    assert "⚠" in panel
+    assert "#15" in panel
+```
 
 ### 3.1 风险矩阵
 
@@ -1213,6 +1764,9 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 | 缓存文件损坏 | 极低 | 低 | 缓解：`ClarifierCache._load()` 捕获所有异常，清空缓存重建，不阻塞分发；写入时使用 `.tmp` + `os.replace` 原子写入防崩溃 |
 | `author_login` 缺失且 `author_first=true` | 低 | 低 | 缓解：gate 内联检测，直接降级到 `manual_required`，记录 warning，不抛异常 |
 | 多轮追问中 `ClarificationResolver` 状态竞争 | 低 | 低 | 缓解：gate 每次调用 `resolver.clear()` 后再 `request_clarification()`，避免旧状态干扰新问题 |
+| 远端标签推送失败（`add_label` 网络错误） | 低 | 低 | 缓解：`add_label`/`remove_label` 失败时只记录 warning，不阻断分发流程；`remote_label=""` 默认不推送 |
+| Dashboard 澄清视图数据延迟 | 中 | 低 | 缓解：`_broadcast_clarification_status()` 在每轮 poll 末尾调用，最多延迟一个 poll 周期（默认 30s）；面板显示 `elapsed_seconds` 让操作员知道数据时效 |
+| 真实 provider E2E 测试遗漏环境差异 | 中 | 中 | 缓解：`manual_e2e_f124.py` 使用 `skipif` 条件，仅在设置 `CLAWCODEX_TEST_PROVIDER` 时运行；开发者需在本地确认而非依赖 CI |
 
 ### 3.2 约束
 
@@ -1222,6 +1776,8 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 - **LLM 调用通过 `asyncio.to_thread` 异步化**：实际调用在 `gate.py` 中通过 `asyncio.to_thread(self.service.analyze, ...)` 异步执行，避免阻塞 poll 主循环。但 `analyze()` 内部的 provider.chat 仍是同步阻塞（线程池中），单次延迟 < 5s 可接受。
 - **Per-poll 分析预算**：`max_analyses_per_poll`（默认 4）防止单次 poll 中所有 issue 同时触发 LLM 分析耗尽 quota。预算耗尽时延迟到下一 poll 周期。
 - **`compute_workspace_focuses` 只作辅助信号**：仅 follow-up 场景、仅 import 一个纯函数、不引入 F-123 的策略框架（详见 §1.3）。
+- **远端标签不阻塞分发**：`add_label`/`remove_label` 失败只记录 warning，不阻断分发流程。`remote_label=""` 默认不推送任何标签。
+- **Dashboard 澄清面板不阻塞主循环**：`_broadcast_clarification_status()` 在 poll 末尾调用，同步开销 < 1ms（纯内存操作）。
 
 ---
 
@@ -1245,6 +1801,42 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 - [x] 确定性门控 `_find_explicit_clarification_gap` 在 LLM 之前检测 TBD/未指定/do not guess + ask author 等显式缺口
 - [x] 降级结果标记 `degraded=True`，降级结果不写入缓存
 - [x] 所有降级路径（provider 异常/非 JSON/confidence 不足/ambiguities 为空）均返回 `is_clear=True` + `degraded=True`
+
+### 4.5 特性缺口验收（P2 — 设计待实现）
+
+#### F-124-L (workspace focus 富化)
+
+- [ ] `workspace_focus_enabled=true` 时，follow-up 分支已建且 `changed_files` 非空时调用 `compute_workspace_focuses`
+- [ ] `workspace_focuses` 注入 `build_clarify_messages` payload 的 `workspace_focuses` 字段
+- [ ] 首次 issue 场景（分支未建）天然跳过富化
+- [ ] `workspace_focus_enabled=false` 时不调用 `compute_workspace_focuses`，向后兼容
+- [ ] `compute_workspace_focuses` 抛异常时捕获并返回 `[]`，不阻断分发
+
+#### 运营增强 1：长期 daemon E2E
+
+- [ ] `manual_e2e_f124.py` 在 `CLAWCODEX_TEST_PROVIDER` 未设置时被 `skipif` 跳过
+- [ ] 真实 provider 下 `test_clear_issue_passes_through` 通过
+- [ ] 真实 provider 下 `test_unclear_issue_blocks_and_awaits` 通过
+- [ ] 单次 `analyze()` 延迟 < 10s（真实 provider 含网络延迟）
+- [ ] provider 不可用时 `test_provider_fail_open` 放行
+
+#### 运营增强 2：远端等待标签
+
+- [ ] `remote_label` 配置非空时，`add_label` 在 issue 进入 `awaiting_author` 时被调用
+- [ ] `remote_label` 配置非空时，`remove_label` 在澄清解决后被调用
+- [ ] `remote_label=""` 时不调用 `add_label`/`remove_label`
+- [ ] `add_label`/`remove_label` 失败时只记录 warning，不阻断分发
+- [ ] RepoTracker 的 `add_label` 实现通过 `PATCH /repos/{owner}/{repo}/issues/{id}` 推送标签
+- [ ] `reset_for_retry` 清除澄清状态时也调用 `remove_label` 清理远端标签
+
+#### 运营增强 3：Dashboard 澄清视图
+
+- [ ] `ClarificationEntry` dataclass 包含 `issue_id`、`status`、`open_questions`、`round_num`、`max_rounds`、`elapsed_seconds`、`author_login` 字段
+- [ ] `StatusDashboard.on_clarification_update()` 接收 `ClarificationEntry` 列表并刷新面板
+- [ ] 无澄清状态时 `_clarification_panel()` 返回空字符串，不占用屏幕空间
+- [ ] awaiting 条目按等待时长降序排列，最久的在最上面
+- [ ] `manual_required` 条目显示 `⚠` 高亮标记
+- [ ] `Orchestrator._broadcast_clarification_status()` 在每轮 poll 末尾调用
 
 ### 4.2 降级验收（关键：澄清器自身故障不阻塞流水线）
 
@@ -1334,6 +1926,19 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 - F-121 规则回灌（澄清器与规则提取正交，无交互）
 - F-123 的策略框架（`intent_strategy` 三选一不用于澄清器，仅复用餐具级能力）
 
+### 5.5 特性缺口依赖（P2 — 设计状态）
+
+| 子特性 | 依赖 | 类型 | 说明 |
+|--------|------|------|------|
+| F-124-L (workspace focus) | F-123 focus.py `compute_workspace_focuses` | 强依赖 | 纯函数 import，无副作用 |
+| F-124-L (workspace focus) | F-39 follow-up 分支检测 | 强依赖 | `_has_followup_branch(issue)` 方法，需要 F-39 的 follow-up 分支标记已就绪 |
+| F-124-P (E2E) | 本地 provider 环境 | 运营 | `CLAWCODEX_TEST_PROVIDER` 环境变量，开发者自行配置 |
+| F-124-P (E2E) | `manual_e2e_f38.py` 的 LocalTracker + bare-origin 模板 | 引用 | 复用其 `temp_dir` fixture 和 bare-origin 设置模式 |
+| F-124-Q (远端标签) | `TrackerAdapter` 接口扩展 | 强依赖 | 新增 `add_label`/`remove_label` 抽象方法 |
+| F-124-Q (远端标签) | `RepositoryIssueClient` PATCH /issues/{id} | 实现 | 实现 `add_label`/`remove_label` 的具体 API 调用 |
+| F-124-R (Dashboard) | `StatusDashboard` 已有 `render_clarification_status` | 弱依赖 | 复用渲染方法，新增 `_clarification_panel()` 组合 |
+| F-124-R (Dashboard) | `Orchestrator._poll_and_dispatch()` 末尾回调 | 集成 | 新增 `_broadcast_clarification_status()` 调用点 |
+
 ---
 
 ## §6 变更记录
@@ -1348,3 +1953,4 @@ def _workspace_focus_for_followup(self, issue: Issue) -> list[dict]:
 | 2026-07-21 | 文档补全特性缺口：§0 更新至五处重大调整 + 实现中独有设计清单；§2 同步实际实现（数据模型、prompt 结构、解析器降级行为、确定性门控、gate 状态机、IssueRecord 字段、边界场景）；§3 补充风险与约束；§4 补充验收项；§5 更新依赖与协同模块 | 实现与原始草案存在多处差异，需要同步文档以保持准确；本次补全覆盖所有已发现的特性缺口 |
 | 2026-07-21 | 修正 §0 状态行数字与 §1.6 子特性表不一致 | 原写"核心 12/15"与 §1.6 实际 13 ✅ + 1 ❌ + 1 ⚠️ 不符；改为"13/15 落地"并显式列出偏离项（F-124-L P2 + registration.py 合并） |
 | 2026-07-21 | 文档状态置为已完成 | §0/§1.6/§1.7/§2/§3/§4/§5 全部与实现一致；遗留运营增强项与 P2 子特性属后续迭代不计入缺口，状态从 🟢 改为 ✅ 已完成 |
+| 2026-07-21 | 补全特性缺口设计：F-124-L P2 详细设计 + 3 项运营增强详细设计 | 更新 §0 状态行与尚未完成清单、§1.6 子特性表新增 F-124-P/Q/R、§2.11 扩展 workspace focus 数据流/接口/配置/测试、新增 §2.13 E2E 测试设计、§2.14 远端标签设计、§2.15 Dashboard 视图设计、§3 风险矩阵新增 3 行、§4 新增 4.5 特性缺口验收、§5 新增 5.5 特性缺口依赖表、§6 本条变更记录 |

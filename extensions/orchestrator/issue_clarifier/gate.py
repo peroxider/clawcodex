@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from .models import ClarifyResult
 from .service import IssueClarifierService, format_clarification_request
@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from ..clarification import ClarificationResolver
     from ..issue import Issue
     from ..issue_registry import IssueRegistry
+    from ..tracker import TrackerAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +28,15 @@ class IssueClarificationGate:
         resolver: "ClarificationResolver",
         registry: "IssueRegistry",
         config: Any,
+        tracker: "TrackerAdapter | None" = None,  # ★ P2: 远端标签推送
+        workspace_focus_callback: Callable[["Issue"], list[dict]] | None = None,  # ★ P2
     ) -> None:
         self.service = service
         self.resolver = resolver
         self.registry = registry
         self.config = config
+        self._tracker = tracker
+        self._workspace_focus_callback = workspace_focus_callback
         self._analyses_this_poll = 0
 
     def begin_poll(self) -> None:
@@ -101,12 +106,34 @@ class IssueClarificationGate:
             )
             return False
         self._analyses_this_poll += 1
+
+        # ★ P2: Follow-up workspace focus 富化
+        workspace_focuses = self._workspace_focus_for_followup(issue)
+
         result = await asyncio.to_thread(
             self.service.analyze,
             issue,
             prior_replies=replies,
+            workspace_focuses=workspace_focuses,
         )
         return await self._apply_result(issue, result, replies)
+
+    def _workspace_focus_for_followup(self, issue: "Issue") -> list[dict] | None:
+        """F-124-L: 在 follow-up 模式下计算 workspace focus 作为澄清上下文富化。
+
+        仅在以下条件全部满足时返回非空列表：
+        - workspace_focus_enabled=True
+        - workspace_focus_callback 已设置
+        - 该 issue 有 follow-up 分支（通过 callback 判断）
+        """
+        ws_enabled = getattr(self.config, "workspace_focus_enabled", False)
+        if not ws_enabled or self._workspace_focus_callback is None:
+            return None
+        try:
+            return self._workspace_focus_callback(issue)
+        except Exception as exc:
+            logger.warning("Workspace focus callback failed for issue %s: %s", issue.id, exc)
+            return None
 
     async def _apply_result(
         self,
@@ -129,6 +156,8 @@ class IssueClarificationGate:
                 status=status,
                 replies=replies,
             )
+            # ★ P2: 澄清解决后清除远端标签
+            self._remove_remote_label(issue_id)
             return True
 
         questions = result.questions
@@ -202,7 +231,35 @@ class IssueClarificationGate:
             fingerprint=result.fingerprint,
             round_number=record.clarification_round + 1,
         )
+        # ★ P2: 阻断时推送远端标签
+        self._add_remote_label(issue_id)
         return False
+
+    # --- 运营增强 2: 远端标签推送/清除 ---
+
+    def _add_remote_label(self, issue_id: str) -> None:
+        """推送远端等待澄清标签到 tracker。"""
+        label = getattr(self.config, "remote_label", "")
+        if not label or self._tracker is None:
+            return
+        add = getattr(self._tracker, "add_label", None)
+        if callable(add):
+            try:
+                add(issue_id, label)
+            except Exception as exc:
+                logger.warning("Failed to add label %s to issue %s: %s", label, issue_id, exc)
+
+    def _remove_remote_label(self, issue_id: str) -> None:
+        """清除远端等待澄清标签。"""
+        label = getattr(self.config, "remote_label", "")
+        if not label or self._tracker is None:
+            return
+        remove = getattr(self._tracker, "remove_label", None)
+        if callable(remove):
+            try:
+                remove(issue_id, label)
+            except Exception as exc:
+                logger.warning("Failed to remove label %s from issue %s: %s", label, issue_id, exc)
 
 
 __all__ = ["IssueClarificationGate"]

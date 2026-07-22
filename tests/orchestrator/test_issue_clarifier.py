@@ -629,3 +629,201 @@ def test_clarify_cli_recheck_clears_gate_state(tmp_path) -> None:
     reloaded = IssueRegistry(registry_path).get("1")
     assert reloaded.clarification_status is None
     assert reloaded.clarifier_fingerprint is None
+
+
+# --- F-124-L: workspace focus 富化 ---
+
+
+def test_workspace_focus_injected_into_payload() -> None:
+    """workspace_focuses 非空时注入 prompt payload 的 workspace_focuses 字段。"""
+    issue = Issue(id="1", title="add config", description="add new config field")
+    focuses = [{"module": "config", "focus": "config schema", "relevance": 0.95}]
+    messages = build_clarify_messages(issue, workspace_focuses=focuses)
+    payload = json.loads(messages[1]["content"])
+    assert "workspace_focuses" in payload
+    assert payload["workspace_focuses"] == focuses
+
+
+def test_workspace_focus_none_skips_field() -> None:
+    """workspace_focuses=None 时 payload 不含 workspace_focuses 字段。"""
+    issue = Issue(id="2", title="clear", description="do X")
+    messages = build_clarify_messages(issue, workspace_focuses=None)
+    payload = json.loads(messages[1]["content"])
+    assert "workspace_focuses" not in payload
+
+
+def test_workspace_focus_empty_list_skips_field() -> None:
+    """workspace_focuses=[] 时 payload 不含 workspace_focuses 字段（空列表视为假）。"""
+    issue = Issue(id="3", title="clear", description="do Y")
+    messages = build_clarify_messages(issue, workspace_focuses=[])
+    payload = json.loads(messages[1]["content"])
+    assert "workspace_focuses" not in payload
+
+
+def test_workspace_focus_passes_through_service(tmp_path) -> None:
+    """workspace_focuses 通过 service.analyze() 传递到 build_clarify_messages。"""
+    provider = FakeProvider([clear_response()])
+    config = ClarifierConfig(enabled=True)
+    service = make_service(tmp_path, provider, config=config)
+    issue = Issue(id="4", title="add cache", description="implement cache layer")
+    focuses = [{"module": "cache", "focus": "redis integration", "relevance": 0.9}]
+    result = service.analyze(issue, workspace_focuses=focuses)
+    assert result.is_clear is True
+    # provider 被调用一次（没有缓存命中）
+    assert provider.calls == 1
+
+
+def test_workspace_focus_gate_skips_when_disabled() -> None:
+    """workspace_focus_enabled=False 时 gate 不调用 callback。"""
+    gate = IssueClarificationGate(
+        service=MagicMock(),
+        resolver=MagicMock(),
+        registry=MagicMock(),
+        config=ClarifierConfig(workspace_focus_enabled=False),
+    )
+    result = gate._workspace_focus_for_followup(
+        Issue(id="5", title="test", description="test")
+    )
+    assert result is None
+
+
+def test_workspace_focus_gate_calls_callback_when_enabled() -> None:
+    """workspace_focus_enabled=True 时 gate 调用 callback。"""
+    callback = MagicMock(return_value=[{"module": "auth", "focus": "OAuth flow"}])
+    gate = IssueClarificationGate(
+        service=MagicMock(),
+        resolver=MagicMock(),
+        registry=MagicMock(),
+        config=ClarifierConfig(workspace_focus_enabled=True),
+        workspace_focus_callback=callback,
+    )
+    result = gate._workspace_focus_for_followup(
+        Issue(id="6", title="test", description="test")
+    )
+    assert result == [{"module": "auth", "focus": "OAuth flow"}]
+    callback.assert_called_once()
+
+
+def test_workspace_focus_gate_callback_exception_fails_open() -> None:
+    """callback 抛异常时 gate 返回 None 不阻断。"""
+    def _failing(_issue):
+        raise RuntimeError("git error")
+    gate = IssueClarificationGate(
+        service=MagicMock(),
+        resolver=MagicMock(),
+        registry=MagicMock(),
+        config=ClarifierConfig(workspace_focus_enabled=True),
+        workspace_focus_callback=_failing,
+    )
+    result = gate._workspace_focus_for_followup(
+        Issue(id="7", title="test", description="test")
+    )
+    assert result is None
+
+
+# --- 运营增强 2: 远端标签 ---
+
+
+class FakeLabelTracker:
+    """A tracker that records add_label/remove_label calls."""
+    def __init__(self) -> None:
+        self.added: list[tuple[str, str]] = []
+        self.removed: list[tuple[str, str]] = []
+
+    def add_label(self, issue_id: str, label: str) -> bool:
+        self.added.append((issue_id, label))
+        return True
+
+    def remove_label(self, issue_id: str, label: str) -> bool:
+        self.removed.append((issue_id, label))
+        return True
+
+
+def test_remote_label_added_on_block() -> None:
+    """remote_label 配置时，阻断后调用 add_label。"""
+    tracker = FakeLabelTracker()
+    gate = IssueClarificationGate(
+        service=MagicMock(),
+        resolver=MagicMock(),
+        registry=MagicMock(),
+        config=ClarifierConfig(remote_label="agent:awaiting-clarification"),
+        tracker=tracker,
+    )
+    gate._add_remote_label("1")
+    assert tracker.added == [("1", "agent:awaiting-clarification")]
+
+
+def test_remote_label_removed_on_resolve() -> None:
+    """remote_label 配置时，解决后调用 remove_label。"""
+    tracker = FakeLabelTracker()
+    gate = IssueClarificationGate(
+        service=MagicMock(),
+        resolver=MagicMock(),
+        registry=MagicMock(),
+        config=ClarifierConfig(remote_label="agent:awaiting-clarification"),
+        tracker=tracker,
+    )
+    gate._remove_remote_label("1")
+    assert tracker.removed == [("1", "agent:awaiting-clarification")]
+
+
+def test_remote_label_empty_skips_add() -> None:
+    """remote_label="" 时不调用 add_label。"""
+    tracker = FakeLabelTracker()
+    gate = IssueClarificationGate(
+        service=MagicMock(),
+        resolver=MagicMock(),
+        registry=MagicMock(),
+        config=ClarifierConfig(remote_label=""),
+        tracker=tracker,
+    )
+    gate._add_remote_label("1")
+    assert tracker.added == []
+
+
+def test_remote_label_empty_skips_remove() -> None:
+    """remote_label="" 时不调用 remove_label。"""
+    tracker = FakeLabelTracker()
+    gate = IssueClarificationGate(
+        service=MagicMock(),
+        resolver=MagicMock(),
+        registry=MagicMock(),
+        config=ClarifierConfig(remote_label=""),
+        tracker=tracker,
+    )
+    gate._remove_remote_label("1")
+    assert tracker.removed == []
+
+
+def test_remote_label_no_tracker_skips() -> None:
+    """tracker=None 时不调用 add_label/remove_label。"""
+    gate = IssueClarificationGate(
+        service=MagicMock(),
+        resolver=MagicMock(),
+        registry=MagicMock(),
+        config=ClarifierConfig(remote_label="agent:awaiting-clarification"),
+        tracker=None,
+    )
+    # 不抛异常
+    gate._add_remote_label("1")
+    gate._remove_remote_label("1")
+
+
+def test_remote_label_failure_logs_warning(tmp_path) -> None:
+    """add_label 失败时只记录 warning，不抛异常。"""
+    class FailingTracker:
+        def add_label(self, issue_id: str, label: str) -> bool:
+            raise RuntimeError("API error")
+        def remove_label(self, issue_id: str, label: str) -> bool:
+            raise RuntimeError("API error")
+
+    gate = IssueClarificationGate(
+        service=MagicMock(),
+        resolver=MagicMock(),
+        registry=MagicMock(),
+        config=ClarifierConfig(remote_label="agent:awaiting-clarification"),
+        tracker=FailingTracker(),
+    )
+    # 不抛异常
+    gate._add_remote_label("1")
+    gate._remove_remote_label("1")
