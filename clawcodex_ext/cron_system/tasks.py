@@ -23,6 +23,11 @@ from .models import (
 from .parser import parse_cron_expression
 
 
+# F-22-H: mtime-based incremental read cache
+_MtimeCache: dict[Path, tuple[float, list[CronTask]]] = {}
+_MTIME_CACHE_TTL: float = 1.0  # 1 second cooldown
+
+
 def tasks_file_path(workspace_root: Path) -> Path:
     return workspace_root / SCHEDULED_TASKS_RELATIVE_PATH
 
@@ -56,6 +61,29 @@ def read_cron_tasks(workspace_root: Path) -> list[CronTask]:
         if task is not None and parse_cron_expression(task.cron) is not None:
             tasks.append(task)
     tasks.sort(key=lambda task: task.id)
+    return tasks
+
+
+def read_cron_tasks_cached(workspace_root: Path) -> list[CronTask]:
+    """F-22-H: mtime-based incremental read of durable cron tasks.
+
+    Skips full file re-read when the file's mtime is unchanged within
+    the TTL window (``_MTIME_CACHE_TTL`` = 1 s).  Falls back to
+    :func:`read_cron_tasks` on cache miss or IO error.
+    """
+    path = tasks_file_path(workspace_root)
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return read_cron_tasks(workspace_root)  # fallback
+    cached = _MtimeCache.get(path)
+    if cached is not None and (time.monotonic() - cached[0]) < _MTIME_CACHE_TTL:
+        return cached[1]
+    # Also skip re-read if mtime unchanged
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
+    tasks = read_cron_tasks(workspace_root)
+    _MtimeCache[path] = (mtime, tasks)
     return tasks
 
 
@@ -129,6 +157,7 @@ def add_cron_task(
     jitter: CronJitterConfig | None = None,
     created_at: int | None = None,
     session_store: MutableMapping[str, CronTask | dict] | None = None,
+    agent_id: str | None = None,  # F-22-F: agent ownership
 ) -> CronTask:
     fields = parse_cron_expression(cron)
     if fields is None:
@@ -142,6 +171,7 @@ def add_cron_task(
         prompt=prompt,
         recurring=recurring,
         durable=durable,
+        agent_id=agent_id,
         created_at=timestamp,
         updated_at=timestamp,
         expires_at=timestamp + DEFAULT_RECURRING_MAX_AGE_MS if recurring else None,
@@ -480,6 +510,26 @@ def prune_expired_recurring_tasks(
         if removed:
             write_cron_tasks(workspace_root, kept)
     return removed_session + removed
+
+
+def cleanup_orphaned_tasks(
+    workspace_root: Path,
+    active_agents: set[str],
+    *,
+    session_store: MutableMapping[str, CronTask | dict] | None = None,
+) -> list[CronTask]:
+    """F-22-F-5: Find and mark tasks whose owning agent is no longer active.
+
+    Tasks with ``agent_id`` not in ``active_agents`` are returned as
+    orphaned. The caller decides whether to delete them (default behaviour:
+    list only, no automatic deletion).
+    """
+    orphaned: list[CronTask] = []
+    all_tasks = read_all_cron_tasks(workspace_root, session_store)
+    for task in all_tasks:
+        if task.agent_id is not None and task.agent_id not in active_agents:
+            orphaned.append(task)
+    return orphaned
 
 
 def _datetime_from_ms(value: int) -> datetime:

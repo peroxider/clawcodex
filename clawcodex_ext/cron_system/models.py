@@ -29,6 +29,7 @@ MAX_ONE_SHOT_FLOOR_MS = 30 * 60 * 1000
 MAX_ONE_SHOT_MINUTE_MOD = 60
 MAX_RECURRING_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 ENV_CLAWCODEX_DISABLE_CRON = "CLAWCODEX_DISABLE_CRON"
+ENV_CLAUDE_CODE_DISABLE_CRON = "CLAUDE_CODE_DISABLE_CRON"  # F-22-I: CCB 兼容回退
 
 
 def _default_jitter_config() -> "CronJitterConfig":
@@ -219,9 +220,12 @@ def load_jitter_config(
 
 
 def is_cron_disabled(env: dict[str, str] | None = None) -> bool:
-    """Check ``CLAWCODEX_DISABLE_CRON`` (F-22-G1) at runtime."""
+    """Check ``CLAWCODEX_DISABLE_CRON`` (F-22-G1) at runtime,
+    with fallback to ``CLAUDE_CODE_DISABLE_CRON`` for CCB migration (F-22-I)."""
     env_map = env if env is not None else os.environ
     raw = env_map.get(ENV_CLAWCODEX_DISABLE_CRON)
+    if raw is None:
+        raw = env_map.get(ENV_CLAUDE_CODE_DISABLE_CRON)  # F-22-I: CCB 兼容回退
     if raw is None:
         return False
     return raw.strip().lower() in {"1", "true", "yes", "on"}
@@ -241,6 +245,8 @@ class CronTask:
     expires_at: int | None = None
     jitter: CronJitterConfig = None  # type: ignore[assignment]
     permanent: bool = False
+    agent_id: str | None = None  # F-22-F: 创建者 agent 标识；None 表示全局任务
+    team_id: str | None = None  # F-22-F: 团队标识（预留，用于多租户隔离）
 
     def __post_init__(self) -> None:
         # frozen dataclass: bypass __setattr__ via object.__setattr__
@@ -275,6 +281,8 @@ class CronTask:
                 expires_at=_optional_int(data.get("expires_at", data.get("expiresAt"))),
                 jitter=jitter_config_from_dict(jitter_data),
                 permanent=bool(data.get("permanent", False)),
+                agent_id=_optional_str(data.get("agent_id", data.get("agentId"))),
+                team_id=_optional_str(data.get("team_id", data.get("teamId"))),
             )
         except (KeyError, TypeError, ValueError):
             return None
@@ -302,6 +310,8 @@ class CronTask:
                 "recurring_max_age_ms": self.jitter.recurring_max_age_ms,
             },
             "permanent": self.permanent,
+            "agent_id": self.agent_id,
+            "team_id": self.team_id,
         }
 
 
@@ -309,3 +319,12 @@ def _optional_int(value: Any) -> int | None:
     if value is None:
         return None
     return int(value)
+
+
+def _optional_str(value: Any) -> str | None:
+    """Convert a value to str or None (F-22-F helper)."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return None
+    return value

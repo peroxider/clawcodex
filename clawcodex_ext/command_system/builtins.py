@@ -544,10 +544,14 @@ def _format_cron_job(job: dict[str, Any]) -> str:
 
 
 def cron_list_command_call(args: str, context: CommandContext) -> LocalCommandResult:
+    deep = _cron_deep_arg(args)
     if not _has_cron_tool_runtime(context):
         from clawcodex_ext.cron_system.status import build_schedule_list
 
-        return LocalCommandResult(type="text", value=build_schedule_list(context.workspace_root))
+        return LocalCommandResult(
+            type="text",
+            value=build_schedule_list(context.workspace_root, deep=deep),
+        )
 
     output = _call_cron_tool(context, "CronList", {})
     jobs = output.get("jobs", []) if isinstance(output, dict) else []
@@ -558,6 +562,8 @@ def cron_list_command_call(args: str, context: CommandContext) -> LocalCommandRe
     for job in jobs:
         if isinstance(job, dict):
             lines.append(_format_cron_job(job))
+    if deep:
+        lines.append("(deep mode)")
     return LocalCommandResult(type="text", value="\n".join(lines))
 
 
@@ -1601,7 +1607,7 @@ CRON_RUNS_COMMAND = LocalCommand(
 CRON_RUN_COMMAND = LocalCommand(
     name="cron-run",
     description="Manually fire a scheduled cron job",
-    aliases=["cron-fire"],
+    aliases=["cron-fire", "cron-trigger"],
     argument_hint="<id>",
     supports_non_interactive=True,
 )

@@ -46,6 +46,7 @@ def attach_cron_runtime(
     is_loading: Callable[[], bool] | None = None,
     assistant_mode: bool = False,
     asciicast_observer: Any | None = None,
+    agent_id: str | None = None,  # F-22-F: agent ownership
 ) -> CronScheduler:
     """Wire Cron tools + scheduler to a session context.
 
@@ -61,6 +62,10 @@ def attach_cron_runtime(
     ``assistant_mode`` bypasses the ``is_loading`` gate so cron fires
     proceed even while the agent is busy. Used by assistant/daemon
     sub-modes where cron must not be starved.
+
+    ``agent_id`` (F-22-F) sets the owning agent identity. When provided,
+    the scheduler only fires tasks belonging to this agent or global tasks
+    (agent_id=None). Pass None for single-agent mode (no filtering).
     """
     if is_killed is None:
         is_killed = is_cron_disabled
@@ -138,6 +143,7 @@ def attach_cron_runtime(
         session_store=session_store,
         is_loading=is_loading,
         assistant_mode=assistant_mode,
+        agent_id=agent_id,  # F-22-F
     )
     setattr(ctx, "cron_scheduler", scheduler)
     setattr(ctx, "cron_jitter_config", lambda: load_jitter_config(ctx.workspace_root))

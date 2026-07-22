@@ -127,6 +127,8 @@ def _cron_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
 
     recurring = bool(tool_input.get("recurring", True))
     durable = bool(tool_input.get("durable", False))
+    # F-22-F: auto-fill agent_id from tool_input (caller guarantees the value)
+    agent_id = tool_input.get("agent_id")
     task = add_cron_task(
         context.workspace_root,
         cron=cron.strip(),
@@ -134,6 +136,7 @@ def _cron_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
         recurring=recurring,
         durable=durable,
         session_store=context.crons,
+        agent_id=agent_id,
     )
     return ToolResult(
         name="CronCreate",
@@ -144,6 +147,7 @@ def _cron_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
             "recurring": task.recurring,
             "durable": task.durable,
             "permanent": task.permanent,
+            "agentId": task.agent_id,
             "nextFireAt": task.next_fire_at,
         },
     )
@@ -182,6 +186,11 @@ def _cron_list_call(tool_input: dict[str, Any], context: ToolContext) -> ToolRes
     jobs = [
         _task_output(task) for task in read_all_cron_tasks(context.workspace_root, context.crons)
     ]
+    # F-22-F: agent ownership filtering — when agent_id is provided and not "*",
+    # only return tasks belonging to this agent or global tasks (agent_id=None).
+    agent_id = tool_input.get("agent_id")
+    if agent_id is not None and agent_id != "*":
+        jobs = [j for j in jobs if j.get("agentId") is None or j.get("agentId") == agent_id]
     return ToolResult(name="CronList", output={"jobs": jobs})
 
 
@@ -205,6 +214,19 @@ def _cron_delete_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
     if not isinstance(cron_id, str) or not cron_id.strip():
         raise ToolInputError("id must be a non-empty string")
     normalized_id = cron_id.strip()
+    # F-22-F: ownership validation — non-admin callers cannot delete tasks
+    # owned by another agent.
+    caller_agent_id = tool_input.get("agent_id")
+    all_tasks = read_all_cron_tasks(context.workspace_root, context.crons)
+    target = next((t for t in all_tasks if t.id == normalized_id), None)
+    if target is not None and target.agent_id is not None:
+        if caller_agent_id is None or caller_agent_id == "*":
+            pass  # admin or no runtime context: allow
+        elif caller_agent_id != target.agent_id:
+            raise ToolInputError(
+                f"cron job '{normalized_id}' is owned by agent '{target.agent_id}' "
+                f"and cannot be deleted by agent '{caller_agent_id}'"
+            )
     existed = remove_cron_tasks(context.workspace_root, normalized_id, context.crons)
     if not existed:
         raise ToolInputError(f"No scheduled job with id '{normalized_id}'")
@@ -295,6 +317,7 @@ def _task_output(task: CronTask) -> dict[str, Any]:
         "recurring": task.recurring,
         "durable": task.durable,
         "permanent": task.permanent,
+        "agentId": task.agent_id,
         "createdAt": task.created_at,
         "updatedAt": task.updated_at,
         "lastFiredAt": task.last_fired_at,

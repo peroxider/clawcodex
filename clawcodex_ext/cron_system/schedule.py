@@ -26,6 +26,7 @@ class CronTaskDetail:
     last_fired_at: int | None
     next_fire_at: int | None
     last_run: CronRun | None
+    agent_id: str | None = None  # F-22-F: 创建者 agent 标识
 
 
 def get_cron_task_detail(
@@ -50,6 +51,7 @@ def get_cron_task_detail(
         prompt=task.prompt,
         recurring=task.recurring,
         durable=task.durable,
+        agent_id=task.agent_id,
         created_at=task.created_at,
         updated_at=task.updated_at,
         last_fired_at=task.last_fired_at,
@@ -59,11 +61,12 @@ def get_cron_task_detail(
 
 
 def format_cron_task_detail(detail: CronTaskDetail) -> str:
+    agent_label = detail.agent_id or "—"
     lines = [
         f"Trigger: {detail.id}",
         f"Status: {detail.status}",
         f"Schedule: {detail.human_schedule}",
-        "Agent: —",
+        f"Agent: {agent_label}",
         f"Next run: {_format_optional_ms(detail.next_fire_at)}",
         f"Last run: {_format_last_run(detail)}",
         f"Created: {_format_optional_ms(detail.created_at)}",

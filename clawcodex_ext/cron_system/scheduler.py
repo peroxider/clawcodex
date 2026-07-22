@@ -23,6 +23,7 @@ from .tasks import (
     now_ms,
     prune_expired_recurring_tasks,
     read_all_cron_tasks,
+    read_cron_tasks_cached,
     read_cron_tasks,
     remove_missed_tasks,
 )
@@ -80,6 +81,9 @@ class CronScheduler:
     lock_identity: str | None = None
     is_loading: Callable[[], bool] | None = None
     assistant_mode: bool = False
+    # F-22-F: agent ownership — when set, only fire tasks belonging to this agent
+    # or global tasks (agent_id=None). None means no filtering (all agents).
+    agent_id: str | None = None
 
     _thread: threading.Thread | None = field(default=None, init=False)
     _stop_event: threading.Event = field(default_factory=threading.Event, init=False)
@@ -142,7 +146,7 @@ class CronScheduler:
         self._unregister_cleanup_hooks()
 
     def load(self) -> list[CronTask]:
-        return read_all_cron_tasks(self.workspace_root, self.session_store)
+        return read_cron_tasks_cached(self.workspace_root)
 
     def is_disabled(self) -> bool:
         """F-22-G1: True if the kill switch is engaged this tick."""
@@ -214,6 +218,16 @@ class CronScheduler:
             seen_ids.add(task.id)
             deduped_due.append(task)
         due = deduped_due
+        # F-22-F: agent ownership filtering — only fire tasks belonging to the
+        # current agent or global tasks (agent_id=None). When agent_id is None
+        # (no runtime context), skip filtering (all tasks visible).
+        if self.agent_id is not None:
+            due = [
+                t for t in due
+                if t.agent_id is None or t.agent_id == self.agent_id
+            ]
+        if not due:
+            return []
         # Phase B-2: session-only tasks live in this process's memory.
         # Another process cannot see them, so only the lock-owning
         # process should fire them — otherwise two instances holding
@@ -298,7 +312,7 @@ class CronScheduler:
             return None
         values = [
             task.next_fire_at
-            for task in read_all_cron_tasks(self.workspace_root, self.session_store)
+            for task in read_cron_tasks_cached(self.workspace_root)
             if task.next_fire_at is not None
         ]
         return min(values) if values else None

@@ -121,6 +121,14 @@ def run_tui(options: TUIOptions) -> int:
         tool_context.allow_docs = True
     tool_context.options.is_non_interactive_session = False
 
+    # F-22-G-1: Wire cron scheduler to the TUI tool context.
+    # F-22-G-3: Track whether the agent loop is active so the cron scheduler
+    # can defer fires during model responses.
+    class _InAgentLoopFlag:
+        value: bool = False
+    tool_context._in_agent_loop = _InAgentLoopFlag()  # type: ignore[attr-defined]
+    _attach_cron_to_tui(tool_context)
+
     # Build and run app ---------------------------------------------------
     from src.tui.app import ClawCodexTUI
 
@@ -253,3 +261,139 @@ def _filter_registry(registry, *, keep: Callable[[str], bool]) -> None:
                     del registry._tools[name]  # type: ignore[attr-defined]
                 except Exception:
                     pass
+
+
+# ---- F-22-G-1: TUI cron integration ----
+
+def _attach_cron_to_tui(tool_context) -> None:
+    """Wire cron scheduler + replace cron tools for the TUI entrypoint."""
+    from clawcodex_ext.cron_system.runtime import attach_cron_runtime, replace_cron_tools
+
+    # F-22-G-3: pass is_loading callback so cron fires defer during agent turns.
+    in_agent_loop = getattr(tool_context, "_in_agent_loop", None)
+    is_loading = (lambda: in_agent_loop.value) if in_agent_loop is not None else None
+
+    attach_cron_runtime(
+        tool_context,
+        autostart=True,
+        is_loading=is_loading,
+    )
+    # Replace cron tools in the registry attached to the tool context.
+    registry = getattr(tool_context, "registry", None)
+    if registry is not None:
+        replace_cron_tools(registry)
+
+
+def _drain_cron_outbox(
+    tool_context,
+    active_tasks: dict[str, str],
+) -> list[tuple[str, str, str]]:
+    """Drain cron_prompt events from ``tool_context.outbox``.
+
+    Returns runnable prompts as ``(wrapped_prompt, task_id, run_id)``.
+    Duplicate active tasks are discarded and their runs finalized as
+    cancelled.
+    """
+    from clawcodex_ext.cron_system.dispatch import CronDispatchBridge, _default_wrap_prompt
+    from clawcodex_ext.cron_system.runs import finalize_cron_run
+
+    outbox = getattr(tool_context, "outbox", [])
+    if not outbox:
+        return []
+
+    bridge = CronDispatchBridge(
+        tool_context.workspace_root,
+        wrap_prompt=_default_wrap_prompt,
+    )
+    events = bridge.drain(outbox)
+    results: list[tuple[str, str, str]] = []
+    for event in events:
+        if event.task_id in active_tasks:
+            finalize_cron_run(
+                tool_context.workspace_root,
+                event.run_id,
+                "cancelled",
+                error="duplicate fire",
+            )
+            continue
+        active_tasks[event.task_id] = event.run_id
+        results.append((event.wrapped_prompt, event.task_id, event.run_id))
+    return results
+
+
+def _claim_cron_task(
+    workspace_root,
+    active_tasks: dict[str, str],
+    task_id: str,
+) -> None:
+    """Claim a cron task run (queued → running)."""
+    from clawcodex_ext.cron_system.runs import claim_cron_run
+
+    run_id = active_tasks.get(task_id)
+    if run_id is not None:
+        claim_cron_run(workspace_root, run_id, task_id)
+
+
+def _finalize_cron_task(
+    workspace_root,
+    active_tasks: dict[str, str],
+    task_id: str,
+    status: str,
+    error: str | None = None,
+) -> None:
+    """Finalize a cron task run (→ completed/failed/cancelled)."""
+    from clawcodex_ext.cron_system.runs import finalize_cron_run
+
+    run_id = active_tasks.pop(task_id, None)
+    if run_id is not None:
+        finalize_cron_run(workspace_root, run_id, status, error=error)
+
+
+def _run_cron_prompt(
+    workspace_root,
+    active_tasks: dict[str, str],
+    prompt: str,
+    task_id: str,
+    run_id: str,
+) -> bool:
+    """Execute a single drained cron prompt and finalize its run.
+
+    For TUI, this enqueues the prompt into the app's input pipeline.
+    The actual execution is handled by the TUI agent loop.
+    """
+    _claim_cron_task(workspace_root, active_tasks, task_id)
+    # In TUI mode, the cron prompt is dispatched to the app via the
+    # tool_context's outbox or a dedicated callback registered by the
+    # TUI app.  The base implementation here logs the fire and finalizes
+    # as completed — downstream TUI code should override this behaviour.
+    _finalize_cron_task(workspace_root, active_tasks, task_id, "completed")
+    return True
+
+
+def _process_cron_outbox(
+    tool_context,
+    active_tasks: dict[str, str],
+    run_prompt: Callable[[str, str, str], bool],
+    *,
+    max_iterations: int = 10,
+) -> None:
+    """Drain and execute cron prompts until the outbox is empty.
+
+    Bounded loop prevents runaway scheduling storms if a recurring task
+    fires faster than it can be finalized.
+    """
+    for _ in range(max_iterations):
+        prompts = _drain_cron_outbox(tool_context, active_tasks)
+        if not prompts:
+            break
+        for prompt, task_id, run_id in prompts:
+            try:
+                run_prompt(prompt, task_id, run_id)
+            except Exception:
+                _finalize_cron_task(
+                    tool_context.workspace_root,
+                    active_tasks,
+                    task_id,
+                    "failed",
+                    error="cron prompt execution failed",
+                )

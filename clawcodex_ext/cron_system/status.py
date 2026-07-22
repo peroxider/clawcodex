@@ -47,7 +47,13 @@ def build_autonomy_runs(workspace_root: Path, *, deep: bool = False) -> str:
     return "\n".join(lines)
 
 
-def build_schedule_list(workspace_root: Path) -> str:
+def build_schedule_list(workspace_root: Path, *, deep: bool = False) -> str:
+    """Build a human-readable list of scheduled cron jobs.
+
+    ``deep`` is reserved for future truncation control (F-22-J-2).
+    Currently, all tasks are returned regardless of ``deep``.
+    """
+    _ = deep  # marker for future truncation
     tasks = read_all_cron_tasks(workspace_root)
     if not tasks:
         return "No scheduled cron jobs."
@@ -55,12 +61,13 @@ def build_schedule_list(workspace_root: Path) -> str:
 
 
 def _job_table(tasks) -> list[str]:
-    lines = [f"  {'ID':<8} {'Schedule':<18} {'Recurring':<9} {'Durable':<7} {'Next':<13} Prompt"]
+    lines = [f"  {'ID':<8} {'Schedule':<18} {'Recurring':<9} {'Durable':<7} {'Orphaned':<8} {'Next':<13} Prompt"]
     for task in tasks:
         prompt = _truncate(task.prompt, 60)
+        orphaned = "✓" if task.agent_id is not None else "—"
         lines.append(
             f"  {task.id:<8} {_truncate(cron_to_human(task.cron), 18):<18} "
-            f"{str(task.recurring):<9} {str(task.durable):<7} {str(task.next_fire_at or '—'):<13} {prompt}"
+            f"{str(task.recurring):<9} {str(task.durable):<7} {orphaned:<8} {str(task.next_fire_at or '—'):<13} {prompt}"
         )
     return lines
 

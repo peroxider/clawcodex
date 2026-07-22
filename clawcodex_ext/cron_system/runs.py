@@ -48,6 +48,7 @@ class CronRun:
     owner_key: str = DEFAULT_OWNER_KEY
     owner_process_id: int | None = None
     owner_session_id: str | None = None
+    owner_agent_id: str | None = None  # F-22-F: 实际执行该 run 的 agent 标识
     ended_at: int | None = None
 
     @classmethod
@@ -116,6 +117,9 @@ class CronRun:
                 owner_session_id=_optional_str(
                     data.get("owner_session_id", data.get("ownerSessionId"))
                 ),
+                owner_agent_id=_optional_str(
+                    data.get("owner_agent_id", data.get("ownerAgentId"))
+                ),
                 ended_at=ended_at,
             )
         except (KeyError, TypeError, ValueError):
@@ -145,6 +149,7 @@ class CronRun:
             "owner_key": self.owner_key,
             "owner_process_id": self.owner_process_id,
             "owner_session_id": self.owner_session_id,
+            "owner_agent_id": self.owner_agent_id,
         }
 
 
