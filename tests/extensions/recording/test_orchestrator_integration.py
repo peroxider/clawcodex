@@ -1,7 +1,7 @@
 """End-to-end integration tests for the F-REC asciicast recorder × orchestrator.
 
-This file closes the F-156 coverage gap documented in
-``docs/feature_plan/08-recording/f-156-asciicast-recorder.md``: the
+This file closes the F-156 coverage gap (F-156 design doc archived
+after full implementation): the
 commit claims ``60 unit + integration + subprocess E2E`` test coverage,
 but the most consequential integration path —
 ``Orchestrator._build_session_sink → AsciicastSink → AsciicastWriter →

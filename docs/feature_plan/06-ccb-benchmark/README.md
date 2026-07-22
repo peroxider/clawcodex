@@ -24,15 +24,15 @@
 | [f-81-native-modules.md](./f-81-native-modules.md) | F-81 Native 原生模块系统 | 🔭 |
 | [f-82-remote-control.md](./f-82-remote-control.md) | F-82 Remote Control 远程控制 | 🔄 |
 | [f-83-triggers.md](./f-83-triggers.md) | F-83 Triggers 触发器 + cron 调度 | 🟡 |
-| [f-84-daemon.md](./f-84-daemon.md) | F-84 Daemon 后台守护进程(Supervisor + Worker) | ✅ |
+| ~~f-84-daemon.md~~ | F-84 Daemon 后台守护进程(Supervisor + Worker) | ✅ 已落地 | *特性文档已归档* |
 | [f-85-pipe-ipc.md](./f-85-pipe-ipc.md) | F-85 Pipe IPC 多实例协作（UDS + LAN_PIPES） | 🟡 |
 | [f-86-computer-use.md](./f-86-computer-use.md) | F-86 Computer Use 三平台 | 🟡 |
-| [f-87-ultraplan.md](./f-87-ultraplan.md) | F-87 Ultraplan 工作流计划层 | ✅ |
-| [f-88-monitor.md](./f-88-monitor.md) | F-88 Monitor 后台监控 + MonitorTool | ✅ |
+| ~~f-87-ultraplan.md~~ | F-87 Ultraplan 工作流计划层 | ✅ 已落地 | *特性文档已归档* |
+| ~~f-88-monitor.md~~ | F-88 Monitor 后台监控 + MonitorTool | ✅ 已落地 | *特性文档已归档* |
 | [f-91-mcp-skill-discovery.md](./f-91-mcp-skill-discovery.md) | F-91 MCP Skills 自动发现 | 📋 |
-| [f-92-skill-search.md](./f-92-skill-search.md) | F-92 Skill Search TF-IDF 检索 | ✅ |
+| ~~f-92-skill-search.md~~ | F-92 Skill Search TF-IDF 检索 | ✅ 已落地 | *特性文档已归档* |
 | [f-94-bg-sessions.md](./f-94-bg-sessions.md) | F-94 BG_SESSIONS 后台会话统一管理 | 🚧 |
-| [f-95-templates.md](./f-95-templates.md) | F-95 TEMPLATES 模板系统产品化 | ✅ |
+| ~~f-95-templates.md~~ | F-95 TEMPLATES 模板系统产品化 | ✅ 已落地 | *特性文档已归档* |
 | [f-96-cache-break-detection.md](./f-96-cache-break-detection.md) | F-96 PROMPT_CACHE_BREAK_DETECTION 缓存命中率监测 | 📋 |
 | [f-98-ssh-remote.md](./f-98-ssh-remote.md) | F-98 SSH_REMOTE 远程模式（协同 F-74） | 📋 |
 | [f-99-direct-connect.md](./f-99-direct-connect.md) | F-99 DIRECT_CONNECT 直连模式 | 🔄 |
@@ -61,11 +61,11 @@
 | 5 | Chrome 浏览器控制 | ✅ `clawcodex_ext/services/chrome/`（三后端） | 已完成 | F-62 |
 | 6 | Computer Use 屏幕操控 | 🟠 仅 `linux.py` / `null.py`;macOS+Windows 后端缺 | P1 | [F-86](./f-86-computer-use.md) |
 | 7 | Feature Flags / GrowthBook | ✅ F-68（114 测试，clawcodex_ext/feature_gate/） | 已完成 | — |
-| 8 | /ultraplan 高级规划 | ✅ `/ultraplan` 命令族 + LLM Planner + CCR 远程 + TUI 面板 | 已完成 | [F-87](./f-87-ultraplan.md) |
-| 9 | Daemon 后台守护 | ✅ `extensions/daemon/` Supervisor + Worker + CLI | 已完成 | [F-84](./f-84-daemon.md) |
+| 8 | /ultraplan 高级规划 | ✅ `/ultraplan` 命令族 + LLM Planner + CCR 远程 + TUI 面板 | 已完成 | F-87（已落地） |
+| 9 | Daemon 后台守护 | ✅ `extensions/daemon/` Supervisor + Worker + CLI | 已完成 | F-84（已落地） |
 | 10 | Pipe IPC 多实例协作 | 🟡 仅 UDS 传输+registry;无命令族 | P0 | [F-85](./f-85-pipe-ipc.md) |
 | 11 | LAN Pipes 局域网群控 | ❌ 无 TCP/UDP multicast 发现 | P0 | [F-85](./f-85-pipe-ipc.md)（F-85.2） |
-| 12 | Monitor 后台监控 | ✅ `MonitorTool` + `/monitor` 命令族 + TUI 面板 | 已完成 | [F-88](./f-88-monitor.md) |
+| 12 | Monitor 后台监控 | ✅ `MonitorTool` + `/monitor` 命令族 + TUI 面板 | 已完成 | F-88（已落地） |
 | 13 | Workflow 工作流脚本 | 🟠 `.claude/workflows/*.py` + `/workflows` 面板 | 已完成 | F-110 协同 |
 | 14 | Coordinator 多Worker协调 | ✅ `src/coordinator/` + ext | 已完成 | — |
 | 15 | Proactive 自主模式 | ✅ PROACTIVE/KAIROS Tick 调度 + SleepTool + Remote automation_state | 已完成 | F-89 |
@@ -79,10 +79,10 @@
 |------------------|:----:|:----:|----------|
 | `ACP`（Agent Client Protocol） | ❌ | P1 | [F-66](./f-66-acp-protocol.md) |
 | `MCP_SKILLS`（skill:// 自动发现） | ❌ | P2 | [F-91](./f-91-mcp-skill-discovery.md) |
-| `EXPERIMENTAL_SKILL_SEARCH`（TF-IDF） | ✅ `clawcodex_ext/services/skill_search/` 8 模块 + 8 测试 | 已完成 | [F-92](./f-92-skill-search.md) |
+| `EXPERIMENTAL_SKILL_SEARCH`（TF-IDF） | ✅ `clawcodex_ext/services/skill_search/` 8 模块 + 8 测试 | 已完成 | F-92（已落地） |
 | `TEAMMEM`（Team 共享记忆） | ✅ `extensions/agents/team_memory*.py` + Tool + CLI | 已完成 | F-93 |
 | `BG_SESSIONS`（后台会话） | 🚧 `clawcodex_ext/tasks/bg_session*.py` + Tool + CLI 已落地;P94-G Team/SendMessage 待 F-93 协同 | P1 | [F-94](./f-94-bg-sessions.md) |
-| `TEMPLATES`（模板系统） | ✅ `clawcodex_ext/services/templates/` 14 模块 + `/template` 命令族 | 已完成 | [F-95](./f-95-templates.md) |
+| `TEMPLATES`（模板系统） | ✅ `clawcodex_ext/services/templates/` 14 模块 + `/template` 命令族 | 已完成 | F-95（已落地） |
 | `PROMPT_CACHE_BREAK_DETECTION` | 🟡 usage 采集已具备 | P2 | [F-96](./f-96-cache-break-detection.md) |
 | `LODESTONE`（深度链接） | ✅ `clawcodex_ext/services/lodestone/` 9 模块 + Tool + CLI | 已完成 | F-97 |
 | `SSH_REMOTE`（SSH 远程模式） | ❌ | P2 | [F-98](./f-98-ssh-remote.md)（协同 F-74） |
@@ -91,9 +91,9 @@
 | `TOKEN_BUDGET`（Token 预算） | ✅ F-69 | 已完成 | [F-69](./f-69-budget-mode.md) |
 | `KAIROS`（Tick 调度） | ✅ `kairos/scheduler.py` + proactive emitter | 已完成 | F-89 |
 | `PROACTIVE`（主动模式） | ✅ `/proactive` + tick prompt + SleepTool + automation_state | 已完成 | F-89 |
-| `MONITOR_TOOL`（后台监控） | ✅ `clawcodex_ext/services/monitor/` + `MonitorTool` + `/monitor` 命令族 | 已完成 | [F-88](./f-88-monitor.md) |
+| `MONITOR_TOOL`（后台监控） | ✅ `clawcodex_ext/services/monitor/` + `MonitorTool` + `/monitor` 命令族 | 已完成 | F-88（已落地） |
 | `UDS_INBOX` / `LAN_PIPES`（Pipe IPC） | 🟡/❌ | P0 | [F-85](./f-85-pipe-ipc.md) |
-| `DAEMON`（后台守护） | ✅ `extensions/daemon/` 14 模块 + CLI + Stage 7 稳定性门禁 | 已完成 | [F-84](./f-84-daemon.md) |
+| `DAEMON`（后台守护） | ✅ `extensions/daemon/` 14 模块 + CLI + Stage 7 稳定性门禁 | 已完成 | F-84（已落地） |
 | `CONTEXT_COLLAPSE` / `AWAY_SUMMARY` | ✅ | 已完成 | — |
 | `SKILL_LEARNING` / `REVIEW_ARTIFACT` / `CONNECTOR_TEXT` | ❌ | P3 | 长期 |
 | `ULTRATHINK`（扩展思考） | 🟡 `thinking.py`（stub） | P2 | 完善 |
@@ -107,8 +107,8 @@
 | 优先级 | F-Number | 名称 | 周期 | 累计 |
 |:------:|----------|------|:----:|:----:|
 | P0 | [F-85](./f-85-pipe-ipc.md) | Pipe IPC 命令族(UDS) | 2 周 | 2 周 |
-| P0 | [F-88](./f-88-monitor.md) | Monitor Tool | 1.5 周 | 3.5 周 |
-| P0 | [F-84](./f-84-daemon.md) | Daemon Supervisor | 3 周 | 6.5 周 |
+| P0 | F-88（已落地） | Monitor Tool | 1.5 周 | 3.5 周 |
+| P0 | F-84（已落地） | Daemon Supervisor | 3 周 | 6.5 周 |
 | 已完成 | F-89 | Proactive 模式 | 2026-07-03 完成 | 6.5 周 |
 | P0 | [F-85](./f-85-pipe-ipc.md) | LAN Pipes（F-85.2） | 2 周 | 11.5 周 |
 
@@ -119,7 +119,7 @@
 | F-Number | 名称 | 周期 |
 |----------|------|:----:|
 | [F-86](./f-86-computer-use.md) | Computer Use 三平台 | 3 周 |
-| [F-87](./f-87-ultraplan.md) | /ultraplan 完整实现 | 3 周 |
+| F-87（已落地） | /ultraplan 完整实现 | 3 周 |
 | [F-83](./f-83-triggers.md) | 远程 Triggers | 2 周 |
 | [F-82](./f-82-remote-control.md) 增强 | Worker 调度 + Web 面板 | 4 周 |
 | [F-71](./f-71-tool-gap.md) P71-B/K/M | 三个 Tier-3 工具 | 2 周 |
@@ -127,7 +127,7 @@
 ### B.3 长期（2027 Q1+,持续 — P2/P3）
 
 按 P2 列表逐项推进,每个 1-2 周:
-[F-91](./f-91-mcp-skill-discovery.md) → [F-92](./f-92-skill-search.md) → [F-94](./f-94-bg-sessions.md) → [F-95](./f-95-templates.md) → [F-96](./f-96-cache-break-detection.md) → [F-98](./f-98-ssh-remote.md) → [F-99](./f-99-direct-connect.md);
+[F-91](./f-91-mcp-skill-discovery.md) → F-92（已落地） → [F-94](./f-94-bg-sessions.md) → F-95（已落地） → [F-96](./f-96-cache-break-detection.md) → [F-98](./f-98-ssh-remote.md) → [F-99](./f-99-direct-connect.md);
 另 P2 长期:[F-66](./f-66-acp-protocol.md) ACP、[F-72](./f-72-multi-api.md) Multi-API、[F-74](./f-74-sandbox.md) Sandbox、[F-81](./f-81-native-modules.md) Native。
 
 ---

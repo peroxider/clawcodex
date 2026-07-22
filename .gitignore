@@ -230,3 +230,4 @@ telemetry.toml
 
 # MCP config
 .mcp.json
+/.tmp/

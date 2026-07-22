@@ -301,4 +301,4 @@ clawcodex_ext/cron_system/runtime.py       ← asciicast_observer: kwarg
 extensions/orchestrator/report_writer.py   ← cast_path: kwarg + dual-write
 ```
 
-完整设计文档：[`docs/feature_plan/08-recording/f-156-asciicast-recorder.md`](../feature_plan/08-recording/f-156-asciicast-recorder.md)。
+F-156 Asciicast v2 录制器设计文档已归档（特性已全部落地）。

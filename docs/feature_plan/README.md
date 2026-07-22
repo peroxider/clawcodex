@@ -38,7 +38,7 @@ docs/feature_plan/
 | F-116 | 工作流可观测性集成 | 🟡 | [f-116-workflow-observability.md](02-orchestrator/f-116-workflow-observability.md) |
 | F-118 | 动态任务分解引擎 | 🟡 | [f-118-dynamic-decomposition.md](02-orchestrator/f-118-dynamic-decomposition.md) |
 | F-121 | PR 代码检视意见规则回灌 | 📋 | [f-121-rules-feedback.md](02-orchestrator/f-121-rules-feedback.md) |
-| F-124 | Issue 澄清器 — 描述不清晰自动检测与澄清闭环 | 🟡 | [f-124-issue-clarifier.md](02-orchestrator/f-124-issue-clarifier.md) |
+| F-124 | Issue 澄清器 — 描述不清晰自动检测与澄清闭环 | ✅ 已落地 | *特性文档已归档* |
 | F-127 | PR CI 失败自动修复 — 从 CI 状态到 Agent 修复的闭环 | 📋 | [f-127-ci-auto-fix.md](02-orchestrator/f-127-ci-auto-fix.md) |
 | F-128 | 定时全量代码审查 — 周期性代码扫描与自动化 Issue 归档 | 📋 | [f-128-periodic-code-review.md](02-orchestrator/f-128-periodic-code-review.md) |
 
@@ -50,6 +50,7 @@ docs/feature_plan/
 | F-107 | PowerShell 支持增强 | 📋 | [f-107-powershell.md](03-agent-core/f-107-powershell.md) |
 | F-119 | System Prompt 段落拼装与自迭代基础设施 | 📋 | [f-119-prompt-assembly.md](03-agent-core/f-119-prompt-assembly.md) |
 | F-130 | 自校正上下文切换 — 元认知"换脑"机制 | 📋 | [f-130-self-correct-context-switch.md](03-agent-core/f-130-self-correct-context-switch.md) |
+| F-158 | 抗幻觉基线协议 — 置信度 / 否定检索 / 边界追踪 | 📋 | [f-158-anti-hallucination-baseline.md](03-agent-core/f-158-anti-hallucination-baseline.md) |
 
 ### CLI 与配置系统
 
@@ -64,8 +65,8 @@ docs/feature_plan/
 |----------|------|:----:|---------|
 | F-50 | SOP 转换器源码固化 (子特性 A-G) | 🟡 | [f-50-sop-converter.md](04-architecture-sdk/f-50-sop-converter.md) |
 | F-52 | Python SDK 方法注册为 Tool | 📋 | [f-52-sdk-to-tool.md](04-architecture-sdk/f-52-sdk-to-tool.md) |
-| F-55 | Tool 生命周期依赖与资源类型契约 | ✅ | [f-55-tool-lifecycle-dependencies.md](04-architecture-sdk/f-55-tool-lifecycle-dependencies.md) |
-| F-56 | SOP Resource Catalog | ✅ | [f-56-sop-resource-catalog.md](04-architecture-sdk/f-56-sop-resource-catalog.md) |
+| F-55 | Tool 生命周期依赖与资源类型契约 | ✅ 已落地 | *特性文档已归档* |
+| F-56 | SOP Resource Catalog | ✅ 已落地 | *特性文档已归档* |
 | F-57 | SOP 可执行组合工作流 | 🔧 | [f-57-sop-executable-composite-workflows.md](04-architecture-sdk/f-57-sop-executable-composite-workflows.md) |
 | F-58 | SOP Resource Contract Schema | 📋 | [f-58-sop-resource-contract-schema.md](04-architecture-sdk/f-58-sop-resource-contract-schema.md) |
 | F-59 | SOP Runtime Guards & Recovery | 📋 | [f-59-sop-runtime-guards-recovery.md](04-architecture-sdk/f-59-sop-runtime-guards-recovery.md) |
@@ -76,13 +77,13 @@ docs/feature_plan/
 
 | F-Number | 名称 | 状态 | 章节路径 |
 |----------|------|:----:|---------|
-| F-22 | Cron 系统执行引擎 | 🔄 | [f-22-cron-execution.md](05-cron-system/f-22-cron-execution.md) |
+| F-22 | Cron 系统执行引擎 | ✅ 已落地 | *特性文档已归档* |
 
 ### Recording / 可观测性增强
 
 | F-Number | 名称 | 状态 | 章节路径 |
 |----------|------|:----:|---------|
-| F-156 | Asciicast v2 录制器（orchestrator / query / SOP / visualizer / cron） | ✅ | [f-156-asciicast-recorder.md](08-recording/f-156-asciicast-recorder.md) |
+| F-156 | Asciicast v2 录制器（orchestrator / query / SOP / visualizer / cron） | ✅ 已落地 | *特性文档已归档* |
 
 ### CCB 对标
 
@@ -96,24 +97,24 @@ docs/feature_plan/
 | F-74 | Sandbox 沙箱远程执行 | 📋 | [f-74-sandbox.md](06-ccb-benchmark/f-74-sandbox.md) |
 | F-82 | Remote Control 远程控制 | 🔄 | [f-82-remote-control.md](06-ccb-benchmark/f-82-remote-control.md) |
 | F-83 | 远程 Triggers（AGENT_TRIGGERS_REMOTE） | 🟡 | [f-83-triggers.md](06-ccb-benchmark/f-83-triggers.md) |
-| F-84 | Daemon 后台守护 | ✅ | [f-84-daemon.md](06-ccb-benchmark/f-84-daemon.md) |
+| F-84 | Daemon 后台守护 | ✅ 已落地 | *特性文档已归档* |
 | F-85 | Pipe IPC 命令族（UDS + LAN_PIPES） | 🟡 | [f-85-pipe-ipc.md](06-ccb-benchmark/f-85-pipe-ipc.md) |
 | F-86 | Computer Use 跨平台 Executor | 🟡 | [f-86-computer-use.md](06-ccb-benchmark/f-86-computer-use.md) |
-| F-87 | /ultraplan LLM 驱动 + CLI 完整实现 | ✅ | [f-87-ultraplan.md](06-ccb-benchmark/f-87-ultraplan.md) |
-| F-88 | Monitor 后台监控 + MonitorTool | ✅ | [f-88-monitor.md](06-ccb-benchmark/f-88-monitor.md) |
+| F-87 | /ultraplan LLM 驱动 + CLI 完整实现 | ✅ 已落地 | *特性文档已归档* |
+| F-88 | Monitor 后台监控 + MonitorTool | ✅ 已落地 | *特性文档已归档* |
 | F-91 | MCP Skills 自动发现 | 📋 | [f-91-mcp-skill-discovery.md](06-ccb-benchmark/f-91-mcp-skill-discovery.md) |
-| F-92 | experimental_skill_search TF-IDF | ✅ | [f-92-skill-search.md](06-ccb-benchmark/f-92-skill-search.md) |
+| F-92 | experimental_skill_search TF-IDF | ✅ 已落地 | *特性文档已归档* |
 | F-94 | BG_SESSIONS 后台会话 | 🚧 | [f-94-bg-sessions.md](06-ccb-benchmark/f-94-bg-sessions.md) |
-| F-95 | TEMPLATES 模板系统 | ✅ | [f-95-templates.md](06-ccb-benchmark/f-95-templates.md) |
+| F-95 | TEMPLATES 模板系统 | ✅ 已落地 | *特性文档已归档* |
 | F-96 | PROMPT_CACHE_BREAK_DETECTION | 📋 | [f-96-cache-break-detection.md](06-ccb-benchmark/f-96-cache-break-detection.md) |
 | F-98 | SSH_REMOTE 远程模式 | 📋 | [f-98-ssh-remote.md](06-ccb-benchmark/f-98-ssh-remote.md) |
 | F-99 | DIRECT_CONNECT 直连模式 | 🔄 | [f-99-direct-connect.md](06-ccb-benchmark/f-99-direct-connect.md) |
 | F-125 | Headless 无头模式多轮交互 + `--resume` 冲突分析 | 🚧 | [f-125-headless-multi-turn.md](06-ccb-benchmark/f-125-headless-multi-turn.md) |
-| — | **CCB ↔ ClawCodex 缺口分析** | ✅ | [06-ccb-benchmark/README.md](06-ccb-benchmark/README.md) |
+| — | **CCB ↔ ClawCodex 缺口分析** | ✅ 已落地 | *特性文档已归档* |
 
 ### Agent 元架构 / 动态上下文 (Brainstorm)
 
-> 元架构脑暴规划，不申请 F-Number；落地时按子特性单独立项。详见 [dynamic-context-architecture.md](dynamic-context-architecture.md)。
+> 元架构脑暴规划，20 项 DC-NN 已收敛为 **16 个 F-N 文档**（F-158 ~ F-173，按 Wave 1/2/3 三波落地；F-130 已承载 DC-001/DC-002/DC-007-部分）。详见 [dynamic-context-architecture.md §4.4 映射表](dynamic-context-architecture.md)。
 
 | 编号 | 名称 | 组别 | 核心杠杆 | 落地门槛 | 章节路径 |
 |:----:|------|------|:--------:|:--------:|---------|
@@ -164,4 +165,6 @@ docs/feature_plan/
 | 2026-07-14 | 新增 F-130 自校正上下文切换 | 在 F-119 section registry 基础上规划元认知换脑机制；模板 + Agent 自定义的 Profile 系统；循环检测器框架；上下文切换引擎 + rollback；默认 4 个 Profile（default/debug/creative/review） |
 | 2026-07-18 | 新增 F-157 ToolSearch 宏/原子分层检索，并回写 F-56/F-57 边界 | 自然语言验收显示 phrase-only route 不能稳定阻止 SDK 原子工具抢占；新增 `intent_key`、`covered_tools`、RetrievalPlan、exclusive suppression 与执行前回滚设计 |
 | 2026-07-21 | 新增 dynamic-context-architecture.md (DC-001 ~ DC-020) | 用户提出"动态上下文切换/装配/生成"挑战性脑暴问题；沉淀 20 项原理特性规划，覆盖上下文生命周期 / 抗幻觉 / 推理扩展 / 元架构 4 组；定位为 brainstorm 文档，不申请 F-Number，落地时按子特性单独立项 |
+| 2026-07-22 | dynamic-context-architecture.md 新增 §4.4 DC → F-N 映射表 | 把 20 项 DC-NN 收敛为 16 个 F-N 文档（F-158 ~ F-173，F-N 编号接续 F-157 ToolSearch），按 Wave 1（P0 立竿见影）/ Wave 2（P1 工具化）/ Wave 3（P2/P3 元架构）三波落地；DC-001 / DC-002 / DC-007-部分 保留在 F-130 不单独立项 |
+| 2026-07-22 | 新增 F-158 抗幻觉基线协议（覆盖 DC-005 / DC-009 / DC-020） | DC-A §4.4 映射表基础上落地 Wave 1 P0 高杠杆特性；置信度声明协议 + 否定式检索 + 边界追踪三层防御抑制幻觉；解耦落地于 `extensions/anti_hallucination/`，零 `src/` 侵入 |
 | 2026-07-21 | 更新 CCB 对标章节:F-84/F-87/F-88/F-92/F-95 标记为 ✅,F-94 保持 🚧 | 代码确认 5 个特性完全落地,同步 `06-ccb-benchmark/README.md` §A 缺口矩阵与单篇文档状态 |

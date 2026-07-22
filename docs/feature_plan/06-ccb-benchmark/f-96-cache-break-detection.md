@@ -393,4 +393,4 @@ Recent events (last 24h):
 
 ---
 
-**关联文档**: [README.md 缺口矩阵](./README.md#a-全特性对照矩阵), [F-94 BG_SESSIONS](./f-94-bg-sessions.md), [F-92 Skill Search](./f-92-skill-search.md)
+**关联文档**: [README.md 缺口矩阵](./README.md#a-全特性对照矩阵), [F-94 BG_SESSIONS](./f-94-bg-sessions.md), F-92 Skill Search（特性已落地，设计文档已归档）
