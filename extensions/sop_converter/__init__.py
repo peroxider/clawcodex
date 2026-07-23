@@ -22,6 +22,15 @@ Architecture::
     Persistence / Registration
 """
 
+# ── Dependency Injection ────────────────────────────────────────────────────
+# Populate the module-level DEFAULTS container with the default adapter
+# implementations (Layer 1.5).  This must happen before any SOP converter
+# module imports ``DEFAULTS`` so the factories are available at runtime.
+# See ``docs/DECOUPLE_SOP_CONVERTER_PLAN.md`` §3.4.
+from .adapters import DEFAULTS as _DEFAULTS, fill_defaults as _fill_defaults
+
+_fill_defaults(_DEFAULTS)
+
 from .sdk_parser import SdkParser, SdkMethod
 from .skill_grouper import (
     SkillGrouper,
