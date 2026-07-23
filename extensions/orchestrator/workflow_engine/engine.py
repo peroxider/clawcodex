@@ -371,6 +371,8 @@ class DeclarativeWorkflowEngine:
                         continue
                     elif stage.on_error == "skip":
                         logger.info("GATE stage %s rejected, skipping (on_error=skip)", stage.id)
+                        # Mark as COMPLETED so downstream dependencies are satisfied
+                        result.status = StageStatus.COMPLETED
                         idx += 1
                         continue
                     else:

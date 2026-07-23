@@ -469,6 +469,7 @@ class WorkspaceConfig:
     clone_depth: int | None = 1
     checkout_issue_branch: bool = True
     git_username: str | None = None
+    git_email: str | None = None
     git_token: str | None = None
     gitignore_patterns: list[str] = field(default_factory=list)
     strategy: str = "isolated"
@@ -1031,6 +1032,7 @@ class WorkflowConfig:
             clone_depth=workspace_raw.get("clone_depth", 1),
             checkout_issue_branch=workspace_raw.get("checkout_issue_branch", True),
             git_username=_resolve_env_value(workspace_raw.get("git_username")),
+            git_email=_resolve_env_value(workspace_raw.get("git_email")),
             git_token=_normalize_secret_value(_resolve_env_value(workspace_raw.get("git_token"))),
             gitignore_patterns=workspace_raw.get(
                 "gitignore_patterns",
