@@ -641,7 +641,11 @@ def cron_run_command_call(args: str, context: CommandContext) -> LocalCommandRes
 
 def cost_command_call(args: str, context: CommandContext) -> LocalCommandResult:
     """
-    Handle /cost command - show session cost.
+    Handle /cost command - show session cost and usage.
+
+    Reads from the bootstrap singleton's per-model usage accumulators,
+    which are populated by ``CostTracker.record_usage()`` (called by the
+    query loop, compaction, and advisor after every API response).
 
     Args:
         args: Command arguments
@@ -650,6 +654,17 @@ def cost_command_call(args: str, context: CommandContext) -> LocalCommandResult:
     Returns:
         LocalCommandResult
     """
+    # Lazy imports to avoid circular dependency at module level.
+    from src.bootstrap.state import (
+        get_model_usage,
+        get_total_cache_creation_input_tokens,
+        get_total_cache_read_input_tokens,
+        get_total_cost_usd,
+        get_total_input_tokens,
+        get_total_output_tokens,
+        has_unknown_model_cost,
+    )
+
     tracker = context.cost_tracker
     if tracker is None:
         return LocalCommandResult(
@@ -657,12 +672,47 @@ def cost_command_call(args: str, context: CommandContext) -> LocalCommandResult:
             value="Cost tracking not available.",
         )
 
-    lines = ["Session Cost:", ""]
-    lines.append(f"  Total units: {tracker.total_units}")
+    total_in = get_total_input_tokens()
+    total_out = get_total_output_tokens()
+    total_cache_creation = get_total_cache_creation_input_tokens()
+    total_cache_read = get_total_cache_read_input_tokens()
+    total_cost = get_total_cost_usd()
+    unknown_cost = has_unknown_model_cost()
+    model_usage = get_model_usage()
 
+    # Nothing recorded yet — show a clear "zero" state.
+    if not model_usage:
+        return LocalCommandResult(
+            type="text",
+            value="Session Cost:\n\n  No API usage recorded yet.",
+        )
+
+    lines = ["Session Cost:", ""]
+    lines.append(f"  Total input tokens:        {total_in:>8,}")
+    lines.append(f"  Total output tokens:       {total_out:>8,}")
+    if total_cache_creation:
+        lines.append(f"  Cache creation tokens:     {total_cache_creation:>8,}")
+    if total_cache_read:
+        lines.append(f"  Cache read tokens:         {total_cache_read:>8,}")
+
+    if unknown_cost:
+        lines.append(f"  Estimated cost USD:        ${total_cost:<7.4f}  (some models have unknown pricing)")
+    else:
+        lines.append(f"  Estimated cost USD:        ${total_cost:<7.4f}")
+
+    # Per-model breakdown (only models with non-zero usage).
+    lines.append("")
+    lines.append("  Per model:")
+    for model_name, usage in sorted(model_usage.items()):
+        cost_str = f"(${usage.cost_usd:.4f})" if usage.cost_usd > 0 else "(cost unknown)"
+        lines.append(
+            f"    {model_name}:  {usage.input_tokens:>6,} in / {usage.output_tokens:>6,} out  {cost_str}"
+        )
+
+    # Legacy events (costHook path) — if any, append as supplemental info.
     if tracker.events:
         lines.append("")
-        lines.append("  Recent events:")
+        lines.append("  Legacy events:")
         for event in tracker.events[-10:]:
             lines.append(f"    - {event}")
 

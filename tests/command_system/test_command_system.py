@@ -55,6 +55,7 @@ from src.command_system import (
     register_command,
     substitute_arguments,
 )
+from src.bootstrap.state import reset_state_for_tests
 from src.cost_tracker import CostTracker
 from src.history import HistoryLog
 
@@ -271,6 +272,30 @@ class TestBuiltinCommands(unittest.TestCase):
         self.assertTrue(registry.has("cron-runs"))
         self.assertTrue(registry.has("cron-run"))
         self.assertTrue(registry.has("init"))
+
+    def test_cost_command_shows_non_zero_after_record_usage(self):
+        """Regression: /cost must show non-zero tokens after record_usage()."""
+        reset_state_for_tests()
+
+        # Record non-zero usage via the real tracker.
+        self.cost_tracker.record_usage(
+            "claude-sonnet-4-20250514",
+            {"input_tokens": 1000, "output_tokens": 500},
+        )
+
+        success, result, _ = execute_command_sync("cost", "", self.context)
+        self.assertTrue(success)
+        self.assertIn("1,000", result)
+        self.assertIn("500", result)
+        self.assertIn("claude-sonnet-4-20250514", result)
+
+    def test_cost_command_shows_no_usage_message_when_empty(self):
+        """Regression: /cost must show a clear 'no usage' message when empty."""
+        reset_state_for_tests()
+
+        success, result, _ = execute_command_sync("cost", "", self.context)
+        self.assertTrue(success)
+        self.assertIn("No API usage recorded yet", result)
 
     def test_cron_list_uses_injected_tool_runtime(self):
         """Test that /cron-list reads jobs from the injected cron runtime."""
