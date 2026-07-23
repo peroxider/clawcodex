@@ -13,19 +13,9 @@ logger = logging.getLogger(__name__)
 
 
 def _detect_adapter_name(source_dir: Path) -> str:
-    name_lower = source_dir.name.lower()
-    if "autoresearch" in name_lower or "arc" in name_lower:
-        return "arc"
-    if (source_dir / ".arc-workflow").is_file():
-        return "arc"
-    pyproject = source_dir / "pyproject.toml"
-    if pyproject.is_file():
-        try:
-            text = pyproject.read_text(encoding="utf-8").lower()
-            if "autoresearch" in text:
-                return "arc"
-        except OSError:
-            pass
+    # 默认返回 "generic"，无内置项目特定适配器。
+    # 自定义适配器可通过 ExtractorRegistry.register_adapter() 注册，
+    # 并在 discriminator 中覆盖此函数以支持自动检测。
     return "generic"
 
 

@@ -13,12 +13,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from clawcodex_ext.agent.tool_authoring.persistence import (
-    TOOL_DIR,
-    bundle_tool_dir,
-    save_spec,
-)
-from clawcodex_ext.agent.tool_authoring.validators import ValidationError, validate_spec
+from ..adapters import DEFAULTS
 
 from . import (
     _SKIP_PLACEHOLDER_COMPOSITE_TOOLS,
@@ -51,7 +46,7 @@ def register_composite_tool(
         return None
 
     if spec.workflow_spec is not None:
-        from extensions.sop_converter.macros import register_macro
+        from extensions.sop_converter.runtime.macros import register_macro
 
         register_macro(
             f"builtin:{to_kebab_case(spec.name)}",
@@ -60,16 +55,17 @@ def register_composite_tool(
         )
 
     bundle_path = bundle_dir.resolve() if bundle_dir is not None else None
-    tool_dir = bundle_tool_dir(bundle_path) if bundle_path is not None else None
+    ta = DEFAULTS.tool_authoring
+    tool_dir = ta.bundle_tool_dir(bundle_path) if bundle_path is not None else None
     agent_spec = _composite_to_agent_tool_spec(spec, bundle_dir=bundle_path)
     try:
-        validate_spec(agent_spec)
-    except ValidationError as exc:
+        ta.validate_spec(agent_spec)
+    except Exception as exc:
         logger.warning("Composite tool validation failed for %s: %s", spec.name, exc)
         return None
 
     if persist:
-        save_spec(agent_spec, tool_dir=tool_dir if tool_dir is not None else TOOL_DIR)
+        ta.save_spec(agent_spec, tool_dir=tool_dir if tool_dir is not None else ta.TOOL_DIR)
     return agent_spec.name
 
 

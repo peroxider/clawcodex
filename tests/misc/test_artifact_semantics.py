@@ -6,7 +6,8 @@ import ast
 from pathlib import Path
 
 from extensions.sop_converter.workflow_mode.ast_helpers import parse_contracts_dict
-from extensions.sop_converter.workflow_mode.extractors.adapters.arc import ArcExtractor
+from examples.sdk_extractor import PatternExtractor
+from examples.sdk_extractor.pattern_extractor import ARC_COMPAT_CONFIG
 from extensions.sop_converter.workflow_mode.generator.artifact_semantics import (
     ARTIFACT_SEMANTICS,
     describe_output_file,
@@ -53,7 +54,7 @@ class TestArcContractExtraction:
     def test_topic_init_contract_from_arc_repo(self):
         if not (ARC_REPO / "researchclaw" / "pipeline" / "contracts.py").is_file():
             return
-        graph = ArcExtractor().extract(ARC_REPO)
+        graph = PatternExtractor(config=ARC_COMPAT_CONFIG).extract(ARC_REPO)
         contract = graph.contracts.get(1)
         assert contract is not None
         assert "goal.md" in contract.output_files

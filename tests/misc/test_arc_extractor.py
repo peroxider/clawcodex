@@ -1,4 +1,4 @@
-"""Tests for F-50-G ArcExtractor and generic dict-comp / CONTRACTS parsing."""
+"""Tests for F-50-G ArcExtractor (now via PatternExtractor + ARC_COMPAT_CONFIG)."""
 
 from __future__ import annotations
 
@@ -7,13 +7,15 @@ from pathlib import Path
 import pytest
 
 from extensions.sop_converter.workflow_mode.discriminator import _detect_adapter_name
-from extensions.sop_converter.workflow_mode.extractors.adapters.arc import (
-    ArcExtractor,
-    resolve_arc_pipeline_dir,
-)
 from extensions.sop_converter.workflow_mode.extractors.adapters.generic import GenericPipelineExtractor
 from extensions.sop_converter.workflow_mode.extractors.registry import ExtractorRegistry
 from extensions.sop_converter.workflow_mode.scan_context import SourceScanContext
+
+from examples.sdk_extractor import PatternExtractor, PipelineConfig
+from examples.sdk_extractor.pattern_extractor import (
+    ARC_COMPAT_CONFIG,
+    _resolve_pipeline_dir,
+)
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 ARC_FIXTURE = FIXTURES / "fixture_arc_project"
@@ -22,14 +24,10 @@ ARC_REPO = Path(r"D:\projects\AutoResearchClaw")
 
 class TestArcExtractorFixture:
     def test_resolve_pipeline_dir(self):
-        assert resolve_arc_pipeline_dir(ARC_FIXTURE) == ARC_FIXTURE.resolve()
-
-    def test_registry_returns_arc_for_arc_name(self):
-        ext = ExtractorRegistry.get_extractor(ARC_FIXTURE, name="arc")
-        assert isinstance(ext, ArcExtractor)
+        assert _resolve_pipeline_dir(ARC_FIXTURE, ARC_COMPAT_CONFIG) == ARC_FIXTURE.resolve()
 
     def test_arc_fixture_graph(self):
-        ext = ArcExtractor(mode="fwa")
+        ext = PatternExtractor(config=ARC_COMPAT_CONFIG, mode="fwa")
         graph = ext.extract(ARC_FIXTURE)
         assert len(graph.stages) == 3
         assert len(graph.transitions) == 2
@@ -56,10 +54,11 @@ class TestArcExtractorFixture:
 @pytest.mark.skipif(not ARC_REPO.is_dir(), reason="AutoResearchClaw not checked out locally")
 class TestArcExtractorRealRepo:
     def test_detect_adapter_arc(self):
-        assert _detect_adapter_name(ARC_REPO) == "arc"
+        # _detect_adapter_name 现在总是返回 "generic"（无内置项目特定适配器）
+        assert _detect_adapter_name(ARC_REPO) == "generic"
 
     def test_full_pipeline_extraction(self):
-        ext = ArcExtractor(mode="fwa")
+        ext = PatternExtractor(config=ARC_COMPAT_CONFIG, mode="fwa")
         graph = ext.extract(ARC_REPO)
         assert len(graph.stages) == 23
         assert len(graph.transitions) == 22
@@ -69,5 +68,6 @@ class TestArcExtractorRealRepo:
         assert graph.extraction_quality == "full"
 
     def test_registry_auto_select_arc(self):
+        # 由于移除了内置 arc 适配器，get_extractor 默认返回 GenericPipelineExtractor
         ext = ExtractorRegistry.get_extractor(ARC_REPO)
-        assert isinstance(ext, ArcExtractor)
+        assert isinstance(ext, GenericPipelineExtractor)

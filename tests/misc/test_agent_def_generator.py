@@ -129,10 +129,11 @@ class TestAgentDefinitionGenerator:
             assert "-stage-skill" not in content.split("---", 2)[1]
 
     def test_hybrid_agent_includes_output_contract(self, tmp_path: Path):
-        from extensions.sop_converter.workflow_mode.extractors.adapters.arc import ArcExtractor
+        from examples.sdk_extractor import PatternExtractor
+        from examples.sdk_extractor.pattern_extractor import ARC_COMPAT_CONFIG
 
         path = FIXTURES / "fixture_arc_project"
-        graph = ArcExtractor(mode="fwa").extract(path)
+        graph = PatternExtractor(config=ARC_COMPAT_CONFIG, mode="fwa").extract(path)
         coarse = [SkillSpec(name="merged", description="coarse", allowed_tools=[])]
         skills = ensure_arc_stage_skills(graph, [], coarse, path)
         agent_map = StageCapabilityMapper().map(graph, [], skills)

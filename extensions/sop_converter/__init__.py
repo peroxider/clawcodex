@@ -31,46 +31,54 @@ from .adapters import DEFAULTS as _DEFAULTS, fill_defaults as _fill_defaults
 
 _fill_defaults(_DEFAULTS)
 
-from .sdk_parser import SdkParser, SdkMethod
-from .skill_grouper import (
-    SkillGrouper,
-    SkillSpec,
-    GroupStrategy,
-    MatchType,
-    MatchTarget,
-    group_source_components,
-)
-from .agent_builder import AgentBuilder, AgentBuildResult
-from .templates import (
+# ── Core (pure algorithm, no clawcodex_ext / src dependency) ────────────────
+from .core import (
+    SdkParser,
+    SdkMethod,
+    SourceCodeParser,
+    SourceComponent,
+    SourceOperation,
+    ParamSpec,
     AGENT_TEMPLATE,
     SKILL_TEMPLATE,
     MappingRule,
     AGENT_MD_TEMPLATE,
     SKILL_MD_TEMPLATE_JINJA,
     OVERVIEW_AGENT_TEMPLATE,
-)
-from .source_parser import SourceCodeParser, SourceComponent, SourceOperation, ParamSpec
-from .agent_md_writer import AgentMarkdownWriter, AgentComponentInfo, WorkflowStage
-from .default_agent import resolve_default_agent, resolve_agent_by_type
-from .tool_registry_bridge import register_component_tools, register_http_tools
-from .resource_catalog import (
+    resolve_default_agent,
+    resolve_agent_by_type,
     ResourceCatalog,
     ResourceRecord,
     get_resource_record,
     resolve_resource_catalog_path,
-)
-from .resource_handlers import (
     ResourceHandler,
     get_resource_handler,
     register_resource_handler,
     require_resource_handler,
-)
-from .tool_retrieval import (
     MacroCoverage,
     ToolRetrievalIndex,
     ToolRetrievalProfile,
     load_tool_retrieval_index,
 )
+
+# ── Runtime (agent runtime integration layer) ────────────────────────────────
+from .runtime import (
+    SkillGrouper,
+    SkillSpec,
+    GroupStrategy,
+    MatchType,
+    MatchTarget,
+    group_source_components,
+    AgentBuilder,
+    AgentBuildResult,
+    AgentMarkdownWriter,
+    AgentComponentInfo,
+    WorkflowStage,
+    register_component_tools,
+    register_http_tools,
+)
+
+# ── workflow_mode (kept independent) ────────────────────────────────────────
 from .workflow_mode import (
     WorkflowDiscriminator,
     DiscriminationResult,
@@ -80,13 +88,13 @@ from .workflow_mode import (
 
 
 def register_composite_tools(*args, **kwargs):
-    from .composite_tools import register_composite_tools as _register
+    from .runtime.composite_tools import register_composite_tools as _register
 
     return _register(*args, **kwargs)
 
 
 def emit_composite_workflow_yaml(*args, **kwargs):
-    from .composite_tools import emit_composite_workflow_yaml as _emit
+    from .runtime.composite_tools import emit_composite_workflow_yaml as _emit
 
     return _emit(*args, **kwargs)
 

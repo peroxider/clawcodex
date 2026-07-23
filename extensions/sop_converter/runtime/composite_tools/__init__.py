@@ -15,12 +15,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from clawcodex_ext.agent.tool_authoring.persistence import (
-    bundle_tool_dir,
-    list_persisted_specs,
-    save_spec,
-)
-from clawcodex_ext.agent.tool_authoring.spec import AgentToolSpec
+from ..adapters import DEFAULTS
 
 from .builtin import builtin_composite_tools
 from .models import CompositeStage, CompositeToolSpec
@@ -32,7 +27,7 @@ def persist_builtin_retrieval_index(bundle_dir: Path) -> Path | None:
     """Compile F-157 metadata for persisted builtin composite macros."""
 
     try:
-        from extensions.sop_converter.macros.routing import (
+        from extensions.sop_converter.runtime.macros.routing import (
             MacroRouteCatalog,
             ensure_builtin_routes,
         )
@@ -42,8 +37,8 @@ def persist_builtin_retrieval_index(bundle_dir: Path) -> Path | None:
             write_tool_retrieval_index,
         )
 
-        tool_dir = bundle_tool_dir(bundle_dir)
-        specs = list_persisted_specs(tool_dir=tool_dir)
+        tool_dir = DEFAULTS.tool_authoring.bundle_tool_dir(bundle_dir)
+        specs = DEFAULTS.tool_authoring.list_persisted_specs(tool_dir=tool_dir)
         tool_names = [spec.name for spec in specs]
         catalog = MacroRouteCatalog()
         ensure_builtin_routes(catalog)
@@ -99,7 +94,7 @@ def register_composite_tools(
         A mapping from composite tool names to kebab-case registered names
         (e.g. ``{"AgentTeams": "agent-teams"}``).
     """
-    tool_dir = bundle_tool_dir(bundle_dir) if bundle_dir is not None else None
+    tool_dir = DEFAULTS.tool_authoring.bundle_tool_dir(bundle_dir) if bundle_dir is not None else None
     name_map: dict[str, str] = {}
 
     for spec in builtin_composite_tools(bundle_dir=bundle_dir):
@@ -112,7 +107,7 @@ def register_composite_tools(
             continue
 
         if spec.workflow_spec is not None:
-            from extensions.sop_converter.macros import register_macro
+            from extensions.sop_converter.runtime.macros import register_macro
 
             register_macro(
                 f"builtin:{to_kebab_case(spec.name)}",
@@ -123,7 +118,7 @@ def register_composite_tools(
         tool_spec = _composite_to_agent_tool_spec(spec, bundle_dir=bundle_dir)
         if persist:
             try:
-                save_spec(tool_spec, tool_dir=tool_dir)
+                DEFAULTS.tool_authoring.save_spec(tool_spec, tool_dir=tool_dir)
             except Exception as exc:
                 logger.warning("Failed to persist composite tool %s: %s", spec.name, exc)
                 continue
@@ -139,8 +134,8 @@ def _composite_to_agent_tool_spec(
     spec: CompositeToolSpec,
     *,
     bundle_dir: Path | None = None,
-) -> AgentToolSpec:
-    """Convert a ``CompositeToolSpec`` into an ``AgentToolSpec``.
+) -> Any:
+    """Convert a ``CompositeToolSpec`` into an ``AgentToolSpec``-compatible spec.
 
     When ``spec.call_impl`` is set, preserves ``spec.call_type`` (defaulting to
     ``bash`` only when unset) so workflow macros such as
@@ -151,7 +146,7 @@ def _composite_to_agent_tool_spec(
     bundle_id = bundle_dir.name if bundle_dir else None
 
     if spec.call_impl is not None:
-        return AgentToolSpec(
+        return DEFAULTS.tool_authoring.create_spec(
             name=to_kebab_case(spec.name),
             description=spec.description,
             input_schema=spec.input_schema,
@@ -181,7 +176,7 @@ def _composite_to_agent_tool_spec(
     # The agent reads this to understand the macro workflow.
     call_impl = f"echo 'Composite tool: {spec.name}' && echo 'Stages: {stages_json}'"
 
-    return AgentToolSpec(
+    return DEFAULTS.tool_authoring.create_spec(
         name=to_kebab_case(spec.name),
         description=spec.description,
         input_schema=spec.input_schema,

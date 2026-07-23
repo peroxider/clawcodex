@@ -7,14 +7,13 @@ from pathlib import Path
 
 from ..discriminator import _detect_adapter_name
 from ..scan_context import SourceScanContext
-from .adapters.arc import ArcExtractor
 from .adapters.generic import GenericPipelineExtractor
 from .base import WorkflowExtractorBase
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_ADAPTERS: dict[str, type[WorkflowExtractorBase]] = {
-    "arc": ArcExtractor,
+    # 自定义提取器可通过 register_adapter() 注册
 }
 
 
