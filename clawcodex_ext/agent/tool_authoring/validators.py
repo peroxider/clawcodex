@@ -129,7 +129,7 @@ def _validate_http_impl(call_impl: str | dict) -> None:
 
     url = call_impl.get("url", "")
     if not isinstance(url, str) or not url.startswith("http"):
-        raise ValidationError("http call_impl 'url' must be a valid https:// URL")
+        raise ValidationError("http call_impl 'url' must be a valid http:// or https:// URL")
 
 
 def _validate_python_impl(call_impl: str | dict) -> None:

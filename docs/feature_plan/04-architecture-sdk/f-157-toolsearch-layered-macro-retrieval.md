@@ -258,6 +258,38 @@ class RetrievalPlan:
 
 先有 plan，后修改候选和上下文，才能实现可回滚的两阶段提交。
 
+### 6.2.1 为何需要三种策略、如何判定
+
+三种 `selection` 是在「敢不敢藏原子工具」上分档，而不是三套互不相关的搜索算法。只做 exclusive 会在误匹配时过度截断候选；只做 prefer 又无法挡住语义重合的原子工具抢戏。因此按置信度分档：
+
+| 策略 | 何时需要 | 行为（白话） |
+|------|----------|----------------|
+| `exclusive` | 意图很明确（如「调用已有 Agent」），原子工具会抢戏 | 只露宏，并隐藏其 `covered_tools` 中的原子工具 |
+| `prefer` | 希望优先宏，但用户仍可能要调单个算子（如手写流水线宏） | 宏置顶，**不**隐藏原子工具 |
+| `normal` | 没命中宏路由、exclusive 冲突/非唯一、或宏预检失败 | 退回普通语义搜索，并常带回原子候选 |
+
+**声明侧（作者 / convert）**
+
+- MacroRoute 上写 `selection: exclusive | prefer`，以及 `verified`。
+- `exclusive` 必须 `verified=true`，并具备窄粒度 `intent_key` 与非空 `covered_tools`；否则降级为 `prefer`。
+- 新建 session / convert 装载的 bundle 手写宏默认 `prefer`；builtin 如 `invoke-existing-agent` 可为 verified exclusive。
+- 路由未声明或未命中时，运行时 `RetrievalPlan.selection` 记为 `normal`（普通检索路径）。
+
+**运行时（ToolSearch）判定顺序（摘要）**
+
+```text
+query → MacroRoute 匹配
+  → 唯一命中 verified exclusive
+        → 宏 preflight 通过 → plan.selection=exclusive（提交 suppression）
+        → 宏 preflight 失败 → plan.selection=normal，同一次搜索恢复 covered 原子
+  → 命中 prefer，或 exclusive 非唯一 / 冲突
+        → plan.selection=prefer（宏置顶）或 normal（冲突时常不隐藏）
+  → 无宏路由命中
+        → plan.selection=normal（语义评分 + 同 tier 结构 tie-break）
+```
+
+完整 exclusive / prefer / normal 步骤见 §6.3–§6.5；冲突与回滚见 §6.6、§7。
+
 ### 6.3 verified exclusive
 
 唯一高置信 route 命中后：

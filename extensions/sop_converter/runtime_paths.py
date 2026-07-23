@@ -59,9 +59,3 @@ def normalize_runtime_path(value: str | os.PathLike[str]) -> Path:
     if converted:
         path = converted
     return Path(path).resolve()
-
-
-def normalize_runtime_path_str(value: str | os.PathLike[str]) -> str:
-    """String form of :func:`normalize_runtime_path`."""
-
-    return str(normalize_runtime_path(value))

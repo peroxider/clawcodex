@@ -26,6 +26,7 @@ from .routing import (
     resolve_macro_route,
     resolve_macro_route_details,
 )
+from .templates import HANDWRITTEN_MACRO_TEMPLATE, TEMPLATES_DIR
 from ..tool_retrieval import (
     MacroCoverage,
     ToolRetrievalIndex,
@@ -64,4 +65,6 @@ __all__ = [
     "ToolRetrievalProfile",
     "load_tool_retrieval_index",
     "write_tool_retrieval_index",
+    "HANDWRITTEN_MACRO_TEMPLATE",
+    "TEMPLATES_DIR",
 ]

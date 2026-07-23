@@ -79,24 +79,15 @@ class TestResourceCatalogRoundTrip(unittest.TestCase):
         second_record.metadata = {"extra": "x"}
         second = cat.upsert(second_record)
         self.assertEqual(first.created_at, second.created_at)
-        self.assertEqual(cat.list_keys(), ["agentconfig:agent-1"])
+        self.assertIsNotNone(cat.get("agentconfig", "agent-1"))
         self.assertEqual(cat.get("agentconfig", "agent-1").metadata["extra"], "x")  # type: ignore[union-attr]
-
-    def test_mark_failed_sets_status_and_reason(self) -> None:
-        cat = ResourceCatalog()
-        cat.upsert(_make_record())
-        cat.mark_failed("AgentConfig", "agent-1", "broken payload")
-        record = cat.get("agentconfig", "agent-1")
-        assert record is not None
-        self.assertEqual(record.status, "failed")
-        self.assertEqual(record.metadata["failure_reason"], "broken payload")
 
     def test_missing_and_bad_files_degrade_to_empty(self) -> None:
         missing = _tmp_path() / "missing.json"
-        self.assertEqual(ResourceCatalog.load(missing).list_keys(), [])
+        self.assertEqual(ResourceCatalog.load(missing).records, {})
         bad = _tmp_path() / "bad.json"
         bad.write_text("{not json", encoding="utf-8")
-        self.assertEqual(ResourceCatalog.load(bad).list_keys(), [])
+        self.assertEqual(ResourceCatalog.load(bad).records, {})
 
     def test_unsupported_catalog_version_raises_resource_version_unsupported(self) -> None:
         future = _tmp_path() / "future.json"

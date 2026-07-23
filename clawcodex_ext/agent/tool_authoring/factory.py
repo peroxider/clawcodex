@@ -234,12 +234,7 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
     """
 
     def _call_impl(input: dict[str, Any], _context: ToolContext) -> ToolResult:
-        from extensions.sop_converter.tool_state import (
-            enrich_tool_input,
-            persist_configure_secrets,
-        )
-
-        call_input = enrich_tool_input(spec.name, input, _context.session_id)
+        call_input = input
         try:
             if should_use_in_process_sdk_wrapper(spec):
                 parsed = parse_sdk_wrapper_call_impl(str(spec.call_impl))
@@ -346,7 +341,6 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
         if output_error is not None:
             return output_error
 
-        persist_configure_secrets(spec.name, call_input, _context.session_id)
         return ToolResult(
             name=spec.name,
             output=output,
