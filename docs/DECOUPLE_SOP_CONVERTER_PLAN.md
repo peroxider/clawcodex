@@ -629,8 +629,103 @@ Stability gate：489 个测试通过；2 项 Stage 6 perf 失败（`test_convers
 | stability gate 全过 | ✅（WSL 漂移不算回归） |
 | ruff 0 警告 | ✅ |
 
-### 8.5 Phase 3-5 状态
+### 8.5 Phase 3-5 状态（Phase 3 已完成）
 
-未启动。触发条件：商业化路线图（`COMMERCIALIZATION_PLAN.md` 策略三）确认走「sop_converter 独立发布」时。
+**Phase 3** 已完成（2026-07-23）。Phase 4-5 触发条件不变：商业化路线图（`COMMERCIALIZATION_PLAN.md` 策略三）确认走「sop_converter 独立发布」时启动。
 
-当前进度对应的工时（按 plan §7.2 估算「~650 行 / ~5.5 天」）实际产出 **~423 行**（Phase 1=1 行 + Phase 2=422 行），比例与预估差距源于：hard-grep 字段命名对齐靠 dataclass 已存在字段而未做简写别名（Plan §3.3 别名推迟到 Phase 3 adapter 的 property 转接）。
+当前进度对应的工时（按 plan §7.2 估算「~1,650 行 / ~10.5 天」）实际产出 **~972 行**（Phase 1=1 行 + Phase 2=422 行 + Phase 3=549 行），比例与预估差距原因同上。
+
+---
+
+## 9. Phase 3 实施记录（2026-07-23）
+
+按 §7.2 中量档落地 Phase 3（5 个 default adapter + 顶层 DEFAULTS 容器）。零侵入 `src/` 与既有 `clawcodex_ext/` 代码。
+
+### 9.1 新增文件
+
+| 文件 | 行数 | 职责 |
+|------|------|------|
+| `extensions/sop_converter/adapters/__init__.py` | 148 | `SOPDefaults` 数据类容器 + `fill_defaults()` 填充函数 |
+| `extensions/sop_converter/adapters/agent_definition_adapter.py` | 57 | 包装 `clawcodex_ext.agent.agent_definitions.AgentDefinition` + `get_agent_definitions_with_overrides` |
+| `extensions/sop_converter/adapters/skill_adapter.py` | 67 | 包装 `clawcodex_ext.skills.model.Skill` + `frontmatter.parse_frontmatter` |
+| `extensions/sop_converter/adapters/tool_authoring_adapter.py` | 132 | 聚合 persistence/spec/validators/factory/registry_ext 五个子模块，含 `AgentToolSpecProtocol` → `AgentToolSpec` 转换 |
+| `extensions/sop_converter/adapters/permission_adapter.py` | 85 | 包装 `ToolPermissionContext`，`is_bypass` / `should_avoid_prompts` 属性别名 |
+| `extensions/sop_converter/adapters/sop_provider_adapter.py` | 63 | `BaseProvider.chat()` → `SOPAssistantProviderProtocol.chat()` 薄适配器，提取 `.content` |
+| **合计** | **549** | |
+
+### 9.2 修改文件
+
+| 文件 | 改动 |
+|------|------|
+| `extensions/sop_converter/__init__.py` | 顶部添加 `from .adapters import DEFAULTS, fill_defaults; fill_defaults(DEFAULTS)`，import 时自动填充 |
+
+### 9.3 `SOPDefaults` 容器
+
+```python
+@dataclass
+class SOPDefaults:
+    agent_definition_factory: Callable[..., AgentDefinitionProtocol]
+    skill_factory: Callable[..., SkillProtocol]
+    frontmatter_parser: SkillFrontmatterProtocol
+    tool_authoring: ToolAuthoringProtocol
+    permission_context_factory: Callable[..., PermissionContextProtocol]
+    sop_provider: SOPAssistantProviderProtocol | None  # 可选
+    agent_loader: Callable[[], list[AgentDefinitionProtocol]]
+```
+
+`fill_defaults(DEFAULTS)` 填充除 `sop_provider` 外的所有字段。`sop_provider` 保持 `None`，需调用方显式设置才启用 LLM 辅助分组。
+
+### 9.4 关键设计决定
+
+**a) `AgentToolSpecProtocol` → `AgentToolSpec` 转换**（`tool_authoring_adapter.py`）
+
+上游 `AgentToolSpec` 是 `@dataclass(frozen=True)`，`call_type` 为 `Literal["bash", "http", "python", "workflow"]` 而 Protocol 为 `str`。`spec_from_protocol()` 函数读取 Protocol 字段并构造上游 dataclass，超出范围的值抛 `ValidationError`。
+
+**b) `PermissionContextAdapter` 属性别名**（`permission_adapter.py`）
+
+Protocol 字段名 `is_bypass` / `should_avoid_prompts` 与上游 `is_bypass_permissions_mode_available` / `should_avoid_permission_prompts` 不一致。Adapter 通过 `@property` 映射，工厂函数 `default_permission_context_factory` 同时接受两种命名。
+
+**c) `agent_loader` 的 `cwd` 参数**（`agent_definition_adapter.py`）
+
+上游 `get_agent_definitions_with_overrides(cwd)` 需要 `cwd` 参数。默认实现使用 `os.getcwd()`，符合 plan §3.4 的 `Callable[[], ...]` 签名约定。
+
+**d) `SOPAssistantProviderAdapter` 的向后兼容**（`sop_provider_adapter.py`）
+
+提供 `from_provider(provider: BaseProvider)` 类方法，保留既有 `skill_grouper` 调用方的迁移路径。`chat()` 调用 `BaseProvider.chat(messages)` 并提取 `response.content` 返回 `str`。
+
+### 9.5 验证结果
+
+```
+✅ 全部 6 个 adapter 可 import
+✅ DEFAULTS 单例所有 7 个字段（6 个必填 + 1 个可选）正确填充
+✅ 5 个 factory 函数均产生 @runtime_checkable Protocol 兼容实例
+✅ agent_loader() 返回 7 个 agent（当前项目配置）
+✅ frontmatter_parser 正确解析 YAML 头
+✅ tool_authoring TOOL_DIR 指向 ~/.clawcodex/agent-tools
+✅ permission_context_factory 正确映射 is_bypass 别名
+✅ extensions.sop_converter 完整导入触发 fill_defaults
+✅ ruff check 0 警告
+✅ 无 src.skills 泄漏
+```
+
+### 9.6 与 §6 验收标准的差距
+
+按 §7.2 中量档只覆盖部分验收项：
+
+| §6 验收项 | 当前状态 |
+|-----------|----------|
+| `extensions/sop_converter/core/` 无 `from src./clawcodex_ext.` | ⏸️ Phase 4 才拆分 |
+| `runtime/` 仅通过 `extensions/capabilities.*` 引用 | ⏸️ Phase 4 才拆分 |
+| 提供 sop MCP server 工具 | ⏸️ Phase 4-5 才有独立打包 |
+| `import extensions.sop_converter.core` 无 `clawcodex_ext` 可加载 | ⏸️ Phase 4 |
+| orchestrator + sop_converter 集成测试通过 | ✅ 既有测试不受影响 |
+| stability gate 全过 | ✅ |
+| ruff 0 警告 | ✅ |
+
+### 9.7 三档进度总览
+
+| 档位 | Phase | 状态 | 行数 | 工时 |
+|------|-------|------|------|------|
+| 轻量（预防性解耦） | Phase 1+2 | ✅ 已完成 | ~423 | ~5.5 天 |
+| **中量（可移植）** | **Phase 1-3** | **✅ 已完成** | **~972** | **~10.5 天** |
+| 完整（独立发布） | Phase 1-5 | ⏸️ 待商业化确认 | ~4,000 | ~25 天 |
