@@ -411,54 +411,7 @@ def _import_resolved_type(
 # ---------------------------------------------------------------------------
 
 _PROBE_SCRIPT = r'''\
-import sys, json, importlib, ast, signal, time
-from pathlib import Path
-
-def _extract_via_ast(source_dir, module_path, class_name):
-    """AST 提取 class 定义 + 编译执行，跳过模块级阻塞代码。
-
-    只提取 import 语句、目标 class 定义、函数定义和安全赋值（常量/字面量），
-    跳过模块级的函数调用赋值（如 _pool = ConnectionPool()）。
-    编译后调用 model_json_schema() 获取精确 schema。
-    """
-    root = Path(source_dir)
-    parts = module_path.split(".")
-    source_file = root.joinpath(*parts).with_suffix(".py")
-    if not source_file.is_file():
-        return None
-    source = source_file.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-
-    filtered = []
-    for node in tree.body:
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            filtered.append(node)
-        elif isinstance(node, ast.ClassDef) and node.name == class_name:
-            filtered.append(node)
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            filtered.append(node)
-        elif isinstance(node, ast.Assign) and isinstance(
-            node.value,
-            (ast.Constant, ast.List, ast.Dict, ast.Set, ast.Tuple, ast.Name, ast.Attribute),
-        ):
-            filtered.append(node)
-
-    module_ast = ast.Module(body=filtered, type_ignores=[])
-    code = compile(module_ast, str(source_file), "exec")
-    namespace = {"__name__": "extracted_module"}
-    exec(code, namespace)
-
-    cls = namespace.get(class_name)
-    if not isinstance(cls, type):
-        return None
-    try:
-        from pydantic import BaseModel
-        if issubclass(cls, BaseModel):
-            return cls.model_json_schema(mode="validation")
-    except Exception:
-        pass
-    return None
-
+import sys, json, importlib, signal, time
 
 def main():
     req = json.loads(sys.stdin.read())
@@ -473,11 +426,12 @@ def main():
         if p and p not in sys.path:
             sys.path.insert(0, p)
 
-    # Phase 1: direct import with timeout.
+    # Direct import with timeout.
     # On Linux/WSL we use signal.alarm() so a blocking import can be
-    # interrupted and we fall through to Phase 2 in the same subprocess.
+    # interrupted and we return kind=None; the parent then uses in-process
+    # AST / batch-probe fallbacks.
     # On Windows there is no SIGALRM, so we rely on the parent process's
-    # subprocess.run(timeout=...) to kill the whole subprocess; the import
+    # communicate(timeout=...) to kill the whole subprocess; the import
     # itself is still attempted (no skip) so Windows users get schemas too.
     schema = None
     direct_ok = False
@@ -518,18 +472,17 @@ def main():
                           "direct_time": round(direct_time, 3)}))
         return
 
-    # Phase 2 (AST extraction + compilation) 已禁用。
-    # _extract_via_ast() 函数定义保留以备后续重新启用，但此处不再调用。
-    # 纯 Phase 1 方案：import 失败则直接返回 None，降级为基础 JSON 类型。
+    # Import failed or skipped: return None so the parent can fall back to
+    # batch probe / in-process AST (pydantic / pure / dataclass).
     print(json.dumps({"kind": None, "direct_failed": not direct_ok,
                       "direct_time": round(direct_time, 3)}))
 
 main()
 '''
 
-# Per-source_dir circuit breaker: when the entire subprocess times out
-# (both direct import AND AST extraction blocked), subsequent probes for the
-# same source_dir are skipped entirely.  This prevents N × timeout delay.
+# Per-source_dir circuit breaker: when the subprocess times out on direct
+# import, subsequent probes for the same source_dir are skipped entirely.
+# This prevents N × timeout delay.
 #
 # Scope: process-local state for ONE ``sop convert`` run.  The CLI entrypoint
 # (``_handle_convert_from_source`` in clawcodex_ext/cli/sop_cmd/commands.py)
@@ -540,19 +493,19 @@ main()
 # just hang again.
 _BLOCKED_SOURCE_DIRS: set[str] = set()
 
-# Per-source_dir flag: when direct import (Phase 1) fails OR is too slow
-# for one type, it will almost certainly be slow for all types in the same
-# SDK (same import chain).  Skipping Phase 1 for subsequent types saves
-# the import cost (up to 6s per type).
+# Per-source_dir flag: when direct import fails OR is too slow for one type,
+# it will almost certainly be slow for all types in the same SDK (same import
+# chain).  Skipping direct import for subsequent types saves the import cost
+# (up to 6s per type); the parent still has batch / in-process AST fallbacks.
 _DIRECT_IMPORT_BLOCKED: set[str] = set()
 
-# Threshold: if Phase 1 (direct import) takes longer than this even on
-# success, mark the SDK to skip Phase 1 for subsequent types and go
-# straight to Phase 2 (AST extraction).  This handles SDKs whose import
-# is slow but not truly hanging (e.g., 3-5s due to heavy initialization).
-# Set high enough to tolerate SDKs with heavy module-level initialization
-# (e.g., 10-20s for connection pools, model registries).  Only truly
-# pathological SDKs (>60s per import) will trigger the circuit breaker.
+# Threshold: if direct import takes longer than this even on success, mark
+# the SDK to skip direct import for subsequent types.  This handles SDKs
+# whose import is slow but not truly hanging (e.g., 3-5s due to heavy
+# initialization).  Set high enough to tolerate SDKs with heavy module-level
+# initialization (e.g., 10-20s for connection pools, model registries).
+# Only truly pathological SDKs (>60s per import) will trigger the circuit
+# breaker.
 _DIRECT_IMPORT_SLOW_THRESHOLD = 60.0
 
 # Pre-filled cache from batch probe.  When non-None for a key, individual
@@ -589,17 +542,15 @@ def _probe_type_in_subprocess(
     timeout: float = 60.0,
     venv_python: str | None = None,
 ) -> dict[str, Any] | None:
-    """在隔离子进程中提取 pydantic schema，带超时和两层回退。
+    """在隔离子进程中提取 pydantic schema（仅 direct import），带超时。
 
-    Phase 1: 直接 import + signal alarm 超时（60s）→ 最精确
-    Phase 2: AST 提取 class 定义 + 编译 → 精确（跳过模块级阻塞代码）
-
-    两层都使用 pydantic 的 model_json_schema()，循环引用由 pydantic
-    原生处理（$ref）。如果两层都失败，返回 None，类型降级为基础 JSON 类型。
+    子进程只做 direct import + signal alarm / 父进程 communicate 超时。
+    失败时返回 None；上层 ``pydantic_schema_for_type`` 再走 batch cache /
+    进程内 AST（pydantic / pure / dataclass）兜底。
 
     熔断机制：
-    - _DIRECT_IMPORT_BLOCKED: Phase 1 失败或过慢（>3s）后，后续跳过 Phase 1
-    - _BLOCKED_SOURCE_DIRS: 整个子进程超时后，后续跳过所有探测
+    - _DIRECT_IMPORT_BLOCKED: direct import 失败或过慢后，后续跳过子进程 import
+    - _BLOCKED_SOURCE_DIRS: 整个子进程超时后，后续跳过所有单类型探测
 
     批量预热：preload_schemas_for_source_dir() 可一次性填充 _BATCH_CACHE，
     后续调用直接命中缓存，不 spawn 子进程。
@@ -646,7 +597,7 @@ def _probe_type_in_subprocess(
             return None
         result = json.loads(lines[-1])
 
-        # Mark SDK to skip Phase 1 for subsequent probes when:
+        # Mark SDK to skip direct import for subsequent probes when:
         # 1. Direct import failed (timeout/error), OR
         # 2. Direct import succeeded but was slow (> threshold)
         direct_time = result.get("direct_time", 0.0)
@@ -654,7 +605,7 @@ def _probe_type_in_subprocess(
         if direct_failed and root not in _DIRECT_IMPORT_BLOCKED:
             _DIRECT_IMPORT_BLOCKED.add(root)
             logger.info(
-                "Direct import failed for %s, subsequent probes will skip to AST extraction",
+                "Direct import failed for %s, subsequent probes will skip direct import",
                 root,
             )
         elif (
@@ -665,7 +616,7 @@ def _probe_type_in_subprocess(
             _DIRECT_IMPORT_BLOCKED.add(root)
             logger.info(
                 "Direct import slow for %s (%.1fs > %.1fs threshold), "
-                "subsequent probes will skip to AST extraction",
+                "subsequent probes will skip direct import",
                 root,
                 direct_time,
                 _DIRECT_IMPORT_SLOW_THRESHOLD,
@@ -675,10 +626,10 @@ def _probe_type_in_subprocess(
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
-        # Both phases timed out — circuit breaker for this SDK.
+        # Direct-import subprocess timed out — circuit breaker for this SDK.
         _BLOCKED_SOURCE_DIRS.add(root)
         logger.warning(
-            "Probe %s.%s timed out after %ss (both direct import and AST extraction), "
+            "Probe %s.%s timed out after %ss (direct import), "
             "circuit breaker tripped for %s",
             module_path,
             class_name,

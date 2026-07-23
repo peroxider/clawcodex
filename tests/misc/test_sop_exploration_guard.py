@@ -2,44 +2,13 @@
 
 from __future__ import annotations
 
-import importlib.util
 import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[2]
-
-# Minimal stub so @patch("extensions.sop_converter.bundle_context.get_active_bundle") works
-# without pulling in clawcodex_ext (and its aiohttp dependency).
-import types
-
-
-def _get_active_bundle_stub():
-    return None
-
-
-_bundle_ctx = types.ModuleType("extensions.sop_converter.bundle_context")
-sys.modules.setdefault("extensions.sop_converter", types.ModuleType("extensions.sop_converter"))
-sys.modules["extensions.sop_converter.bundle_context"] = _bundle_ctx
-_bundle_ctx.get_active_bundle = _get_active_bundle_stub
-
-
-def _load_module(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-_guard = _load_module(
-    "extensions.sop_converter.sop_exploration_guard",
-    ROOT / "extensions" / "sop_converter" / "sop_exploration_guard.py",
-)
-check_bundle_source_exploration = _guard.check_bundle_source_exploration
+from extensions.sop_converter.sop_exploration_guard import check_bundle_source_exploration
 
 _SDK_ROOT = Path("/mnt/d/projects/JiuwenAgent")
 _WIN_SDK_ROOT = Path("D:/projects/JiuwenAgent")

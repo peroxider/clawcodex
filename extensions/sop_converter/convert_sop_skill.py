@@ -17,6 +17,7 @@ Examples:
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from extensions.sop_converter import (
@@ -26,6 +27,7 @@ from extensions.sop_converter import (
     AgentBuildResult,
     MappingRule,
     SKILL_TEMPLATE,
+    register_http_tools,
 )
 
 logger = logging.getLogger(__name__)
@@ -58,6 +60,9 @@ def convert_sop_to_agent(
     agent_description: str = "",
     model: str | None = None,
     mapping_rules: list[MappingRule] | None = None,
+    *,
+    register_http: bool = True,
+    bundle_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Convert an SOP spec into a reusable Agent.
 
@@ -68,6 +73,7 @@ def convert_sop_to_agent(
         agent_description: Description for the resulting agent.
         model: Optional model override for the agent.
         mapping_rules: Optional custom mapping rules.
+        register_http: If True (default), register HTTP tools for OpenAPI specs.
 
     Returns:
         Dict with agent definition, skill specs, and any warnings.
@@ -94,7 +100,22 @@ def convert_sop_to_agent(
             "error": "No skills produced from grouping",
         }
 
-    # Step 3: Build Agent from Skills
+    # Step 3: Register HTTP tools for OpenAPI specs (F-52)
+    name_map: dict[str, str] = {}
+    is_openapi = any(m.http_method is not None for m in methods)
+    if register_http and is_openapi:
+        try:
+            name_map = register_http_tools(methods, persist=True, bundle_dir=bundle_dir)
+            # Update skill allowed_tools with kebab-case names
+            for skill in skills:
+                updated_tools = []
+                for tool in skill.allowed_tools:
+                    updated_tools.append(name_map.get(tool, tool))
+                skill.allowed_tools = updated_tools
+        except Exception as exc:
+            logger.warning("Failed to register HTTP tools: %s", exc)
+
+    # Step 4: Build Agent from Skills
     resolved_name = agent_name or _generate_agent_name(requirements)
     resolved_desc = (
         agent_description or f"Agent for: {requirements}"
@@ -112,7 +133,7 @@ def convert_sop_to_agent(
     )
     result = builder.build()
 
-    # Step 4: Persist agent for long-term use
+    # Step 5: Persist agent for long-term use
     try:
         from extensions.sop_converter.agent_builder import persist_converted_agent
 
@@ -139,6 +160,8 @@ def convert_sop_to_agent(
         "skill_files": [str(p) for p in result.skill_files],
         "persist_status": persist_status,
         "warnings": result.warnings,
+        "is_openapi": is_openapi,
+        "registered_http_tools": len(name_map),
     }
 
 
@@ -203,6 +226,10 @@ def _format_result(result: dict[str, Any]) -> str:
 
     lines.append(f"\n## Tools ({len(result.get('tools', []))})")
     lines.append(", ".join(result.get("tools", [])))
+
+    if result.get("is_openapi"):
+        lines.append(f"\n📡 OpenAPI Mode: Yes")
+        lines.append(f"Registered HTTP tools: {result.get('registered_http_tools', 0)}")
 
     lines.append(f"\nPersistence: {result['persist_status']}")
     lines.append(f"Skill files: {', '.join(result.get('skill_files', []))}")

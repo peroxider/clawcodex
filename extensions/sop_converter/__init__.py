@@ -43,7 +43,7 @@ from .templates import (
 from .source_parser import SourceCodeParser, SourceComponent, SourceOperation, ParamSpec
 from .agent_md_writer import AgentMarkdownWriter, AgentComponentInfo, WorkflowStage
 from .default_agent import resolve_default_agent, resolve_agent_by_type
-from .tool_registry_bridge import register_component_tools
+from .tool_registry_bridge import register_component_tools, register_http_tools
 from .resource_catalog import (
     ResourceCatalog,
     ResourceRecord,
@@ -109,6 +109,7 @@ __all__ = [
     "resolve_default_agent",
     "resolve_agent_by_type",
     "register_component_tools",
+    "register_http_tools",
     "ResourceCatalog",
     "ResourceRecord",
     "get_resource_record",

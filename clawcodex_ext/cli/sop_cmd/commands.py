@@ -267,6 +267,7 @@ def _handle_convert(args: list[str]) -> int:
         sdk_spec=opts.sdk_spec,
         requirements=opts.requirements,
         agent_name=opts.agent_name,
+        bundle_dir=opts.output_dir,
     )
 
     if result["status"] == "error":

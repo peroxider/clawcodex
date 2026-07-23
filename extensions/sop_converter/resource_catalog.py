@@ -256,7 +256,6 @@ class ResourceCatalog:
 
     version: int = SCHEMA_VERSION
     records: dict[str, ResourceRecord] = field(default_factory=dict)
-    _removed_keys: set[str] = field(default_factory=set, repr=False)
 
     @classmethod
     def load(cls, path: Path) -> ResourceCatalog:
@@ -308,7 +307,7 @@ class ResourceCatalog:
                 if merge:
                     disk = self.load(path)
                     for key, record in disk.records.items():
-                        if key not in records and key not in self._removed_keys:
+                        if key not in records:
                             records[key] = record
                 payload = {
                     "version": self.version,
@@ -394,7 +393,6 @@ class ResourceCatalog:
                 set(redacted.secrets.get("env_refs") or []) | set(env_refs)
             )
         self.records[redacted.key()] = redacted
-        self._removed_keys.discard(redacted.key())
         return redacted
 
     def get(self, resource_type: str, resource_id: str) -> ResourceRecord | None:
@@ -417,25 +415,6 @@ class ResourceCatalog:
             updated_at=record.updated_at,
             metadata=dict(record.metadata),
         )
-
-    def latest(self, resource_type: str) -> ResourceRecord | None:
-        target = _normalise_resource_type(resource_type)
-        best: ResourceRecord | None = None
-        for record in self.records.values():
-            if record.resource_type != target:
-                continue
-            if best is None or record.created_at > best.created_at:
-                best = record
-        if best is None:
-            return None
-        return self.get(best.resource_type, best.resource_id)
-
-    def find_by_source_tool(self, source_tool: str) -> list[ResourceRecord]:
-        return [
-            self.get(record.resource_type, record.resource_id)  # type: ignore[misc]
-            for record in self.records.values()
-            if record.source_tool == source_tool
-        ]
 
     def find_by_resource_id(
         self,
@@ -492,30 +471,6 @@ class ResourceCatalog:
             if restored is not None:
                 matches.append(restored)
         return sorted(matches, key=lambda item: item.created_at, reverse=True)
-
-    def mark_failed(self, resource_type: str, resource_id: str, reason: str) -> None:
-        record = self.records.get(_resource_key(resource_type, resource_id))
-        if record is None:
-            raise KeyError(_resource_key(resource_type, resource_id))
-        updated = ResourceRecord(
-            **{
-                **record.to_dict(),
-                "status": "failed",
-                "updated_at": _now(),
-                "metadata": {**record.metadata, "failure_reason": reason},
-            }
-        )
-        self.records[updated.key()] = updated
-
-    def delete(self, resource_type: str, resource_id: str) -> bool:
-        key = _resource_key(resource_type, resource_id)
-        removed = self.records.pop(key, None) is not None
-        if removed:
-            self._removed_keys.add(key)
-        return removed
-
-    def list_keys(self) -> list[str]:
-        return sorted(self.records.keys())
 
 
 def resolve_resource_catalog_path(

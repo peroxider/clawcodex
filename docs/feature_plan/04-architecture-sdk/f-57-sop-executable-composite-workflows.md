@@ -218,51 +218,46 @@ outputs:
 
 #### 4.2.1 手写宏 YAML 固定模板（Canonical）
 
-以下为手写 bundle 宏的**规范骨架**。新宏应复制此模板再填字段；模板宏实例化后也必须落到同一结构。
+**权威模板文件（单源，给人与模型复制填写）：**
+
+[`extensions/sop_converter/macros/templates/macro.definition.yaml.template`](../../../extensions/sop_converter/macros/templates/macro.definition.yaml.template)
+
+用法：复制到源树 `sop-macros/<name>.yaml` 后按注释改字段；模板内附 `create-and-invoke-agent` 注释示例。模板宏实例化后也必须落到同一 `MacroDefinition` 结构。下文保留精简骨架便于阅读；字段释义与硬约束以模板文件头注释为准。
 
 ```yaml
-version: 1                          # 目前仅支持 1
-name: your-macro-name               # 必填；注册为 call_type=workflow 的工具名
+version: 1
+name: your-macro-name
 description: 一句话说明意图与编排范围
-scope: bundle                       # bundle | session | builtin
+scope: bundle
 enabled: true
 
-workflow:                           # 必填；内含 CompositeWorkflowSpec 字段
-  inputs:                           # 宏对外参数（覆盖所有 $input.*）
+workflow:
+  inputs:
     some_arg:
-      type: string                  # string | object | ...
+      type: string
       description: 参数说明
       required: true
-  steps:                            # 非空列表
-    - id: step1                     # 步内唯一
-      kind: tool                    # 手写/bundle 宏仅允许 tool
-      callable_ref: some-atomic-tool  # 必须能在 bundle ToolIndex 唯一解析
+  steps:
+    - id: step1
+      kind: tool
+      callable_ref: some-atomic-tool
       args:
-        x: $input.some_arg          # 绑定：$input.* / $steps.<id>.output[.<field>]
-      # output_schema:              # 可选；声明本步 public output，供后续绑定校验
-      #   type: object
-      #   properties:
-      #     field: {type: string}
-      #   required: [field]
-  outputs:                          # 宏对外返回契约
+        x: $input.some_arg
+  outputs:
     result: $steps.step1.output
 
-routing:                            # MacroRoute；ToolSearch 主动召回
-  phrases:
-    - 自然语言召回短语
-  keywords:
-    - 关键词
-  negative_keywords: []             # 命中则抑制本宏
-  target_tool: your-macro-name      # 通常等于 name
-  match_mode: all                   # exact | all | any
-  selection: prefer                 # prefer | exclusive（未 verified 的 exclusive 会降级为 prefer）
+routing:
+  phrases: [自然语言召回短语]
+  keywords: [关键词]
+  negative_keywords: []
+  target_tool: your-macro-name
+  match_mode: all
+  selection: prefer
   priority: 100
   verified: false
-  intent_key: ""                    # 可选；F-157 意图键
-  covered_tools: []                 # 可选；本宏覆盖的原子工具名，供分层检索
 
 provenance:
-  kind: handwritten                 # handwritten | template | promoted | ...
+  kind: handwritten
   manifest: sop-macros/your-macro-name.yaml
 ```
 
@@ -388,39 +383,17 @@ provenance:
 call_type: Literal["bash", "http", "python", "workflow"]
 ```
 
-workflow 工具不生成专用 Bash wrapper。`call_impl` 只保存宏引用，不在持久化的 `AgentToolSpec` 中复制整份 workflow：
+新增：
 
-```json
-{
-  "manifest": ".clawcodex/macros/create-and-invoke-agent.yaml"
-}
+```text
+extensions/sop_converter/composite_runtime.py
 ```
 
-不同 scope 使用以下引用形式：
-
-| scope | `call_impl` | 定义存放位置 |
-|-------|-------------|--------------|
-| Bundle | `{"manifest": ".clawcodex/macros/<name>.yaml"}` | bundle manifest |
-| Session | `{"catalog_id": "session:<session_id>:<macro_id>"}` | `ToolContext` 的 session macro catalog，不生成临时文件 |
-| Builtin | `{"catalog_id": "builtin:<name>"}` | 进程内 builtin macro catalog |
-
-inline spec 只允许测试或内部构造使用，不作为 bundle/session 的标准持久化格式。
-
-`build_tool_from_spec()` 在主进程构造 runner：
+核心接口：
 
 ```python
-def tool_runner(name: str, args: dict[str, Any]) -> Any:
-    result = context.tool_registry.dispatch(
-        ToolCall(name=name, input=args),
-        context,
-    )
-    if result.is_error:
-        raise CompositeWorkflowError(
-            "workflow_step_failed",
-            normalize_tool_error(result),
-        )
-    return normalize_workflow_output(result.output)
-```
+class CompositeWorkflowRunner:
+    def run(self, spec: CompositeWorkflowSpec, inputs: dict[str, Any]) -> CompositeResult: ...
 
 这样每个底层 step 仍经过：
 
@@ -542,10 +515,10 @@ convert 只接收已经声明好的 MacroDefinition，不分析 SDK 函数体来
 
 - 可重复的 `--macro-manifest <path>`，显式传入一个或多个宏定义。
 - source tree 中约定的 `sop-macros/*.yaml` 目录，存在时自动读取。
-- converter 自带、受版本控制的模板；模板实例化后必须先形成完整 MacroDefinition。
+- converter 自带、受版本控制的模板：`extensions/sop_converter/macros/templates/macro.definition.yaml.template`；实例化后必须先形成完整 MacroDefinition。
 - 由 session/trace 宏显式 promote 后产生的 bundle manifest。
 
-模板只允许变量替换和工具引用映射，不得执行任意 Python、Jinja expression 或 shell。无论来源如何，最终输入都必须是相同版本的声明式 MacroDefinition（骨架见 **§4.2.1**，填好的示例见 **§4.2.2**）。
+模板只允许变量替换和工具引用映射，不得执行任意 Python、Jinja expression 或 shell。无论来源如何，最终输入都必须是相同版本的声明式 MacroDefinition（权威骨架见 **§4.2.1** 模板文件，填好的示例见 **§4.2.2**）。
 
 ### 6.2 处理流水线
 
@@ -599,196 +572,11 @@ F-57 不包含 AST/WorkflowGraph 自动生成宏，也不预留 `--infer-macros`
 
 ---
 
-## §7 会话级自定义宏
+## §5 标准宏工具
 
-> **状态：待实施（Phase 5，可选）**
+### 5.1 `invoke-existing-agent`
 
-### 7.1 注册入口
-
-新增基础工具：
-
-```text
-RegisterMacroWorkflow
-```
-
-它接收声明式 `name`、`description`、`input_schema`、`steps`、`outputs` 和 `routing`，执行与 convert 宏相同的编译后校验。
-
-主 Agent 仅在用户有明确持久化意图时调用，例如：
-
-- “以后我说发布时，先 build，再 test，最后 upload。”
-- “把刚才成功的创建并调用 Agent 流程记成一个宏。”
-- “在本次会话里把 verify 流程注册为 `verify-release`。”
-
-普通一次性多工具任务不得自动注册宏。
-
-### 7.2 强制安全门闩
-
-`RegisterMacroWorkflow` 是高权限状态变更入口，不能只依赖主 Agent 判断用户意图。运行时必须执行以下门闩：
-
-- 每次 create、replace、promote 前都触发专用 permission ask，并展示 scope、宏名称、route、完整 step 工具列表和可能的 side effect；普通工具权限的“don't ask again”不得跳过这次宏计划确认。
-- 注册请求必须关联 `originating_user_turn_id`；工具输出、网页内容、源码注释或子 Agent 指令只能生成 draft，不能直接确认注册。
-- 非交互/headless 模式默认拒绝 session 宏注册，只有显式配置 `allow_session_macro_registration=true` 时允许。
-- 单个宏默认最多 16 个展开后 step，嵌套深度继续受 §5.4 的 8 层限制。
-- 每个 session 默认最多 32 个 active 宏；默认每 10 分钟最多成功注册 5 个，阈值可配置但不能由宏自身修改。
-- step 只能引用当前 bundle/session allowlist 中的工具或显式基础工具；“存在于全局 registry 但未 allowlist”不视为可引用。
-- `RegisterMacroWorkflow`、promote/delete macro 等宏管理工具禁止作为任何宏的 step，避免自复制和权限递归。
-- 校验、确认或注册任一步失败时不得留下 tool、route 或 catalog 的部分状态。
-
-### 7.3 从自然语言定义
-
-主 Agent 可以把用户要求转换为 MacroDefinition 草稿，但运行时必须重新验证：
-
-- 所有 step 工具已注册或可从当前 bundle 延迟加载；
-- 参数名和 required schema 正确；
-- step output binding 可解析；
-- 不包含任意 Python/Bash；
-- 不存在宏递归或越权工具；
-- route 唯一且不会覆盖高优先级 builtin route。
-
-存在工具映射或参数歧义时，返回 draft diagnostics，由 Agent 向用户确认，不得猜测后注册。
-
-### 7.4 从已执行 trace 固化
-
-支持“把刚才的操作注册成宏”时，优先使用本会话的实际 tool trace：
-
-1. 提取成功执行的工具序列。
-2. 将重复值和前一步输出引用识别为 binding。
-3. 将用户输入或需变化的常量提升为宏 input。
-4. 保留固定常量并过滤 secret 明文。
-5. 生成 session MacroDraft，再走统一校验。
-
-trace-to-macro 比重新解释自然语言更可靠，应作为会话宏的首选来源。
-
-### 7.5 注册与提升
-
-session 宏注册成功后：
-
-- 立即加入 `context.tool_registry`。
-- 加入当前 session 的可用工具列表。
-- 增加 session direct route。
-- 默认不修改 bundle 文件和 Skill markdown。
-
-只有用户明确要求“保存到项目/bundle”时，才执行 promote：
-
-```text
-session macro
-  → revalidate against bundle tool catalog
-  → remove session-only references
-  → write <bundle>/.clawcodex/macros/<name>.yaml
-  → update bundle routes and Skill allowlist
-```
-
-session 宏执行 create 工具时，资源仍按 F-56 规则写入 bundle-local 或 user-local ResourceCatalog。session 结束或删除宏不会删除这些资源；宏的会话作用域不提供资源隔离或自动回收。
-
----
-
-## §8 确定性 ToolSearch 路由
-
-> **状态：⚠️ MacroRoute / direct recall 已实现；“exclusive 命中后结构化隐藏 covered atomic”验收未完成，由 F-157 接续。**
-
-`MacroRoute` 与 F-55 `PriorityRoute` 是两套独立模型：
-
-- `PriorityRoute` 保持现有 lifecycle intent-group 重排语义，不增加 `target_tool`、`selection` 等宏字段。
-- `MacroRoute` 负责主动召回一个具体宏，随 MacroDefinition 存储，或编译成独立的 bundle/session route index。
-- MacroRoute 不写入 `.clawcodex/tool-dependencies.yaml`；ToolSearch 分别加载两类元数据，并按 §8.3 串联。
-
-不得通过扩展 F-55 `PriorityRoute` 来实现宏直达，否则生命周期依赖层和可执行宏层会再次耦合。F-157 同样使用独立的窄粒度 `intent_key`，不把 F-55 宽粒度 lifecycle group 直接当成隐藏边界。
-
-### 8.1 当前问题
-
-当前 F-55 `priority_routes` 的行为是：
-
-1. 普通 ToolSearch 先根据 name、alias、tag、description 产生候选。
-2. lifecycle route 只对已有候选重排。
-
-因此，如果宏没有被普通文本评分选中，route 无法把它加入结果。F-57 已用通用 MacroRoute 替代 existing-agent 专用短路，但验收表明：route 未命中时仍会回到普通评分，且系统尚不知道宏覆盖哪些原子工具。后一个问题不是继续添加 phrase 可以完整解决的，覆盖关系与分层规划见 F-157。
-
-### 8.2 独立 MacroRoute 模型
-
-新增 direct route 元数据。以下 `invoke-existing-agent` 是已经过回归验证、允许 exclusive 的 builtin 示例：
-
-```yaml
-phrases:
-  - 用已创建的 agent 回复
-keywords:
-  - agent
-  - 回复
-negative_keywords:
-  - 创建
-target_tool: invoke-existing-agent
-intent_key: agent.invoke_existing       # F-157 扩展
-covered_tools:                          # F-157 扩展
-  - llmagent-invoke
-  - send-to-agent
-match_mode: all
-selection: exclusive
-priority: 100
-verified: true
-```
-
-| 字段 | 说明 |
-|------|------|
-| `target_tool` | route 直接召回的宏工具 |
-| `intent_key` | F-157 的窄粒度检索意图；不得直接复用宽粒度 lifecycle group |
-| `covered_tools` | F-157 中 exclusive 命中后可隐藏、宏不可用时可恢复的原子工具 |
-| `selection=exclusive` | 唯一高置信命中时只返回目标宏 |
-| `selection=prefer` | 将宏置顶，同时保留下层候选 |
-| `match_mode` | `exact`、`all`、`any` |
-| `priority` | 多 route 命中时的稳定排序 |
-| `negative_keywords` | 排除创建、配置等相邻意图 |
-| `verified` | 是否已通过 route corpus、权限和失败行为验证 |
-
-默认策略必须保守：
-
-- 新建 session 宏和 convert 装载的 bundle 宏默认 `selection=prefer`。
-- `exclusive` 只允许 builtin 或 `verified=true` 的 bundle 宏，并要求存在正向、负向和冲突 route 测试语料。
-- session 宏即使由用户创建，也必须先以 `prefer` 运行；只有显式 promote/verify 后才可变为 `exclusive`。
-
-### 8.3 ToolSearch 顺序
-
-```text
-select:<exact-tool>
-  → session direct route
-  → bundle direct route
-  → builtin direct route
-  → lifecycle-chain route
-  → normal ToolSearch scoring
-  → lifecycle reorder
-```
-
-直达路由必须能把 `target_tool` 主动加入候选，而不是只重排已有候选。
-
-F-157 在 direct route 与普通评分之间增加 `RetrievalPlan → macro preflight → suppression commit/rollback`。F-57 的 `exclusive=True → 直接返回宏` 只能视为兼容实现，不再是最终架构。
-
-### 8.4 冲突处理
-
-- exact phrase 优先于 keyword route。
-- session route 优先于 bundle route，但不得静默覆盖 builtin 安全路由。
-- priority 更高者优先；priority 相同时选择匹配 token 更多者。
-- 两条 `exclusive` route 仍然同分时，不直接执行；返回两个候选或退回普通 ToolSearch。
-- route 指向不存在、未 allowlist、无法激活或校验失败的工具时忽略该 exclusive route，降级到 `prefer`/普通 ToolSearch，并记录诊断。
-- 如果宏已经开始执行后失败，不得自动改调底层原子工具，因为前序 step 可能已有 side effect；应返回 trace、失败 step 和可供用户选择的恢复候选。
-
-### 8.5 Skill、Task Guide 与 F-157 分层检索
-
-convert 注册 bundle 宏后：
-
-- 如果 Skill 的 `allowed_tools` 覆盖宏的所有底层工具，优先把宏加入该 Skill。
-- Task Guide 自动生成 `select:<macro-name>` 行。
-- 只有 `selection=exclusive`、`verified=true`、存在窄粒度 `intent_key` / `covered_tools` 且目标宏通过无副作用 preflight 时，才可隐藏对应底层原子工具。
-- 隐藏必须同时影响 ToolSearch `matches` 与当前 turn 已暴露的 active tools；只把宏截断为第一名不算完成。
-- exclusive 目标在执行前不可用时，由 F-157 在同一次搜索中恢复原子工具候选；执行开始后的失败按 §8.4 返回 trace，不自动重放底层工具。
-- 普通评分阶段由 F-157 使用 `source=composite-tool`、`call_type=workflow`、macro tags 的编译结果做结构 tie-break；这些信号不得继续只停留在 ToolSpec。
-
-Task Guide 只是解释层；MacroRoute 负责意图召回，F-157 RetrievalPlan 负责候选分层、隐藏与回滚，runtime validation 才是确定性来源。完整契约、迁移和验收见 F-157。
-
----
-
-## §9 标准宏迁移
-
-### 9.1 `invoke-existing-agent`
-
-保留现有行为和兼容输入：
+输入：
 
 ```json
 {
@@ -943,7 +731,7 @@ Phase 2 已按以下门禁完成并通过回归测试；`resource_type` 可扩�
 |-----------|----------|
 | `extensions/sop_converter/composite_runtime.py` | tool result 规范化、trusted private context、递归保护、schema/binding 增强 |
 | `extensions/sop_converter/composite_tools/models.py` | 与通用 MacroDefinition 对接，逐步移除 script-name 强依赖 |
-| `extensions/sop_converter/composite_tools/registry.py` | 支持 manifest/workflow 注册，不再要求每个宏有专用 wrapper |
+| `extensions/sop_converter/composite_tools/__init__.py` | 支持 manifest/workflow 注册，不再要求每个宏有专用 wrapper |
 | `extensions/sop_converter/macros/*` | 新增 definition/draft、会话编译、校验、catalog、注册和路由模块 |
 | `clawcodex_ext/agent/tool_authoring/spec.py` | 增加 `call_type="workflow"` 和可选 `output_schema` |
 | `clawcodex_ext/agent/tool_authoring/validators.py` | 校验 workflow manifest、可引用路径和可选 output schema |

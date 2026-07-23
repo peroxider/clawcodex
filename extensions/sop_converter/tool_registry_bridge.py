@@ -55,6 +55,7 @@ from .path_resolver import (
 )
 from .search_tags import generate_search_tags
 from .source_parser import SourceComponent, SourceOperation, ParamSpec
+from .sdk_parser import SdkMethod, SdkParam
 from .sdk_serialization import (
     WRAPPER_COERCION_HELPERS,
     WRAPPER_SERIALIZATION_HELPERS,
@@ -3197,5 +3198,369 @@ def register_component_tools(
             )
         except Exception as exc:  # pragma: no cover — defensive
             logger.warning("Failed to write tool-dependencies.yaml: %s", exc)
+
+    return name_map
+
+
+# ---------------------------------------------------------------------------
+# HTTP Tool Registration (F-52)
+# ---------------------------------------------------------------------------
+
+
+def _sdk_param_to_json_schema_property(param: SdkParam) -> dict[str, Any]:
+    """Convert an SdkParam to a JSON Schema property dict."""
+    prop: dict[str, Any] = {
+        "type": param.param_type,
+    }
+    if param.description:
+        prop["description"] = param.description
+    if param.schema:
+        prop.update(param.schema)
+        if "type" in param.schema:
+            prop["type"] = param.schema["type"]
+    return prop
+
+
+def _build_http_input_schema(method: SdkMethod) -> dict[str, Any]:
+    """Build JSON Schema input schema for an HTTP tool."""
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+
+    has_body_param = any(p.name == "body" and p.location == "body" for p in method.params)
+
+    if has_body_param and method.request_body:
+        content = method.request_body.get("content", {})
+        for media_type, schema in content.items():
+            if isinstance(schema, dict) and "properties" in schema:
+                for prop_name, prop_schema in schema["properties"].items():
+                    properties[prop_name] = prop_schema
+                    if schema.get("required") and prop_name in schema.get("required", []):
+                        required.append(prop_name)
+    else:
+        for param in method.params:
+            prop = _sdk_param_to_json_schema_property(param)
+            properties[param.name] = prop
+            if param.required:
+                required.append(param.name)
+
+        if method.request_body:
+            content = method.request_body.get("content", {})
+            for media_type, schema in content.items():
+                if isinstance(schema, dict):
+                    if "properties" in schema:
+                        for prop_name, prop_schema in schema["properties"].items():
+                            if prop_name not in properties:
+                                properties[prop_name] = prop_schema
+                                if schema.get("required") and prop_name in schema.get("required", []):
+                                    required.append(prop_name)
+                    elif "$ref" in schema:
+                        pass
+
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": properties,
+    }
+    if required:
+        schema["required"] = required
+
+    return schema
+
+
+def _build_http_call_impl(method: SdkMethod) -> dict[str, str]:
+    """Build call_impl dict for HTTP tool."""
+    url = method.http_path or ""
+    path_params = []
+
+    if "{" in url and "}" in url:
+        import re
+
+        path_params = re.findall(r"\{(\w+)\}", url)
+
+    return {
+        "method": method.http_method or "GET",
+        "url": url,
+    }
+
+
+_HTTP_WRAPPER_TEMPLATE = '''#!/usr/bin/env python3
+"""Auto-generated HTTP wrapper for __TOOL_NAME__ - created by SOP converter."""
+
+import argparse
+import json
+import sys
+from typing import Any
+
+
+def _build_request(args: argparse.Namespace) -> dict[str, Any]:
+    """Build request dict from parsed arguments."""
+    request = {}
+__REQUEST_BUILDER__
+    return request
+
+
+def _format_url(url: str, path_params: dict[str, Any]) -> str:
+    """Replace path parameters in URL template."""
+    for key, value in path_params.items():
+        url = url.replace("{" + key + "}", str(value))
+    return url
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="__DESCRIPTION__")
+__ARGPARSE_DEFINITIONS__
+    
+    args = parser.parse_args()
+    
+    request = _build_request(args)
+    
+    # Process URL and body
+    path_params = {}
+    url_template = "__HTTP_PATH__"
+    for k, v in request.items():
+        if "{" + k + "}" in url_template:
+            path_params[k] = v
+    
+    url = _format_url(url_template, path_params)
+    body_params = {k: v for k, v in request.items() if k not in path_params}
+    data = json.dumps(body_params).encode("utf-8") if body_params else None
+    
+    # Print request info
+    print("=== Request ===")
+    print(f"Method: __HTTP_METHOD__")
+    print(f"URL: {url}")
+    print('Headers: {"Content-Type": "application/json"}')
+    if body_params:
+        print(f"Body: {json.dumps(body_params, indent=2, ensure_ascii=False)}")
+    print()
+    
+    # For testing: make actual HTTP request
+    try:
+        import urllib.request
+        import urllib.error
+        
+        headers = {"Content-Type": "application/json"}
+        
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers=headers,
+            method="__HTTP_METHOD__",
+        )
+        
+        with urllib.request.urlopen(req) as resp:
+            response_body = resp.read().decode("utf-8")
+            print("=== Response ===")
+            print(f"Status: {resp.status}")
+            print(f"Body: {response_body}")
+            return 0
+    except ImportError:
+        print("Note: urllib available, skipping actual HTTP request")
+        return 0
+    except urllib.error.HTTPError as e:
+        print(f"HTTP Error: {e.code} - {e.read().decode('utf-8')}")
+        return e.code
+    except Exception as e:
+        print(f"Error: {e}")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+
+def _generate_http_wrapper_script(
+    method: SdkMethod,
+    tool_name: str,
+    scripts_dir: Path,
+) -> Path:
+    """Generate a standalone HTTP wrapper script for testing."""
+    script_name = f"{tool_name}.py"
+    script_path = scripts_dir / script_name
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+
+    argparse_definitions: list[str] = []
+    request_builder_lines: list[str] = []
+
+    has_body_param = any(p.name == "body" and p.location == "body" for p in method.params)
+
+    if has_body_param and method.request_body:
+        content = method.request_body.get("content", {})
+        for media_type, schema in content.items():
+            if isinstance(schema, dict) and "properties" in schema:
+                for prop_name, prop_schema in schema["properties"].items():
+                    prop_type = prop_schema.get("type", "string")
+                    if prop_type == "integer":
+                        arg_type = int
+                    elif prop_type == "number":
+                        arg_type = float
+                    elif prop_type == "boolean":
+                        arg_type = bool
+                    elif prop_type == "array":
+                        required_fields = schema.get("required", [])
+                        is_required = prop_name in required_fields
+                        if is_required:
+                            argparse_definitions.append(
+                                f'    parser.add_argument("--{prop_name}", type=str, required=True, help="{prop_schema.get("description", "")}")'
+                            )
+                        else:
+                            argparse_definitions.append(
+                                f'    parser.add_argument("--{prop_name}", type=str, default=None, help="{prop_schema.get("description", "")}")'
+                            )
+                        request_builder_lines.append(f'    if args.{prop_name} is not None:\n        request["{prop_name}"] = [x.strip() for x in args.{prop_name}.split(",")]')
+                        continue
+                    else:
+                        arg_type = str
+
+                    required_fields = schema.get("required", [])
+                    is_required = prop_name in required_fields
+
+                    if is_required:
+                        argparse_definitions.append(
+                            f'    parser.add_argument("--{prop_name}", type={arg_type.__name__}, required=True, help="{prop_schema.get("description", "")}")'
+                        )
+                    else:
+                        argparse_definitions.append(
+                            f'    parser.add_argument("--{prop_name}", type={arg_type.__name__}, default=None, help="{prop_schema.get("description", "")}")'
+                        )
+                    request_builder_lines.append(f'    if args.{prop_name} is not None:\n        request["{prop_name}"] = args.{prop_name}')
+    else:
+        for param in method.params:
+            arg_type = param.param_type
+            if arg_type == "integer":
+                arg_type = int
+            elif arg_type == "number":
+                arg_type = float
+            elif arg_type == "boolean":
+                arg_type = bool
+            else:
+                arg_type = str
+
+            if param.required:
+                argparse_definitions.append(
+                    f'    parser.add_argument("--{param.name}", type={arg_type.__name__}, required=True, help="{param.description}")'
+                )
+            else:
+                argparse_definitions.append(
+                    f'    parser.add_argument("--{param.name}", type={arg_type.__name__}, default=None, help="{param.description}")'
+                )
+            request_builder_lines.append(f'    if args.{param.name} is not None:\n        request["{param.name}"] = args.{param.name}')
+
+        if method.request_body:
+            content = method.request_body.get("content", {})
+            for media_type, schema in content.items():
+                if isinstance(schema, dict) and "properties" in schema:
+                    for prop_name, prop_schema in schema["properties"].items():
+                        if prop_name not in [p.name for p in method.params]:
+                            prop_type = prop_schema.get("type", "string")
+                            if prop_type == "integer":
+                                arg_type = int
+                            elif prop_type == "number":
+                                arg_type = float
+                            elif prop_type == "boolean":
+                                arg_type = bool
+                            else:
+                                arg_type = str
+
+                            required_fields = schema.get("required", [])
+                            is_required = prop_name in required_fields
+
+                            if is_required:
+                                argparse_definitions.append(
+                                    f'    parser.add_argument("--{prop_name}", type={arg_type.__name__}, required=True, help="{prop_schema.get("description", "")}")'
+                                )
+                            else:
+                                argparse_definitions.append(
+                                    f'    parser.add_argument("--{prop_name}", type={arg_type.__name__}, default=None, help="{prop_schema.get("description", "")}")'
+                                )
+                            request_builder_lines.append(f'    if args.{prop_name} is not None:\n        request["{prop_name}"] = args.{prop_name}')
+
+    content = _HTTP_WRAPPER_TEMPLATE
+    content = content.replace("__TOOL_NAME__", tool_name)
+    content = content.replace("__DESCRIPTION__", method.description or method.name)
+    content = content.replace("__HTTP_METHOD__", method.http_method or "GET")
+    content = content.replace("__HTTP_PATH__", method.http_path or "")
+    content = content.replace("__ARGPARSE_DEFINITIONS__", "\n".join(argparse_definitions))
+    content = content.replace("__REQUEST_BUILDER__", "\n".join(request_builder_lines))
+
+    script_path.write_text(content, encoding="utf-8")
+    script_path.chmod(0o755)
+
+    return script_path
+
+
+def register_http_tools(
+    methods: list[SdkMethod],
+    *,
+    persist: bool = True,
+    overwrite: bool = True,
+    bundle_dir: str | Path | None = None,
+    bundle_id: str | None = None,
+    generate_wrappers: bool = True,
+) -> dict[str, str]:
+    """Register OpenAPI operations as HTTP tools.
+
+    Args:
+        methods: List of SdkMethod parsed from OpenAPI spec.
+        persist: If True, persist each AgentToolSpec to disk.
+        overwrite: If True, overwrite existing specs with the same name.
+        bundle_dir: Optional bundle directory for spec persistence.
+        bundle_id: Optional bundle identifier.
+        generate_wrappers: If True, generate standalone wrapper scripts.
+
+    Returns:
+        A mapping from original method names to kebab-case tool names.
+    """
+    bundle_path = Path(bundle_dir).resolve() if bundle_dir is not None else None
+    effective_bundle_id = bundle_id or (bundle_path.name if bundle_path else None)
+    tool_dir = bundle_tool_dir(bundle_path) if bundle_path is not None else None
+    scripts_dir = scripts_dir_for(tool_dir) if tool_dir is not None else SCRIPTS_DIR
+
+    name_map: dict[str, str] = {}
+    specs: list[AgentToolSpec] = []
+
+    for method in methods:
+        tool_name = _to_kebab_case(method.name)
+
+        input_schema = _build_http_input_schema(method)
+        call_impl = _build_http_call_impl(method)
+
+        tags = tuple(method.tags) if method.tags else ()
+
+        spec = AgentToolSpec(
+            name=tool_name,
+            description=method.description or method.name,
+            input_schema=input_schema,
+            call_type="http",
+            call_impl=call_impl,
+            tags=tags,
+            source="openapi-converter",
+            bundle_id=effective_bundle_id,
+        )
+
+        validate_spec(spec)
+        specs.append(spec)
+
+        name_map[method.name] = tool_name
+
+        if generate_wrappers:
+            _generate_http_wrapper_script(method, tool_name, scripts_dir)
+
+    if persist:
+        if tool_dir is not None:
+            tool_dir.mkdir(parents=True, exist_ok=True)
+        for spec in specs:
+            target_dir = tool_dir or TOOL_DIR
+            spec_path = target_dir / f"{spec.name}.json"
+            if not overwrite and spec_path.exists():
+                logger.debug("HTTP tool spec already exists, skipping: %s", spec.name)
+                continue
+            save_spec(spec, tool_dir=tool_dir)
+            logger.info("Persisted HTTP tool spec: %s -> %s", spec.name, spec_path.parent)
+
+    logger.info(
+        "Registered %d HTTP tools from OpenAPI spec",
+        len(specs),
+    )
 
     return name_map

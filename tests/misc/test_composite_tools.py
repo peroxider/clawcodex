@@ -87,19 +87,15 @@ class TestCompositeTools(unittest.TestCase):
             {"catalog_id": "builtin:invoke-existing-agent"},
         )
 
-    def test_registry_module_register_preserves_workflow_call_type(self) -> None:
-        from extensions.sop_converter.composite_tools import registry as composite_registry
-
-        invoke = next(s for s in builtin_composite_tools() if s.name == "invoke_existing_agent")
+    def test_register_preserves_workflow_call_type(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "demo_bundle"
             bundle.mkdir()
-            name = composite_registry.register_composite_tool(
-                invoke,
-                persist=True,
-                bundle_dir=bundle,
+            registered = register_composite_tools(persist=True, bundle_dir=bundle)
+            self.assertEqual(
+                registered.get("invoke_existing_agent"),
+                "invoke-existing-agent",
             )
-            self.assertEqual(name, "invoke-existing-agent")
             saved = json.loads(
                 (bundle / "agent-tools" / "invoke-existing-agent.json").read_text(
                     encoding="utf-8"

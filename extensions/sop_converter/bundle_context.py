@@ -365,7 +365,11 @@ def load_bundle_macro_routes(bundle_path: Path | str) -> list[Any]:
 
     Each macro definition may embed a ``routing:`` block (F-57 §4 / §8).
     Routes are tagged ``scope="bundle"``. Missing directory yields ``[]``.
+
+    Parses routing via :func:`macros.loader.parse_macro_route` (route-only;
+    does not require a ``workflow:`` block like :func:`load_macro_yaml`).
     """
+    from .macros.loader import parse_macro_route
     from .macros.models import MacroRoute
 
     root = Path(bundle_path)
@@ -391,43 +395,13 @@ def load_bundle_macro_routes(bundle_path: Path | str) -> list[Any]:
             continue
         if data.get("enabled", True) is False:
             continue
-        routing = data.get("routing")
-        if not isinstance(routing, dict):
-            routing = {}
-        target = str(routing.get("target_tool") or data.get("name") or "").strip()
-        if not target:
-            continue
-        match_mode = str(routing.get("match_mode") or "all")
-        if match_mode not in ("exact", "all", "any"):
-            match_mode = "all"
-        selection = str(routing.get("selection") or "prefer")
-        if selection not in ("exclusive", "prefer"):
-            selection = "prefer"
-        try:
-            priority = int(routing.get("priority", 100))
-        except (TypeError, ValueError):
-            priority = 100
-        routes.append(
-            MacroRoute(
-                phrases=[str(p) for p in (routing.get("phrases") or []) if str(p).strip()],
-                keywords=[str(k) for k in (routing.get("keywords") or []) if str(k).strip()],
-                negative_keywords=[
-                    str(k) for k in (routing.get("negative_keywords") or []) if str(k).strip()
-                ],
-                target_tool=target,
-                match_mode=match_mode,  # type: ignore[arg-type]
-                selection=selection,  # type: ignore[arg-type]
-                priority=priority,
-                verified=bool(routing.get("verified", False)),
-                enabled=True,
-                intent_key=str(routing.get("intent_key") or "").strip(),
-                covered_tools=[
-                    str(name)
-                    for name in (routing.get("covered_tools") or [])
-                    if str(name).strip()
-                ],
-                unavailable_policy="restore-covered",
-                scope="bundle",
-            )
+        routing = data.get("routing") if isinstance(data.get("routing"), dict) else {}
+        route = parse_macro_route(
+            routing,
+            default_target=str(data.get("name") or ""),
         )
+        if not route.target_tool:
+            continue
+        route.scope = "bundle"
+        routes.append(route)
     return routes
