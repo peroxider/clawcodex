@@ -173,7 +173,7 @@ extensions/        Layer 2 — 二开功能模组（全新子系统）
 
 ---
 
-#### 4.2.2 visualizer — ✅ 已落地（F-167）
+#### 4.2.2 visualizer — 已落地
 
 依赖链条：`visualizer → capabilities.dashboard_entry/recorder → recording.renderers`
 
@@ -199,7 +199,7 @@ extensions/        Layer 2 — 二开功能模组（全新子系统）
 
 ---
 
-#### 4.2.3 logical_kanban —  中低成本脱离
+#### 4.2.3 logical_kanban —  中低成本脱离 — 已落地
 
 依赖 4 个 clawcodex 类型：
 - `feature_gate` — 可用环境变量或简单 config 替代
@@ -219,9 +219,11 @@ extensions/        Layer 2 — 二开功能模组（全新子系统）
 
 ---
 
-#### 4.2.4 orchestrator — 高成本但可行
+#### 4.2.4 orchestrator — 高成本但可行 — Phase 0+1+2 部分已落地
 
 耦合点约 15 个，涉及 Agent 运行时、工具系统、消息类型、通信模块、Git 工具、流事件、录制等多个领域。
+
+> ✅ **2026-07-23 Phase 0+1+2 已落地**（commit `2dcacba8`）：以**仓内子模块** `extensions/orchestrator_runtime/` 形态实现（12 Protocol 文件 / 30 symbols + 4 copy-down utils + clawcodex_compat 透明转发层）；20 新文件 / 5 改文件 / 9 处顶级 import 切换；详见 `docs/ORCHESTRATOR_DECOUPLING_DESIGN.md` §10.2 及 `memory/orchestrator_decoupling_p0p1p2_done.md`。剩余 Phase 3~6（核心迁移 + 适配层 + CLI/MCP + 切换废弃）待启动。
 
 **需要定义的抽象接口**：
 
