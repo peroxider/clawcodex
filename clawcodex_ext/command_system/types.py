@@ -426,6 +426,9 @@ class InteractiveOutcome:
     # Defaults to False so existing interactive commands keep their current
     # behaviour (single block print).
     scrollable: bool = False
+    # Read-only views can ask interactive surfaces for a dismissible overlay
+    # instead of a permanent transcript/scrollback entry.
+    transient: bool = False
 
     @classmethod
     def skip(cls) -> "InteractiveOutcome":

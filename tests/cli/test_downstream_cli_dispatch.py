@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import os
+from types import SimpleNamespace
 
 
 def test_run_cli_version_short_circuit(monkeypatch):
@@ -148,9 +149,154 @@ def test_run_cli_print_goal_summary_skips_runtime_provider(
 
     captured = capsys.readouterr()
     assert rc == 0
-    assert "/goal [<objective>|clear|edit|pause|resume]" in captured.out
-    assert "No goal is currently set." in captured.out
+    assert "/goal <condition> to set one" in captured.out
+    assert "No goal set" in captured.out
     assert "runtime provider should not be built" not in captured.err
+
+
+def test_run_cli_print_goal_clear_skips_runtime_provider(monkeypatch, tmp_path, capsys):
+    from clawcodex_ext.cli.dispatch import run_cli
+
+    monkeypatch.setenv("CLAWCODEX_HOME", str(tmp_path / "clawcodex-home"))
+    monkeypatch.setattr("src.init.run_pre_action", lambda args: None)
+    monkeypatch.setattr(
+        "clawcodex_ext.runtime.context.RuntimeContext.build",
+        classmethod(
+            lambda cls, options: (_ for _ in ()).throw(
+                AssertionError("provider runtime must not be built")
+            )
+        ),
+    )
+
+    rc = run_cli(["clawcodex", "-p", "/goal clear"])
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "No goal set" in captured.out
+    assert "provider runtime must not be built" not in captured.err
+
+
+def test_run_cli_marks_max_turns_as_explicit_for_goal_print(monkeypatch, tmp_path):
+    from clawcodex_ext.cli.dispatch import run_cli
+
+    captured = []
+    monkeypatch.setenv("CLAWCODEX_HOME", str(tmp_path / "clawcodex-home"))
+    monkeypatch.setattr("src.init.run_pre_action", lambda args: None)
+    monkeypatch.setattr(
+        "src.entrypoints.headless.run_headless",
+        lambda options: captured.append(options) or 0,
+    )
+
+    rc = run_cli(["clawcodex", "-p", "/goal", "--max-turns", "3"])
+
+    assert rc == 0
+    assert len(captured) == 1
+    assert captured[0].max_turns == 3
+    assert captured[0].max_turns_explicit is True
+
+
+def test_run_cli_print_goal_summary_forwards_resume_and_continue(monkeypatch, tmp_path):
+    """The provider-free fast path keeps the resolved target session ID."""
+    from clawcodex_ext.cli.dispatch import run_cli
+    import src.entrypoints.headless as headless_module
+    import src.services.session_storage as session_storage_module
+
+    resumed_session_id = "resolved-goal-session"
+    sessions_dir = tmp_path / "sessions"
+    (sessions_dir / resumed_session_id).mkdir(parents=True)
+    captured_options = []
+
+    monkeypatch.setenv("CLAWCODEX_SESSIONS_DIR", str(sessions_dir))
+    monkeypatch.setattr("src.init.run_pre_action", lambda args: None)
+
+    def _list_sessions(cls, *args, tag_filter=None, **kwargs):
+        if tag_filter is not None:
+            return []
+        return [SimpleNamespace(session_id=resumed_session_id)]
+
+    monkeypatch.setattr(
+        session_storage_module.SessionStorage,
+        "list_sessions",
+        classmethod(_list_sessions),
+    )
+    monkeypatch.setattr(
+        "clawcodex_ext.runtime.context.RuntimeContext.build",
+        classmethod(
+            lambda cls, options: (_ for _ in ()).throw(
+                AssertionError("provider runtime must not be built")
+            )
+        ),
+    )
+
+    def _capture_headless(options):
+        captured_options.append(options)
+        return 0
+
+    monkeypatch.setattr(headless_module, "run_headless", _capture_headless)
+
+    resume_rc = run_cli(["clawcodex", "--resume", resumed_session_id, "-p", "/goal"])
+    continue_rc = run_cli(["clawcodex", "--continue", "-p", "/goal"])
+
+    assert resume_rc == 0
+    assert continue_rc == 0
+    assert [options.resume_session_id for options in captured_options] == [
+        resumed_session_id,
+        resumed_session_id,
+    ]
+
+
+def test_run_cli_agent_debug_resume_uses_isolated_sessions_dir(
+    monkeypatch,
+    tmp_path,
+):
+    """--resume must use the session directory selected by --agent-debug."""
+    from clawcodex_ext.cli.dispatch import run_cli
+    import src.entrypoints.headless as headless_module
+
+    resumed_session_id = "agent-debug-goal-session"
+    debug_dir = tmp_path / "debug-state"
+    (debug_dir / "sessions" / resumed_session_id).mkdir(parents=True)
+    captured_options = []
+
+    for name in (
+        "CLAWCODEX_AGENT_DEBUG",
+        "CLAWCODEX_HOME",
+        "CLAWCODEX_HISTORY_FILE",
+        "CLAWCODEX_SESSIONS_DIR",
+        "CLAW_TELEMETRY_STORAGE_DIR",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("CLAWCODEX_AGENT_DEBUG_DIR", str(debug_dir))
+    monkeypatch.setattr("src.init.run_pre_action", lambda args: None)
+    monkeypatch.setattr(
+        "clawcodex_ext.runtime.context.RuntimeContext.build",
+        classmethod(
+            lambda cls, options: (_ for _ in ()).throw(
+                AssertionError("provider runtime must not be built")
+            )
+        ),
+    )
+
+    def _capture_headless(options):
+        captured_options.append(options)
+        return 0
+
+    monkeypatch.setattr(headless_module, "run_headless", _capture_headless)
+
+    rc = run_cli(
+        [
+            "clawcodex",
+            "--agent-debug",
+            "--resume",
+            resumed_session_id,
+            "-p",
+            "/goal",
+        ]
+    )
+
+    assert rc == 0
+    assert os.environ["CLAWCODEX_SESSIONS_DIR"] == str(debug_dir / "sessions")
+    assert [options.resume_session_id for options in captured_options] == [resumed_session_id]
 
 
 def test_run_cli_provider_model_fast_paths_skip_pre_action(monkeypatch, capsys):

@@ -31,6 +31,7 @@ TerminalReason = Literal[
     "hook_stopped",
     "max_turns",
     "tool_failure_loop",
+    "goal_evaluator_error",
 ]
 
 

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 
-from clawcodex_ext.goal.model import ThreadGoalStatus
+from clawcodex_ext.goal.model import GoalCompletionMode, ThreadGoalStatus
 from clawcodex_ext.goal.store import (
     GoalStore,
     GoalUpdate,
@@ -18,6 +20,31 @@ from src.bootstrap.state import SessionId, reset_state_for_tests, switch_session
 
 def make_store(tmp_path: Path) -> GoalStore:
     return GoalStore(tmp_path / goals_db_filename())
+
+
+def _create_legacy_goal_database(db_path: Path) -> None:
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE thread_goals (
+                thread_id TEXT PRIMARY KEY NOT NULL,
+                goal_id TEXT NOT NULL,
+                objective TEXT NOT NULL,
+                status TEXT NOT NULL,
+                token_budget INTEGER,
+                tokens_used INTEGER NOT NULL DEFAULT 0,
+                time_used_seconds INTEGER NOT NULL DEFAULT 0,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO thread_goals VALUES
+            ('thread-1', 'goal-1', 'legacy', 'active', NULL, 5, 2, 1, 1)
+            """
+        )
 
 
 def test_goals_db_path_uses_independent_goal_store_file(tmp_path: Path) -> None:
@@ -51,6 +78,9 @@ def test_schema_bootstrap_matches_upstream_columns_and_constraints(tmp_path: Pat
         "token_budget",
         "tokens_used",
         "time_used_seconds",
+        "completion_mode",
+        "evaluation_count",
+        "last_evaluation_reason",
         "created_at_ms",
         "updated_at_ms",
     ]
@@ -60,6 +90,58 @@ def test_schema_bootstrap_matches_upstream_columns_and_constraints(tmp_path: Pat
         assert f"'{status.value}'" in create_sql
     assert "tokens_used INTEGER NOT NULL DEFAULT 0" in create_sql
     assert "time_used_seconds INTEGER NOT NULL DEFAULT 0" in create_sql
+    assert "completion_mode TEXT NOT NULL DEFAULT 'tool'" in create_sql
+    assert "evaluation_count INTEGER NOT NULL DEFAULT 0" in create_sql
+
+
+def test_schema_bootstrap_migrates_existing_goal_database(tmp_path: Path) -> None:
+    db_path = tmp_path / goals_db_filename()
+    _create_legacy_goal_database(db_path)
+
+    store = GoalStore(db_path)
+    goal = store.get_thread_goal("thread-1")
+
+    assert goal is not None
+    assert goal.evaluation_count == 0
+    assert goal.last_evaluation_reason is None
+    assert goal.completion_mode is GoalCompletionMode.TOOL
+
+
+def test_schema_migration_is_idempotent_across_two_store_instances(tmp_path: Path) -> None:
+    db_path = tmp_path / goals_db_filename()
+    _create_legacy_goal_database(db_path)
+
+    first = GoalStore(db_path)
+    second = GoalStore(db_path)
+    try:
+        assert first.get_thread_goal("thread-1") == second.get_thread_goal("thread-1")
+    finally:
+        second.close()
+        first.close()
+
+
+def test_schema_migration_is_safe_for_concurrent_first_open(tmp_path: Path) -> None:
+    db_path = tmp_path / goals_db_filename()
+    _create_legacy_goal_database(db_path)
+    ready = Barrier(2)
+
+    def open_store() -> GoalStore:
+        ready.wait(timeout=5)
+        return GoalStore(db_path)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(open_store) for _ in range(2)]
+        stores = [future.result(timeout=10) for future in futures]
+
+    try:
+        goals = [store.get_thread_goal("thread-1") for store in stores]
+        assert goals[0] == goals[1]
+        assert goals[0] is not None
+        assert goals[0].completion_mode is GoalCompletionMode.TOOL
+        assert goals[0].evaluation_count == 0
+    finally:
+        for store in stores:
+            store.close()
 
 
 def test_insert_rejects_unfinished_goal_but_allows_after_complete(tmp_path: Path) -> None:
@@ -97,6 +179,114 @@ def test_insert_rejects_unfinished_goal_but_allows_after_complete(tmp_path: Path
     assert replacement.objective == "second objective"
     assert replacement.tokens_used == 0
     assert replacement.time_used_seconds == 0
+    assert replacement.evaluation_count == 0
+    assert replacement.last_evaluation_reason is None
+
+
+def test_record_evaluation_uses_goal_id_cas_and_completes_atomically(tmp_path: Path) -> None:
+    from clawcodex_ext.goal.evaluator import GoalEvaluation
+
+    store = make_store(tmp_path)
+    stale = store.replace_thread_goal("thread-1", "old", ThreadGoalStatus.ACTIVE, token_budget=None)
+    current = store.replace_thread_goal(
+        "thread-1",
+        "new",
+        ThreadGoalStatus.ACTIVE,
+        token_budget=None,
+        completion_mode=GoalCompletionMode.EVALUATOR,
+    )
+
+    stale_result = store.record_thread_goal_evaluation(
+        "thread-1",
+        GoalEvaluation(met=True, reason="stale", usage={}),
+        expected_goal_id=stale.goal_id,
+        expected_evaluation_count=0,
+    )
+    first = store.record_thread_goal_evaluation(
+        "thread-1",
+        GoalEvaluation(met=False, reason="tests still running", usage={}),
+        expected_goal_id=current.goal_id,
+        expected_evaluation_count=0,
+    )
+    completed = store.record_thread_goal_evaluation(
+        "thread-1",
+        GoalEvaluation(met=True, reason="all tests pass", usage={}),
+        expected_goal_id=current.goal_id,
+        expected_evaluation_count=1,
+    )
+
+    assert stale_result is None
+    assert first is not None
+    assert first.status is ThreadGoalStatus.ACTIVE
+    assert first.evaluation_count == 1
+    assert first.last_evaluation_reason == "tests still running"
+    assert completed is not None
+    assert completed.status is ThreadGoalStatus.COMPLETE
+    assert completed.evaluation_count == 2
+    assert completed.last_evaluation_reason == "all tests pass"
+
+
+def test_record_evaluation_rejects_concurrent_result_from_same_snapshot(
+    tmp_path: Path,
+) -> None:
+    from clawcodex_ext.goal.evaluator import GoalEvaluation
+
+    db_path = tmp_path / goals_db_filename()
+    first_store = GoalStore(db_path)
+    second_store = GoalStore(db_path)
+    goal = first_store.replace_thread_goal(
+        "thread-1",
+        "concurrent",
+        ThreadGoalStatus.ACTIVE,
+        token_budget=None,
+        completion_mode=GoalCompletionMode.EVALUATOR,
+    )
+    ready = Barrier(2)
+
+    def record(store: GoalStore, reason: str):
+        ready.wait(timeout=5)
+        return store.record_thread_goal_evaluation(
+            "thread-1",
+            GoalEvaluation(met=False, reason=reason, usage={}),
+            expected_goal_id=goal.goal_id,
+            expected_evaluation_count=0,
+        )
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(record, first_store, "first result"),
+                executor.submit(record, second_store, "second result"),
+            ]
+            results = [future.result(timeout=10) for future in futures]
+
+        persisted = first_store.get_thread_goal("thread-1")
+        assert sum(result is not None for result in results) == 1
+        assert persisted is not None
+        assert persisted.evaluation_count == 1
+        assert persisted.last_evaluation_reason in {"first result", "second result"}
+    finally:
+        second_store.close()
+        first_store.close()
+
+
+def test_record_evaluation_ignores_tool_completed_goal(tmp_path: Path) -> None:
+    from clawcodex_ext.goal.evaluator import GoalEvaluation
+
+    store = make_store(tmp_path)
+    goal = store.replace_thread_goal(
+        "thread-1", "tool-owned", ThreadGoalStatus.ACTIVE, token_budget=None
+    )
+
+    result = store.record_thread_goal_evaluation(
+        "thread-1",
+        GoalEvaluation(met=True, reason="would complete", usage={}),
+        expected_goal_id=goal.goal_id,
+        expected_evaluation_count=0,
+    )
+
+    assert result is None
+    assert store.get_thread_goal("thread-1") == goal
 
 
 def test_replace_unconditionally_resets_usage_and_generates_new_goal_id(tmp_path: Path) -> None:

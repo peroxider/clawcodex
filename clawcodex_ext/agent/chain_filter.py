@@ -37,9 +37,10 @@ Two-stage gating:
 Backward compatibility:
 
     Transcripts without any ``"parentUuid":`` substring (legacy
-    sessions written before F-103) skip the filter automatically
-    — the gate fires on byte-index sparsity, not on schema
-    version, so no explicit feature flag is needed.
+    sessions written before F-103) skip the filter automatically.
+    Mixed transcripts created by resuming a legacy session retain
+    every legacy message while newer, chain-aware lines can still
+    be pruned to their active branch.
 
 Decoupling:
 
@@ -183,12 +184,23 @@ def walk_chain_before_parse(
     # for ``"type":`` followed by a recognised marker) so we don't
     # pay JSON-parse cost on every line.
     parent_indices: list[int] = []
+    legacy_message_indices: set[int] = set()
     metadata_indices: set[int] = set()
     for idx, line in enumerate(lines):
         if not line.strip():
             continue
         if PARENT_UUID_TOKEN in line:
             parent_indices.append(idx)
+        elif b'"uuid"' in line:
+            # A resumed pre-F-103 transcript has a legacy prefix without
+            # parentUuid followed by newly chained messages. Preserve every
+            # valid legacy message: there is no topology with which to prune
+            # that prefix safely, and a new message may point at its tail.
+            entry = _parse_line_safely(line)
+            if entry is not None:
+                uuid = entry.get("uuid")
+                if isinstance(uuid, str) and uuid:
+                    legacy_message_indices.add(idx)
         if _is_metadata_line(line):
             metadata_indices.add(idx)
 
@@ -262,7 +274,7 @@ def walk_chain_before_parse(
             chain.add(cursor)
             parent_uuid = parent_uuids.get(cursor)
             cursor = uuid_to_line.get(parent_uuid) if parent_uuid else None
-        best_chain = chain
+        best_chain = chain | legacy_message_indices
 
     # If we couldn't find any leaf, fall back to "everything is
     # active" — better to over-include than to lose the entire

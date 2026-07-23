@@ -27,6 +27,9 @@ _USAGE = (
 
 @register("provider")
 def run_provider_command(args: list[str]) -> int:
+    from clawcodex_ext.providers import ensure_provider_extensions_installed
+
+    ensure_provider_extensions_installed()
     # No args => current state (mirrors `/provider` and `git config --get` zero-arg idiom).
     if not args:
         print(format_provider_current())
@@ -59,6 +62,7 @@ def run_provider_command(args: list[str]) -> int:
             return 0
         if command == "use":
             provider = _parse_use_args(rest)
+            provider = ModelRegistry().validate_provider(provider)
             ModelStore().set_default_provider(provider)
             print(f"Default provider set to: {provider}")
             print(
@@ -100,7 +104,7 @@ def format_provider_show(name: str | None = None) -> str:
     registry = ModelRegistry()
     if name is None:
         name = resolve(registry=registry).provider
-    registry.validate_provider(name)
+    name = registry.validate_provider(name)
     info = registry.provider_info[name]
     models = ", ".join(registry.available_models(name))
     return "\n".join(

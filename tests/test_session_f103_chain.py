@@ -435,6 +435,35 @@ class TestSessionLoadIntegration(unittest.TestCase):
         self.assertIn("u2", uuids)
         self.assertIn("u3", uuids)
 
+    def test_load_preserves_legacy_prefix_before_new_chained_messages(self):
+        """A resumed legacy transcript keeps history written before parentUuid existed."""
+        self._patch_sessions_dir()
+        session_id = "mixed-legacy-chain-1"
+        init = _make_session_init(session_id)
+        lines = [
+            init,
+            json.dumps(
+                {
+                    "uuid": "u1",
+                    "role": "user",
+                    "content": "x" * ABS_SIZE_THRESHOLD,
+                }
+            ),
+            json.dumps({"uuid": "u2", "role": "assistant", "content": "hello"}),
+            _msg_json("u3", "u2", "user", "resumed"),
+            _msg_json("u4", "u3", "assistant", "continued"),
+            _snapshot_line(),
+        ]
+        transcript = self._write_transcript(session_id, lines)
+        self.assertGreater(transcript.stat().st_size, ABS_SIZE_THRESHOLD)
+
+        from clawcodex_ext.agent.session import Session
+
+        loaded = Session.load(session_id)
+        self.assertIsNotNone(loaded)
+        uuids = [getattr(m, "uuid", None) for m in loaded.conversation.messages]
+        self.assertEqual(uuids, ["u1", "u2", "u3", "u4"])
+
     def test_chain_filter_disabled_returns_full_transcript(self):
         """Opt-out: chain_filter=False returns the full transcript including dead branches."""
         self._patch_sessions_dir()

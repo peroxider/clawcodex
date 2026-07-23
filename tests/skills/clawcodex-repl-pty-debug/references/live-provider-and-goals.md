@@ -41,14 +41,14 @@ Use local proof:
 ```json
 {"op":"send","text":"/help","expect":"Available Commands:","label":"help"}
 {"op":"send","text":"/tools","expect":"Available tools:","label":"tools"}
-{"op":"send","text":"/goal","expect":"No goal is currently set.","label":"fresh goal"}
+{"op":"send","text":"/goal","expect":"No goal set","label":"fresh goal"}
 {"op":"send","text":"/cost","expect":"Total units:","label":"cost"}
 ```
 
 Use live-provider proof only where network is allowed:
 
 ```json
-{"op":"send","text":"/goal verify live continuation","expect":"Goal active","label":"set goal"}
+{"op":"send","text":"/goal verify live continuation","expect":"Goal set: verify live continuation","label":"set goal"}
 {"op":"observe","timeout":30,"label":"provider continuation"}
 ```
 

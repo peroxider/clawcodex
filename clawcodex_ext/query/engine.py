@@ -335,6 +335,12 @@ class QueryEngine:
                 continue
 
             if isinstance(message, SystemMessage):
+                if getattr(message, "subtype", None) in {
+                    "goal_evaluation",
+                    "goal_achieved",
+                    "goal_evaluator_error",
+                }:
+                    self._mutable_messages.append(message)
                 if on_message:
                     on_message(message)
                 yield message

@@ -103,17 +103,20 @@ def _apply_agent_debug_if_requested(argv: list[str]) -> None:
 
 
 def _is_provider_free_goal_summary_print(args: object) -> bool:
-    """Return True for the narrow `-p /goal` read-only fast path."""
+    """Return True for local-only ``-p /goal`` status and clear commands."""
     if not getattr(args, "print", False):
         return False
     if getattr(args, "input_format", "text") != "text":
         return False
-    if getattr(args, "output_format", "text") != "text":
-        return False
     prompt = getattr(args, "prompt", None)
     if not isinstance(prompt, str):
         return False
-    return prompt.strip().lower() in {"/goal", "/g"}
+    words = prompt.strip().lower().split()
+    if not words or words[0] != "/goal":
+        return False
+    return len(words) == 1 or (
+        len(words) == 2 and words[1] in {"clear", "stop", "off", "reset", "none", "cancel"}
+    )
 
 
 def _maybe_argcomplete_top_level(argv: list[str]) -> None:
@@ -407,9 +410,9 @@ def run_cli(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv[1:])
     profile_checkpoint("argparse_done")
 
-    swarm_requested = bool(getattr(args, "swarm", False)) or getattr(
-        args, "effort", "normal"
-    ) == "swarm"
+    swarm_requested = (
+        bool(getattr(args, "swarm", False)) or getattr(args, "effort", "normal") == "swarm"
+    )
     if swarm_requested:
         if not getattr(args, "prompt", None):
             parser.error("--swarm/--decompose requires a prompt")
@@ -463,9 +466,12 @@ def run_cli(argv: list[str] | None = None) -> int:
     # as a tag prefix so `--resume cron:task:build` works directly.
     resume_val = getattr(args, "resume", None)
     if resume_val and resume_val != "browse":
-        from src.services.session_storage import SESSIONS_DIR, SessionStorage
+        from clawcodex_ext.services.session_storage import (
+            SessionStorage,
+            resolve_sessions_dir,
+        )
 
-        session_dir = SESSIONS_DIR / resume_val
+        session_dir = resolve_sessions_dir() / resume_val
         if not session_dir.is_dir():
             # Not a session directory — try tag prefix lookup.
             metas = SessionStorage.list_sessions(tag_filter=str(resume_val), limit=1)
@@ -499,14 +505,6 @@ def run_cli(argv: list[str] | None = None) -> int:
     # agent loop starts.  These programmatic overrides take priority
     # over env-vars and config-file values.
     _apply_feature_gate_overrides(args)
-
-    if getattr(args, "agent_debug", False):
-        try:
-            from clawcodex_ext.debug.agent_debug import apply_agent_debug_environment
-
-            apply_agent_debug_environment(os.environ)
-        except Exception:
-            os.environ["CLAWCODEX_AGENT_DEBUG"] = "1"
 
     # Plan-phase-1 wiring (ch02-bootstrap-refactoring-plan.md P1.5):
     # ``run_pre_action(args)`` is the Python analog of Commander's
@@ -577,6 +575,7 @@ def run_cli(argv: list[str] | None = None) -> int:
             raise MultiModelConfigError(f"unknown model group '{_multimodel_group}'")
         if _multimodel_group:
             from clawcodex_ext.multimodel.feature import require_multimodel_enabled
+
             require_multimodel_enabled()
     except (MultiModelConfigError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -591,6 +590,9 @@ def run_cli(argv: list[str] | None = None) -> int:
         input_format=getattr(args, "input_format", "text"),
         include_partial_messages=getattr(args, "include_partial_messages", False),
         max_turns=getattr(args, "max_turns", 20),
+        max_turns_explicit=any(
+            token == "--max-turns" or token.startswith("--max-turns=") for token in argv[1:]
+        ),
         allowed_tools=tuple(_split_csv(getattr(args, "allowed_tools", None))),
         disallowed_tools=tuple(_split_csv(getattr(args, "disallowed_tools", None))),
         stream=getattr(args, "stream", False),
@@ -622,6 +624,7 @@ def run_cli(argv: list[str] | None = None) -> int:
                 provider_name=runtime_opts.provider_name,
                 model=runtime_opts.model,
                 max_turns=runtime_opts.max_turns,
+                max_turns_explicit=runtime_opts.max_turns_explicit,
                 permission_mode=runtime_opts.permission_mode,
                 is_bypass_permissions_mode_available=runtime_opts.is_bypass_permissions_mode_available,
                 skip_permissions=runtime_opts.skip_permissions,
@@ -632,6 +635,8 @@ def run_cli(argv: list[str] | None = None) -> int:
                 workspace_root=runtime_opts.workspace_root or Path.cwd(),
                 append_system_prompt=runtime_opts.append_system_prompt,
                 startup_agent=runtime_opts.startup_agent,
+                resume_session_id=runtime_opts.resume_session_id,
+                resume_session_at=runtime_opts.resume_session_at,
                 record=runtime_opts.record,
                 record_width=runtime_opts.record_width,
                 record_height=runtime_opts.record_height,
@@ -782,19 +787,55 @@ def _apply_sop_startup(
             sample_agents = ", ".join(agent_names[:4])
             if len(agent_names) > 4:
                 sample_agents += ", …"
-            domain_agents = [a for a in agent_names if a.endswith("-agent") and not a.startswith("clawcodex-")]
-            stage_agents = [a for a in agent_names if a.endswith("-agent") and any(stage in a for stage in ["topic-init", "problem-decompose", "search-strategy", "literature-collect", "literature-screen", "knowledge-extract", "synthesis", "hypothesis-gen", "experiment-design", "code-generation", "resource-planning", "experiment-run", "iterative-refine", "result-analysis", "research-decision", "paper-outline", "paper-draft", "peer-review", "paper-revision", "quality-gate", "knowledge-archive", "export-publish", "citation-verify"])]
-            
+            domain_agents = [
+                a for a in agent_names if a.endswith("-agent") and not a.startswith("clawcodex-")
+            ]
+            stage_agents = [
+                a
+                for a in agent_names
+                if a.endswith("-agent")
+                and any(
+                    stage in a
+                    for stage in [
+                        "topic-init",
+                        "problem-decompose",
+                        "search-strategy",
+                        "literature-collect",
+                        "literature-screen",
+                        "knowledge-extract",
+                        "synthesis",
+                        "hypothesis-gen",
+                        "experiment-design",
+                        "code-generation",
+                        "resource-planning",
+                        "experiment-run",
+                        "iterative-refine",
+                        "result-analysis",
+                        "research-decision",
+                        "paper-outline",
+                        "paper-draft",
+                        "peer-review",
+                        "paper-revision",
+                        "quality-gate",
+                        "knowledge-archive",
+                        "export-publish",
+                        "citation-verify",
+                    ]
+                )
+            ]
+
             if stage_agents:
-                agent_type_desc = f"stage agents ({len(stage_agents)}) + domain agents ({len(domain_agents)})"
+                agent_type_desc = (
+                    f"stage agents ({len(stage_agents)}) + domain agents ({len(domain_agents)})"
+                )
             else:
                 agent_type_desc = "domain agents"
-            
+
             print(
-                f'🤖 Loaded {len(agent_names)} SOP {agent_type_desc} from bundle',
+                f"🤖 Loaded {len(agent_names)} SOP {agent_type_desc} from bundle",
                 file=sys.stderr,
             )
-            print(f'   agents: {sample_agents}', file=sys.stderr)
+            print(f"   agents: {sample_agents}", file=sys.stderr)
 
         load_result = register_bundle_skills(bundle_path, workspace)
         registered = load_result.skill_names

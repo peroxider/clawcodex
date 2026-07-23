@@ -42,7 +42,6 @@ LOCAL_BUILTINS: tuple[str, ...] = (
     "/skills",
     # Phase 2 dialogs:
     "/model",
-    "/models",
     "/effort",
     "/history",
     "/cost",
@@ -70,6 +69,8 @@ class CommandDispatchResult:
       forwarding it through the main agent again.
     * ``system_text`` — text to append to the transcript as a system
       message (from commands that emit a textual response).
+    * ``should_query`` — start the command-owned continuation after rendering
+      the local result (used by ``/goal <condition>``).
     * ``open_dialog`` — name of a Phase 2 dialog screen to push
       (``model``, ``effort``, ``history``, ``cost``, ``idle``, ``exit``,
       ``theme``). The app resolves the name to a concrete
@@ -83,6 +84,8 @@ class CommandDispatchResult:
     assistant_name: str | None = None
     system_text: str | None = None
     system_render: str = "plain"
+    should_query: bool = False
+    transient: bool = False
     open_dialog: str | None = None
     error: str | None = None
 
@@ -361,7 +364,7 @@ def dispatch_local_command(
 
     # Phase 2 dialogs: the command itself has no state to resolve here,
     # it just asks the app to push the corresponding modal screen.
-    if name in ("/model", "/models"):
+    if name == "/model" and raw.lower() == "/model":
         return CommandDispatchResult(handled=True, open_dialog="model")
     if name == "/effort":
         return CommandDispatchResult(handled=True, open_dialog="effort")
@@ -435,6 +438,8 @@ async def dispatch_registry_command(
             handled=True,
             system_text=result.text or "",
             system_render="markdown" if name in {"recap", "forecast"} else "plain",
+            should_query=bool(result.should_query),
+            transient=bool(getattr(result, "transient", False)),
         )
 
     if result.result_type == "prompt":

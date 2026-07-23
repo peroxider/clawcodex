@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import os
 import signal as _signal
 import sys
@@ -94,6 +95,10 @@ class HeadlessOptions:
     provider_instance: Any | None = None
     model: str | None = None
     max_turns: int = 20
+    # Goal mode is intentionally unbounded unless the CLI user supplied
+    # --max-turns.  A finite default can stop an unmet goal and then report
+    # success, which violates /goal's keep-going contract.
+    max_turns_explicit: bool = False
     # ``skip_permissions`` is a backward-compat alias for the boolean form
     # of ``--dangerously-skip-permissions``. ``permission_mode`` and
     # ``is_bypass_permissions_mode_available`` were added in round 5 to
@@ -247,6 +252,7 @@ def _run_headless_core(options: HeadlessOptions) -> int:
         options,
         workspace_root=workspace_root,
         stdout=stdout,
+        stderr=stderr,
     )
     if provider_free_exit is not None:
         return provider_free_exit
@@ -493,6 +499,12 @@ def _run_headless_core(options: HeadlessOptions) -> int:
     )
     tool_context.goal_thread_id = session.session_id
     tool_context.options.is_non_interactive_session = True
+    if options.resume_session_id:
+        from clawcodex_ext.goal.runtime import (
+            restore_goal_runtime_after_session_resume,
+        )
+
+        restore_goal_runtime_after_session_resume(tool_context)
 
     # ★ MVP peer-to-peer SendMessage: auto-wire team context for multi-agent
     # demos. When the workspace has a pre-existing `.clawcodex/team.json` and
@@ -668,6 +680,10 @@ def _run_headless_core(options: HeadlessOptions) -> int:
 
                 # F-89: expand @agent-name mentions before sending to LLM.
                 text = user_msg.text
+                command_tokens = text.strip().split(maxsplit=1)
+                is_goal_command_input = bool(
+                    command_tokens and command_tokens[0].lower() == "/goal"
+                )
                 try:
                     from clawcodex_ext.agent.load_agents_dir import (
                         get_agent_definitions_with_overrides,
@@ -836,6 +852,62 @@ def _run_headless_core(options: HeadlessOptions) -> int:
                                         aggregate_text.append(prompt_result.text)
                                 _skip_agent_loop = True
 
+                        # Claude Code supports ``-p '/goal <condition>'``. Goal
+                        # is an InteractiveCommand for the REPL/TUI rendering
+                        # contract, but its body needs no interactive prompt,
+                        # so execute it through the async command engine here.
+                        elif (
+                            parsed.command_name.lower() == "goal"
+                            and cmd is not None
+                            and getattr(cmd, "command_type", None)
+                            and cmd.command_type.value == "interactive"
+                        ):
+                            cmd_ctx = create_command_context(
+                                workspace_root=workspace_root,
+                                conversation=session.conversation,
+                                tool_registry=tool_registry,
+                                tool_context=tool_context,
+                                provider=provider,
+                            )
+                            goal_registry = CommandRegistry()
+                            goal_registry.register(cmd)
+                            goal_result = asyncio.run(
+                                CommandEngine(
+                                    registry=goal_registry,
+                                    workspace_root=workspace_root,
+                                    context=cmd_ctx,
+                                ).execute(text)
+                            )
+                            if not goal_result.success:
+                                err = goal_result.error or "Command /goal failed"
+                                if writer is not None:
+                                    writer.write(
+                                        ResultEvent(
+                                            subtype="error",
+                                            session_id=session.session_id,
+                                            num_turns=0,
+                                            result="",
+                                            duration_ms=0,
+                                            is_error=True,
+                                            error=err,
+                                        )
+                                    )
+                                else:
+                                    print(f"error: {err}", file=stderr)
+                                exit_code = 1
+                                break
+
+                            if goal_result.text:
+                                if writer is not None:
+                                    writer.write(AssistantEvent(text=goal_result.text))
+                                aggregate_text.append(goal_result.text)
+                            if goal_result.should_query:
+                                # The condition itself is the first directive;
+                                # never send the literal slash command to the model.
+                                text = (parsed.command_args or "").strip()
+                            else:
+                                _skip_agent_loop = True
+
                         # F-120: ``/dashboard`` is an InteractiveCommand, but
                         # it has no UI dependencies (pure read-only text
                         # rendering). ``execute_command_sync`` would reject it,
@@ -957,8 +1029,30 @@ def _run_headless_core(options: HeadlessOptions) -> int:
                                     print(f"error: {err}", file=stderr)
                                 exit_code = 1
                                 break
-                except Exception:
-                    # best-effort: slash command detection failure is non-fatal
+                except Exception as exc:
+                    # Most slash-command probing remains best-effort, but a
+                    # failed /goal command must never fall through as a literal
+                    # model prompt. Surface a non-zero command failure instead.
+                    if is_goal_command_input:
+                        err = str(exc).strip() or "Command /goal failed"
+                        if writer is not None:
+                            writer.write(
+                                ResultEvent(
+                                    subtype="error",
+                                    session_id=session.session_id,
+                                    num_turns=0,
+                                    result="",
+                                    duration_ms=0,
+                                    is_error=True,
+                                    error=err,
+                                )
+                            )
+                        else:
+                            print(f"error: {err}", file=stderr)
+                        exit_code = 1
+                        break
+                    # best-effort: other slash-command detection failures are
+                    # non-fatal and retain the historical fallback behaviour.
                     pass
 
                 if _skip_agent_loop:
@@ -988,6 +1082,12 @@ def _run_headless_core(options: HeadlessOptions) -> int:
                     raise
                 except Exception as exc:
                     exit_code = 1
+                    failed_usage = getattr(exc, "aggregate_usage", None)
+                    failed_turns = int(getattr(exc, "num_turns", 0) or 0)
+                    num_turns_total += failed_turns
+                    if isinstance(failed_usage, dict):
+                        for key, value in failed_usage.items():
+                            usage_total[key] = usage_total.get(key, 0) + int(value or 0)
                     # F-97: best-effort error event with stable
                     # fingerprint. The session_id lets the aggregator
                     # correlate the crash with the same conversation
@@ -1007,6 +1107,7 @@ def _run_headless_core(options: HeadlessOptions) -> int:
                                 num_turns=num_turns_total,
                                 result=str(exc),
                                 duration_ms=int((time.monotonic() - start) * 1000),
+                                usage=usage_total or None,
                                 is_error=True,
                                 error=str(exc),
                             )
@@ -1101,8 +1202,13 @@ def _run_headless_core(options: HeadlessOptions) -> int:
     multimodel_payload = None
     if getattr(provider, "last_result", None):
         from clawcodex_ext.multimodel.display import ModelDisplayState, SummaryBuilder
+
         states = [ModelDisplayState.from_result(item) for item in provider.last_result]
-        multimodel_payload = json.loads(SummaryBuilder.build_json(states, strategy=getattr(provider.strategy, "name", "parallel")))
+        multimodel_payload = json.loads(
+            SummaryBuilder.build_json(
+                states, strategy=getattr(provider.strategy, "name", "parallel")
+            )
+        )
         final_text = SummaryBuilder.build_text(states)
 
     if options.output_format == "text":
@@ -1188,14 +1294,15 @@ def _try_run_provider_free_goal_summary(
     *,
     workspace_root: Path,
     stdout: IO[str],
+    stderr: IO[str],
 ) -> int | None:
-    """Handle `-p /goal` before provider validation.
+    """Handle local-only ``-p /goal`` status and clear before provider validation.
 
-    `/goal` with no args is a local status read. It should not fail merely
-    because the default chat provider is not configured. Goal creation and
-    continuation still take the normal provider-backed path.
+    Status and clear only touch local session state. They should not fail
+    merely because the default chat provider is not configured. Goal creation
+    and continuation still take the normal provider-backed path.
     """
-    if options.input_format != "text" or options.output_format != "text":
+    if options.input_format != "text":
         return None
     if options.prompt is None or options.prompt == "-":
         return None
@@ -1207,9 +1314,12 @@ def _try_run_provider_free_goal_summary(
     parsed = parse_user_input(prompt_text)
     if parsed.input_type != "command":
         return None
-    if parsed.command_name.lower() not in {"goal", "g"}:
+    if parsed.command_name.lower() != "goal":
         return None
-    if parsed.command_args.strip():
+    command_args = parsed.command_args.strip().lower()
+    from clawcodex_ext.goal.command import GOAL_CLEAR_ALIASES
+
+    if command_args and command_args not in GOAL_CLEAR_ALIASES:
         return None
 
     command = _find_builtin_or_registered_command(parsed.command_name)
@@ -1218,46 +1328,179 @@ def _try_run_provider_free_goal_summary(
 
     import asyncio as _asyncio
 
-    session = Session.create("local", options.model or "")
-    abort_controller = AbortController()
-    tool_context = ToolContext(
-        workspace_root=workspace_root,
-        abort_controller=abort_controller,
-        env=options.env,
-        startup_agent=options.startup_agent,
-        agent_type=getattr(options.startup_agent, "agent_type", None),
-        bundle_context=getattr(options, "bundle_context", None),
-    )
-    tool_context.mcp_clients = getattr(options, "mcp_clients", {}) or {}
-    tool_context.mcp_manager_loop = getattr(options, "mcp_manager_loop", None)
-    tool_context.session_id = session.session_id
-    tool_context.goal_thread_id = session.session_id
-    tool_context.options.is_non_interactive_session = True
+    if options.external_session is not None:
+        session = options.external_session
+    elif options.resume_session_id:
+        try:
+            session = Session.resume(options.resume_session_id)
+        except Exception as exc:
+            print(
+                f"error: failed to resume session '{options.resume_session_id}': {exc}",
+                file=stderr,
+            )
+            return 1
+        if session is None:
+            print(
+                f"error: no session found with ID '{options.resume_session_id}'",
+                file=stderr,
+            )
+            return 1
+    else:
+        session = Session.create("local", options.model or "")
 
-    command_context = create_command_context(
-        workspace_root=workspace_root,
-        conversation=session.conversation,
-        tool_context=tool_context,
-    )
-    command_registry = CommandRegistry()
-    command_registry.register(command)
-    engine = CommandEngine(
-        registry=command_registry,
-        workspace_root=workspace_root,
-        context=command_context,
-    )
-    result = _asyncio.run(engine.execute(prompt_text))
+    started_at = time.monotonic()
+    try:
+        abort_controller = AbortController()
+        tool_context = ToolContext(
+            workspace_root=workspace_root,
+            abort_controller=abort_controller,
+            env=options.env,
+            startup_agent=options.startup_agent,
+            agent_type=getattr(options.startup_agent, "agent_type", None),
+            bundle_context=getattr(options, "bundle_context", None),
+        )
+        tool_context.mcp_clients = getattr(options, "mcp_clients", {}) or {}
+        tool_context.mcp_manager_loop = getattr(options, "mcp_manager_loop", None)
+        tool_context.session_id = session.session_id
+        tool_context.goal_thread_id = session.session_id
+        tool_context.options.is_non_interactive_session = True
+        if options.resume_session_id:
+            from clawcodex_ext.goal.runtime import (
+                restore_goal_runtime_after_session_resume,
+            )
+
+            restore_goal_runtime_after_session_resume(tool_context)
+
+        command_context = create_command_context(
+            workspace_root=workspace_root,
+            conversation=session.conversation,
+            tool_context=tool_context,
+        )
+        command_registry = CommandRegistry()
+        command_registry.register(command)
+        engine = CommandEngine(
+            registry=command_registry,
+            workspace_root=workspace_root,
+            context=command_context,
+        )
+        result = _asyncio.run(engine.execute(prompt_text))
+    except Exception as exc:
+        print(f"error: {exc}", file=stderr)
+        return 1
+
+    duration_ms = int((time.monotonic() - started_at) * 1000)
+    if not result.success:
+        error = result.error or result.text or "Command /goal failed"
+        if options.output_format == "json":
+            stdout.write(
+                ndjson_safe_dumps(
+                    {
+                        "type": "result",
+                        "subtype": "error",
+                        "session_id": session.session_id,
+                        "goal_operation_id": session.session_id,
+                        "provider": "local",
+                        "model": options.model,
+                        "num_turns": 0,
+                        "result": "",
+                        "duration_ms": duration_ms,
+                        "usage": None,
+                        "tool_events": [],
+                        "is_error": True,
+                        "error": error,
+                    }
+                )
+                + "\n"
+            )
+            stdout.flush()
+        elif options.output_format == "stream-json":
+            writer = StreamJsonWriter(stdout)
+            writer.write(
+                SystemEvent(
+                    subtype="init",
+                    session_id=session.session_id,
+                    goal_operation_id=session.session_id,
+                    model=options.model,
+                    provider="local",
+                    cwd=str(workspace_root),
+                    tools=[],
+                    permission_mode=options.permission_mode,
+                )
+            )
+            writer.write(
+                ResultEvent(
+                    subtype="error",
+                    session_id=session.session_id,
+                    goal_operation_id=session.session_id,
+                    num_turns=0,
+                    result="",
+                    duration_ms=duration_ms,
+                    is_error=True,
+                    error=error,
+                )
+            )
+        else:
+            print(f"error: {error}", file=stderr)
+        return 1
     if result.should_query:
-        return None
+        print("error: Command /goal unexpectedly requested a model query", file=stderr)
+        return 1
 
-    exit_code = 0 if result.success else 1
     final_text = (result.text or "").strip()
-    if final_text:
-        stdout.write(final_text + "\n")
+    if options.output_format == "json":
+        stdout.write(
+            ndjson_safe_dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "session_id": session.session_id,
+                    "goal_operation_id": session.session_id,
+                    "provider": "local",
+                    "model": options.model,
+                    "num_turns": 0,
+                    "result": final_text,
+                    "duration_ms": duration_ms,
+                    "usage": None,
+                    "tool_events": [],
+                    "is_error": False,
+                }
+            )
+            + "\n"
+        )
         stdout.flush()
-    from clawcodex_ext.utils.resume_hint import print_resume_hint
+    elif options.output_format == "stream-json":
+        writer = StreamJsonWriter(stdout)
+        writer.write(
+            SystemEvent(
+                subtype="init",
+                session_id=session.session_id,
+                goal_operation_id=session.session_id,
+                model=options.model,
+                provider="local",
+                cwd=str(workspace_root),
+                tools=[],
+                permission_mode=options.permission_mode,
+            )
+        )
+        if final_text:
+            writer.write(AssistantEvent(text=final_text))
+        writer.write(
+            ResultEvent(
+                subtype="success",
+                session_id=session.session_id,
+                goal_operation_id=session.session_id,
+                num_turns=0,
+                result=final_text,
+                duration_ms=duration_ms,
+            )
+        )
+    else:
+        if final_text:
+            stdout.write(final_text + "\n")
+            stdout.flush()
+        from clawcodex_ext.utils.resume_hint import print_resume_hint
 
-    print_resume_hint(session.session_id, stream=stdout)
+        print_resume_hint(session.session_id, stream=stdout)
     if options.persist_on_exit:
         try:
             session.save()
@@ -1268,7 +1511,7 @@ def _try_run_provider_free_goal_summary(
                 "F-125: failed to persist provider-free headless command session",
                 exc_info=True,
             )
-    return exit_code
+    return 0
 
 
 def _find_builtin_or_registered_command(command_name: str) -> Any | None:
@@ -1654,6 +1897,28 @@ def _build_event_bridge(writer: StreamJsonWriter | None, sink: list[dict]):
     return on_event
 
 
+def _get_active_evaluator_goal(tool_context: ToolContext) -> Any | None:
+    """Return the active Claude-style goal, without leaking lookup failures."""
+
+    try:
+        from clawcodex_ext.goal.model import GoalCompletionMode, ThreadGoalStatus
+        from clawcodex_ext.goal.runtime import goal_runtime_for_context
+
+        runtime = goal_runtime_for_context(tool_context)
+        if runtime is None:
+            return None
+        goal = runtime.service.get_goal(runtime.thread_id)
+        if (
+            goal is not None
+            and goal.status is ThreadGoalStatus.ACTIVE
+            and goal.completion_mode is GoalCompletionMode.EVALUATOR
+        ):
+            return goal
+    except Exception:
+        return None
+    return None
+
+
 def _run_one_agent_loop(
     session: Session,
     provider: Any,
@@ -1756,7 +2021,15 @@ def _run_one_agent_loop(
 
     def _persist(msg: Any) -> None:
         try:
-            session.conversation.add_message(msg.role, msg.content)
+            add_existing = getattr(
+                session.conversation,
+                "add_existing_message",
+                None,
+            )
+            if callable(add_existing):
+                add_existing(msg)
+            else:
+                session.conversation.add_message(msg.role, msg.content)
         except Exception:
             import logging
 
@@ -1765,6 +2038,28 @@ def _run_one_agent_loop(
                 getattr(msg, "role", "?"),
             )
             raise
+
+    active_evaluator_goal = _get_active_evaluator_goal(tool_context)
+    effective_max_turns = options.max_turns
+    if active_evaluator_goal is not None and not options.max_turns_explicit:
+        effective_max_turns = 0
+
+    # The query adapter appends model/goal output to the main transcript in
+    # real time. Flush the already-ordered conversation first so command-side
+    # facts (for example goal_set) and the user directive are guaranteed to
+    # precede those outputs on disk. The adapter continues the parentUuid
+    # chain from the last message passed below; Session.save() then dedupes the
+    # same UUIDs at exit instead of appending the inputs after the outputs.
+    save_transcript = getattr(session, "save_transcript", None)
+    if callable(save_transcript):
+        try:
+            save_transcript()
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "Failed to persist headless input before agent loop"
+            )
 
     in_agent_loop.value = True
     try:
@@ -1775,7 +2070,7 @@ def _run_one_agent_loop(
                 tool_registry=tool_registry,
                 tool_context=tool_context,
                 system_prompt=effective_system_prompt,
-                max_turns=options.max_turns,
+                max_turns=effective_max_turns,
                 on_event=on_event,
                 on_text_chunk=on_text_chunk,
                 on_message=_persist,
@@ -1784,6 +2079,17 @@ def _run_one_agent_loop(
         )
     finally:
         in_agent_loop.value = False
+
+    if (
+        active_evaluator_goal is not None
+        and options.max_turns_explicit
+        and compat_result.terminal is not None
+        and compat_result.terminal.reason == "max_turns"
+    ):
+        error = RuntimeError(f"Goal not achieved before --max-turns={options.max_turns}")
+        error.aggregate_usage = dict(compat_result.usage or {})
+        error.num_turns = compat_result.num_turns
+        raise error
 
     return AgentLoopResult(
         response_text=compat_result.response_text,
@@ -1843,9 +2149,7 @@ def _drain_cron_outbox(
     for event in events:
         if event.task_id and event.task_id in active_tasks:
             try:
-                finalize_cron_run(
-                    tool_context.workspace_root, event.run_id, "cancelled"
-                )
+                finalize_cron_run(tool_context.workspace_root, event.run_id, "cancelled")
             except Exception:
                 pass
             continue

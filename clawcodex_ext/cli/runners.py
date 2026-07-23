@@ -110,6 +110,7 @@ def run_print_mode(args) -> int:
         provider_name=args.provider,
         model=args.model,
         max_turns=args.max_turns,
+        max_turns_explicit=getattr(args, "max_turns_explicit", False),
         skip_permissions=bool(args.dangerously_skip_permissions),
         permission_mode=args._resolved_permission_mode,
         is_bypass_permissions_mode_available=args._resolved_is_bypass_available,

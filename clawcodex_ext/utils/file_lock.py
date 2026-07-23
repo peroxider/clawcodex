@@ -1,9 +1,8 @@
 """Cross-platform file-lock utilities.
 
-Provides a safe ``fcntl.flock`` wrapper that degrades gracefully on
-Windows (where ``fcntl`` is not available).  All three functions in this
-module are no-ops when ``fcntl`` is absent, so callers never need to
-branch on ``sys.platform``.
+Provides a safe ``fcntl.flock`` wrapper and a cross-platform context manager.
+The context manager uses ``msvcrt.locking`` on Windows; the lower-level flock
+helpers remain no-ops when ``fcntl`` is unavailable.
 
 Usage::
 
@@ -42,6 +41,11 @@ except ImportError:
     _fcntl = None  # type: ignore[assignment]
     HAS_FLOCK = False
 
+try:
+    import msvcrt as _msvcrt  # type: ignore[import-not-found]
+except ImportError:
+    _msvcrt = None  # type: ignore[assignment]
+
 
 def flock_exclusive(fd: int, non_blocking: bool = False) -> None:
     """Acquire an exclusive ``flock`` on *fd*.
@@ -70,22 +74,33 @@ def flock_unlock(fd: int) -> None:
 
 @contextlib.contextmanager
 def exclusive_file_lock(lock_path: str | Path) -> Iterator[int]:
-    """Context manager that acquires an exclusive ``flock`` on *lock_path*.
+    """Acquire an exclusive advisory lock on *lock_path*.
 
-    On Windows no lock is acquired — the FD is still opened and yielded
-    so callers get consistent behaviour without branching on ``HAS_FLOCK``.
-
-    Yields the file-descriptor integer (or ``-1`` on Windows when no FD
-    was opened — callers that need the FD should use the lower-level
-    functions instead).
+    Uses ``fcntl.flock`` on POSIX and locks the first byte with
+    ``msvcrt.locking`` on Windows. Yields the open file descriptor.
     """
     lock_path = Path(lock_path)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path.touch(exist_ok=True)
     fd = os.open(str(lock_path), os.O_RDWR)
+    windows_locked = False
     try:
-        flock_exclusive(fd)
+        if _msvcrt is not None:
+            if os.fstat(fd).st_size == 0:
+                os.write(fd, b"\0")
+            os.lseek(fd, 0, os.SEEK_SET)
+            _msvcrt.locking(fd, _msvcrt.LK_LOCK, 1)
+            windows_locked = True
+        else:
+            flock_exclusive(fd)
         yield fd
     finally:
-        flock_unlock(fd)
+        if windows_locked and _msvcrt is not None:
+            try:
+                os.lseek(fd, 0, os.SEEK_SET)
+                _msvcrt.locking(fd, _msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+        else:
+            flock_unlock(fd)
         os.close(fd)

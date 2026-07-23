@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
+import json
 from types import SimpleNamespace
 import threading
 import time
+
+import pytest
 
 from src.utils.abort_controller import AbortController, AbortError
 from src.auth.codex_oauth import CODEX_BASE_URL
@@ -333,20 +337,70 @@ def test_chat_parses_codex_responses_function_calls(monkeypatch) -> None:
     ]
 
 
-def test_get_available_models_uses_codex_model_discovery(monkeypatch) -> None:
-    calls: list[str] = []
+def test_get_available_models_is_local_fallback_without_network(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        "clawcodex_ext.providers.openai_codex_provider.resolve_codex_runtime_credentials",
+        lambda *args, **kwargs: calls.append("credentials"),
+    )
+    monkeypatch.setattr(
+        "clawcodex_ext.providers.openai_codex_provider.get_codex_model_ids",
+        lambda access_token, **kwargs: (_ for _ in ()).throw(
+            AssertionError("fallback must not request the Codex catalog")
+        ),
+    )
 
+    assert OpenAICodexProvider().get_available_models() == CODEX_FALLBACK_MODELS
+    assert calls == []
+
+
+def test_model_catalog_cache_scope_survives_token_rotation_and_isolates_accounts() -> None:
+    def token(account_id: str, nonce: str) -> str:
+        payload = {
+            "https://api.openai.com/auth": {"chatgpt_account_id": account_id},
+            "nonce": nonce,
+        }
+        encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+        return f"header.{encoded}.signature"
+
+    first = OpenAICodexProvider(api_key=token("account-1", "first"))
+    rotated = OpenAICodexProvider(api_key=token("account-1", "rotated"))
+    other_account = OpenAICodexProvider(api_key=token("account-2", "first"))
+
+    assert first.model_catalog_cache_scope() == rotated.model_catalog_cache_scope()
+    assert first.model_catalog_cache_scope() != other_account.model_catalog_cache_scope()
+
+
+def test_discover_available_models_uses_codex_catalog_not_sdk_models(monkeypatch) -> None:
     monkeypatch.setattr(
         "clawcodex_ext.providers.openai_codex_provider.resolve_codex_runtime_credentials",
         lambda *args, **kwargs: FakeCredentials(api_key="access-token"),
     )
     monkeypatch.setattr(
         "clawcodex_ext.providers.openai_codex_provider.get_codex_model_ids",
-        lambda access_token: calls.append(access_token) or ["codex-model"],
+        lambda access_token, **kwargs: ["codex-live-model"],
+    )
+    provider = OpenAICodexProvider(api_key="access-token")
+    provider._client = SimpleNamespace(
+        models=SimpleNamespace(
+            list=lambda: (_ for _ in ()).throw(AssertionError("SDK /models must not be used"))
+        )
     )
 
-    assert OpenAICodexProvider().get_available_models() == ["codex-model"]
-    assert calls == ["access-token"]
+    assert provider.discover_available_models() == ["codex-live-model"]
+
+
+def test_discover_available_models_surfaces_missing_codex_credentials(monkeypatch) -> None:
+    provider = OpenAICodexProvider(api_key="", model="gpt-5.5")
+    monkeypatch.setattr(
+        "clawcodex_ext.providers.openai_codex_provider.resolve_codex_runtime_credentials",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("not logged in")),
+    )
+
+    with pytest.raises(RuntimeError, match="not logged in"):
+        provider.discover_available_models()
+
+    assert provider.get_available_models() == CODEX_FALLBACK_MODELS
 
 
 def test_get_available_models_falls_back_when_not_authenticated(monkeypatch) -> None:

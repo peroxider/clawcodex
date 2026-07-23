@@ -51,6 +51,7 @@ from ..messages import (
     PermissionResolved,
     PromptDraftChanged,
     StateChanged,
+    SystemNotice,
     ThinkingChunk,
     ToolEventMessage,
 )
@@ -339,6 +340,9 @@ class REPLScreen(Screen):
     def on_assistant_message(self, message: AssistantMessage) -> None:
         ## _log(f'[repl.py] on_assistant_message: {message.text[:100] if message.text else "empty"}...')
         self.transcript.append_assistant(message.text, agent_name=message.agent_name)
+
+    def on_system_notice(self, message: SystemNotice) -> None:
+        self.transcript.append_system(message.text, style=message.style, render="markdown")
 
     def on_multi_model_event(self, message: MultiModelEvent) -> None:
         if message.kind == "start":

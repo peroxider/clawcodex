@@ -225,7 +225,13 @@ def _sanitize_agent_id(agent_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _serialize_message(message: Any, parent_session_id: str | None = None) -> str:
+def _serialize_message(
+    message: Any,
+    parent_session_id: str | None = None,
+    *,
+    parent_uuid: str | None = None,
+    include_parent_uuid: bool = False,
+) -> str:
     """Convert a ``Message`` (or any JSON-shaped object) to a single
     UTF-8 JSON line. Falls back to ``repr`` for non-serializable objects
     so a malformed message can't bring the writer down — corrupt lines
@@ -254,12 +260,14 @@ def _serialize_message(message: Any, parent_session_id: str | None = None) -> st
         except Exception:
             payload = {"_unserializable": repr(message)}
     elif isinstance(message, dict):
-        payload = message
+        payload = dict(message)
     else:
         # Last-resort: try to serialize a str() of it.
         payload = {"_unserializable": repr(message)}
     if parent_session_id is not None:
         payload["parent_session_id"] = parent_session_id
+    if include_parent_uuid:
+        payload["parentUuid"] = parent_uuid
     # Normalize string content → single text block. Done after
     # ``asdict`` (so the asdict call doesn't need to know about the
     # shape) and before ``json.dumps`` (so the on-disk JSONL is
@@ -360,9 +368,18 @@ class TranscriptWriter:
     _SORT_BUFFER_MAX_ENTRIES: int = 64
     _SORT_BUFFER_MAX_BYTES: int = 8 * 1024
 
-    def __init__(self, path: str | Path, parent_session_id: str | None = None) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        parent_session_id: str | None = None,
+        *,
+        chain_messages: bool = False,
+        initial_parent_uuid: str | None = None,
+    ) -> None:
         self._path = str(path)
         self._parent_session_id = parent_session_id
+        self._chain_messages = chain_messages
+        self._chain_parent_uuid = initial_parent_uuid
         # Ensure parent dir exists (transcript root may not have been
         # created yet if the caller bypassed ``get_agent_transcript_path``).
         Path(self._path).parent.mkdir(parents=True, exist_ok=True)
@@ -402,8 +419,24 @@ class TranscriptWriter:
         """
         if self._closed or self._fd is None:
             raise RuntimeError("TranscriptWriter is closed")
-        line = _serialize_message(message, self._parent_session_id) + "\n"
+        line = (
+            _serialize_message(
+                message,
+                self._parent_session_id,
+                parent_uuid=self._chain_parent_uuid,
+                include_parent_uuid=self._chain_messages,
+            )
+            + "\n"
+        )
         encoded = line.encode("utf-8")
+        if self._chain_messages:
+            # Parent links describe append order, so timestamp sorting would
+            # be self-contradictory when a child happens to carry an earlier
+            # timestamp than its parent. Chained transcripts are written in
+            # call order and Session.load() uses parentUuid for branch repair.
+            self._write_raw(encoded)
+            self._advance_message_chain(message)
+            return
         ts = _extract_ts_epoch(message)
         if ts is None:
             # Unparseable ts → write now, don't buffer. Also flush
@@ -411,6 +444,7 @@ class TranscriptWriter:
             # roughly-ts-order up to this point.
             self._flush_sort_buffer()
             self._write_raw(encoded)
+            self._advance_message_chain(message)
             return
         self._sort_buffer.append((ts, encoded))
         self._sort_buffer_bytes += len(encoded)
@@ -419,6 +453,18 @@ class TranscriptWriter:
             or self._sort_buffer_bytes >= self._SORT_BUFFER_MAX_BYTES
         ):
             self._flush_sort_buffer()
+        self._advance_message_chain(message)
+
+    def _advance_message_chain(self, message: Any) -> None:
+        """Advance chained-writer state after accepting one message."""
+        if not self._chain_messages:
+            return
+        if isinstance(message, dict):
+            message_uuid = message.get("uuid")
+        else:
+            message_uuid = getattr(message, "uuid", None)
+        if isinstance(message_uuid, str) and message_uuid:
+            self._chain_parent_uuid = message_uuid
 
     def write_session_init(
         self,

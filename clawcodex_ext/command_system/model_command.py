@@ -2,7 +2,7 @@
 
 Port of ``typescript/src/commands/model/`` (``model.tsx`` + ``index.ts``). Like
 ``/theme`` and ``/effort``, this is the **inverse** of ``/export`` at the TUI dispatch
-layer: the TUI keeps intercepting ``/model`` (+ ``/models``) → ``open_dialog="model"`` to
+layer: the TUI keeps intercepting ``/model`` → ``open_dialog="model"`` to
 preserve its ``ModelPickerScreen``; this command serves the registry-consulting surfaces
 (REPL numbered-menu ``select``, SDK, help/aggregator listings) where ``/model`` was
 previously invisible (it lived only in the TUI's private ``LOCAL_BUILTINS``).
@@ -21,14 +21,12 @@ this is session-only, no settings write.
 need no UI; only the no-args picker needs a surface (``NullUIHost.select`` raises there).
 
 **Deliberate divergences (documented for parity review):**
-  * **Dropped** (need unported subsystems): network discovery/``refresh`` (→ "not supported"),
-    org-allowlist, 1M-context gates, fast-mode, extra-usage billing, network model-validation,
-    and TS ``'default'``-reset (no provider-default reachable from ``CommandContext``).
-  * **Validation = alias-resolve + membership** in ``provider.get_available_models()`` (the
-    list the picker uses), not TS's network ``validateModel``. Makes "Model 'x' not found"
-    reachable. ``MODEL_ALIASES`` is Claude-only, so on non-Anthropic providers (incl. GLM —
-    the REPL default, whose ``get_available_models()`` lists ``zai/glm-5``) set-by-name needs
-    the **exact listed id**; the picker is the ergonomic path there.
+  * **Dropped** (need unported subsystems): explicit ``refresh`` command, org-allowlist,
+    1M-context gates, fast-mode, extra-usage billing, network model-validation, and TS
+    ``'default'``-reset (no provider-default reachable from ``CommandContext``).
+  * **Validation = alias-resolve + cached-catalog membership** using the shared
+    stale-while-revalidate model cache. The picker returns configured fallback models
+    immediately while live discovery runs in the background.
   * **Static description** ("Set the AI model"); TS's is dynamic ``…(currently {model})`` — a
     frozen ``CommandBase.description: str`` can't be a getter. ``current`` shows the live model.
   * **``provider.model`` is the sole write** (Python reads it, not AppState — an architectural
@@ -94,14 +92,26 @@ def _label(model: str | None) -> str:
     return display_name(model)
 
 
-def _list_models(provider) -> list[str]:
-    """The provider's available model ids (the source the picker uses + the validation
-    set). ``get_available_models`` is the real provider method (``list_models`` does not
-    exist on providers)."""
+def _list_models(provider, provider_name: str | None = None) -> list[str]:
+    """Return cached/fallback models while live discovery runs out of band."""
+
     try:
-        return [str(m) for m in (provider.get_available_models() or [])]
+        from clawcodex_ext.providers.model_catalog_cache import get_model_catalog
+
+        catalog_name = (
+            provider_name
+            or getattr(provider, "provider_name", None)
+            or type(provider).__name__.lower()
+        )
+        snapshot = get_model_catalog(str(catalog_name), provider)
+        return list(snapshot.models)
     except Exception:
         return []
+
+
+def _provider_name(context: CommandContext, provider) -> str | None:
+    runtime = getattr(context, "runtime_context", None)
+    return getattr(runtime, "provider_name", None) or getattr(provider, "provider_name", None)
 
 
 def _options(models: list[str], current: str | None) -> list[UIOption]:
@@ -161,7 +171,7 @@ class ModelCommand(InteractiveCommand):
         prov = context.provider
         if prov is None:
             return InteractiveOutcome(message=_NO_PROVIDER, display="system")
-        models = _list_models(prov)
+        models = _list_models(prov, _provider_name(context, prov))
         if not models:
             return InteractiveOutcome(message="No models available.", display="system")
         current = getattr(prov, "model", None)
@@ -178,7 +188,7 @@ class ModelCommand(InteractiveCommand):
         if prov is None or not hasattr(prov, "model"):
             return InteractiveOutcome(message=_NO_PROVIDER, display="system")
         canon = _canonical(arg)
-        models = _list_models(prov)
+        models = _list_models(prov, _provider_name(context, prov))
         # Membership validation (TS network validate dropped). Permissive when the
         # provider lists nothing (unknown provider) so a valid id still goes through.
         if models and canon not in models:

@@ -357,6 +357,20 @@ class ClawCodexExtREPL(ClawcodexREPL):
             session=self.session,
             provider=self.provider,
         )
+        # REPL goals are scoped to the live session.  Explicit resume keeps
+        # the active condition while restarting its session-local counters.
+        self.tool_context.goal_thread_id = None
+        if resume_session_id and str(getattr(self.session, "session_id", "")) == str(
+            resume_session_id
+        ):
+            try:
+                from clawcodex_ext.goal.runtime import (
+                    restore_goal_runtime_after_session_resume,
+                )
+
+                restore_goal_runtime_after_session_resume(self.tool_context)
+            except Exception:
+                pass
         self.tool_context.ask_user = self._ask_user_questions
         self._current_status = None
         if self._permission_mode == "bypassPermissions":

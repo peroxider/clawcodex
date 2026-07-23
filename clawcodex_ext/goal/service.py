@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import threading
-from typing import Any
+from typing import Any, Callable
 
 from .files import materialize_goal_objective
 from .gate import goal_enabled
-from .model import ThreadGoal, ThreadGoalStatus
+from .evaluator import GoalEvaluation
+from .model import GoalCompletionMode, ThreadGoal, ThreadGoalStatus
 from .observability import (
     GoalObserver,
     record_goal_cleared,
@@ -18,6 +20,10 @@ from .observability import (
 from .store import GoalStore, GoalUpdate, current_goal_thread_id
 
 KEEP_TOKEN_BUDGET = object()
+
+_log = logging.getLogger(__name__)
+
+GoalSubscriber = Callable[[ThreadGoal | None], None]
 
 
 class GoalServiceError(RuntimeError):
@@ -46,6 +52,8 @@ class GoalService:
         self.observer = observer
         self._runtime_lock = threading.RLock()
         self._runtimes: dict[str, Any] = {}
+        self._subscriber_lock = threading.RLock()
+        self._subscribers: dict[str, list[GoalSubscriber]] = {}
 
     def register_runtime(self, runtime: Any) -> None:
         thread_id = str(getattr(runtime, "thread_id"))
@@ -58,6 +66,39 @@ class GoalService:
             if self._runtimes.get(thread_id) is runtime:
                 self._runtimes.pop(thread_id, None)
 
+    def subscribe(
+        self,
+        thread_id: str,
+        callback: GoalSubscriber,
+        *,
+        emit_current: bool = False,
+    ) -> Callable[[], None]:
+        """Subscribe to committed goal snapshots for one persisted thread."""
+
+        normalized_thread_id = str(thread_id)
+        with self._subscriber_lock:
+            self._subscribers.setdefault(normalized_thread_id, []).append(callback)
+
+        if emit_current:
+            self._notify_subscriber(
+                callback,
+                self.store.get_thread_goal(normalized_thread_id),
+            )
+
+        def unsubscribe() -> None:
+            with self._subscriber_lock:
+                callbacks = self._subscribers.get(normalized_thread_id)
+                if callbacks is None:
+                    return
+                try:
+                    callbacks.remove(callback)
+                except ValueError:
+                    return
+                if not callbacks:
+                    self._subscribers.pop(normalized_thread_id, None)
+
+        return unsubscribe
+
     def get_goal(self, thread_id: str) -> ThreadGoal | None:
         self._ensure_enabled()
         return self.store.get_thread_goal(thread_id)
@@ -67,11 +108,13 @@ class GoalService:
         thread_id: str,
         objective: str,
         token_budget: int | None = None,
+        completion_mode: GoalCompletionMode | str = GoalCompletionMode.TOOL,
     ) -> ThreadGoal:
         """Create a fresh active goal without replacing unfinished work."""
         self._ensure_enabled()
         normalized_objective = self._prepare_objective(objective)
         normalized_budget = _validate_token_budget(token_budget)
+        normalized_completion_mode = _coerce_completion_mode(completion_mode)
         runtime = self._runtime_for_thread(thread_id)
         if runtime is None:
             goal = self.store.insert_thread_goal(
@@ -79,11 +122,13 @@ class GoalService:
                 normalized_objective,
                 ThreadGoalStatus.ACTIVE,
                 normalized_budget,
+                normalized_completion_mode,
             )
             if goal is None:
                 raise _unfinished_goal_error()
             record_goal_created(self.observer, goal)
             record_status_transition(self.observer, None, goal)
+            self._publish_goal(goal)
             return goal
 
         with runtime.goal_state_permit():
@@ -96,12 +141,14 @@ class GoalService:
                 normalized_objective,
                 ThreadGoalStatus.ACTIVE,
                 normalized_budget,
+                normalized_completion_mode,
             )
             if goal is None:
                 raise _unfinished_goal_error()
             runtime.apply_external_goal_set(goal, previous)
             record_goal_created(self.observer, goal)
             record_status_transition(self.observer, None, goal)
+        self._publish_goal(goal)
         return goal
 
     def set_goal(
@@ -110,6 +157,7 @@ class GoalService:
         objective: str | None,
         status: ThreadGoalStatus | str | None = ThreadGoalStatus.ACTIVE,
         token_budget: int | None | object = KEEP_TOKEN_BUDGET,
+        completion_mode: GoalCompletionMode | str | None = None,
     ) -> ThreadGoal:
         self._ensure_enabled()
         normalized_objective = self._prepare_objective(objective) if objective is not None else None
@@ -119,65 +167,81 @@ class GoalService:
             if token_budget is KEEP_TOKEN_BUDGET
             else _normalize_token_budget_update(token_budget)
         )
+        normalized_completion_mode = (
+            None if completion_mode is None else _coerce_completion_mode(completion_mode)
+        )
         runtime = self._runtime_for_thread(thread_id)
         if runtime is not None:
             with runtime.goal_state_permit():
-                return self._set_goal_locked(
+                goal = self._set_goal_locked(
                     runtime,
                     thread_id,
                     normalized_objective,
                     normalized_status,
                     normalized_budget,
+                    normalized_completion_mode,
                     token_budget_is_keep=token_budget is KEEP_TOKEN_BUDGET,
                 )
+            self._publish_goal(goal)
+            return goal
 
         existing = self.store.get_thread_goal(thread_id)
 
         if existing is None:
             if normalized_objective is None:
                 raise GoalServiceError(f"cannot update goal for thread {thread_id}: no goal exists")
-            goal = self.store.insert_thread_goal(
+            created_goal = self.store.insert_thread_goal(
                 thread_id,
                 normalized_objective,
                 normalized_status or ThreadGoalStatus.ACTIVE,
                 None if token_budget is KEEP_TOKEN_BUDGET else normalized_budget,
+                normalized_completion_mode or GoalCompletionMode.TOOL,
             )
-            if goal is None:
+            if created_goal is None:
                 raise GoalServiceError(
                     f"cannot create goal for thread {thread_id}: unfinished goal exists"
                 )
-            record_goal_created(self.observer, goal)
-            record_status_transition(self.observer, None, goal)
-            return goal
+            record_goal_created(self.observer, created_goal)
+            record_status_transition(self.observer, None, created_goal)
+            self._publish_goal(created_goal)
+            return created_goal
 
         update = (
-            GoalUpdate(objective=normalized_objective, status=normalized_status)
+            GoalUpdate(
+                objective=normalized_objective,
+                status=normalized_status,
+                completion_mode=normalized_completion_mode,
+            )
             if token_budget is KEEP_TOKEN_BUDGET
             else GoalUpdate(
                 objective=normalized_objective,
                 status=normalized_status,
                 token_budget=normalized_budget,
+                completion_mode=normalized_completion_mode,
             )
         )
-        goal = self.store.update_thread_goal(
+        updated_goal = self.store.update_thread_goal(
             thread_id,
             update,
             expected_goal_id=existing.goal_id,
         )
-        if goal is None:
+        if updated_goal is None:
             raise GoalServiceError(f"cannot update goal for thread {thread_id}")
-        record_status_transition(self.observer, existing.status, goal)
-        return goal
+        record_status_transition(self.observer, existing.status, updated_goal)
+        self._publish_goal(updated_goal)
+        return updated_goal
 
     def replace_goal(
         self,
         thread_id: str,
         objective: str,
         token_budget: int | None = None,
+        completion_mode: GoalCompletionMode | str = GoalCompletionMode.TOOL,
     ) -> ThreadGoal:
         self._ensure_enabled()
         normalized_objective = self._prepare_objective(objective)
         normalized_budget = _validate_token_budget(token_budget)
+        normalized_completion_mode = _coerce_completion_mode(completion_mode)
         runtime = self._runtime_for_thread(thread_id)
         if runtime is None:
             goal = self.store.replace_thread_goal(
@@ -185,9 +249,11 @@ class GoalService:
                 normalized_objective,
                 ThreadGoalStatus.ACTIVE,
                 normalized_budget,
+                normalized_completion_mode,
             )
             record_goal_created(self.observer, goal)
             record_status_transition(self.observer, None, goal)
+            self._publish_goal(goal)
             return goal
         with runtime.goal_state_permit():
             previous = self.store.get_thread_goal(thread_id)
@@ -197,11 +263,13 @@ class GoalService:
                 normalized_objective,
                 ThreadGoalStatus.ACTIVE,
                 normalized_budget,
+                normalized_completion_mode,
             )
             runtime.apply_external_goal_set(goal, previous)
             record_goal_created(self.observer, goal)
             record_status_transition(self.observer, None, goal)
-            return goal
+        self._publish_goal(goal)
+        return goal
 
     def clear_goal(self, thread_id: str) -> bool:
         self._ensure_enabled()
@@ -210,6 +278,7 @@ class GoalService:
             deleted = self.store.delete_thread_goal(thread_id)
             if deleted is not None:
                 record_goal_cleared(self.observer, deleted)
+                self._publish_thread_goal(thread_id, None)
             return deleted is not None
         with runtime.goal_state_permit():
             previous = self.store.get_thread_goal(thread_id)
@@ -221,7 +290,8 @@ class GoalService:
                 return False
             runtime.apply_external_goal_clear(deleted)
             record_goal_cleared(self.observer, deleted)
-            return True
+        self._publish_thread_goal(thread_id, None)
+        return True
 
     def pause_goal(self, thread_id: str) -> ThreadGoal | None:
         return self.update_goal(thread_id, ThreadGoalStatus.PAUSED)
@@ -251,6 +321,7 @@ class GoalService:
                     previous.status if previous is not None else None,
                     goal,
                 )
+                self._publish_goal(goal)
             return goal
         with runtime.goal_state_permit():
             previous = self.store.get_thread_goal(thread_id)
@@ -265,7 +336,9 @@ class GoalService:
             if goal is not None:
                 runtime.apply_external_goal_set(goal, previous)
                 record_status_transition(self.observer, previous.status, goal)
-            return goal
+        if goal is not None:
+            self._publish_goal(goal)
+        return goal
 
     def update_goal_from_runtime(
         self,
@@ -286,6 +359,7 @@ class GoalService:
                 previous.status if previous is not None else None,
                 goal,
             )
+            self._publish_goal(goal)
         return goal
 
     def account_usage(
@@ -315,6 +389,50 @@ class GoalService:
                 previous.status if previous is not None else None,
                 goal,
             )
+            self._publish_goal(goal)
+        return goal
+
+    def record_evaluation(
+        self,
+        thread_id: str,
+        evaluation: GoalEvaluation,
+        expected_goal_id: str,
+        expected_evaluation_count: int,
+    ) -> ThreadGoal | None:
+        """Record one independent evaluator decision for an active goal."""
+
+        self._ensure_enabled()
+        previous = self.store.get_thread_goal(thread_id)
+        goal = self.store.record_thread_goal_evaluation(
+            thread_id,
+            evaluation,
+            expected_goal_id=expected_goal_id,
+            expected_evaluation_count=expected_evaluation_count,
+        )
+        if goal is not None:
+            record_status_transition(
+                self.observer,
+                previous.status if previous is not None else None,
+                goal,
+            )
+            self._publish_goal(goal)
+        return goal
+
+    def reset_progress_for_resume(
+        self,
+        thread_id: str,
+        *,
+        expected_goal_id: str | None = None,
+    ) -> ThreadGoal | None:
+        """Reset active goal metrics when a persisted session is resumed."""
+
+        self._ensure_enabled()
+        goal = self.store.reset_thread_goal_progress_for_resume(
+            thread_id,
+            expected_goal_id=expected_goal_id,
+        )
+        if goal is not None:
+            self._publish_goal(goal)
         return goal
 
     def _ensure_enabled(self) -> None:
@@ -324,6 +442,22 @@ class GoalService:
     def _runtime_for_thread(self, thread_id: str) -> Any | None:
         with self._runtime_lock:
             return self._runtimes.get(thread_id)
+
+    def _publish_goal(self, goal: ThreadGoal) -> None:
+        self._publish_thread_goal(goal.thread_id, goal)
+
+    def _publish_thread_goal(self, thread_id: str, goal: ThreadGoal | None) -> None:
+        with self._subscriber_lock:
+            callbacks = tuple(self._subscribers.get(str(thread_id), ()))
+        for callback in callbacks:
+            self._notify_subscriber(callback, goal)
+
+    @staticmethod
+    def _notify_subscriber(callback: GoalSubscriber, goal: ThreadGoal | None) -> None:
+        try:
+            callback(goal)
+        except Exception:
+            _log.exception("Goal subscriber failed")
 
     def _prepare_objective(self, objective: str) -> str:
         return materialize_goal_objective(
@@ -338,6 +472,7 @@ class GoalService:
         normalized_objective: str | None,
         normalized_status: ThreadGoalStatus | None,
         normalized_budget: int | None,
+        normalized_completion_mode: GoalCompletionMode | None,
         *,
         token_budget_is_keep: bool,
     ) -> ThreadGoal:
@@ -351,6 +486,7 @@ class GoalService:
                 normalized_objective,
                 normalized_status or ThreadGoalStatus.ACTIVE,
                 None if token_budget_is_keep else normalized_budget,
+                normalized_completion_mode or GoalCompletionMode.TOOL,
             )
             if goal is None:
                 raise GoalServiceError(
@@ -362,12 +498,17 @@ class GoalService:
             return goal
 
         update = (
-            GoalUpdate(objective=normalized_objective, status=normalized_status)
+            GoalUpdate(
+                objective=normalized_objective,
+                status=normalized_status,
+                completion_mode=normalized_completion_mode,
+            )
             if token_budget_is_keep
             else GoalUpdate(
                 objective=normalized_objective,
                 status=normalized_status,
                 token_budget=normalized_budget,
+                completion_mode=normalized_completion_mode,
             )
         )
         runtime.prepare_external_goal_mutation()
@@ -394,6 +535,27 @@ def goal_thread_id_from_context(context: Any) -> str:
     return current_goal_thread_id()
 
 
+def clear_goal_for_context(context: Any) -> bool:
+    """Remove the goal owned by a live session context when one is bound."""
+
+    tool_context = getattr(context, "tool_context", None) or context
+    service = getattr(tool_context, "goal_service", None) or getattr(
+        context,
+        "goal_service",
+        None,
+    )
+    if service is None:
+        return False
+    thread_id = getattr(tool_context, "goal_thread_id", None) or getattr(
+        tool_context,
+        "session_id",
+        None,
+    )
+    if not thread_id:
+        return False
+    return bool(service.clear_goal(str(thread_id)))
+
+
 def _validate_objective(objective: str) -> str:
     text = objective.strip()
     if not text:
@@ -415,6 +577,14 @@ def _coerce_status(status: ThreadGoalStatus | str) -> ThreadGoalStatus:
     return ThreadGoalStatus.from_wire(str(status))
 
 
+def _coerce_completion_mode(
+    completion_mode: GoalCompletionMode | str,
+) -> GoalCompletionMode:
+    if isinstance(completion_mode, GoalCompletionMode):
+        return completion_mode
+    return GoalCompletionMode.from_wire(str(completion_mode))
+
+
 def _normalize_token_budget_update(value: int | None | object) -> int | None:
     if value is KEEP_TOKEN_BUDGET:
         raise AssertionError("token budget keep sentinel must be handled by caller")
@@ -434,5 +604,6 @@ __all__ = [
     "KEEP_TOKEN_BUDGET",
     "GoalService",
     "GoalServiceError",
+    "clear_goal_for_context",
     "goal_thread_id_from_context",
 ]

@@ -166,6 +166,16 @@ def _AgnesVideoProvider_lazy():
 _provider_extensions_initialized: bool = False
 
 
+def ensure_provider_extensions_installed() -> None:
+    """Install only provider metadata, factories, and discovery hooks.
+
+    Provider/model CLI commands use this lightweight bootstrap so listing or
+    selecting a model does not import unrelated orchestrator and tool-system
+    extensions.
+    """
+    _init_provider_extensions()
+
+
 def _init_provider_extensions() -> None:
     """Register downstream providers, model extensions, and media providers.
 
@@ -198,9 +208,14 @@ def _init_provider_extensions() -> None:
             "default_base_url": "https://chatgpt.com/backend-api/codex",
             "default_model": "gpt-5.5",
             "available_models": [
+                "gpt-5.6-sol",
+                "gpt-5.6-terra",
+                "gpt-5.6-luna",
                 "gpt-5.5",
-                "gpt-5.3-codex",
+                "gpt-5.4",
+                "gpt-5.4-mini",
                 "gpt-5.3-codex-spark",
+                "codex-auto-review",
             ],
         },
         _OpenAICodexProvider_lazy,  # type: ignore[arg-type]

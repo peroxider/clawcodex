@@ -50,6 +50,9 @@ class ModelRegistry:
         discovery_hooks: dict[str, list[Callable[[], list[str]]]] | None = None,
     ) -> None:
         if provider_info is None:
+            from clawcodex_ext.providers import ensure_provider_extensions_installed
+
+            ensure_provider_extensions_installed()
             from src.providers import PROVIDER_INFO
 
             provider_info = PROVIDER_INFO
@@ -58,21 +61,36 @@ class ModelRegistry:
         # import-time registration is visible to every ModelRegistry instance.
         self._discovery_hooks = _DISCOVERY_HOOKS if discovery_hooks is None else discovery_hooks
 
+    def _provider_key(self, provider: str) -> str:
+        """Resolve aliases while preserving names in custom test registries."""
+        from src.providers import canonical_provider_name
+
+        canonical = canonical_provider_name(provider)
+        if canonical in self.provider_info:
+            return canonical
+        return provider
+
     def provider_names(self) -> list[str]:
         return list(self.provider_info.keys())
 
     def validate_provider(self, provider: str) -> str:
-        if provider not in self.provider_info:
+        provider_key = self._provider_key(provider)
+        if provider_key not in self.provider_info:
             raise UnknownProviderError(provider)
-        return provider
+        return provider_key
 
     def provider_default_model(self, provider: str) -> str:
-        self.validate_provider(provider)
+        provider = self.validate_provider(provider)
         return self.provider_info[provider]["default_model"]
 
+    def configured_models(self, provider: str) -> list[str]:
+        """Return the provider's local catalog without running discovery hooks."""
+        provider = self.validate_provider(provider)
+        return list(self.provider_info[provider].get("available_models", []))
+
     def available_models(self, provider: str) -> list[str]:
-        self.validate_provider(provider)
-        baseline = list(self.provider_info[provider].get("available_models", []))
+        provider = self.validate_provider(provider)
+        baseline = self.configured_models(provider)
         for hook in self._discovery_hooks.get(provider, []):
             try:
                 extra = hook()
@@ -84,19 +102,27 @@ class ModelRegistry:
         return baseline
 
     def validate_model(self, model: str, provider: str) -> str:
-        self.validate_provider(provider)
+        provider = self.validate_provider(provider)
         if model in self.available_models(provider):
             return model
         if any(model in self.available_models(name) for name in self.provider_names()):
             raise ProviderMismatchError(model, provider)
         raise UnknownModelError(model)
 
-    def infer_provider_for_model(self, model: str) -> str:
-        matches = [
-            provider
-            for provider in self.provider_names()
-            if model in self.available_models(provider)
-        ]
+    def infer_provider_for_model(self, model: str, *, discover: bool = True) -> str:
+        """Return the unique provider whose catalog contains a model.
+
+        Args:
+            model: Model identifier to locate.
+            discover: Whether to include live discovery hooks. Disable this
+                on startup and persistence paths that must remain local.
+
+        Returns:
+            The unique matching provider identifier.
+        """
+
+        models_for = self.available_models if discover else self.configured_models
+        matches = [provider for provider in self.provider_names() if model in models_for(provider)]
         if not matches:
             raise UnknownModelError(model)
         if len(matches) > 1:

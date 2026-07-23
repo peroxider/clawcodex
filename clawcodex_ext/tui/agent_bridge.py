@@ -24,6 +24,7 @@ tests drive :class:`AgentBridge` with a fake agent loop (see
 from __future__ import annotations
 
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable
@@ -38,9 +39,11 @@ from clawcodex_ext.query.agent_loop_compat import (
     build_effective_system_prompt,
     run_query_as_agent_loop,
 )
+from clawcodex_ext.goal.evaluator import GoalEvaluationError
 from src.tool_system.context import ToolContext
 from src.tool_system.registry import ToolRegistry
 from src.utils.abort_controller import AbortController, AbortError
+from clawcodex_ext.types.messages import SystemMessage as QuerySystemMessage
 
 from .messages import (
     AdvisorEventMessage,
@@ -51,6 +54,7 @@ from .messages import (
     AssistantMessage,
     MultiModelEvent,
     PermissionRequested,
+    SystemNotice,
     ToolEventMessage,
 )
 from .state import AppState
@@ -89,6 +93,7 @@ class AgentBridge:
         tail_follower: Any | None = None,
         append_system_prompt: str = "",
         runtime_permission_controller: Any | None = None,
+        reset_goal_progress: bool = False,
     ) -> None:
         self._post = post_message
         self._session = session
@@ -100,6 +105,12 @@ class AgentBridge:
         self._max_turns = max_turns
         self._stream = stream
         self._append_system_prompt = append_system_prompt
+        self._goal_unsubscribe: Callable[[], None] | None = None
+        self._goal_bound_service: Any | None = None
+        self._goal_bound_thread_id: str | None = None
+        self._goal_runtime: Any | None = None
+        self._goal_active_id: str | None = None
+        self._goal_active_since: float | None = None
         self._busy_lock = threading.Lock()
         self._busy = False
         # Runtime permission controller — the unified chokepoint for
@@ -133,6 +144,10 @@ class AgentBridge:
         # empty ``{}`` (or nothing at all) and the agent loop would
         # never see the user's choices.
         tool_context.ask_user = self._ask_user_handler
+        self._bind_goal_state(
+            reset_baseline=True,
+            reset_progress=reset_goal_progress,
+        )
         # Advisor IDs we've already mirrored to the UI. The high-level
         # SDK stream doesn't give us per-event hooks for server tools,
         # so the bridge inspects the assembled conversation after each
@@ -159,6 +174,7 @@ class AgentBridge:
     def replace_runtime(
         self, *, provider: Any, tool_registry: ToolRegistry, tool_context: ToolContext
     ) -> None:
+        self._unbind_goal_state()
         old_provider = self._provider
         if self._multimodel_listener is not None and hasattr(old_provider, "remove_event_listener"):
             old_provider.remove_event_listener(self._multimodel_listener)
@@ -170,6 +186,145 @@ class AgentBridge:
         if tool_context.default_permission_handler is None:
             tool_context.default_permission_handler = self._permission_handler
         tool_context.ask_user = self._ask_user_handler
+        self._bind_goal_state(reset_baseline=False, reset_progress=False)
+
+    def replace_session(self, session: Session | None) -> bool:
+        """Rebind session state when idle; return ``False`` while busy."""
+
+        if session is None:
+            return False
+        with self._busy_lock:
+            if self._busy:
+                return False
+            previous_id = getattr(self._session, "session_id", None)
+            next_id = getattr(session, "session_id", None)
+            self._unbind_goal_state()
+            self._session = session
+            if str(previous_id or "") != str(next_id or ""):
+                self._goal_active_id = None
+                self._goal_active_since = None
+            self.reset_advisor_dedup()
+            self._bind_goal_state(reset_baseline=True, reset_progress=True)
+            return True
+
+    def _bind_goal_state(self, *, reset_baseline: bool, reset_progress: bool) -> None:
+        """Bind the live session id and mirror GoalService snapshots to AppState."""
+
+        from clawcodex_ext.runtime.tool_context_binding import bind_tool_context_runtime
+
+        bind_tool_context_runtime(
+            self._tool_context,
+            tool_registry=self._tool_registry,
+            session=self._session,
+            provider=self._provider,
+        )
+        # Claude Code goals are session-scoped. A stale protocol/test override
+        # must not pin a resumed TUI to the previous session's goal row.
+        self._tool_context.goal_thread_id = None
+
+        thread_id = getattr(self._tool_context, "session_id", None)
+        if thread_id is None:
+            self._state.set_goal_status(None)
+            return
+        thread_id = str(thread_id)
+
+        service = getattr(self._tool_context, "goal_service", None)
+        if service is None:
+            try:
+                from clawcodex_ext.goal.service import GoalService
+
+                service = GoalService()
+                self._tool_context.goal_service = service
+            except Exception:
+                self._state.set_goal_status(None)
+                return
+
+        try:
+            from clawcodex_ext.goal.runtime import (
+                goal_runtime_for_context,
+                restore_goal_runtime_after_session_resume,
+            )
+
+            if reset_progress:
+                runtime = restore_goal_runtime_after_session_resume(
+                    self._tool_context,
+                )
+            else:
+                runtime = goal_runtime_for_context(self._tool_context)
+                if runtime is not None:
+                    runtime.restore_after_resume()
+        except Exception:
+            runtime = None
+
+        if reset_baseline:
+            self._goal_active_id = None
+            self._goal_active_since = None
+
+        self._goal_bound_service = service
+        self._goal_bound_thread_id = thread_id
+        self._goal_runtime = runtime
+
+        def _sync(goal: Any | None) -> None:
+            if self._goal_bound_service is service and self._goal_bound_thread_id == thread_id:
+                self._sync_goal_snapshot(goal)
+
+        try:
+            self._goal_unsubscribe = service.subscribe(
+                thread_id,
+                _sync,
+                emit_current=True,
+            )
+        except Exception:
+            self._goal_unsubscribe = None
+            self._state.set_goal_status(None)
+
+    def _unbind_goal_state(self) -> None:
+        unsubscribe = self._goal_unsubscribe
+        self._goal_unsubscribe = None
+        if unsubscribe is not None:
+            try:
+                unsubscribe()
+            except Exception:
+                pass
+
+        runtime = self._goal_runtime
+        service = self._goal_bound_service
+        if runtime is not None and service is not None:
+            try:
+                service.unregister_runtime(runtime)
+            except Exception:
+                pass
+        if getattr(self._tool_context, "goal_runtime", None) is runtime:
+            self._tool_context.goal_runtime = None
+
+        self._goal_runtime = None
+        self._goal_bound_service = None
+        self._goal_bound_thread_id = None
+
+    def _sync_goal_snapshot(self, goal: Any | None) -> None:
+        if goal is None:
+            self._goal_active_id = None
+            self._goal_active_since = None
+            self._state.set_goal_status(None)
+            return
+
+        try:
+            from clawcodex_ext.goal.model import ThreadGoalStatus
+            from clawcodex_ext.goal.protocol import ThreadGoalDTO
+
+            payload = ThreadGoalDTO.from_model(goal).to_dict()
+            payload["goalId"] = goal.goal_id
+            if goal.status is ThreadGoalStatus.ACTIVE:
+                if self._goal_active_id != goal.goal_id or self._goal_active_since is None:
+                    self._goal_active_id = goal.goal_id
+                    self._goal_active_since = time.time() - max(goal.time_used_seconds, 0)
+                payload["activeSince"] = self._goal_active_since
+            else:
+                self._goal_active_id = None
+                self._goal_active_since = None
+            self._state.set_goal_status(payload)
+        except Exception:
+            self._state.set_goal_status(None)
 
     def _attach_multimodel_listener(self, provider: Any) -> None:
         if not hasattr(provider, "add_event_listener") or not hasattr(provider, "slots"):
@@ -316,6 +471,71 @@ class AgentBridge:
         ## _log(f'[agent_bridge] run_worker called')
         return True
 
+    def continue_goal_if_idle(self) -> bool:
+        """Claim and start the active session goal without a second user prompt."""
+
+        try:
+            from clawcodex_ext.goal.runtime import goal_runtime_for_context
+
+            runtime = goal_runtime_for_context(self._tool_context)
+            continuation = runtime.continue_if_idle() if runtime is not None else None
+        except Exception:
+            return False
+        if runtime is None or continuation is None:
+            return False
+
+        with self._busy_lock:
+            if self._busy or not runtime.claim_continuation(continuation):
+                return False
+            self._busy = True
+            self._abort_controller = AbortController()
+            self._tool_context.abort_controller = self._abort_controller
+
+        try:
+            for message in continuation.messages:
+                add_existing = getattr(self._session.conversation, "add_existing_message", None)
+                if callable(add_existing):
+                    add_existing(message)
+                else:
+                    self._session.conversation.add_message(message.role, message.content)
+
+            goal = runtime.service.get_goal(runtime.thread_id)
+            directive = goal.objective if goal is not None else "/goal"
+            self._post(AgentRunStarted(prompt=directive))
+            self._state.set_thinking(True, verb="Pursuing goal")
+            self._run_worker(
+                self._run_agent_in_thread,
+                thread=True,
+                exclusive=True,
+                name="agent-loop",
+            )
+            return True
+        except Exception:
+            with self._busy_lock:
+                self._busy = False
+                self._abort_controller = None
+            self._state.set_thinking(False)
+            return False
+
+    def _effective_max_turns(self) -> int:
+        """Keep evaluator goals running until achieved or explicitly stopped."""
+
+        try:
+            from clawcodex_ext.goal.model import GoalCompletionMode, ThreadGoalStatus
+            from clawcodex_ext.goal.runtime import goal_runtime_for_context
+
+            runtime = goal_runtime_for_context(self._tool_context)
+            goal = runtime.service.get_goal(runtime.thread_id) if runtime is not None else None
+            if (
+                goal is not None
+                and goal.status is ThreadGoalStatus.ACTIVE
+                and goal.completion_mode is GoalCompletionMode.EVALUATOR
+            ):
+                return 0
+        except Exception:
+            pass
+        return self._max_turns
+
     def cancel(self, reason: str = "user_interrupt") -> bool:
         """Trip the active run's abort signal. Returns True if a run was cancelled.
 
@@ -415,7 +635,33 @@ class AgentBridge:
                 # for the next turn (tool_use without tool_result will
                 # 400 at the API). Surface it now, not later.
                 try:
-                    self._session.conversation.add_message(msg.role, msg.content)
+                    add_existing = getattr(
+                        self._session.conversation,
+                        "add_existing_message",
+                        None,
+                    )
+                    if callable(add_existing):
+                        add_existing(msg)
+                    else:
+                        self._session.conversation.add_message(msg.role, msg.content)
+                    if isinstance(msg, QuerySystemMessage) and getattr(msg, "subtype", None) in {
+                        "goal_evaluation",
+                        "goal_achieved",
+                        "goal_evaluator_error",
+                    }:
+                        subtype = getattr(msg, "subtype", None)
+                        self._post(
+                            SystemNotice(
+                                text=str(msg.content),
+                                style=(
+                                    "light"
+                                    if subtype == "goal_achieved"
+                                    else "error"
+                                    if subtype == "goal_evaluator_error"
+                                    else "muted"
+                                ),
+                            )
+                        )
                 except Exception:
                     import logging
 
@@ -437,7 +683,7 @@ class AgentBridge:
                         tool_registry=self._tool_registry,
                         tool_context=self._tool_context,
                         system_prompt=effective_system_prompt,
-                        max_turns=self._max_turns,
+                        max_turns=self._effective_max_turns(),
                         on_event=_on_event,
                         on_text_chunk=_on_text if self._stream else None,
                         on_thinking_chunk=_on_thinking if self._stream else None,
@@ -460,6 +706,31 @@ class AgentBridge:
                 self._session.save_transcript()
             except Exception:
                 pass
+        except GoalEvaluationError as exc:
+            # The explicit SystemNotice emitted above is the user-facing
+            # failure. Preserve it and finish without a second generic error.
+            aggregate_usage = getattr(exc, "aggregate_usage", None)
+            if isinstance(aggregate_usage, dict):
+                self._state.usage["input_tokens"] = self._state.usage.get("input_tokens", 0) + int(
+                    aggregate_usage.get("input_tokens", 0) or 0
+                )
+                self._state.usage["output_tokens"] = self._state.usage.get(
+                    "output_tokens", 0
+                ) + int(aggregate_usage.get("output_tokens", 0) or 0)
+            try:
+                self._session.save_transcript()
+            except Exception:
+                pass
+            self._post(
+                AgentRunFinished(
+                    response_text="",
+                    num_turns=int(getattr(exc, "num_turns", 0) or 0),
+                    usage=(aggregate_usage if isinstance(aggregate_usage, dict) else None),
+                    error=None,
+                )
+            )
+            self._finish()
+            return
         except AbortError:
             self._post(
                 AgentRunFinished(

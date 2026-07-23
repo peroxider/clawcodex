@@ -9,7 +9,7 @@ from clawcodex_ext.tool_system.context import ToolContext
 from clawcodex_ext.tool_system.protocol import ToolResult
 
 from .gate import goal_enabled
-from .model import ThreadGoal, ThreadGoalStatus
+from .model import GoalCompletionMode, ThreadGoal, ThreadGoalStatus
 from .protocol import ThreadGoalDTO
 from .service import GoalService, GoalServiceError
 
@@ -134,7 +134,10 @@ def filter_goal_model_tools_for_context(
     """Drop goal tools from model-visible lists when upstream would hide them."""
     visible = goal_model_tools_visible(context)
     if visible:
-        return list(tools)
+        visible_tools = list(tools)
+        if _has_active_evaluator_goal(context):
+            return [tool for tool in visible_tools if tool.name != UPDATE_GOAL_TOOL_NAME]
+        return visible_tools
     return [tool for tool in tools if tool.name not in GOAL_MODEL_TOOL_NAMES]
 
 
@@ -147,6 +150,23 @@ def goal_model_tools_visible(context: ToolContext | Any | None) -> bool:
     if _is_review_subagent_context(context):
         return False
     return _persistent_thread_id(context) is not None
+
+
+def _has_active_evaluator_goal(context: ToolContext | Any | None) -> bool:
+    if context is None:
+        return False
+    thread_id = _persistent_thread_id(context)
+    if thread_id is None:
+        return False
+    service = getattr(context, "goal_service", None)
+    if service is None:
+        return False
+    goal = service.get_goal(thread_id)
+    return bool(
+        goal is not None
+        and goal.status is ThreadGoalStatus.ACTIVE
+        and goal.completion_mode is GoalCompletionMode.EVALUATOR
+    )
 
 
 def _get_goal(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -184,7 +204,15 @@ def _update_goal(tool_input: dict[str, Any], context: ToolContext) -> ToolResult
     try:
         thread_id = _resolve_thread_id(context)
         status = _parse_update_status(tool_input.get("status"))
-        goal = _resolve_goal_service(context).update_goal(thread_id, status)
+        service = _resolve_goal_service(context)
+        current = service.get_goal(thread_id)
+        if (
+            current is not None
+            and current.status is ThreadGoalStatus.ACTIVE
+            and current.completion_mode is GoalCompletionMode.EVALUATOR
+        ):
+            raise GoalServiceError("this /goal is completed only by its independent evaluator")
+        goal = service.update_goal(thread_id, status)
         if goal is None:
             raise GoalServiceError("cannot update goal because this thread has no goal")
         return ToolResult(

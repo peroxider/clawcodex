@@ -39,6 +39,7 @@ from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock, ToolResu
 from clawcodex_ext.types.messages import (
     AssistantMessage,
     Message,
+    SystemMessage,
     UserMessage,
 )
 from clawcodex_ext.utils.abort_controller import AbortController, AbortError, AbortSignal
@@ -158,7 +159,7 @@ class AgentLoopRunResult:
     terminal: Terminal | None = None
 
 
-async def run_query_as_agent_loop(
+async def _run_query_as_agent_loop_impl(
     *,
     initial_messages: list[Message],
     provider: BaseProvider,
@@ -172,6 +173,7 @@ async def run_query_as_agent_loop(
     on_message: Callable[[Message], None] | None = None,
     cancel_signal: AbortSignal | None = None,
     abort_controller: AbortController | None = None,
+    main_transcript: TranscriptWriter | None = None,
 ) -> AgentLoopRunResult:
     """Drive the canonical query() loop and adapt to AgentLoopResult.
 
@@ -258,29 +260,6 @@ async def run_query_as_agent_loop(
     conversation_messages: list[Message] = list(initial_messages)
     next_messages: list[Message] = list(initial_messages)
 
-    # Open the main-conversation JSONL transcript so the full
-    # user↔model exchange is on disk for ``cli --resume`` and the
-    # session-analysis viewer. Mirrors the sub-agent sidechain
-    # pattern (``src.tool_system.tools.agent``) but uses the fixed
-    # ``~/.clawcodex/sessions/<sid>/transcript.jsonl`` convention
-    # from ``get_main_transcript_path``. If no session id is
-    # attached to the tool context (e.g. legacy test entry points
-    # that build a bare context), persistence is silently skipped
-    # — same as the pre-fix behavior, just spelled out.
-    main_transcript: TranscriptWriter | None = None
-    main_session_id = getattr(tool_context, "session_id", None)
-    if main_session_id:
-        try:
-            main_transcript = TranscriptWriter(
-                get_main_transcript_path(main_session_id),
-            )
-        except Exception:
-            logging.getLogger(__name__).exception(
-                "main transcript open failed for session %s; continuing without disk persistence",
-                main_session_id,
-            )
-            main_transcript = None
-
     while True:
         holder = TerminalHolder()
         params = _make_params(next_messages)
@@ -314,7 +293,11 @@ async def run_query_as_agent_loop(
                 # matches the legacy ``on_message`` gates (skip isApiError,
                 # skip isMeta) so the on-disk shape mirrors what the legacy
                 # Conversation would have held.
-                if main_transcript is not None and not _persist_is_api_error and not _persist_is_meta:
+                if (
+                    main_transcript is not None
+                    and not _persist_is_api_error
+                    and not _persist_is_meta
+                ):
                     try:
                         main_transcript.append(msg)
                     except OSError:
@@ -384,6 +367,19 @@ async def run_query_as_agent_loop(
                         # caller's stream.
                     continue
 
+                if isinstance(msg, SystemMessage):
+                    if getattr(msg, "subtype", None) in {
+                        "goal_evaluation",
+                        "goal_achieved",
+                        "goal_evaluator_error",
+                    }:
+                        evaluator_usage = getattr(msg, "usage", None) or {}
+                        usage["input_tokens"] += int(evaluator_usage.get("input_tokens", 0) or 0)
+                        usage["output_tokens"] += int(evaluator_usage.get("output_tokens", 0) or 0)
+                        if on_message is not None:
+                            on_message(msg)
+                    continue
+
                 if isinstance(msg, UserMessage):
                     # Tool result(s) arrive as UserMessages with ToolResultBlock
                     # content. Persist the full message (so the next turn's
@@ -395,7 +391,9 @@ async def run_query_as_agent_loop(
                         continue
                     content = msg.content
                     if isinstance(content, list):
-                        has_tool_result = any(isinstance(block, ToolResultBlock) for block in content)
+                        has_tool_result = any(
+                            isinstance(block, ToolResultBlock) for block in content
+                        )
                         if has_tool_result and on_message is not None:
                             on_message(msg)
                         for block in content:
@@ -424,9 +422,7 @@ async def run_query_as_agent_loop(
                 await _drain_turn()
         except asyncio.CancelledError:
             if abort_controller.signal.aborted:
-                raise AbortError(
-                    abort_controller.signal.reason or "user_interrupt"
-                ) from None
+                raise AbortError(abort_controller.signal.reason or "user_interrupt") from None
             raise
         except asyncio.TimeoutError:
             logging.getLogger(__name__).warning(
@@ -473,6 +469,25 @@ async def run_query_as_agent_loop(
             raise AbortError(
                 getattr(abort_controller.signal, "reason", None) or reason or "user_interrupt"
             )
+        if reason == "model_error":
+            error = getattr(terminal, "error", None)
+            if not isinstance(error, BaseException):
+                error = RuntimeError("Model API request failed")
+            try:
+                error.aggregate_usage = dict(usage)  # type: ignore[attr-defined]
+                error.num_turns = num_turns  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            raise error
+        if reason == "goal_evaluator_error":
+            error = getattr(terminal, "error", None)
+            if isinstance(error, BaseException):
+                if hasattr(error, "aggregate_usage"):
+                    error.aggregate_usage = dict(usage)
+                if hasattr(error, "num_turns"):
+                    error.num_turns = num_turns
+                raise error
+            raise RuntimeError("Goal evaluator failed")
 
     # When the loop exited because of max_turns, surface the legacy
     # ``[Max tool turns reached]`` sentinel as response_text so callers
@@ -504,22 +519,82 @@ async def run_query_as_agent_loop(
                 response_text = entry.get("message")
                 break
 
-    # Close the main transcript. Single close call (no try/finally
-    # wrapper around the whole function) — if the loop throws, the
-    # OS reclaims the fd on process exit. JSONL append-only writers
-    # don't need ordered teardown.
-    if main_transcript is not None:
-        try:
-            main_transcript.close()
-        except OSError:
-            logging.getLogger(__name__).exception(
-                "main transcript close failed for session %s",
-                main_session_id,
-            )
-
     return AgentLoopRunResult(
         response_text=response_text,
         usage=usage,
         num_turns=num_turns,
         terminal=holder.value,
     )
+
+
+async def run_query_as_agent_loop(
+    *,
+    initial_messages: list[Message],
+    provider: BaseProvider,
+    tool_registry: ToolRegistry,
+    tool_context: ToolContext,
+    system_prompt: str | list[dict[str, Any]] = "You are a helpful assistant.",
+    max_turns: int = 20,
+    on_event: ToolEventHandler | None = None,
+    on_text_chunk: TextChunkHandler | None = None,
+    on_thinking_chunk: Callable[[str], None] | None = None,
+    on_message: Callable[[Message], None] | None = None,
+    cancel_signal: AbortSignal | None = None,
+    abort_controller: AbortController | None = None,
+) -> AgentLoopRunResult:
+    """Drive the canonical query loop and always finalize its transcript.
+
+    ``TranscriptWriter.close()`` drains its timestamp-sort buffer before
+    closing the file descriptor.  Keep that cleanup in a ``finally`` so
+    provider failures, evaluator failures, and cancellation retain their
+    original exception semantics without losing buffered transcript records.
+    """
+    # Open the main-conversation JSONL transcript so the full user↔model
+    # exchange is on disk for ``cli --resume`` and the session-analysis viewer.
+    # Bare legacy contexts have no session id and intentionally skip persistence.
+    main_transcript: TranscriptWriter | None = None
+    main_session_id = getattr(tool_context, "session_id", None)
+    if main_session_id:
+        try:
+            initial_parent_uuid = (
+                getattr(initial_messages[-1], "uuid", None) if initial_messages else None
+            )
+            main_transcript = TranscriptWriter(
+                get_main_transcript_path(main_session_id),
+                chain_messages=True,
+                initial_parent_uuid=initial_parent_uuid,
+            )
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "main transcript open failed for session %s; continuing without disk persistence",
+                main_session_id,
+            )
+            main_transcript = None
+
+    try:
+        return await _run_query_as_agent_loop_impl(
+            initial_messages=initial_messages,
+            provider=provider,
+            tool_registry=tool_registry,
+            tool_context=tool_context,
+            system_prompt=system_prompt,
+            max_turns=max_turns,
+            on_event=on_event,
+            on_text_chunk=on_text_chunk,
+            on_thinking_chunk=on_thinking_chunk,
+            on_message=on_message,
+            cancel_signal=cancel_signal,
+            abort_controller=abort_controller,
+            main_transcript=main_transcript,
+        )
+    finally:
+        if main_transcript is not None:
+            try:
+                main_transcript.close()
+            except Exception:
+                # Transcript cleanup must never mask the model/evaluator/cancel
+                # outcome that caused the adapter to exit.
+                logging.getLogger(__name__).exception(
+                    "main transcript close failed for session %s",
+                    main_session_id,
+                )

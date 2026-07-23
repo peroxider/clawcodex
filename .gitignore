@@ -67,6 +67,9 @@ Thumbs.db
 archive/
 *.log
 
+# Agent-local designs, specifications, experiments, and generated artifacts
+/.scratch/
+
 # Sensitive files - NEVER COMMIT
 .env
 .env.local

@@ -10,44 +10,31 @@ from src.tui.state import AppState
 from src.tui.widgets.status_line import _goal_status_segment
 
 
-@pytest.mark.parametrize(
-    ("status", "expected"),
-    [
-        ("active", "Pursuing goal"),
-        ("paused", "Goal paused (/goal resume)"),
-        ("blocked", "Goal blocked (/goal resume)"),
-        ("usage_limited", "Goal hit usage limits (/goal resume)"),
-        ("budget_limited", "Goal unmet"),
-        ("complete", "Goal achieved"),
-    ],
-)
-def test_status_line_explains_all_goal_statuses(status: str, expected: str) -> None:
-    state = AppState(model="test-model", provider="test-provider")
-    state.set_goal_status(
-        {
-            "status": status,
-            "tokenBudget": 100,
-            "tokensUsed": 40,
-            "timeUsedSeconds": 120,
-        }
-    )
-
-    rendered = _goal_status_segment(state.goal_status)
-
-    assert expected in rendered
-
-
-def test_status_line_prefers_budget_usage_for_active_goal() -> None:
+def test_status_line_matches_claude_active_goal_indicator() -> None:
     state = AppState(model="test-model", provider="test-provider")
     state.set_goal_status(
         {
             "status": "active",
-            "tokenBudget": 50_000,
-            "tokensUsed": 12_500,
-            "timeUsedSeconds": 120,
+            "activeSince": 100.0,
         }
     )
 
-    rendered = _goal_status_segment(state.goal_status)
+    rendered = _goal_status_segment(state.goal_status, now=113.9)
 
-    assert "Pursuing goal (12.5K / 50K)" in rendered
+    assert rendered == "◎ /goal active (13s)"
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["paused", "blocked", "usage_limited", "budget_limited", "complete"],
+)
+def test_status_line_shows_non_active_goal_states(status: str) -> None:
+    goal = {"status": status, "timeUsedSeconds": 120}
+
+    assert _goal_status_segment(goal, now=200.0) == f"◎ /goal {status} (2m)"
+
+
+def test_status_line_falls_back_to_accounted_elapsed_without_live_baseline() -> None:
+    goal = {"status": "active", "timeUsedSeconds": 120}
+
+    assert _goal_status_segment(goal, now=200.0) == "◎ /goal active (2m)"

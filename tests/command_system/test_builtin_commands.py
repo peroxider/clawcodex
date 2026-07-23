@@ -199,6 +199,30 @@ def test_clear_aliases_work(
     assert error is None
 
 
+def test_clear_preserves_conversation_when_goal_clear_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    registry: CommandRegistry,
+    ctx: SimpleNamespace,
+) -> None:
+    """Conversation clearing is atomic with removal of the active goal."""
+    monkeypatch.setattr(
+        "src.command_system.builtins.get_command_registry",
+        lambda: registry,
+    )
+    service = MagicMock()
+    service.clear_goal.side_effect = RuntimeError("goal store unavailable")
+    ctx.tool_context = SimpleNamespace(
+        session_id="clear-session",
+        goal_service=service,
+    )
+
+    success, _text, error = execute_command_sync("clear", "", ctx)
+
+    assert success is False
+    assert "goal store unavailable" in (error or "")
+    ctx.conversation.clear.assert_not_called()
+
+
 def test_exit_via_aliases(
     monkeypatch: pytest.MonkeyPatch,
     registry: CommandRegistry,

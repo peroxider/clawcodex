@@ -38,6 +38,7 @@ class _GoalTurnAccounting:
     current_token_total: int = 0
     last_accounted_token_total: int = 0
     active_goal_id: str | None = None
+    started_goal_id: str | None = None
     account_tokens: bool = True
 
     def token_delta_since_last_accounting(self) -> int:
@@ -115,6 +116,19 @@ class GoalAccountingState:
                 and turn.active_goal_id is not None
             )
 
+    def turn_started_goal_id(self, turn_id: str) -> str | None:
+        """Return the goal bound when ``turn_id`` began.
+
+        ``active_goal_id`` may change when the user replaces a goal while a
+        provider request is in flight.  Completion evaluation must use this
+        immutable start-of-turn binding so the old response cannot satisfy
+        the replacement goal.
+        """
+
+        with self._lock:
+            turn = self._turns.get(turn_id)
+            return None if turn is None else turn.started_goal_id
+
     def record_token_usage(self, turn_id: str, usage: dict[str, Any] | None) -> int | None:
         token_delta = goal_token_delta_for_usage(usage or {})
         if token_delta <= 0:
@@ -136,6 +150,7 @@ class GoalAccountingState:
             if turn is None:
                 return
             turn.active_goal_id = goal_id
+            turn.started_goal_id = goal_id
             if self._current_turn_id == turn_id and turn.account_tokens:
                 self._wall_clock.mark_active_goal(goal_id)
 

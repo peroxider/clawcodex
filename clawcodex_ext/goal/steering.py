@@ -7,6 +7,8 @@ from clawcodex_ext.types.messages import UserMessage, create_user_message
 from .model import ThreadGoal
 
 CONTINUATION_STEERING_MARKER = "codex-goal-continuation"
+EVALUATOR_START_MARKER = "claude-goal-start"
+EVALUATOR_CONTINUATION_MARKER = "claude-goal-evaluator-continuation"
 BUDGET_LIMIT_STEERING_MARKER = "codex-goal-budget-limit"
 OBJECTIVE_UPDATED_STEERING_MARKER = "codex-goal-objective-updated"
 
@@ -21,6 +23,39 @@ def continuation_steering_message(goal: ThreadGoal) -> UserMessage:
         CONTINUATION_STEERING_MARKER,
         continuation_prompt(goal),
     )
+
+
+def evaluator_start_message(goal: ThreadGoal) -> UserMessage:
+    """Create Claude Code's first directive for an evaluator-backed goal."""
+
+    objective = escape_xml_text(goal.objective)
+    prompt = f"""A session-scoped goal is active. Briefly acknowledge it, then immediately work toward the completion condition below.
+
+<goal-condition>
+{objective}
+</goal-condition>
+
+Do not stop merely to report partial progress. When your turn naturally ends, a separate tool-free evaluator will inspect the conversation evidence. If the condition is not yet met, its reason will be provided and work will continue automatically. The evaluator alone decides when this goal is achieved."""
+    return _goal_context_message(EVALUATOR_START_MARKER, prompt)
+
+
+def evaluator_continuation_message(goal: ThreadGoal, reason: str) -> UserMessage:
+    """Inject the independent evaluator's unmet reason into the next turn."""
+
+    objective = escape_xml_text(goal.objective)
+    check_reason = escape_xml_text(reason)
+    prompt = f"""The active goal's independent evaluator found that the completion condition is not yet met.
+
+<goal-condition>
+{objective}
+</goal-condition>
+
+<last-check>
+{check_reason}
+</last-check>
+
+Continue working toward the full condition now. Use the last check as guidance, but verify the current workspace and conversation evidence yourself. Do not stop merely to restate progress. A separate evaluator will check the condition again when this turn naturally ends."""
+    return _goal_context_message(EVALUATOR_CONTINUATION_MARKER, prompt)
 
 
 def budget_limit_steering_message(goal: ThreadGoal) -> UserMessage:
@@ -201,11 +236,15 @@ def _goal_context_message(marker: str, prompt: str) -> UserMessage:
 __all__ = [
     "BUDGET_LIMIT_STEERING_MARKER",
     "CONTINUATION_STEERING_MARKER",
+    "EVALUATOR_CONTINUATION_MARKER",
+    "EVALUATOR_START_MARKER",
     "OBJECTIVE_UPDATED_STEERING_MARKER",
     "budget_limit_prompt",
     "budget_limit_steering_message",
     "continuation_prompt",
     "continuation_steering_message",
+    "evaluator_start_message",
+    "evaluator_continuation_message",
     "escape_xml_text",
     "objective_updated_prompt",
     "objective_updated_steering_message",

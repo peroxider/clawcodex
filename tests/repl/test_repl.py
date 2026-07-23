@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from pathlib import Path
 import tempfile
 import json
@@ -12,6 +12,7 @@ import os
 import threading
 import time
 from contextlib import redirect_stderr
+from types import SimpleNamespace
 from rich.markdown import Markdown
 
 import src.config as config_module
@@ -556,6 +557,276 @@ class TestREPL(unittest.TestCase):
         self.assertTrue(handled)
         repl._continue_goal_if_idle.assert_called_once_with()
 
+    def test_transient_goal_status_uses_dismissible_viewer(self):
+        from clawcodex_ext.command_system.engine import CommandResult
+
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl.console = Mock()
+        repl._print_local_command_text = Mock()
+        repl._print_transient_text = Mock()
+
+        handled = repl._handle_command_result(
+            CommandResult(
+                success=True,
+                command_name="goal",
+                result_type="text",
+                text="Goal active\n\n  running 3s",
+                transient=True,
+            )
+        )
+
+        self.assertTrue(handled)
+        repl._print_transient_text.assert_called_once_with(
+            "Goal active\n\n  running 3s",
+            command="goal",
+        )
+        repl._print_local_command_text.assert_not_called()
+
+    def test_goal_continuation_mounts_live_status_and_passes_abort_controller(self):
+        import asyncio
+        from contextlib import nullcontext
+
+        from clawcodex_ext.query.agent_loop_compat import AgentLoopRunResult
+        from clawcodex_ext.types.messages import create_user_message
+        from clawcodex_ext.utils.abort_controller import AbortController
+
+        class FakeLiveStatus:
+            instances = []
+
+            def __init__(self, message, **kwargs):
+                self.message = message
+                self.kwargs = kwargs
+                self._pending_text = "queued during goal"
+                self.updates = []
+                self.__class__.instances.append(self)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return None
+
+            def update(self, message):
+                self.updates.append(message)
+
+        previous_controller = AbortController()
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl.console = Mock()
+        repl.provider = Mock()
+        repl.tool_registry = Mock()
+        repl.tool_context = SimpleNamespace(
+            abort_controller=previous_controller,
+            output_style_name=None,
+            output_style_dir=None,
+        )
+        repl.session = SimpleNamespace(
+            conversation=Conversation(),
+            save_transcript=Mock(),
+        )
+        repl.stream = True
+        repl._append_system_prompt = ""
+        repl._engine_messages = []
+        repl._max_turns = 20
+        repl._stats_turns = 0
+        repl._stats_input_tokens = 0
+        repl._stats_output_tokens = 0
+        repl._im_active_cancel = None
+        repl._active_live_status = None
+        repl.completer = None
+        repl._file_history = None
+        repl._do_expand_last = Mock()
+        repl._apply_permission_mode_cycle = Mock()
+        repl._bottom_toolbar = Mock(return_value="")
+        repl._status_message = Mock(return_value="Thinking…")
+        repl._enqueue_prompt = Mock()
+        goal_loop = asyncio.new_event_loop()
+        repl._get_chat_loop = Mock(return_value=goal_loop)
+
+        continuation = SimpleNamespace(
+            messages=[create_user_message("continue the goal", isMeta=True)]
+        )
+        goal_runtime = Mock()
+        goal_runtime.continue_if_idle.return_value = continuation
+        goal_runtime.claim_continuation.return_value = True
+
+        captured = {}
+
+        async def fake_run_query_as_agent_loop(**kwargs):
+            captured.update(kwargs)
+            self.assertIs(repl._active_live_status, FakeLiveStatus.instances[-1])
+            self.assertIs(
+                repl._im_active_cancel,
+                FakeLiveStatus.instances[-1].kwargs["on_cancel"],
+            )
+            self.assertIs(repl.tool_context.abort_controller, kwargs["abort_controller"])
+            return AgentLoopRunResult(
+                response_text="goal response",
+                usage={"input_tokens": 4, "output_tokens": 2},
+                num_turns=1,
+            )
+
+        try:
+            with (
+                patch("clawcodex_ext.repl.core._load_heavy_runtime"),
+                patch("clawcodex_ext.repl.core.AbortController", AbortController, create=True),
+                patch("clawcodex_ext.repl.core.LiveStatus", FakeLiveStatus, create=True),
+                patch("clawcodex_ext.repl.core._pt_patch_stdout", return_value=nullcontext()),
+                patch(
+                    "clawcodex_ext.repl.core.resolve_output_style",
+                    return_value=SimpleNamespace(prompt=""),
+                    create=True,
+                ),
+                patch(
+                    "clawcodex_ext.goal.runtime.goal_runtime_for_context",
+                    return_value=goal_runtime,
+                ),
+                patch(
+                    "clawcodex_ext.query.agent_loop_compat.build_effective_system_prompt",
+                    return_value="system prompt",
+                ),
+                patch(
+                    "clawcodex_ext.query.agent_loop_compat.run_query_as_agent_loop",
+                    side_effect=fake_run_query_as_agent_loop,
+                ),
+            ):
+                completed = repl._continue_goal_if_idle()
+        finally:
+            goal_loop.close()
+
+        self.assertTrue(completed)
+        self.assertIsNotNone(captured.get("abort_controller"))
+        self.assertEqual(captured.get("max_turns"), 0)
+        self.assertIs(repl.tool_context.abort_controller, previous_controller)
+        self.assertIsNone(repl._im_active_cancel)
+        self.assertIsNone(repl._active_live_status)
+        repl._enqueue_prompt.assert_called_once_with("queued during goal")
+        self.assertEqual(repl._stats_turns, 1)
+        self.assertEqual(repl._stats_input_tokens, 4)
+        self.assertEqual(repl._stats_output_tokens, 2)
+
+    def test_goal_continuation_im_interrupt_aborts_without_error(self):
+        import asyncio
+        from contextlib import nullcontext
+
+        from clawcodex_ext.types.messages import create_user_message
+        from clawcodex_ext.utils.abort_controller import AbortController, AbortError
+
+        class FakeLiveStatus:
+            instances = []
+
+            def __init__(self, message, **kwargs):
+                self.message = message
+                self.kwargs = kwargs
+                self._pending_text = ""
+                self.updates = []
+                self.__class__.instances.append(self)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return None
+
+            def update(self, message):
+                self.updates.append(message)
+
+        previous_controller = AbortController()
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl.console = Mock()
+        repl.provider = Mock()
+        repl.tool_registry = Mock()
+        repl.tool_context = SimpleNamespace(
+            abort_controller=previous_controller,
+            output_style_name=None,
+            output_style_dir=None,
+        )
+        repl.session = SimpleNamespace(
+            conversation=Conversation(),
+            save_transcript=Mock(),
+        )
+        repl.stream = True
+        repl._append_system_prompt = ""
+        repl._engine_messages = []
+        repl._max_turns = 20
+        repl._stats_turns = 0
+        repl._stats_input_tokens = 0
+        repl._stats_output_tokens = 0
+        repl._im_active_cancel = None
+        repl._direct_abort_controller = None
+        repl._active_live_status = None
+        repl.completer = None
+        repl._file_history = None
+        repl._do_expand_last = Mock()
+        repl._apply_permission_mode_cycle = Mock()
+        repl._bottom_toolbar = Mock(return_value="")
+        repl._status_message = Mock(return_value="Thinking…")
+        repl._enqueue_prompt = Mock()
+        goal_loop = asyncio.new_event_loop()
+        repl._get_chat_loop = Mock(return_value=goal_loop)
+
+        continuation = SimpleNamespace(
+            messages=[create_user_message("continue the goal", isMeta=True)]
+        )
+        goal_runtime = Mock()
+        goal_runtime.continue_if_idle.return_value = continuation
+        goal_runtime.claim_continuation.return_value = True
+
+        async def fake_run_query_as_agent_loop(**kwargs):
+            live_status = FakeLiveStatus.instances[-1]
+            self.assertIs(repl._im_active_cancel, live_status.kwargs["on_cancel"])
+            controller = kwargs["abort_controller"]
+            live_status.kwargs["on_cancel"]()
+            self.assertTrue(controller.signal.aborted)
+            self.assertEqual(controller.signal.reason, "user_interrupt")
+            self.assertTrue(repl._interrupt_active_chat_from_im())
+            raise AbortError("user_interrupt")
+
+        try:
+            with (
+                patch("clawcodex_ext.repl.core._load_heavy_runtime"),
+                patch("clawcodex_ext.repl.core.AbortController", AbortController, create=True),
+                patch("clawcodex_ext.repl.core.LiveStatus", FakeLiveStatus, create=True),
+                patch("clawcodex_ext.repl.core._pt_patch_stdout", return_value=nullcontext()),
+                patch(
+                    "clawcodex_ext.repl.core.resolve_output_style",
+                    return_value=SimpleNamespace(prompt=""),
+                    create=True,
+                ),
+                patch(
+                    "clawcodex_ext.goal.runtime.goal_runtime_for_context",
+                    return_value=goal_runtime,
+                ),
+                patch(
+                    "clawcodex_ext.query.agent_loop_compat.build_effective_system_prompt",
+                    return_value="system prompt",
+                ),
+                patch(
+                    "clawcodex_ext.query.agent_loop_compat.run_query_as_agent_loop",
+                    side_effect=fake_run_query_as_agent_loop,
+                ),
+            ):
+                completed = repl._continue_goal_if_idle()
+        finally:
+            goal_loop.close()
+
+        self.assertFalse(completed)
+        self.assertEqual(repl._last_chat_outcome, "cancelled")
+        self.assertIs(repl.tool_context.abort_controller, previous_controller)
+        self.assertIsNone(repl._im_active_cancel)
+        self.assertIsNone(repl._active_live_status)
+        self.assertIn(
+            "[warning]Cancelling…[/warning]",
+            FakeLiveStatus.instances[-1].updates,
+        )
+        self.assertFalse(
+            any(
+                "Error:" in str(call.args[0])
+                for call in repl.console.print.call_args_list
+                if call.args
+            )
+        )
+        repl.session.save_transcript.assert_not_called()
+
     def test_forked_skill_result_is_rendered_without_second_model_query(self):
         from clawcodex_ext.command_system.engine import CommandResult
 
@@ -608,26 +879,43 @@ class TestREPL(unittest.TestCase):
                         mock_provider.chat_stream_response.side_effect = NotImplementedError()
                         mock_provider.chat.side_effect = [
                             ChatResponse(
-                                content="Completing the active goal.",
+                                content="Still working toward the active goal.",
                                 model="test",
-                                usage={"input_tokens": 3, "output_tokens": 2},
-                                finish_reason="tool_use",
-                                tool_uses=[
-                                    {
-                                        "id": "toolu_goal_complete",
-                                        "name": "update_goal",
-                                        "input": {"status": "complete"},
-                                    }
-                                ],
+                                usage={"input_tokens": 2, "output_tokens": 2},
+                                finish_reason="end_turn",
+                                tool_uses=None,
                             ),
                             ChatResponse(
                                 content="Goal complete.",
                                 model="test",
-                                usage={"input_tokens": 1, "output_tokens": 1},
+                                usage={"input_tokens": 3, "output_tokens": 2},
                                 finish_reason="end_turn",
                                 tool_uses=None,
                             ),
                         ]
+                        mock_provider.chat_async = AsyncMock(
+                            side_effect=[
+                                ChatResponse(
+                                    content=(
+                                        '{"met": false, "reason": '
+                                        '"Implementation is still in progress."}'
+                                    ),
+                                    model="test",
+                                    usage={},
+                                    finish_reason="end_turn",
+                                    tool_uses=None,
+                                ),
+                                ChatResponse(
+                                    content=(
+                                        '{"met": true, "reason": "The implementation is complete."}'
+                                    ),
+                                    model="test",
+                                    usage={},
+                                    finish_reason="end_turn",
+                                    tool_uses=None,
+                                ),
+                            ]
+                        )
                         mock_provider_class.return_value = Mock(return_value=mock_provider)
 
                         repl = ClawcodexREPL(provider_name="glm", stream=False)
@@ -639,13 +927,14 @@ class TestREPL(unittest.TestCase):
         goal = service.get_goal("repl-goal-session")
         self.assertIsNotNone(goal)
         self.assertEqual(goal.status.value, "complete")
-        self.assertGreaterEqual(mock_provider.chat.call_count, 2)
+        self.assertEqual(mock_provider.chat.call_count, 2)
+        self.assertEqual(mock_provider.chat_async.await_count, 2)
         rendered = "\n".join(
             args[0].markup if args and isinstance(args[0], Markdown) else str(args[0])
             for args, _kwargs in repl.console.print.call_args_list
             if args
         )
-        self.assertIn("Goal active", rendered)
+        self.assertIn("Goal set: implement smoke", rendered)
         self.assertIn("Goal complete.", rendered)
 
     def test_handle_command_goal_lifecycle_smoke_without_live_provider(self):
@@ -673,48 +962,74 @@ class TestREPL(unittest.TestCase):
                         mock_provider.chat_stream_response.side_effect = NotImplementedError()
                         mock_provider.chat.side_effect = [
                             ChatResponse(
-                                content="Still working.",
+                                content="First goal achieved.",
                                 model="test",
                                 usage={"input_tokens": 1, "output_tokens": 1},
                                 finish_reason="end_turn",
                                 tool_uses=None,
                             ),
                             ChatResponse(
-                                content="Resumed working.",
+                                content="Replacement goal achieved.",
                                 model="test",
                                 usage={"input_tokens": 1, "output_tokens": 1},
                                 finish_reason="end_turn",
                                 tool_uses=None,
                             ),
                         ]
+                        mock_provider.chat_async = AsyncMock(
+                            side_effect=[
+                                ChatResponse(
+                                    content=(
+                                        '{"met": true, "reason": "The first goal is complete."}'
+                                    ),
+                                    model="test",
+                                    usage={},
+                                    finish_reason="end_turn",
+                                    tool_uses=None,
+                                ),
+                                ChatResponse(
+                                    content=(
+                                        '{"met": true, "reason": '
+                                        '"The replacement goal is complete."}'
+                                    ),
+                                    model="test",
+                                    usage={},
+                                    finish_reason="end_turn",
+                                    tool_uses=None,
+                                ),
+                            ]
+                        )
                         mock_provider_class.return_value = Mock(return_value=mock_provider)
 
                         repl = ClawcodexREPL(provider_name="glm", stream=False)
                         repl.console.print = Mock()
+                        repl._print_transient_text = Mock(
+                            side_effect=lambda text, **_kwargs: repl.console.print(text)
+                        )
 
                         repl.handle_command("/goal implement lifecycle smoke")
                         repl.handle_command("/goal")
-                        repl.handle_command("/goal pause")
+                        repl.handle_command("/goal replacement condition")
                         repl.handle_command("/goal")
-                        repl.handle_command("/goal resume")
-                        repl.handle_command("/goal")
-                        repl.handle_command("/goal clear")
+                        repl.handle_command("/goal stop")
+                        repl.handle_command("/clear")
                         repl.handle_command("/goal")
 
         service = repl.tool_context.goal_service
         self.assertIsNone(service.get_goal("repl-goal-lifecycle-session"))
         self.assertEqual(mock_provider.chat.call_count, 2)
+        self.assertEqual(mock_provider.chat_async.await_count, 2)
         rendered = "\n".join(
             args[0].markup if args and isinstance(args[0], Markdown) else str(args[0])
             for args, _kwargs in repl.console.print.call_args_list
             if args
         )
-        self.assertIn("Goal active", rendered)
-        self.assertIn("Still working.", rendered)
-        self.assertIn("Status: paused", rendered)
-        self.assertIn("Resumed working.", rendered)
-        self.assertIn("Goal cleared", rendered)
-        self.assertIn("No goal is currently set.", rendered)
+        self.assertIn("Goal set: implement lifecycle smoke", rendered)
+        self.assertIn("First goal achieved.", rendered)
+        self.assertIn("Goal set: replacement condition", rendered)
+        self.assertIn("Replacement goal achieved.", rendered)
+        self.assertIn("Conversation cleared.", rendered)
+        self.assertIn("No goal set", rendered)
 
     def test_handle_command_tools_lists_registered_tools(self):
         """/tools must call ToolRegistry.list_tools() and print each name.
@@ -832,6 +1147,49 @@ class TestREPL(unittest.TestCase):
                     else:
                         self.assertEqual(last_content, "你好")
 
+    def test_repl_goal_footer_is_visible_only_while_active(self):
+        """The prompt footer mirrors Claude Code's active-goal indicator."""
+        from types import SimpleNamespace
+
+        from clawcodex_ext.goal.model import ThreadGoalStatus
+        from clawcodex_ext.goal.service import GoalService
+        from clawcodex_ext.goal.store import GoalStore
+
+        service = GoalService(store=GoalStore(Path(self.temp_dir) / "footer-goals.sqlite"))
+        goal = service.replace_goal("footer-session", "finish footer smoke")
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl.tool_context = SimpleNamespace(
+            goal_service=service,
+            goal_thread_id="footer-session",
+            session_id="footer-session",
+        )
+
+        with patch("clawcodex_ext.repl.core.time.monotonic", side_effect=[100.0, 113.0]):
+            self.assertEqual(repl._goal_footer_status(), "◎ /goal active (0s)")
+            self.assertEqual(repl._goal_footer_status(), "◎ /goal active (13s)")
+
+        service.update_goal(
+            "footer-session",
+            ThreadGoalStatus.COMPLETE,
+            expected_goal_id=goal.goal_id,
+        )
+        self.assertIsNone(repl._goal_footer_status())
+
+    def test_direct_stream_fails_closed_when_goal_state_lookup_fails(self):
+        from types import SimpleNamespace
+
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl.stream = True
+        service = Mock()
+        service.get_goal.side_effect = RuntimeError("goal database unavailable")
+        repl.tool_context = SimpleNamespace(
+            goal_service=service,
+            goal_thread_id="footer-session",
+            session_id="footer-session",
+        )
+
+        self.assertFalse(repl._should_try_direct_stream("continue working"))
+
     def test_chat_direct_stream_accounts_goal_usage(self):
         """Direct-stream REPL turns must report provider usage to GoalRuntime."""
 
@@ -884,6 +1242,7 @@ class TestREPL(unittest.TestCase):
 
                     repl = ClawcodexREPL(provider_name="glm", stream=True)
                     repl.console.print = Mock()
+                    repl._continue_goal_if_idle = Mock(return_value=True)
 
                     with patch(
                         "clawcodex_ext.goal.runtime.goal_runtime_for_context",
@@ -903,6 +1262,7 @@ class TestREPL(unittest.TestCase):
                 ("stop", "goal-turn-1"),
             ],
         )
+        repl._continue_goal_if_idle.assert_called_once_with()
 
     def test_repl_threads_session_id_into_tool_context(self):
         """REPL goal commands and runtime accounting must share one thread id."""
@@ -980,10 +1340,12 @@ class TestREPL(unittest.TestCase):
 
                     repl = ClawcodexREPL(provider_name="glm", stream=True)
                     repl.console.print = Mock()
+                    repl._continue_goal_if_idle = Mock(return_value=True)
                     repl.chat("你好呀")
 
                     mock_provider.chat_stream.assert_called_once()
                     mock_provider.chat.assert_called()
+                    repl._continue_goal_if_idle.assert_called_once_with()
 
     def test_chat_pumps_cron_loop_during_engine_turn(self):
         """chat() must pump the IM gateway loop during engine turns."""
@@ -1109,15 +1471,16 @@ class TestREPL(unittest.TestCase):
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
 
-                    with patch("clawcodex_ext.repl.core.Session.load") as mock_load:
-                        loaded_session = Mock()
-                        loaded_session.session_id = "loaded_session_123"
-                        loaded_session.provider = "glm"
-                        loaded_session.model = "glm-4.5"
-                        loaded_session.conversation = Mock()
-                        loaded_session.conversation.messages = []
-                        mock_load.return_value = loaded_session
-
+                    loaded_session = Mock()
+                    loaded_session.session_id = "loaded_session_123"
+                    loaded_session.provider = "glm"
+                    loaded_session.model = "glm-4.5"
+                    loaded_session.conversation = Mock()
+                    loaded_session.conversation.messages = []
+                    with patch(
+                        "src.agent.Session.resume",
+                        return_value=loaded_session,
+                    ):
                         repl = ClawcodexREPL(provider_name="glm")
                         repl.load_session("loaded_session_123")
 
@@ -1162,6 +1525,7 @@ class TestREPL(unittest.TestCase):
                     repl.load_session("resumed_session")
 
                     self.assertEqual(repl.session.session_id, "resumed_session")
+                    self.assertEqual(repl.tool_context.session_id, "resumed_session")
                     # _engine_messages must contain the restored messages
                     self.assertEqual(len(repl._engine_messages), 2)
                     self.assertIs(
@@ -1206,6 +1570,51 @@ class TestREPL(unittest.TestCase):
         self.assertEqual(len(repl._engine_messages), 2)
         self.assertIs(repl._engine_messages[0], resumed_session.conversation.messages[0])
         self.assertIs(repl._engine_messages[1], resumed_session.conversation.messages[1])
+
+    def test_ext_repl_resume_resets_active_goal_progress(self):
+        """An explicit resume keeps the condition but restarts live metrics."""
+        from clawcodex_ext.goal.service import GoalService
+        from clawcodex_ext.goal.store import GoalStore
+        from clawcodex_ext.repl.app import ClawCodexExtREPL
+        from clawcodex_ext.tool_system.context import ToolContext
+        from clawcodex_ext.tool_system.registry import ToolRegistry
+
+        resumed_session = Mock()
+        resumed_session.session_id = "resumed-goal-session"
+        resumed_session.provider = "glm"
+        resumed_session.model = "glm-4.5"
+        resumed_session.conversation = Conversation()
+        service = GoalService(store=GoalStore(Path(self.temp_dir) / "goals.sqlite"))
+        goal = service.set_goal("resumed-goal-session", "keep working")
+        service.account_usage(
+            "resumed-goal-session",
+            expected_goal_id=goal.goal_id,
+            token_delta=17,
+            elapsed_seconds=6,
+        )
+        context = ToolContext(
+            workspace_root=Path(self.temp_dir),
+            goal_service=service,
+        )
+        provider = Mock(model="glm-4.5")
+
+        repl = ClawCodexExtREPL(
+            provider_name="glm",
+            resume_session_id="resumed-goal-session",
+            session=resumed_session,
+            provider=provider,
+            tool_registry=ToolRegistry(),
+            tool_context=context,
+            workspace_root=Path(self.temp_dir),
+        )
+
+        restored = service.get_goal("resumed-goal-session")
+        self.assertEqual(repl.tool_context.session_id, "resumed-goal-session")
+        self.assertIsNotNone(restored)
+        self.assertEqual(restored.goal_id, goal.goal_id)
+        self.assertEqual(restored.objective, "keep working")
+        self.assertEqual(restored.tokens_used, 0)
+        self.assertEqual(restored.time_used_seconds, 0)
 
     def test_ext_repl_uses_structured_permission_handler_by_default(self):
         """The downstream REPL entrypoint must preserve permission suggestions."""
@@ -2052,6 +2461,74 @@ class TestREPLConversationSanitization(unittest.TestCase):
             "sanitization must be called with the image_unsupported AssistantMessage; "
             f"got call_args_list={call_args_list!r}",
         )
+
+    def test_chat_renders_goal_evaluator_failure(self):
+        """The canonical REPL path must not hide evaluator failures."""
+        from src.types.messages import SystemMessage
+
+        repl = self._make_repl()
+
+        async def fake_submit_message(content, **kwargs):
+            del content, kwargs
+            notice = SystemMessage(
+                content="Goal evaluator failed: provider unavailable",
+                subtype="goal_evaluator_error",
+                level="warning",
+            )
+            notice.usage = {"input_tokens": 5, "output_tokens": 2}  # type: ignore[attr-defined]
+            yield notice
+
+        with patch("clawcodex_ext.query.engine.QueryEngine") as mock_engine_class:
+            mock_engine = Mock()
+            mock_engine.submit_message = fake_submit_message
+            mock_engine.reset_abort_controller = Mock()
+            mock_engine.get_messages = Mock(return_value=[])
+            mock_engine_class.return_value = mock_engine
+            repl.console.print = Mock()
+            repl._continue_goal_if_idle = Mock()
+
+            repl.chat("please inspect README.md and verify the implementation carefully")
+
+        self.assertTrue(
+            any(
+                "Goal evaluator failed: provider unavailable" in str(call.args[0])
+                for call in repl.console.print.call_args_list
+                if call.args
+            )
+        )
+        self.assertEqual(repl._last_chat_outcome, "goal_evaluator_error")
+        self.assertEqual(repl._stats_input_tokens, 5)
+        self.assertEqual(repl._stats_output_tokens, 2)
+        repl._continue_goal_if_idle.assert_not_called()
+
+    def test_chat_accounts_goal_evaluator_usage(self):
+        """REPL session stats include the evaluator side-call tokens."""
+        from src.types.messages import SystemMessage
+
+        repl = self._make_repl()
+
+        async def fake_submit_message(content, **kwargs):
+            del content, kwargs
+            notice = SystemMessage(
+                content="✓ Goal achieved",
+                subtype="goal_achieved",
+                level="info",
+            )
+            notice.usage = {"input_tokens": 7, "output_tokens": 3}  # type: ignore[attr-defined]
+            yield notice
+
+        with patch("clawcodex_ext.query.engine.QueryEngine") as mock_engine_class:
+            mock_engine = Mock()
+            mock_engine.submit_message = fake_submit_message
+            mock_engine.reset_abort_controller = Mock()
+            mock_engine.get_messages = Mock(return_value=[])
+            mock_engine_class.return_value = mock_engine
+            repl.console.print = Mock()
+
+            repl.chat("please inspect README.md and verify the implementation carefully")
+
+        self.assertEqual(repl._stats_input_tokens, 7)
+        self.assertEqual(repl._stats_output_tokens, 3)
 
 
 class TestREPLResumeReplay(unittest.TestCase):

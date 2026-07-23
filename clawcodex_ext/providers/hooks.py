@@ -24,14 +24,12 @@ def _codex_api_discovery() -> list[str]:
         register_discovery_hook("openai-codex", _codex_api_discovery)
     """
     try:
-        from src.auth.codex_oauth import get_codex_auth_status
+        from src.auth.codex_oauth import resolve_codex_runtime_credentials
 
-        status = get_codex_auth_status()
-        if not status.is_authenticated or not status.access_token:
-            return []  # no token yet — stick with the static baseline
+        credentials = resolve_codex_runtime_credentials(refresh_if_expiring=True)
         from clawcodex_ext.providers.codex_models import get_codex_model_ids
 
-        return get_codex_model_ids(status.access_token)
+        return get_codex_model_ids(credentials.api_key)
     except Exception:
         logger.debug("Codex API model discovery failed (non-fatal)", exc_info=True)
         return []

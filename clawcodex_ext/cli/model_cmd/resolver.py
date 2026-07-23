@@ -40,13 +40,13 @@ def resolve(
         provider_source = "env"
     if provider is None and cli_model:
         try:
-            provider = registry.infer_provider_for_model(cli_model)
+            provider = registry.infer_provider_for_model(cli_model, discover=False)
             provider_source = "cli-model"
         except Exception:
             pass
     if provider is None and env_model:
         try:
-            provider = registry.infer_provider_for_model(env_model)
+            provider = registry.infer_provider_for_model(env_model, discover=False)
             provider_source = "env-model"
         except Exception:
             pass
@@ -56,7 +56,7 @@ def resolve(
 
     provider_unknown = False
     try:
-        registry.validate_provider(provider)
+        provider = registry.validate_provider(provider)
     except UnknownProviderError:
         provider_unknown = True
         print(
@@ -77,15 +77,20 @@ def resolve(
         configured_model = _nonempty(provider_cfg.get("default_model"))
         if configured_model:
             if not provider_unknown:
-                try:
-                    registry.validate_model(configured_model, provider)
+                local_models = set(registry.configured_models(provider))
+                configured_models = provider_cfg.get("models")
+                if isinstance(configured_models, list):
+                    local_models.update(
+                        model for model in configured_models if isinstance(model, str) and model
+                    )
+                if configured_model in local_models:
                     model = configured_model
                     model_source = "user"
-                except Exception:
-                    # User-configured model is not in the known list —
-                    # the API may have added it dynamically. Trust the
-                    # user's configured value and log a warning instead
-                    # of silently dropping back to the built-in default.
+                else:
+                    # Startup resolution must stay local.  A provider may
+                    # expose newer models than the cached/configured catalog,
+                    # so trust the saved value and let the provider validate it
+                    # on the first request instead of blocking on discovery.
                     print(
                         f"Warning: model '{configured_model}' is not in the known list "
                         f"for provider '{provider}' — using it anyway (saved config)",
@@ -105,8 +110,10 @@ def resolve(
         model = provider
         model_source = "fallback"
 
-    if not provider_unknown and model_source != "user-warn":
-        registry.validate_model(model, provider)
+    # Every remaining model source is already authoritative: explicit CLI/env
+    # values are session choices, saved values were checked locally above, and
+    # provider defaults come from this same registry.  Do not perform another
+    # live catalog lookup as final validation.
     return Resolution(
         provider=provider,
         model=model,

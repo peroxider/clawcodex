@@ -9,7 +9,7 @@ import pytest
 
 from clawcodex_ext.feature_gate import get_registry, reset_registry
 from clawcodex_ext.goal.gate import ensure_goals_feature_registered
-from clawcodex_ext.goal.model import ThreadGoalStatus
+from clawcodex_ext.goal.model import GoalCompletionMode, ThreadGoalStatus
 from clawcodex_ext.goal.files import (
     GOAL_FILE_NAME,
     MAX_THREAD_GOAL_OBJECTIVE_CHARS,
@@ -18,6 +18,7 @@ from clawcodex_ext.goal.files import (
 from clawcodex_ext.goal.service import (
     GoalService,
     GoalServiceError,
+    clear_goal_for_context,
     goal_thread_id_from_context,
 )
 from clawcodex_ext.goal.store import GoalStore, goals_db_filename
@@ -64,13 +65,26 @@ def test_set_goal_materializes_long_objective_before_persisting(tmp_path: Path) 
 
 
 def test_replace_goal_resets_usage_and_generates_new_goal_id(tmp_path: Path) -> None:
+    from clawcodex_ext.goal.evaluator import GoalEvaluation
+
     service = make_service(tmp_path)
-    first = service.set_goal("thread-1", "old", token_budget=20)
+    first = service.set_goal(
+        "thread-1",
+        "old",
+        token_budget=20,
+        completion_mode=GoalCompletionMode.EVALUATOR,
+    )
     accounted = service.account_usage(
         "thread-1",
         expected_goal_id=first.goal_id,
         token_delta=12,
         elapsed_seconds=5,
+    )
+    service.record_evaluation(
+        "thread-1",
+        GoalEvaluation(met=False, reason="not yet", usage={}),
+        expected_goal_id=first.goal_id,
+        expected_evaluation_count=0,
     )
 
     replacement = service.replace_goal("thread-1", "new")
@@ -81,6 +95,56 @@ def test_replace_goal_resets_usage_and_generates_new_goal_id(tmp_path: Path) -> 
     assert replacement.tokens_used == 0
     assert replacement.time_used_seconds == 0
     assert replacement.status is ThreadGoalStatus.ACTIVE
+    assert replacement.evaluation_count == 0
+    assert replacement.last_evaluation_reason is None
+
+
+def test_model_tool_goal_defaults_to_tool_completion_mode(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+
+    created = service.create_goal("thread-1", "created by model tool")
+
+    assert created.completion_mode is GoalCompletionMode.TOOL
+
+
+def test_record_evaluation_publishes_snapshot_and_rejects_stale_goal(
+    tmp_path: Path,
+) -> None:
+    from clawcodex_ext.goal.evaluator import GoalEvaluation
+
+    service = make_service(tmp_path)
+    stale = service.set_goal("thread-1", "old", completion_mode=GoalCompletionMode.EVALUATOR)
+    current = service.replace_goal("thread-1", "new", completion_mode=GoalCompletionMode.EVALUATOR)
+    snapshots = []
+    service.subscribe("thread-1", snapshots.append)
+
+    rejected = service.record_evaluation(
+        "thread-1",
+        GoalEvaluation(met=True, reason="stale result", usage={}),
+        expected_goal_id=stale.goal_id,
+        expected_evaluation_count=0,
+    )
+    recorded = service.record_evaluation(
+        "thread-1",
+        GoalEvaluation(met=False, reason="needs another turn", usage={}),
+        expected_goal_id=current.goal_id,
+        expected_evaluation_count=0,
+    )
+    rejected_version = service.record_evaluation(
+        "thread-1",
+        GoalEvaluation(met=False, reason="stale concurrent result", usage={}),
+        expected_goal_id=current.goal_id,
+        expected_evaluation_count=0,
+    )
+
+    assert rejected is None
+    assert rejected_version is None
+    assert recorded is not None
+    assert recorded.status is ThreadGoalStatus.ACTIVE
+    assert recorded.evaluation_count == 1
+    assert recorded.last_evaluation_reason == "needs another turn"
+    assert service.get_goal("thread-1") == recorded
+    assert snapshots == [recorded]
 
 
 def test_update_goal_uses_expected_goal_id_for_cas(tmp_path: Path) -> None:
@@ -175,3 +239,133 @@ def test_service_rejects_empty_objective_and_negative_budget(tmp_path: Path) -> 
 
     with pytest.raises(GoalServiceError, match="token budget must be non-negative"):
         service.create_goal("thread-1", "negative budget", token_budget=-1)
+
+
+def test_subscribe_emits_current_and_all_committed_goal_snapshots(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    snapshots: list[tuple[str, int] | None] = []
+
+    unsubscribe = service.subscribe(
+        "thread-1",
+        lambda goal: snapshots.append(
+            None if goal is None else (goal.status.value, goal.tokens_used)
+        ),
+        emit_current=True,
+    )
+    goal = service.set_goal("thread-1", "keep UI current")
+    service.account_usage(
+        "thread-1",
+        expected_goal_id=goal.goal_id,
+        token_delta=7,
+        elapsed_seconds=2,
+    )
+    service.update_goal(
+        "thread-1",
+        ThreadGoalStatus.COMPLETE,
+        expected_goal_id=goal.goal_id,
+    )
+    service.clear_goal("thread-1")
+
+    assert snapshots == [
+        None,
+        ("active", 0),
+        ("active", 7),
+        ("complete", 7),
+        None,
+    ]
+
+    unsubscribe()
+    service.set_goal("thread-1", "not observed")
+    assert snapshots[-1] is None
+
+
+def test_subscriber_failures_do_not_rollback_goal_mutations(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+
+    def fail(_goal) -> None:
+        raise RuntimeError("UI listener failed")
+
+    service.subscribe("thread-1", fail)
+
+    goal = service.set_goal("thread-1", "mutation survives")
+
+    assert service.get_goal("thread-1") == goal
+
+
+def test_failed_cas_update_does_not_publish_snapshot(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    stale = service.set_goal("thread-1", "old")
+    service.replace_goal("thread-1", "new")
+    snapshots = []
+    service.subscribe("thread-1", snapshots.append)
+
+    result = service.update_goal(
+        "thread-1",
+        ThreadGoalStatus.COMPLETE,
+        expected_goal_id=stale.goal_id,
+    )
+
+    assert result is None
+    assert snapshots == []
+
+
+def test_clear_goal_for_context_removes_session_goal(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    service.set_goal("thread-1", "clear with conversation")
+    context = SimpleNamespace(session_id="thread-1", goal_service=service)
+
+    assert clear_goal_for_context(context) is True
+    assert service.get_goal("thread-1") is None
+
+
+def test_clear_goal_for_context_propagates_store_failure() -> None:
+    class FailingService:
+        def clear_goal(self, thread_id: str) -> bool:
+            raise RuntimeError(f"cannot clear {thread_id}")
+
+    context = SimpleNamespace(
+        session_id="thread-1",
+        goal_service=FailingService(),
+    )
+
+    with pytest.raises(RuntimeError, match="cannot clear thread-1"):
+        clear_goal_for_context(context)
+
+
+def test_reset_progress_for_resume_preserves_active_condition_and_identity(
+    tmp_path: Path,
+) -> None:
+    from clawcodex_ext.goal.evaluator import GoalEvaluation
+
+    service = make_service(tmp_path)
+    goal = service.set_goal(
+        "thread-1",
+        "resume condition",
+        completion_mode=GoalCompletionMode.EVALUATOR,
+    )
+    service.account_usage(
+        "thread-1",
+        expected_goal_id=goal.goal_id,
+        token_delta=21,
+        elapsed_seconds=8,
+    )
+    service.record_evaluation(
+        "thread-1",
+        GoalEvaluation(met=False, reason="continue", usage={}),
+        expected_goal_id=goal.goal_id,
+        expected_evaluation_count=0,
+    )
+
+    resumed = service.reset_progress_for_resume(
+        "thread-1",
+        expected_goal_id=goal.goal_id,
+    )
+
+    assert resumed is not None
+    assert resumed.goal_id == goal.goal_id
+    assert resumed.objective == "resume condition"
+    assert resumed.status is ThreadGoalStatus.ACTIVE
+    assert resumed.tokens_used == 0
+    assert resumed.time_used_seconds == 0
+    assert resumed.evaluation_count == 0
+    assert resumed.last_evaluation_reason is None
