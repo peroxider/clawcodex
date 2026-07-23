@@ -313,11 +313,13 @@ class AgentSession:
             return
         try:
             import json as _json
-            from clawcodex_ext.agent.conversation import Conversation
-            from clawcodex_ext.services.session_storage import SessionStorage
-            from clawcodex_ext.types.messages import message_from_dict
+            from extensions.orchestrator_runtime.utils.messages_impl import (
+                message_from_dict,
+            )
 
-            storage: SessionStorage | None = getattr(self, "_transcript_storage", None)
+            # Phase 3: route through Protocol-injected SessionStorage when
+            # available; otherwise fall back to the legacy direct import.
+            storage = getattr(self, "_transcript_storage", None)
             messages = []
             if storage is not None:
                 try:
@@ -337,25 +339,22 @@ class AgentSession:
             cost_block: dict = {}
             try:
                 import time as _time
-                from clawcodex_ext.bootstrap.state import (
-                    get_total_cost_usd,
-                    get_total_api_duration,
-                    get_total_api_duration_without_retries,
-                    get_total_tool_duration,
-                    get_total_lines_added,
-                    get_total_lines_removed,
-                    get_start_time,
-                    get_model_usage,
-                )
+                # Phase 3: route through Protocol-injected BootstrapState
+                # when available; otherwise fall back to legacy direct
+                # import.
+                self._resolve_protocols()
+                bootstrap = self._bootstrap_state
 
                 cost_block = {
-                    "total_cost_usd": get_total_cost_usd(),
-                    "total_api_duration": get_total_api_duration(),
-                    "total_api_duration_without_retries": get_total_api_duration_without_retries(),
-                    "total_tool_duration": get_total_tool_duration(),
-                    "total_lines_added": get_total_lines_added(),
-                    "total_lines_removed": get_total_lines_removed(),
-                    "last_duration": _time.time() - get_start_time(),
+                    "total_cost_usd": bootstrap.get_total_cost_usd(),
+                    "total_api_duration": bootstrap.get_total_api_duration(),
+                    "total_api_duration_without_retries": (
+                        bootstrap.get_total_api_duration_without_retries()
+                    ),
+                    "total_tool_duration": bootstrap.get_total_tool_duration(),
+                    "total_lines_added": bootstrap.get_total_lines_added(),
+                    "total_lines_removed": bootstrap.get_total_lines_removed(),
+                    "last_duration": _time.time() - (bootstrap.get_start_time() or _time.time()),
                     "model_usage": {
                         model: {
                             "input_tokens": u.input_tokens,
@@ -364,7 +363,7 @@ class AgentSession:
                             "cache_read_input_tokens": u.cache_read_input_tokens,
                             "cost_usd": u.cost_usd,
                         }
-                        for model, u in get_model_usage().items()
+                        for model, u in bootstrap.get_model_usage().items()
                     },
                 }
             except Exception:
@@ -377,12 +376,13 @@ class AgentSession:
             # save_to_session_storage() which overwrites the
             # SessionStorage metadata (title, cwd) that run()
             # already initialised.
-            conv = Conversation(messages=messages)
+            # Phase 3: Conversation wrapper is no longer needed (we
+            # just persist messages+metadata directly).
             snapshot_data = {
                 "session_id": self.run_id,
                 "provider": self._snapshot_provider or "",
                 "model": self._snapshot_model or "",
-                "conversation": conv.to_dict(),
+                "conversation": {"messages": messages, "max_history": 0},
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "cost": cost_block,
@@ -421,6 +421,10 @@ class AgentRunner:
         agent_config: AgentConfig,
         sandbox_config: SandboxConfig,
         workspace_cfg: WorkspaceConfig | None = None,
+        *,
+        agent_runtime: Any | None = None,
+        session_storage: Any | None = None,
+        coordinator_provider: Any | None = None,
     ) -> None:
         self.agent_config = agent_config
         self.sandbox_config = sandbox_config
@@ -440,6 +444,47 @@ class AgentRunner:
         # this with a recording coroutine; production paths use the
         # real ``asyncio.sleep`` so cancellation still works.
         self._sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
+
+        # ─── Phase 3 Protocol injection (optional, backward-compat) ─────
+        # Lazy-import factories so module-load order stays unchanged for
+        # callers that never reach the Protocol paths (e.g. lightweight
+        # unit tests that only exercise _save_json_snapshot).
+        if (
+            agent_runtime is not None
+            or session_storage is not None
+            or coordinator_provider is not None
+        ):
+            self._protocols_active = True
+            self._agent_runtime = agent_runtime
+            self._session_storage = session_storage
+            self._coordinator = coordinator_provider
+        else:
+            self._protocols_active = False
+            self._agent_runtime = None
+            self._session_storage = None
+            self._coordinator = None
+
+    def _resolve_protocols(self) -> None:
+        """Lazy-initialise Protocol defaults on first use.
+
+        Defers the ``extensions.orchestrator_runtime.adapters`` import to
+        avoid surprising existing test imports that patch
+        ``extensions.orchestrator.agent_runner.QueryRunner`` directly.
+        """
+        if getattr(self, "_protocols_active", False):
+            return
+        from extensions.orchestrator_runtime.adapters import (
+            build_default_agent_runtime,
+            build_default_bootstrap_state,
+            build_default_coordinator_provider,
+            build_default_session_storage,
+        )
+
+        self._agent_runtime = build_default_agent_runtime()
+        self._session_storage = build_default_session_storage()
+        self._coordinator = build_default_coordinator_provider()
+        self._bootstrap_state = build_default_bootstrap_state()
+        self._protocols_active = True
 
     def _handle_tool_call(
         self,
@@ -645,13 +690,11 @@ class AgentRunner:
             return
 
         storage = session._transcript_storage
-        from clawcodex_ext.types.messages import (
-            create_assistant_message,
-            create_user_message,
-        )
-        from clawcodex_ext.types.content_blocks import (
+        from extensions.orchestrator_runtime.utils.messages_impl import (
             TextBlock,
             ToolResultBlock,
+            create_assistant_message,
+            create_user_message,
         )
 
         # --- AssistantMessage: optional leading TextBlock then all ToolUseBlocks.
@@ -879,7 +922,9 @@ class AgentRunner:
         diagnostics_callback: Callable[[AgentSession], None] | None = None,
     ) -> None:
         """Execute one session with coordinator mode isolated per task."""
-        from clawcodex_ext.coordinator.mode import coordinator_mode_context
+        # Phase 3: route through Protocol-injected coordinator provider when
+        # available; otherwise fall back to legacy direct import.
+        self._resolve_protocols()
 
         explicit_mode = getattr(session, "coordinator_mode", None)
         coordinator_enabled = (
@@ -887,7 +932,7 @@ class AgentRunner:
             if explicit_mode is not None
             else bool(getattr(self.agent_config, "coordinator_mode", False))
         )
-        with coordinator_mode_context(coordinator_enabled):
+        with self._coordinator.enter(coordinator_enabled):
             return await self._run_impl(
                 session,
                 workflow,
@@ -964,9 +1009,10 @@ class AgentRunner:
         # SendMessage / TaskStop + lightweight reads) and is expected to
         # spawn workers via the Agent tool. This flip was lost in the
         # !52 squash-merge — restored from dfa79a7c.
-        from clawcodex_ext.coordinator.mode import is_coordinator_mode
+        # Phase 3: route through Protocol-injected coordinator provider.
+        self._resolve_protocols()
 
-        if is_coordinator_mode():
+        if self._coordinator.is_active():
             logger.info(
                 "Coordinator mode ENABLED for issue %s — agent will get "
                 "coordinator tool set and may spawn workers via Agent tool.",
@@ -1209,10 +1255,15 @@ class AgentRunner:
                 if session.run_id:
                     if session._transcript_storage is None:
                         try:
-                            from clawcodex_ext.services.session_storage import SessionStorage
-
-                            session._transcript_storage = SessionStorage(
-                                session_id=session.run_id,
+                            # Phase 3: route through Protocol-injected
+                            # session storage. The adapter defaults to the
+                            # upstream ``SessionStorage``; tests can inject a
+                            # custom impl.
+                            self._resolve_protocols()
+                            session._transcript_storage = (
+                                self._session_storage._upstream(
+                                    session_id=session.run_id,
+                                )
                             )
                             session._transcript_storage.init_metadata(
                                 model=self.agent_config.model or "",
@@ -1256,8 +1307,12 @@ class AgentRunner:
                             session.control_socket = None
                     if session._transcript_storage is not None:
                         try:
-                            from clawcodex_ext.types.messages import create_user_message
-                            from clawcodex_ext.types.content_blocks import TextBlock
+                            # Phase 3: copy-down messages (orchestrator-local)
+                            # replace direct upstream import.
+                            from extensions.orchestrator_runtime.utils.messages_impl import (  # noqa: E501
+                                TextBlock,
+                                create_user_message,
+                            )
 
                             session._transcript_storage.write_message(
                                 create_user_message(
@@ -1291,7 +1346,9 @@ class AgentRunner:
                     debug_log_path=session.debug_log_path,
                     env={
                         **(getattr(self.agent_config, "env", None) or {}),
-                        "CLAUDE_CODE_COORDINATOR_MODE": ("1" if is_coordinator_mode() else "0"),
+                        "CLAUDE_CODE_COORDINATOR_MODE": (
+                            "1" if self._coordinator.is_active() else "0"
+                        ),
                     },
                     timeout_s=self.agent_config.run_timeout_ms / 1000.0,
                     stall_timeout_s=(
@@ -1491,7 +1548,11 @@ class AgentRunner:
                             # (c) max_turns fallthrough, (d) 429 backoff reset.
                             if session._transcript_storage is not None:
                                 try:
-                                    from clawcodex_ext.types.content_blocks import ToolUseBlock
+                                    # Phase 3: copy-down messages_impl replaces
+                                    # direct upstream import.
+                                    from extensions.orchestrator_runtime.utils.messages_impl import (  # noqa: E501
+                                        ToolUseBlock,
+                                    )
 
                                     if event.tool_use_id:
                                         session._transcript_tool_uses.append(
@@ -1560,7 +1621,11 @@ class AgentRunner:
                             # synthetic error block.
                             if session._transcript_storage is not None and event.tool_use_id:
                                 try:
-                                    from clawcodex_ext.types.content_blocks import ToolResultBlock
+                                    # Phase 3: copy-down messages_impl replaces
+                                    # direct upstream import.
+                                    from extensions.orchestrator_runtime.utils.messages_impl import (  # noqa: E501
+                                        ToolResultBlock,
+                                    )
 
                                     result_output = event.result.get("output", "")
                                     is_error = event.result.get("is_error", False)

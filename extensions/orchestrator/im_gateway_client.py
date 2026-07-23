@@ -86,11 +86,11 @@ class OrchestratorGatewayClient:
 
     async def _on_pushed_deliver(self, frame) -> None:
         """Server-pushed DELIVER (gateway→orchestrator): classify + dispatch."""
-        from clawcodex_ext.services.im_gateway.models import (
-            InboundMessage,
-            MessageSemantics,
-        )
-
+        # Phase 3 cleanup: ``InboundMessage`` / ``MessageSemantics`` are
+        # already top-level imported via ``clawcodex_compat`` shim, so the
+        # redundant function-level lazy import is removed. Full migration to
+        # the ``ImInbound`` Protocol dataclass is Phase 4+ (would change the
+        # public ``dispatch()`` signature).
         semantic = None
         if frame.semantic:
             with __import__("contextlib").suppress(ValueError):
@@ -149,6 +149,11 @@ class OrchestratorGatewayClient:
                 )
 
     def _classify(self, message):
+        # Phase 3: ``MessageClassifier`` is *not* part of the ImChannel
+        # Protocol surface (it produces upstream ``MessageSemantics`` enum
+        # values consumed by ``dispatch()``). Keep as defensive lazy import
+        # for backward compatibility — converting to ``ImInbound.metadata``
+        # would change the public ``dispatch()`` signature (Phase 4+).
         from clawcodex_ext.messaging.semantics import MessageClassifier
 
         return MessageClassifier().classify(message)
@@ -362,6 +367,12 @@ class OrchestratorGatewayClient:
         stderr = io.StringIO()
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             try:
+                # Phase 3: ``run_orchestrator_subcommand`` lives in
+                # ``clawcodex_ext.entrypoints.orchestrator`` — not part of
+                # the ImChannel Protocol surface. Existing ``cli_runner``
+                # injection (lines above) already provides the
+                # Protocol-style replacement path; this fallback is kept as
+                # an ImportError-safety net for tests that don't inject.
                 from clawcodex_ext.entrypoints.orchestrator import run_orchestrator_subcommand
 
                 rc = run_orchestrator_subcommand(list(argv))

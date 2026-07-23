@@ -24,8 +24,12 @@ class CoordinatorContextProvider(Protocol):
     def is_active(self) -> bool:
         ...
 
-    def enter(self) -> AbstractContextManager[None]:
-        """Returns a context manager; entering enables coordinator mode."""
+    def enter(self, enabled: bool) -> AbstractContextManager[None]:
+        """Returns a context manager; entering with ``enabled=True`` flips
+        the coordinator-mode gate for the lifetime of the block.
+
+        Mirrors the upstream ``coordinator_mode_context(enabled)`` semantics.
+        """
         ...
 
 

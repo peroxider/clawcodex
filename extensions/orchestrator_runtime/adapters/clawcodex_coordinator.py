@@ -31,13 +31,12 @@ class ClawcodexCoordinatorProvider(CoordinatorContextProvider):
 
         return bool(is_coordinator_mode())
 
-    def enter(self) -> AbstractContextManager[None]:
+    def enter(self, enabled: bool = True) -> AbstractContextManager[None]:
         from clawcodex_ext.coordinator.mode import coordinator_mode_context
 
-        # ``coordinator_mode_context(enabled)`` takes a bool argument; the
-        # Protocol contract says ``enter()`` returns a context manager that
-        # "enters coordinator mode". We default-enable on entry.
-        return coordinator_mode_context(True)  # type: ignore[return-value]
+        # Pass through the ``enabled`` flag so callers (e.g. agent_runner.run)
+        # can keep their dynamic coordinator-mode toggle semantics.
+        return coordinator_mode_context(enabled)  # type: ignore[return-value]
 
 
 __all__ = ["ClawcodexCoordinatorProvider"]
