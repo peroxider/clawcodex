@@ -2,8 +2,8 @@
 
 > **来源**：docs/COMMERCIALIZATION_EXECUTIVE_SUMMARY.md §4.2.4 判定「高成本但可行」
 > **目标**：将 `extensions/orchestrator/`（43,643 行 / 101 个文件）拆为独立 PyPI 包 `orchestratord`，上游 ClawCodex 仅作为「执行后端」之一可插拔替换。
-> **本文状态**：Phase 0+1+2（§10.2 可独立启动子集）✅ 已落地（commit `2dcacba8`，2026-07-23）；Phase 3~6 仍为设计阶段。
-> **落地记录**：`~/.claude/projects/-mnt-c-WorkSpace-clawcodex/memory/orchestrator_decoupling_p0p1p2_done.md`
+> **本文状态**：Phase 0+1+2+3（§10.2 可独立启动子集 + agent_runner/im_gateway_client 核心迁移）✅ 已落地（commit `2dcacba8` / `87fd0fe4`，2026-07-23）；Phase 4~6 仍为设计阶段。
+> **落地记录**：`~/.claude/projects/-mnt-c-WorkSpace-clawcodex/memory/orchestrator_decoupling_p0p1p2p3_done.md`
 
 ---
 
@@ -608,11 +608,12 @@ class ClawcodexBackend:
 
 ## 6. 迁移路径（6 个 Phase）
 
-> **实施说明（2026-07-23）**：Phase 0+1+2 已按「§10.2 可独立启动子集」落地，
+> **实施说明（2026-07-23）**：Phase 0+1+2+3 已按「§10.2 可独立启动子集 + 核心迁移」落地，
 > 但形态与原设计不同——采用**仓内子模块** `extensions/orchestrator_runtime/`
 > 而非独立 `orchestratord/` Git 仓库/PyPI 包（用户确认保留单仓开发流）。
 > 因此下文各 Phase 中的 `orchestratord/xxx` 路径在实际落地中对应
-> `extensions/orchestrator_runtime/xxx`。commit `2dcacba8`。
+> `extensions/orchestrator_runtime/xxx`。commit `2dcacba8`（P0+P1+P2）与
+> `87fd0fe4`（P3 压缩版：agent_runner / im_gateway_client Protocol 注入）。
 
 ### Phase 0 — 准备（0.5 天）✅ 已落地（改为仓内子模块形态）
 - [x] ~~建立 `orchestratord/` 独立 Git 仓库~~ → 改为建立仓内子模块 `extensions/orchestrator_runtime/`（`protocols/` + `utils/` + `adapters/` 三层骨架）
@@ -653,7 +654,7 @@ class ClawcodexBackend:
 > orchestrator 测试 1610 pass、Stage 1 30/30、Stage 5 114/114。
 > **未做**：`utils/messages.py`（C3 TextBlock 复制）、`utils/intent.py`（Intent 枚举）——实测 orchestrator 顶级 import 未直接依赖，留待 Phase 3 函数级 lazy import 迁移时处理。
 
-### Phase 3 — 核心迁移（约 10 天，~3,000 行）
+### Phase 3 — 核心迁移（约 10 天，~3,000 行）✅ 已落地（实测 6 改文件 / 2 新测试，agent_runner + im_gateway_client 完成 Protocol 解耦）
 **目标**：把 `extensions/orchestrator/` 的核心代码迁到 `orchestratord/core/`，替换具体上游引用为 Protocol。
 
 **关键步骤**：
@@ -666,6 +667,14 @@ class ClawcodexBackend:
 7. `modes/*.py` 改用 Protocol 注入
 
 **验证**：双轨运行（生产仍走 `extensions/orchestrator/`），但每次 `orchestratord` 启动时跑相同的单元测试集合。
+
+> ✅ **2026-07-23 已落地压缩版**（commit `87fd0fe4`）：不复制全部文件，而是直接在 `extensions/orchestrator/agent_runner.py` 和 `im_gateway_client.py` 中注入 Protocol 抽象；
+> - `AgentRunner` 新增 3 个 kw-only 注入点（`agent_runtime` / `session_storage` / `coordinator_provider`），默认通过 `_resolve_protocols()` 懒加载 `ClawcodexAgentRuntime` / `ClawcodexSessionStorage` / `ClawcodexCoordinatorProvider`。
+> - 替换 `agent_runner.py` 中 13 处 function-level lazy import：`clawcodex_ext.types.{messages,content_blocks}` → `extensions.orchestrator_runtime.utils.messages_impl`；`clawcodex_ext.bootstrap.state.*` → `BootstrapState` Protocol；`clawcodex_ext.coordinator.mode.*` → `CoordinatorContextProvider` Protocol；`clawcodex_ext.services.session_storage.SessionStorage` → `SessionStorage` Protocol（`_upstream()` 包装）。
+> - `im_gateway_client.py`：移除冗余的 `InboundMessage/MessageSemantics` lazy import（已可通过 `clawcodex_compat` 顶层获得）；保留 `MessageClassifier` 与 `run_orchestrator_subcommand` 作为防御性 fallback 并加注 Phase 4+ 说明。
+> - 修复 `CoordinatorContextProvider.enter()` 签名，支持 `enabled: bool` 透传，以保留 `agent_runner.run()` 动态 coordinator-mode 语义。
+> - 新增 2 个测试：`tests/orchestrator/test_agent_runner_protocol_injection.py`、`tests/orchestrator/test_im_channel_protocol_injection.py`。
+> - 验证：ruff passed；受影响测试 31 passed；orchestrator 单元测试 1611 passed / 2 skipped（仅 pre-existing `test_repro_gate.py::test_green_repro_command_passes_and_reports` 失败）；稳定性门禁 491 passed。
 
 ### Phase 4 — 适配层实现（约 5 天，~1,500 行）
 **目标**：在 `clawcodex_ext/orchestratord_adapter/` 下实现 ClawcodexBackend，把上游实现包装成 Protocol 满足者。
@@ -845,7 +854,7 @@ def main(argv=None):
 **可独立启动的子集**（即使上游暂未走「独立包」也值得做的）：
 - Phase 1 + Phase 2 = ~1,500 行纯 orchestrator 内部重组，把弱耦合 6 类抽出来（不依赖任何仓外决策）
 - 这部分也是 Decoupling Mandate 的体现：减少 `extensions/orchestrator/` 对 `clawcodex_ext.` 的引用
-- ✅ **已于 2026-07-23 落地**（commit `2dcacba8`）：以仓内子模块 `extensions/orchestrator_runtime/` 形态实现，Phase 0+1+2 合并单提交；20 新文件 / 5 改文件；orchestrator 与 orchestrator_runtime 共存，原入口经 `clawcodex_compat` 透明委托。前置条件 3/3 未全满足（capabilities 仍演进、商业化主线未定），但子集不依赖仓外决策故先行落地。
+- ✅ **已于 2026-07-23 落地**（commit `2dcacba8` / `87fd0fe4`）：以仓内子模块 `extensions/orchestrator_runtime/` 形态实现，Phase 0+1+2+3 合并为两次提交；P0+P1+P2 为 20 新文件 / 5 改文件 / 9 处顶级 import 切换；P3 为 `agent_runner.py` / `im_gateway_client.py` 的 13 处 lazy import Protocol 化 + 2 个新测试。orchestrator 与 orchestrator_runtime 共存，原入口经 `clawcodex_compat` 透明委托。前置条件 3/3 未全满足（capabilities 仍演进、商业化主线未定），但子集不依赖仓外决策故先行落地。
 
 ---
 
@@ -882,4 +891,4 @@ def main(argv=None):
 
 **最后更新**：2026-07-23
 **作者**：ClawCodex 项目组
-**状态**：Phase 0+1+2（§10.2 可独立启动子集）✅ 已落地（commit `2dcacba8`）；Phase 3~6 📐 设计阶段
+**状态**：Phase 0+1+2+3 ✅ 已落地（commit `2dcacba8` / `87fd0fe4`）；Phase 4~6 📐 设计阶段
