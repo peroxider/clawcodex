@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-from ..adapters import DEFAULTS
+from ...adapters import DEFAULTS
 
 from ..composite_runtime import CompositeWorkflowSpec
 from .catalog import register_macro
@@ -16,7 +16,7 @@ from .models import MacroDefinition
 from .persist import macro_relative_manifest, persist_macros_atomic
 from .routing import register_macro_route
 from .validation import validate_macro_definition
-from ..tool_retrieval import (
+from ...core.tool_retrieval import (
     index_from_routes,
     load_tool_retrieval_index,
     write_tool_retrieval_index,

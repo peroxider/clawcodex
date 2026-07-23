@@ -26,8 +26,8 @@ from .routing import (
     resolve_macro_route,
     resolve_macro_route_details,
 )
-from ..core.templates import HANDWRITTEN_MACRO_TEMPLATE, TEMPLATES_DIR
-from ..tool_retrieval import (
+from .templates import HANDWRITTEN_MACRO_TEMPLATE, TEMPLATES_DIR
+from ...core.tool_retrieval import (
     MacroCoverage,
     ToolRetrievalIndex,
     ToolRetrievalProfile,

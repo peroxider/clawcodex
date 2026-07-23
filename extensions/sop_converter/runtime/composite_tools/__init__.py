@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from ..adapters import DEFAULTS
+from ...adapters import DEFAULTS
 
 from .builtin import builtin_composite_tools
 from .models import CompositeStage, CompositeToolSpec

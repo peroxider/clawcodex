@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from ..adapters import DEFAULTS
+from ...adapters import DEFAULTS
 
 from . import (
     _SKIP_PLACEHOLDER_COMPOSITE_TOOLS,

@@ -193,7 +193,7 @@ def validate_macro_definition(
             )
 
     if macro.routing.covered_tools and tool_index is not None:
-        from ..tool_retrieval import resolve_tool_references
+        from ...core.tool_retrieval import resolve_tool_references
 
         try:
             covered = resolve_tool_references(
