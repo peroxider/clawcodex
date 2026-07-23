@@ -1,10 +1,2 @@
-"""Vampire ATP adapter."""
-
-from __future__ import annotations
-
-from .base import ExternalAtpSolverAdapter
-
-
-class VampireSolverAdapter(ExternalAtpSolverAdapter):
-    engine_name = "atp-vampire"
-    binary_name = "vampire"
+"""Compatibility shim — delegate to lkb.atp.vampire."""
+from lkb.atp.vampire import *  # noqa: F401, F403
