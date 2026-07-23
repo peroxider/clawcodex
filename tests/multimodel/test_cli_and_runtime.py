@@ -37,11 +37,11 @@ def test_runtime_selection_overrides_config(monkeypatch, tmp_path) -> None:
 
     async def exercise() -> None:
         result = await command.call("use quick-compare", context)
-        assert "已切换到多模型组" in result.value
+        assert "Switched to model group" in result.value
         status = (await command.call("status", context)).value
-        assert "状态: 已启用" in status
-        assert "聚合器: passthrough" in status
-        assert "单模型模式" in (await command.call("off", context)).value
+        assert "Status: enabled" in status
+        assert "Aggregator: passthrough" in status
+        assert "single-model mode" in (await command.call("off", context)).value
 
     asyncio.run(exercise())
     assert resolve_active_group(cli_group="cli", runtime_group="runtime", config=load_config()) == "cli"
