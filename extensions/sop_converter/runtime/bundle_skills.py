@@ -300,15 +300,9 @@ def register_bundle_skills(bundle_path: Path, workspace_root: Path) -> BundleSki
 
     if registered:
         try:
-            from clawcodex_ext.command_system.aggregator import clear_commands_cache
+            from ..adapters import DEFAULTS
 
-            clear_commands_cache()
-        except Exception:
-            pass
-        try:
-            from clawcodex_ext.context_system.prompt_assembly import clear_context_caches
-
-            clear_context_caches()
+            DEFAULTS.clear_sop_caches()
         except Exception:
             pass
 

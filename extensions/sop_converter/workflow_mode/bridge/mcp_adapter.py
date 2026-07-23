@@ -5,15 +5,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from clawcodex_ext.agent.tool_authoring.persistence import (
-    TOOL_DIR,
-    bundle_tool_dir,
-    save_spec,
-    scripts_dir_for,
-)
-from clawcodex_ext.agent.tool_authoring.spec import AgentToolSpec
-from clawcodex_ext.agent.tool_authoring.validators import ValidationError, validate_spec
-
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +23,18 @@ def register_bridge_tool(
     bundle_dir: Path | None = None,
 ) -> str | None:
     """Create bash-callable tool spec for the bridge script."""
+    from clawcodex_ext.agent.tool_authoring.persistence import (
+        TOOL_DIR,
+        bundle_tool_dir,
+        save_spec,
+        scripts_dir_for,
+    )
+    from clawcodex_ext.agent.tool_authoring.spec import AgentToolSpec
+    from clawcodex_ext.agent.tool_authoring.validators import (
+        ValidationError,
+        validate_spec,
+    )
+
     script_path = bridge_script.resolve()
     if not script_path.is_file():
         logger.warning("Bridge script not found: %s", script_path)

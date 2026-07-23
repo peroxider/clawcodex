@@ -105,6 +105,16 @@ class SOPDefaults:
     ``clawcodex_ext.agent.load_agents_dir.get_agent_definitions_with_overrides``.
     """
 
+    # --- Cache clearing (bundle skills) ---
+    clear_sop_caches: Optional[Callable[[], None]] = None
+    """Callable that clears runtime caches (commands + context) after loading
+    bundle skills.
+
+    The default implementation wraps
+    ``clawcodex_ext.command_system.aggregator.clear_commands_cache`` and
+    ``clawcodex_ext.context_system.prompt_assembly.clear_context_caches``.
+    """
+
 
 def fill_defaults(container: SOPDefaults) -> None:
     """Populate *container* with default adapter implementations.
@@ -141,6 +151,11 @@ def fill_defaults(container: SOPDefaults) -> None:
         from .agent_definition_adapter import default_agent_loader
 
         container.agent_loader = default_agent_loader
+
+    if container.clear_sop_caches is None:
+        from .skill_adapter import default_clear_sop_caches
+
+        container.clear_sop_caches = default_clear_sop_caches
 
 
 # Module-level singleton — populated by calling ``fill_defaults(DEFAULTS)``

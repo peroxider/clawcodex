@@ -24,7 +24,38 @@ from extensions.capabilities.skill_protocol import (
 __all__ = [
     "default_skill_factory",
     "default_frontmatter_parser",
+    "default_clear_sop_caches",
 ]
+
+
+def default_clear_sop_caches() -> None:
+    """Clear runtime caches (commands, context, agent definitions) after loading
+    bundle skills or agents.
+
+    Wraps ``clawcodex_ext.command_system.aggregator.clear_commands_cache``,
+    ``clawcodex_ext.context_system.prompt_assembly.clear_context_caches``,
+    and ``clawcodex_ext.agent.load_agents_dir.clear_agent_definitions_cache``
+    so bundle loading code can clear caches without importing ``clawcodex_ext``
+    directly.
+    """
+    try:
+        from clawcodex_ext.command_system.aggregator import clear_commands_cache
+
+        clear_commands_cache()
+    except Exception:
+        pass
+    try:
+        from clawcodex_ext.context_system.prompt_assembly import clear_context_caches
+
+        clear_context_caches()
+    except Exception:
+        pass
+    try:
+        from clawcodex_ext.agent.load_agents_dir import clear_agent_definitions_cache
+
+        clear_agent_definitions_cache()
+    except Exception:
+        pass
 
 
 def default_skill_factory(**kwargs: Any) -> SkillProtocol:

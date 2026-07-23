@@ -7,13 +7,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from clawcodex_ext.tool_system.build_tool import Tool, Tools, tool_matches_name
-
 from extensions.capabilities.agent_definition_protocol import AgentToolConstants
 from ..core.bundle_manifest import resolve_sdk_source_dir
 
 if TYPE_CHECKING:
-    from clawcodex_ext.tool_system.registry import ToolRegistry
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +131,7 @@ def collect_tool_names_from_bundle_specs(bundle_path: Path) -> list[str]:
     return sorted(names)
 
 
-def is_pos_converter_tool(tool: Tool) -> bool:
+def is_pos_converter_tool(tool: Any) -> bool:
     return bool(getattr(tool, "should_defer", False))
 
 
@@ -147,17 +145,21 @@ def _spec_allowed_for_bundle(spec: Any, allowed_names: frozenset[str]) -> bool:
     return False
 
 
-def _tool_in_bundle_allowlist(tool: Tool, bundle: BundleContext) -> bool:
+def _tool_in_bundle_allowlist(tool: Any, bundle: BundleContext) -> bool:
+    from clawcodex_ext.tool_system.build_tool import tool_matches_name  
+
     return any(tool_matches_name(tool, name) for name in bundle.tool_names)
 
 
-def filter_tools_for_bundle(tools: Tools, bundle: BundleContext | None = None) -> Tools:
+def filter_tools_for_bundle(tools: list[Any], bundle: BundleContext | None = None) -> list[Any]:
     """Keep base tools + deferred SDK tools that belong to the active bundle."""
+    from clawcodex_ext.tool_system.build_tool import tool_matches_name  
+
     bundle = bundle or get_active_bundle()
     if bundle is None:
         return tools
 
-    filtered: Tools = []
+    filtered: list[Any] = []
     for tool in tools:
         if tool.is_mcp or tool.name.startswith("mcp__"):
             filtered.append(tool)
@@ -175,8 +177,10 @@ def filter_tools_for_bundle(tools: Tools, bundle: BundleContext | None = None) -
     return filtered
 
 
-def _bundle_deferred_tools_loaded(registry: ToolRegistry, bundle: BundleContext) -> bool:
+def _bundle_deferred_tools_loaded(registry: Any, bundle: BundleContext) -> bool:
     """Return True when a representative set of bundle tools is already registered."""
+    from clawcodex_ext.tool_system.registry import ToolRegistry  
+
     sample = [name for name in bundle.tool_names if name][:8]
     if not sample:
         return any(getattr(tool, "should_defer", False) for tool in registry.list_tools())
@@ -184,8 +188,9 @@ def _bundle_deferred_tools_loaded(registry: ToolRegistry, bundle: BundleContext)
     return hits >= min(3, len(sample))
 
 
-def load_bundle_persisted_tools(registry: ToolRegistry, bundle_path: Path) -> int:
+def load_bundle_persisted_tools(registry: Any, bundle_path: Path) -> int:
     """Load SDK tool specs from bundle-local storage and register them."""
+    from clawcodex_ext.tool_system.registry import ToolRegistry  
     from ..adapters import DEFAULTS
 
     bundle_name = bundle_path.name
@@ -225,12 +230,13 @@ def load_bundle_persisted_tools(registry: ToolRegistry, bundle_path: Path) -> in
 
 
 def _register_persisted_spec(
-    registry: ToolRegistry,
+    registry: Any,
     spec: Any,
     *,
     seen: set[str] | None = None,
 ) -> bool:
     """Register one persisted spec; return True when newly registered."""
+    from clawcodex_ext.tool_system.registry import ToolRegistry  
     from ..adapters import DEFAULTS
 
     if seen is not None and spec.name in seen:
@@ -261,12 +267,14 @@ def _register_persisted_spec(
 
 
 def ensure_bundle_tools_registered(
-    registry: ToolRegistry,
+    registry: Any,
     tool_names: list[str],
     *,
     bundle_path: Path | None = None,
 ) -> int:
     """Load persisted specs for *tool_names* that are missing from *registry*."""
+    from clawcodex_ext.tool_system.registry import ToolRegistry  
+
     if not tool_names:
         return 0
 
@@ -320,8 +328,10 @@ def ensure_bundle_tools_registered(
     return loaded
 
 
-def prune_registry_to_bundle(registry: ToolRegistry, bundle: BundleContext) -> int:
+def prune_registry_to_bundle(registry: Any, bundle: BundleContext) -> int:
     """Remove deferred tools from the registry that are outside the bundle."""
+    from clawcodex_ext.tool_system.registry import ToolRegistry  
+
     removed = 0
     for tool in list(registry.list_tools()):
         if not is_pos_converter_tool(tool):
@@ -334,10 +344,11 @@ def prune_registry_to_bundle(registry: ToolRegistry, bundle: BundleContext) -> i
 
 
 def activate_bundle_isolation(
-    registry: ToolRegistry,
+    registry: Any,
     bundle: BundleContext,
 ) -> None:
     """Apply L2/L3 isolation: load bundle tools, prune foreign deferred tools."""
+    from clawcodex_ext.tool_system.registry import ToolRegistry  
     set_active_bundle(bundle)
     loaded = load_bundle_persisted_tools(registry, bundle.bundle_path)
     removed = prune_registry_to_bundle(registry, bundle)

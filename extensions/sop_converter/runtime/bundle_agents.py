@@ -45,9 +45,9 @@ def register_bundle_agents(bundle_path: Path) -> list[str]:
 
     if registered:
         try:
-            from clawcodex_ext.agent.load_agents_dir import clear_agent_definitions_cache
+            from ..adapters import DEFAULTS
 
-            clear_agent_definitions_cache()
+            DEFAULTS.clear_sop_caches()
         except Exception:
             pass
 

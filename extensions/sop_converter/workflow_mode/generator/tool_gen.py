@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from clawcodex_ext.agent.constants import POS_SOP_DOMAIN_AGENT_TOOLS
+from extensions.capabilities.agent_definition_protocol import AgentToolConstants
 
 from ..capability.models import ExecutionMode, StageCapabilityProfile
 
 
 def stage_agent_tool_names(sdk_tools: list[str]) -> list[str]:
     """SOP stage agents need Skill/ToolSearch plus deferred SDK tools."""
-    return sorted(set(POS_SOP_DOMAIN_AGENT_TOOLS) | set(sdk_tools))
+    return sorted(set(AgentToolConstants.POS_SOP_DOMAIN_AGENT_TOOLS) | set(sdk_tools))
 
 
 def tools_for_profile(
