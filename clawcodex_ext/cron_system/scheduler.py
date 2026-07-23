@@ -236,7 +236,11 @@ class CronScheduler:
                 session_store=self.session_store,
             )
         self._prune_tick_counter += 1
-        due = find_due_tasks(self.workspace_root, timestamp, session_store=self.session_store)
+        try:
+            due = find_due_tasks(self.workspace_root, timestamp, session_store=self.session_store)
+        except OSError as exc:
+            _log.warning("check_once: find_due_tasks failed with OSError: %s; skipping tick", exc)
+            return []
         if not due:
             return []
         # Dedupe by task.id: if the same id lives in both file and session
