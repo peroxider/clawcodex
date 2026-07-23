@@ -23,7 +23,7 @@ from .approval_policy import (
     get_approval_policy,
     ToolCallEvent as PolicyToolCallEvent,
 )
-from clawcodex_ext.utils.git import get_file_status
+from extensions.orchestrator_runtime.adapters.clawcodex_compat import get_file_status
 from .config.schema import AgentConfig, SandboxConfig, WorkflowConfig, WorkspaceConfig
 from .debug_log import append_debug_event
 from .issue import Issue
@@ -34,7 +34,7 @@ from .workspace import Workspace
 
 # Reuse the project's typed rate-limit error and helpers so the 429
 # detection logic stays in lockstep with the rest of the codebase.
-from clawcodex_ext.services.api.errors import (
+from extensions.orchestrator_runtime.adapters.clawcodex_compat import (
     RateLimitError,
     is_rate_limit_error,
 )

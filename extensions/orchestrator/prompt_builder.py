@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from jinja2 import Environment, StrictUndefined, TemplateError
 
-from clawcodex_ext.agent.agent_definitions import task_v2_guidelines
+from extensions.orchestrator_runtime.adapters.clawcodex_compat import task_v2_guidelines
 
 from .premise_check import build_premise_block, check_issue_premise
 from .rules_learner import RuleEngine

@@ -28,11 +28,11 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Callable
 
-from clawcodex_ext.services.im_gateway.models import (
+from extensions.orchestrator_runtime.adapters.clawcodex_compat import (
     InboundMessage,
     MessageSemantics,
 )
-from clawcodex_ext.messaging.semantics import CommandRouter, ControlBridge
+from extensions.orchestrator_runtime.adapters.clawcodex_compat import CommandRouter, ControlBridge
 
 logger = logging.getLogger(__name__)
 

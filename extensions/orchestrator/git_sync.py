@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from clawcodex_ext.utils.git import (
+from extensions.orchestrator_runtime.adapters.clawcodex_compat import (
     get_current_branch,
     get_default_branch,
     get_file_status,

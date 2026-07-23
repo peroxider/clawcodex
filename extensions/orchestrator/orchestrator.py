@@ -14,11 +14,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from clawcodex_ext.services.channels.capabilities import (
+from extensions.orchestrator_runtime.adapters.clawcodex_compat import (
     CardUpdateCapability,
     ChannelCapability,
 )
-from clawcodex_ext.tool_system.context import ToolContext
+from extensions.orchestrator_runtime.adapters.clawcodex_compat import ToolContext
 
 from .agent_runner import AgentRunner, AgentSession, RetryItem
 from .config.schema import WorkflowConfig
@@ -55,7 +55,7 @@ from .repro_gate import (
 from .review_feedback import ReviewFeedbackService, ReviewFollowup
 from .rules_learner import RuleEngine, RuleStore
 from .status_dashboard import SessionStatus, StatusDashboard
-from clawcodex_ext.utils.git import (
+from extensions.orchestrator_runtime.adapters.clawcodex_compat import (
     _run_git,
     get_default_branch,
     get_file_status,
