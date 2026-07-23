@@ -188,6 +188,12 @@ def clear_command_call(args: str, context: CommandContext) -> LocalCommandResult
     Returns:
         LocalCommandResult
     """
+    from clawcodex_ext.goal.service import clear_goal_for_context
+
+    # Keep /clear atomic: if an active goal cannot be removed, preserve the
+    # conversation instead of hiding a still-running goal behind an empty UI.
+    clear_goal_for_context(context)
+
     if hasattr(context.conversation, "clear"):
         context.conversation.clear()
 
@@ -696,7 +702,9 @@ def cost_command_call(args: str, context: CommandContext) -> LocalCommandResult:
         lines.append(f"  Cache read tokens:         {total_cache_read:>8,}")
 
     if unknown_cost:
-        lines.append(f"  Estimated cost USD:        ${total_cost:<7.4f}  (some models have unknown pricing)")
+        lines.append(
+            f"  Estimated cost USD:        ${total_cost:<7.4f}  (some models have unknown pricing)"
+        )
     else:
         lines.append(f"  Estimated cost USD:        ${total_cost:<7.4f}")
 
@@ -1878,6 +1886,7 @@ def register_builtin_commands(registry: CommandRegistry | None = None) -> None:
     reg = registry or get_command_registry()
     try:
         from clawcodex_ext.multimodel.runtime_command import register_multimodel_runtime_command
+
         register_multimodel_runtime_command(reg)
     except Exception:
         pass

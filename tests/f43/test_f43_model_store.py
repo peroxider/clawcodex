@@ -16,7 +16,7 @@ def test_model_store_sets_default_provider(monkeypatch) -> None:
 
     ModelStore().set_default_provider("glm")
 
-    assert calls == ["glm"]
+    assert calls == ["zai"]
 
 
 def test_model_store_rejects_project_provider_scope() -> None:
@@ -40,7 +40,7 @@ def test_model_store_sets_default_model_without_losing_existing_config(monkeypat
 
     assert calls == [
         {
-            "provider": "glm",
+            "provider": "zai",
             "api_key": "secret",
             "base_url": "https://custom.example",
             "default_model": "zai/glm-4",
@@ -81,7 +81,7 @@ def test_set_default_model_allow_unknown_persists(monkeypatch) -> None:
 
     assert calls == [
         {
-            "provider": "glm",
+            "provider": "zai",
             "api_key": "secret",
             "base_url": "https://custom.example",
             "default_model": "totally-bogus-model-xyz",
@@ -127,7 +127,7 @@ def test_set_default_model_persist_unknown_falls_back_when_provider_config_missi
 
     ModelStore().set_default_model_persist_unknown("glm", "totally-bogus-model-xyz")
 
-    assert calls[0]["base_url"] == PROVIDER_INFO["glm"]["default_base_url"]
+    assert calls[0]["base_url"] == PROVIDER_INFO["zai"]["default_base_url"]
     assert calls[0]["api_key"] == ""
     assert calls[0]["default_model"] == "totally-bogus-model-xyz"
 

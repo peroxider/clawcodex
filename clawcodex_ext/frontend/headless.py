@@ -32,6 +32,7 @@ class HeadlessFrontend(FrontendPlugin):
             provider_instance=ctx.provider,
             model=ctx.options.model,
             max_turns=ctx.options.max_turns,
+            max_turns_explicit=getattr(ctx.options, "max_turns_explicit", False),
             permission_mode=ctx.options.permission_mode,
             is_bypass_permissions_mode_available=ctx.options.is_bypass_permissions_mode_available,
             skip_permissions=ctx.options.skip_permissions,

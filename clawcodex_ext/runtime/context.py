@@ -29,6 +29,7 @@ class RuntimeOptions:
     input_format: str = "text"
     include_partial_messages: bool = False
     max_turns: int = 20
+    max_turns_explicit: bool = False
     allowed_tools: tuple[str, ...] = ()
     disallowed_tools: tuple[str, ...] = ()
     workspace_root: Path | None = None
@@ -122,7 +123,8 @@ class RuntimeContext:
 
             group = load_config().groups[options.multimodel_group]
             provider = build_router(
-                group, build_provider_from_config,
+                group,
+                build_provider_from_config,
                 audit_path=default_config_path().parent / "multimodel-audit.jsonl",
             )
             provider_name = "multimodel"
@@ -315,9 +317,12 @@ class RuntimeContext:
         from src.providers.runtime import build_provider_from_config
         from src.tool_system.defaults import build_default_registry
 
-        registry = ModelRegistry()
+        # Runtime switching is validated by constructing the target provider.
+        # Registry discovery hooks may perform network I/O and must not make a
+        # local `/model <name>` switch wait for a catalog refresh first.
+        registry = ModelRegistry(discovery_hooks={})
         try:
-            registry.validate_provider(provider_name)
+            provider_name = registry.validate_provider(provider_name)
         except UnknownProviderError:
             import sys
 
@@ -335,7 +340,7 @@ class RuntimeContext:
         provider = build_provider_from_config(provider_name, model)
         tool_registry = build_default_registry(
             provider=provider,
-            load_agent_tools=self.options.bundle_path is None,
+            load_agent_tools=getattr(self.options, "bundle_path", None) is None,
         )
         replace_cron_tools(tool_registry)
         _filter_registry(
@@ -377,20 +382,28 @@ class RuntimeContext:
         if group_name not in config.groups:
             raise ValueError(f"unknown model group '{group_name}'")
         provider = build_router(
-            config.groups[group_name], build_provider_from_config,
+            config.groups[group_name],
+            build_provider_from_config,
             audit_path=default_config_path().parent / "multimodel-audit.jsonl",
         )
         tool_registry = build_default_registry(
-            provider=provider, load_agent_tools=self.options.bundle_path is None,
+            provider=provider,
+            load_agent_tools=self.options.bundle_path is None,
         )
         replace_cron_tools(tool_registry)
-        _filter_registry(tool_registry, allowed=self.options.allowed_tools, denied=self.options.disallowed_tools)
+        _filter_registry(
+            tool_registry, allowed=self.options.allowed_tools, denied=self.options.disallowed_tools
+        )
         self.provider = provider
         self.provider_name = "multimodel"
         self.tool_registry = tool_registry
         self.multimodel_group = group_name
         self.options.multimodel_group = group_name
-        for attr, value in (("provider", provider), ("provider_name", "multimodel"), ("tool_registry", tool_registry)):
+        for attr, value in (
+            ("provider", provider),
+            ("provider_name", "multimodel"),
+            ("tool_registry", tool_registry),
+        ):
             if hasattr(self.tool_context, attr):
                 setattr(self.tool_context, attr, value)
         notify_observers(self)
@@ -428,9 +441,7 @@ def _bootstrap_mcp_sync(tool_context: Any) -> Any | None:
 
     loop = asyncio.new_event_loop()
     try:
-        manager = loop.run_until_complete(
-            bootstrap_mcp_runtime(prefetch_claudeai=False)
-        )
+        manager = loop.run_until_complete(bootstrap_mcp_runtime(prefetch_claudeai=False))
     except Exception as exc:
         logging.getLogger(__name__).debug("MCP bootstrap failed: %s", exc)
         try:

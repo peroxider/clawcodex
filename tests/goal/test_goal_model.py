@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from clawcodex_ext.goal.model import ThreadGoal, ThreadGoalStatus
+from clawcodex_ext.goal.model import GoalCompletionMode, ThreadGoal, ThreadGoalStatus
 
 
 def test_thread_goal_status_matches_upstream_six_state_set() -> None:
@@ -69,6 +69,9 @@ def test_thread_goal_serializes_without_completion_timestamp_field() -> None:
         "token_budget": 1000,
         "tokens_used": 250,
         "time_used_seconds": 12,
+        "completion_mode": "tool",
+        "evaluation_count": 0,
+        "last_evaluation_reason": None,
         "created_at": "2026-06-29T10:00:00+00:00",
         "updated_at": "2026-06-29T10:01:00+00:00",
     }
@@ -86,11 +89,35 @@ def test_thread_goal_from_dict_normalizes_utc_datetime_suffix() -> None:
             "token_budget": None,
             "tokens_used": 1,
             "time_used_seconds": 2,
+            "completion_mode": "evaluator",
+            "evaluation_count": 3,
+            "last_evaluation_reason": "verified by tests",
             "created_at": "2026-06-29T10:00:00Z",
             "updated_at": "2026-06-29T10:01:00Z",
         }
     )
 
     assert goal.status is ThreadGoalStatus.COMPLETE
+    assert goal.completion_mode is GoalCompletionMode.EVALUATOR
+    assert goal.evaluation_count == 3
+    assert goal.last_evaluation_reason == "verified by tests"
     assert goal.created_at.tzinfo is timezone.utc
     assert goal.updated_at.tzinfo is timezone.utc
+
+
+def test_legacy_goal_dict_defaults_to_tool_completion_mode() -> None:
+    goal = ThreadGoal.from_dict(
+        {
+            "thread_id": "thread-1",
+            "goal_id": "goal-1",
+            "objective": "legacy",
+            "status": "active",
+            "token_budget": None,
+            "tokens_used": 0,
+            "time_used_seconds": 0,
+            "created_at": "2026-06-29T10:00:00Z",
+            "updated_at": "2026-06-29T10:01:00Z",
+        }
+    )
+
+    assert goal.completion_mode is GoalCompletionMode.TOOL

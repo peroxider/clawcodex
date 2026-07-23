@@ -12,7 +12,7 @@ from clawcodex_ext.types.messages import UserMessage
 
 from .accounting import BudgetLimitedGoalDisposition, GoalAccountingState
 from .gate import goal_enabled
-from .model import ThreadGoal, ThreadGoalStatus
+from .model import GoalCompletionMode, ThreadGoal, ThreadGoalStatus
 from .observability import (
     GoalObserver,
     record_continuation_skipped,
@@ -21,9 +21,11 @@ from .service import GoalService, GoalServiceError
 from .steering import (
     BUDGET_LIMIT_STEERING_MARKER,
     CONTINUATION_STEERING_MARKER,
+    EVALUATOR_START_MARKER,
     OBJECTIVE_UPDATED_STEERING_MARKER,
     budget_limit_steering_message,
     continuation_steering_message,
+    evaluator_start_message,
     objective_updated_steering_message,
 )
 from .tools import UPDATE_GOAL_TOOL_NAME
@@ -158,6 +160,13 @@ class GoalRuntime:
         if self.is_enabled():
             self.accounting_state.record_token_usage(turn_id, usage or {})
 
+    def goal_id_at_turn_start(self, turn_id: str) -> str | None:
+        """Return the immutable goal identity captured for a running turn."""
+
+        if not self.is_enabled():
+            return None
+        return self.accounting_state.turn_started_goal_id(turn_id)
+
     def on_tool_finish(
         self,
         turn_id: str,
@@ -197,13 +206,6 @@ class GoalRuntime:
                 turn_id,
                 BudgetLimitedGoalDisposition.CLEAR_ACTIVE,
             )
-            goal = self.service.get_goal(self.thread_id)
-            if goal is not None and goal.status is ThreadGoalStatus.ACTIVE:
-                self.service.update_goal_from_runtime(
-                    self.thread_id,
-                    ThreadGoalStatus.PAUSED,
-                    expected_goal_id=goal.goal_id,
-                )
             self._pending_steering_messages.clear()
             self.accounting_state.finish_turn(turn_id)
 
@@ -222,6 +224,18 @@ class GoalRuntime:
             goal = self.service.get_goal(self.thread_id)
             if goal is None:
                 self.accounting_state.clear_active_goal()
+                self.accounting_state.finish_turn(turn_id)
+                return
+            if (
+                goal.completion_mode is GoalCompletionMode.EVALUATOR
+                and goal.status is ThreadGoalStatus.ACTIVE
+            ):
+                # Claude-style /goal conditions survive provider/model
+                # failures. Stop this run, but keep the idle wall-clock
+                # baseline live so `/goal` and the footer agree while the
+                # user decides whether to retry or clear it.
+                self.accounting_state.mark_idle_goal_active(goal.goal_id)
+                self._pending_steering_messages.clear()
                 self.accounting_state.finish_turn(turn_id)
                 return
             status = (
@@ -333,7 +347,11 @@ class GoalRuntime:
             self.accounting_state.mark_idle_goal_active(goal.goal_id)
             return GoalContinuationRequest(
                 expected_goal_id=goal.goal_id,
-                messages=[continuation_steering_message(goal)],
+                messages=[
+                    evaluator_start_message(goal)
+                    if goal.completion_mode is GoalCompletionMode.EVALUATOR
+                    else continuation_steering_message(goal)
+                ],
             )
 
     def claim_continuation(self, request: GoalContinuationRequest) -> bool:
@@ -385,6 +403,47 @@ def goal_runtime_for_context(context: Any) -> GoalRuntime | None:
     return runtime
 
 
+def restore_goal_runtime_after_session_resume(context: Any) -> GoalRuntime | None:
+    """Rebind an active goal to a resumed session with fresh metrics.
+
+    Goal elapsed time and token counters describe the current live run.  A
+    persisted active condition survives session resume, but its counters and
+    wall-clock baseline start over, matching Claude Code's resume behaviour.
+    """
+
+    if not goal_enabled() or context is None:
+        return None
+
+    previous = getattr(context, "goal_runtime", None)
+    if isinstance(previous, GoalRuntime):
+        previous.service.unregister_runtime(previous)
+        try:
+            context.goal_runtime = None
+        except Exception:
+            pass
+
+    runtime = goal_runtime_for_context(context)
+    if runtime is None:
+        return None
+
+    goal = runtime.service.get_goal(runtime.thread_id)
+    if goal is not None and goal.status is ThreadGoalStatus.ACTIVE:
+        runtime.service.reset_progress_for_resume(
+            runtime.thread_id,
+            expected_goal_id=goal.goal_id,
+        )
+    elif (
+        goal is not None
+        and goal.status is ThreadGoalStatus.COMPLETE
+        and goal.completion_mode is GoalCompletionMode.EVALUATOR
+    ):
+        # Achieved /goal state is represented by its transcript entry, not a
+        # live goal restored into a later session run.
+        runtime.service.clear_goal(runtime.thread_id)
+    runtime.restore_after_resume()
+    return runtime
+
+
 def _persistent_thread_id(context: Any) -> str | None:
     explicit = _non_empty_str(getattr(context, "goal_thread_id", None))
     if explicit is not None:
@@ -429,9 +488,11 @@ def _non_empty_str(value: Any) -> str | None:
 __all__ = [
     "BUDGET_LIMIT_STEERING_MARKER",
     "CONTINUATION_STEERING_MARKER",
+    "EVALUATOR_START_MARKER",
     "OBJECTIVE_UPDATED_STEERING_MARKER",
     "AccountedGoalProgress",
     "GoalContinuationRequest",
     "GoalRuntime",
     "goal_runtime_for_context",
+    "restore_goal_runtime_after_session_resume",
 ]

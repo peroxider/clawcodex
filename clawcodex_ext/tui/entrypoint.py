@@ -152,12 +152,17 @@ def _run_tui_with_app(
     model_label = getattr(provider, "model", "")
 
     # Build session: resume or create
+    resumed_existing = False
     if session is not None:
         used_session = session
+        resumed_existing = bool(
+            resume_session_id and str(getattr(session, "session_id", "")) == str(resume_session_id)
+        )
     elif resume_session_id:
         loaded = Session.resume(resume_session_id)
         if loaded is not None:
             used_session = loaded
+            resumed_existing = True
         else:
             from clawcodex_ext.repl.color_scheme import build_oklch_console
 
@@ -182,6 +187,7 @@ def _run_tui_with_app(
         resume_browse=resume_browse,
         runtime_context=runtime_context,
         append_system_prompt=append_system_prompt,
+        session_was_resumed=resumed_existing,
     )
 
     # ---- SIGTERM/SIGINT: save session + print resume hint via graceful shutdown (S-R1) ----

@@ -1,32 +1,30 @@
-"""Upstream-compatible `/goal` user command."""
+"""Claude Code-compatible ``/goal`` user command."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from clawcodex_ext.command_system.types import (
-    InteractiveCommand,
-    InteractiveOutcome,
-    UIOption,
-)
+from clawcodex_ext.command_system.types import InteractiveCommand, InteractiveOutcome
+from clawcodex_ext.types.messages import create_system_message
 
+from .files import MAX_THREAD_GOAL_OBJECTIVE_CHARS, objective_text_for_edit
 from .gate import goal_enabled
-from .files import objective_text_for_edit
-from .model import ThreadGoalStatus
+from .model import GoalCompletionMode, ThreadGoalStatus
 from .protocol import (
     ThreadGoalClearParams,
     ThreadGoalDTO,
     ThreadGoalGetParams,
     ThreadGoalProtocol,
-    ThreadGoalSetParams,
+    ThreadGoalReplaceParams,
 )
-from .service import KEEP_TOKEN_BUDGET, GoalServiceError, goal_thread_id_from_context
+from .service import GoalServiceError, goal_thread_id_from_context
 
-GOAL_USAGE = "/goal [<objective>|clear|edit|pause|resume]"
+GOAL_USAGE = "/goal [<condition>|clear]"
+GOAL_CLEAR_ALIASES = frozenset({"clear", "stop", "off", "reset", "none", "cancel"})
 
 
 class GoalCommand(InteractiveCommand):
-    """Feature-gated upstream-compatible `/goal` command."""
+    """Set, inspect, or clear a session-scoped completion condition."""
 
     async def run(self, args: str, context: Any) -> InteractiveOutcome:
         if not goal_enabled():
@@ -36,30 +34,18 @@ class GoalCommand(InteractiveCommand):
         thread_id = goal_thread_id_from_context(context)
         command = args.strip()
 
-        try:
-            if not command:
-                return _goal_summary(api, thread_id, context)
-
-            lowered = command.lower()
-            if lowered == "clear":
-                return _clear_goal(api, thread_id, context)
-            if lowered == "pause":
-                return _set_goal_status(api, thread_id, ThreadGoalStatus.PAUSED, context)
-            if lowered == "resume":
-                return _set_goal_status(api, thread_id, ThreadGoalStatus.ACTIVE, context)
-            if lowered == "edit":
-                return await _edit_goal(api, thread_id, context)
-
-            return await _set_goal_objective(api, thread_id, command, context)
-        except GoalServiceError as exc:
-            return InteractiveOutcome(message=str(exc), display="system")
+        if not command:
+            return _goal_summary(api, thread_id, context)
+        if command.lower() in GOAL_CLEAR_ALIASES:
+            return _clear_goal(api, thread_id, context)
+        return _set_goal_condition(api, thread_id, command, context)
 
 
 GOAL_COMMAND = GoalCommand(
     name="goal",
-    description="Manage an upstream-compatible long-running goal.",
-    argument_hint="[<objective>|clear|edit|pause|resume]",
-    aliases=["g"],
+    description="Set a goal Claude checks before stopping.",
+    argument_hint="[<condition>|clear]",
+    aliases=[],
     is_enabled=goal_enabled,
 )
 
@@ -100,100 +86,71 @@ def _goal_summary(
     thread_id: str,
     context: Any | None = None,
 ) -> InteractiveOutcome:
+    # Persist elapsed idle time before rendering so the explicit status view
+    # and the continuously-updated footer report the same live duration.
+    tool_context = getattr(context, "tool_context", None)
+    if tool_context is not None:
+        from .accounting import BudgetLimitedGoalDisposition
+        from .runtime import goal_runtime_for_context
+
+        runtime = goal_runtime_for_context(tool_context)
+        if runtime is not None and runtime.thread_id == thread_id:
+            runtime.account_idle_goal_progress(BudgetLimitedGoalDisposition.KEEP_ACTIVE)
+
     response = api.thread_goal_get(ThreadGoalGetParams(thread_id=thread_id))
     if response.goal is None:
         _sync_app_goal_status(None, context)
         return InteractiveOutcome(
-            message=f"{GOAL_USAGE}\nNo goal is currently set.",
+            message="Goal\n\nNo goal set\n  /goal <condition> to set one",
             display="system",
+            transient=True,
         )
     _sync_app_goal_status(response.goal, context)
     return InteractiveOutcome(
-        message=_format_goal_summary(response.goal),
+        message=_format_goal_summary(response.goal, api=api),
         display="system",
+        transient=True,
     )
 
 
-async def _set_goal_objective(
+def _set_goal_condition(
     api: ThreadGoalProtocol,
     thread_id: str,
-    objective: str,
+    condition: str,
     context: Any,
 ) -> InteractiveOutcome:
-    current = api.thread_goal_get(ThreadGoalGetParams(thread_id=thread_id)).goal
-    if current is not None:
-        if current.status is not ThreadGoalStatus.COMPLETE:
-            choice = await context.ui.select(
-                "Replace goal?",
-                [
-                    UIOption(
-                        "replace",
-                        "Replace current goal",
-                        "Set the new objective and start it now",
-                    ),
-                    UIOption("cancel", "Cancel", "Keep the current goal"),
-                ],
-            )
-            if choice != "replace":
-                return InteractiveOutcome.skip()
-        api.thread_goal_clear(ThreadGoalClearParams(thread_id=thread_id))
+    if len(condition) > MAX_THREAD_GOAL_OBJECTIVE_CHARS:
+        raise GoalServiceError("Goal condition must be 4,000 characters or fewer.")
 
-    response = api.thread_goal_set(
-        ThreadGoalSetParams(
+    response = api.thread_goal_replace(
+        ThreadGoalReplaceParams(
             thread_id=thread_id,
-            objective=objective,
-            status=ThreadGoalStatus.ACTIVE,
+            objective=condition,
+            completion_mode=GoalCompletionMode.EVALUATOR,
         )
     )
-    return _goal_status_outcome(response.goal, context)
-
-
-async def _edit_goal(
-    api: ThreadGoalProtocol,
-    thread_id: str,
-    context: Any,
-) -> InteractiveOutcome:
-    current = api.thread_goal_get(ThreadGoalGetParams(thread_id=thread_id)).goal
-    if current is None:
-        return InteractiveOutcome(
-            message=f"No goal is currently set.\n{GOAL_USAGE}",
-            display="system",
-        )
-
-    edited = await context.ui.prompt_text(
-        "Edit goal",
-        default=objective_text_for_edit(
-            current.objective,
-            codex_home=getattr(api.service, "codex_home", None),
-        ),
-        placeholder="Type a goal objective and press Enter",
+    _sync_app_goal_status(response.goal, context)
+    persisted = api.service.get_goal(thread_id)
+    _append_lifecycle_notice(
+        context,
+        subtype="goal_set",
+        message=f"Goal set: {condition}",
+        data={
+            "goalId": persisted.goal_id if persisted is not None else None,
+            "condition": condition,
+            "state": "active",
+            "met": None,
+            "reason": None,
+            "turns": response.goal.evaluation_count,
+            "tokens": response.goal.tokens_used,
+            "durationSeconds": response.goal.time_used_seconds,
+        },
     )
-    if edited is None:
-        return InteractiveOutcome.skip()
-
-    if current.status in {
-        ThreadGoalStatus.BUDGET_LIMITED,
-        ThreadGoalStatus.COMPLETE,
-    }:
-        api.thread_goal_clear(ThreadGoalClearParams(thread_id=thread_id))
-        response = api.thread_goal_set(
-            ThreadGoalSetParams(
-                thread_id=thread_id,
-                objective=edited,
-                status=ThreadGoalStatus.ACTIVE,
-                token_budget=current.token_budget,
-            )
-        )
-    else:
-        response = api.thread_goal_set(
-            ThreadGoalSetParams(
-                thread_id=thread_id,
-                objective=edited,
-                status=current.status,
-                token_budget=current.token_budget,
-            )
-        )
-    return _goal_status_outcome(response.goal, context)
+    return InteractiveOutcome(
+        message=f"Goal set: {condition}",
+        display="system",
+        should_query=True,
+    )
 
 
 def _clear_goal(
@@ -201,86 +158,117 @@ def _clear_goal(
     thread_id: str,
     context: Any | None = None,
 ) -> InteractiveOutcome:
+    current = api.thread_goal_get(ThreadGoalGetParams(thread_id=thread_id)).goal
+    if current is None or current.status is ThreadGoalStatus.COMPLETE:
+        if current is None:
+            _sync_app_goal_status(None, context)
+        else:
+            _sync_app_goal_status(current, context)
+        return InteractiveOutcome(message="No goal set", display="system")
+
+    persisted = api.service.get_goal(thread_id)
     response = api.thread_goal_clear(ThreadGoalClearParams(thread_id=thread_id))
-    if response.cleared:
-        _sync_app_goal_status(None, context)
-        return InteractiveOutcome(message="Goal cleared", display="system")
+    if not response.cleared:
+        return InteractiveOutcome(message="No goal set", display="system")
+
+    _sync_app_goal_status(None, context)
+    condition = objective_text_for_edit(
+        current.objective,
+        codex_home=getattr(api.service, "codex_home", None),
+    )
+    _append_lifecycle_notice(
+        context,
+        subtype="goal_cleared",
+        message=f"Goal cleared: {condition}",
+        data={
+            "goalId": persisted.goal_id if persisted is not None else None,
+            "condition": condition,
+            "state": "cleared",
+            "met": False,
+            "reason": "cleared by user",
+            "turns": current.evaluation_count,
+            "tokens": current.tokens_used,
+            "durationSeconds": current.time_used_seconds,
+        },
+    )
     return InteractiveOutcome(
-        message="No goal to clear\nThis thread does not currently have a goal.",
+        message=f"Goal cleared: {condition}",
         display="system",
     )
 
 
-def _set_goal_status(
-    api: ThreadGoalProtocol,
-    thread_id: str,
-    status: ThreadGoalStatus,
-    context: Any | None = None,
-) -> InteractiveOutcome:
-    response = api.thread_goal_set(
-        ThreadGoalSetParams(
-            thread_id=thread_id,
-            status=status,
-            token_budget=KEEP_TOKEN_BUDGET,
+def _append_lifecycle_notice(
+    context: Any | None,
+    *,
+    subtype: str,
+    message: str,
+    data: dict[str, Any],
+) -> None:
+    """Persist command-side goal transitions as replayable transcript facts."""
+
+    conversation = getattr(context, "conversation", None)
+    if conversation is None:
+        return
+    notice = create_system_message(
+        message,
+        subtype=subtype,
+        data=data,
+    )
+    add_existing = getattr(conversation, "add_existing_message", None)
+    if callable(add_existing):
+        add_existing(notice)
+        return
+    add_message = getattr(conversation, "add_message", None)
+    if callable(add_message):
+        add_message(notice.role, notice.content)
+
+
+def _format_goal_summary(goal: ThreadGoalDTO, *, api: ThreadGoalProtocol) -> str:
+    condition = objective_text_for_edit(
+        goal.objective,
+        codex_home=getattr(api.service, "codex_home", None),
+    )
+    if goal.status is ThreadGoalStatus.COMPLETE:
+        title = "✓ Goal achieved"
+        hint = ""
+    elif goal.status is ThreadGoalStatus.ACTIVE:
+        title = "◎ Goal active"
+        hint = "\n\n  /goal clear to stop early"
+    else:
+        # Legacy ClawCodex rows can still carry internal failure states. Keep
+        # them inspectable without advertising those states as new commands.
+        title = "Goal inactive"
+        hint = "\n\n  Set a new /goal <condition> to replace it"
+    turns = ""
+    last_check = ""
+    if goal.evaluation_count > 0:
+        turn_label = "turn" if goal.evaluation_count == 1 else "turns"
+        turns = f" · {goal.evaluation_count} {turn_label}"
+        reason = (
+            goal.last_evaluation_reason
+            if goal.last_evaluation_reason is not None
+            else "not available"
         )
-    )
-    return _goal_status_outcome(response.goal, context)
-
-
-def _goal_status_outcome(
-    goal: ThreadGoalDTO,
-    context: Any | None = None,
-) -> InteractiveOutcome:
-    _sync_app_goal_status(goal, context)
-    return InteractiveOutcome(
-        message=f"Goal {_goal_status_label(goal.status)}\n{_goal_usage_summary(goal)}",
-        display="system",
-        should_query=goal.status is ThreadGoalStatus.ACTIVE,
+        last_check = f"\n\n  Last check: {reason}"
+    return (
+        f"{title}\n\n"
+        f"  running {_format_elapsed(goal.time_used_seconds)}"
+        f"{turns} · {goal.tokens_used} tokens\n\n"
+        f"  Goal: {condition}"
+        f"{last_check}"
+        f"{hint}"
     )
 
 
-def _format_goal_summary(goal: ThreadGoalDTO) -> str:
-    lines = [
-        "Goal",
-        f"Status: {_goal_status_label(goal.status)}",
-        f"Objective: {goal.objective}",
-        f"Time used: {goal.time_used_seconds}s",
-        f"Tokens used: {goal.tokens_used}",
-    ]
-    if goal.token_budget is not None:
-        lines.append(f"Token budget: {goal.token_budget}")
-    lines.append("")
-    lines.append(f"Commands: {_goal_commands_for_status(goal.status)}")
-    return "\n".join(lines)
-
-
-def _goal_usage_summary(goal: ThreadGoalDTO) -> str:
-    if goal.token_budget is not None:
-        return f"{goal.tokens_used} / {goal.token_budget} tokens"
-    return f"{goal.time_used_seconds}s"
-
-
-def _goal_commands_for_status(status: ThreadGoalStatus) -> str:
-    if status is ThreadGoalStatus.ACTIVE:
-        return "/goal edit, /goal pause, /goal clear"
-    if status in {
-        ThreadGoalStatus.PAUSED,
-        ThreadGoalStatus.BLOCKED,
-        ThreadGoalStatus.USAGE_LIMITED,
-    }:
-        return "/goal edit, /goal resume, /goal clear"
-    return "/goal edit, /goal clear"
-
-
-def _goal_status_label(status: ThreadGoalStatus) -> str:
-    return {
-        ThreadGoalStatus.ACTIVE: "active",
-        ThreadGoalStatus.PAUSED: "paused",
-        ThreadGoalStatus.BLOCKED: "blocked",
-        ThreadGoalStatus.USAGE_LIMITED: "usage limited",
-        ThreadGoalStatus.BUDGET_LIMITED: "limited by budget",
-        ThreadGoalStatus.COMPLETE: "complete",
-    }[status]
+def _format_elapsed(seconds: int) -> str:
+    seconds = max(int(seconds), 0)
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m"
+    hours, remaining_minutes = divmod(minutes, 60)
+    return f"{hours}h" if remaining_minutes == 0 else f"{hours}h {remaining_minutes}m"
 
 
 def _sync_app_goal_status(goal: ThreadGoalDTO | None, context: Any | None) -> None:
@@ -290,9 +278,13 @@ def _sync_app_goal_status(goal: ThreadGoalDTO | None, context: Any | None) -> No
     if app_state is None:
         return
     setter = getattr(app_state, "set_goal_status", None)
-    if not callable(setter):
-        return
-    setter(goal.to_dict() if goal is not None else None)
+    if callable(setter):
+        setter(goal.to_dict() if goal is not None else None)
 
 
-__all__ = ["GOAL_COMMAND", "GOAL_USAGE", "GoalCommand"]
+__all__ = [
+    "GOAL_CLEAR_ALIASES",
+    "GOAL_COMMAND",
+    "GOAL_USAGE",
+    "GoalCommand",
+]

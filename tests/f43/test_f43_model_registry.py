@@ -15,8 +15,8 @@ def test_model_registry_lists_and_validates_known_providers() -> None:
     registry = ModelRegistry()
 
     assert "anthropic" in registry.provider_names()
-    assert registry.validate_provider("glm") == "glm"
-    assert registry.provider_default_model("glm") == "zai/glm-5"
+    assert registry.validate_provider("glm") == "zai"
+    assert registry.provider_default_model("glm") == "GLM-5.1"
     assert "zai/glm-4" in registry.available_models("glm")
 
 
@@ -36,7 +36,7 @@ def test_model_registry_validates_model_provider_pair() -> None:
 
 
 def test_model_registry_infers_provider_for_unique_model() -> None:
-    assert ModelRegistry().infer_provider_for_model("zai/glm-4") == "glm"
+    assert ModelRegistry().infer_provider_for_model("zai/glm-4") == "zai"
 
 
 def test_dynamic_discovery_hook_adds_models() -> None:
@@ -87,8 +87,8 @@ def test_dynamic_discovery_hook_isolation() -> None:
     hooks.setdefault("openai-codex", []).append(lambda: ["gpt-7777"])
 
     assert "gpt-7777" in registry.available_models("openai-codex")
-    # gpt-5.5 should also be there (from static list)
-    assert "gpt-5.3-codex" in registry.available_models("openai-codex")
+    # The configured fallback catalog remains available.
+    assert "gpt-5.6-sol" in registry.available_models("openai-codex")
 
 
 def test_dynamic_discovery_hook_failure_silent() -> None:
@@ -103,7 +103,7 @@ def test_dynamic_discovery_hook_failure_silent() -> None:
 
     # Should return static list without raising
     models = registry.available_models("openai-codex")
-    assert "gpt-5.3-codex" in models
+    assert "gpt-5.6-sol" in models
 
 
 def test_dynamic_discovery_hook_no_duplicates() -> None:

@@ -10,6 +10,9 @@ loop) so failures stay scoped to dialog behaviour.
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -32,6 +35,7 @@ from src.tui.screens import (
     fuzzy_score,
 )
 from clawcodex_ext.intent_forecast.messages import ForecastResult, ForecastSuggestion
+from clawcodex_ext.tui.app import ClawCodexTUI
 
 
 class _Host(Screen):
@@ -125,6 +129,167 @@ async def test_forecast_picker_cancel_resolves_none():
 # ------------------------------------------------------------------
 # ModelPicker
 # ------------------------------------------------------------------
+
+
+def test_tui_model_picker_uses_refreshed_provider_models(monkeypatch, tmp_path):
+    from clawcodex_ext.providers.model_catalog_cache import reset_model_catalog_cache
+
+    monkeypatch.setenv("CLAWCODEX_HOME", str(tmp_path))
+    reset_model_catalog_cache()
+    app = object.__new__(ClawCodexTUI)
+    app.provider = SimpleNamespace(
+        discover_available_models=lambda: ["provider-live-model"],
+        get_available_models=lambda: ["provider-stale-model"],
+    )
+    app.provider_name = "test-provider"
+    app.model = "configured-model"
+
+    app._list_available_models()
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline:
+        models = app._list_available_models()
+        if "provider-live-model" in models:
+            break
+        time.sleep(0.01)
+    else:
+        raise AssertionError("refreshed provider models were not published")
+    assert models == ["configured-model", "provider-live-model"]
+
+
+def test_tui_model_picker_uses_fallback_while_catalog_refreshes(monkeypatch, tmp_path):
+    from clawcodex_ext.providers.model_catalog_cache import reset_model_catalog_cache
+
+    monkeypatch.setenv("CLAWCODEX_HOME", str(tmp_path))
+    reset_model_catalog_cache()
+    started = threading.Event()
+    release = threading.Event()
+
+    def discover():
+        started.set()
+        release.wait(timeout=2)
+        return ["provider-live-model"]
+
+    app = object.__new__(ClawCodexTUI)
+    app.provider = SimpleNamespace(
+        get_available_models=lambda: ["provider-fallback-model"],
+        discover_available_models=discover,
+    )
+    app.provider_name = "test-provider"
+    app.model = "provider-fallback-model"
+
+    before = time.perf_counter()
+    models = app._list_available_models()
+    elapsed = time.perf_counter() - before
+
+    assert elapsed < 0.25
+    assert models == ["provider-fallback-model"]
+    assert "refresh" in app._model_discovery_warning.lower()
+    assert started.wait(timeout=0.5)
+    release.set()
+
+
+def test_tui_model_picker_schedules_discovery_off_ui_thread():
+    app = object.__new__(ClawCodexTUI)
+    app.provider = SimpleNamespace()
+    app.provider_name = "test-provider"
+    app.model = "test-model"
+    scheduled = []
+    app.run_worker = lambda awaitable, **kwargs: scheduled.append((awaitable, kwargs))
+    app._list_available_models = lambda: (_ for _ in ()).throw(
+        AssertionError("discovery must not run synchronously")
+    )
+
+    app._open_model_picker(SimpleNamespace())
+
+    assert len(scheduled) == 1
+    awaitable, options = scheduled[0]
+    assert options["exclusive"] is True
+    assert options["group"] == "model-catalog"
+    awaitable.close()
+
+
+@pytest.mark.asyncio
+async def test_tui_model_picker_discards_catalog_after_provider_switch(monkeypatch):
+    app = object.__new__(ClawCodexTUI)
+    original_provider = SimpleNamespace()
+    app.provider = original_provider
+    app.provider_name = "old-provider"
+    app.model = "old-model"
+    app._model_discovery_warning = None
+    pushed = []
+    app.push_screen = lambda *args, **kwargs: pushed.append((args, kwargs))
+
+    async def switch_during_discovery(func, *args):
+        app.provider = SimpleNamespace()
+        app.provider_name = "new-provider"
+        app.model = "new-model"
+        return ["old-provider-model"], None
+
+    monkeypatch.setattr("clawcodex_ext.tui.app.asyncio.to_thread", switch_during_discovery)
+
+    await app._discover_and_open_model_picker(
+        SimpleNamespace(),
+        provider=original_provider,
+        provider_name="old-provider",
+        current_model="old-model",
+    )
+
+    assert pushed == []
+
+
+def test_tui_model_picker_records_discovery_fallback(monkeypatch):
+    app = object.__new__(ClawCodexTUI)
+
+    def fail_discovery():
+        raise RuntimeError("TLS EOF")
+
+    app.provider = SimpleNamespace(get_available_models=fail_discovery)
+    app.provider_name = "openai-codex"
+    app.model = "gpt-current"
+    monkeypatch.setattr(
+        "src.config.get_provider_config",
+        lambda provider: {"default_model": "gpt-fallback"},
+    )
+
+    assert app._list_available_models() == ["gpt-current", "gpt-fallback"]
+    assert "TLS EOF" in app._model_discovery_warning
+
+
+def test_tui_command_context_reinstalls_runtime_commands_after_builtins(monkeypatch, tmp_path):
+    app = object.__new__(ClawCodexTUI)
+    app._command_context = None
+    app.workspace_root = tmp_path
+    app.session = SimpleNamespace(conversation=SimpleNamespace())
+    app.provider = SimpleNamespace()
+    app.tool_registry = SimpleNamespace()
+    app.tool_context = SimpleNamespace()
+    app.runtime_context = SimpleNamespace()
+    app._intent_forecast_controller = None
+    app.app_state = SimpleNamespace()
+    calls = []
+
+    monkeypatch.setattr(
+        "src.command_system.builtins.register_builtin_commands",
+        lambda registry=None: calls.append("builtins"),
+    )
+    monkeypatch.setattr(
+        "clawcodex_ext.cli.runtime_commands.register_runtime_commands",
+        lambda registry=None: calls.append("runtime"),
+    )
+    monkeypatch.setattr("src.command_system.load_and_register_skills", lambda registry=None: None)
+    monkeypatch.setattr(
+        "clawcodex_ext.cli.tool_cmd.register_tool_commands",
+        lambda registry=None, tool_registry=None: None,
+    )
+    monkeypatch.setattr(
+        "src.command_system.engine.create_command_context",
+        lambda **kwargs: SimpleNamespace(),
+    )
+    monkeypatch.setattr("src.cost_tracker.CostTracker", lambda: SimpleNamespace())
+    monkeypatch.setattr("src.history.HistoryLog", lambda: SimpleNamespace())
+
+    assert app._ensure_command_context() is not None
+    assert calls == ["builtins", "runtime"]
 
 
 @pytest.mark.asyncio

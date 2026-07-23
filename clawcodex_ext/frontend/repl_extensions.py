@@ -38,6 +38,7 @@ from clawcodex_ext.intent_forecast.messages import (
 )
 from clawcodex_ext.intent_forecast.registration import register_intent_forecast_commands
 from clawcodex_ext.runtime.observer import RuntimeObserver, attach_observer
+from clawcodex_ext.providers.model_catalog_cache import prewarm_model_catalog
 
 if TYPE_CHECKING:  # pragma: no cover
     from src.repl.core import ClawcodexREPL
@@ -562,6 +563,7 @@ class _ReplRuntimeObserver:
             repl.command_context.provider = runtime.provider
             repl.command_context.tool_registry = runtime.tool_registry
             repl.command_context.tool_context = runtime.tool_context
+        prewarm_model_catalog(runtime.provider_name, runtime.provider)
 
 
 def install_repl_extensions(repl: "ClawcodexREPL", ctx) -> None:
@@ -607,6 +609,7 @@ def install_repl_extensions(repl: "ClawcodexREPL", ctx) -> None:
     renderer.bind(runtime.provider)
     repl._multimodel_renderer = renderer
     attach_observer(runtime, _ReplRuntimeObserver(repl, renderer))
+    prewarm_model_catalog(runtime.provider_name, runtime.provider)
 
     # ---- SIGTERM / SIGINT: save session + print resume hint (S-R1) ----
     _register_signal_session_save(repl)

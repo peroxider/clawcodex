@@ -139,6 +139,59 @@ class BaseProvider(ABC):
         """
         pass
 
+    def discover_available_models(self) -> list[str]:
+        """Return the provider account's current model catalog when available.
+
+        OpenAI-, Anthropic-, Gemini-, and gateway-style SDKs expose a
+        ``client.models.list()`` resource with slightly different response
+        shapes.  The shared provider contract normalizes those shapes so every
+        frontend can use one discovery path.  Providers without a model-list
+        API retain their explicit ``get_available_models()`` catalog.
+
+        Network/auth failures are surfaced to the frontend, which can then
+        label its configured fallback instead of silently presenting stale
+        data as a live result.
+        """
+        ensure_client = getattr(self, "_ensure_client", None)
+        try:
+            client = ensure_client() if callable(ensure_client) else getattr(self, "client", None)
+        except Exception as exc:
+            raise RuntimeError(f"provider model discovery failed: {exc}") from exc
+
+        models_resource = getattr(client, "models", None) if client is not None else None
+        list_models = getattr(models_resource, "list", None)
+        if not callable(list_models):
+            return self.get_available_models()
+
+        try:
+            payload = list_models()
+            candidates = getattr(payload, "data", None)
+            if candidates is None:
+                candidates = getattr(payload, "models", None)
+            if candidates is None:
+                candidates = payload
+            model_ids: list[str] = []
+            for item in candidates or []:
+                if isinstance(item, str):
+                    model_id = item
+                    hidden = False
+                elif isinstance(item, dict):
+                    model_id = item.get("id") or item.get("name") or item.get("slug")
+                    hidden = bool(item.get("hidden") or item.get("hide"))
+                else:
+                    model_id = (
+                        getattr(item, "id", None)
+                        or getattr(item, "name", None)
+                        or getattr(item, "slug", None)
+                    )
+                    hidden = bool(getattr(item, "hidden", False) or getattr(item, "hide", False))
+                if isinstance(model_id, str) and model_id and not hidden:
+                    model_ids.append(model_id)
+        except Exception as exc:
+            raise RuntimeError(f"provider model discovery failed: {exc}") from exc
+
+        return list(dict.fromkeys(model_ids)) or self.get_available_models()
+
     def _get_model(self, **kwargs) -> str:
         """Get model from kwargs or use default.
 

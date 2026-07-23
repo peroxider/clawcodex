@@ -5,19 +5,21 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
 from clawcodex_ext.command_system.engine import CommandEngine
 from clawcodex_ext.command_system.registry import CommandRegistry
 from clawcodex_ext.command_system.types import CommandContext, NullUIHost, UIOption
+from clawcodex_ext.agent.conversation import Conversation
 from clawcodex_ext.feature_gate import get_registry, reset_registry
 from clawcodex_ext.goal.command import GOAL_COMMAND
-from clawcodex_ext.goal.model import ThreadGoalStatus
+from clawcodex_ext.goal.model import GoalCompletionMode, ThreadGoalStatus
 from clawcodex_ext.goal.protocol import GoalEventLog, ThreadGoalProtocol
 from clawcodex_ext.goal.files import MAX_THREAD_GOAL_OBJECTIVE_CHARS
 from clawcodex_ext.goal.files import objective_text_for_edit
-from clawcodex_ext.goal.service import GoalService
+from clawcodex_ext.goal.service import GoalService, GoalServiceError
 from clawcodex_ext.goal.store import GoalStore, goals_db_filename
 from src.command_system.safe_commands import is_bridge_safe_command
 from src.tui.state import AppState
@@ -72,6 +74,7 @@ def _context(tmp_path: Path, ui: ScriptedUIHost | None = None) -> CommandContext
     context = CommandContext(
         workspace_root=Path("/tmp"),
         cwd=Path("/tmp"),
+        conversation=Conversation(),
         tool_context=SimpleNamespace(session_id="spec-1"),
         ui=ui or NullUIHost(),
     )
@@ -104,7 +107,8 @@ def test_goal_command_remains_interactive_not_bridge_safe():
 
 
 def test_goal_command_user_visible_arguments_only_include_upstream_set():
-    assert GOAL_COMMAND.argument_hint == "[<objective>|clear|edit|pause|resume]"
+    assert GOAL_COMMAND.argument_hint == "[<condition>|clear]"
+    assert GOAL_COMMAND.aliases == []
 
 
 def test_bare_goal_shows_usage_when_no_goal_is_set(tmp_path: Path):
@@ -112,8 +116,8 @@ def test_bare_goal_shows_usage_when_no_goal_is_set(tmp_path: Path):
 
     assert outcome.display == "system"
     assert outcome.should_query is False
-    assert "/goal [<objective>|clear|edit|pause|resume]" in outcome.message
-    assert "No goal is currently set." in outcome.message
+    assert "/goal <condition> to set one" in outcome.message
+    assert "No goal set" in outcome.message
 
 
 def test_goal_objective_creates_active_goal(tmp_path: Path):
@@ -123,15 +127,18 @@ def test_goal_objective_creates_active_goal(tmp_path: Path):
 
     assert outcome.display == "system"
     assert outcome.should_query is True
-    assert "Goal active" in outcome.message
+    assert outcome.message == "Goal set: ship spec 3"
     assert context.goal_service.get_goal("spec-1").objective == "ship spec 3"  # type: ignore[attr-defined]
+    assert (  # type: ignore[attr-defined]
+        context.goal_service.get_goal("spec-1").completion_mode is GoalCompletionMode.EVALUATOR
+    )
 
 
 def test_goal_command_uses_tool_context_goal_service_for_runtime_continuation(
     tmp_path: Path,
 ):
     from clawcodex_ext.goal.runtime import (
-        CONTINUATION_STEERING_MARKER,
+        EVALUATOR_START_MARKER,
         goal_runtime_for_context,
     )
 
@@ -157,59 +164,70 @@ def test_goal_command_uses_tool_context_goal_service_for_runtime_continuation(
 
     assert service.get_goal("spec-1").objective == "continue after slash command"
     assert request is not None
-    assert CONTINUATION_STEERING_MARKER in str(request.messages[0].content)
+    assert EVALUATOR_START_MARKER in str(request.messages[0].content)
 
 
-def test_goal_objective_materializes_long_input(tmp_path: Path):
+def test_goal_condition_rejects_more_than_4000_characters(tmp_path: Path):
     context = _context(tmp_path)
-    objective = "long goal\n" + ("x" * MAX_THREAD_GOAL_OBJECTIVE_CHARS)
-
-    outcome = _run(GOAL_COMMAND.run(objective, context))
-
-    goal = context.goal_service.get_goal("spec-1")  # type: ignore[attr-defined]
-    assert "Goal active" in outcome.message
-    assert goal.objective.startswith("Read the Codex goal objective file at ")
-    assert (
-        objective_text_for_edit(
-            goal.objective,
-            codex_home=tmp_path / "codex-home",
-        )
-        == objective
+    objective = "x" * (MAX_THREAD_GOAL_OBJECTIVE_CHARS + 1)
+    registry = CommandRegistry()
+    registry.register(GOAL_COMMAND)
+    engine = CommandEngine(
+        registry=registry,
+        workspace_root=tmp_path,
+        context=context,
     )
 
+    result = _run(engine.execute(f"/goal {objective}"))
 
-def test_goal_objective_requires_confirmation_before_replacing_unfinished_goal(
+    assert result.success is False
+    assert "4,000 characters" in result.error
+    assert context.goal_service.get_goal("spec-1") is None  # type: ignore[attr-defined]
+
+
+def test_goal_objective_replaces_unfinished_goal_without_confirmation(
     tmp_path: Path,
 ):
     ui = ScriptedUIHost(selects=["cancel"])
-    context = _context(tmp_path, ui)
-    context.goal_service.set_goal("spec-1", "current")  # type: ignore[attr-defined]
-
-    outcome = _run(GOAL_COMMAND.run("replacement", context))
-
-    assert outcome.display == "skip"
-    assert "Replace goal?" in ui.seen_selects[0][0]
-    assert context.goal_service.get_goal("spec-1").objective == "current"  # type: ignore[attr-defined]
-
-
-def test_goal_objective_confirmed_replace_clears_then_sets_new_goal(tmp_path: Path):
-    ui = ScriptedUIHost(selects=["replace"])
     context = _context(tmp_path, ui)
     old = context.goal_service.set_goal("spec-1", "current")  # type: ignore[attr-defined]
 
     outcome = _run(GOAL_COMMAND.run("replacement", context))
     current = context.goal_service.get_goal("spec-1")  # type: ignore[attr-defined]
 
-    assert "Goal active" in outcome.message
+    assert outcome.message == "Goal set: replacement"
+    assert ui.seen_selects == []
     assert current.objective == "replacement"
     assert current.goal_id != old.goal_id
     assert [message.method for message in context.goal_events.messages] == [  # type: ignore[attr-defined]
-        "thread/goal/get",
-        "thread/goal/clear",
-        "thread/goal/cleared",
         "thread/goal/set",
         "thread/goal/updated",
     ]
+
+
+def test_goal_replace_failure_is_command_failure_and_preserves_current_goal(
+    tmp_path: Path,
+):
+    context = _context(tmp_path)
+    current = context.goal_service.set_goal("spec-1", "keep me")  # type: ignore[attr-defined]
+    context.goal_events.clear()  # type: ignore[attr-defined]
+    context.goal_service.replace_goal = Mock(  # type: ignore[attr-defined,method-assign]
+        side_effect=GoalServiceError("replace transaction failed")
+    )
+    registry = CommandRegistry()
+    registry.register(GOAL_COMMAND)
+    engine = CommandEngine(
+        registry=registry,
+        workspace_root=tmp_path,
+        context=context,
+    )
+
+    result = _run(engine.execute("/goal replacement"))
+
+    assert result.success is False
+    assert result.error == "replace transaction failed"
+    assert context.goal_service.store.get_thread_goal("spec-1") == current  # type: ignore[attr-defined]
+    assert context.goal_events.messages == []  # type: ignore[attr-defined]
 
 
 def test_goal_objective_replaces_complete_goal_without_confirmation(tmp_path: Path):
@@ -224,7 +242,7 @@ def test_goal_objective_replaces_complete_goal_without_confirmation(tmp_path: Pa
 
     outcome = _run(GOAL_COMMAND.run("fresh", context))
 
-    assert "Goal active" in outcome.message
+    assert outcome.message == "Goal set: fresh"
     assert ui.seen_selects == []
     assert context.goal_service.get_goal("spec-1").objective == "fresh"  # type: ignore[attr-defined]
 
@@ -235,20 +253,44 @@ def test_goal_clear_deletes_current_goal(tmp_path: Path):
 
     outcome = _run(GOAL_COMMAND.run("clear", context))
 
-    assert outcome.message == "Goal cleared"
+    assert outcome.message == "Goal cleared: delete"
     assert context.goal_service.get_goal("spec-1") is None  # type: ignore[attr-defined]
 
 
-def test_goal_pause_and_resume_update_status(tmp_path: Path):
+def test_goal_set_and_clear_are_durable_transcript_events(tmp_path: Path):
     context = _context(tmp_path)
-    context.goal_service.set_goal("spec-1", "toggle")  # type: ignore[attr-defined]
 
-    paused = _run(GOAL_COMMAND.run("pause", context))
-    resumed = _run(GOAL_COMMAND.run("resume", context))
+    _run(GOAL_COMMAND.run("durable condition", context))
+    _run(GOAL_COMMAND.run("clear", context))
 
-    assert "Goal paused" in paused.message
-    assert "Goal active" in resumed.message
-    assert context.goal_service.get_goal("spec-1").status is ThreadGoalStatus.ACTIVE  # type: ignore[attr-defined]
+    notices = [
+        message
+        for message in context.conversation.messages
+        if getattr(message, "subtype", None) in {"goal_set", "goal_cleared"}
+    ]
+    assert [notice.subtype for notice in notices] == ["goal_set", "goal_cleared"]
+    assert notices[0].data["condition"] == "durable condition"
+    assert notices[0].data["state"] == "active"
+    assert notices[0].data["goalId"]
+    assert notices[1].data["state"] == "cleared"
+    assert notices[1].data["goalId"] == notices[0].data["goalId"]
+
+
+@pytest.mark.parametrize("clear_alias", ["clear", "stop", "off", "reset", "none", "cancel"])
+def test_goal_clear_aliases_remove_active_goal(tmp_path: Path, clear_alias: str):
+    context = _context(tmp_path)
+    context.goal_service.set_goal("spec-1", "stop this condition")  # type: ignore[attr-defined]
+
+    outcome = _run(GOAL_COMMAND.run(clear_alias, context))
+
+    assert outcome.message == "Goal cleared: stop this condition"
+    assert context.goal_service.get_goal("spec-1") is None  # type: ignore[attr-defined]
+
+
+def test_goal_clear_without_active_goal_matches_claude_message(tmp_path: Path):
+    outcome = _run(GOAL_COMMAND.run("clear", _context(tmp_path)))
+
+    assert outcome.message == "No goal set"
 
 
 def test_goal_command_updates_app_state_goal_status(tmp_path: Path):
@@ -256,9 +298,8 @@ def test_goal_command_updates_app_state_goal_status(tmp_path: Path):
     context.app_state = AppState(model="test", provider="test")  # type: ignore[attr-defined]
 
     _run(GOAL_COMMAND.run("sync status", context))
-    _run(GOAL_COMMAND.run("pause", context))
 
-    assert context.app_state.goal_status["status"] == "paused"  # type: ignore[attr-defined]
+    assert context.app_state.goal_status["status"] == "active"  # type: ignore[attr-defined]
     assert context.app_state.goal_status["objective"] == "sync status"  # type: ignore[attr-defined]
 
     _run(GOAL_COMMAND.run("clear", context))
@@ -273,108 +314,96 @@ def test_bare_goal_summary_updates_app_state_goal_status(tmp_path: Path):
 
     outcome = _run(GOAL_COMMAND.run("", context))
 
-    assert "Objective: sync on summary" in outcome.message
+    assert "Goal: sync on summary" in outcome.message
+    assert "Goal active" in outcome.message
+    assert outcome.transient is True
     assert context.app_state.goal_status["status"] == "active"  # type: ignore[attr-defined]
     assert context.app_state.goal_status["objective"] == "sync on summary"  # type: ignore[attr-defined]
 
 
-def test_goal_edit_prompts_and_preserves_paused_status(tmp_path: Path):
-    ui = ScriptedUIHost(prompts=["edited objective"])
-    context = _context(tmp_path, ui)
-    context.goal_service.set_goal("spec-1", "current")  # type: ignore[attr-defined]
-    context.goal_service.pause_goal("spec-1")  # type: ignore[attr-defined]
+def test_bare_goal_summary_accounts_live_idle_elapsed_time(tmp_path: Path):
+    from clawcodex_ext.goal.accounting import GoalAccountingState
+    from clawcodex_ext.goal.runtime import GoalRuntime
 
-    outcome = _run(GOAL_COMMAND.run("edit", context))
-
-    goal = context.goal_service.get_goal("spec-1")  # type: ignore[attr-defined]
-    assert "Goal paused" in outcome.message
-    assert goal.objective == "edited objective"
-    assert goal.status is ThreadGoalStatus.PAUSED
-
-
-@pytest.mark.parametrize(
-    "terminal_status",
-    [ThreadGoalStatus.BUDGET_LIMITED, ThreadGoalStatus.COMPLETE],
-)
-def test_goal_edit_reactivates_terminal_goal_and_resets_usage(
-    tmp_path: Path,
-    terminal_status: ThreadGoalStatus,
-):
-    ui = ScriptedUIHost(prompts=["edited terminal objective"])
-    context = _context(tmp_path, ui)
-    goal = context.goal_service.set_goal(  # type: ignore[attr-defined]
-        "spec-1",
-        "terminal",
-        token_budget=10,
-    )
-    context.goal_service.account_usage(  # type: ignore[attr-defined]
-        "spec-1",
-        expected_goal_id=goal.goal_id,
-        token_delta=10,
-        elapsed_seconds=5,
-    )
-    if terminal_status is ThreadGoalStatus.COMPLETE:
-        limited = context.goal_service.get_goal("spec-1")  # type: ignore[attr-defined]
-        context.goal_service.update_goal(  # type: ignore[attr-defined]
-            "spec-1",
-            ThreadGoalStatus.COMPLETE,
-            expected_goal_id=limited.goal_id,
-        )
-
-    outcome = _run(GOAL_COMMAND.run("edit", context))
-
-    edited = context.goal_service.get_goal("spec-1")  # type: ignore[attr-defined]
-    assert "Goal active" in outcome.message
-    assert edited.objective == "edited terminal objective"
-    assert edited.status is ThreadGoalStatus.ACTIVE
-    assert edited.token_budget == 10
-    assert edited.tokens_used == 0
-    assert edited.time_used_seconds == 0
-    assert edited.goal_id != goal.goal_id
-
-
-def test_goal_edit_reads_materialized_objective_for_default_text(tmp_path: Path):
-    ui = ScriptedUIHost(prompts=["edited long objective"])
-    context = _context(tmp_path, ui)
-    objective = "editable goal\n" + ("x" * MAX_THREAD_GOAL_OBJECTIVE_CHARS)
-    context.goal_service.set_goal("spec-1", objective)  # type: ignore[attr-defined]
-
-    outcome = _run(GOAL_COMMAND.run("edit", context))
-
-    assert "Goal active" in outcome.message
-    assert ui.seen_prompts == [("Edit goal", objective)]
-
-
-def test_bare_goal_summary_omits_resume_for_budget_limited_goal(tmp_path: Path):
+    now = [1_000.0]
     context = _context(tmp_path)
-    goal = context.goal_service.set_goal("spec-1", "budget", token_budget=1)  # type: ignore[attr-defined]
-    context.goal_service.account_usage(  # type: ignore[attr-defined]
+    service = context.goal_service  # type: ignore[attr-defined]
+    runtime = GoalRuntime(
+        thread_id="spec-1",
+        service=service,
+        accounting_state=GoalAccountingState(clock=lambda: now[0]),
+    )
+    service.register_runtime(runtime)
+    context.tool_context.goal_service = service
+    context.tool_context.goal_runtime = runtime
+    service.replace_goal("spec-1", "show current elapsed time")
+    now[0] += 7
+
+    outcome = _run(GOAL_COMMAND.run("", context))
+
+    assert "running 7s" in outcome.message
+    assert service.get_goal("spec-1").time_used_seconds == 7
+
+
+def test_bare_goal_shows_achieved_summary(tmp_path: Path):
+    context = _context(tmp_path)
+    goal = context.goal_service.set_goal("spec-1", "finished condition")  # type: ignore[attr-defined]
+    context.goal_service.update_goal(  # type: ignore[attr-defined]
         "spec-1",
+        ThreadGoalStatus.COMPLETE,
         expected_goal_id=goal.goal_id,
-        token_delta=1,
-        elapsed_seconds=1,
     )
 
     outcome = _run(GOAL_COMMAND.run("", context))
 
-    assert "Status: limited by budget" in outcome.message
-    assert "Commands: /goal edit, /goal clear" in outcome.message
-    assert "resume" not in outcome.message.split("Commands:", 1)[1]
+    assert "Goal achieved" in outcome.message
+    assert "Goal: finished condition" in outcome.message
+    assert outcome.transient is True
 
 
-@pytest.mark.parametrize("legacy_args", ["status", "continue", "complete"])
-def test_legacy_goal_words_are_treated_as_objectives(tmp_path: Path, legacy_args: str):
+def test_bare_goal_shows_evaluated_turns_and_last_check(tmp_path: Path):
+    from clawcodex_ext.goal.evaluator import GoalEvaluation
+
+    context = _context(tmp_path)
+    goal = context.goal_service.set_goal(  # type: ignore[attr-defined]
+        "spec-1", "pass tests", completion_mode=GoalCompletionMode.EVALUATOR
+    )
+    context.goal_service.record_evaluation(  # type: ignore[attr-defined]
+        "spec-1",
+        GoalEvaluation(met=False, reason="one test remains", usage={}),
+        expected_goal_id=goal.goal_id,
+        expected_evaluation_count=0,
+    )
+
+    outcome = _run(GOAL_COMMAND.run("", context))
+
+    assert "1 turn" in outcome.message
+    assert "Last check: one test remains" in outcome.message
+
+
+def test_bare_goal_hides_turns_and_last_check_before_first_evaluation(tmp_path: Path):
+    context = _context(tmp_path)
+    context.goal_service.set_goal("spec-1", "pass tests")  # type: ignore[attr-defined]
+
+    outcome = _run(GOAL_COMMAND.run("", context))
+
+    assert " turn" not in outcome.message
+    assert "Last check:" not in outcome.message
+
+
+@pytest.mark.parametrize(
+    "condition",
+    ["pause", "resume", "edit", "status", "continue", "complete"],
+)
+def test_non_clear_goal_words_are_conditions(tmp_path: Path, condition: str):
     context = _context(tmp_path)
 
-    outcome = _run(GOAL_COMMAND.run(legacy_args, context))
+    outcome = _run(GOAL_COMMAND.run(condition, context))
 
     assert outcome.display == "system"
     assert outcome.should_query is True
-    assert "Goal active" in outcome.message
-    assert context.goal_service.get_goal("spec-1").objective == legacy_args  # type: ignore[attr-defined]
-    assert "Current goal status" not in outcome.message
-    assert "Goal counter reset" not in outcome.message
-    assert "Goal marked complete" not in outcome.message
+    assert outcome.message == f"Goal set: {condition}"
+    assert context.goal_service.get_goal("spec-1").objective == condition  # type: ignore[attr-defined]
 
 
 def test_engine_reports_goal_disabled_when_gate_is_off():

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 
@@ -27,6 +28,99 @@ def test_downstream_tui_entrypoint_uses_downstream_app(monkeypatch):
     call_args = runner.call_args
     assert call_args[0][0] is options
     assert call_args[1].get("app_cls") is ClawCodexExtTUI
+
+
+def test_tui_entrypoint_marks_matching_session_as_resumed(monkeypatch, tmp_path):
+    from clawcodex_ext.tui import entrypoint
+    from src.agent.conversation import Conversation
+    from src.tool_system.context import ToolContext
+    from src.tool_system.registry import ToolRegistry
+
+    captured = {}
+
+    class FakeApp:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def run(self):
+            return None
+
+    monkeypatch.setattr(entrypoint, "_textual_available", lambda: True)
+    monkeypatch.setattr(entrypoint, "_register_tui_signal_save", lambda _session: None)
+    monkeypatch.setattr(entrypoint, "_print_resume_hint", lambda _session: None)
+    session = SimpleNamespace(
+        session_id="resume-me",
+        conversation=Conversation(),
+        save=lambda: None,
+    )
+    provider = SimpleNamespace(model="test-model", provider_name="test-provider")
+    options = TUIOptions(workspace_root=tmp_path)
+
+    result = entrypoint._run_tui_with_app(
+        options,
+        app_cls=FakeApp,
+        provider=provider,
+        session=session,
+        tool_registry=ToolRegistry(),
+        tool_context=ToolContext(workspace_root=tmp_path),
+        resume_session_id="resume-me",
+    )
+
+    assert result == 0
+    assert captured["session_was_resumed"] is True
+
+    created = SimpleNamespace(
+        session_id="fresh-session",
+        conversation=Conversation(),
+        save=lambda: None,
+    )
+    monkeypatch.setattr(entrypoint.Session, "resume", lambda _session_id: None)
+    monkeypatch.setattr(
+        entrypoint.Session,
+        "create",
+        lambda _provider_name, _model: created,
+    )
+    captured.clear()
+
+    result = entrypoint._run_tui_with_app(
+        options,
+        app_cls=FakeApp,
+        provider=provider,
+        tool_registry=ToolRegistry(),
+        tool_context=ToolContext(workspace_root=tmp_path),
+        resume_session_id="missing-session",
+    )
+
+    assert result == 0
+    assert captured["session_was_resumed"] is False
+
+
+def test_tui_app_installs_runtime_observer_when_context_is_available(monkeypatch, tmp_path):
+    from clawcodex_ext.tui.app import ClawCodexTUI
+    from src.agent.conversation import Conversation
+    from src.tool_system.context import ToolContext
+    from src.tool_system.registry import ToolRegistry
+
+    installed = []
+    monkeypatch.setattr(
+        "clawcodex_ext.frontend.tui_extensions.install_tui_extensions",
+        lambda app, runtime: installed.append((app, runtime)),
+    )
+    provider = SimpleNamespace(model="test-model")
+    runtime = SimpleNamespace()
+    session = SimpleNamespace(session_id="test-session", conversation=Conversation())
+
+    app = ClawCodexTUI(
+        provider=provider,
+        provider_name="test-provider",
+        workspace_root=tmp_path,
+        tool_registry=ToolRegistry(),
+        tool_context=ToolContext(workspace_root=tmp_path),
+        session=session,
+        runtime_context=runtime,
+    )
+
+    assert installed == [(app, runtime)]
 
 
 def test_upstream_tui_entrypoint_uses_upstream_app(monkeypatch):

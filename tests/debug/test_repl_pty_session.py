@@ -1851,7 +1851,7 @@ def test_docs_use_current_goal_expectations() -> None:
     for expected in [
         '"expect":"Available Commands:"',
         '"expect":"Available tools:"',
-        '"expect":"No goal is currently set."',
+        '"expect":"No goal set"',
         "Total units:",
         "CLAW_HEADLESS_BACKEND=stub",
         "CLAWCODEX_HOME",

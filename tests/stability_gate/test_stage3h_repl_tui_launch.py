@@ -577,7 +577,7 @@ class TestStage3hImportChain:
         assert hasattr(ClawCodexExtREPL, "handle_command")
 
     def test_tui_model_command_dispatched_locally(self):
-        """TUI 中 ``/model`` 和 ``/models`` 被本地 dispatch 拦截为 ``open_dialog="model"``。
+        """TUI 仅将 ``/model`` 本地 dispatch 为 ``open_dialog="model"``。
 
         回归防护：若 ``dispatch_local_command`` 的 ``/model`` 拦截被意外移除，
         则 TUI 中的 ``/model`` 会落入 registry 命令路径，因缺乏 ui 上下文
@@ -606,15 +606,16 @@ class TestStage3hImportChain:
             f"/model 应映射为 open_dialog='model', 实际得到 {result.open_dialog!r}"
         )
 
-        # /models 别名同样拦截
+        # /models 不是命令，也不应出现在建议列表或被本地拦截
+        assert "/models" not in LOCAL_BUILTINS
         result_plural = dispatch_local_command(
             "/models",
             session=MagicMock(),
             workspace_root=Path("/tmp"),
             tool_registry=MagicMock(),
         )
-        assert result_plural.handled is True
-        assert result_plural.open_dialog == "model"
+        assert result_plural.handled is False
+        assert result_plural.open_dialog is None
 
         # ModelPickerScreen 可导入（dialog 接收端就绪）
         from clawcodex_ext.tui.screens.model_picker import ModelPickerScreen

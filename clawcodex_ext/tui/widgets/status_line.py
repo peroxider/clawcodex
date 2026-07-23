@@ -285,59 +285,29 @@ class StatusLine(Static):
             return str(self._workspace_root)
 
 
-def _goal_status_segment(goal: dict | None) -> str | None:
+def _goal_status_segment(goal: dict | None, *, now: float | None = None) -> str | None:
     if not isinstance(goal, dict):
         return None
     status = str(goal.get("status") or "")
-    tokens_used = _goal_int(goal.get("tokensUsed", goal.get("tokens_used", 0)))
-    token_budget = goal.get("tokenBudget", goal.get("token_budget"))
-    time_used_seconds = _goal_int(goal.get("timeUsedSeconds", goal.get("time_used_seconds", 0)))
-
-    if status == "active":
-        return f"Pursuing goal ({_goal_active_usage(token_budget, tokens_used, time_used_seconds)})"
-    if status == "paused":
-        return "Goal paused (/goal resume)"
-    if status == "blocked":
-        return "Goal blocked (/goal resume)"
-    if status == "usage_limited":
-        return "Goal hit usage limits (/goal resume)"
-    if status == "budget_limited":
-        usage = _goal_budget_usage(token_budget, tokens_used)
-        return f"Goal unmet ({usage})" if usage else "Goal unmet"
-    if status == "complete":
-        usage = _goal_complete_usage(token_budget, tokens_used, time_used_seconds)
-        return f"Goal achieved ({usage})" if usage else "Goal achieved"
-    return None
-
-
-def _goal_active_usage(
-    token_budget: object,
-    tokens_used: int,
-    time_used_seconds: int,
-) -> str:
-    budget = _optional_goal_int(token_budget)
-    if budget is not None:
-        return f"{_format_goal_tokens(tokens_used)} / {_format_goal_tokens(budget)}"
-    return _format_goal_elapsed_seconds(time_used_seconds)
-
-
-def _goal_budget_usage(token_budget: object, tokens_used: int) -> str | None:
-    budget = _optional_goal_int(token_budget)
-    if budget is None:
+    if status not in {
+        "active",
+        "paused",
+        "blocked",
+        "usage_limited",
+        "budget_limited",
+        "complete",
+    }:
         return None
-    return f"{_format_goal_tokens(tokens_used)} / {_format_goal_tokens(budget)} tokens"
 
-
-def _goal_complete_usage(
-    token_budget: object,
-    tokens_used: int,
-    time_used_seconds: int,
-) -> str | None:
-    if _optional_goal_int(token_budget) is not None:
-        return f"{_format_goal_tokens(tokens_used)} tokens"
-    if time_used_seconds > 0:
-        return _format_goal_elapsed_seconds(time_used_seconds)
-    return None
+    elapsed = _goal_int(goal.get("timeUsedSeconds", goal.get("time_used_seconds", 0)))
+    active_since = goal.get("activeSince", goal.get("active_since"))
+    try:
+        if status == "active" and active_since is not None:
+            current = time.time() if now is None else now
+            elapsed = max(int(current - float(active_since)), 0)
+    except (TypeError, ValueError):
+        pass
+    return f"◎ /goal {status} ({_format_goal_elapsed_seconds(elapsed)})"
 
 
 def _goal_int(value: object) -> int:
@@ -345,23 +315,6 @@ def _goal_int(value: object) -> int:
         return max(int(value or 0), 0)
     except (TypeError, ValueError):
         return 0
-
-
-def _optional_goal_int(value: object) -> int | None:
-    if value is None:
-        return None
-    try:
-        return max(int(value), 0)
-    except (TypeError, ValueError):
-        return None
-
-
-def _format_goal_tokens(value: int) -> str:
-    if value >= 1_000_000:
-        return f"{value / 1_000_000:.1f}".rstrip("0").rstrip(".") + "M"
-    if value >= 1_000:
-        return f"{value / 1_000:.1f}".rstrip("0").rstrip(".") + "K"
-    return str(value)
 
 
 def _format_goal_elapsed_seconds(seconds: int) -> str:

@@ -8,7 +8,7 @@ import pytest
 
 from clawcodex_ext.feature_gate import get_registry, reset_registry
 from clawcodex_ext.goal.gate import ensure_goals_feature_registered
-from clawcodex_ext.goal.model import ThreadGoalStatus
+from clawcodex_ext.goal.model import GoalCompletionMode, ThreadGoalStatus
 from clawcodex_ext.goal.service import GoalService
 from clawcodex_ext.goal.store import GoalStore, goals_db_filename
 from clawcodex_ext.goal.tools import (
@@ -16,6 +16,7 @@ from clawcodex_ext.goal.tools import (
     GET_GOAL_TOOL_NAME,
     GOAL_MODEL_TOOL_NAMES,
     UPDATE_GOAL_TOOL_NAME,
+    filter_goal_model_tools_for_context,
     make_goal_model_tools,
 )
 from clawcodex_ext.tool_system import get_team_aware_tool_list
@@ -271,6 +272,9 @@ def test_create_goal_creates_active_goal_and_reports_remaining_budget(tmp_path: 
         "threadId": "thread-1",
         "objective": "ship spec 4",
         "status": "active",
+        "completionMode": "tool",
+        "evaluationCount": 0,
+        "lastEvaluationReason": None,
         "tokenBudget": 100,
         "tokensUsed": 0,
         "timeUsedSeconds": 0,
@@ -367,6 +371,26 @@ def test_update_goal_can_mark_complete_and_returns_completion_budget_report(
     assert "completedAt" not in result.output["goal"]
     assert result.output["remainingTokens"] == 75
     assert "Goal achieved" in result.output["completionBudgetReport"]
+
+
+def test_evaluator_goal_hides_and_rejects_model_completion(tmp_path: Path):
+    registry = _goal_registry()
+    context = _goal_context(tmp_path)
+    context.goal_service.replace_goal(
+        "thread-1",
+        "independently verified",
+        completion_mode=GoalCompletionMode.EVALUATOR,
+    )
+
+    visible = filter_goal_model_tools_for_context(registry.list_tools(), context)
+    result = _dispatch(registry, UPDATE_GOAL_TOOL_NAME, {"status": "complete"}, context)
+
+    assert UPDATE_GOAL_TOOL_NAME not in {tool.name for tool in visible}
+    assert result.is_error
+    assert "independent evaluator" in result.output["error"]
+    goal = context.goal_service.get_goal("thread-1")
+    assert goal is not None
+    assert goal.status is ThreadGoalStatus.ACTIVE
 
 
 def test_update_goal_can_mark_blocked(tmp_path: Path):

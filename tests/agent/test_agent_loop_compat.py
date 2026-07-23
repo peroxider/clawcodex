@@ -11,12 +11,12 @@ import asyncio
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from clawcodex_ext.providers.base import ChatResponse
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
-from clawcodex_ext.types.messages import UserMessage
+from clawcodex_ext.types.messages import AssistantMessage, UserMessage
 from src.utils.abort_controller import AbortController
 
 from src.query.agent_loop_compat import (
@@ -189,6 +189,52 @@ class TestAgentLoopCompatAdapter(unittest.TestCase):
                     cancel_signal=cancel.signal,
                 )
             )
+
+    def test_evaluator_error_closes_transcript_after_buffered_append(self):
+        """Exceptional exits close the writer, which flushes its sort buffer."""
+        from clawcodex_ext.goal.evaluator import GoalEvaluationError
+        from clawcodex_ext.query.transitions import Terminal
+
+        provider = MagicMock()
+        self.context.session_id = "goal-evaluator-error-close"
+        failure = GoalEvaluationError("invalid evaluator response")
+        yielded = AssistantMessage(
+            content="work completed before evaluation",
+            usage={"input_tokens": 2, "output_tokens": 3},
+        )
+
+        async def _query_with_evaluator_error(_params, *, terminal_holder):
+            yield yielded
+            terminal_holder.value = Terminal(
+                reason="goal_evaluator_error",
+                error=failure,
+            )
+
+        writer = MagicMock()
+        with (
+            patch(
+                "clawcodex_ext.query.agent_loop_compat.TranscriptWriter",
+                return_value=writer,
+            ),
+            patch(
+                "clawcodex_ext.query.agent_loop_compat.query",
+                _query_with_evaluator_error,
+            ),
+            self.assertRaises(GoalEvaluationError) as raised,
+        ):
+            _run(
+                run_query_as_agent_loop(
+                    initial_messages=[UserMessage(content="finish the goal")],
+                    provider=provider,
+                    tool_registry=self.registry,
+                    tool_context=self.context,
+                    system_prompt="You are helpful.",
+                )
+            )
+
+        self.assertIs(raised.exception, failure)
+        writer.append.assert_called_once_with(yielded)
+        writer.close.assert_called_once_with()
 
     def test_turn_timeout_pauses_while_tool_is_in_flight(self):
         in_flight = {"call-1"}

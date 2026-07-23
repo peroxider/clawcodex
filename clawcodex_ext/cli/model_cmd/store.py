@@ -18,7 +18,7 @@ class ModelStore:
     def set_default_provider(self, provider: str, *, scope: str = "user") -> None:
         if scope != "user":
             raise ProviderUnsupportedScopeError(scope)
-        self.registry.validate_provider(provider)
+        provider = self.registry.validate_provider(provider)
         from src.config import set_default_provider
 
         set_default_provider(provider)
@@ -40,6 +40,7 @@ class ModelStore:
     ) -> None:
         if scope != "user":
             raise ModelUnsupportedScopeError(scope)
+        provider = self.registry.validate_provider(provider)
         if not allow_unknown:
             self.registry.validate_model(model, provider)
 

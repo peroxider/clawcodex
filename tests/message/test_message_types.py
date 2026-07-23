@@ -84,7 +84,12 @@ class TestMessageTypes(unittest.TestCase):
                 ],
                 stop_reason="tool_use",
             ),
-            SystemMessage(content="api retry", subtype="api_error"),
+            SystemMessage(
+                content="api retry",
+                subtype="api_error",
+                data={"attempt": 2},
+                usage={"input_tokens": 3},
+            ),
             ProgressMessage(
                 content="Working...", progress="phase-1", toolUseID="t1", parentToolUseID="t0"
             ),
@@ -108,6 +113,8 @@ class TestMessageTypes(unittest.TestCase):
 
         self.assertEqual(restored_messages[1].stop_reason, "tool_use")
         self.assertEqual(getattr(restored_messages[2], "subtype", None), "api_error")
+        self.assertEqual(getattr(restored_messages[2], "data", None), {"attempt": 2})
+        self.assertEqual(getattr(restored_messages[2], "usage", None), {"input_tokens": 3})
         self.assertEqual(getattr(restored_messages[4], "attachments", [])[0]["name"], "diagram.png")
 
     def test_isMeta_field(self):

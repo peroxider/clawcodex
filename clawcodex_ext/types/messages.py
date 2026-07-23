@@ -105,6 +105,11 @@ class SystemMessage(Message):
     level: str | None = None
     toolUseID: str | None = None
     preventContinuation: bool = False
+    # Optional structured payload for durable lifecycle notices.  System
+    # messages are filtered from provider input, but this data survives JSONL
+    # round-trips so resume/remote surfaces can reconstruct local state.
+    data: Any = None
+    usage: dict[str, Any] | None = None
 
 
 @dataclass
@@ -219,6 +224,7 @@ def create_system_message(
     subtype: str = "informational",
     toolUseID: str | None = None,
     preventContinuation: bool = False,
+    data: Any = None,
 ) -> SystemMessage:
     return SystemMessage(
         content=content,
@@ -229,6 +235,7 @@ def create_system_message(
         level=level,
         toolUseID=toolUseID,
         preventContinuation=preventContinuation,
+        data=data,
     )
 
 
@@ -686,6 +693,8 @@ def message_from_dict(data: Mapping[str, Any]) -> Message:
             level=level if isinstance(level, str) else None,
             toolUseID=data.get("toolUseID") if isinstance(data.get("toolUseID"), str) else None,
             preventContinuation=bool(data.get("preventContinuation", False)),
+            data=data.get("data"),
+            usage=data.get("usage") if isinstance(data.get("usage"), dict) else None,
             origin=origin,
         )
 

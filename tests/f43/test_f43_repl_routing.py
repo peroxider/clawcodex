@@ -16,7 +16,7 @@ from __future__ import annotations
 
 def test_model_removed_from_repl_tui_only_whitelist() -> None:
     """``/model`` must NOT be in REPL's TUI-only placeholder list."""
-    import src.repl.core as repl_core
+    import clawcodex_ext.repl.core as repl_core
 
     src = open(repl_core.__file__, encoding="utf-8").read()
 
@@ -24,13 +24,16 @@ def test_model_removed_from_repl_tui_only_whitelist() -> None:
     # handle_command and the early-return check on the next line. Both must
     # drop ``model`` so the runtime command (LocalCommand) gets a chance.
     assert "'model'" not in src.split("special_commands")[1].split("effort")[0]
-    assert "if cmd_name in ('repl', 'effort'" in src
-    assert "'model'" not in src.split("if cmd_name in ('repl'")[1].split("'effort'")[0]
+    assert 'if cmd_name in ("repl", "theme")' in src
+    tui_only_block = src.split('if cmd_name in ("repl", "theme")', 1)[0].rsplit(
+        "special_commands", 1
+    )[1]
+    assert '"model"' not in tui_only_block
 
 
 def test_provider_listed_in_repl_builtins() -> None:
     """``/provider`` is in the REPL built-in commands list; ``/models`` is gone."""
-    import src.repl.core as repl_core
+    import clawcodex_ext.repl.core as repl_core
 
     src = open(repl_core.__file__, encoding="utf-8").read()
 
@@ -59,7 +62,7 @@ def test_handle_command_routes_model_to_new_command_system() -> None:
     """``handle_command`` must let ``/model`` fall through to the runtime registry."""
     import re
 
-    import src.repl.core as repl_core
+    import clawcodex_ext.repl.core as repl_core
 
     src = open(repl_core.__file__, encoding="utf-8").read()
 

@@ -96,7 +96,7 @@ sufficient if the artifact evidence matches the task.
 {"op":"start","label":"start"}
 {"op":"send","text":"/help","expect":"Available Commands:","label":"help"}
 {"op":"send","text":"/tools","expect":"Available tools:","label":"tools"}
-{"op":"send","text":"/goal","expect":"No goal is currently set.","label":"goal status"}
+{"op":"send","text":"/goal","expect":"No goal set","label":"goal status"}
 {"op":"send","text":"/cost","expect":"Total units:","label":"cost"}
 {"op":"observe","timeout":2.0,"label":"settle"}
 {"op":"stop","label":"stop"}

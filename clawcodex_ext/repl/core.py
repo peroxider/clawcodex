@@ -320,6 +320,20 @@ from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
+
+def _format_goal_footer_elapsed(seconds: int) -> str:
+    """Format the compact elapsed value used by Claude Code's goal footer."""
+
+    seconds = max(int(seconds), 0)
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m"
+    hours, remaining_minutes = divmod(minutes, 60)
+    return f"{hours}h" if remaining_minutes == 0 else f"{hours}h {remaining_minutes}m"
+
+
 # Heavy runtime deps are loaded lazily via ``_load_heavy_runtime()`` so
 # ``from src.repl import ClawcodexREPL`` stays within the Stage-6 perf
 # budget. Full stack (Session, providers, tools, commands) loads on first
@@ -1231,6 +1245,8 @@ class ClawcodexREPL:
             _in = self._stats_input_tokens
             _out = self._stats_output_tokens
             _fmt = lambda n: f"{n / 1000:.1f}k" if n >= 1000 else str(n)
+            goal_segment = self._goal_footer_status()
+            goal_part = f" · {goal_segment}" if goal_segment else ""
             return (
                 f" {provider} · {model} · {cwd} · "
                 f"mode: {permission_mode_short_title(self._permission_mode)} · "
@@ -1240,6 +1256,7 @@ class ClawcodexREPL:
                 f"{ctx_part}"
                 f"{advisor_tokens}"
                 f"{cost_part}"
+                f"{goal_part}"
                 f" "
             )
         except Exception:
@@ -1248,6 +1265,68 @@ class ClawcodexREPL:
             # cause when troubleshooting without flooding normal sessions.
             logger.debug("bottom toolbar render failed", exc_info=True)
             return ""
+
+    def _goal_footer_status(self) -> str | None:
+        """Return Claude Code's active-goal footer segment for the REPL."""
+
+        service = getattr(getattr(self, "tool_context", None), "goal_service", None)
+        thread_id = getattr(getattr(self, "tool_context", None), "goal_thread_id", None)
+        thread_id = thread_id or getattr(getattr(self, "tool_context", None), "session_id", None)
+        if service is None or not thread_id:
+            return None
+        try:
+            from clawcodex_ext.goal.model import ThreadGoalStatus
+
+            goal = service.get_goal(str(thread_id))
+            if goal is None or goal.status is not ThreadGoalStatus.ACTIVE:
+                self._goal_footer_id = None
+                self._goal_footer_started_at = None
+                return None
+
+            now = time.monotonic()
+            if (
+                getattr(self, "_goal_footer_id", None) != goal.goal_id
+                or getattr(self, "_goal_footer_started_at", None) is None
+            ):
+                self._goal_footer_id = goal.goal_id
+                self._goal_footer_started_at = now - max(int(goal.time_used_seconds), 0)
+            elapsed = max(int(now - self._goal_footer_started_at), 0)
+            return f"◎ /goal active ({_format_goal_footer_elapsed(elapsed)})"
+        except Exception:
+            logger.debug("goal footer render failed", exc_info=True)
+            return None
+
+    def _has_active_evaluator_goal_for_control_flow(self) -> bool:
+        """Authoritatively gate paths that would bypass goal evaluation.
+
+        Storage failures fail closed: the canonical query path can surface the
+        underlying error, while direct streaming could silently skip a live
+        evaluator goal and incorrectly return control to the user.
+        """
+
+        context = getattr(self, "tool_context", None)
+        service = getattr(context, "goal_service", None)
+        thread_id = getattr(context, "goal_thread_id", None) or getattr(context, "session_id", None)
+        if service is None or not thread_id:
+            return False
+        try:
+            from clawcodex_ext.goal.model import (
+                GoalCompletionMode,
+                ThreadGoalStatus,
+            )
+
+            goal = service.get_goal(str(thread_id))
+            return bool(
+                goal is not None
+                and goal.status is ThreadGoalStatus.ACTIVE
+                and goal.completion_mode is GoalCompletionMode.EVALUATOR
+            )
+        except Exception:
+            logger.warning(
+                "goal state lookup failed; disabling direct stream",
+                exc_info=True,
+            )
+            return True
 
     def _echo_user_input(self, text: str) -> None:
         """Print a user message to the transcript (transparent background).
@@ -2225,12 +2304,17 @@ class ClawcodexREPL:
                     self._engine_messages.append(create_message("assistant", result.text))
                     self.console.print()
                     return True
+                if getattr(result, "transient", False):
+                    self._print_transient_text(
+                        result.text,
+                        command=result.command_name,
+                    )
                 # F-122-F: long /btw answers carry scrollable=True. Route
                 # them through the keyboard-scrolled viewer so the user
                 # can navigate instead of seeing a wall of text scroll
                 # past. Falls back to a flat print when prompt_toolkit is
                 # unavailable or the body fits without paging.
-                if getattr(result, "scrollable", False):
+                elif getattr(result, "scrollable", False):
                     self._print_scrollable_text(
                         result.text,
                         command=result.command_name,
@@ -2240,7 +2324,10 @@ class ClawcodexREPL:
                         result.text,
                         command=result.command_name,
                     )
-                self.console.print()
+                if not getattr(result, "transient", False):
+                    self.console.print()
+            if result.should_query:
+                self._continue_goal_if_idle()
             return True
 
         elif result.result_type == "prompt":
@@ -2264,6 +2351,253 @@ class ClawcodexREPL:
 
         return False
 
+    def _continue_goal_if_idle(self) -> bool:
+        """Start an active goal continuation after a local slash command."""
+
+        _load_heavy_runtime()
+        try:
+            from clawcodex_ext.goal.runtime import goal_runtime_for_context
+
+            goal_runtime = goal_runtime_for_context(self.tool_context)
+        except Exception:
+            return False
+        if goal_runtime is None:
+            return False
+
+        continuation = goal_runtime.continue_if_idle()
+        if continuation is None or not goal_runtime.claim_continuation(continuation):
+            return False
+
+        messages = list(continuation.messages)
+        if not messages:
+            return False
+
+        from clawcodex_ext.query.agent_loop_compat import (
+            build_effective_system_prompt,
+            run_query_as_agent_loop,
+        )
+
+        style_name = getattr(self.tool_context, "output_style_name", None)
+        style_dir = getattr(self.tool_context, "output_style_dir", None)
+        append_prompt = resolve_output_style(style_name, style_dir).prompt
+        extra = getattr(self, "_append_system_prompt", "")
+        if extra:
+            append_prompt = f"{append_prompt}\n\n{extra}"
+
+        effective_system_prompt = build_effective_system_prompt(
+            append_prompt,
+            self.tool_context,
+        )
+        initial_messages = [
+            *list(getattr(self, "_engine_messages", [])),
+            *messages,
+        ]
+        persisted_messages = list(initial_messages)
+        streamed_text = False
+        tool_names: dict[str, str] = {}
+        continuation_usage = {"input_tokens": 0, "output_tokens": 0}
+        abort_controller = AbortController()
+        previous_abort_controller = getattr(self.tool_context, "abort_controller", None)
+        self.tool_context.abort_controller = abort_controller
+
+        def _on_text_chunk(chunk: str) -> None:
+            nonlocal streamed_text
+            if not chunk:
+                return
+            streamed_text = True
+            self.console.print(chunk, end="", markup=False, highlight=False, soft_wrap=True)
+
+        def _on_message(message: Any) -> None:
+            persisted_messages.append(message)
+            message_usage = getattr(message, "usage", None)
+            if isinstance(message_usage, dict):
+                continuation_usage["input_tokens"] += int(message_usage.get("input_tokens", 0) or 0)
+                continuation_usage["output_tokens"] += int(
+                    message_usage.get("output_tokens", 0) or 0
+                )
+            add_existing = getattr(self.session.conversation, "add_existing_message", None)
+            if callable(add_existing):
+                add_existing(message)
+            else:
+                self.session.conversation.add_message(message.role, message.content)
+            if isinstance(message, SystemMessage):
+                subtype = getattr(message, "subtype", None)
+                if subtype in {
+                    "goal_evaluation",
+                    "goal_achieved",
+                    "goal_evaluator_error",
+                }:
+                    # The initial `/goal <condition>` run uses this adapter,
+                    # not QueryEngine.submit_message(). Keep its transcript
+                    # visibility identical to ordinary goal continuations.
+                    self.console.print()
+                    if subtype == "goal_evaluator_error":
+                        self._last_chat_outcome = "goal_evaluator_error"
+                    style = (
+                        "success"
+                        if subtype == "goal_achieved"
+                        else "warning"
+                        if subtype == "goal_evaluator_error"
+                        else "dim"
+                    )
+                    self.console.print(f"[{style}]{escape(str(message.content))}[/{style}]")
+
+        def _on_tool_event(event: ToolEvent) -> None:
+            tool_use_id = str(event.tool_use_id or "")
+            if event.kind == "tool_use":
+                if tool_use_id:
+                    tool_names[tool_use_id] = event.tool_name
+                summary = summarize_tool_use(event.tool_name, event.tool_input or {})
+                suffix = f" ({escape(summary)})" if summary else ""
+                self.console.print(
+                    f"[success]●[/success] [bold][info]{event.tool_name}[/info][/bold]{suffix}"
+                )
+                return
+
+            tool_name = event.tool_name or tool_names.get(tool_use_id, "tool")
+            output = event.error if event.is_error else event.tool_output
+            summary = summarize_tool_result(tool_name, output)
+            style = "error" if event.is_error else "dim"
+            self.console.print(f"[{style}]  ⎿  {escape(str(summary))}[/{style}]")
+
+        async def _run_query():
+            return await run_query_as_agent_loop(
+                initial_messages=initial_messages,
+                provider=self.provider,
+                tool_registry=self.tool_registry,
+                tool_context=self.tool_context,
+                system_prompt=effective_system_prompt,
+                # Claude-style /goal keeps running until its evaluator says
+                # the condition is met (or the user cancels/clears it).
+                max_turns=0,
+                on_event=_on_tool_event,
+                on_text_chunk=_on_text_chunk if self.stream else None,
+                on_message=_on_message,
+                abort_controller=abort_controller,
+            )
+
+        def _cancel_goal_continuation() -> None:
+            self._last_chat_outcome = "cancelled"
+            abort_controller.abort("user_interrupt")
+            status = getattr(self, "_active_live_status", None)
+            if status is not None:
+                try:
+                    status.update("[warning]Cancelling…[/warning]")
+                except Exception:
+                    pass
+
+        status_ref: list[LiveStatus] = []
+
+        def _on_submit_goal(text: str) -> None:
+            self._enqueue_prompt(text)
+            if status_ref:
+                status_ref[0].update(self._status_message())
+
+        background_requested = False
+
+        def _on_background_goal() -> None:
+            nonlocal background_requested
+            background_requested = True
+            self._last_chat_outcome = "cancelled"
+            abort_controller.abort("background")
+
+        self.console.print("\n[bold]Assistant[/bold]")
+        try:
+            loop = self._get_chat_loop()
+        except RuntimeError:
+            loop = None
+
+        result = None
+        status = None
+        cancelled = False
+        from clawcodex_ext.utils.abort_controller import AbortError
+
+        self._last_chat_outcome = "success"
+        self._im_active_cancel = _cancel_goal_continuation
+        try:
+            with _pt_patch_stdout(raw=True):
+                with LiveStatus(
+                    self._status_message(),
+                    on_cancel=_cancel_goal_continuation,
+                    on_submit=_on_submit_goal,
+                    on_expand=self._do_expand_last,
+                    on_background=_on_background_goal,
+                    on_permission_cycle=self._apply_permission_mode_cycle,
+                    completer=self.completer,
+                    history=self._file_history,
+                    toolbar_text=self._bottom_toolbar,
+                ) as status:
+                    status_ref.append(status)
+                    self._active_live_status = status
+                    try:
+                        if loop is None or loop.is_closed():
+                            result = asyncio.run(_run_query())
+                        elif loop.is_running():
+                            import concurrent.futures
+
+                            with concurrent.futures.ThreadPoolExecutor() as pool:
+                                result = pool.submit(lambda: asyncio.run(_run_query())).result()
+                        else:
+                            result = loop.run_until_complete(_run_query())
+                    finally:
+                        self._active_live_status = None
+        except (AbortError, asyncio.CancelledError):
+            self._last_chat_outcome = "cancelled"
+            cancelled = True
+        except KeyboardInterrupt:
+            self._last_chat_outcome = "cancelled"
+            abort_controller.abort("user_interrupt")
+            raise
+        except Exception as exc:
+            if self._last_chat_outcome == "goal_evaluator_error":
+                self._engine_messages = persisted_messages
+                self._stats_turns += int(getattr(exc, "num_turns", 0) or 0)
+                self._stats_input_tokens += continuation_usage["input_tokens"]
+                self._stats_output_tokens += continuation_usage["output_tokens"]
+                try:
+                    self.session.save_transcript()
+                except Exception:
+                    pass
+                return False
+            self._last_chat_outcome = "failure"
+            self.console.print(f"\n[error]Error: {escape(str(exc))}[/error]")
+            return False
+        finally:
+            if self._im_active_cancel is _cancel_goal_continuation:
+                self._im_active_cancel = None
+            self._active_live_status = None
+            self.tool_context.abort_controller = previous_abort_controller
+
+        if status is not None:
+            pending = getattr(status, "_pending_text", "")
+            if pending:
+                self._enqueue_prompt(pending)
+        if background_requested:
+            self._handle_background_escape()
+            return False
+        if abort_controller.signal.aborted:
+            cancelled = True
+        if cancelled:
+            self.console.print()
+            return False
+        if result is None:
+            return False
+
+        self._engine_messages = persisted_messages
+        usage = result.usage or {}
+        self._stats_turns += int(result.num_turns or 0)
+        self._stats_input_tokens += int(usage.get("input_tokens", 0) or 0)
+        self._stats_output_tokens += int(usage.get("output_tokens", 0) or 0)
+        response_text = result.response_text
+        if response_text and not streamed_text:
+            self.console.print(Markdown(response_text))
+        self.console.print()
+        try:
+            self.session.save_transcript()
+        except Exception:
+            pass
+        return True
+
     def _print_local_command_text(self, text: str, *, command: str = "") -> None:
         """Print local command output, rendering only /recap as Markdown."""
 
@@ -2272,6 +2606,68 @@ class ClawcodexREPL:
             self.console.print(Markdown(text))
             return
         self.console.print("\n" + text)
+
+    def _print_transient_text(self, text: str, *, command: str = "") -> None:
+        """Show a short status view that disappears after Esc/Enter/q."""
+
+        if not text:
+            return
+        if not _HAS_PROMPT_TOOLKIT:
+            self._print_local_command_text(text, command=command)
+            return
+
+        from prompt_toolkit.application import Application
+        from prompt_toolkit.key_binding import KeyBindings
+        from prompt_toolkit.layout import Layout
+        from prompt_toolkit.layout.containers import Window
+        from prompt_toolkit.layout.controls import FormattedTextControl
+        from prompt_toolkit.styles import Style
+
+        body = text.strip()
+        if body.startswith("Goal\n\n"):
+            body = body[len("Goal\n\n") :]
+        label = command or "status"
+
+        def _fragments():
+            return [
+                ("class:transient-title", f"\n  {label.title()}\n\n"),
+                ("", body + "\n"),
+                ("class:transient-footer", "\n  Esc to dismiss"),
+            ]
+
+        bindings = KeyBindings()
+
+        def _close(event) -> None:
+            event.app.exit(result=None)
+
+        bindings.add("escape")(_close)
+        bindings.add("enter")(_close)
+        bindings.add("q")(_close)
+        bindings.add("Q")(_close)
+        bindings.add("c-c")(_close)
+
+        application = Application(
+            layout=Layout(Window(FormattedTextControl(_fragments))),
+            key_bindings=bindings,
+            style=Style.from_dict(
+                {
+                    "transient-title": "bold fg:cyan",
+                    "transient-footer": "fg:gray italic",
+                }
+            ),
+            full_screen=False,
+            erase_when_done=True,
+            mouse_support=False,
+        )
+        live = self._active_live_status
+        try:
+            if live is not None:
+                with live.paused():
+                    application.run()
+            else:
+                application.run()
+        except (EOFError, KeyboardInterrupt):
+            return
 
     # ------------------------------------------------------------------
     # F-122-F: scrollable answer viewer for /btw side questions
@@ -3778,6 +4174,7 @@ class ClawcodexREPL:
             tool_context=self.tool_context,
             session=self.session,
             stream=True,
+            runtime_context=getattr(self, "runtime_context", None),
             replay_exit_snapshot_from_start=False,
         )
         result = None
@@ -3973,6 +4370,24 @@ class ClawcodexREPL:
                     if display:
                         self.console.print()
                         self.console.print(Markdown(display))
+                elif subtype in {
+                    "goal_set",
+                    "goal_cleared",
+                    "goal_evaluation",
+                    "goal_achieved",
+                    "goal_evaluator_error",
+                }:
+                    display = str(getattr(msg, "content", "") or "")
+                    if display:
+                        self.console.print()
+                        style = (
+                            "error"
+                            if subtype == "goal_evaluator_error"
+                            else "success"
+                            if subtype == "goal_achieved"
+                            else "dim"
+                        )
+                        self.console.print(f"[{style}]{escape(display)}[/{style}]")
                 continue
 
             if role == "user":
@@ -4778,12 +5193,24 @@ class ClawcodexREPL:
             # Try new command system first, fall back to original
             try:
                 handled, result_text = self._try_execute_new_command("clear", "")
-                if handled and result_text:
-                    self.console.print("\n[success]" + result_text + "[/success]")
+                if handled:
+                    if result_text:
+                        self.console.print("\n[success]" + result_text + "[/success]")
                     return
-            except Exception:
-                pass
+                if result_text:
+                    self.console.print(f"[error]{escape(result_text)}[/error]")
+                    return
+            except Exception as exc:
+                self.console.print(f"[error]{escape(str(exc))}[/error]")
+                return
             # Original implementation
+            try:
+                from clawcodex_ext.goal.service import clear_goal_for_context
+
+                clear_goal_for_context(self.tool_context)
+            except Exception as exc:
+                self.console.print(f"[error]{escape(str(exc))}[/error]")
+                return
             self.session.conversation.clear()
             self._engine_messages = []
             self.console.print("[success]Conversation cleared.[/success]")
@@ -5498,6 +5925,10 @@ class ClawcodexREPL:
     def _should_try_direct_stream(self, user_input: str) -> bool:
         if not self.stream:
             return False
+        # Goal turns must use the canonical query loop so the independent
+        # completion evaluator runs at the natural stop boundary.
+        if self._has_active_evaluator_goal_for_control_flow():
+            return False
         text = user_input.strip().lower()
         if not text or text.startswith("/"):
             return False
@@ -5584,6 +6015,7 @@ class ClawcodexREPL:
         if abort_signal.aborted:
             return None
 
+        self._last_direct_response_usage = None
         try:
             api_messages, call_kwargs = self._build_direct_stream_payload()
             try:
@@ -5597,6 +6029,8 @@ class ClawcodexREPL:
                 content = response.content if response else None
                 full_response = content if isinstance(content, str) and content else None
                 if full_response is not None:
+                    usage = getattr(response, "usage", None) if response is not None else None
+                    self._last_direct_response_usage = usage if isinstance(usage, dict) else None
                     self.session.conversation.add_assistant_message(full_response)
                     return full_response
             except NotImplementedError:
@@ -5629,6 +6063,34 @@ class ClawcodexREPL:
         if full_response:
             self.session.conversation.add_assistant_message(full_response)
         return full_response
+
+    def _account_direct_goal_turn(self, usage: dict[str, Any] | None) -> None:
+        try:
+            from clawcodex_ext.goal.runtime import goal_runtime_for_context
+
+            goal_runtime = goal_runtime_for_context(self.tool_context)
+        except Exception:
+            return
+        if goal_runtime is None:
+            return
+        try:
+            turn_id = goal_runtime.on_turn_start(
+                plan_mode=bool(getattr(self.tool_context, "plan_mode", False))
+            )
+        except Exception:
+            return
+        try:
+            goal_runtime.on_token_usage(turn_id, usage or {})
+        except Exception as exc:
+            try:
+                goal_runtime.on_turn_error(turn_id, exc)
+            except Exception:
+                pass
+            return
+        try:
+            goal_runtime.on_turn_stop(turn_id)
+        except Exception:
+            pass
 
     def _get_last_assistant_text(self) -> str | None:
         for message in reversed(self.session.conversation.messages):
@@ -5927,12 +6389,16 @@ class ClawcodexREPL:
                 if pending:
                     self._enqueue_prompt(pending)
                 if direct_response is not None:
+                    self._account_direct_goal_turn(
+                        getattr(self, "_last_direct_response_usage", None)
+                    )
                     self.console.print("\n")
                     # Per-turn save: persist JSONL transcript only (lightweight).
                     try:
                         self.session.save_transcript()
                     except Exception:
                         pass
+                    self._continue_goal_if_idle()
                     return True
                 # User pressed ESC/Ctrl+C during direct stream — skip the
                 # engine path entirely instead of falling through.
@@ -6175,6 +6641,52 @@ class ClawcodexREPL:
                                 f"[warning]Reached maximum number of turns. "
                                 f"The task may be incomplete.[/warning]"
                             )
+                        elif subtype in {"goal_evaluation", "goal_achieved"}:
+                            _stop_status_once()
+                            stream_started = True
+                            evaluator_usage = getattr(msg, "usage", None)
+                            if isinstance(evaluator_usage, dict):
+                                in_toks = int(evaluator_usage.get("input_tokens", 0) or 0)
+                                out_toks = int(evaluator_usage.get("output_tokens", 0) or 0)
+                                self._stats_input_tokens += in_toks
+                                self._stats_output_tokens += out_toks
+                                turn_tokens += in_toks + out_toks
+                                if _engine_status_ref:
+                                    _engine_status_ref[0].set_tokens(turn_tokens)
+                            style = "success" if subtype == "goal_achieved" else "dim"
+                            self.console.print(f"[{style}]{escape(str(msg.content))}[/{style}]")
+                            add_existing = getattr(
+                                self.session.conversation,
+                                "add_existing_message",
+                                None,
+                            )
+                            if callable(add_existing):
+                                add_existing(msg)
+                            else:
+                                self.session.conversation.add_message(msg.role, msg.content)
+                        elif subtype == "goal_evaluator_error":
+                            _stop_status_once()
+                            stream_started = True
+                            self._last_chat_outcome = "goal_evaluator_error"
+                            evaluator_usage = getattr(msg, "usage", None)
+                            if isinstance(evaluator_usage, dict):
+                                in_toks = int(evaluator_usage.get("input_tokens", 0) or 0)
+                                out_toks = int(evaluator_usage.get("output_tokens", 0) or 0)
+                                self._stats_input_tokens += in_toks
+                                self._stats_output_tokens += out_toks
+                                turn_tokens += in_toks + out_toks
+                                if _engine_status_ref:
+                                    _engine_status_ref[0].set_tokens(turn_tokens)
+                            self.console.print(f"[warning]{escape(str(msg.content))}[/warning]")
+                            add_existing = getattr(
+                                self.session.conversation,
+                                "add_existing_message",
+                                None,
+                            )
+                            if callable(add_existing):
+                                add_existing(msg)
+                            else:
+                                self.session.conversation.add_message(msg.role, msg.content)
                         continue
 
                     if isinstance(msg, UserMessage):
@@ -6434,6 +6946,8 @@ class ClawcodexREPL:
                 traceback.print_exc()
             return False
 
+        if self._last_chat_outcome != "goal_evaluator_error":
+            self._continue_goal_if_idle()
         return True
 
     def _print_resume_hint(self) -> None:
@@ -6612,6 +7126,33 @@ class ClawcodexREPL:
         # Replace current session (bootstrap id + cost already restored
         # by Session.resume).
         self.session = loaded_session
+        from clawcodex_ext.runtime.tool_context_binding import bind_tool_context_runtime
+
+        bind_tool_context_runtime(
+            self.tool_context,
+            tool_registry=self.tool_registry,
+            session=self.session,
+            provider=self.provider,
+        )
+        # Goals follow the resumed session rather than any stale protocol
+        # override left on an injected ToolContext.
+        self.tool_context.goal_thread_id = None
+        try:
+            from clawcodex_ext.goal.runtime import (
+                restore_goal_runtime_after_session_resume,
+            )
+
+            restore_goal_runtime_after_session_resume(self.tool_context)
+        except Exception:
+            # Session loading must remain usable when the optional goal store
+            # is disabled or unavailable.
+            pass
+
+        command_context = getattr(self, "command_context", None)
+        if command_context is not None:
+            command_context.session = loaded_session
+            command_context.conversation = loaded_session.conversation
+            command_context.tool_context = self.tool_context
         # Populate _engine_messages from the restored conversation so the
         # next chat() call's QueryEngine sees the full history rather than
         # starting with an empty mutable-message list (which would cause

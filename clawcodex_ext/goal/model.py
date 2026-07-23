@@ -35,6 +35,27 @@ class ThreadGoalStatus(str, Enum):
         return self in {ThreadGoalStatus.BUDGET_LIMITED, ThreadGoalStatus.COMPLETE}
 
 
+class GoalCompletionMode(str, Enum):
+    """Authority responsible for deciding that a goal is complete."""
+
+    TOOL = "tool"
+    EVALUATOR = "evaluator"
+
+    @classmethod
+    def from_wire(cls, value: str) -> "GoalCompletionMode":
+        """Parse a completion-mode value from persisted or protocol data."""
+
+        try:
+            return cls(value)
+        except ValueError as exc:
+            raise ValueError(f"unknown goal completion mode `{value}`") from exc
+
+    def to_wire(self) -> str:
+        """Return the stable persisted and protocol representation."""
+
+        return self.value
+
+
 @dataclass(frozen=True)
 class ThreadGoal:
     """Persisted goal for one recoverable thread/session."""
@@ -48,6 +69,9 @@ class ThreadGoal:
     time_used_seconds: int
     created_at: datetime
     updated_at: datetime
+    completion_mode: GoalCompletionMode = GoalCompletionMode.TOOL
+    evaluation_count: int = 0
+    last_evaluation_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -58,6 +82,9 @@ class ThreadGoal:
             "token_budget": self.token_budget,
             "tokens_used": self.tokens_used,
             "time_used_seconds": self.time_used_seconds,
+            "completion_mode": self.completion_mode.to_wire(),
+            "evaluation_count": self.evaluation_count,
+            "last_evaluation_reason": self.last_evaluation_reason,
             "created_at": _normalize_datetime(self.created_at).isoformat(),
             "updated_at": _normalize_datetime(self.updated_at).isoformat(),
         }
@@ -74,6 +101,11 @@ class ThreadGoal:
             time_used_seconds=int(data["time_used_seconds"]),
             created_at=_parse_datetime(data["created_at"]),
             updated_at=_parse_datetime(data["updated_at"]),
+            completion_mode=GoalCompletionMode.from_wire(
+                str(data.get("completion_mode", GoalCompletionMode.TOOL.value))
+            ),
+            evaluation_count=int(data.get("evaluation_count", 0)),
+            last_evaluation_reason=_optional_str(data.get("last_evaluation_reason")),
         )
 
 
@@ -81,6 +113,12 @@ def _optional_int(value: Any) -> int | None:
     if value is None:
         return None
     return int(value)
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    return str(value)
 
 
 def _parse_datetime(value: Any) -> datetime:
@@ -98,4 +136,4 @@ def _normalize_datetime(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-__all__ = ["ThreadGoal", "ThreadGoalStatus"]
+__all__ = ["GoalCompletionMode", "ThreadGoal", "ThreadGoalStatus"]

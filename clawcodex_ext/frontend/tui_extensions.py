@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 from clawcodex_ext.cli.runtime_commands import register_runtime_commands
 from clawcodex_ext.multimodel.runtime_command import register_multimodel_runtime_command
 from clawcodex_ext.runtime.observer import RuntimeObserver, attach_observer
+from clawcodex_ext.providers.model_catalog_cache import prewarm_model_catalog
 
 if TYPE_CHECKING:  # pragma: no cover
     from src.tui.app import ClawCodexTUI
@@ -81,6 +82,7 @@ class _TuiRuntimeObserver:
                 )
             except Exception:
                 pass
+        prewarm_model_catalog(runtime.provider_name, runtime.provider)
 
 
 def install_tui_extensions(app: "ClawCodexTUI", ctx) -> None:
@@ -114,3 +116,4 @@ def install_tui_extensions(app: "ClawCodexTUI", ctx) -> None:
         return
 
     attach_observer(runtime, _TuiRuntimeObserver(app))
+    prewarm_model_catalog(runtime.provider_name, runtime.provider)

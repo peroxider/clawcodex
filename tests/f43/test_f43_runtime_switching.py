@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import threading
+import time
 from types import SimpleNamespace
 
 from clawcodex_ext.runtime.context import RuntimeContext, RuntimeOptions
@@ -33,6 +35,52 @@ class FakeRegistry:
         raise NotImplementedError
 
 
+def test_runtime_swap_does_not_run_model_discovery_hooks(monkeypatch, tmp_path: Path) -> None:
+    import clawcodex_ext.cli.model_cmd.registry as registry_module
+
+    hook_called = threading.Event()
+
+    def slow_hook() -> list[str]:
+        hook_called.set()
+        time.sleep(0.3)
+        return ["account-only-model"]
+
+    monkeypatch.setitem(registry_module._DISCOVERY_HOOKS, "anthropic", [slow_hook])
+    monkeypatch.setattr(
+        "src.providers.runtime.build_provider_from_config",
+        lambda provider_name, model=None: FakeProvider(model),
+    )
+    monkeypatch.setattr(
+        "src.tool_system.defaults.build_default_registry",
+        lambda provider, **kwargs: FakeRegistry(provider),
+    )
+    monkeypatch.setattr(
+        "clawcodex_ext.runtime.context.replace_cron_tools",
+        lambda registry: None,
+    )
+    runtime = RuntimeContext(
+        options=RuntimeOptions(
+            provider_name="anthropic",
+            model="claude-sonnet-4-6",
+            workspace_root=tmp_path,
+        ),
+        provider_name="anthropic",
+        provider=FakeProvider("claude-sonnet-4-6"),
+        session=object(),
+        tool_registry=FakeRegistry(FakeProvider()),
+        tool_context=SimpleNamespace(),
+        workspace_root=tmp_path,
+    )
+
+    before = time.perf_counter()
+    runtime.swap_provider("anthropic", "account-only-model")
+    elapsed = time.perf_counter() - before
+
+    assert elapsed < 0.25
+    assert hook_called.is_set() is False
+    assert runtime.provider.model == "account-only-model"
+
+
 def test_runtime_context_build_uses_model_resolver(monkeypatch, tmp_path: Path) -> None:
     built: list[tuple[str, str | None]] = []
 
@@ -48,7 +96,7 @@ def test_runtime_context_build_uses_model_resolver(monkeypatch, tmp_path: Path) 
     )
     monkeypatch.setattr(
         "src.tool_system.defaults.build_default_registry",
-        lambda provider: FakeRegistry(provider),
+        lambda provider, **kwargs: FakeRegistry(provider),
     )
     monkeypatch.setattr(
         "clawcodex_ext.runtime.context.attach_cron_runtime",
@@ -88,7 +136,7 @@ def test_runtime_context_swap_provider_replaces_provider_and_registry(
         lambda provider_name, model=None: FakeProvider(model),
     )
 
-    def fake_registry(provider: FakeProvider) -> FakeRegistry:
+    def fake_registry(provider: FakeProvider, **kwargs) -> FakeRegistry:
         registry = FakeRegistry(provider)
         registries.append(registry)
         return registry
@@ -117,13 +165,13 @@ def test_runtime_context_swap_provider_replaces_provider_and_registry(
 
     runtime.swap_provider("glm", "zai/glm-4")
 
-    assert runtime.provider_name == "glm"
+    assert runtime.provider_name == "zai"
     assert runtime.provider.model == "zai/glm-4"
     assert runtime.tool_registry is registries[-1]
-    assert runtime.options.provider_name == "glm"
+    assert runtime.options.provider_name == "zai"
     assert runtime.options.model == "zai/glm-4"
     assert tool_context.provider is runtime.provider
-    assert tool_context.provider_name == "glm"
+    assert tool_context.provider_name == "zai"
     assert tool_context.tool_registry is runtime.tool_registry
 
 
@@ -147,7 +195,7 @@ def test_swap_provider_notifies_attached_observers(monkeypatch, tmp_path: Path) 
     )
     monkeypatch.setattr(
         "src.tool_system.defaults.build_default_registry",
-        lambda provider: FakeRegistry(provider),
+        lambda provider, **kwargs: FakeRegistry(provider),
     )
     monkeypatch.setattr(
         "clawcodex_ext.cron_system.runtime.replace_cron_tools",
@@ -190,7 +238,7 @@ def test_swap_provider_observer_errors_do_not_break_swap(monkeypatch, tmp_path: 
     )
     monkeypatch.setattr(
         "src.tool_system.defaults.build_default_registry",
-        lambda provider: FakeRegistry(provider),
+        lambda provider, **kwargs: FakeRegistry(provider),
     )
     monkeypatch.setattr(
         "clawcodex_ext.cron_system.runtime.replace_cron_tools",
@@ -222,7 +270,7 @@ def test_swap_provider_observer_errors_do_not_break_swap(monkeypatch, tmp_path: 
 
     runtime.swap_provider("glm", "zai/glm-4")
 
-    assert runtime.provider_name == "glm"
+    assert runtime.provider_name == "zai"
     assert healthy.calls == [runtime]
 
 
@@ -237,6 +285,12 @@ def test_install_repl_extensions_attaches_observer(monkeypatch) -> None:
         tool_context=SimpleNamespace(),
         options=SimpleNamespace(model="claude-sonnet-4-6"),
         _observers=[],
+    )
+    prewarmed = []
+    monkeypatch.setattr(
+        "clawcodex_ext.frontend.repl_extensions.prewarm_model_catalog",
+        lambda provider_name, provider: prewarmed.append((provider_name, provider)),
+        raising=False,
     )
 
     class _Repl:
@@ -273,6 +327,10 @@ def test_install_repl_extensions_attaches_observer(monkeypatch) -> None:
     assert repl.command_context.provider is fake_new.provider
     assert repl.command_context.tool_registry is fake_new.tool_registry
     assert repl.command_context.tool_context is fake_new.tool_context
+    assert prewarmed == [
+        ("anthropic", runtime.provider),
+        ("glm", fake_new.provider),
+    ]
 
 
 def test_repl_multimodel_renderer_shows_each_slot_result() -> None:
@@ -326,6 +384,12 @@ def test_install_tui_extensions_attaches_observer(monkeypatch) -> None:
         tool_context=SimpleNamespace(),
         options=SimpleNamespace(model="claude-sonnet-4-6"),
         _observers=[],
+    )
+    prewarmed = []
+    monkeypatch.setattr(
+        "clawcodex_ext.frontend.tui_extensions.prewarm_model_catalog",
+        lambda provider_name, provider: prewarmed.append((provider_name, provider)),
+        raising=False,
     )
 
     class _StatusBar:
@@ -382,3 +446,7 @@ def test_install_tui_extensions_attaches_observer(monkeypatch) -> None:
     assert app.app_state.provider == "glm"
     assert app.app_state.model == "zai/glm-4"
     assert app._repl_screen.status_bar.refreshes == [("glm", "zai/glm-4")]
+    assert prewarmed == [
+        ("anthropic", runtime.provider),
+        ("glm", fake_new.provider),
+    ]

@@ -218,6 +218,25 @@ def _create_assistant_api_error_message(
     return msg
 
 
+def _terminal_error_for_api_message(
+    message: Message | None,
+    *,
+    error_type: str | None = None,
+) -> RuntimeError:
+    """Turn a terminal API-error message back into a propagated error."""
+
+    content = getattr(message, "content", "") if message is not None else ""
+    if isinstance(content, list):
+        details = " ".join(block.text for block in content if isinstance(block, TextBlock)).strip()
+    else:
+        details = str(content).strip()
+    if error_type == "max_output_tokens":
+        prefix = "output token recovery exhausted"
+    else:
+        prefix = error_type or getattr(message, "_api_error", None) or "model API error"
+    return RuntimeError(f"{prefix}: {details}" if details else str(prefix))
+
+
 def _create_user_interruption_message(*, tool_use: bool = False) -> UserMessage:
 
     content = INTERRUPT_MESSAGE_FOR_TOOL_USE if tool_use else INTERRUPT_MESSAGE
@@ -1515,27 +1534,91 @@ async def query(
     config = build_query_config()
     goal_runtime = None
     goal_turn_id: str | None = None
+    goal_turn_start_id: str | None = None
+    goal_evidence_boundary_id: str | None = None
+    goal_evidence_boundary_content: str | None = None
 
     def _goal_start_turn(tool_use_context: ToolContext) -> None:
-        nonlocal goal_runtime, goal_turn_id
-        try:
-            from clawcodex_ext.goal.runtime import goal_runtime_for_context
+        nonlocal goal_runtime, goal_turn_id, goal_turn_start_id
+        from clawcodex_ext.goal.runtime import goal_runtime_for_context
 
+        has_bound_goal_state = bool(
+            getattr(tool_use_context, "goal_runtime", None) is not None
+            or getattr(tool_use_context, "goal_service", None) is not None
+        )
+        try:
             goal_runtime = goal_runtime_for_context(tool_use_context)
         except Exception:
+            if has_bound_goal_state:
+                raise
             goal_runtime = None
         if goal_runtime is None:
             goal_turn_id = None
+            goal_turn_start_id = None
             return
         goal_turn_id = goal_runtime.on_turn_start(
             plan_mode=bool(getattr(tool_use_context, "plan_mode", False))
         )
+        goal_turn_start_id = goal_runtime.goal_id_at_turn_start(goal_turn_id)
+
+    def _active_evaluator_goal() -> Any | None:
+        if goal_runtime is None:
+            return None
+        from clawcodex_ext.goal.model import GoalCompletionMode, ThreadGoalStatus
+
+        candidate = goal_runtime.service.get_goal(goal_runtime.thread_id)
+        if (
+            candidate is not None
+            and candidate.status is ThreadGoalStatus.ACTIVE
+            and candidate.completion_mode is GoalCompletionMode.EVALUATOR
+        ):
+            return candidate
+        return None
+
+    def _goal_notice_data(
+        goal: Any,
+        *,
+        state: str,
+        met: bool | None,
+        reason: str | None,
+    ) -> dict[str, Any]:
+        return {
+            "goalId": goal.goal_id,
+            "condition": goal.objective,
+            "state": state,
+            "met": met,
+            "reason": reason,
+            "turns": goal.evaluation_count,
+            "tokens": goal.tokens_used,
+            "durationSeconds": goal.time_used_seconds,
+        }
 
     def _goal_record_usage(assistant_messages: list[AssistantMessage]) -> None:
         if goal_runtime is None or goal_turn_id is None:
             return
+        candidate = goal_runtime.service.get_goal(goal_runtime.thread_id)
+        if candidate is not None and candidate.goal_id != goal_turn_start_id:
+            return
         for assistant in assistant_messages:
             goal_runtime.on_token_usage(goal_turn_id, getattr(assistant, "usage", None) or {})
+
+    def _goal_evaluation_messages(
+        evaluator_goal: Any,
+        messages: list[Message],
+        assistant_messages: list[AssistantMessage],
+    ) -> list[Message]:
+        transcript = [*messages, *assistant_messages]
+        if evaluator_goal.goal_id != goal_evidence_boundary_id:
+            return transcript
+        if goal_evidence_boundary_content is None:
+            return list(assistant_messages)
+        for index in range(len(messages) - 1, -1, -1):
+            if str(getattr(messages[index], "content", "")) == goal_evidence_boundary_content:
+                return [*messages[index:], *assistant_messages]
+        # A context pipeline may discard the meta boundary.  In that case,
+        # use only the current goal-bound output rather than leak evidence
+        # produced for the replaced goal into the evaluator.
+        return list(assistant_messages)
 
     def _goal_finish_tools(
         tool_use_blocks: list[ToolUseBlock],
@@ -1557,17 +1640,38 @@ async def query(
         return steering
 
     def _goal_finish_turn(kind: str, error: BaseException | None = None) -> None:
-        nonlocal goal_turn_id
+        nonlocal goal_turn_id, goal_turn_start_id
         if goal_runtime is None or goal_turn_id is None:
             return
         turn_id = goal_turn_id
         goal_turn_id = None
+        goal_turn_start_id = None
         if kind == "error" and error is not None:
             goal_runtime.on_turn_error(turn_id, error)
         elif kind == "abort":
             goal_runtime.on_turn_abort(turn_id)
         else:
             goal_runtime.on_turn_stop(turn_id)
+
+    def _exceeded_max_turns(next_turn_count: int) -> int | None:
+        max_turns = int(params.max_turns or 0)
+        if max_turns and next_turn_count > max_turns:
+            return max_turns
+        return None
+
+    def _finish_at_max_turns(next_turn_count: int) -> None:
+        error = RuntimeError("max turns reached")
+        set_terminal(
+            holder,
+            natural_termination,
+            Terminal(reason="max_turns", turn_count=next_turn_count),
+        )
+        _goal_finish_turn("error", error)
+        # Evaluator decisions are recorded after the work turn is closed.
+        # When the explicit cap ends the run at that boundary, keep the
+        # still-active condition on an idle clock for `/goal` status/retry.
+        if goal_runtime is not None and _active_evaluator_goal() is not None:
+            goal_runtime.restore_after_resume()
 
     while True:
         messages = state.messages
@@ -1882,6 +1986,7 @@ async def query(
                     error_type=error_type,
                 )
                 strategy_applied = False
+                retry_with_new_state = False
                 for strategy in find_recovery_strategies(error_type, state):
                     try:
                         raw_result = strategy.fn(recovery_ctx)
@@ -1899,7 +2004,8 @@ async def query(
                             yield msg
                         if new_state is not None:
                             state = new_state
-                            continue  # while True
+                            retry_with_new_state = True
+                            break
                         # new_state is None: terminate
                         if error_type == "media_size":
                             set_terminal(
@@ -1909,30 +2015,247 @@ async def query(
                             )
                             _goal_finish_turn("error", RuntimeError("image error"))
                         else:
-                            set_terminal(
-                                holder,
-                                natural_termination,
-                                Terminal(
-                                    reason="prompt_too_long"
-                                    if error_type == "prompt_too_long"
-                                    else "completed"
-                                ),
-                            )
-                            _goal_finish_turn(
-                                "error" if error_type == "prompt_too_long" else "stop",
-                                RuntimeError("prompt too long")
-                                if error_type == "prompt_too_long"
-                                else None,
-                            )
+                            if error_type == "prompt_too_long":
+                                terminal_error = RuntimeError("prompt too long")
+                                set_terminal(
+                                    holder,
+                                    natural_termination,
+                                    Terminal(
+                                        reason="prompt_too_long",
+                                        error=terminal_error,
+                                    ),
+                                )
+                                _goal_finish_turn("error", terminal_error)
+                            elif _active_evaluator_goal() is not None:
+                                terminal_error = _terminal_error_for_api_message(
+                                    last_message,
+                                    error_type=error_type,
+                                )
+                                set_terminal(
+                                    holder,
+                                    natural_termination,
+                                    Terminal(reason="model_error", error=terminal_error),
+                                )
+                                _goal_finish_turn("error", terminal_error)
+                            else:
+                                set_terminal(
+                                    holder,
+                                    natural_termination,
+                                    Terminal(reason="completed"),
+                                )
+                                _goal_finish_turn("stop")
                         return
+                if retry_with_new_state:
+                    _goal_finish_turn("stop")
+                    continue
                 # 如果没有任何策略适用，yield last_message 并 fallthrough
                 if not strategy_applied and last_message is not None:
                     yield last_message
 
             if last_message and getattr(last_message, "isApiErrorMessage", False):
-                set_terminal(holder, natural_termination, Terminal(reason="completed"))
-                _goal_finish_turn("stop")
+                if _active_evaluator_goal() is not None:
+                    terminal_error = _terminal_error_for_api_message(last_message)
+                    set_terminal(
+                        holder,
+                        natural_termination,
+                        Terminal(reason="model_error", error=terminal_error),
+                    )
+                    _goal_finish_turn("error", terminal_error)
+                else:
+                    set_terminal(holder, natural_termination, Terminal(reason="completed"))
+                    _goal_finish_turn("stop")
                 return
+
+            evaluator_goal = _active_evaluator_goal()
+            if evaluator_goal is not None and evaluator_goal.goal_id != goal_turn_start_id:
+                # The response was generated from the previous goal (or from
+                # no goal at all).  Do not let it satisfy a replacement goal.
+                # Finish this accounting turn, inject the replacement
+                # directive, and only evaluate output from the next turn.
+                from clawcodex_ext.goal.steering import evaluator_start_message
+
+                steering_messages = (
+                    goal_runtime.consume_pending_steering_messages()
+                    if goal_runtime is not None
+                    else []
+                )
+                if not steering_messages:
+                    steering_messages = [evaluator_start_message(evaluator_goal)]
+                boundary_message = steering_messages[-1]
+                goal_evidence_boundary_id = evaluator_goal.goal_id
+                goal_evidence_boundary_content = str(boundary_message.content)
+                for steering_message in steering_messages:
+                    yield steering_message
+                _goal_finish_turn("stop")
+                next_turn_count = turn_count + 1
+                exceeded_max_turns = _exceeded_max_turns(next_turn_count)
+                if exceeded_max_turns is not None:
+                    yield _create_max_turns_attachment(
+                        exceeded_max_turns,
+                        next_turn_count,
+                    )
+                    _finish_at_max_turns(next_turn_count)
+                    return
+                state = QueryState(
+                    messages=[
+                        *messages,
+                        *assistant_messages,
+                        *steering_messages,
+                    ],
+                    tool_use_context=tool_use_context,
+                    auto_compact_tracking=state.auto_compact_tracking,
+                    turn_count=next_turn_count,
+                    max_output_tokens_recovery_count=0,
+                    has_attempted_reactive_compact=False,
+                    max_output_tokens_override=None,
+                    stop_hook_active=state.stop_hook_active,
+                    continuation_nudge_count=0,
+                    pending_tool_use_summary=state.pending_tool_use_summary,
+                    transition=Transition(reason="stop_hook_blocking"),
+                )
+                continue
+
+            if evaluator_goal is not None:
+                # _active_evaluator_goal() only returns a goal when a runtime
+                # is bound. Keep that invariant explicit for type checking and
+                # for future changes to the evaluator path.
+                assert goal_runtime is not None
+                from clawcodex_ext.goal.evaluator import (
+                    GoalEvaluationError,
+                    evaluate_goal,
+                )
+                from clawcodex_ext.goal.steering import (
+                    evaluator_continuation_message,
+                )
+
+                try:
+                    evaluation = await evaluate_goal(
+                        params.provider,
+                        evaluator_goal,
+                        _goal_evaluation_messages(
+                            evaluator_goal,
+                            messages,
+                            assistant_messages,
+                        ),
+                        abort_signal=params.abort_controller.signal,
+                    )
+                except asyncio.CancelledError:
+                    _goal_finish_turn("abort")
+                    raise
+                except GoalEvaluationError as exc:
+                    # The main work turn itself succeeded. Keep the goal active
+                    # and stop this run explicitly instead of retry-spinning.
+                    if goal_runtime is not None and goal_turn_id is not None:
+                        goal_runtime.on_token_usage(goal_turn_id, exc.usage)
+                    _goal_finish_turn("error", exc)
+                    failed_goal = (
+                        goal_runtime.service.get_goal(goal_runtime.thread_id)
+                        if goal_runtime is not None
+                        else evaluator_goal
+                    )
+                    notice = SystemMessage(
+                        content=f"Goal evaluator failed: {exc}",
+                        subtype="goal_evaluator_error",
+                        level="warning",
+                        data=_goal_notice_data(
+                            failed_goal or evaluator_goal,
+                            state="active",
+                            met=None,
+                            reason=str(exc),
+                        ),
+                        usage=exc.usage,
+                    )
+                    yield notice
+                    set_terminal(
+                        holder,
+                        natural_termination,
+                        Terminal(reason="goal_evaluator_error", error=exc),
+                    )
+                    return
+
+                if goal_runtime is not None and goal_turn_id is not None:
+                    goal_runtime.on_token_usage(goal_turn_id, evaluation.usage)
+                _goal_finish_turn("stop")
+                if params.abort_controller.signal.aborted:
+                    raise asyncio.CancelledError(
+                        params.abort_controller.signal.reason or "user_interrupt"
+                    )
+                evaluated_goal = goal_runtime.service.record_evaluation(
+                    goal_runtime.thread_id,
+                    evaluation,
+                    expected_goal_id=evaluator_goal.goal_id,
+                    expected_evaluation_count=evaluator_goal.evaluation_count,
+                )
+                if evaluated_goal is None:
+                    set_terminal(holder, natural_termination, Terminal(reason="completed"))
+                    return
+
+                if evaluation.met:
+                    turn_label = "turn" if evaluated_goal.evaluation_count == 1 else "turns"
+                    notice = SystemMessage(
+                        content=(
+                            "✓ Goal achieved\n\n"
+                            f"Goal: {evaluated_goal.objective}\n\n"
+                            f"running {evaluated_goal.time_used_seconds}s · "
+                            f"{evaluated_goal.evaluation_count} {turn_label} · "
+                            f"{evaluated_goal.tokens_used} tokens\n\n"
+                            f"Last check: {evaluation.reason}"
+                        ),
+                        subtype="goal_achieved",
+                        level="info",
+                        data=_goal_notice_data(
+                            evaluated_goal,
+                            state="achieved",
+                            met=True,
+                            reason=evaluation.reason,
+                        ),
+                        usage=evaluation.usage,
+                    )
+                    yield notice
+                    set_terminal(holder, natural_termination, Terminal(reason="completed"))
+                    return
+
+                notice = SystemMessage(
+                    content=f"Goal check: not achieved\n\n{evaluation.reason}",
+                    subtype="goal_evaluation",
+                    level="info",
+                    data=_goal_notice_data(
+                        evaluated_goal,
+                        state="active",
+                        met=False,
+                        reason=evaluation.reason,
+                    ),
+                    usage=evaluation.usage,
+                )
+                yield notice
+                next_turn_count = turn_count + 1
+                exceeded_max_turns = _exceeded_max_turns(next_turn_count)
+                if exceeded_max_turns is not None:
+                    yield _create_max_turns_attachment(
+                        exceeded_max_turns,
+                        next_turn_count,
+                    )
+                    _finish_at_max_turns(next_turn_count)
+                    return
+                guidance = evaluator_continuation_message(
+                    evaluated_goal,
+                    evaluation.reason,
+                )
+                yield guidance
+                state = QueryState(
+                    messages=[*messages, *assistant_messages, guidance],
+                    tool_use_context=tool_use_context,
+                    auto_compact_tracking=state.auto_compact_tracking,
+                    turn_count=next_turn_count,
+                    max_output_tokens_recovery_count=0,
+                    has_attempted_reactive_compact=False,
+                    max_output_tokens_override=None,
+                    stop_hook_active=state.stop_hook_active,
+                    continuation_nudge_count=0,
+                    pending_tool_use_summary=state.pending_tool_use_summary,
+                    transition=Transition(reason="stop_hook_blocking"),
+                )
+                continue
 
             set_terminal(holder, natural_termination, Terminal(reason="completed"))
             _goal_finish_turn("stop")
@@ -2080,14 +2403,10 @@ async def query(
 
         next_turn_count = turn_count + 1
 
-        if params.max_turns and next_turn_count > params.max_turns:
-            yield _create_max_turns_attachment(params.max_turns, next_turn_count)
-            set_terminal(
-                holder,
-                natural_termination,
-                Terminal(reason="max_turns", turn_count=next_turn_count),
-            )
-            _goal_finish_turn("error", RuntimeError("max turns reached"))
+        exceeded_max_turns = _exceeded_max_turns(next_turn_count)
+        if exceeded_max_turns is not None:
+            yield _create_max_turns_attachment(exceeded_max_turns, next_turn_count)
+            _finish_at_max_turns(next_turn_count)
             return
 
         # Chapter-10 / Chunk D / WI-3.3 — pending-messages drain at the

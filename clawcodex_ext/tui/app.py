@@ -14,6 +14,7 @@ screen then materialises as a modal.
 
 from __future__ import annotations
 
+import asyncio
 import time
 import threading
 from pathlib import Path
@@ -97,6 +98,8 @@ from .theme import (
 )
 from .widgets.transcript_view import Transcript
 
+_RESUME_BUSY_MESSAGE = "Cannot resume while the agent is running. Press Esc to interrupt first."
+
 
 def _flatten_message_text(content: Any) -> str:
     """Normalise ``Message.content`` (string or block list) to text.
@@ -167,6 +170,7 @@ class ClawCodexTUI(App):
         runtime_context: Any | None = None,
         append_system_prompt: str = "",
         replay_exit_snapshot_from_start: bool = True,
+        session_was_resumed: bool = False,
     ) -> None:
         super().__init__()
         self.runtime_context = runtime_context
@@ -189,6 +193,7 @@ class ClawCodexTUI(App):
         )
         self._repl_screen: REPLScreen | None = None
         self._command_context: Any | None = None
+        self._model_discovery_warning: str | None = None
         self._away_summary_controller: AwaySummaryController | None = None
         self._intent_forecast_controller: IntentForecastController | None = None
         self._pending_system_messages: list[tuple[str, str, str | None]] = []
@@ -254,6 +259,7 @@ class ClawCodexTUI(App):
             tail_follower=tail_follower,
             append_system_prompt=self._append_system_prompt,
             runtime_permission_controller=self._runtime_permission_controller,
+            reset_goal_progress=session_was_resumed,
         )
         # Patch the controller's ``default_handler`` now that the
         # bridge has installed its own ``permission_handler`` on the
@@ -275,6 +281,10 @@ class ClawCodexTUI(App):
         # Double-press exit guard: Ctrl+C first press clears draft /
         # arms exit; second press within 0.8s actually quits.
         self._last_ctrl_c: float = 0.0
+        if self.runtime_context is not None:
+            from clawcodex_ext.frontend.tui_extensions import install_tui_extensions
+
+            install_tui_extensions(self, self.runtime_context)
 
     # The base CSS for the REPL; Phase 1 uses Textual's default theme
     # variables ($primary, $surface, …) — palette overrides sit in
@@ -766,6 +776,22 @@ class ClawCodexTUI(App):
             self.exit()
             return
         if result.system_text == "__clear__":
+            try:
+                from clawcodex_ext.goal.service import clear_goal_for_context
+
+                clear_goal_for_context(self.tool_context)
+            except Exception as exc:
+                transcript.append_system(
+                    f"Unable to clear active goal: {exc}",
+                    style="error",
+                )
+                self.announcer.announce("Unable to clear active goal.")
+                return
+            try:
+                self.session.conversation.clear()
+            except Exception:
+                pass
+            self.app_state.set_goal_status(None)
             transcript.clear_transcript()
             self._agent_bridge.reset_advisor_dedup()
             return
@@ -785,6 +811,12 @@ class ClawCodexTUI(App):
             status = "enabled" if self.stream else "disabled"
             transcript.append_system(f"Stream mode {status}.")
             return
+        if result.transient and result.system_text:
+            from clawcodex_ext.tui.screens.goal_status import GoalStatusScreen
+
+            self.push_screen(GoalStatusScreen(result.system_text))
+            self.announcer.announce("Opened goal status.", notify=False)
+            return
         if result.system_text:
             transcript.append_system(
                 result.system_text,
@@ -799,6 +831,8 @@ class ClawCodexTUI(App):
         if result.prompt_text:
             transcript.append_user(f"(from slash command) {result.prompt_text[:80]}…")
             self.submit_to_agent(result.prompt_text)
+        if result.should_query:
+            self._agent_bridge.continue_goal_if_idle()
 
     # ---- Phase 2 dialog dispatcher -------------------------------------
     def _open_phase2_dialog(self, name: str, transcript: Transcript) -> None:
@@ -830,7 +864,11 @@ class ClawCodexTUI(App):
         elif name == "tasks":
             self._open_tasks_dialog(transcript)
         elif name == "resume":
-            self._show_resume_browser()
+            if self._agent_bridge.busy:
+                transcript.append_system(_RESUME_BUSY_MESSAGE, style="error")
+                self.announcer.announce(_RESUME_BUSY_MESSAGE)
+            else:
+                self._show_resume_browser()
         elif name == "permission":
             self._open_permission_mode_picker(transcript)
         elif name == "forecast":
@@ -839,9 +877,49 @@ class ClawCodexTUI(App):
             transcript.append_system(f"Dialog '{name}' not available.", style="muted")
 
     def _open_model_picker(self, transcript: Transcript) -> None:
-        models = self._list_available_models()
+        provider = self.provider
+        provider_name = self.provider_name
+        current_model = self.model
+        self.run_worker(
+            self._discover_and_open_model_picker(
+                transcript,
+                provider=provider,
+                provider_name=provider_name,
+                current_model=current_model,
+            ),
+            exclusive=True,
+            group="model-catalog",
+            name="model-catalog",
+        )
+
+    async def _discover_and_open_model_picker(
+        self,
+        transcript: Transcript,
+        *,
+        provider: Any,
+        provider_name: str,
+        current_model: str,
+    ) -> None:
+        models, warning = await asyncio.to_thread(
+            self._discover_available_models,
+            provider,
+            provider_name,
+            current_model,
+        )
+        if self.provider is not provider or self.provider_name != provider_name:
+            return
+        self._model_discovery_warning = warning
+        if warning:
+            transcript.append_system(warning, style="muted")
 
         def _on_selected(model_id: str | None) -> None:
+            if self.provider is not provider or self.provider_name != provider_name:
+                transcript.append_system(
+                    "Provider changed while the model picker was open; selection ignored.",
+                    style="muted",
+                )
+                self._restore_prompt_focus()
+                return
             if not model_id or model_id == self.model:
                 self._restore_prompt_focus()
                 return
@@ -862,7 +940,7 @@ class ClawCodexTUI(App):
         self.push_screen(
             ModelPickerScreen(
                 models=models,
-                current_model=self.model,
+                current_model=current_model,
             ),
             callback=_on_selected,
         )
@@ -1269,27 +1347,71 @@ class ClawCodexTUI(App):
     def _list_available_models(self) -> list[str]:
         """Return a best-effort list of models for the active provider."""
 
+        models, warning = self._discover_available_models(
+            self.provider,
+            self.provider_name,
+            self.model,
+        )
+        self._model_discovery_warning = warning
+        return models
+
+    @staticmethod
+    def _discover_available_models(
+        provider: Any,
+        provider_name: str,
+        current_model: str,
+    ) -> tuple[list[str], str | None]:
+        warning: str | None = None
         try:
-            if hasattr(self.provider, "list_models"):
-                models = list(self.provider.list_models() or [])  # type: ignore[attr-defined]
-                if models:
-                    return [str(m) for m in models]
-        except Exception:
-            pass
+            from clawcodex_ext.providers.model_catalog_cache import get_model_catalog
+
+            snapshot = get_model_catalog(provider_name, provider)
+            models = list(snapshot.models)
+            if snapshot.error:
+                shown = "cached" if snapshot.source == "stale-cache" else "fallback"
+                warning = (
+                    f"Last model catalog refresh failed for {provider_name}: "
+                    f"{snapshot.error}; showing {shown} models."
+                )
+            if models:
+                if current_model and current_model not in models:
+                    models.insert(0, current_model)
+                if warning is None and snapshot.refreshing:
+                    shown = "cached" if snapshot.source == "stale-cache" else "fallback"
+                    warning = (
+                        f"Model catalog refresh is running in the background; "
+                        f"showing {shown} models."
+                    )
+                return models, warning
+            if warning is None:
+                warning = (
+                    f"Model catalog has no models for {provider_name}; "
+                    "showing configured fallback models."
+                )
+        except Exception as exc:
+            warning = (
+                f"Model discovery failed for {provider_name}: {exc}; "
+                "showing configured fallback models."
+            )
         try:
             from src.config import get_provider_config
 
-            cfg = get_provider_config(self.provider_name) or {}
+            cfg = get_provider_config(provider_name) or {}
+            fallback_models: list[str] = []
             models = cfg.get("models")
-            if isinstance(models, list) and models:
-                return [str(m) for m in models]
+            if isinstance(models, list):
+                fallback_models.extend(str(model) for model in models if model)
             default = cfg.get("default_model")
-            if default:
-                return [str(default)]
+            if default and str(default) not in fallback_models:
+                fallback_models.append(str(default))
+            if current_model and current_model not in fallback_models:
+                fallback_models.insert(0, current_model)
+            if fallback_models:
+                return fallback_models, warning
         except Exception:
             pass
         # Fallback: just the active model.
-        return [self.model or "default"]
+        return [current_model or "default"], warning
 
     def _ensure_command_context(self) -> Any:
         if self._command_context is not None:
@@ -1322,6 +1444,12 @@ class ClawCodexTUI(App):
                 register_tool_commands(None, tool_registry=self.tool_registry)
             except Exception:
                 pass
+            # Builtin registration installs the interactive ModelCommand.
+            # Reinstall the runtime facade last so TUI `/model <name>` uses
+            # the same provider swap and state-sync path as the REPL.
+            from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+
+            register_runtime_commands(None)
             self._command_context = create_command_context(
                 workspace_root=self.workspace_root,
                 conversation=self.session.conversation,
@@ -1448,13 +1576,27 @@ class ClawCodexTUI(App):
         if session_id is None:
             # User cancelled — start a fresh session.
             return
+        if self._agent_bridge.busy:
+            self.announcer.announce(_RESUME_BUSY_MESSAGE)
+            return
         try:
             from clawcodex_ext.agent.session_ext import resume_session_with_tail
 
             resumed, tail = resume_session_with_tail(session_id)
-            # Swap session + bridge.
+            if resumed is None:
+                self.announcer.announce("Unable to resume the selected session.")
+                return
+            # The bridge owns the definitive busy check. A turn can begin while
+            # the resume picker is open, so only publish the new session after
+            # the bridge atomically accepts the rebind.
+            if not self._agent_bridge.replace_session(resumed):
+                self.announcer.announce(_RESUME_BUSY_MESSAGE)
+                return
             self.session = resumed
-            self._agent_bridge._session = resumed
+            if self._command_context is not None:
+                self._command_context.session = resumed
+                self._command_context.conversation = resumed.conversation
+                self._command_context.tool_context = self.tool_context
             self._install_away_summary_controller()
             self._install_intent_forecast_controller()
             self._install_goal_controller()
@@ -1596,6 +1738,18 @@ class ClawCodexTUI(App):
         """
         agent_type = getattr(self.tool_context, "agent_type", None) or ""
         for msg in self.session.conversation.messages:
+            is_meta = (
+                bool(msg.get("isMeta", False))
+                if isinstance(msg, dict)
+                else bool(getattr(msg, "isMeta", False))
+            )
+            is_virtual = (
+                bool(msg.get("isVirtual", False))
+                if isinstance(msg, dict)
+                else bool(getattr(msg, "isVirtual", False))
+            )
+            if is_meta or is_virtual:
+                continue
             role = getattr(msg, "role", None) or ""
             content = getattr(msg, "content", None) or ""
             if role == "user":
@@ -1618,6 +1772,28 @@ class ClawCodexTUI(App):
                     self._repl_screen.transcript.append_system(
                         getattr(msg, "content", "") or "",
                         style="light",
+                        render="markdown",
+                    )
+                elif (
+                    subtype
+                    in {
+                        "goal_set",
+                        "goal_cleared",
+                        "goal_evaluation",
+                        "goal_achieved",
+                        "goal_evaluator_error",
+                    }
+                    and self._repl_screen is not None
+                ):
+                    self._repl_screen.transcript.append_system(
+                        getattr(msg, "content", "") or "",
+                        style=(
+                            "error"
+                            if subtype == "goal_evaluator_error"
+                            else "light"
+                            if subtype in {"goal_set", "goal_cleared", "goal_achieved"}
+                            else "muted"
+                        ),
                         render="markdown",
                     )
                 continue

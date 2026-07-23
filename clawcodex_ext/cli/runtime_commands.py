@@ -96,6 +96,87 @@ def format_model_list(provider: str | None = None) -> str:
     return _format_configured_model_list(provider)
 
 
+def _format_runtime_model_list(context: Any) -> str:
+    """Render models reported by the active provider instance.
+
+    ``/model`` is a session command, so its source of truth must be the
+    provider that will handle the next request rather than the process-wide
+    static registry.  Registry/config data remains an explicit fallback when
+    the provider cannot refresh its catalog.
+    """
+    runtime = _runtime(context)
+    provider = getattr(runtime, "provider", None) if runtime is not None else None
+    provider = provider or getattr(context, "provider", None)
+    provider_name = _current_provider_name(context) or "unknown"
+    current = getattr(provider, "model", None)
+
+    try:
+        from clawcodex_ext.providers.model_catalog_cache import get_model_catalog
+
+        snapshot = get_model_catalog(provider_name, provider)
+        models = list(snapshot.models)
+    except Exception as exc:
+        fallback = _mark_current_model(format_model_list(provider=provider_name), current=current)
+        return (
+            f"Model discovery failed for {provider_name}: {exc}\n"
+            "Showing configured fallback models.\n\n"
+            f"{fallback}"
+        )
+
+    if current and current not in models:
+        models.insert(0, current)
+    if not models:
+        fallback = _mark_current_model(format_model_list(provider=provider_name), current=current)
+        return (
+            f"Model discovery returned no models for {provider_name}.\n"
+            "Showing configured fallback models.\n\n"
+            f"{fallback}"
+        )
+
+    lines = []
+    if snapshot.error:
+        shown = "cached" if snapshot.source == "stale-cache" else "configured fallback"
+        lines.extend(
+            [
+                f"Last model catalog refresh failed for {provider_name}: {snapshot.error}; "
+                f"showing {shown} models.",
+                "",
+            ]
+        )
+    elif snapshot.refreshing:
+        shown = "cached" if snapshot.source == "stale-cache" else "configured fallback"
+        lines.extend(
+            [
+                f"Model catalog refresh is running in the background; showing {shown} models.",
+                "",
+            ]
+        )
+    lines.extend(["Models:", f"  {provider_name}:"])
+    for model in models:
+        marker = " *" if model == current else ""
+        lines.append(f"    {model}{marker}")
+    return "\n".join(lines)
+
+
+def _mark_current_model(model_list: str, *, current: str | None) -> str:
+    if not current:
+        return model_list
+    lines = model_list.splitlines()
+    found = False
+    for index, line in enumerate(lines):
+        if not line.startswith("    "):
+            continue
+        model = line.strip().removesuffix(" *")
+        if model == current:
+            lines[index] = f"    {model} *"
+            found = True
+        elif line.endswith(" *"):
+            lines[index] = line[:-2]
+    if not found:
+        lines.append(f"    {current} *")
+    return "\n".join(lines)
+
+
 def _format_configured_model_list(provider: str | None = None) -> str:
     """Show models only for providers with API keys in config.
 
@@ -110,7 +191,7 @@ def _format_configured_model_list(provider: str | None = None) -> str:
     2. Models recorded in the config's ``models`` list (user's custom /
        previously-used models outside the built-in registry)
     """
-    registry = ModelRegistry()
+    registry = ModelRegistry(discovery_hooks={})
     try:
         from src.config import get_provider_config
 
@@ -140,7 +221,7 @@ def _format_configured_model_list(provider: str | None = None) -> str:
     if not configured:
         # No config or all empty — fall back to showing all known providers
         # so the user always sees something.
-        configured = list(registry.provider_names())
+        configured = [provider] if provider is not None else list(registry.provider_names())
 
     lines = ["Models:"]
     for provider_name in configured:
@@ -151,26 +232,34 @@ def _format_configured_model_list(provider: str | None = None) -> str:
 
         reg_models: list[str] = []
         try:
-            reg_models = list(registry.available_models(provider_name) or [])
+            reg_models = list(registry.configured_models(provider_name) or [])
         except Exception:
             pass
 
         # Merge in models from config's ``models`` list
         cfg_models: list[str] = []
+        default_model: str | None = None
         try:
             from src.config import get_provider_config
 
             pc = get_provider_config(provider_name)
             if pc:
                 cfg_models = list(pc.get("models", []) or [])
+                default_model = pc.get("default_model")
         except Exception:
             pass
+
+        if default_model is None:
+            try:
+                default_model = registry.provider_default_model(provider_name)
+            except Exception:
+                pass
 
         all_models = list(dict.fromkeys(reg_models + cfg_models))  # dedup, preserve order
 
         lines.append(f"  {provider_name}:")
         for model in all_models:
-            marker = " *" if model == registry.provider_default_model(provider_name) else ""
+            marker = " *" if model == default_model else ""
             lines.append(f"    {model}{marker}")
     return "\n".join(lines)
 
@@ -223,6 +312,11 @@ def _provider_call(args: str, context: Any) -> LocalCommandResult:
         return _text("\n".join(lines))
 
     provider = tokens[0]
+    registry = ModelRegistry(discovery_hooks={})
+    try:
+        provider = registry.validate_provider(provider)
+    except UnknownProviderError:
+        pass
     runtime = _runtime(context)
     if runtime is None:
         return _text("Runtime context is not available — cannot switch provider.")
@@ -265,8 +359,7 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
 
     if not tokens:
         current = _format_runtime_current(context)
-        current_provider = _current_provider_name(context)
-        model_list = format_model_list(provider=current_provider)
+        model_list = _format_runtime_model_list(context)
         lines = [current, "", model_list] if current else [model_list]
         return _text("\n".join(lines))
 
@@ -276,7 +369,10 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
         return _text(f"usage: /model [NAME [--provider NAME]]\n{exc}")
 
     warnings: list[str] = []
-    registry = ModelRegistry()
+    # Switching is session-scoped and the provider API is authoritative.
+    # Avoid discovery hooks here: they would turn `/model <name>` into a
+    # blocking network operation before the runtime can even try the model.
+    registry = ModelRegistry(discovery_hooks={})
 
     # ---- Resolve provider ----
     if provider is None:
@@ -284,6 +380,10 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
         # so /model switches models under the user's current provider rather
         # than silently jumping to whichever provider "owns" the model name.
         provider = _current_provider_name(context) or "anthropic"
+    try:
+        provider = registry.validate_provider(provider)
+    except UnknownProviderError:
+        pass
 
     # ---- Try prefix matching / spelling suggestions on validation failure ----
     # Unique prefix matches are auto-corrected with a Note; multiple matches

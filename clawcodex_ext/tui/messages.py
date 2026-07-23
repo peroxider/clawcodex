@@ -86,6 +86,14 @@ class AssistantMessage(Message):
 
 
 @dataclass
+class SystemNotice(Message):
+    """A visible, transcript-backed system event from the query loop."""
+
+    text: str
+    style: str = "muted"
+
+
+@dataclass
 class MultiModelEvent(Message):
     """A slot-scoped multi-model update, safe to post from a worker thread."""
 

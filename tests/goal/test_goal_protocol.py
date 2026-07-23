@@ -8,12 +8,13 @@ import pytest
 
 from clawcodex_ext.feature_gate import get_registry, reset_registry
 from clawcodex_ext.goal.gate import ensure_goals_feature_registered
-from clawcodex_ext.goal.model import ThreadGoalStatus
+from clawcodex_ext.goal.model import GoalCompletionMode, ThreadGoalStatus
 from clawcodex_ext.goal.protocol import (
     GoalEventLog,
     ThreadGoalClearParams,
     ThreadGoalGetParams,
     ThreadGoalProtocol,
+    ThreadGoalReplaceParams,
     ThreadGoalSetParams,
 )
 from clawcodex_ext.goal.service import GoalService, GoalServiceError
@@ -53,6 +54,51 @@ def test_thread_goal_set_returns_response_then_updated_notification(
     assert events.messages[1].payload.turn_id is None
     assert events.messages[1].payload.goal == response.goal
     assert "goalId" not in response.goal.to_dict()
+    assert response.goal.to_dict()["evaluationCount"] == 0
+    assert response.goal.to_dict()["lastEvaluationReason"] is None
+    assert response.goal.to_dict()["completionMode"] == "tool"
+
+
+def test_thread_goal_set_accepts_evaluator_completion_mode(tmp_path: Path) -> None:
+    protocol, _events = make_protocol(tmp_path)
+
+    response = protocol.thread_goal_set(
+        ThreadGoalSetParams(
+            thread_id="thread-1",
+            objective="checked independently",
+            completion_mode=GoalCompletionMode.EVALUATOR,
+        )
+    )
+
+    assert response.goal.completion_mode is GoalCompletionMode.EVALUATOR
+
+
+def test_thread_goal_replace_uses_one_replace_mutation_and_standard_set_events(
+    tmp_path: Path,
+) -> None:
+    protocol, events = make_protocol(tmp_path)
+    protocol.thread_goal_set(ThreadGoalSetParams(thread_id="thread-1", objective="old"))
+    old = protocol.service.get_goal("thread-1")
+    events.clear()
+
+    response = protocol.thread_goal_replace(
+        ThreadGoalReplaceParams(
+            thread_id="thread-1",
+            objective="new",
+            completion_mode=GoalCompletionMode.EVALUATOR,
+        )
+    )
+    current = protocol.service.get_goal("thread-1")
+
+    assert old is not None
+    assert current is not None
+    assert current.goal_id != old.goal_id
+    assert response.goal.objective == "new"
+    assert response.goal.completion_mode is GoalCompletionMode.EVALUATOR
+    assert [message.method for message in events.messages] == [
+        "thread/goal/set",
+        "thread/goal/updated",
+    ]
 
 
 def test_thread_goal_get_returns_goal_without_emitting_notifications(

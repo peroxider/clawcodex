@@ -29,6 +29,9 @@ _USAGE = (
 
 @register("model")
 def run_model_command(args: list[str]) -> int:
+    from clawcodex_ext.providers import ensure_provider_extensions_installed
+
+    ensure_provider_extensions_installed()
     # No args => current state (mirrors `/model` and `git status` zero-arg idiom).
     if not args:
         print(format_model_current())
@@ -42,13 +45,13 @@ def run_model_command(args: list[str]) -> int:
         print(_USAGE)
         return 0
     if command in ("--list", "ls"):
-        print(_format_model_explore())
+        print(_format_model_explore(wait_for_refresh=True))
         return 0
 
     try:
         if command == "list":
             provider = _parse_provider_flag(rest)
-            print(format_model_list(provider))
+            print(format_model_list(provider, wait_for_refresh=True))
             return 0
         if command == "show":
             model, provider = _parse_show_args(rest)
@@ -73,20 +76,78 @@ def run_model_command(args: list[str]) -> int:
     return 2
 
 
-def _format_model_explore() -> str:
+def _format_model_explore(*, wait_for_refresh: bool = False) -> str:
     """Combined ``current + list`` view, mirroring what ``/model`` shows in the REPL."""
-    return format_model_current() + "\n\n" + format_model_list()
+    return format_model_current() + "\n\n" + format_model_list(wait_for_refresh=wait_for_refresh)
 
 
-def format_model_list(provider: str | None = None) -> str:
+def format_model_list(provider: str | None = None, *, wait_for_refresh: bool = False) -> str:
+    """Render the selected provider's model catalog.
+
+    Args:
+        provider: Provider to display, or the currently resolved provider.
+        wait_for_refresh: Whether to wait briefly for live catalog discovery.
+
+    Returns:
+        A human-readable model catalog with current-model and refresh status.
+    """
+
     registry = ModelRegistry()
-    providers = [provider] if provider else registry.provider_names()
+    resolution = resolve() if provider is None else None
+    provider = provider or resolution.provider
+    from src.providers import canonical_provider_name
+
+    provider = canonical_provider_name(provider)
+    resolved_current = resolution.model if resolution is not None else None
+    providers = [provider]
     lines = ["Models:"]
     for provider_name in providers:
         registry.validate_provider(provider_name)
+        models = registry.configured_models(provider_name)
+        current_model = resolved_current or registry.provider_default_model(provider_name)
+        discovery_warning: str | None = None
+        try:
+            from src.config import get_provider_config
+            from src.providers.runtime import build_provider_from_config
+
+            provider_config = get_provider_config(provider_name) or {}
+            if resolved_current is None:
+                current_model = provider_config.get("default_model") or current_model
+            runtime_provider = build_provider_from_config(provider_name, current_model)
+            from clawcodex_ext.providers.model_catalog_cache import (
+                get_model_catalog,
+                refresh_model_catalog,
+            )
+
+            if wait_for_refresh:
+                snapshot = refresh_model_catalog(provider_name, runtime_provider)
+            else:
+                snapshot = get_model_catalog(provider_name, runtime_provider)
+            if snapshot.models:
+                models = list(snapshot.models)
+            if snapshot.error:
+                shown = "cached" if snapshot.source == "stale-cache" else "configured fallback"
+                discovery_warning = (
+                    f"Last model catalog refresh failed for {provider_name}: {snapshot.error}; "
+                    f"showing {shown} models."
+                )
+            elif snapshot.refreshing:
+                shown = "cached" if snapshot.source == "stale-cache" else "configured fallback"
+                discovery_warning = (
+                    f"Model catalog refresh is running in the background for {provider_name}; "
+                    f"showing {shown} models."
+                )
+        except Exception as exc:
+            discovery_warning = (
+                f"Model discovery failed for {provider_name}: {exc}; showing configured fallback."
+            )
+        if current_model and current_model not in models:
+            models = [current_model, *models]
         lines.append(f"  {provider_name}:")
-        for model in registry.available_models(provider_name):
-            marker = " *" if model == registry.provider_default_model(provider_name) else ""
+        if discovery_warning:
+            lines.append(f"    ! {discovery_warning}")
+        for model in models:
+            marker = " *" if model == current_model else ""
             lines.append(f"    {model}{marker}")
     return "\n".join(lines)
 
@@ -132,14 +193,18 @@ def format_current_pair(model: str, provider: str) -> str:
 
 
 def use_model(model: str, *, provider: str | None = None) -> list[str]:
+    from clawcodex_ext.providers import ensure_provider_extensions_installed
+
+    ensure_provider_extensions_installed()
     registry = ModelRegistry()
     if provider is None:
-        provider = registry.infer_provider_for_model(model)
-    registry.validate_model(model, provider)
+        provider = registry.infer_provider_for_model(model, discover=False)
+    else:
+        provider = registry.validate_provider(provider)
 
     store = ModelStore(registry)
     store.set_default_provider(provider)
-    store.set_default_model(provider, model)
+    store.set_default_model_persist_unknown(provider, model)
     return [
         f"Default provider set to: {provider}",
         f"Default model for {provider} set to: {model}",

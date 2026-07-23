@@ -64,7 +64,6 @@ _KNOWN_HANDLED_COMMANDS: set[str] = {
     "/tools",
     "/stream",
     "/model",
-    "/models",
     "/effort",
     "/history",
     "/cost",
@@ -172,6 +171,255 @@ async def test_registry_fork_result_is_returned_as_assistant_text(
     assert result.prompt_text is None
 
 
+@pytest.mark.asyncio
+async def test_registry_text_result_preserves_goal_continuation_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from clawcodex_ext.command_system.engine import CommandResult
+
+    async def _execute_command_async(name, args, context):
+        del args, context
+        return CommandResult(
+            success=True,
+            command_name=name,
+            result_type="text",
+            text="Goal set: verify TUI continuation",
+            should_query=True,
+        )
+
+    monkeypatch.setattr(
+        "src.command_system.builtins.execute_command_async",
+        _execute_command_async,
+    )
+
+    result = await dispatch_registry_command(
+        "/goal verify TUI continuation",
+        command_context=MagicMock(),
+    )
+
+    assert result.handled is True
+    assert result.should_query is True
+
+
+@pytest.mark.asyncio
+async def test_registry_goal_status_preserves_transient_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from clawcodex_ext.command_system.engine import CommandResult
+
+    async def _execute_command_async(name, args, context):
+        del args, context
+        return CommandResult(
+            success=True,
+            command_name=name,
+            result_type="text",
+            text="Goal active",
+            transient=True,
+        )
+
+    monkeypatch.setattr(
+        "src.command_system.builtins.execute_command_async",
+        _execute_command_async,
+    )
+
+    result = await dispatch_registry_command("/goal", command_context=MagicMock())
+
+    assert result.handled is True
+    assert result.transient is True
+
+
+def test_app_shows_goal_status_as_transient_screen() -> None:
+    from clawcodex_ext.tui.app import ClawCodexTUI
+    from clawcodex_ext.tui.screens.goal_status import GoalStatusScreen
+
+    app = MagicMock()
+    transcript = MagicMock()
+    result = CommandDispatchResult(
+        handled=True,
+        system_text="Goal active\n\n  running 3s",
+        transient=True,
+    )
+
+    ClawCodexTUI._apply_command_result(app, result, transcript)
+
+    transcript.append_system.assert_not_called()
+    screen = app.push_screen.call_args.args[0]
+    assert isinstance(screen, GoalStatusScreen)
+    assert "running 3s" in screen._status_text
+
+
+def test_app_starts_goal_continuation_after_rendering_command_result() -> None:
+    from clawcodex_ext.tui.app import ClawCodexTUI
+
+    bridge = MagicMock()
+    app = MagicMock()
+    app._agent_bridge = bridge
+    transcript = MagicMock()
+    result = CommandDispatchResult(
+        handled=True,
+        system_text="Goal set: verify TUI continuation",
+        should_query=True,
+    )
+
+    ClawCodexTUI._apply_command_result(app, result, transcript)
+
+    transcript.append_system.assert_called_once()
+    bridge.continue_goal_if_idle.assert_called_once_with()
+
+
+def test_app_clear_removes_conversation_and_session_goal(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from clawcodex_ext.agent.conversation import Conversation
+    from clawcodex_ext.goal.service import GoalService
+    from clawcodex_ext.goal.store import GoalStore, goals_db_filename
+    from clawcodex_ext.tui.app import ClawCodexTUI
+    from clawcodex_ext.tui.state import AppState
+
+    service = GoalService(store=GoalStore(tmp_path / goals_db_filename()))
+    service.set_goal("session-1", "clear with conversation")
+    conversation = Conversation()
+    conversation.add_user_message("old prompt")
+    app = SimpleNamespace(
+        tool_context=SimpleNamespace(session_id="session-1", goal_service=service),
+        session=SimpleNamespace(conversation=conversation),
+        app_state=AppState(model="test", provider="test"),
+        _agent_bridge=MagicMock(),
+    )
+    transcript = MagicMock()
+
+    ClawCodexTUI._apply_command_result(
+        app,
+        CommandDispatchResult(handled=True, system_text="__clear__"),
+        transcript,
+    )
+
+    assert conversation.messages == []
+    assert service.get_goal("session-1") is None
+    assert app.app_state.goal_status is None
+    transcript.clear_transcript.assert_called_once_with()
+
+
+def test_app_clear_keeps_conversation_when_goal_store_fails() -> None:
+    from types import SimpleNamespace
+
+    from clawcodex_ext.agent.conversation import Conversation
+    from clawcodex_ext.tui.app import ClawCodexTUI
+    from clawcodex_ext.tui.state import AppState
+
+    service = MagicMock()
+    service.clear_goal.side_effect = RuntimeError("goal store unavailable")
+    conversation = Conversation()
+    conversation.add_user_message("keep me")
+    app = SimpleNamespace(
+        tool_context=SimpleNamespace(session_id="session-1", goal_service=service),
+        session=SimpleNamespace(conversation=conversation),
+        app_state=AppState(model="test", provider="test"),
+        _agent_bridge=MagicMock(),
+        announcer=MagicMock(),
+    )
+    transcript = MagicMock()
+
+    ClawCodexTUI._apply_command_result(
+        app,
+        CommandDispatchResult(handled=True, system_text="__clear__"),
+        transcript,
+    )
+
+    assert len(conversation.messages) == 1
+    transcript.clear_transcript.assert_not_called()
+    transcript.append_system.assert_called_once()
+
+
+def test_app_refuses_resume_dialog_while_agent_is_busy() -> None:
+    from types import SimpleNamespace
+
+    from clawcodex_ext.tui.app import ClawCodexTUI
+
+    app = SimpleNamespace(
+        _agent_bridge=SimpleNamespace(busy=True),
+        _show_resume_browser=MagicMock(),
+        announcer=MagicMock(),
+    )
+    transcript = MagicMock()
+
+    ClawCodexTUI._open_phase2_dialog(app, "resume", transcript)
+
+    app._show_resume_browser.assert_not_called()
+    transcript.append_system.assert_called_once_with(
+        "Cannot resume while the agent is running. Press Esc to interrupt first.",
+        style="error",
+    )
+    app.announcer.announce.assert_called_once()
+
+
+def test_app_keeps_current_session_if_resume_becomes_busy(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from clawcodex_ext.tui.app import ClawCodexTUI
+
+    current = SimpleNamespace(session_id="session-1", conversation=MagicMock())
+    resumed = SimpleNamespace(session_id="session-2", conversation=MagicMock())
+    monkeypatch.setattr(
+        "clawcodex_ext.agent.session_ext.resume_session_with_tail",
+        lambda _session_id: (resumed, None),
+    )
+    command_context = SimpleNamespace(
+        session=current,
+        conversation=current.conversation,
+        tool_context=object(),
+    )
+    bridge = MagicMock()
+    bridge.busy = False
+    bridge.replace_session.return_value = False
+    app = SimpleNamespace(
+        session=current,
+        _agent_bridge=bridge,
+        _command_context=command_context,
+        announcer=MagicMock(),
+    )
+
+    ClawCodexTUI._on_session_selected(app, "session-2")
+
+    assert app.session is current
+    assert command_context.session is current
+    assert command_context.conversation is current.conversation
+    app.announcer.announce.assert_called_once()
+
+
+def test_app_keeps_current_session_when_resume_target_is_missing(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from clawcodex_ext.tui.app import ClawCodexTUI
+
+    current = SimpleNamespace(session_id="session-1", conversation=MagicMock())
+    monkeypatch.setattr(
+        "clawcodex_ext.agent.session_ext.resume_session_with_tail",
+        lambda _session_id: (None, None),
+    )
+    command_context = SimpleNamespace(
+        session=current,
+        conversation=current.conversation,
+        tool_context=object(),
+    )
+    bridge = MagicMock()
+    bridge.busy = False
+    app = SimpleNamespace(
+        session=current,
+        _agent_bridge=bridge,
+        _command_context=command_context,
+        announcer=MagicMock(),
+    )
+
+    ClawCodexTUI._on_session_selected(app, "missing-session")
+
+    assert app.session is current
+    assert command_context.session is current
+    assert command_context.conversation is current.conversation
+    bridge.replace_session.assert_not_called()
+    app.announcer.announce.assert_called_once_with("Unable to resume the selected session.")
+
+
 # ---------------------------------------------------------------------------
 # dispatch_local_command — each LOCAL_BUILTINS command
 # ---------------------------------------------------------------------------
@@ -274,12 +522,25 @@ def test_dispatch_model(mock_session, tmp_path, tool_registry):
     assert result.open_dialog == "model"
 
 
-def test_dispatch_models(mock_session, tmp_path, tool_registry):
+def test_dispatch_model_with_argument_falls_through_to_runtime_command(
+    mock_session, tmp_path, tool_registry
+):
+    result = dispatch_local_command(
+        "/model gpt-live",
+        session=mock_session,
+        workspace_root=tmp_path,
+        tool_registry=tool_registry,
+    )
+    assert result.handled is False
+    assert result.open_dialog is None
+
+
+def test_dispatch_models_is_not_a_command(mock_session, tmp_path, tool_registry):
     result = dispatch_local_command(
         "/models", session=mock_session, workspace_root=tmp_path, tool_registry=tool_registry
     )
-    assert result.handled is True
-    assert result.open_dialog == "model"
+    assert result.handled is False
+    assert result.open_dialog is None
 
 
 def test_dispatch_effort(mock_session, tmp_path, tool_registry):

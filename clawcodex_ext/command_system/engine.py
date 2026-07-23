@@ -46,6 +46,7 @@ class CommandResult:
     # recognise scrollable rendering (currently: REPL) branch off their
     # normal text path; others ignore the flag and print ``text`` as usual.
     scrollable: bool = False
+    transient: bool = False
 
     @classmethod
     def success_text(cls, command_name: str, text: str) -> "CommandResult":
@@ -333,6 +334,7 @@ class CommandEngine:
             # surface adapters (REPL _handle_command_result) can branch
             # into a keyboard-scrolled view instead of a flat print.
             scrollable=outcome.scrollable,
+            transient=outcome.transient,
         )
 
     def add_command_hook(

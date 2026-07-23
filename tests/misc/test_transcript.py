@@ -199,6 +199,54 @@ def test_writer_dataclass_serialization(tmp_path: Path) -> None:
     assert parsed == {"field": "hello", "n": 42}
 
 
+def test_chained_writer_ignores_reverse_timestamps_and_loads_in_parent_order(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A child's earlier timestamp cannot reorder a parentUuid chain."""
+    from clawcodex_ext.agent.session import Session
+
+    sessions_dir = tmp_path / "sessions"
+    session_id = "reverse-timestamp-chain"
+    monkeypatch.setenv("CLAWCODEX_SESSIONS_DIR", str(sessions_dir))
+    path = sessions_dir / session_id / "transcript.jsonl"
+    parent = {
+        "uuid": "parent",
+        "role": "user",
+        "type": "user",
+        "content": "parent",
+        "timestamp": "2026-07-22T12:00:02+00:00",
+    }
+    child = {
+        "uuid": "child",
+        "role": "assistant",
+        "type": "assistant",
+        "content": "child",
+        "timestamp": "2026-07-22T12:00:01+00:00",
+    }
+
+    with TranscriptWriter(path, chain_messages=True) as writer:
+        writer.write_session_init(
+            session_id,
+            provider="test",
+            model="test-model",
+        )
+        writer.append(parent)
+        writer.append(child)
+
+    entries = [json.loads(line) for line in path.read_text().splitlines()]
+    raw_messages = [entry for entry in entries if entry.get("uuid")]
+    assert [entry["uuid"] for entry in raw_messages] == ["parent", "child"]
+    assert [entry["parentUuid"] for entry in raw_messages] == [None, "parent"]
+
+    loaded = Session.load(session_id)
+    assert loaded is not None
+    assert [message.uuid for message in loaded.conversation.messages] == [
+        "parent",
+        "child",
+    ]
+
+
 def test_writer_unserializable_object_does_not_crash(tmp_path: Path) -> None:
     """A non-JSON-able object falls back to ``repr`` rather than
     bringing down the writer mid-run."""

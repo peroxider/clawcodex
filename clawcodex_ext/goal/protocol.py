@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .model import ThreadGoal, ThreadGoalStatus
+from .model import GoalCompletionMode, ThreadGoal, ThreadGoalStatus
 from .service import KEEP_TOKEN_BUDGET, GoalService
 
 
@@ -19,6 +19,9 @@ class ThreadGoalDTO:
     token_budget: int | None
     tokens_used: int
     time_used_seconds: int
+    completion_mode: GoalCompletionMode
+    evaluation_count: int
+    last_evaluation_reason: str | None
     created_at: int
     updated_at: int
 
@@ -31,6 +34,9 @@ class ThreadGoalDTO:
             token_budget=goal.token_budget,
             tokens_used=goal.tokens_used,
             time_used_seconds=goal.time_used_seconds,
+            completion_mode=goal.completion_mode,
+            evaluation_count=goal.evaluation_count,
+            last_evaluation_reason=goal.last_evaluation_reason,
             created_at=int(goal.created_at.timestamp()),
             updated_at=int(goal.updated_at.timestamp()),
         )
@@ -43,6 +49,9 @@ class ThreadGoalDTO:
             "tokenBudget": self.token_budget,
             "tokensUsed": self.tokens_used,
             "timeUsedSeconds": self.time_used_seconds,
+            "completionMode": self.completion_mode.to_wire(),
+            "evaluationCount": self.evaluation_count,
+            "lastEvaluationReason": self.last_evaluation_reason,
             "createdAt": self.created_at,
             "updatedAt": self.updated_at,
         }
@@ -54,11 +63,22 @@ class ThreadGoalSetParams:
     objective: str | None = None
     status: ThreadGoalStatus | str | None = None
     token_budget: int | None | object = KEEP_TOKEN_BUDGET
+    completion_mode: GoalCompletionMode | str | None = None
 
 
 @dataclass(frozen=True)
 class ThreadGoalSetResponse:
     goal: ThreadGoalDTO
+
+
+@dataclass(frozen=True)
+class ThreadGoalReplaceParams:
+    """Parameters for atomically replacing a thread's active goal."""
+
+    thread_id: str
+    objective: str
+    token_budget: int | None = None
+    completion_mode: GoalCompletionMode | str = GoalCompletionMode.TOOL
 
 
 @dataclass(frozen=True)
@@ -134,14 +154,36 @@ class ThreadGoalProtocol:
             params.objective,
             status=params.status,
             token_budget=params.token_budget,
+            completion_mode=params.completion_mode,
         )
+        return self._record_set_response(params.thread_id, goal)
+
+    def thread_goal_replace(
+        self,
+        params: ThreadGoalReplaceParams,
+    ) -> ThreadGoalSetResponse:
+        """Replace a goal through the store's single atomic mutation."""
+
+        goal = self.service.replace_goal(
+            params.thread_id,
+            params.objective,
+            token_budget=params.token_budget,
+            completion_mode=params.completion_mode,
+        )
+        return self._record_set_response(params.thread_id, goal)
+
+    def _record_set_response(
+        self,
+        thread_id: str,
+        goal: ThreadGoal,
+    ) -> ThreadGoalSetResponse:
         dto = ThreadGoalDTO.from_model(goal)
         response = ThreadGoalSetResponse(goal=dto)
         self.events.response("thread/goal/set", response)
         self.events.notification(
             "thread/goal/updated",
             ThreadGoalUpdatedNotification(
-                thread_id=params.thread_id,
+                thread_id=thread_id,
                 turn_id=None,
                 goal=dto,
             ),
@@ -178,6 +220,7 @@ __all__ = [
     "ThreadGoalGetParams",
     "ThreadGoalGetResponse",
     "ThreadGoalProtocol",
+    "ThreadGoalReplaceParams",
     "ThreadGoalSetParams",
     "ThreadGoalSetResponse",
     "ThreadGoalUpdatedNotification",

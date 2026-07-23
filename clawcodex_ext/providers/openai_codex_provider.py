@@ -195,11 +195,31 @@ class OpenAICodexProvider(OpenAICompatibleProvider):
         return model, request_kwargs
 
     def get_available_models(self) -> list[str]:
-        try:
-            credentials = resolve_codex_runtime_credentials(refresh_if_expiring=True)
-        except Exception:
-            return list(CODEX_FALLBACK_MODELS)
-        return get_codex_model_ids(credentials.api_key)
+        """Return the non-blocking local fallback used before cache refresh."""
+        return list(CODEX_FALLBACK_MODELS)
+
+    def model_catalog_cache_scope(self) -> str:
+        """Return a stable account scope without persisting OAuth credentials."""
+        from clawcodex_ext.bridge.jwt_utils import decode_jwt_payload
+
+        payload = decode_jwt_payload(self.api_key)
+        if payload is not None:
+            auth = payload.get("https://api.openai.com/auth")
+            if isinstance(auth, dict):
+                account_id = auth.get("chatgpt_account_id")
+                if isinstance(account_id, str) and account_id:
+                    return f"chatgpt-account:{account_id}"
+            subject = payload.get("sub")
+            if isinstance(subject, str) and subject:
+                return f"oauth-subject:{subject}"
+        return f"oauth-token:{self.api_key}"
+
+    def discover_available_models(self) -> list[str]:
+        """Use the dedicated ChatGPT Codex catalog, not SDK ``/models``."""
+        credentials = resolve_codex_runtime_credentials(refresh_if_expiring=True)
+        if not credentials.api_key.strip():
+            raise RuntimeError("Codex model discovery requires a valid access token.")
+        return get_codex_model_ids(credentials.api_key, raise_on_error=True)
 
 
 def _append_system_instruction(instructions: list[str], content: Any) -> None:
