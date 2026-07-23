@@ -18,7 +18,7 @@ def register_bundle_agents(bundle_path: Path) -> list[str]:
 
     from clawcodex_ext.agent.parse_agent_markdown import parse_agent_from_markdown
     from clawcodex_ext.agent.registry import AgentRegistry, SOURCE_EXTENSIONS
-    from src.skills.frontmatter import parse_frontmatter
+    from clawcodex_ext.skills.frontmatter import parse_frontmatter
 
     registered: list[str] = []
     for md_path in sorted(agents_dir.glob("*.md")):

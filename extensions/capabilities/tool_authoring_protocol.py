@@ -1,0 +1,100 @@
+"""ToolAuthoring Protocol — interface for SOP-convertible tool authoring.
+
+Aggregates the persistence / spec / validation / factory / registration
+surface that the SOP converter (and its ``tool_registry_bridge``)
+currently borrows from ``clawcodex_ext.agent.tool_authoring`` across
+five sub-modules:
+
+* :mod:`clawcodex_ext.agent.tool_authoring.persistence` —
+  ``TOOL_DIR`` / ``bundle_tool_dir`` / ``save_spec`` / ``scripts_dir_for``
+* :mod:`clawcodex_ext.agent.tool_authoring.spec` —
+  ``AgentToolSpec`` (the dataclass shape)
+* :mod:`clawcodex_ext.agent.tool_authoring.validators` — ``validate_spec``
+* :mod:`clawcodex_ext.agent.tool_authoring.factory` —
+  ``create_and_validate``
+* :mod:`clawcodex_ext.agent.tool_authoring.registry_ext` — ``add_tool``
+
+The Protocol intentionally surfaces only the methods the SOP converter
+calls today; concrete implementations (default adapter in
+``extensions/sop_converter/adapters/tool_authoring_adapter.py``) are
+free to add helper methods without breaking the contract.
+
+See ``docs/DECOUPLE_SOP_CONVERTER_PLAN.md`` §3.3.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Optional, Protocol, runtime_checkable
+
+__all__ = [
+    "AgentToolSpecProtocol",
+    "ToolAuthoringProtocol",
+    "ValidationError",
+]
+
+
+@runtime_checkable
+class AgentToolSpecProtocol(Protocol):
+    """Minimal contract for an ``AgentToolSpec``-shaped value.
+
+    Mirrors ``clawcodex_ext.agent.tool_authoring.spec.AgentToolSpec`` —
+    the SOP converter constructs plain dataclass instances and passes
+    them through ``save_spec`` / ``create_and_validate`` / ``validate_spec``
+    without reading individual fields. Implementations may add fields
+    beyond what is listed here.
+    """
+
+    name: str
+    description: str
+    input_schema: dict
+    call_type: str
+    call_impl: Any
+    tags: tuple[str, ...]
+    aliases: tuple[str, ...]
+    source: str
+    bundle_id: Optional[str]
+    stateful_wrapper: bool
+    output_schema: Optional[dict]
+
+
+class ValidationError(Exception):
+    """Raised by :meth:`ToolAuthoringProtocol.validate_spec` on bad specs.
+
+    Mirrors ``clawcodex_ext.agent.tool_authoring.validators.ValidationError``
+    so existing callers that catch that exception keep working through
+    an adapter.
+    """
+
+
+@runtime_checkable
+class ToolAuthoringProtocol(Protocol):
+    """Aggregate boundary for the SOP converter's tool-authoring needs.
+
+    Concrete implementations aggregate the five upstream sub-modules.
+    The default implementation lives in
+    ``extensions/sop_converter/adapters/tool_authoring_adapter.py``
+    (Phase 3+); for the moment the Protocol is consumed as
+    ``@runtime_checkable`` documentation.
+    """
+
+    # --- persistence (clawcodex_ext.agent.tool_authoring.persistence) ---
+    TOOL_DIR: Path
+
+    def bundle_tool_dir(self, bundle_path: Path) -> Path: ...
+
+    def scripts_dir_for(self, tool_dir: Path) -> Path: ...
+
+    def save_spec(self, spec: AgentToolSpecProtocol, *, tool_dir: Optional[Path] = None) -> None: ...
+
+    # --- validation (clawcodex_ext.agent.tool_authoring.validators) ---
+    def validate_spec(self, spec: AgentToolSpecProtocol) -> None: ...
+
+    # --- factory / registration ---
+    # ``create_and_validate`` returns the runtime ``Tool`` instance — typed as
+    # ``Any`` because the SOP converter only uses it to register via
+    # ``add_tool`` and does not introspect the returned Tool. Concrete
+    # adapters still return ``src.tool_system.build_tool.Tool``.
+    def create_and_validate(self, spec: AgentToolSpecProtocol) -> Any: ...
+
+    def add_tool(self, tool: Any) -> None: ...
