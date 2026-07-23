@@ -87,6 +87,19 @@ class ToolAuthoringProtocol(Protocol):
 
     def save_spec(self, spec: AgentToolSpecProtocol, *, tool_dir: Optional[Path] = None) -> None: ...
 
+    def list_persisted_specs(self, tool_dir: Optional[Path] = None) -> list[Any]: ...
+
+    def iter_bundle_tool_dirs(self, bundle_path: Path) -> list[Path]: ...
+
+    def create_spec(self, **kwargs: Any) -> Any:
+        """Create a concrete tool spec from keyword arguments.
+
+        The returned value is duck-type-compatible with
+        ``AgentToolSpecProtocol`` — callers can pass it to
+        ``save_spec`` / ``validate_spec`` / ``create_and_validate``
+        without importing the upstream dataclass.
+        """
+
     # --- validation (clawcodex_ext.agent.tool_authoring.validators) ---
     def validate_spec(self, spec: AgentToolSpecProtocol) -> None: ...
 

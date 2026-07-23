@@ -99,6 +99,28 @@ class DefaultToolAuthoring(ToolAuthoringProtocol):
 
         _save_spec(spec_from_protocol(spec), tool_dir=tool_dir)
 
+    def list_persisted_specs(self, tool_dir: Optional[Path] = None) -> list[Any]:
+        """List all persisted tool specs in *tool_dir* (or the default TOOL_DIR)."""
+        from clawcodex_ext.agent.tool_authoring.persistence import (
+            list_persisted_specs as _list_persisted_specs,
+        )
+
+        return _list_persisted_specs(tool_dir=tool_dir)
+
+    def iter_bundle_tool_dirs(self, bundle_path: Path) -> list[Path]:
+        """Iterate over bundle-local tool directories."""
+        from clawcodex_ext.agent.tool_authoring.persistence import (
+            iter_bundle_tool_dirs as _iter_bundle_tool_dirs,
+        )
+
+        return list(_iter_bundle_tool_dirs(bundle_path))
+
+    def create_spec(self, **kwargs: Any) -> Any:
+        """Create a concrete ``AgentToolSpec`` from keyword arguments."""
+        from clawcodex_ext.agent.tool_authoring.spec import AgentToolSpec
+
+        return AgentToolSpec(**kwargs)
+
     # --- validation ---
 
     def validate_spec(self, spec: AgentToolSpecProtocol) -> None:
