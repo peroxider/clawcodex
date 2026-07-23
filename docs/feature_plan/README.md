@@ -91,6 +91,7 @@ docs/feature_plan/
 | F-Number | 名称 | 状态 | 章节路径 |
 |----------|------|:----:|---------|
 | F-156 | Asciicast v2 录制器（orchestrator / query / SOP / visualizer / cron） | ✅ 已落地 | *特性文档已归档* |
+| F-167 | Visualizer 独立包化（商业化脱离） | ✅ 已落地 | [f-167-visualizer-package-extract.md](04-architecture-sdk/f-167-visualizer-package-extract.md) |
 
 ### CCB 对标
 
@@ -177,6 +178,8 @@ docs/feature_plan/
 | 2026-07-22 | 新增 F-159 JIT 上下文合成（覆盖 DC-003） | DC-A §4.4 映射表基础上落地 Wave 1 P0 上下文生命周期特性；Intent 解析 + Loader 集合 + 缓存 + register_section 注入 + 触发限流；与 F-130（占位符填充）/ F-158-A（VERIFIED source）/ F-161（执行层）强协同；解耦落地于 `extensions/jit_context/`，零 `src/` 侵入 |
 | 2026-07-22 | 新增 F-160 反事实推理（覆盖 DC-012） | DC-A §4.4 映射表基础上落地 Wave 1 P0 推理扩展轻量级特性；门槛最低（仅 prompt + 1 Hook）；3 类模板（决策 / 断言 / 推荐）+ 6 档 verdict 标注 + 自检 Hook；与 F-119 / F-102 / F-158-A / F-130 / F-163 协同；解耦落地于 `extensions/counterfactual/`，零 `src/` 侵入 |
 | 2026-07-22 | 新增 F-161 涌现式上下文发现（覆盖 DC-018） | DC-A §4.4 映射表基础上落地 Wave 1 P0 元架构层特性（Wave 1 最后一个落地）；是 F-159 JIT 的隐式反思调度前置（meta-cognition 显式化）；反思 prompt + 4 档门控决策 + 反思缓存 + 调用 F-159 synthesize；与 F-119 / F-102 / F-159 / F-158 / F-160 / F-130 协同；解耦落地于 `extensions/emergent/`，零 `src/` 侵入 |
+| 2026-07-23 | 新增 F-167 Visualizer 独立包化（商业化脱离） | 基于 `COMMERCIALIZATION_EXECUTIVE_SUMMARY.md` §4.2.2「低成本脱离」评估；实测 visualizer 22/25 文件零二层依赖，仅 3 文件有弱耦合（Protocol/dataclass/14 行函数）；方案为 Protocol 内联 + recording 适配器归位 + entry-points 入口；工作量 ~1125 行，单人 ~1 工作日落地 |
+| 2026-07-23 | F-167-A~G 全部落地（visualizer 独立包化完成） | F-167-A/B：DashboardEntry/Source/Sink + AsciicastCapture/Event/Header Protocol 内联到 `extensions/visualizer/protocols/`；F-167-C：`panel()` 从 `recording.renderers` 迁到 `extensions/visualizer/_rendering.py`（私有）；F-167-D：`asciicast_dashboard_source.py` 从 `extensions/visualizer/` 迁到 `extensions/recording/visualizer_dashboard_source.py`，反向依赖 visualizer.protocols 和 _rendering.panel；F-167-E：`extensions/visualizer/pyproject.toml` 标注独立包元数据 + `clawcodex.commands` entry-points；F-167-F/G：`cli.py` 改为 self-contained `register_viz_subcommand`，`subcommand_registry.load_builtin_subcommands` 改为 try-import 包裹 viz 注册。验证：visualizer 测试 188 通过、recording 测试 136 通过、orchestrator 单元测试 1610 通过、稳定性门禁 482 全绿，**F-167 零回归** |
 | 2026-07-22 | 移除 README.md F-Number 状态总表中 F-119 行 | F-119 已标记为 ✅ 已完成（ROADMAP v4.7 已从路线图移除），但 README.md 仍引用不存在的 `f-119-prompt-assembly.md`；按 ROADMAP 精简口径移除该行；01-overview.md 行 53 同步改为"F-119 已完成，详见 ROADMAP"；代码层 `extensions/prompt_lab/` 目录保留（属已完成特性的实现） |
 | 2026-07-22 | 新增 F-162 工具强制验证（覆盖 DC-006） | DC-A §4.4 映射表基础上落地 Wave 2 P1 工具化组首个特性；是 F-158 软警告的硬约束升级（双层防御：F-158 标注 + F-162 拦截）；6 类规则（API 签名 / 版本号 / import / 库存在 / 路径 / 配置项）+ 三档拦截模式（warn / block / strict）+ 5 维例外判定 + JIT 联动自动抓取 + Profile 映射；与 F-119 / F-102 / F-158 / F-159 / F-130 / F-163 协同；解耦落地于 `extensions/tool_verification/`，零 `src/` 侵入 |
 | 2026-07-22 | 新增 F-163 对抗质疑器（覆盖 DC-008） | DC-A §4.4 映射表基础上落地 Wave 2 P1 工具化组第二个特性；是 Wave 2 P1 的"方案层"对抗（区别于 F-162 "事实层"硬拦截）；Proposer / Critic / Synthesizer 三角色 + 多轮迭代循环（max 3 轮 + fingerprint 去重早停）+ 结构化质疑输出（claim / counter_evidence / severity / category）+ 5 Profile 触发策略（default / review / strict / debug / creative）+ 与 F-162 audit log schema 兼容；与 F-118 / F-119 / F-102 / F-162 / F-130 / F-164 协同；解耦落地于 `extensions/red_team_critic/`，零 `src/` 侵入 |

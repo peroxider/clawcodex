@@ -33,8 +33,26 @@ logger = logging.getLogger(__name__)
 
 
 def register_viz_subcommand() -> None:
-    """Register the ``viz`` subcommand with the CLI registry."""
-    from clawcodex_ext.cli.subcommand_registry import register
+    """Register the ``viz`` subcommand with the CLI registry.
+
+    F-167-F: this helper is now self-contained. It tries to import the
+    CLI subcommand registry lazily and silently no-ops if the registry
+    is unavailable (e.g. a minimal environment where
+    ``clawcodex_ext.cli.subcommand_registry`` has not been installed,
+    or tests that mock the CLI surface). The visualizer package no
+    longer has a hard import-time dependency on
+    ``clawcodex_ext.cli.subcommand_registry`` — the dependency is
+    optional and explicit, suitable for an entry-points style plugin
+    loader.
+    """
+    try:
+        from clawcodex_ext.cli.subcommand_registry import register
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug(
+            "Could not register viz subcommand (registry unavailable): %s",
+            exc,
+        )
+        return
 
     @register("viz")
     def _viz_handler(args: list[str]) -> int:

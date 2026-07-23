@@ -92,8 +92,15 @@ def _sop_factory(capture: AsciicastCapture) -> Any:
 
 
 def _visualizer_factory(capture: AsciicastCapture) -> Any:
-    """Return the visualizer dashboard :class:`RecordableSource` shim."""
-    from extensions.visualizer.asciicast_dashboard_source import (
+    """Return the visualizer dashboard :class:`RecordableSource` shim.
+
+    F-167-D: the adapter now lives under
+    :mod:`extensions.recording.visualizer_dashboard_source` (its real
+    consumer). We import it lazily so a partial checkout that lacks
+    the visualizer package keeps ``clawcodex record --sources ...``
+    working for non-visualizer sources.
+    """
+    from extensions.recording.visualizer_dashboard_source import (
         AsciicastDashboardSource,
     )
 

@@ -14,7 +14,7 @@ from extensions.capabilities.dashboard_entry import (
 )
 from extensions.capabilities.recorder import AsciicastHeader
 from extensions.recording.asciicast_writer import AsciicastWriter
-from extensions.visualizer.asciicast_dashboard_source import (
+from extensions.recording.visualizer_dashboard_source import (
     AsciicastDashboardSource,
 )
 

@@ -48,7 +48,7 @@ from extensions.capabilities.dashboard_entry import (  # noqa: E402
 from extensions.capabilities.recorder import AsciicastHeader  # noqa: E402
 from extensions.recording.asciicast_writer import AsciicastWriter  # noqa: E402
 from extensions.recording.validate_cast import validate_cast  # noqa: E402
-from extensions.visualizer.asciicast_dashboard_source import (  # noqa: E402
+from extensions.recording.visualizer_dashboard_source import (  # noqa: E402
     AsciicastDashboardSource,
 )
 

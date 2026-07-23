@@ -107,7 +107,7 @@ from extensions.orchestrator.workspace import (
 )
 from extensions.recording.asciicast_writer import AsciicastWriter
 from extensions.recording.validate_cast import validate_cast
-from extensions.visualizer.asciicast_dashboard_source import (
+from extensions.recording.visualizer_dashboard_source import (
     AsciicastDashboardSource,
 )
 

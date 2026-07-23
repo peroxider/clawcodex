@@ -1,0 +1,107 @@
+# F-167-E: independent-package metadata for the visualizer package.
+#
+# Today this file is *informational only* — the visualizer package still
+# installs via the top-level ``clawcodex-dev-mind`` pyproject (no
+# duplicate installation happens). The metadata below documents what a
+# future standalone distribution (``clawcodex-visualizer`` on PyPI) will
+# look like, so that:
+#
+#   1. Reviewers can confirm the visualizer package has no hidden
+#      coupling to the rest of the repo (every ``dependencies`` entry
+#      is what the package actually imports today).
+#   2. When the upstream repo is split, the metadata is already
+#      correct and the only change required is renaming the project
+#      table + adding ``src/`` to ``tool.setuptools.package-data``.
+#
+# Once the package is extracted, install with::
+#
+#     pip install clawcodex-visualizer
+#
+# and ``clawcodex viz`` becomes available via the
+# ``clawcodex.commands`` entry-point declared below.
+
+[project]
+name = "clawcodex-visualizer"
+version = "0.1.0"
+description = "Standalone web visualizer for ClawCodex agent sessions (F-94/F-120)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "ClawCodex Contributors" },
+]
+keywords = ["clawcodex", "agent", "observability", "asciicast"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+]
+
+# F-167: only direct runtime dependencies live here. Soft / optional
+# integrations (e.g. extensions.agent_dashboard for the live
+# DashboardStore) are imported inside try/except blocks at the
+# call site — they never appear as install requirements.
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.6",
+    "httpx>=0.27",      # import_router.py
+    "jinja2>=3.1",
+    "Pillow>=10",       # builders/export_builder.py
+    "reportlab>=4",     # builders/export_builder.py
+]
+
+[project.optional-dependencies]
+# Recording-only consumers (F-REC / F-156). The asciicast dashboard
+# adapter now lives in ``extensions.recording.visualizer_dashboard_source``
+# (post-F-167), but its renderer primitives (panel(), Protocol
+# definitions) still live here.
+record = [
+    # no runtime deps; the recorder package owns its own deps
+]
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
+# F-167-F: entry-point declaration. Once this is a standalone
+# distribution, installing ``clawcodex-visualizer`` causes
+# ``clawcodex_dev.cli`` to discover the ``viz`` subcommand via
+# ``importlib.metadata.entry_points(group="clawcodex.commands")``.
+#
+# Today (monorepo) the same function is also invoked eagerly via
+# ``clawcodex_ext.cli.subcommand_registry.load_builtin_subcommands``,
+# so the ``viz`` subcommand is still available without an explicit
+# ``pip install`` of this metadata file.
+[project.entry-points."clawcodex.commands"]
+viz = "clawcodex_visualizer.cli:register_viz_subcommand"
+
+[project.urls]
+Homepage = "https://github.com/agentforce314/clawcodex"
+Repository = "https://github.com/agentforce314/clawcodex"
+Issues = "https://github.com/agentforce314/clawcodex/issues"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# F-167-E: when the package is extracted to its own repo, rename the
+# ``packages`` root from ``extensions`` (monorepo) to ``src`` (sdist
+# layout). Until then this section is informational.
+[tool.setuptools]
+packages = ["extensions.visualizer"]
+
+[tool.setuptools.package-data]
+"extensions.visualizer" = [
+    "templates/*.html",
+    "static/css/*.css",
+    "static/js/*.js",
+]

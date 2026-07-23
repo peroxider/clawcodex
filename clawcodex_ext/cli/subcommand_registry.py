@@ -61,9 +61,18 @@ def load_builtin_subcommands() -> None:
     from clawcodex_ext.cli import session_migrate_cmd as _session_migrate_cmd  # noqa: F401
 
     # F-94-A: ``clawcodex viz`` subcommand for the Multi-Session Visualizer
-    from extensions.visualizer.cli import register_viz_subcommand  # noqa: F401
+    # F-167-F: wrapped in try/except so a partial checkout that lacks
+    # the visualizer package (e.g. CI smoke that runs only the core CLI
+    # surfaces) does not break unrelated subcommand discovery. The
+    # inner ``register_viz_subcommand()`` already self-contains a
+    # try/except, so the outer guard only protects against the import
+    # itself raising.
+    try:
+        from extensions.visualizer.cli import register_viz_subcommand  # noqa: F401
 
-    register_viz_subcommand()
+        register_viz_subcommand()
+    except Exception:
+        pass
 
     # F-75: ``clawcodex stats`` subcommand for tool/skill usage statistics
     from clawcodex_ext.cli import stats_cmd as _stats_cmd  # noqa: F401

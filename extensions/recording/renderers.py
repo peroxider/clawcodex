@@ -22,7 +22,6 @@ __all__ = [
     "format_cron_event",
     "format_phase_marker",
     "format_tool_event",
-    "panel",
 ]
 
 
@@ -73,22 +72,6 @@ def format_cron_event(payload: dict[str, Any]) -> str:
     status = payload.get("status", "?")
     cron = payload.get("cron", "?")
     return f"[cron {status}] task={task_id} schedule='{cron}'"
-
-
-def panel(title: str, rows: list[str], width: int = 80) -> str:
-    """Render a simple ASCII panel for the visualizer adapter.
-
-    The visualizer dashboard renders its templates as HTML; the
-    asciicast adapter mirrors the layout using ``─`` rules and indented
-    rows (the same vocabulary the orchestrator dashboard already
-    uses — see :mod:`extensions.orchestrator.status_dashboard`).
-    """
-    rule = "─" * max(width, len(title) + 4)
-    out = [rule, f"  {title}", rule]
-    for row in rows:
-        out.append(row)
-    out.append(rule)
-    return "\n".join(out)
 
 
 class TeeWriter:
