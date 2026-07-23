@@ -272,6 +272,8 @@ class Orchestrator:
             workflow.workspace.gitignore_patterns,
             workflow.agent,
             workflow.hooks,
+            git_username=workflow.workspace.git_username,
+            git_email=workflow.workspace.git_email,
         )
         self._state = OrchestratorState(
             poll_interval_ms=workflow.polling.interval_ms,

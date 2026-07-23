@@ -99,11 +99,15 @@ class GitSyncService:
         gitignore_patterns: list[str] | None = None,
         agent_config: AgentConfig | None = None,
         hooks_config: HooksConfig | None = None,
+        git_username: str | None = None,
+        git_email: str | None = None,
     ) -> None:
         self.tracker = tracker
         self._branch_prefix = branch_prefix
         self._agent_config = agent_config or AgentConfig()
         self._hooks_config = hooks_config or HooksConfig()
+        self._git_username = git_username
+        self._git_email = git_email
         self._gitignore_patterns = gitignore_patterns or [
             ".event_streams",
             ".orchestrator_control",
@@ -949,16 +953,22 @@ class GitSyncService:
     def _ensure_commit_identity(self, repo_root: str) -> None:
         email = self._run_git_output(["config", "user.email"], repo_root)
         name = self._run_git_output(["config", "user.name"], repo_root)
-        if not email:
+        if not email and self._git_email:
+            self._run_git_checked(["config", "user.email", self._git_email], repo_root)
+        elif not email and self._git_username:
+            self._run_git_checked(
+                ["config", "user.email", f"{self._git_username}@gitcode.com"],
+                repo_root,
+            )
+        elif not email:
             self._run_git_checked(
                 ["config", "user.email", "clawcodex-bot@local.invalid"],
                 repo_root,
             )
-        if not name:
-            self._run_git_checked(
-                ["config", "user.name", "ClawCodex Bot"],
-                repo_root,
-            )
+        if not name and self._git_username:
+            self._run_git_checked(["config", "user.name", self._git_username], repo_root)
+        elif not name:
+            self._run_git_checked(["config", "user.name", "ClawCodex Bot"], repo_root)
 
     _ORCHESTRATOR_ARTIFACTS: tuple[str, ...] = (
         ".orchestrator_control",
