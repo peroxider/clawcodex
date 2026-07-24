@@ -41,7 +41,14 @@ class MultiModelRouter(BaseProvider):
             raise ValueError("MultiModelRouter needs at least one provider slot")
         if len({slot.name for slot in slots}) != len(slots):
             raise ValueError("provider slot names must be unique")
-        super().__init__(api_key="", model=None)
+        # Compose a display-friendly label from slot names so the REPL
+        # startup header and other UI callers see something meaningful
+        # instead of None.  Slot names are guaranteed non-empty and unique
+        # (validated above), so no deduplication is needed.  The label is
+        # purely cosmetic; each slot carries its own model for actual API
+        # calls (see _call_slot).
+        model_label = " | ".join(s.name for s in slots)
+        super().__init__(api_key="", model=model_label)
         self.slots = list(slots)
         self.strategy = strategy
         self._aggregator = aggregator
