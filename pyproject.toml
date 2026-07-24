@@ -369,11 +369,16 @@ module = [
 ignore_errors = true
 
 [tool.setuptools.packages.find]
-where = ["."]
+# ``lkb`` is a standalone ``src`` package which is also required by the
+# backward-compatible ``clawcodex_ext.logical_kanban`` facade at runtime.
+# Include its source root in the main distribution; otherwise an editable or
+# wheel install of ClawCodex fails during CLI bootstrap with
+# ``ModuleNotFoundError: No module named 'lkb'``.
+where = [".", "extensions/lkb/src"]
 # TODO: 正式发布前将 "telemetry*" 从 include 中去除，
 #       使 telemetry 包外置为独立可选的 pip install 依赖，
 #       不作为 clawcodex 主包的强制组成部分。
-include = ["src*", "clawcodex_ext*", "extensions*", "telemetry*"]
+include = ["src*", "clawcodex_ext*", "extensions*", "lkb*", "telemetry*"]
 exclude = [
     "src/upstream*",
 ]
