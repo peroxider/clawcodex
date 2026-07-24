@@ -434,6 +434,13 @@ class AgentBridge:
     def busy(self) -> bool:
         return self._busy
 
+    def _set_in_agent_loop(self, value: bool) -> None:
+        """Keep the cron scheduler's mutable busy gate in sync."""
+
+        flag = self._tool_context._in_agent_loop
+        if flag is not None:
+            flag.value = value
+
     def submit(self, prompt: str) -> bool:
         """Queue ``prompt`` for the agent. Returns False if busy."""
         ## _log(f'[agent_bridge] submit called: {prompt}')
@@ -443,6 +450,7 @@ class AgentBridge:
                 ## _log(f'[agent_bridge] busy, returning False')
                 return False
             self._busy = True
+            self._set_in_agent_loop(True)
             self._abort_controller = AbortController()
             ## _log(f'[agent_bridge] acquired busy lock')
             # Plumb the controller onto the tool context BEFORE we spawn
@@ -488,6 +496,7 @@ class AgentBridge:
             if self._busy or not runtime.claim_continuation(continuation):
                 return False
             self._busy = True
+            self._set_in_agent_loop(True)
             self._abort_controller = AbortController()
             self._tool_context.abort_controller = self._abort_controller
 
@@ -513,6 +522,7 @@ class AgentBridge:
         except Exception:
             with self._busy_lock:
                 self._busy = False
+                self._set_in_agent_loop(False)
                 self._abort_controller = None
             self._state.set_thinking(False)
             return False
@@ -815,6 +825,7 @@ class AgentBridge:
         self._state.clear_streaming_text()
         with self._busy_lock:
             self._busy = False
+            self._set_in_agent_loop(False)
             # Replace the per-run controller on the shared tool context
             # with a fresh one so the next ``submit()`` starts from a
             # clean state. Leaving an aborted controller in place would

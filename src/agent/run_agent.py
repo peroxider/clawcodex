@@ -16,3 +16,8 @@ import clawcodex_ext.agent.run_agent as _mod
 
 _globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
 globals().update(_globals)
+
+# Preserve private upstream compatibility helpers and monkeypatch identity.
+import sys
+
+sys.modules[__name__] = _mod

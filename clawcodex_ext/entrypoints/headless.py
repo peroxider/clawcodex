@@ -94,6 +94,8 @@ class HeadlessOptions:
     provider_name: str | None = None
     provider_instance: Any | None = None
     model: str | None = None
+    fallback_model: str | None = None
+    effort: str | None = None
     max_turns: int = 20
     # Goal mode is intentionally unbounded unless the CLI user supplied
     # --max-turns.  A finite default can stop an unmet goal and then report
@@ -236,7 +238,7 @@ def _run_headless_core(options: HeadlessOptions) -> int:
     stdin = options.stdin or sys.stdin
 
     # ch02 round-3 GAP B: warm the user/system context memos now so the
-    # CLAUDE.md walk and git probes overlap with provider + registry
+    # CLAWCODEX.md walk and git probes overlap with provider + registry
     # construction below instead of running inside the first turn.
     # Mirrors TS main.tsx:1973-1990 (non-interactive early kicks; trust
     # is implicit in -p mode and was granted by run_pre_action).
@@ -260,17 +262,22 @@ def _run_headless_core(options: HeadlessOptions) -> int:
     provider_name = options.provider_name or get_default_provider()
     provider = options.provider_instance
     if provider is None:
+        # Keep every entrypoint aligned on provider validation and its
+        # user-facing errors. Direct tests/integrations may inject a ready
+        # provider instance and intentionally bypass config validation.
+        from src.entrypoints.provider_validation import validate_provider_at_startup
+
         try:
             provider_cfg = get_provider_config(provider_name)
-        except Exception as exc:
-            cli_error(f"error: unable to load provider config: {exc}", 2)
-        # Config api_key wins; fall back to the provider's known env vars.
+        except Exception:
+            validate_provider_at_startup(
+                provider_name, interactive=False, exit_code=2
+            )
+            raise  # pragma: no cover - validator exits on failure
         api_key = resolve_api_key(provider_name, provider_cfg)
         if not api_key and provider_requires_api_key(provider_name):
-            cli_error(
-                f"error: API key for provider '{provider_name}' is not configured. "
-                "Run `clawcodex login` to set it up.",
-                2,
+            validate_provider_at_startup(
+                provider_name, interactive=False, exit_code=2
             )
         provider_cls = get_provider_class(provider_name)
         model = options.model or provider_cfg.get("default_model")
@@ -375,11 +382,22 @@ def _run_headless_core(options: HeadlessOptions) -> int:
 
     tool_registry = build_default_registry(provider=provider)
     replace_cron_tools(tool_registry)
-    if options.allowed_tools:
-        allow = {name.lower() for name in options.allowed_tools}
+    # Canonicalize BOTH sets up front (before either filter runs) so an alias
+    # form (e.g. --disallowed-tools KillShell) resolves while its tool is still
+    # registered.
+    allow = (
+        tool_registry.canonicalize_names(options.allowed_tools)
+        if options.allowed_tools
+        else None
+    )
+    deny = (
+        tool_registry.canonicalize_names(options.disallowed_tools)
+        if options.disallowed_tools
+        else None
+    )
+    if allow is not None:
         _filter_registry(tool_registry, keep=lambda n: n.lower() in allow)
-    if options.disallowed_tools:
-        deny = {name.lower() for name in options.disallowed_tools}
+    if deny is not None:
         _filter_registry(tool_registry, keep=lambda n: n.lower() not in deny)
 
     # F-125 C5: warn when ``--allowed-tools`` / ``--disallowed-tools``
@@ -535,6 +553,62 @@ def _run_headless_core(options: HeadlessOptions) -> int:
             "Failed to auto-wire team context (non-fatal): %s",
             _exc,
         )
+
+    # Initialize upstream plugin/command surfaces and the settings-driven
+    # output style for non-interactive sessions too.
+    try:
+        from src.plugins.init_builtin import init_builtin_plugins
+
+        init_builtin_plugins()
+    except Exception:  # noqa: BLE001
+        pass
+
+    from src.outputStyles import output_style_from_settings
+
+    _settings_style = output_style_from_settings(cwd=str(workspace_root))
+    if _settings_style:
+        tool_context.output_style_name = _settings_style
+
+    # Settings hooks need the same snapshot, registry and trust state as the
+    # interactive entrypoint; otherwise PermissionRequest/Stop hooks silently
+    # disappear in print mode.
+    from src.hooks.config_manager import bootstrap_hook_config_manager
+
+    tool_context.hook_config_manager = bootstrap_hook_config_manager(
+        cwd=str(workspace_root),
+    )
+    try:
+        from src.services.startup_gates import check_trust_accepted
+
+        tool_context.workspace_trusted = check_trust_accepted(workspace_root)
+    except Exception:  # noqa: BLE001
+        import logging as _logging
+
+        _logging.getLogger(__name__).debug(
+            "headless trust check failed", exc_info=True
+        )
+
+    try:
+        from src.services.compact.autocompact import AutoCompactTracking
+
+        _run_compact_tracking = AutoCompactTracking()
+    except Exception:  # noqa: BLE001
+        _run_compact_tracking = None
+
+    def _build_turn_pipeline_config():
+        if _run_compact_tracking is None:
+            return None
+        try:
+            from src.services.compact.pipeline import build_production_pipeline_config
+
+            return build_production_pipeline_config(
+                provider,
+                tool_context,
+                _run_compact_tracking,
+            )
+        except Exception:  # noqa: BLE001
+            return None
+
     if options.skip_permissions or effective_mode == "bypassPermissions":
         tool_context.allow_docs = True
         tool_context.permission_handler = None
@@ -584,7 +658,8 @@ def _run_headless_core(options: HeadlessOptions) -> int:
                 exc_info=True,
             )
 
-    # Build the input iterator.
+    # Build the input iterator. Slash commands, including /goal, are
+    # dispatched by the command engine inside the input loop below.
     if options.input_format == "stream-json":
         inputs: Iterable[UserInputMessage] = StreamJsonReader(stdin)
     else:
@@ -654,6 +729,7 @@ def _run_headless_core(options: HeadlessOptions) -> int:
                     writer=writer,
                     aggregate_tool_events=aggregate_tool_events,
                     in_agent_loop=in_agent_loop,
+                    pipeline_config_factory=_build_turn_pipeline_config,
                 )
             except AbortError:
                 _finalize_cron_task(workspace_root, active_tasks, task_id, "cancelled")
@@ -1075,6 +1151,7 @@ def _run_headless_core(options: HeadlessOptions) -> int:
                         writer=writer,
                         aggregate_tool_events=aggregate_tool_events,
                         in_agent_loop=in_agent_loop,
+                        pipeline_config_factory=_build_turn_pipeline_config,
                     )
                 except AbortError:
                     # Re-raise to the outer ``except`` so the cancelled
@@ -1124,6 +1201,7 @@ def _run_headless_core(options: HeadlessOptions) -> int:
                 if writer is not None:
                     writer.write(AssistantEvent(text=result.response_text))
                 aggregate_text.append(result.response_text)
+
                 # F-22: drain cron prompts that fired while the agent was
                 # busy with the user turn and run them before the next input.
                 _process_cron_outbox(tool_context, active_tasks, _run_cron_prompt)
@@ -1567,6 +1645,28 @@ class _InAgentLoopFlag:
         self.value = False
 
 
+class _CompatPromptBlocks(list[dict[str, Any]]):
+    """Block list retaining the legacy string-inspection surface."""
+
+    def _joined_text(self) -> str:
+        return "\n\n".join(
+            str(block.get("text", ""))
+            for block in self
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+
+    def startswith(self, prefix: str) -> bool:
+        return self._joined_text().startswith(prefix)
+
+    def endswith(self, suffix: str) -> bool:
+        return self._joined_text().endswith(suffix)
+
+    def __contains__(self, item: object) -> bool:
+        if isinstance(item, str):
+            return item in self._joined_text()
+        return super().__contains__(item)
+
+
 def _install_sigint_handler(
     controller: AbortController,
     in_agent_loop: _InAgentLoopFlag,
@@ -1664,34 +1764,35 @@ def _install_sigint_handler(
 def _filter_registry(registry, *, keep) -> None:
     """In-place best-effort filter of a ToolRegistry.
 
-    Historic bug: this function called ``registry.unregister(name)`` but
-    the canonical ``ToolRegistry`` exposes no such method — the ``try /
-    except: continue`` silently swallowed the AttributeError and the
-    filter became a no-op. That made ``--allowed-tools`` /
-    ``--disallowed-tools`` CLI parameters look effective in the help
-    text but never actually restrict the tool set.
+    Drops every tool for which ``keep(name)`` is False so that
+    ``--allowed-tools`` / ``--disallowed-tools`` remove the tool from the pool
+    the model sees (schemas are emitted from ``registry.list_tools()``), not
+    just block it at execution time.
 
-    Real fix: mutate the registry's internal storage (``_tools`` list
-    + ``_by_name`` dict) directly when no public unregister exists.
+    Prefer the canonical ``remove_tool`` API, retain ``unregister`` support
+    for older/custom registries, and finally fall back to rebuilding the
+    internal indexes for legacy registry doubles.
     """
     try:
         entries = list(registry.list_tools())
     except Exception:
         return
-    # First pass: try public ``unregister`` if the registry implements it
-    # (forward-compat for future ToolRegistry subclasses that add the API).
-    if hasattr(registry, "unregister") and callable(getattr(registry, "unregister")):
+
+    remover = getattr(registry, "remove_tool", None)
+    if not callable(remover):
+        remover = getattr(registry, "unregister", None)
+    if callable(remover):
         for tool in entries:
             name = getattr(tool, "name", "")
             if not keep(name):
                 try:
-                    registry.unregister(name)
+                    remover(name)
                 except Exception:
                     pass
         return
-    # Fallback: ToolRegistry has no ``unregister``; mutate internal
-    # storage. Touch only ``_tools`` and ``_by_name`` (both are
-    # implementation details but stable in current ToolRegistry).
+
+    # Fallback for legacy/opaque test registries with no removal API. Touch
+    # only ``_tools`` and ``_by_name`` and preserve alias lookup entries.
     kept_tools = [t for t in entries if keep(getattr(t, "name", ""))]
     kept_by_name: dict = {}
     for t in kept_tools:
@@ -1725,12 +1826,25 @@ def _auto_deny_permission_handler(stderr: IO[str]):
     return handler
 
 
+_NON_INTERACTIVE_ANSWER = (
+    "No interactive user is available (running headless/non-interactive). "
+    "Proceed autonomously with your best judgment and reasonable default "
+    "assumptions; do not ask again."
+)
+
+
 def _noop_ask_user(questions):  # type: ignore[override]
-    # In non-interactive mode, collapse every question to an empty answer.
+    # Non-interactive mode: there is no user to answer. Returning bare
+    # empty strings left the model with no signal about WHY the answer was
+    # empty — observed live (terminal-bench raman-fitting) to make it flail,
+    # re-asking / retrying instead of committing to an approach. Return an
+    # explicit "proceed autonomously" answer so the model moves on
+    # decisively. (The interactive TUI still shows the real dialog; only the
+    # headless surface — which cannot collect input — substitutes this.)
     answers: dict = {}
     for q in questions or []:
         if isinstance(q, dict) and isinstance(q.get("question"), str):
-            answers[q["question"]] = ""
+            answers[q["question"]] = _NON_INTERACTIVE_ANSWER
     return answers
 
 
@@ -1931,6 +2045,7 @@ def _run_one_agent_loop(
     in_agent_loop: _InAgentLoopFlag,
     *,
     on_text_chunk: Callable[[str], None] | None = None,
+    pipeline_config_factory: Callable[[], Any] | None = None,
 ) -> AgentLoopResult:
     """Run the current conversation through the canonical query() loop once.
 
@@ -1989,47 +2104,78 @@ def _run_one_agent_loop(
         getattr(tool_context, "output_style_name", None),
         getattr(tool_context, "output_style_dir", None),
     ).prompt
-    from clawcodex_ext.coordinator.mode import (
-        get_coordinator_user_context,
-        is_coordinator_mode,
-    )
-
-    if is_coordinator_mode():
-        from clawcodex_ext.coordinator.prompt import get_coordinator_system_prompt
-
-        # Coordinator mode is a distinct agent role, not just a restricted
-        # tool set.  Keep workspace context, but replace the normal agent/style
-        # prompt so the model knows it must delegate implementation to workers.
-        workspace_context = build_effective_system_prompt("", tool_context).strip()
-        worker_context = get_coordinator_user_context().get("workerToolsContext", "")
-        effective_system_prompt = "\n\n".join(
-            part
-            for part in (
-                get_coordinator_system_prompt(),
-                worker_context,
-                workspace_context,
-            )
-            if part
+    try:
+        effective_system_prompt = build_effective_system_prompt(
+            _style_prompt,
+            tool_context,
+            provider=provider,
         )
-    else:
+    except TypeError:
         effective_system_prompt = build_effective_system_prompt(
             _style_prompt,
             tool_context,
         )
+    if isinstance(effective_system_prompt, list):
+        effective_system_prompt = _CompatPromptBlocks(effective_system_prompt)
     if options.append_system_prompt:
-        effective_system_prompt = f"{effective_system_prompt}\n\n{options.append_system_prompt}"
+        if isinstance(effective_system_prompt, list):
+            effective_system_prompt.append(
+                {"type": "text", "text": options.append_system_prompt}
+            )
+        else:
+            effective_system_prompt = (
+                f"{effective_system_prompt}\n\n{options.append_system_prompt}"
+            )
 
     def _persist(msg: Any) -> None:
         try:
-            add_existing = getattr(
-                session.conversation,
-                "add_existing_message",
-                None,
-            )
+            conversation = session.conversation
+            add_existing = getattr(conversation, "add_existing_message", None)
             if callable(add_existing):
+                # Preserve the complete message object (content blocks, usage,
+                # model/request metadata) when the canonical Conversation API
+                # is available.
                 add_existing(msg)
             else:
-                session.conversation.add_message(msg.role, msg.content)
+                # Compatibility for lightweight/custom conversation objects.
+                # Newer implementations accept ``usage``; older test doubles
+                # may only expose the historic two-argument signature.
+                try:
+                    conversation.add_message(
+                        msg.role,
+                        msg.content,
+                        usage=getattr(msg, "usage", None),
+                    )
+                except TypeError as exc:
+                    if "usage" not in str(exc):
+                        raise
+                    conversation.add_message(msg.role, msg.content)
+
+            # Stream-json exposes signed/redacted thinking as a separate
+            # assistant content event. The visible final text is still emitted
+            # once by the caller after the agent loop completes.
+            if writer is not None and msg.role == "assistant":
+                from src.types.content_blocks import (
+                    RedactedThinkingBlock,
+                    ThinkingBlock,
+                    content_block_to_dict,
+                )
+
+                blocks = msg.content if isinstance(msg.content, list) else []
+                thinking = [
+                    content_block_to_dict(block)
+                    for block in blocks
+                    if isinstance(block, (ThinkingBlock, RedactedThinkingBlock))
+                ]
+                if thinking:
+                    writer.write(
+                        AssistantEvent(
+                            message={
+                                "role": "assistant",
+                                "content": thinking,
+                            }
+                        )
+                    )
         except Exception:
             import logging
 
@@ -2063,17 +2209,35 @@ def _run_one_agent_loop(
 
     in_agent_loop.value = True
     try:
+        from clawcodex_ext.coordinator.mode import coordinator_main_loop_registry
+
+        try:
+            main_loop_registry = coordinator_main_loop_registry(tool_registry)
+        except (AttributeError, TypeError):
+            main_loop_registry = tool_registry
+
         compat_result = _asyncio.run(
             run_query_as_agent_loop(
                 initial_messages=list(session.conversation.messages),
                 provider=provider,
-                tool_registry=tool_registry,
+                tool_registry=main_loop_registry,
                 tool_context=tool_context,
                 system_prompt=effective_system_prompt,
                 max_turns=effective_max_turns,
+                fallback_model=options.fallback_model,
+                thinking_effort=options.effort,
+                pipeline_config=(
+                    pipeline_config_factory()
+                    if pipeline_config_factory is not None
+                    else None
+                ),
+                query_source="sdk",
                 on_event=on_event,
                 on_text_chunk=on_text_chunk,
                 on_message=_persist,
+                on_attachment=lambda m: session.conversation.add_message(
+                    m.role, m.content
+                ),
                 abort_controller=abort_controller,
             )
         )
@@ -2111,7 +2275,8 @@ def _wrap_cron_prompt(prompt: str, task_id: str, run_id: str) -> str:
 
     _ = run_id  # unused — wrapper does not currently show run id
     now = datetime.now()
-    time_str = now.strftime("%b %d %-I:%M%p").lower()
+    # ``%-I`` is POSIX-only; Windows' strftime rejects it.
+    time_str = now.strftime("%b %d %I:%M%p").lower().replace(" 0", " ")
     header = f"✻ Running scheduled task ({time_str})"
     if task_id:
         header += f" · {task_id}"

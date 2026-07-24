@@ -65,6 +65,15 @@ def _run_print_mode(args):
     return run_print_mode(args)
 
 
+from clawcodex_ext.cli.worktree import WORKTREE_FAILED as _WORKTREE_FAILED
+
+
+def _maybe_create_worktree(args):
+    from clawcodex_ext.cli.worktree import maybe_create_worktree
+
+    return maybe_create_worktree(args)
+
+
 def _run_tui_mode(args):
     from clawcodex_ext.cli.runners import run_tui_mode
 

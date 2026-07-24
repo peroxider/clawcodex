@@ -30,19 +30,22 @@ picker raises there.
 **Persistence:** writes ``settings.effort`` via
 :func:`clawcodex_ext.configuration.set_effort` (the
 validated settings channel, mirroring TS ``updateSettingsForSource('userSettings',
-{effortLevel})``). NOTE — the persisted value is **not yet consumed by inference**:
-Python's effort pipeline is inert end-to-end (``settings.effort`` is read by no request
-builder; ``CallModelOptions.effort`` never reaches the API wire). Wiring the pipeline is a
-separate, deliberately-deferred phase. This command makes ``/effort`` *exist + persist*
-faithfully and is forward-compatible when the pipeline lands.
+{effortLevel})``). The persisted value IS consumed by inference on the Anthropic
+first-party path: ``resolve_thinking_effort`` (src/query/query.py) reads it at the
+wire boundary whenever no explicit per-session effort (``--effort`` /
+``QueryParams.thinking_effort``) is set, and forwards it as ``output_config.effort``
+on effort-capable models. (``CallModelOptions.effort`` in the legacy services layer
+remains unwired.)
 
 **Deliberate divergences (documented for parity review):**
-  * **No ``xhigh``/OpenAI-effort path, no ``CLAUDE_CODE_EFFORT_LEVEL`` env override, no
-    model-default resolver.** Python's effort domain (``settings.constants.VALID_EFFORT_VALUES``)
-    is ``""``/low/medium/high/max; the TS machinery for OpenAI/env/model-default has no
-    functional Python analog (``src/utils/effort.py`` is a separate, test-only enum). So
-    ``current`` reports plain ``"Effort level: auto"`` (no TS "(currently X)"), and the
-    valid-options/help text list no ``xhigh``.
+  * **No ``CLAUDE_CODE_EFFORT_LEVEL`` env override, no model-default resolver.**
+    Python's effort domain (``settings.constants.VALID_EFFORT_VALUES``) is
+    ``""``/low/medium/high/xhigh/max — the full Claude ladder; per-model wire
+    acceptance of ``xhigh`` is handled downstream by ``resolve_thinking_effort``
+    (clamps to ``high`` where rejected). The TS machinery for OpenAI/env/
+    model-default has no functional Python analog (``src/utils/effort.py`` is a
+    separate, test-only enum), so ``current`` reports plain
+    ``"Effort level: auto"`` (no TS "(currently X)").
   * **Case-insensitive args** (``a.lower()``), slightly more lenient than TS (which is
     case-sensitive for ``help``/``current``/``status``).
   * **Levels come from ``VALID_EFFORT_VALUES``** (the single settings source of truth,
@@ -72,26 +75,50 @@ _DESCRIPTIONS: dict[str, str] = {
     "low": "Quick, straightforward implementation with minimal overhead",
     "medium": "Balanced approach with standard implementation and testing",
     "high": "Comprehensive implementation with extensive testing and documentation",
-    "max": "Maximum capability with deepest reasoning (Opus 4.6 only)",
+    "xhigh": "Deeper reasoning (models that support it; else treated as high)",
+    "max": "Maximum capability with deepest reasoning",
 }
 
 # TS effort.tsx:213: picker auto-pick description when effort is undefined.
 _AUTO_PICKER_DESC = "Use default effort level for your model"
 
-# TS effort.tsx:179 help text, minus the xhigh line (no OpenAI-effort path in Python).
+# workflow-engine §4.1: `/effort ultracode` enables the session-long workflow
+# auto-orchestration mode (not a persisted effort level — it contributes the
+# orchestration mode only and never lands in ``settings.effort``).
+_ULTRACODE_ON_MSG = (
+    "Ultracode on: I'll plan and run a workflow (fan out subagents + verify) for "
+    "substantive tasks this session, instead of working turn by turn. "
+    "Reset with /effort high."
+)
+
+
+def _valid_options_str() -> str:
+    base = "low, medium, high, xhigh, max, auto"
+    from src.workflow.gating import is_workflows_enabled
+
+    return f"{base}, ultracode" if is_workflows_enabled() else base
+
+
+def _invalid_msg(raw: str) -> str:
+    return f"Invalid argument: {raw}. Valid options are: {_valid_options_str()}"
+
+# TS effort.tsx:179 help text. xhigh/max availability is model-dependent;
+# resolve_thinking_effort clamps xhigh to high on models that reject it
+# (wire-probed 2026-07-18: opus-4-8 accepts xhigh; sonnet-4-6/opus-4-6 400).
 _USAGE = (
-    "Usage: /effort [low|medium|high|max|auto]\n\n"
+    "Usage: /effort [low|medium|high|xhigh|max|auto]\n\n"
     "Effort levels:\n"
     "- low: Quick, straightforward implementation\n"
     "- medium: Balanced approach with standard testing\n"
     "- high: Comprehensive implementation with extensive testing\n"
-    "- max: Maximum capability with deepest reasoning (Opus 4.6 only)\n"
+    "- xhigh: Deeper reasoning (models that support it; else treated as high)\n"
+    "- max: Maximum capability with deepest reasoning\n"
     "- auto: Use the default effort level for your model"
 )
 
 
 def _levels() -> tuple[str, ...]:
-    """The persistable effort levels (``low, medium, high, max``) — the single source
+    """The persistable effort levels (``low, medium, high, xhigh, max``) — the single source
     of truth ``VALID_EFFORT_VALUES`` minus the empty ``""`` (which is ``auto``).
 
     Imported lazily so a bare ``import src.command_system`` does not pull the settings
@@ -205,7 +232,7 @@ class EffortCommand(InteractiveCommand):
 EFFORT_COMMAND = EffortCommand(
     name="effort",
     description="Set effort level for model usage",  # verbatim TS index.ts
-    argument_hint="[low|medium|high|max|auto]",  # TS index.ts (minus xhigh)
+    argument_hint="[low|medium|high|xhigh|max|auto]",  # TS index.ts
 )
 
 

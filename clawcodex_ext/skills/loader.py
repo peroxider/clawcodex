@@ -18,26 +18,26 @@ LoadedFrom = str
 
 
 def _get_global_config_dir() -> Path:
-    env_override = os.environ.get("CLAUDE_CONFIG_DIR")
+    env_override = os.environ.get("CLAWCODEX_CONFIG_DIR")
     if env_override:
         return Path(env_override).expanduser().resolve()
-    return Path.home() / ".claude"
+    return Path.home() / ".clawcodex"
 
 
 def _get_managed_file_path() -> Path:
-    env_override = os.environ.get("CLAUDE_MANAGED_CONFIG_DIR")
+    env_override = os.environ.get("CLAWCODEX_MANAGED_CONFIG_DIR")
     if env_override:
         return Path(env_override).expanduser().resolve()
-    return Path("/etc/claude")
+    return Path("/etc/clawcodex")
 
 
 def get_skills_path(source: str, dir_type: str = "skills") -> str:
     if source == "policySettings":
-        return str(_get_managed_file_path() / ".claude" / dir_type)
+        return str(_get_managed_file_path() / ".clawcodex" / dir_type)
     elif source == "userSettings":
         return str(_get_global_config_dir() / dir_type)
     elif source == "projectSettings":
-        return f".claude/{dir_type}"
+        return f".clawcodex/{dir_type}"
     elif source == "plugin":
         return "plugin"
     return ""
@@ -605,7 +605,7 @@ def _get_project_skills_dirs(cwd: str) -> list[str]:
     home = Path.home().resolve()
 
     while True:
-        skills_dir = current / ".claude" / "skills"
+        skills_dir = current / ".clawcodex" / "skills"
         dirs.append(str(skills_dir))
         if current == home or current == current.parent:
             break
@@ -643,7 +643,7 @@ def _is_skills_policy_disabled() -> bool:
     """True when ``CLAUDE_CODE_DISABLE_POLICY_SKILLS`` is set.
 
     Mirrors the TS check at `loadSkillsDir.ts:771`. When set, the
-    managed/policy skills directory (`/etc/claude/.claude/skills`) is
+    managed/policy skills directory (`/etc/clawcodex/.clawcodex/skills`) is
     skipped — useful for opting out of admin-distributed skills on
     multi-tenant machines.
     """
@@ -670,7 +670,7 @@ def _is_restricted_to_plugin_only(scope: str) -> bool:
 def _get_additional_skill_dirs() -> list[str]:
     """Read ``--add-dir`` paths from ``CLAUDE_CODE_ADDITIONAL_DIRECTORIES``.
 
-    Each entry maps to ``<dir>/.claude/skills`` for skill loading
+    Each entry maps to ``<dir>/.clawcodex/skills`` for skill loading
     (matches TS `additionalSkillsNested` block).
     """
     val = os.environ.get("CLAUDE_CODE_ADDITIONAL_DIRECTORIES", "")
@@ -699,7 +699,7 @@ def get_skill_dir_commands(cwd: str) -> list[Skill]:
 
     Behavior matches TS `loadSkillsFromSkillsDir` (line 720+):
       - Bare mode: load only ``--add-dir`` paths; skip everything else.
-      - Policy disabled: skip the managed/`/etc/claude` dir.
+      - Policy disabled: skip the managed/`/etc/clawcodex` dir.
       - Plugin-only restriction: collapses user + project loads to empty
         (the gate currently always returns False; future hook).
       - Order: managed → user → project → additional. Realpath dedup is
@@ -727,14 +727,14 @@ def get_skill_dir_commands(cwd: str) -> list[Skill]:
             return []
         bare_skills: list[Skill] = []
         for d in additional_dirs:
-            skills_dir = str(Path(d) / ".claude" / "skills")
+            skills_dir = str(Path(d) / ".clawcodex" / "skills")
             bare_skills.extend(load_skills_from_skills_dir(skills_dir, "projectSettings"))
         unconditional = _split_conditional(bare_skills)
         _skill_dir_cache[cwd] = unconditional
         return list(unconditional)
 
     # --- Standard discovery -------------------------------------------
-    managed_skills_dir = str(_get_managed_file_path() / ".claude" / "skills")
+    managed_skills_dir = str(_get_managed_file_path() / ".clawcodex" / "skills")
     user_skills_dir = str(_get_global_config_dir() / "skills")
     project_skills_dirs = _get_project_skills_dirs(cwd)
 
@@ -752,7 +752,7 @@ def get_skill_dir_commands(cwd: str) -> list[Skill]:
     additional_skills: list[Skill] = []
     if not plugin_only:
         for d in additional_dirs:
-            skills_dir = str(Path(d) / ".claude" / "skills")
+            skills_dir = str(Path(d) / ".clawcodex" / "skills")
             additional_skills.extend(load_skills_from_skills_dir(skills_dir, "projectSettings"))
 
     all_skills = managed_skills + user_skills + project_skills + additional_skills
@@ -857,11 +857,11 @@ def discover_skill_dirs_for_paths(
     file_paths: list[str],
     cwd: str,
 ) -> list[str]:
-    """Walk parent dirs of each touched file looking for `.claude/skills`.
+    """Walk parent dirs of each touched file looking for `.clawcodex/skills`.
 
     Mirrors TS `discoverSkillDirsForPaths` (`loadSkillsDir.ts:951+`).
     Each newly-found skills dir whose containing folder is gitignored is
-    skipped (e.g. `node_modules/pkg/.claude/skills` won't load silently);
+    skipped (e.g. `node_modules/pkg/.clawcodex/skills` won't load silently);
     `git check-ignore` handles nested `.gitignore` and global rules with
     correct precedence. Fails open outside a git repo.
     """
@@ -872,7 +872,7 @@ def discover_skill_dirs_for_paths(
         current_dir = str(Path(file_path).parent)
 
         while current_dir.startswith(resolved_cwd + os.sep):
-            skill_dir = os.path.join(current_dir, ".claude", "skills")
+            skill_dir = os.path.join(current_dir, ".clawcodex", "skills")
             if skill_dir not in _dynamic_skill_dirs:
                 _dynamic_skill_dirs.add(skill_dir)
                 if Path(skill_dir).is_dir():
@@ -1078,16 +1078,14 @@ def clear_skill_registry() -> None:
         _skill_registry.clear()
 
 
-def _legacy_user_skill_dirs(
+def _extra_user_skill_dirs(
     user_skills_dir: str | Path | None,
 ) -> list[Path]:
-    """Resolve the legacy clawcodex user-skill locations.
+    """Resolve only explicitly configured extra user-skill locations.
 
-    The TS-port loader walks `~/.claude/skills` (handled inside
-    `get_skill_dir_commands`). This function returns the additional
-    clawcodex-specific dirs plus any env overrides so existing setups
-    that drop skills under `CLAWCODEX_SKILLS_DIR` or `~/.clawcodex/skills`
-    continue to work.
+    Canonical ``~/.clawcodex/skills`` discovery already happens in
+    ``get_skill_dir_commands``; loading it again here would bypass the
+    conditional ``paths:`` hold.
     """
     dirs: list[Path] = []
 
@@ -1104,22 +1102,19 @@ def _legacy_user_skill_dirs(
         if p not in dirs:
             dirs.append(p)
 
-    clawcodex_dir = (Path.home() / ".clawcodex" / "skills").expanduser().resolve()
-    if clawcodex_dir not in dirs:
-        dirs.append(clawcodex_dir)
-
     return dirs
 
 
-def _legacy_project_skill_dirs(project_root: str | Path) -> list[Path]:
-    """Resolve clawcodex-specific project skill dirs.
+# Compatibility seams retained for downstream plugins/tests. Their defaults
+# now follow the upstream rebrand: canonical project/user directories are
+# already loaded, so only explicit extras are returned.
+def _legacy_user_skill_dirs(user_skills_dir: str | Path | None) -> list[Path]:
+    return _extra_user_skill_dirs(user_skills_dir)
 
-    `.claude/skills` is already handled by `get_skill_dir_commands`; here
-    we add `.clawcodex/skills` as a sibling so the legacy layout still
-    works.
-    """
-    pr = Path(project_root).expanduser().resolve()
-    return [pr / ".clawcodex" / "skills"]
+
+def _legacy_project_skill_dirs(project_root: str | Path) -> list[Path]:
+    _ = project_root
+    return []
 
 
 def _load_dirs_as(
@@ -1226,9 +1221,11 @@ def discover_all_skills(
         skill for skill in disk_skills if skill.loaded_from not in {"managed", "user", "project"}
     ]
     merge_order = (
-        list(bundled)
-        + list(extra_managed_skills)
+        list(extra_managed_skills)
         + disk_managed
+        # Core bundled names are reserved against user/project shadowing;
+        # managed policy may still override them deliberately.
+        + list(bundled)
         + disk_user
         + list(extra_user_skills)
         + disk_project
@@ -1257,7 +1254,18 @@ def get_registered_skill(name: str) -> Skill | None:
         found = _skill_registry.get(name)
     if found is not None:
         return found
-    return get_bundled_skill_by_name(name)
+    bundled = get_bundled_skill_by_name(name)
+    if bundled is not None:
+        return bundled
+    try:
+        from src.plugins.builtin_plugins import get_builtin_plugin_skill_commands
+
+        for skill in get_builtin_plugin_skill_commands():
+            if skill.name == name or name in getattr(skill, "aliases", ()):
+                return skill
+    except Exception:  # noqa: BLE001 - plugins are non-critical
+        pass
+    return None
 
 
 # Back-compat shim for the old PromptSkill-producing loader. Some callers

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
+from .base import BaseProvider, ChatMessage, ChatResponse
+
 
 # Provider metadata for login/UI
 class ProviderInfo(TypedDict):
@@ -14,57 +16,63 @@ class ProviderInfo(TypedDict):
 
 
 PROVIDER_INFO: dict[str, ProviderInfo] = {
-    'anthropic': {
-        'label': 'Anthropic Claude',
-        'default_base_url': 'https://api.anthropic.com',
-        'default_model': 'claude-sonnet-4-6',
-        'available_models': [
+    "anthropic": {
+        "label": "Anthropic Claude",
+        "default_base_url": "https://api.anthropic.com",
+        "default_model": "claude-sonnet-4-6",
+        "available_models": [
+            # Frontier (above Opus tier)
+            "claude-fable-5",
             # Claude 4 series (latest)
-            'claude-sonnet-4-6',
-            'claude-sonnet-4-5',
-            'claude-sonnet-4-5-20250929',
-            'claude-sonnet-4-0',
-            'claude-sonnet-4-20250514',
-            'claude-opus-4-6',
-            'claude-opus-4-5',
-            'claude-opus-4-5-20251101',
-            'claude-opus-4-1',
-            'claude-opus-4-1-20250805',
-            'claude-opus-4-0',
-            'claude-opus-4-20250514',
-            'claude-haiku-4-5',
-            'claude-haiku-4-5-20251001',
+            "claude-sonnet-4-6",
+            "claude-sonnet-4-5",
+            "claude-sonnet-4-5-20250929",
+            "claude-sonnet-4-0",
+            "claude-sonnet-4-20250514",
+            "claude-opus-4-8",
+            "claude-opus-4-6",
+            "claude-opus-4-5",
+            "claude-opus-4-5-20251101",
+            "claude-opus-4-1",
+            "claude-opus-4-1-20250805",
+            "claude-opus-4-0",
+            "claude-opus-4-20250514",
+            "claude-haiku-4-5",
+            "claude-haiku-4-5-20251001",
             # Legacy
-            'claude-3-5-sonnet-20241022',
-            'claude-3-5-haiku-20241022',
-            'claude-3-opus-20240229',
-            'claude-3-sonnet-20240229',
-            'claude-3-haiku-20240307',
+            "claude-3-5-sonnet-20241022",
+            "claude-3-5-haiku-20241022",
+            "claude-3-opus-20240229",
+            "claude-3-sonnet-20240229",
+            "claude-3-haiku-20240307",
         ],
     },
-    'openai': {
-        'label': 'OpenAI GPT',
-        'default_base_url': 'https://api.openai.com/v1',
-        'default_model': 'gpt-5.4',
-        'available_models': [
-            # GPT-5.4 series (latest flagship)
-            'gpt-5.4',
-            'gpt-5.4-pro',
-            'gpt-5.4-mini',
-            'gpt-5.4-nano',
+    "openai": {
+        "label": "OpenAI GPT",
+        "default_base_url": "https://api.openai.com/v1",
+        "default_model": "gpt-5.4",
+        "available_models": [
+            # GPT-5.5 (flagship; also served by the ChatGPT subscription)
+            "gpt-5.5",
+            # GPT-5.4 series
+            "gpt-5.4",
+            "gpt-5.4-pro",
+            "gpt-5.4-mini",
+            "gpt-5.4-nano",
             # GPT-5.2 series (previous)
-            'gpt-5.2',
-            'gpt-5.2-pro',
-            'gpt-5.2-mini',
-            'gpt-5.2-nano',
+            "gpt-5.2",
+            "gpt-5.2-pro",
+            "gpt-5.2-mini",
+            "gpt-5.2-nano",
             # GPT-5.3-Codex (coding-specialized)
-            'gpt-5.3-codex',
+            "gpt-5.3-codex",
+            "gpt-5.3-codex-spark",
             # Legacy GPT-4 series
-            'gpt-4o',
-            'gpt-4o-mini',
-            'gpt-4-turbo',
-            'gpt-4',
-            'gpt-3.5-turbo',
+            "gpt-4o",
+            "gpt-4o-mini",
+            "gpt-4-turbo",
+            "gpt-4",
+            "gpt-3.5-turbo",
         ],
     },
     "zai": {
@@ -77,85 +85,85 @@ PROVIDER_INFO: dict[str, ProviderInfo] = {
             "GLM-5.2",  # opt-in preview
         ],
     },
-    'minimax': {
-        'label': 'Minimax AI',
-        'default_base_url': 'https://api.minimaxi.com/anthropic',
-        'default_model': 'MiniMax-M2.7',
-        'available_models': [
-            # M2 series (latest)
-            'MiniMax-M2.7',
-            'MiniMax-M2.7-highspeed',
-            'MiniMax-M2.5',
-            'MiniMax-M2.5-highspeed',
-            'M2-her',
+    "minimax": {
+        "label": "Minimax AI",
+        "default_base_url": "https://api.minimax.io/anthropic",
+        "default_model": "MiniMax-M3",
+        "available_models": [
+            "MiniMax-M3",
+            "MiniMax-M2.7",
+            "MiniMax-M2.7-highspeed",
+            "MiniMax-M2.5",
+            "MiniMax-M2.5-highspeed",
+            "M2-her",
             # Historical
-            'MiniMax-M2.1',
-            'MiniMax-M2.1-highspeed',
-            'MiniMax-M2',
+            "MiniMax-M2.1",
+            "MiniMax-M2.1-highspeed",
+            "MiniMax-M2",
         ],
     },
-    'deepseek': {
-        'label': 'DeepSeek',
-        'default_base_url': 'https://api.deepseek.com',
-        'default_model': 'deepseek-v4-pro',
-        'available_models': [
+    "deepseek": {
+        "label": "DeepSeek",
+        "default_base_url": "https://api.deepseek.com",
+        "default_model": "deepseek-v4-pro",
+        "available_models": [
             # V4 series (current)
-            'deepseek-v4-pro',
-            'deepseek-v4-flash',
+            "deepseek-v4-pro",
+            "deepseek-v4-flash",
             # Legacy aliases (being deprecated; map to v4-flash modes)
-            'deepseek-chat',
-            'deepseek-reasoner',
+            "deepseek-chat",
+            "deepseek-reasoner",
         ],
     },
-    'gemini': {
-        'label': 'Google Gemini',
-        'default_base_url': 'https://generativelanguage.googleapis.com/v1beta/openai/',
-        'default_model': 'gemini-2.5-pro',
-        'available_models': [
-            'gemini-2.5-pro',
-            'gemini-2.5-flash',
-            'gemini-2.0-flash',
+    "gemini": {
+        "label": "Google Gemini",
+        "default_base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "default_model": "gemini-2.5-pro",
+        "available_models": [
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
         ],
     },
-    'openrouter': {
-        'label': 'OpenRouter (multi-vendor proxy)',
-        'default_base_url': 'https://openrouter.ai/api/v1',
-        'default_model': 'anthropic/claude-sonnet-4.5',
-        'available_models': [
+    "openrouter": {
+        "label": "OpenRouter (multi-vendor proxy)",
+        "default_base_url": "https://openrouter.ai/api/v1",
+        "default_model": "anthropic/claude-sonnet-4.5",
+        "available_models": [
             # DeepSeek V4 (latest, strongest — top of the list)
-            'deepseek/deepseek-v4-pro',
-            'deepseek/deepseek-v4-flash',
+            "deepseek/deepseek-v4-pro",
+            "deepseek/deepseek-v4-flash",
             # Anthropic
-            'anthropic/claude-sonnet-4.5',
-            'anthropic/claude-opus-4.1',
-            'anthropic/claude-haiku-4.5',
-            'anthropic/claude-3.5-sonnet',
-            'anthropic/claude-3.5-haiku',
+            "anthropic/claude-sonnet-4.5",
+            "anthropic/claude-opus-4.1",
+            "anthropic/claude-haiku-4.5",
+            "anthropic/claude-3.5-sonnet",
+            "anthropic/claude-3.5-haiku",
             # OpenAI
-            'openai/gpt-5',
-            'openai/gpt-5-mini',
-            'openai/gpt-4o',
-            'openai/gpt-4o-mini',
-            'openai/o1',
-            'openai/o1-mini',
+            "openai/gpt-5",
+            "openai/gpt-5-mini",
+            "openai/gpt-4o",
+            "openai/gpt-4o-mini",
+            "openai/o1",
+            "openai/o1-mini",
             # Google
-            'google/gemini-2.5-pro',
-            'google/gemini-2.5-flash',
-            'google/gemini-2.0-flash',
+            "google/gemini-2.5-pro",
+            "google/gemini-2.5-flash",
+            "google/gemini-2.0-flash",
             # Meta
-            'meta-llama/llama-3.3-70b-instruct',
-            'meta-llama/llama-3.1-405b-instruct',
+            "meta-llama/llama-3.3-70b-instruct",
+            "meta-llama/llama-3.1-405b-instruct",
             # Mistral
-            'mistralai/mistral-large',
-            'mistralai/mixtral-8x22b-instruct',
+            "mistralai/mistral-large",
+            "mistralai/mixtral-8x22b-instruct",
             # DeepSeek (V3.x line — V4 is at top of list)
-            'deepseek/deepseek-v3.2',
-            'deepseek/deepseek-v3.2-speciale',
-            'deepseek/deepseek-v3.1-terminus',
-            'deepseek/deepseek-chat-v3.1',
-            'deepseek/deepseek-r1-0528',
+            "deepseek/deepseek-v3.2",
+            "deepseek/deepseek-v3.2-speciale",
+            "deepseek/deepseek-v3.1-terminus",
+            "deepseek/deepseek-chat-v3.1",
+            "deepseek/deepseek-r1-0528",
             # xAI
-            'x-ai/grok-2',
+            "x-ai/grok-2",
         ],
     },
 }
@@ -198,6 +206,15 @@ PROVIDER_ALIASES: dict[str, str] = {
 for _alias, _canonical in _spec_aliases().items():
     PROVIDER_ALIASES.setdefault(_alias, _canonical)
 
+# ``glm`` intentionally remains an alias of the canonical upstream ``zai``
+# provider.  The downstream extension keeps its historical native class
+# addressable through ``get_provider_class("glm")`` without turning ``glm``
+# back into a second provider identity.
+#
+# Kimi is still a distinct downstream provider implementation rather than the
+# generic ``moonshot`` registry alias, so keep that historical id literal.
+PROVIDER_ALIASES["kimi"] = "kimi"
+
 
 def _canonical_provider_name(provider_name: str) -> str:
     """Resolve a legacy/alternate provider spelling to its canonical id."""
@@ -217,50 +234,53 @@ def canonical_provider_name(provider_name: str) -> str:
 
 def get_provider_info(provider_name: str) -> ProviderInfo:
     """Get provider info by name (legacy aliases accepted)."""
+    _ensure_downstream_providers()
+    if provider_name in PROVIDER_INFO:
+        return PROVIDER_INFO[provider_name]
     canonical = _canonical_provider_name(provider_name)
     if canonical not in PROVIDER_INFO:
         raise ValueError(f"Unknown provider: {provider_name}")
     return PROVIDER_INFO[canonical]
 
 
-# Lazy registry for providers added by clawcodex_ext / extensions.
-# Populated by ``clawcodex_ext.providers.factory.register_provider()``.
 _EXTRA_PROVIDER_CLASSES: dict[str, type] = {}
 
 
+def _ensure_downstream_providers() -> None:
+    """Install optional secondary registrations after core import completes."""
+    try:
+        from clawcodex_ext.providers import _init_provider_extensions
+
+        _init_provider_extensions()
+    except Exception:
+        pass
+
+
+def _extra_provider_class(provider_name: str):
+    entry = _EXTRA_PROVIDER_CLASSES.get(provider_name)
+    if entry is None:
+        return None
+    if callable(entry) and not isinstance(entry, type):
+        entry = entry()
+        _EXTRA_PROVIDER_CLASSES[provider_name] = entry
+    return entry
+
+
 def get_provider_class(provider_name: str):
-    """Get provider class by name (legacy aliases accepted).
-
-    Resolution order:
-
-    1. ``_EXTRA_PROVIDER_CLASSES`` — populated by
-       ``clawcodex_ext.providers.factory.register_provider()`` and
-       checked FIRST so downstream can override any built-in
-       provider. Values may be a class or a zero-arg callable that
-       returns one (lazy import).
-    2. The hardcoded ``if`` branches below — upstream built-in
-       defaults (anthropic, openai, zai, minimax, openrouter,
-       deepseek, gemini). Used as fallbacks when no downstream
-       override is registered.
-    3. The data-driven OpenAI-compatible spec registry
-       (``_SPECS_BY_ID``) for vendors that differ only by base URL /
-       default model / env vars.
-
-    Legacy/alternate provider spellings (``glm`` → ``zai`` …) are
-    normalized via :func:`_canonical_provider_name` first.
-    """
+    """Get provider class by name (legacy aliases accepted)."""
+    _ensure_downstream_providers()
+    extra = _extra_provider_class(provider_name)
+    if extra is not None:
+        return extra
     provider_name = _canonical_provider_name(provider_name)
-    if provider_name in _EXTRA_PROVIDER_CLASSES:
-        entry = _EXTRA_PROVIDER_CLASSES[provider_name]
-        if callable(entry) and not isinstance(entry, type):
-            entry = entry()
-            _EXTRA_PROVIDER_CLASSES[provider_name] = entry
-        return entry
+    extra = _extra_provider_class(provider_name)
+    if extra is not None:
+        return extra
     if provider_name == "anthropic":
         from .anthropic_provider import AnthropicProvider
 
         return AnthropicProvider
-    if provider_name == 'openai':
+    if provider_name == "openai":
         from .openai_provider import OpenAIProvider
 
         return OpenAIProvider
@@ -272,15 +292,15 @@ def get_provider_class(provider_name: str):
         from .minimax_provider import MinimaxProvider
 
         return MinimaxProvider
-    if provider_name == 'openrouter':
+    if provider_name == "openrouter":
         from .openrouter_provider import OpenRouterProvider
 
         return OpenRouterProvider
-    if provider_name == 'deepseek':
+    if provider_name == "deepseek":
         from .deepseek_provider import DeepSeekProvider
 
         return DeepSeekProvider
-    if provider_name == 'gemini':
+    if provider_name == "gemini":
         from .gemini_provider import GeminiProvider
 
         return GeminiProvider
@@ -328,6 +348,32 @@ def provider_requires_api_key(provider_name: str) -> bool:
     return spec.requires_api_key if spec else True
 
 
+def provider_has_credentials(provider_name: str, api_key: str) -> bool:
+    """Whether requests to ``provider_name`` can authenticate.
+
+    True when an API key is present, the provider needs none (local
+    servers), or the user has a stored subscription OAuth login — Claude
+    Pro/Max for ``anthropic`` (#697) or a ChatGPT plan for ``openai``.
+    Every "no API key configured" fatality gate must go through this
+    helper (startup validation, agent-server session init, agent-server
+    provider switch) so subscription logins work on all of them —
+    gating on ``provider_requires_api_key`` alone bricked subscription
+    sessions in the TUI.
+    """
+    if api_key or not provider_requires_api_key(provider_name):
+        return True
+    canonical = _canonical_provider_name(provider_name)
+    if canonical == "anthropic":
+        from src.auth.anthropic_subscription import load_credentials
+
+        return load_credentials() is not None
+    if canonical == "openai":
+        from src.auth.openai_subscription import load_credentials
+
+        return load_credentials() is not None
+    return False
+
+
 def resolve_api_key(
     provider_name: str, provider_cfg: dict[str, Any] | None = None
 ) -> str:
@@ -364,53 +410,23 @@ def resolve_api_key(
 
 
 # Legacy registry for display purposes
-AVAILABLE_PROVIDERS: dict[str, str] = {k: v['label'] for k, v in PROVIDER_INFO.items()}
-
-
-# ---------------------------------------------------------------------------
-# Facade re-exports — 二开 provider factory + registration API
-#
-# The real implementations live in ``clawcodex_ext/providers/factory.py``.
-# They are imported lazily so that the upstream core remains usable even
-# when the extension package is not installed.
-# ---------------------------------------------------------------------------
+AVAILABLE_PROVIDERS: dict[str, str] = {k: v["label"] for k, v in PROVIDER_INFO.items()}
 
 
 def __getattr__(name: str):
-    """Lazy re-export for 二开 provider API symbols."""
-    _FACADE_NAMES = frozenset(
-        {
-            'create_provider',
-            'should_use_litellm',
-            'register_provider',
-            'register_provider_info',
-        }
-    )
-    if name in _FACADE_NAMES:
-        from clawcodex_ext.providers.factory import (  # noqa: F401
-            create_provider as _create_provider,
-            should_use_litellm as _should_use_litellm,
-            register_provider as _register_provider,
-            register_provider_info as _register_provider_info,
-        )
+    """Lazy re-export of the downstream construction/registration API."""
+    if name not in {
+        "create_provider",
+        "should_use_litellm",
+        "register_provider",
+        "register_provider_info",
+    }:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from clawcodex_ext.providers import factory
 
-        # Cache on the module so subsequent lookups skip __getattr__
-        import sys
-
-        mod = sys.modules[__name__]
-        mod.create_provider = _create_provider
-        mod.should_use_litellm = _should_use_litellm
-        mod.register_provider = _register_provider
-        mod.register_provider_info = _register_provider_info
-        return locals()[
-            {
-                'create_provider': '_create_provider',
-                'should_use_litellm': '_should_use_litellm',
-                'register_provider': '_register_provider',
-                'register_provider_info': '_register_provider_info',
-            }[name]
-        ]
-    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+    value = getattr(factory, name)
+    globals()[name] = value
+    return value
 
 
 __all__ = [
@@ -422,6 +438,7 @@ __all__ = [
     "get_provider_info",
     "canonical_provider_name",
     "provider_env_vars",
+    "provider_has_credentials",
     "provider_requires_api_key",
     "resolve_api_key",
     "PROVIDER_INFO",

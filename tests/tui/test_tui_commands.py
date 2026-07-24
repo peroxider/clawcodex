@@ -80,6 +80,7 @@ _KNOWN_HANDLED_COMMANDS: set[str] = {
     "/init",
     "/provider",
     "/multimodel",
+    "/auto-fix",
     "/lkb",
     "/recap",
     "/btw",
@@ -96,6 +97,7 @@ _KNOWN_HANDLED_COMMANDS: set[str] = {
     "/export",
     "/output-style",
     "/security-review",
+    "/review",
     "/statusline",
     "/telemetry",
     "/copy",
@@ -110,6 +112,10 @@ _KNOWN_HANDLED_COMMANDS: set[str] = {
     "/voice",
     "/workflows",
     "/deep-research",
+    "/dashboard",
+    "/dialogue",
+    "/dream",
+    "/eco",
     "/render-last",
     "/skills",
     "/tts",
@@ -127,16 +133,17 @@ def test_all_local_builtins_have_handlers():
 
 def test_all_suggestion_commands_have_handlers(tmp_path: Path):
     """Every command returned by ``build_command_suggestions`` must have
-    a known handler (local, registry, or skill)."""
+    a known handler (local, registry, tool adapter, or skill)."""
     suggestions = build_command_suggestions(tmp_path)
-    for s in suggestions:
-        # Skills are handled by the skill system
-        if s.source == "skills":
-            continue
-        slash = f"/{s.name}"
-        assert slash in _KNOWN_HANDLED_COMMANDS, (
-            f"{slash} (source={s.source}) is in suggestions but has no known handler"
-        )
+    missing = [
+        f"/{suggestion.name} (source={suggestion.source})"
+        for suggestion in suggestions
+        if suggestion.source not in {"skills", "tools"}
+        and f"/{suggestion.name}" not in _KNOWN_HANDLED_COMMANDS
+    ]
+    assert not missing, (
+        "suggestions have no known handler: " + ", ".join(missing)
+    )
 
 
 def test_command_suggestions_include_multimodel(tmp_path: Path):

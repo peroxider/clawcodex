@@ -189,6 +189,39 @@ def _parse_plan_transcript(
     return (title, summary, tuple(steps))
 
 
+
+def _emit_terminal_agent_progress(
+    parent_context: Any,
+    *,
+    agent_id: str,
+    name: Any,
+    description: Any,
+    subagent_type: Any,
+    status: str,
+) -> None:
+    """R5 round-5 (ch13) — emit a TERMINAL ``agent_progress`` so the TUI
+    subagent HUD marks the subagent done instead of lingering "running"
+    until the end-of-turn flush. Round-4 emitted this only on the SYNC
+    SUCCESS path; async subagents (which finish via
+    ``enqueue_agent_notification``, never ``agent_progress``) and failed sync
+    subagents were never marked terminal. Uses the SAME ``name`` +
+    ``description`` the running emits use so the HUD goal label doesn't flip
+    to the truncated prompt at completion (critic residual). Guarded — a
+    progress emit must never fail a completed/failed delegation."""
+    try:
+        emit = getattr(parent_context, "agent_progress_emit", None)
+        if emit is not None:
+            emit({
+                "agent_id": agent_id,
+                "name": name,
+                "description": description,
+                "subagent_type": subagent_type,
+                "activity": None,
+                "status": status,
+            })
+    except Exception:  # noqa: BLE001
+        logger.debug("terminal subagent progress emit failed", exc_info=True)
+
 # Input schema matching typescript/src/tools/AgentTool/AgentTool.tsx
 AGENT_INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -359,11 +392,19 @@ def make_agent_tool(
 
         force_fork = tool_input.get("_force_fork") is True
         refresh_skill_listing = tool_input.get("_refresh_skill_listing") is True
+        inherit_context = tool_input.get("_inherit_context") is True
 
         description = tool_input.get("description", prompt[:50])
         subagent_type = tool_input.get("subagent_type")
-        model = tool_input.get("model")
-        inherit_context = tool_input.get("_inherit_context") is True
+        # Coordinator mode ignores the model param — the coordinator prompt
+        # says "Do not set the model parameter. Workers need the default
+        # model"; this enforces it. Mirrors AgentTool.tsx:252. Function-local
+        # import: src.coordinator's package init imports worker_agent →
+        # agent_definitions (cycle at import time, safe at call time).
+        from src.coordinator.mode import is_coordinator_mode
+
+        model = None if is_coordinator_mode() else tool_input.get("model")
+        run_in_background = bool(tool_input.get("run_in_background", False))
         # Chapter-10 / WI-6.1 — optional human-readable name. We
         # validate / register it AFTER agent_id is generated so the
         # collision-on-running check can compare against the registry
@@ -551,7 +592,12 @@ def make_agent_tool(
 
         agent_id = generate_task_id("local_agent")
         start_time = time.time()
-        is_async = run_in_background
+        # Coordinator spawns are ALWAYS async so results arrive as
+        # <task-notification> user messages — the interaction model the
+        # coordinator system prompt teaches. Mirrors AgentTool.tsx:562's
+        # ``|| isCoordinator`` term (the selectedAgent.background / fork /
+        # kairos terms there belong to their own unported features).
+        is_async = run_in_background or is_coordinator_mode()
 
         # Spawn-attribution record: the Agent tool is the ONLY place that
         # knows both the child's ``agent_id`` and the ``description`` at
@@ -617,7 +663,7 @@ def make_agent_tool(
         fork_context_messages: list[Any] | None = None
         fork_query_source: str | None = None
         fork_use_exact_tools = False
-        fork_parent_system_prompt: str | None = None
+        fork_parent_system_prompt: "str | list | None" = None
         fork_prompt = prompt
 
         if inherit_context and not is_fork_path:
@@ -672,6 +718,7 @@ def make_agent_tool(
             provider=effective_provider,
             model=model,
             agent_id=agent_id,
+            agent_name=agent_name,
             is_async=is_async,
             max_turns=agent_def.max_turns,
             context_messages=fork_context_messages,
@@ -680,6 +727,43 @@ def make_agent_tool(
             parent_system_prompt=fork_parent_system_prompt,
             refresh_skill_listing=refresh_skill_listing,
         )
+
+        # Stream the subagent's live progress to the UI when the host wired a
+        # hook (agent-server only). run_agent calls on_message per message, so
+        # this covers both the sync and background paths. Purely additive — no
+        # hook means no behavior change.
+        _emit_progress = getattr(context, "agent_progress_emit", None)
+        if _emit_progress is not None:
+            from src.tasks.progress import (
+                ProgressTracker,
+                total_tokens_from_tracker,
+                update_progress_from_message,
+            )
+
+            _tracker = ProgressTracker()
+
+            def _on_subagent_message(message: Any) -> None:
+                try:
+                    update_progress_from_message(_tracker, message)
+                    acts = _tracker.recent_activities
+                    activity = None
+                    if acts:
+                        last = acts[-1]
+                        activity = last.activity_description or last.tool_name
+                    _emit_progress({
+                        "agent_id": agent_id,
+                        "name": agent_name,
+                        "description": description,
+                        "subagent_type": subagent_type,
+                        "activity": activity,
+                        "tool_use_count": _tracker.tool_use_count,
+                        "tokens": total_tokens_from_tracker(_tracker),
+                        "status": "running",
+                    })
+                except Exception:
+                    logger.debug("subagent progress emit failed", exc_info=True)
+
+            run_params.on_message = _on_subagent_message
 
         if is_async:
             return _launch_async_agent(
@@ -700,6 +784,7 @@ def make_agent_tool(
                 prompt=prompt,
                 description=description,
                 agent_type=agent_def.agent_type,
+                agent_name=agent_name,
             )
 
     def _run_sync_agent(
@@ -711,6 +796,7 @@ def make_agent_tool(
         prompt: str,
         description: str,
         agent_type: str,
+        agent_name: Any = None,
     ) -> ToolResult:
         """Run an agent synchronously and return the result.
 
@@ -874,6 +960,12 @@ def make_agent_tool(
                 loop.run_until_complete(_go())
             finally:
                 loop.close()
+        # R5 (ch13) — the HUD goal label: use the SAME name/description the
+        # running emits use, not the truncated prompt (critic residual).
+        _hud_name = agent_name if agent_name is not None else \
+            getattr(run_params.agent_definition, "agent_type", "")
+        _hud_desc = description if description is not None else \
+            (run_params.prompt or "")[:80]
 
         run_exc: BaseException | None = None
         try:
@@ -898,6 +990,14 @@ def make_agent_tool(
             sync_state.status = "failed"
             sync_state.error = str(exc)
             sync_state.completed_at = time.time()
+            _emit_terminal_agent_progress(
+                run_params.parent_context,
+                agent_id=agent_id,
+                name=_hud_name,
+                description=_hud_desc,
+                subagent_type=agent_type,
+                status="failed",
+            )
             raise
         finally:
             if transcript_writer is not None:
@@ -948,6 +1048,15 @@ def make_agent_tool(
                 session_id=parent_sid,
                 transcript=result_text,
             )
+
+        _emit_terminal_agent_progress(
+            run_params.parent_context,
+            agent_id=agent_id,
+            name=_hud_name,
+            description=_hud_desc,
+            subagent_type=agent_type,
+            status="completed",
+        )
 
         return TR(
             name=AGENT_TOOL_NAME,
@@ -1035,11 +1144,24 @@ def make_agent_tool(
             except AgentNameAlreadyClaimedError as exc:
                 raise ToolInputError(str(exc)) from exc
 
+        # R6 — a dedicated AbortController for this background run, stored on
+        # the task state so kill_async_agent can .abort() it (→ the run's
+        # query() loop halts). It is FRESH (not the parent turn's), so it
+        # preserves async isolation (killing the parent turn doesn't kill the
+        # bg agent) — the same isolation run_agent would otherwise get from
+        # its own internal controller (run_agent.py:291), but now reachable.
+        # Setting run_params.abort_controller makes run_agent use THIS one
+        # (run_agent.py:286-287) instead of an unreachable internal one.
+        from src.utils.abort_controller import AbortController as _AbortController
+        _async_abort = _AbortController()
+        run_params.abort_controller = _async_abort
+
         register_async_agent(
             agent_id=agent_id,
             description=description,
             prompt=prompt,
             agent_type=agent_type,
+            abort_controller=_async_abort,
             registry=context.runtime_tasks,
             parent_session_id=get_session_id(),
         )
@@ -1121,6 +1243,29 @@ def make_agent_tool(
                         result_text=result_text,
                         registry=context.runtime_tasks,
                     )
+                    # R5 (ch13) — mark the async subagent terminal in the HUD.
+                    # Round-4 wired terminal progress for SYNC only; async
+                    # finished via enqueue_agent_notification alone, so the
+                    # HUD lingered "running" until the end-of-turn flush.
+                    # Report the AUTHORITATIVE runtime status, not a hardcoded
+                    # "completed". A concurrent kill marks the task terminal
+                    # "killed" in the registry; when this success branch runs
+                    # (on natural completion — local async agents don't yet
+                    # wire abort_event, so the run finishes normally — or a
+                    # cooperative stop where wired), complete_agent_task
+                    # no-ops on that terminal state (local_agent.py:287), so
+                    # the registry status stays "killed" and the HUD should
+                    # say so (the ui-tui mapping handles killed).
+                    _st = context.runtime_tasks.get(agent_id)
+                    _final_status = (
+                        str(getattr(_st, "status", "completed"))
+                        if _st is not None else "completed"
+                    )
+                    _emit_terminal_agent_progress(
+                        context, agent_id=agent_id, name=agent_name,
+                        description=description, subagent_type=agent_type,
+                        status=_final_status,
+                    )
                     # Chunk D / WI-3.1 + WI-3.2 — enqueue a single
                     # ``<task-notification>`` envelope. Atomic check-and-
                     # set on ``state.notified`` inside the helper means
@@ -1174,12 +1319,22 @@ def make_agent_tool(
                         final_message=partial,
                         registry=context.runtime_tasks,
                     )
+                    # R5 (ch13) — mark the failed async subagent terminal too.
+                    _emit_terminal_agent_progress(
+                        context, agent_id=agent_id, name=agent_name,
+                        description=description, subagent_type=agent_type,
+                        status="failed",
+                    )
                     logger.exception(
                         "Async agent %s (%s) failed",
                         agent_id,
                         agent_type,
                     )
             finally:
+                # Background-bash reaping now lives in the CORE run_agent
+                # generator's finally (src/agent/run_agent.py) so it covers
+                # async + sync + workflow agents on the single shared path —
+                # not just this backgrounded wrapper.
                 if transcript is not None:
                     transcript.close()
 
@@ -1234,7 +1389,11 @@ def make_agent_tool(
                 )
                 available = []
             agents = filter_agents_by_mcp_requirements(agents, available)
-        return get_agent_prompt(agents)
+        # Env read live at prompt-build time, mirroring AgentTool.tsx:223-224's
+        # inline check (function-local import — see _agent_call).
+        from src.coordinator.mode import is_coordinator_mode
+
+        return get_agent_prompt(agents, is_coordinator=is_coordinator_mode())
 
     def _map_result_to_api(result: Any, tool_use_id: str) -> dict[str, Any]:
         if not isinstance(result, dict):
@@ -1288,6 +1447,20 @@ def make_agent_tool(
         map_result_to_api=_map_result_to_api,
         max_result_size_chars=200_000,
         is_destructive=lambda _input: True,
+        # ch07 round-4 GAP A — the Agent tool is concurrency-safe (TS
+        # AgentTool.tsx:1288-1290, and the tool prompt tells the model to
+        # launch multiple agents concurrently). A run of consecutive Agent
+        # tool_use blocks now partitions into ONE parallel batch instead of
+        # N serial batches, so default foreground multi-agent fan-out runs
+        # concurrently (bounded by MAX_TOOL_USE_CONCURRENCY). Safe: sync
+        # tool calls run on worker threads (tool_execution.py:558
+        # asyncio.to_thread), sub-agents get fully isolated contexts +
+        # abort controllers, and the model is responsible for not spawning
+        # conflicting agents (same contract as TS). NOTE: is_read_only
+        # stays False (unset) — unlike TS's isReadOnly()=true — because the
+        # port's sub-agents run Edit/Write, so Agent is not read-only in
+        # effect; concurrency-safety != read-only.
+        is_concurrency_safe=lambda _input: True,
         search_hint="agent spawn subagent delegate task",
         to_auto_classifier_input=lambda input_data: (input_data or {}).get("prompt", "")[:200],
         get_activity_description=lambda input_data: (
@@ -1299,7 +1472,7 @@ def make_agent_tool(
 def _resolve_parent_system_prompt(
     context: ToolContext,
     agent_definitions: list[AgentDefinition],
-) -> str | None:
+) -> "str | list | None":
     """Resolve the parent system prompt for fork children.
 
     Mirrors the layered fallback in
@@ -1321,6 +1494,12 @@ def _resolve_parent_system_prompt(
     Returns ``None`` when no candidate is available.
     """
     rendered = getattr(context, "rendered_system_prompt", None)
+    # ch09 round-4 WI-1 — accept the parent's actual prompt shape. On the
+    # live path this is a non-empty list[dict] of system blocks; on
+    # string-prompt callers it is a str. Both are threaded verbatim into
+    # the fork child's system_prompt for byte-identity.
+    if isinstance(rendered, list) and rendered:
+        return rendered
     if isinstance(rendered, str) and rendered.strip():
         return rendered
 

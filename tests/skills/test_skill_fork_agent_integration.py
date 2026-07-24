@@ -86,7 +86,7 @@ def test_context_fork_uses_real_fork_runner_with_gate_disabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project_skill = tmp_path / ".claude" / "skills" / "child-only"
+    project_skill = tmp_path / ".clawcodex" / "skills" / "child-only"
     project_skill.mkdir(parents=True)
     (project_skill / "SKILL.md").write_text(
         "---\nname: child-only\ndescription: visible only in child catalog\n---\nBody",
@@ -176,7 +176,7 @@ def test_context_fork_uses_real_fork_runner_with_gate_disabled(
     assert len(provider.calls) == 2
     system_prompt = _system_text(provider.calls[0])
     assert "stale-parent" not in system_prompt
-    assert "child-only: visible only in child catalog" in system_prompt
+    assert "**child-only**: visible only in child catalog" in system_prompt
     assert provider.calls[0]["model"] == "skill-model"
     assert provider.calls[0]["reasoning_effort"] == "high"
 
@@ -211,7 +211,7 @@ def test_child_skill_listing_is_rebuilt_for_each_workspace(tmp_path: Path) -> No
     first_root = tmp_path / "first"
     second_root = tmp_path / "second"
     for root, name in ((first_root, "first-only"), (second_root, "second-only")):
-        skill_dir = root / ".claude" / "skills" / name
+        skill_dir = root / ".clawcodex" / "skills" / name
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(
             f"---\nname: {name}\ndescription: visible only in {name}\n---\nBody",
@@ -235,9 +235,9 @@ def test_child_skill_listing_is_rebuilt_for_each_workspace(tmp_path: Path) -> No
     first = render(first_root)
     second = render(second_root)
 
-    assert "first-only: visible only in first-only" in first
+    assert "**first-only**: visible only in first-only" in first
     assert "second-only" not in first
-    assert "second-only: visible only in second-only" in second
+    assert "**second-only**: visible only in second-only" in second
     assert "first-only" not in second
 
 

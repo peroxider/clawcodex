@@ -492,6 +492,7 @@ def register_bundled_skill(definition: BundledSkillDefinition) -> bool:
         skill_root=skill_root,
     )
 
+    global _LAZY_INITIALIZED
     with _registry_lock:
         for index, existing in enumerate(_bundled_skills):
             if existing.name == skill.name:
@@ -499,6 +500,12 @@ def register_bundled_skill(definition: BundledSkillDefinition) -> bool:
                 break
         else:
             _bundled_skills.append(skill)
+        # An explicit registration is a deliberate catalogue seed. Suppress
+        # automatic core expansion until clear_bundled_skills() re-arms it;
+        # registrations performed by _lazy_init itself keep its in-progress
+        # state and are finalized by _lazy_init after all registrars run.
+        if not _LAZY_INITIALIZING:
+            _LAZY_INITIALIZED = True
 
     try:
         from .catalog import _invalidate_catalog_cache_only

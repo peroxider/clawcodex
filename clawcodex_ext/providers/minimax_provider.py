@@ -57,14 +57,19 @@ if TYPE_CHECKING:
     from src.utils.abort_controller import AbortSignal
 
 
+def _usage_token_count(usage: Any, field: str) -> int:
+    value = getattr(usage, field, 0)
+    return int(value) if isinstance(value, (int, float)) else 0
+
+
 class MinimaxProvider(BaseProvider):
     """Minimax AI provider using Anthropic-compatible API.
 
-    Minimax provides an Anthropic-compatible endpoint at api.minimaxi.com/anthropic.
+    Minimax provides an Anthropic-compatible endpoint at api.minimax.io/anthropic.
     Uses the Anthropic SDK with Minimax-specific models.
     """
 
-    DEFAULT_BASE_URL = "https://api.minimaxi.com/anthropic"
+    DEFAULT_BASE_URL = "https://api.minimax.io/anthropic"
 
     def __init__(self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None):
         """Initialize Minimax provider.
@@ -72,10 +77,10 @@ class MinimaxProvider(BaseProvider):
         Args:
             api_key: Minimax API key
             base_url: Base URL (optional, defaults to Minimax Anthropic-compatible endpoint)
-            model: Default model (default: MiniMax-M2.7)
+            model: Default model (default: MiniMax-M3)
         """
         resolved_base_url = base_url or self.DEFAULT_BASE_URL
-        super().__init__(api_key, resolved_base_url, model or "MiniMax-M2.7")
+        super().__init__(api_key, resolved_base_url, model or "MiniMax-M3")
 
         self._client_kwargs: dict[str, Any] = {"api_key": api_key}
         if resolved_base_url:
@@ -88,7 +93,25 @@ class MinimaxProvider(BaseProvider):
         self.client = anthropic.Anthropic(**self._client_kwargs)
         return self.client
 
-    def _build_chat_response(self, response: Any) -> ChatResponse:
+    def _prepare_messages(self, messages: list[Any]) -> list[dict[str, Any]]:
+        """Base preparation + removal of foreign passthrough blocks.
+
+        Minimax speaks the Anthropic wire format, which rejects unknown
+        content-block types — a mid-session ``/model`` switch away from
+        the ChatGPT-subscription provider must not leak its
+        ``openai_responses_item`` replay blocks here. Same strip as
+        ``AnthropicProvider._prepare_messages``.
+        """
+        prepared = super()._prepare_messages(messages)
+        from .openai_responses import strip_responses_item_blocks
+        return strip_responses_item_blocks(prepared)
+
+    def _build_chat_response(
+        self,
+        response: Any,
+        *,
+        request_service_tier: str = "standard",
+    ) -> ChatResponse:
         content_text = ""
         tool_uses: list[dict[str, Any]] = []
 
@@ -108,12 +131,25 @@ class MinimaxProvider(BaseProvider):
                 )
 
         usage = getattr(response, "usage", None)
+        response_service_tier = getattr(usage, "service_tier", None)
+        service_tier = (
+            response_service_tier
+            if response_service_tier in ("standard", "priority")
+            else request_service_tier
+        )
         return ChatResponse(
             content=content_text,
             model=getattr(response, "model", self.model or ""),
             usage={
-                "input_tokens": getattr(usage, "input_tokens", 0),
-                "output_tokens": getattr(usage, "output_tokens", 0),
+                "input_tokens": _usage_token_count(usage, "input_tokens"),
+                "output_tokens": _usage_token_count(usage, "output_tokens"),
+                "cache_creation_input_tokens": _usage_token_count(
+                    usage, "cache_creation_input_tokens"
+                ),
+                "cache_read_input_tokens": _usage_token_count(
+                    usage, "cache_read_input_tokens"
+                ),
+                "service_tier": service_tier,
             },
             finish_reason=str(getattr(response, "stop_reason", "stop")),
             tool_uses=tool_uses if tool_uses else None,
@@ -134,6 +170,9 @@ class MinimaxProvider(BaseProvider):
         """
         model = self._get_model(**kwargs)
         max_tokens = kwargs.get("max_tokens", 4096)
+        request_service_tier = (
+            "priority" if kwargs.get("service_tier") == "priority" else "standard"
+        )
 
         system = kwargs.pop("system", None)
 
@@ -155,7 +194,10 @@ class MinimaxProvider(BaseProvider):
             **{k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]},
         )
 
-        return self._build_chat_response(response)
+        return self._build_chat_response(
+            response,
+            request_service_tier=request_service_tier,
+        )
 
     def chat_stream(
         self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, **kwargs
@@ -221,6 +263,9 @@ class MinimaxProvider(BaseProvider):
 
         model = self._get_model(**kwargs)
         max_tokens = kwargs.get("max_tokens", 4096)
+        request_service_tier = (
+            "priority" if kwargs.get("service_tier") == "priority" else "standard"
+        )
         system = kwargs.pop("system", None)
         minimax_messages = self._prepare_messages(messages)
 
@@ -264,7 +309,10 @@ class MinimaxProvider(BaseProvider):
         guard.raise_if_post_aborted()
 
         if final_message is not None:
-            return self._build_chat_response(final_message)
+            return self._build_chat_response(
+                final_message,
+                request_service_tier=request_service_tier,
+            )
 
         return ChatResponse(
             content=streamed_text,
@@ -281,7 +329,7 @@ class MinimaxProvider(BaseProvider):
             List of model names
         """
         return [
-            # M2 series (latest)
+            "MiniMax-M3",
             "MiniMax-M2.7",
             "MiniMax-M2.7-highspeed",
             "MiniMax-M2.5",

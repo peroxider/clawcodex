@@ -36,6 +36,14 @@ class UpstreamConfig(BaseModel):
     """Upstream repository settings."""
 
     remote_url: str = Field(..., description="Upstream repository URL")
+    # Keep the remote name configurable.  ClawCodex has historically used an
+    # ``upstream`` remote for an internal integration repository, while the
+    # canonical source repository is a different URL.  Hard-coding the name
+    # silently fetched the wrong project in that layout.
+    remote_name: str = Field(
+        default="upstream",
+        description="Local git remote name used for the canonical source repository",
+    )
     main_branch: str = "main"
     vendor_branch: str = "upstream/vendor"
     version_tag_format: str = "upstream/v{YYYY}_{MM}"

@@ -206,6 +206,12 @@ class GeminiProvider(BaseProvider):
                             raw_text = '\n'.join(_text_from_anthropic_block(b) for b in raw)
                         else:
                             raw_text = str(raw)
+                        # FunctionResponse has no error field — prefix the
+                        # text like the OpenAI-wire converters (mirrors TS
+                        # convertToolResultContent, openaiShim.ts:309) so
+                        # failed tools keep a failure signal on the wire.
+                        if block.get("is_error"):
+                            raw_text = f"Error: {raw_text}"
                         # Gemini FunctionResponse needs a name; tool_use_id is
                         # an Anthropic-only correlation id. Use it as the name
                         # if no better signal is available.

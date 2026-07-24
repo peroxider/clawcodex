@@ -33,7 +33,12 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     "glm-5.2": 1_000_000,
     "glm-5.1": 202_752,
     "glm-4": 128_000,  # legacy GLM-4.x fallback
-    # Minimax defaults
+    # DeepSeek V4 ships a 1M context window, like glm-5.2 (legacy deepseek-chat/
+    # -reasoner are intentionally NOT matched here — see src/models/configs.py).
+    "deepseek-v4": 1_000_000,
+    # MiniMax model-specific windows must precede the family fallback.
+    "minimax-m3": 1_000_000,
+    "minimax-m2.7": 204_800,
     "minimax": 128_000,
     "abab": 128_000,
 }
@@ -66,8 +71,29 @@ class ContextData:
 
 
 def get_context_window_for_model(model: str) -> int:
-    """Get the context window size for a model."""
+    """Get the context window size for a model.
+
+    Checks the local table first (back-compat), then defers to the canonical
+    per-model registry (``src/models/configs.py`` via ``src/models/context.py``)
+    so models registered there — e.g. DeepSeek V4's 1M window — are reflected in
+    the context display without maintaining a second table. This closes the drift
+    that made the agent-server status bar report 200K for deepseek-v4-pro: the
+    registry had 1M but this table didn't, and the display reads this function.
+    """
     model_lower = model.lower()
+    # Prefer the canonical registry/settings resolver. The old local-first
+    # order could hide a user-declared 1M limit behind a broad substring row.
+    try:
+        from ..models.context import (
+            DEFAULT_CONTEXT_WINDOW as _REGISTRY_DEFAULT,
+            get_context_window_for_model as _registry_window,
+        )
+
+        win = _registry_window(model)
+        if win and win != _REGISTRY_DEFAULT:
+            return win
+    except Exception:
+        pass
     for name, window in MODEL_CONTEXT_WINDOWS.items():
         if name in model_lower:
             return window
@@ -98,9 +124,9 @@ def count_system_prompt_tokens(system_prompt: str) -> int:
     return count_tokens(system_prompt)
 
 
-def count_claude_md_tokens(claude_md_content: str) -> int:
-    """Count tokens in CLAUDE.md content."""
-    return count_tokens(claude_md_content)
+def count_clawcodex_md_tokens(clawcodex_md_content: str) -> int:
+    """Count tokens in CLAWCODEX.md content."""
+    return count_tokens(clawcodex_md_content)
 
 
 def count_message_breakdown_tokens(
@@ -161,7 +187,7 @@ def analyze_context(
     model: str,
     system_prompt: str,
     tool_schemas: list[dict[str, Any]],
-    claude_md_content: str,
+    clawcodex_md_content: str,
     skills_frontmatter_tokens: int = 0,
     skills_count: int = 0,
     api_usage: Optional[dict[str, int]] = None,
@@ -178,7 +204,7 @@ def analyze_context(
         model: Model name (e.g., "claude-sonnet-4-6")
         system_prompt: The active system prompt string
         tool_schemas: List of tool schema dicts (from tool registry)
-        claude_md_content: Concatenated CLAUDE.md content
+        clawcodex_md_content: Concatenated CLAWCODEX.md content
         skills_frontmatter_tokens: Tokens from skills frontmatter
         skills_count: Number of skills loaded
         api_usage: Actual usage from last API response (optional)
@@ -214,10 +240,10 @@ def analyze_context(
     if agent_total > 0:
         categories.append(ContextCategory(name="Custom agents", tokens=agent_total))
 
-    # Memory files (CLAUDE.md)
-    claude_md_tokens = count_claude_md_tokens(claude_md_content)
-    if claude_md_tokens > 0:
-        categories.append(ContextCategory(name="Memory files", tokens=claude_md_tokens))
+    # Memory files (CLAWCODEX.md)
+    clawcodex_md_tokens = count_clawcodex_md_tokens(clawcodex_md_content)
+    if clawcodex_md_tokens > 0:
+        categories.append(ContextCategory(name="Memory files", tokens=clawcodex_md_tokens))
 
     # Skills
     if skills_frontmatter_tokens > 0:
@@ -248,8 +274,8 @@ def analyze_context(
 
     # Build memory files list
     memory_files: list[dict[str, Any]] = []
-    if claude_md_tokens > 0:
-        memory_files.append({"path": "CLAUDE.md", "tokens": claude_md_tokens})
+    if clawcodex_md_tokens > 0:
+        memory_files.append({"path": "CLAWCODEX.md", "tokens": clawcodex_md_tokens})
 
     return ContextData(
         categories=categories,

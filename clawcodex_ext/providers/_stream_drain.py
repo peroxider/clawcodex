@@ -107,4 +107,56 @@ def drain_text_stream_with_abort_poll(
             on_text(text)
 
 
-__all__ = ["drain_text_stream_with_abort_poll"]
+def drain_event_stream_with_abort_poll(
+    stream: Any,
+    *,
+    guard: "StreamAbortGuard",
+    on_event: Callable[[Any], None],
+    watchdog: "StreamWatchdog | None" = None,
+    stream_name: str = "event-stream",
+) -> None:
+    """Drain the full SDK event stream while polling for user aborts.
+
+    Every event is delivered on the consumer thread. This lets thinking,
+    tool-input and lifecycle events reset the watchdog while the caller alone
+    decides which deltas belong in the visible text channel.
+    """
+
+    done = object()
+    event_queue: _queue.Queue = _queue.Queue()
+
+    def _drain() -> None:
+        try:
+            for event in stream:
+                event_queue.put(event)
+        except BaseException as exc:  # noqa: BLE001 - surface to consumer
+            event_queue.put(exc)
+        finally:
+            event_queue.put(done)
+
+    worker = _threading.Thread(
+        target=_drain,
+        daemon=True,
+        name=f"{stream_name}-{id(stream)}",
+    )
+    worker.start()
+    while True:
+        try:
+            item = event_queue.get(timeout=0.1)
+        except _queue.Empty:
+            if guard.aborted:
+                guard.raise_if_post_aborted()
+            continue
+        if item is done:
+            break
+        if isinstance(item, BaseException):
+            if isinstance(item, Exception):
+                guard.reraise_if_aborted(item)
+                raise item
+            raise item
+        if watchdog is not None:
+            watchdog.reset()
+        on_event(item)
+
+
+__all__ = ["drain_event_stream_with_abort_poll", "drain_text_stream_with_abort_poll"]

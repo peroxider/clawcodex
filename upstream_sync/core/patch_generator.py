@@ -34,6 +34,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from upstream_sync.config import ProjectConfig, PatchConfig
+from upstream_sync.core.vendor import short_commit_id
 
 
 @dataclass
@@ -374,7 +375,7 @@ class PatchGenerator:
     def _resolve_patch_dir(self, commit: str) -> Path:
         """Resolve the patch directory for a given commit."""
         if self.cfg.patches.patch_subdir:
-            return Path(str(self.cfg.patches.patch_subdir).format(commit=commit))
+            return Path(str(self.cfg.patches.patch_subdir).format(commit=short_commit_id(commit)))
         return self.cfg.patches.directory
 
     def create_series_file(self, patches: list[GeneratedPatch], output_path: Path) -> None:
@@ -497,7 +498,10 @@ class PatchGenerator:
         for path in root.rglob("*"):
             if not path.is_file():
                 continue
-            relative_path = str(path.relative_to(root))
+            # Patch paths are platform-independent and always use '/'.  Using
+            # ``str(Path)`` here leaked Windows backslashes into patch names,
+            # skip-prefix checks, and diff headers.
+            relative_path = path.relative_to(root).as_posix()
             if not PatchGenerator.is_skipped(
                 relative_path, skip_prefixes, skip_dirs, skip_suffixes
             ):
@@ -540,14 +544,65 @@ class PatchGenerator:
         ``_timestamp()`` (git's last-commit time). This keeps the output
         stable across regen runs even if local file mtimes change.
         """
-        result = subprocess.run(
-            ["diff", "-u", str(upstream_path), str(src_path)],
-            capture_output=True,
-            timeout=30,
-        )
-        if result.returncode not in (0, 1):
-            raise RuntimeError(result.stderr.decode("utf-8", errors="replace"))
-        output = result.stdout.decode("utf-8", errors="replace")
+        try:
+            result = subprocess.run(
+                ["diff", "-u", str(upstream_path), str(src_path)],
+                capture_output=True,
+                timeout=30,
+            )
+        except FileNotFoundError:
+            # Windows does not ship the POSIX ``diff`` executable. Git's
+            # no-index diff preserves important patch details such as the
+            # ``No newline at end of file`` marker. Keep difflib as the final
+            # fallback for environments that have neither executable.
+            try:
+                git_result = subprocess.run(
+                    [
+                        "git",
+                        "diff",
+                        "--no-index",
+                        "--no-ext-diff",
+                        "--text",
+                        "--unified=3",
+                        "--",
+                        str(upstream_path),
+                        str(src_path),
+                    ],
+                    capture_output=True,
+                    timeout=30,
+                )
+            except FileNotFoundError:
+                upstream_lines = upstream_path.read_text(
+                    encoding="utf-8", errors="surrogateescape"
+                ).splitlines(keepends=True)
+                src_lines = src_path.read_text(
+                    encoding="utf-8", errors="surrogateescape"
+                ).splitlines(keepends=True)
+                output = "".join(
+                    difflib.unified_diff(
+                        upstream_lines,
+                        src_lines,
+                        fromfile=str(upstream_path),
+                        tofile=str(src_path),
+                        lineterm="\n",
+                    )
+                )
+            else:
+                if git_result.returncode not in (0, 1):
+                    raise RuntimeError(
+                        git_result.stderr.decode("utf-8", errors="replace")
+                    )
+                git_output = git_result.stdout.decode("utf-8", errors="replace")
+                git_lines = git_output.splitlines(keepends=True)
+                header_index = next(
+                    (i for i, line in enumerate(git_lines) if line.startswith("--- ")),
+                    len(git_lines),
+                )
+                output = "".join(git_lines[header_index:])
+        else:
+            if result.returncode not in (0, 1):
+                raise RuntimeError(result.stderr.decode("utf-8", errors="replace"))
+            output = result.stdout.decode("utf-8", errors="replace")
         upstream_ts = PatchGenerator._timestamp(upstream_path)
         src_ts = PatchGenerator._timestamp(src_path)
         output = re.sub(

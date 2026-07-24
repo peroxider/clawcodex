@@ -257,10 +257,20 @@ class CronTaskLock:
         # window and the at-least-once nature of lock acquisition make
         # it harmless.  (A fully atomic release would require kernel‑
         # level lease support.)
-        try:
-            self.path.unlink()
-        except FileNotFoundError:
-            pass
+        for attempt in range(5):
+            try:
+                self.path.unlink()
+                break
+            except FileNotFoundError:
+                break
+            except PermissionError:
+                if attempt == 4:
+                    _log.debug(
+                        "cron lock release deferred because the file is busy: %s",
+                        self.path,
+                    )
+                    break
+                time.sleep(0.01)
         self.acquired = False
 
     def __enter__(self) -> CronTaskLock:

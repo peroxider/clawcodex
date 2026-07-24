@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 
@@ -103,12 +104,37 @@ def run_print_mode(args) -> int:
     allowed = _split_csv(args.allowed_tools)
     disallowed = _split_csv(args.disallowed_tools)
 
+    fallback_model = getattr(args, "fallback_model", None)
+    if fallback_model and fallback_model == args.model:
+        import sys
+
+        print("error: --fallback-model must differ from --model", file=sys.stderr)
+        return 2
+
+    from clawcodex_ext.cli.worktree import (
+        WORKTREE_FAILED,
+        maybe_create_worktree,
+        print_worktree_keep_note,
+    )
+
+    worktree_session = maybe_create_worktree(args)
+    if worktree_session is WORKTREE_FAILED:
+        return 1
+    if worktree_session is not None:
+        os.chdir(worktree_session.worktree_path)
+
     options = HeadlessOptions(
         prompt=args.prompt,
         output_format=args.output_format,
         input_format=args.input_format,
         provider_name=args.provider,
         model=args.model,
+        fallback_model=fallback_model,
+        effort=(
+            args.effort
+            if getattr(args, "effort", None) not in (None, "normal", "swarm")
+            else None
+        ),
         max_turns=args.max_turns,
         max_turns_explicit=getattr(args, "max_turns_explicit", False),
         skip_permissions=bool(args.dangerously_skip_permissions),
@@ -119,16 +145,20 @@ def run_print_mode(args) -> int:
         include_partial_messages=bool(args.include_partial_messages),
         verbose=bool(args.verbose),
     )
-    rc = run_headless(options)
-    _telemetry_session_end(
-        session_id=sid,
-        command_name="print",
-        mode="non_interactive",
-        success=(rc == 0),
-        duration_s=time.monotonic() - start,
-        exit_status=rc,
-    )
-    return rc
+    try:
+        rc = run_headless(options)
+        _telemetry_session_end(
+            session_id=sid,
+            command_name="print",
+            mode="non_interactive",
+            success=(rc == 0),
+            duration_s=time.monotonic() - start,
+            exit_status=rc,
+        )
+        return rc
+    finally:
+        if worktree_session is not None:
+            print_worktree_keep_note(worktree_session)
 
 
 # ----------------------------------------------------------------------

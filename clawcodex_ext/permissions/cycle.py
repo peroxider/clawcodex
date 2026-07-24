@@ -37,7 +37,9 @@ _CYCLE_TABLE: list[tuple[str, str]] = [
     ("default", "acceptEdits"),
     ("acceptEdits", "plan"),
     ("plan", "bypassPermissions"),  # guarded by is_bypass_permissions_mode_available
-    ("bypassPermissions", "auto"),  # guarded by can_cycle_to_auto
+    # Downstream keeps ``dontAsk`` in the interactive cycle. ``auto`` remains
+    # available through explicit activation and its safety classifier.
+    ("bypassPermissions", "dontAsk"),
 ]
 
 
@@ -57,6 +59,14 @@ def register_cycle_step(source: str, target: str, *, after: str | None = None) -
         register_cycle_step("bypassPermissions", "dontAsk", after="bypassPermissions")
     """
     entry = (source, target)
+    # A mode has exactly one Shift+Tab successor.  Downstream registration
+    # therefore overrides the upstream transition for the same source; merely
+    # inserting another row would leave it unreachable because first match
+    # wins in ``get_next_permission_mode``.
+    for idx, (existing_source, _existing_target) in enumerate(_CYCLE_TABLE):
+        if existing_source == source:
+            _CYCLE_TABLE[idx] = entry
+            return
     if after is not None:
         for idx, (s, _t) in enumerate(_CYCLE_TABLE):
             if s == after:

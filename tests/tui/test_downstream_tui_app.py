@@ -123,6 +123,68 @@ def test_tui_app_installs_runtime_observer_when_context_is_available(monkeypatch
     assert installed == [(app, runtime)]
 
 
+def test_tui_skill_slash_uses_user_invocation(monkeypatch):
+    from clawcodex_ext.tui.app import ClawCodexTUI
+
+    tool_context = object()
+    app = SimpleNamespace(tool_context=tool_context, submit_to_agent=Mock())
+    transcript = Mock()
+    calls = []
+
+    def fake_run_user_invoked_skill(name, args, context):
+        calls.append((name, args, context))
+        return SimpleNamespace(
+            is_error=False,
+            output={
+                "success": True,
+                "commandName": "hello",
+                "prompt": "Hello bob",
+            },
+        )
+
+    monkeypatch.setattr(
+        "clawcodex_ext.tool_system.tools.skill.run_user_invoked_skill",
+        fake_run_user_invoked_skill,
+    )
+
+    handled = ClawCodexTUI._try_run_skill_slash(app, "/hello bob", transcript)
+
+    assert handled is True
+    assert calls == [("hello", "bob", tool_context)]
+    app.submit_to_agent.assert_called_once_with("Hello bob")
+    transcript.append_system.assert_called_once_with("Launching skill: hello", style="info")
+
+
+def test_tui_forked_skill_slash_renders_result_without_second_query(monkeypatch):
+    from clawcodex_ext.tui.app import ClawCodexTUI
+
+    tool_context = object()
+    app = SimpleNamespace(tool_context=tool_context, submit_to_agent=Mock())
+    transcript = Mock()
+
+    monkeypatch.setattr(
+        "clawcodex_ext.tool_system.tools.skill.run_user_invoked_skill",
+        lambda name, args, context: SimpleNamespace(
+            is_error=False,
+            output={
+                "success": True,
+                "status": "fork",
+                "commandName": name,
+                "result": "runtime evidence\nVERDICT: PASS",
+            },
+        ),
+    )
+
+    handled = ClawCodexTUI._try_run_skill_slash(app, "/verify target.txt", transcript)
+
+    assert handled is True
+    app.submit_to_agent.assert_not_called()
+    transcript.append_assistant.assert_called_once_with(
+        "runtime evidence\nVERDICT: PASS",
+        agent_name="verify",
+    )
+
+
 def test_upstream_tui_entrypoint_uses_upstream_app(monkeypatch):
     """Verify upstream run_tui constructs ClawCodexTUI, not ClawCodexExtTUI."""
     import src.entrypoints.tui as tui_entrypoint

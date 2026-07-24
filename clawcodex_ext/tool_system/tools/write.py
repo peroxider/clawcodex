@@ -8,10 +8,13 @@ from ..build_tool import Tool, ValidationResult, build_tool
 from ..context import ToolContext
 from ..errors import ToolInputError, ToolPermissionError
 from ..protocol import ToolResult
-from ..diff_utils import unified_diff_hunks
-from clawcodex_ext.permissions.types import (
+from ..diff_utils import (
+    convert_leading_tabs_to_spaces,
+    record_patch_line_totals,
+    unified_diff_hunks,
+)
+from src.permissions.types import (
     PermissionAllowDecision,
-    PermissionAskDecision,
     PermissionPassthroughResult,
     PermissionResult,
 )
@@ -48,11 +51,11 @@ def _expand_path(file_path: str) -> str:
 
 def _backfill_observable_input(tool_input: dict[str, Any]) -> None:
     """Expand *file_path* in-place so hook allowlists cannot be bypassed
-    via ``~`` or relative paths.
-    """
-    fp = tool_input.get("file_path")
-    if isinstance(fp, str):
-        tool_input["file_path"] = _expand_path(fp)
+    via ``~`` or relative paths. ch06 round-4 (critic m3): delegates to the
+    shared Read/Edit helper so the three file tools can't drift."""
+    from .read import _backfill_read_edit_path
+
+    _backfill_read_edit_path(tool_input)
 
 
 # ---------------------------------------------------------------------------
@@ -157,21 +160,17 @@ def _check_permissions(tool_input: dict[str, Any], context: ToolContext) -> Perm
         return PermissionPassthroughResult()
 
     # Memory carve-out: writes inside the auto-memory directory bypass
-    # the workspace allowlist AND the docs gate. Without this, the model
-    # would prompt the user on every "save a memory" attempt.
+    # the workspace allowlist. Without this, the model would prompt the
+    # user on every "save a memory" attempt.
     if _is_auto_memory_write(file_path):
         return PermissionPassthroughResult()
 
-    # Path is already expanded by backfill_observable_input
-    try:
-        path = context.ensure_allowed_path(file_path)
-    except ToolPermissionError:
-        return PermissionPassthroughResult()
-
-    if path.suffix.lower() in {".md", ".markdown"} and not context.allow_docs:
-        return PermissionAskDecision(
-            message="Writing documentation files is blocked unless allow_docs is enabled",
-        )
+    # NB: no docs gate. The port used to raise an explicit ask for
+    # ``.md``/``.markdown`` writes unless ``allow_docs`` — the original
+    # Claude Code has no such permission gate, and being an explicit ask it
+    # was structurally un-grantable (no session option, immune to
+    # acceptEdits), so every markdown write re-prompted forever. Markdown
+    # now flows like any other write.
     return PermissionPassthroughResult()
 
 
@@ -253,8 +252,8 @@ def _write_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     context.mark_file_read(path)
-    before_lines = (original_file or "").splitlines(keepends=True)
-    after_lines = content.splitlines(keepends=True)
+    before_lines = convert_leading_tabs_to_spaces(original_file or "").splitlines(keepends=True)
+    after_lines = convert_leading_tabs_to_spaces(content).splitlines(keepends=True)
     diff_lines = list(
         difflib.unified_diff(
             before_lines,
@@ -266,6 +265,15 @@ def _write_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
         )
     )
     hunks = unified_diff_hunks(diff_lines)
+    # New file: the original's write-create path passes an EXPLICITLY empty
+    # patch (FileWriteTool.ts:408, countLinesChanged([], content)), so the
+    # split(/\r?\n/) special case runs and a trailing newline counts one
+    # extra (empty) segment. Passing the difflib hunks here instead would
+    # undercount by that segment.
+    record_patch_line_totals(
+        [] if original_file is None else hunks,
+        content if original_file is None else None,
+    )
     return ToolResult(
         name="Write",
         output={

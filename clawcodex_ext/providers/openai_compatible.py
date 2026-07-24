@@ -10,13 +10,43 @@ import json
 import logging
 import os
 from abc import abstractmethod
-from typing import Any, Callable, Generator, Optional
+from contextlib import nullcontext
+from typing import Any, Generator, Optional
 
-from clawcodex_ext.providers._stream_abort import StreamAbortGuard
-from clawcodex_ext.providers.base import BaseProvider, ChatResponse, MessageInput, TextChunkCallback
+from .base import BaseProvider, ChatResponse, MessageInput, TextChunkCallback
 from clawcodex_ext.services.api.errors import normalize_httpx_transport_error
 
 logger = logging.getLogger(__name__)
+
+# Cap on the ESC-cancel worker-thread queue in ``chat_stream_response``.
+# See the ``chunk_queue`` construction below for why this is bounded.
+_CHUNK_QUEUE_MAXSIZE = 64
+
+
+def _apply_client_timeout(client: Any) -> Any:
+    """Bound an OpenAI-SDK client's read timeout + retries (env-tunable).
+
+    Without this, a streaming request to an endpoint that accepts the connection
+    but stalls mid-read blocks the *synchronous* SDK read for the SDK's 600s
+    default — and that read runs on the asyncio event loop the agent loop drives,
+    so one stalled stream freezes every concurrent workflow agent. ``read`` is
+    the max gap BETWEEN bytes, so legitimate long streams keep working as long as
+    data keeps flowing. Applied centrally (base ``client`` property) so every
+    subclass is covered. Tunable via CLAWCODEX_LLM_READ_TIMEOUT /
+    CLAWCODEX_LLM_CONNECT_TIMEOUT / CLAWCODEX_LLM_MAX_RETRIES.
+    """
+    try:
+        import os
+
+        import httpx
+
+        read = float(os.environ.get("CLAWCODEX_LLM_READ_TIMEOUT", "120"))
+        connect = float(os.environ.get("CLAWCODEX_LLM_CONNECT_TIMEOUT", "15"))
+        max_retries = int(os.environ.get("CLAWCODEX_LLM_MAX_RETRIES", "1"))
+        timeout = httpx.Timeout(connect=connect, read=read, write=30.0, pool=15.0)
+        return client.with_options(timeout=timeout, max_retries=max_retries)
+    except Exception:  # noqa: BLE001 — never break client creation over timeout cfg
+        return client
 
 
 def _anthropic_image_block_to_openai(block: dict[str, Any]) -> dict[str, Any] | None:
@@ -120,63 +150,38 @@ def _translate_anthropic_multimodal_block(block: Any) -> dict[str, Any] | None:
     return _anthropic_document_block_to_openai(block)
 
 
-def _strip_images_from_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Strip Anthropic-format ``image`` content blocks from messages.
-
-    Replaces every ``{"type": "image", ...}`` block with a short text
-    placeholder so the model's text context is preserved while the image
-    payload is removed. Handles image blocks at the top level of a
-    message's ``content`` list as well as inside ``tool_result`` nested
-    content arrays.
-
-    This is a no-op when the message list contains no image blocks.
-    """
-    _IMAGE_PLACEHOLDER = "[Image removed: the current model does not support image input]"
-
+def _strip_images_from_messages(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Replace image blocks with text for models without vision support."""
+    placeholder = "[Image removed: the current model does not support image input]"
     result: list[dict[str, Any]] = []
-    for msg in messages:
-        if not isinstance(msg, dict):
-            result.append(msg)
-            continue
-        content = msg.get("content")
+    for message in messages:
+        content = message.get("content") if isinstance(message, dict) else None
         if not isinstance(content, list):
-            result.append(msg)
+            result.append(message)
             continue
-
         new_content: list[Any] = []
         for block in content:
             if not isinstance(block, dict):
                 new_content.append(block)
                 continue
-            btype = block.get("type")
-
-            # Strip top-level image blocks
-            if btype == "image":
-                new_content.append({"type": "text", "text": _IMAGE_PLACEHOLDER})
+            if block.get("type") == "image":
+                new_content.append({"type": "text", "text": placeholder})
                 continue
-
-            # Strip image blocks nested inside tool_result content
-            if btype == "tool_result":
-                raw_inner = block.get("content")
-                if isinstance(raw_inner, list):
-                    filtered_inner: list[Any] = []
-                    for inner in raw_inner:
-                        if isinstance(inner, dict) and inner.get("type") == "image":
-                            filtered_inner.append(
-                                {"type": "text", "text": _IMAGE_PLACEHOLDER}
-                            )
-                        else:
-                            filtered_inner.append(inner)
-                    new_content.append({**block, "content": filtered_inner})
-                else:
-                    new_content.append(block)
+            if block.get("type") == "tool_result" and isinstance(
+                block.get("content"), list
+            ):
+                inner = [
+                    {"type": "text", "text": placeholder}
+                    if isinstance(item, dict) and item.get("type") == "image"
+                    else item
+                    for item in block["content"]
+                ]
+                new_content.append({**block, "content": inner})
                 continue
-
             new_content.append(block)
-
-        new_msg = {**msg, "content": new_content}
-        result.append(new_msg)
-
+        result.append({**message, "content": new_content})
     return result
 
 
@@ -186,12 +191,6 @@ def _convert_anthropic_messages_to_openai(
     supports_vision: bool | None = None,
 ) -> list[dict[str, Any]]:
     """Convert Anthropic-format messages to OpenAI chat-completion format.
-
-    When ``supports_vision`` is ``False``, image content blocks are
-    stripped from the messages **before** conversion, preventing the
-    provider from sending ``image_url`` blocks to a model that does not
-    accept them.  ``None`` (default) or ``True`` leaves image blocks in
-    place (backward-compatible behaviour).
 
     Handles four transformations:
     1. Assistant messages with tool_use content blocks → assistant + tool_calls
@@ -207,18 +206,43 @@ def _convert_anthropic_messages_to_openai(
        ever appears it lands in the closest OpenAI shape rather than
        passing through as an unrecognised Anthropic block.
     """
-    # When the model has zero image capability, strip image blocks
-    # BEFORE conversion so the provider never sends ``image_url``
-    # blocks to a model that rejects them.  The text placeholder
-    # preserves the model's awareness that an image was present.
+    # ChatGPT-subscription passthrough items (encrypted reasoning et al.)
+    # have no Chat Completions representation — they exist only for the
+    # OpenAI Responses replay path. Strip them BEFORE conversion so a
+    # mid-session model switch never leaks them to a server that rejects
+    # unknown block types. See openai_responses.RESPONSES_ITEM_BLOCK_TYPE.
+    from .openai_responses import strip_responses_item_blocks
+    messages = strip_responses_item_blocks(messages)
     if supports_vision is False:
         messages = _strip_images_from_messages(messages)
 
     result: list[dict[str, Any]] = []
 
-    # Pre-scan all assistant messages for tool_use IDs so we can
-    # drop orphan tool_results that reference stale IDs after
-    # session compression / recovery (#394).
+    # Pre-scan every assistant message for the tool_use ids it declares.
+    # An OpenAI ``role=tool`` message is only valid as a response to a
+    # ``tool_call`` that was actually emitted; a tool_result whose
+    # tool_use_id never appears in any assistant ``tool_use`` is an ORPHAN
+    # and the API rejects it ("messages with role 'tool' must be a
+    # response to a preceding message with 'tool_calls'"). The tool_result
+    # branch below drops such orphans. ``ensure_tool_result_pairing``
+    # (src/types/messages.py) is the upstream backstop but its reverse-
+    # strip only fires when the previous message is NOT an assistant, so
+    # an orphan trailing a text-only assistant turn (a stale id after
+    # compaction/resume) slips through to here. Mirrors TS
+    # openaiShim.ts:498/548 ``knownToolCallIds``. (The symmetric assistant-
+    # side guard — dropping a tool_use that has no result — is NOT ported;
+    # ``ensure_tool_result_pairing`` backfills synthetic results for every
+    # tool_use upstream, so no orphan tool_call reaches the converter.)
+    #
+    # Intentionally ``tool_use``-only — NOT ``server_tool_use`` /
+    # ``mcp_tool_use`` (which ``ensure_tool_result_pairing`` does recognize,
+    # messages.py). Those server-side shapes never reach THIS converter:
+    # the Anthropic server-advisor path strips them before non-Anthropic
+    # providers (query.py strip_advisor_blocks), and client-side MCP
+    # surfaces as a plain ``tool_use``. Matches TS, which builds
+    # knownToolCallIds only from converted tool_use (openaiShim.ts:638).
+    # Do not widen this to server/mcp shapes without re-checking that path,
+    # or you risk un-dropping genuine orphans.
     known_tool_call_ids: set[str] = set()
     for scan_msg in messages:
         if scan_msg.get("role") != "assistant":
@@ -258,16 +282,14 @@ def _convert_anthropic_messages_to_openai(
                     text_parts.append(block.get("text", ""))
                 elif btype == "tool_use":
                     inp = block.get("input", {})
-                    tool_calls.append(
-                        {
-                            "id": block.get("id", ""),
-                            "type": "function",
-                            "function": {
-                                "name": block.get("name", ""),
-                                "arguments": json.dumps(inp) if isinstance(inp, dict) else str(inp),
-                            },
-                        }
-                    )
+                    tool_calls.append({
+                        "id": block.get("id", ""),
+                        "type": "function",
+                        "function": {
+                            "name": block.get("name", ""),
+                            "arguments": json.dumps(inp) if isinstance(inp, dict) else str(inp),
+                        },
+                    })
                 else:
                     other_blocks.append(block)
 
@@ -307,23 +329,47 @@ def _convert_anthropic_messages_to_openai(
                     translated = _translate_anthropic_multimodal_block(block)
                     non_tool_blocks.append(translated if translated is not None else block)
 
-            # Defer non-tool content until after all tool messages
-            # (OpenAI requires role=tool immediately after tool_calls;
-            # #393 — tool message continuity fix).
+            # Emit tool_result blocks as ``role=tool`` messages FIRST,
+            # BEFORE any non-tool user content. OpenAI-compatible APIs
+            # require an assistant message carrying ``tool_calls`` to be
+            # followed IMMEDIATELY by the matching ``role=tool`` messages
+            # (one per ``tool_call_id``). A single Anthropic user message
+            # can carry BOTH tool_result blocks AND plain text — that is
+            # exactly what ``normalize_messages_for_api`` produces when it
+            # merges a rejected/interrupted tool turn with the user's next
+            # prompt (reject 4 Reads, then type "please continue"). Emitting
+            # the text first would slip a ``role=user`` message between the
+            # ``tool_calls`` and the tool responses, and the API rejects the
+            # request with "An assistant message with 'tool_calls' must be
+            # followed by tool messages responding to each 'tool_call_id'
+            # (insufficient tool messages following tool_calls message)".
+            # So tool messages go first; remaining user content is appended
+            # AFTER the loop. Mirrors TS openaiShim.ts:546-567.
+            #
+            # Multimodal tool_results additionally split into a ``role=tool``
+            # text message PLUS a synthetic ``role=user`` carrying the image/
+            # file blocks (OpenAI tool messages can't hold multimodal
+            # content). Those synthetic user messages are COLLECTED here and
+            # emitted only AFTER the whole loop — never inline — so a second
+            # tool_result in the same batch (parallel tool calls, e.g. one
+            # Read returns an image and another returns text) can't drop a
+            # ``role=user`` BETWEEN two ``role=tool`` messages and detach the
+            # later tool_call from its response.
             deferred_multimodal_user_messages: list[dict[str, Any]] = []
-
             # Emit each tool_result as a separate role=tool message
             for tr in tool_results:
                 tool_use_id = tr.get("tool_use_id", "")
-                # Drop orphan tool_results whose ID doesn't match any
-                # known tool_use in the conversation — stale IDs can
-                # appear after session compression / recovery, and
-                # OpenAI rejects role=tool with an unrecognised
-                # tool_call_id (#394).
+                # Orphan guard: drop a tool_result whose id was never
+                # emitted as a tool_call (see the pre-scan note above).
+                # With no preceding ``tool_calls`` entry the API rejects
+                # the ``role=tool`` message. Mirrors TS openaiShim.ts:548.
                 if tool_use_id not in known_tool_call_ids:
-                    logger.debug("Dropping orphan tool_result id=%s", tool_use_id)
+                    logger.debug(
+                        "Dropping orphan tool_result for tool_use_id=%r "
+                        "(no matching tool_call in history)",
+                        tool_use_id,
+                    )
                     continue
-
                 raw_content = tr.get("content", "")
                 # Collect any image blocks separately. OpenAI's ``role=tool``
                 # message only accepts a text ``content`` string -- it
@@ -412,13 +458,22 @@ def _convert_anthropic_messages_to_openai(
                     # requirement is honoured.
                     flat_content = "[empty tool result]"
 
-                result.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_use_id,
-                        "content": flat_content,
-                    }
-                )
+                # OpenAI's ``role=tool`` message has no ``is_error`` field,
+                # so error-ness must ride the text: prefix ``Error: `` like
+                # TS convertToolResultContent (openaiShim.ts:309/:349/:356
+                # — every text-shaped emission applies it). Load-bearing
+                # since thrown tool errors are no longer wrapped in
+                # ``<tool_use_error>`` tags (_format_error parity port):
+                # without the prefix an OpenAI-wire model would see a bare
+                # message with no failure signal at all.
+                if tr.get("is_error"):
+                    flat_content = f"Error: {flat_content}"
+
+                result.append({
+                    "role": "tool",
+                    "tool_call_id": tool_use_id,
+                    "content": flat_content,
+                })
                 if multimodal_blocks_from_tool:
                     # Lead with a tiny text block naming the parent
                     # tool_use_id so the model can correlate this
@@ -427,21 +482,25 @@ def _convert_anthropic_messages_to_openai(
                     # format gives no tool_call_id on user messages.
                     correlation_text = {
                         "type": "text",
-                        "text": (f"[content for tool_use_id={tool_use_id}]"),
+                        "text": (
+                            f"[content for tool_use_id={tool_use_id}]"
+                        ),
                     }
-                    deferred_multimodal_user_messages.append(
-                        {
-                            "role": "user",
-                            "content": [correlation_text, *multimodal_blocks_from_tool],
-                        }
-                    )
+                    # DEFER (do not append inline): collected and emitted
+                    # after the loop so it never splits two tool messages.
+                    deferred_multimodal_user_messages.append({
+                        "role": "user",
+                        "content": [correlation_text, *multimodal_blocks_from_tool],
+                    })
 
-            # Emit non-tool user content AFTER all tool messages
-            # (#393 — tool message continuity fix)
+            # All ``role=tool`` messages have now been emitted contiguously
+            # right after the assistant ``tool_calls``. NOW emit the deferred
+            # multimodal user payloads, then any remaining non-tool user
+            # content — both must follow every tool message so neither splits
+            # a tool_calls/tool-response run.
+            result.extend(deferred_multimodal_user_messages)
             if non_tool_blocks:
                 result.append({"role": "user", "content": non_tool_blocks})
-            # Emit deferred multimodal user messages last
-            result.extend(deferred_multimodal_user_messages)
             continue
 
         # Fallback
@@ -461,12 +520,7 @@ def _convert_to_openai_tool_schema(anthropic_tool: dict[str, Any]) -> dict[str, 
     if schema_type is None or schema_type == "None":
         return None
     # Some providers (Azure) require type=object to have properties
-    if (
-        schema_type == "object"
-        and "properties" not in input_schema
-        and "anyOf" not in input_schema
-        and "oneOf" not in input_schema
-    ):
+    if schema_type == "object" and "properties" not in input_schema and "anyOf" not in input_schema and "oneOf" not in input_schema:
         # Try to add an empty properties dict if none provided
         input_schema = {**input_schema, "properties": {}}
     return {
@@ -477,6 +531,84 @@ def _convert_to_openai_tool_schema(anthropic_tool: dict[str, Any]) -> dict[str, 
             "parameters": input_schema,
         },
     }
+
+
+def _close_truncated_json(s: str) -> str:
+    """Best-effort complete a JSON document cut off mid-stream.
+
+    Tool-call arguments stream as string deltas; an interrupted or late-
+    truncated stream can leave invalid JSON (an unterminated string, open
+    braces/brackets, a dangling comma/colon). This closes those so the partial
+    value is still recoverable, returning ``"{}"`` if the result is still not
+    valid JSON.
+    """
+    stack: list[str] = []  # expected closing chars, innermost last
+    in_str = False
+    esc = False
+    for c in s:
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+            continue
+        if c == '"':
+            in_str = True
+        elif c == "{":
+            stack.append("}")
+        elif c == "[":
+            stack.append("]")
+        elif c in ("}", "]"):
+            if stack:
+                stack.pop()
+    out = s
+    if esc:  # a trailing backslash with nothing escaped — drop it
+        out = out[:-1]
+    if in_str:  # close the dangling string
+        out += '"'
+    trimmed = out.rstrip(" \t\r\n")
+    if trimmed.endswith(","):  # dangling comma before a closer
+        out = trimmed[:-1]
+    elif trimmed.endswith(":"):  # key with no value yet
+        out = trimmed + "null"
+    for closer in reversed(stack):
+        out += closer
+    return out if _is_valid_json(out) else "{}"
+
+
+def _is_valid_json(s: str) -> bool:
+    try:
+        json.loads(s)
+        return True
+    except Exception:
+        return False
+
+
+def _parse_tool_call_arguments(raw: str | None) -> dict[str, Any]:
+    """Parse streamed tool-call argument JSON, recovering truncation.
+
+    Empty/absent → ``{}``. Valid JSON object → parsed as-is. Invalid JSON →
+    best-effort close the truncation (see :func:`_close_truncated_json`) so a
+    resumed/replayed turn keeps the partial arguments instead of discarding
+    them; still falls back to ``{}`` when unrecoverable. Activates only on
+    already-invalid input, so the happy path is untouched for every provider.
+
+    Always returns a ``dict``: tool-call arguments are JSON objects, so a
+    top-level array/scalar (exotic or malformed) coerces to ``{}`` rather than
+    flowing downstream where ``input`` is consumed as a mapping.
+    """
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        try:
+            parsed = json.loads(_close_truncated_json(raw))
+        except Exception:
+            return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 class OpenAICompatibleProvider(BaseProvider):
@@ -516,9 +648,16 @@ class OpenAICompatibleProvider(BaseProvider):
 
     @property
     def client(self) -> Any:
-        """Get or create the SDK client (lazy initialization)."""
+        """Get or create the SDK client (lazy initialization).
+
+        A bounded read timeout is applied centrally here so EVERY
+        openai-compatible provider (openai, openrouter, deepseek, glm, …) is
+        protected from a stalled streaming read blocking the asyncio event loop
+        — not just OpenAIProvider. The SDK default is read=600s, which freezes
+        concurrent workflow agents for up to 10 minutes on a stalled stream.
+        """
         if self._client is None:
-            self._client = self._create_client()
+            self._client = _apply_client_timeout(self._create_client())
         return self._client
 
     def _prepare_messages(
@@ -527,27 +666,17 @@ class OpenAICompatibleProvider(BaseProvider):
         *,
         model: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Convert messages to OpenAI format, translating Anthropic tool blocks.
-
-        When ``model`` is provided, the method checks whether the model
-        supports vision.  If it does not, image content blocks are stripped
-        from the messages **before** conversion so the provider never sends
-        ``image_url`` blocks to a model that rejects them.
-
-        Args:
-            messages: List of chat messages (Anthropic-format).
-            model:  The resolved model ID.  When ``None`` (default) the
-                    instance's ``self.model`` is used as fallback; if both
-                    are ``None`` no vision filtering is applied.
-        """
+        """Convert messages to OpenAI format, translating Anthropic tool blocks."""
         base = super()._prepare_messages(messages)
         resolved = model or self.model
         supports_vision: bool | None = None
         if resolved:
             from src.models.capabilities import supports_vision as _supports_vision
+
             supports_vision = _supports_vision(resolved)
         return _convert_anthropic_messages_to_openai(
-            base, supports_vision=supports_vision,
+            base,
+            supports_vision=supports_vision,
         )
 
     def _build_usage_dict(self, usage: Any) -> dict[str, Any]:
@@ -559,8 +688,56 @@ class OpenAICompatibleProvider(BaseProvider):
             "total_tokens": getattr(usage, "total_tokens", 0),
         }
 
+    @staticmethod
+    def _with_system_prompt(
+        provider_messages: list[dict[str, Any]],
+        kwargs: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Fold an Anthropic-style ``system`` kwarg into the message list.
+
+        OpenAI-compatible chat completions have no top-level ``system``
+        parameter — the system prompt is a ``role="system"`` message. Several
+        callers in this port pass ``system=`` as a kwarg, mirroring the
+        Anthropic provider: compaction's ``COMPACT_SYSTEM_PROMPT``
+        (``services/compact/compact.py``), agent hooks, and the memdir
+        selector. The normal query loop already prepends a system message for
+        these providers (``query.py`` non-Anthropic branch), so the kwarg only
+        reaches here on those side paths. Without this translation it is
+        splatted into ``completions.create()``, which raises
+        ``TypeError: Completions.create() got an unexpected keyword argument
+        'system'`` — the failure that drops compaction to its text-extraction
+        fallback on DeepSeek/GLM/OpenAI/OpenRouter.
+
+        Pops ``system`` from ``kwargs`` (so it is NOT forwarded to the SDK) and
+        returns ``provider_messages`` with a leading system message when the
+        kwarg was a non-empty string or Anthropic-style list of text blocks;
+        otherwise returns ``provider_messages`` unchanged.
+        """
+        system = kwargs.pop("system", None)
+        if not system:
+            return provider_messages
+        if isinstance(system, str):
+            text = system
+        elif isinstance(system, list):
+            parts: list[str] = []
+            for block in system:
+                if isinstance(block, str):
+                    parts.append(block)
+                elif isinstance(block, dict):
+                    parts.append(str(block.get("text", "")))
+            text = "\n".join(p for p in parts if p)
+        else:
+            text = str(system)
+        text = text.strip()
+        if not text:
+            return provider_messages
+        return [{"role": "system", "content": text}, *provider_messages]
+
     def chat(
-        self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, **kwargs
+        self,
+        messages: list[MessageInput],
+        tools: Optional[list[dict[str, Any]]] = None,
+        **kwargs
     ) -> ChatResponse:
         """Synchronous chat completion.
 
@@ -577,19 +754,15 @@ class OpenAICompatibleProvider(BaseProvider):
         # Convert messages
         provider_messages = self._prepare_messages(messages, model=model)
 
-        # OpenAI uses a system message in the messages array rather than
-        # a top-level ``system`` parameter (which is Anthropic-specific).
-        # Pop it from kwargs and inject at the front so callers that pass
-        # ``system=...`` (e.g. compact, re-rank) work transparently.
-        system_prompt: str | None = kwargs.pop("system", None)
-        if system_prompt:
-            provider_messages.insert(0, {"role": "system", "content": system_prompt})
-
         # Convert tools to OpenAI format
         extra_kwargs: dict[str, Any] = {}
         if tools:
             converted = [_convert_to_openai_tool_schema(t) for t in tools]
             extra_kwargs["tools"] = [t for t in converted if t is not None]
+
+        # Fold an Anthropic-style ``system`` kwarg into a leading system
+        # message (and pop it from kwargs so it isn't forwarded to the SDK).
+        provider_messages = self._with_system_prompt(provider_messages, kwargs)
 
         # Make API call
         response = self.client.chat.completions.create(
@@ -604,7 +777,10 @@ class OpenAICompatibleProvider(BaseProvider):
 
         # Handle reasoning content (GLM specific, but harmless for others)
         reasoning_content: Optional[str] = None
-        if hasattr(choice.message, "reasoning_content") and choice.message.reasoning_content:
+        if (
+            hasattr(choice.message, "reasoning_content")
+            and choice.message.reasoning_content
+        ):
             reasoning_content = choice.message.reasoning_content
 
         # Extract tool calls (OpenAI format -> Anthropic format)
@@ -612,17 +788,12 @@ class OpenAICompatibleProvider(BaseProvider):
         if hasattr(choice.message, "tool_calls") and choice.message.tool_calls:
             tool_uses = []
             for tc in choice.message.tool_calls:
-                try:
-                    args = json.loads(tc.function.arguments) if tc.function.arguments else {}
-                except Exception:
-                    args = {}
-                tool_uses.append(
-                    {
-                        "id": tc.id,
-                        "name": tc.function.name,
-                        "input": args,
-                    }
-                )
+                args = _parse_tool_call_arguments(tc.function.arguments)
+                tool_uses.append({
+                    "id": tc.id,
+                    "name": tc.function.name,
+                    "input": args,
+                })
 
         return ChatResponse(
             content=choice.message.content or "",
@@ -634,7 +805,10 @@ class OpenAICompatibleProvider(BaseProvider):
         )
 
     def chat_stream(
-        self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, **kwargs
+        self,
+        messages: list[MessageInput],
+        tools: Optional[list[dict[str, Any]]] = None,
+        **kwargs
     ) -> Generator[str, None, None]:
         """Streaming chat completion.
 
@@ -651,16 +825,15 @@ class OpenAICompatibleProvider(BaseProvider):
         # Convert messages
         provider_messages = self._prepare_messages(messages, model=model)
 
-        # Handle system prompt (OpenAI uses a system message in the messages array)
-        system_prompt: str | None = kwargs.pop("system", None)
-        if system_prompt:
-            provider_messages.insert(0, {"role": "system", "content": system_prompt})
-
         # Convert tools to OpenAI format
         extra_kwargs: dict[str, Any] = {}
         if tools:
             converted = [_convert_to_openai_tool_schema(t) for t in tools]
             extra_kwargs["tools"] = [t for t in converted if t is not None]
+
+        # Fold an Anthropic-style ``system`` kwarg into a leading system
+        # message (and pop it from kwargs so it isn't forwarded to the SDK).
+        provider_messages = self._with_system_prompt(provider_messages, kwargs)
 
         # Stream API call
         stream = self.client.chat.completions.create(
@@ -680,9 +853,9 @@ class OpenAICompatibleProvider(BaseProvider):
         messages: list[MessageInput],
         tools: Optional[list[dict[str, Any]]] = None,
         on_text_chunk: TextChunkCallback | None = None,
-        on_thinking_chunk: "Callable[[str], None] | None" = None,
         abort_signal: Any = None,
-        **kwargs,
+        on_thinking_chunk: TextChunkCallback | None = None,
+        **kwargs
     ) -> ChatResponse:
         """Stream OpenAI-compatible chunks while rebuilding the final response.
 
@@ -709,16 +882,13 @@ class OpenAICompatibleProvider(BaseProvider):
         main thread's response time independent of the SDK's
         cooperation.
         """
+        from ._stream_abort import StreamAbortGuard
+
         guard = StreamAbortGuard(abort_signal)
         guard.raise_if_pre_aborted()
 
         model = self._get_model(**kwargs)
         provider_messages = self._prepare_messages(messages, model=model)
-
-        # Handle system prompt (OpenAI uses a system message in the messages array)
-        system_prompt: str | None = kwargs.pop("system", None)
-        if system_prompt:
-            provider_messages.insert(0, {"role": "system", "content": system_prompt})
 
         extra_kwargs: dict[str, Any] = {}
         if tools:
@@ -731,22 +901,20 @@ class OpenAICompatibleProvider(BaseProvider):
         # counts. The spinner row + ``/stats`` rely on this — see
         # ``_build_usage_dict`` below and the consumer in
         # ``src/query/query.py``.
+        # Fold an Anthropic-style ``system`` kwarg into a leading system
+        # message before the kwargs splat below (and pop it from kwargs so it
+        # isn't forwarded to the SDK).
+        provider_messages = self._with_system_prompt(provider_messages, kwargs)
+
         stream_kwargs = {k: v for k, v in kwargs.items() if k not in ["model", "tools"]}
         existing_stream_options = stream_kwargs.pop("stream_options", None) or {}
-        # Only add include_usage if:
-        #   1. Not explicitly disabled by the caller via stream_options,
-        #   2. Not suppressed by env var (for backends that 404 on it).
-        # Some OpenAI-compatible backends (e.g. older vLLM, custom proxies)
-        # return 404 for stream_options they don't understand.
-        _disable_usage = os.environ.get("CLAWCODEX_DISABLE_STREAM_USAGE", "").lower() in (
-            "1",
-            "true",
-            "yes",
-        )
-        if not _disable_usage and "include_usage" not in existing_stream_options:
+        disable_usage = os.environ.get(
+            "CLAWCODEX_DISABLE_STREAM_USAGE", ""
+        ).lower() in ("1", "true", "yes")
+        if not disable_usage and "include_usage" not in existing_stream_options:
             existing_stream_options["include_usage"] = True
-        stream_kwargs["stream_options"] = existing_stream_options
-
+        if existing_stream_options:
+            stream_kwargs["stream_options"] = existing_stream_options
         content_parts: list[str] = []
         response_model = model
         finish_reason = "stop"
@@ -777,7 +945,14 @@ class OpenAICompatibleProvider(BaseProvider):
         import threading as _threading
 
         _DONE = object()
-        chunk_queue: _queue.Queue = _queue.Queue()
+        # Bounded so an orphaned worker (abort fired but the SDK
+        # iterator never honors ``response.close()`` — the LiteLLM
+        # proxy case documented above) can't accumulate unbounded
+        # chunks in memory. Once the queue is full, ``put()`` blocks
+        # the worker instead of growing, capping retained memory at
+        # ``_CHUNK_QUEUE_MAXSIZE`` chunks regardless of how long the
+        # underlying connection stays open after abort.
+        chunk_queue: _queue.Queue = _queue.Queue(maxsize=_CHUNK_QUEUE_MAXSIZE)
 
         def _drain_stream() -> None:
             try:
@@ -789,18 +964,9 @@ class OpenAICompatibleProvider(BaseProvider):
                     **stream_kwargs,
                 )
                 with guard.attach(stream):
-                    for c in stream:
-                        chunk_queue.put(c)
+                    for chunk in stream:
+                        chunk_queue.put(chunk)
             except BaseException as exc:  # noqa: BLE001 — surface to consumer
-                # Normalize httpx transport-layer errors (e.g. the
-                # ``peer closed connection without sending complete
-                # message body (incomplete chunked read)`` chunked-read
-                # failure that surfaces when a gateway / proxy /
-                # LiteLLM upstream times out mid-stream) into the
-                # domain-specific ``APIConnectionError`` so the retry
-                # classifier recognises them as transient. ``AbortError``
-                # is left untouched so the consumer's
-                # ``guard.reraise_if_aborted`` still fires.
                 chunk_queue.put(normalize_httpx_transport_error(exc))
             finally:
                 chunk_queue.put(_DONE)
@@ -811,93 +977,93 @@ class OpenAICompatibleProvider(BaseProvider):
             name=f"openai-stream-{id(self)}",
         )
 
-        worker.start()
-        while True:
-            try:
-                item = chunk_queue.get(timeout=0.1)
-            except _queue.Empty:
-                # No chunk available right now — check abort and
-                # loop. The 100 ms tick bounds how long the user
-                # waits between pressing ESC and the prompt
-                # returning, regardless of how slow / blocked the
-                # underlying SDK iteration is.
-                if guard.aborted:
-                    # Use ``raise_if_post_aborted`` so the abort
-                    # reason from the controller is preserved
-                    # (rather than hardcoding ``"user_interrupt"``,
-                    # which would silently downgrade a non-default
-                    # reason like a future ``"rate_limit_backoff"``).
-                    guard.raise_if_post_aborted()
-                continue
+        # Keep the consumer block structurally scoped while stream creation and
+        # attachment live in the worker; this lets abort unwind even if the SDK
+        # blocks before returning the stream object.
+        with nullcontext():
+            worker.start()
+            while True:
+                try:
+                    item = chunk_queue.get(timeout=0.1)
+                except _queue.Empty:
+                    # No chunk available right now — check abort and
+                    # loop. The 100 ms tick bounds how long the user
+                    # waits between pressing ESC and the prompt
+                    # returning, regardless of how slow / blocked the
+                    # underlying SDK iteration is.
+                    if guard.aborted:
+                        # Use ``raise_if_post_aborted`` so the abort
+                        # reason from the controller is preserved
+                        # (rather than hardcoding ``"user_interrupt"``,
+                        # which would silently downgrade a non-default
+                        # reason like a future ``"rate_limit_backoff"``).
+                        guard.raise_if_post_aborted()
+                    continue
 
-            if item is _DONE:
-                break
-            if isinstance(item, BaseException):
-                if isinstance(item, Exception):
-                    guard.reraise_if_aborted(item)
+                if item is _DONE:
+                    break
+                if isinstance(item, BaseException):
+                    if isinstance(item, Exception):
+                        guard.reraise_if_aborted(item)
+                        raise item
+                    # KeyboardInterrupt/SystemExit from the worker
+                    # path — re-raise as-is so the outer signal-
+                    # handling story stays intact.
                     raise item
-                # KeyboardInterrupt/SystemExit from the worker
-                # path — re-raise as-is so the outer signal-
-                # handling story stays intact.
-                raise item
 
-            chunk = item
-            response_model = getattr(chunk, "model", response_model)
-            usage_candidate = getattr(chunk, "usage", None)
-            if usage_candidate is not None:
-                usage_obj = usage_candidate
+                chunk = item
+                response_model = getattr(chunk, "model", response_model)
+                usage_candidate = getattr(chunk, "usage", None)
+                if usage_candidate is not None:
+                    usage_obj = usage_candidate
 
-            choices = getattr(chunk, "choices", None) or []
-            if choices:
-                choice = choices[0]
-                if getattr(choice, "finish_reason", None):
-                    finish_reason = choice.finish_reason
+                choices = getattr(chunk, "choices", None) or []
+                if choices:
+                    choice = choices[0]
+                    if getattr(choice, "finish_reason", None):
+                        finish_reason = choice.finish_reason
 
-                delta = getattr(choice, "delta", None)
-                if delta is not None:
-                    content_piece = getattr(delta, "content", None)
-                    if content_piece:
-                        piece = str(content_piece)
-                        content_parts.append(piece)
-                        if on_text_chunk is not None:
-                            on_text_chunk(piece)
+                    delta = getattr(choice, "delta", None)
+                    if delta is not None:
+                        content_piece = getattr(delta, "content", None)
+                        if content_piece:
+                            piece = str(content_piece)
+                            content_parts.append(piece)
+                            if on_text_chunk is not None:
+                                on_text_chunk(piece)
 
-                    reasoning_piece = getattr(delta, "reasoning_content", None)
-                    if reasoning_piece:
-                        reasoning_parts.append(str(reasoning_piece))
-                        ## _log(f'[openai_provider] reasoning_piece={str(reasoning_piece)[:30]}, on_thinking_chunk={on_thinking_chunk}')
-                        if on_thinking_chunk is not None:
-                            ## _log(f'[openai_provider] calling on_thinking_chunk')
-                            on_thinking_chunk(str(reasoning_piece))
+                        reasoning_piece = getattr(delta, "reasoning_content", None)
+                        if reasoning_piece:
+                            reasoning_parts.append(str(reasoning_piece))
+                            if on_thinking_chunk is not None:
+                                on_thinking_chunk(str(reasoning_piece))
 
-                    tool_call_deltas = getattr(delta, "tool_calls", None) or []
-                    for tc in tool_call_deltas:
-                        idx = getattr(tc, "index", 0)
-                        entry = tool_calls_by_index.setdefault(
-                            idx, {"id": "", "name": "", "arguments": ""}
-                        )
+                        tool_call_deltas = getattr(delta, "tool_calls", None) or []
+                        for tc in tool_call_deltas:
+                            idx = getattr(tc, "index", 0)
+                            entry = tool_calls_by_index.setdefault(idx, {"id": "", "name": "", "arguments": ""})
 
-                        tc_id = getattr(tc, "id", None)
-                        if tc_id:
-                            entry["id"] = str(tc_id)
+                            tc_id = getattr(tc, "id", None)
+                            if tc_id:
+                                entry["id"] = str(tc_id)
 
-                        function = getattr(tc, "function", None)
-                        if function is not None:
-                            fn_name = getattr(function, "name", None)
-                            if fn_name:
-                                entry["name"] += str(fn_name)
-                            fn_args = getattr(function, "arguments", None)
-                            if fn_args:
-                                entry["arguments"] += str(fn_args)
+                            function = getattr(tc, "function", None)
+                            if function is not None:
+                                fn_name = getattr(function, "name", None)
+                                if fn_name:
+                                    entry["name"] += str(fn_name)
+                                fn_args = getattr(function, "arguments", None)
+                                if fn_args:
+                                    entry["arguments"] += str(fn_args)
 
-            # Check abort AFTER processing this chunk so any
-            # already-delivered content is preserved (matches the
-            # in-loop-check semantics from the old implementation:
-            # the chunk-list test pins that the chunk we received
-            # before the abort gets processed; we just don't take
-            # the next one).
-            if guard.aborted:
-                guard.raise_if_post_aborted()
+                # Check abort AFTER processing this chunk so any
+                # already-delivered content is preserved (matches the
+                # in-loop-check semantics from the old implementation:
+                # the chunk-list test pins that the chunk we received
+                # before the abort gets processed; we just don't take
+                # the next one).
+                if guard.aborted:
+                    guard.raise_if_post_aborted()
 
         # Stream completed naturally OR the in-loop check broke out.
         # In the latter case the signal is already tripped; raise so
@@ -909,17 +1075,12 @@ class OpenAICompatibleProvider(BaseProvider):
             item = tool_calls_by_index[idx]
             if not item["name"]:
                 continue
-            try:
-                parsed_args = json.loads(item["arguments"]) if item["arguments"] else {}
-            except Exception:
-                parsed_args = {}
-            tool_uses.append(
-                {
-                    "id": item["id"] or f"tool_call_{idx}",
-                    "name": item["name"],
-                    "input": parsed_args,
-                }
-            )
+            parsed_args = _parse_tool_call_arguments(item["arguments"])
+            tool_uses.append({
+                "id": item["id"] or f"tool_call_{idx}",
+                "name": item["name"],
+                "input": parsed_args,
+            })
 
         reasoning_content = "".join(reasoning_parts) if reasoning_parts else None
         return ChatResponse(

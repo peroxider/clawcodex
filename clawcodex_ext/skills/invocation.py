@@ -233,7 +233,11 @@ def _make_shell_executor(
         try:
             registry = shell_context.tool_registry
             if registry is None:
-                raise RuntimeError("skill shell execution requires an active ToolRegistry")
+                from clawcodex_ext.tool_system.defaults import build_default_registry
+
+                registry = build_default_registry(
+                    provider=getattr(shell_context, "_active_provider", None)
+                )
             tool_result = registry.dispatch(
                 ToolCall(
                     name="Bash",

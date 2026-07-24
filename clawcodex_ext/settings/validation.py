@@ -7,7 +7,6 @@ from typing import Any
 
 from src.settings.constants import (
     VALID_EFFORT_VALUES,
-    VALID_OUTPUT_STYLES,
     VALID_PERMISSION_MODES,
     VALID_SPINNER_VERB_MODES,
 )
@@ -62,23 +61,21 @@ def validate_settings(settings: SettingsSchema) -> list[ValidationError]:
     # reported as an invalid mode.
     effective_default_mode = _effective_default_permission_mode(settings)
     if effective_default_mode is not None and effective_default_mode not in VALID_PERMISSION_MODES:
+        permission_field = (
+            "permissions.defaultMode"
+            if getattr(settings.permissions, "default_mode", None)
+            else "permission_mode"
+        )
         errors.append(
             ValidationError(
-                field="permissions.defaultMode",
+                field=permission_field,
                 message=f"Invalid default permission mode: {effective_default_mode!r}",
                 value=effective_default_mode,
             )
         )
 
-    # Output style
-    if settings.output_style.style not in VALID_OUTPUT_STYLES:
-        errors.append(
-            ValidationError(
-                field="output_style.style",
-                message=f"Invalid output style: {settings.output_style.style!r}",
-                value=settings.output_style.style,
-            )
-        )
+    # Output style names are free-form. Unknown names fall back at resolve
+    # time, matching the upstream TS string schema and custom user styles.
 
     # Max width
     if settings.output_style.max_width < 40:
@@ -156,7 +153,25 @@ def validate_settings(settings: SettingsSchema) -> list[ValidationError]:
     # F-47: permissions.rules is a dict[str, list[str]] (allow/deny/ask).
     # The legacy list[PermissionRule] path is gone (Sub-H); rule strings
     # are kept verbatim on disk and validated as non-empty here.
-    rules = settings.permissions.rules
+    permissions = settings.permissions
+    legacy_rules = (
+        permissions
+        if isinstance(permissions, list)
+        else getattr(permissions, "legacy_rules", [])
+    )
+    if legacy_rules:
+        from src.settings.permission_validation import validate_permission_rules
+
+        for message in validate_permission_rules(list(legacy_rules)):
+            field, _, detail = message.partition(": ")
+            errors.append(
+                ValidationError(
+                    field=field,
+                    message=detail or message,
+                )
+            )
+
+    rules = {} if isinstance(permissions, list) else permissions.rules
     for behavior in ("allow", "deny", "ask"):
         bucket = rules.get(behavior, [])
         if not isinstance(bucket, list):

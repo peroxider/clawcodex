@@ -237,13 +237,20 @@ async def test_tui_model_picker_discards_catalog_after_provider_switch(monkeypat
     assert pushed == []
 
 
-def test_tui_model_picker_records_discovery_fallback(monkeypatch):
+def test_tui_model_picker_records_discovery_fallback(monkeypatch, tmp_path):
+    from clawcodex_ext.providers.model_catalog_cache import reset_model_catalog_cache
+
+    monkeypatch.setenv("CLAWCODEX_HOME", str(tmp_path))
+    reset_model_catalog_cache()
     app = object.__new__(ClawCodexTUI)
 
     def fail_discovery():
         raise RuntimeError("TLS EOF")
 
-    app.provider = SimpleNamespace(get_available_models=fail_discovery)
+    app.provider = SimpleNamespace(
+        discover_available_models=fail_discovery,
+        get_available_models=fail_discovery,
+    )
     app.provider_name = "openai-codex"
     app.model = "gpt-current"
     monkeypatch.setattr(

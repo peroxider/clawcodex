@@ -54,6 +54,8 @@ class AgentDefinition:
     background: bool = False
     color: str | None = None
     memory: str | None = None
+    omit_clawcodex_md: bool = False
+    # Compatibility spelling retained for downstream templates/registries.
     omit_claude_md: bool = False
     disallowed_tools: list[str] | None = None
     hooks: dict[str, Any] | None = None
@@ -65,6 +67,11 @@ class AgentDefinition:
     get_system_prompt: Callable[..., str] = field(default=lambda: "")
     callback: Callable[[], None] | None = None
     critical_system_reminder: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.omit_claude_md or self.omit_clawcodex_md:
+            self.omit_claude_md = True
+            self.omit_clawcodex_md = True
 
 
 BuiltInAgentDefinition = AgentDefinition
@@ -205,7 +212,12 @@ EXPLORE_AGENT = AgentDefinition(
     disallowed_tools=["Agent", "ExitPlanMode", "Edit", "Write", "NotebookEdit"],
     source="built-in",
     base_dir="built-in",
-    omit_claude_md=True,
+    omit_clawcodex_md=True,
+    # ch08 round-4 (critic M1) — Explore is the fast/cheap read-only agent;
+    # TS exploreAgent.ts:77 runs it on Haiku. get_agent_model resolves this
+    # against the session provider and inherits on providers that don't
+    # serve haiku (e.g. DeepSeek), so it is cross-provider safe.
+    model="haiku",
     get_system_prompt=_explore_system_prompt,
 )
 
@@ -271,7 +283,7 @@ PLAN_AGENT = AgentDefinition(
     source="built-in",
     base_dir="built-in",
     model="inherit",
-    omit_claude_md=True,
+    omit_clawcodex_md=True,
     get_system_prompt=_plan_system_prompt,
 )
 
@@ -319,7 +331,22 @@ def get_built_in_agents() -> list[AgentDefinition]:
     """Return the list of active built-in agent definitions.
 
     Mirrors getBuiltInAgents() from typescript/src/tools/AgentTool/builtInAgents.ts.
+
+    Coordinator mode swaps in the coordinator agent list (worker /
+    general-purpose / explore / plan) so the coordinator system prompt's
+    ``subagent_type: "worker"`` calls resolve — mirrors
+    ``builtInAgents.ts:35-43``. Imports are function-local for the same
+    reason TS lazy-requires there: ``coordinator.worker_agent`` imports
+    this module (hard cycle at import time), and the env gate is read
+    live per call.
     """
+    from src.coordinator.mode import is_coordinator_mode
+
+    if is_coordinator_mode():
+        from src.coordinator.worker_agent import get_coordinator_agents
+
+        return get_coordinator_agents()
+
     return [
         GENERAL_PURPOSE_AGENT,
         EXPLORE_AGENT,

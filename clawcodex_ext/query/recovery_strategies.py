@@ -26,7 +26,7 @@ from typing import Awaitable, TYPE_CHECKING, Any, Callable
 from clawcodex_ext.types.messages import AssistantMessage, Message
 
 if TYPE_CHECKING:
-    from .config import QueryConfig
+    from .config import FrozenQueryConfig, QueryConfig
     from .query import QueryParams
     from .transitions import QueryState
 
@@ -42,7 +42,7 @@ class RecoveryContext:
 
     state: QueryState
     last_message: Message | None
-    config: QueryConfig
+    config: QueryConfig | FrozenQueryConfig
     params: QueryParams
     messages: list[Message]
     assistant_messages: list[AssistantMessage]
@@ -269,14 +269,14 @@ async def _reactive_compact_recovery(
     s = ctx.state
     if s.has_attempted_reactive_compact:
         return None
-    from .config import QueryConfig
+    from .config import FrozenQueryConfig, QueryConfig
 
-    assert isinstance(ctx.config, QueryConfig)
+    assert isinstance(ctx.config, (QueryConfig, FrozenQueryConfig))
     if not ctx.config.reactive_compact_enabled:
         return None
 
     from clawcodex_ext.services.api.errors import PromptTooLongError
-    from clawcodex_ext.services.compact.reactive_compact import reactive_compact
+    from src.services.compact.reactive_compact import reactive_compact
 
     synthetic_err = PromptTooLongError("withheld during streaming, recovering")
     result = await reactive_compact(
@@ -286,7 +286,7 @@ async def _reactive_compact_recovery(
         model=ctx.config.model,
     )
     if not result.compacted:
-        return None
+        return (None, [ctx.last_message] if ctx.last_message is not None else [])
 
     post_compact_messages: list[Message] = result.messages
     yield_msgs: list[Message] = list(post_compact_messages)

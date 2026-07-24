@@ -119,6 +119,17 @@ def _is_provider_free_goal_summary_print(args: object) -> bool:
     )
 
 
+def _run_with_worktree_keep_note(callback, worktree_session):
+    """Run a local frontend and always report its retained worktree."""
+    try:
+        return callback()
+    finally:
+        if worktree_session is not None:
+            from clawcodex_ext.cli.worktree import print_worktree_keep_note
+
+            print_worktree_keep_note(worktree_session)
+
+
 def _maybe_argcomplete_top_level(argv: list[str]) -> None:
     """If argcomplete is active, expose the fast-path subcommand nouns.
 
@@ -209,6 +220,13 @@ def run_cli(argv: list[str] | None = None) -> int:
     profile_checkpoint("cli_main_entry")
 
     import os
+
+    # A nested CLI inherits the outer session's worktree variables. Strip
+    # them before any prefetch/bootstrap child can snapshot the environment;
+    # only a worktree created by this invocation may be advertised later.
+    from src.utils.worktree_session import strip_worktree_env
+
+    strip_worktree_env()
 
     if os.environ.get("CLAWCODEX_DEBUG", "").lower() in ("1", "true", "yes"):
         import logging
@@ -444,9 +462,9 @@ def run_cli(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv[1:])
     profile_checkpoint("argparse_done")
 
-    swarm_requested = (
-        bool(getattr(args, "swarm", False)) or getattr(args, "effort", "normal") == "swarm"
-    )
+    swarm_requested = bool(getattr(args, "swarm", False)) or getattr(
+        args, "effort", None
+    ) == "swarm"
     if swarm_requested:
         if not getattr(args, "prompt", None):
             parser.error("--swarm/--decompose requires a prompt")
@@ -572,6 +590,22 @@ def run_cli(argv: list[str] | None = None) -> int:
     profile_checkpoint("permissions_resolved")
     profile_checkpoint("phase3_end_phase4_start")
 
+    if (
+        getattr(args, "fallback_model", None)
+        and args.fallback_model == getattr(args, "model", None)
+    ):
+        print("error: --fallback-model must differ from --model", file=sys.stderr)
+        return 2
+
+    from clawcodex_ext.cli.worktree import WORKTREE_FAILED, maybe_create_worktree
+
+    worktree_session = maybe_create_worktree(args)
+    if worktree_session is WORKTREE_FAILED:
+        return 1
+    if worktree_session is not None:
+        os.chdir(worktree_session.worktree_path)
+        os.environ.update(worktree_session.to_env())
+
     # Interactive path: decide between the Textual TUI (new default) and the
     # legacy Rich REPL. Explicit flags win; otherwise auto-detect a compatible TTY.
     explicit_tui: bool | None = None
@@ -619,6 +653,12 @@ def run_cli(argv: list[str] | None = None) -> int:
     runtime_opts = RuntimeOptions(
         provider_name=getattr(args, "provider", None),
         model=getattr(args, "model", None),
+        fallback_model=getattr(args, "fallback_model", None),
+        effort=(
+            args.effort
+            if getattr(args, "effort", None) not in (None, "normal", "swarm")
+            else None
+        ),
         prompt=getattr(args, "prompt", None),
         output_format=getattr(args, "output_format", "text"),
         input_format=getattr(args, "input_format", "text"),
@@ -645,36 +685,43 @@ def run_cli(argv: list[str] | None = None) -> int:
         record=getattr(args, "record", None),
         record_width=getattr(args, "record_width", None),
         record_height=getattr(args, "record_height", None),
+        workspace_root=(
+            Path(worktree_session.worktree_path) if worktree_session is not None else None
+        ),
+        worktree_session=worktree_session,
     )
     runtime_opts.multimodel_group = _multimodel_group
     if _is_provider_free_goal_summary_print(args) and not _multimodel_group:
         from src.entrypoints.headless import HeadlessOptions, run_headless
 
-        rc = run_headless(
-            HeadlessOptions(
-                prompt=runtime_opts.prompt,
-                output_format=runtime_opts.output_format,
-                input_format=runtime_opts.input_format,
-                provider_name=runtime_opts.provider_name,
-                model=runtime_opts.model,
-                max_turns=runtime_opts.max_turns,
-                max_turns_explicit=runtime_opts.max_turns_explicit,
-                permission_mode=runtime_opts.permission_mode,
-                is_bypass_permissions_mode_available=runtime_opts.is_bypass_permissions_mode_available,
-                skip_permissions=runtime_opts.skip_permissions,
-                allowed_tools=runtime_opts.allowed_tools,
-                disallowed_tools=runtime_opts.disallowed_tools,
-                include_partial_messages=runtime_opts.include_partial_messages,
-                verbose=runtime_opts.verbose,
-                workspace_root=runtime_opts.workspace_root or Path.cwd(),
-                append_system_prompt=runtime_opts.append_system_prompt,
-                startup_agent=runtime_opts.startup_agent,
-                resume_session_id=runtime_opts.resume_session_id,
-                resume_session_at=runtime_opts.resume_session_at,
-                record=runtime_opts.record,
-                record_width=runtime_opts.record_width,
-                record_height=runtime_opts.record_height,
-            )
+        headless_options = HeadlessOptions(
+            prompt=runtime_opts.prompt,
+            output_format=runtime_opts.output_format,
+            input_format=runtime_opts.input_format,
+            provider_name=runtime_opts.provider_name,
+            model=runtime_opts.model,
+            fallback_model=runtime_opts.fallback_model,
+            effort=runtime_opts.effort,
+            max_turns=runtime_opts.max_turns,
+            max_turns_explicit=runtime_opts.max_turns_explicit,
+            permission_mode=runtime_opts.permission_mode,
+            is_bypass_permissions_mode_available=runtime_opts.is_bypass_permissions_mode_available,
+            skip_permissions=runtime_opts.skip_permissions,
+            allowed_tools=runtime_opts.allowed_tools,
+            disallowed_tools=runtime_opts.disallowed_tools,
+            include_partial_messages=runtime_opts.include_partial_messages,
+            verbose=runtime_opts.verbose,
+            workspace_root=runtime_opts.workspace_root or Path.cwd(),
+            append_system_prompt=runtime_opts.append_system_prompt,
+            startup_agent=runtime_opts.startup_agent,
+            resume_session_id=runtime_opts.resume_session_id,
+            resume_session_at=runtime_opts.resume_session_at,
+            record=runtime_opts.record,
+            record_width=runtime_opts.record_width,
+            record_height=runtime_opts.record_height,
+        )
+        rc = _run_with_worktree_keep_note(
+            lambda: run_headless(headless_options), worktree_session
         )
         _telemetry_record_end(
             session_id=_telemetry_session_id,
@@ -700,6 +747,10 @@ def run_cli(argv: list[str] | None = None) -> int:
                 "hint: run `clawcodex login` to configure credentials interactively.",
                 file=sys.stderr,
             )
+        if worktree_session is not None:
+            from clawcodex_ext.cli.worktree import print_worktree_keep_note
+
+            print_worktree_keep_note(worktree_session)
         return 1
 
     # ---- Agent type resolution: --agent flag or auto-detect ----
@@ -727,7 +778,9 @@ def run_cli(argv: list[str] | None = None) -> int:
         profile_checkpoint("mode_dispatch_print")
         profile_checkpoint("phase4_dispatch")
         frontend = get_frontend("headless")
-        rc = frontend.run(ctx, argv[1:])
+        rc = _run_with_worktree_keep_note(
+            lambda: frontend.run(ctx, argv[1:]), worktree_session
+        )
         _telemetry_record_end(
             session_id=_telemetry_session_id,
             command_name="print",
@@ -744,7 +797,9 @@ def run_cli(argv: list[str] | None = None) -> int:
         profile_checkpoint("mode_dispatch_tui")
         profile_checkpoint("phase4_dispatch")
         frontend = get_frontend("tui")
-        rc = frontend.run(ctx, argv[1:])
+        rc = _run_with_worktree_keep_note(
+            lambda: frontend.run(ctx, argv[1:]), worktree_session
+        )
         _telemetry_record_end(
             session_id=_telemetry_session_id,
             command_name="tui",
@@ -759,7 +814,9 @@ def run_cli(argv: list[str] | None = None) -> int:
     profile_checkpoint("phase4_dispatch")
 
     frontend = get_frontend("repl")
-    rc = frontend.run(ctx, argv[1:])
+    rc = _run_with_worktree_keep_note(
+        lambda: frontend.run(ctx, argv[1:]), worktree_session
+    )
     _telemetry_record_end(
         session_id=_telemetry_session_id,
         command_name="repl",

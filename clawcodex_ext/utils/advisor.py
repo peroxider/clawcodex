@@ -31,6 +31,7 @@ Anthropic advisors on Anthropic main loops, or for transparency).
 from __future__ import annotations
 
 import os
+import time
 from typing import Any, Mapping, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -415,9 +416,8 @@ def format_advisor_status(
     a stale configuration under an unsupported main loop shows
     ``"(inactive)"`` rather than silently lying about the state.
 
-    Shared between :mod:`src.repl.core` (prompt-toolkit bottom_toolbar)
-    and :mod:`src.tui.widgets.status_line` (Textual widget) so both
-    surfaces format the advisor identically.
+    Formats the advisor status segment uniformly for whatever status
+    surface renders it.
 
     Any unexpected failure (settings cache contention, future provider
     that throws on inspection) returns ``None`` — the status row must
@@ -768,6 +768,7 @@ def execute_client_advisor(
     # Anthropic (line 239 of anthropic_provider.py forwards unknown
     # kwargs straight to ``messages.create``). Streaming under the hood
     # but no ``on_text_chunk`` callback — we only need the final text.
+    _t0 = time.monotonic()
     try:
         try:
             response = provider.chat_stream_response(
@@ -792,6 +793,29 @@ def execute_client_advisor(
         "input_tokens": int(raw_usage.get("input_tokens", 0) or 0),
         "output_tokens": int(raw_usage.get("output_tokens", 0) or 0),
     }
+
+    # ch04 round-3 G1: the client-side advisor is its own API call -- it
+    # must self-record into the bootstrap cost totals (the query loop's
+    # head only sees main-loop responses). Duration rides along so /cost's
+    # "Total duration (API)" covers the same calls its cost total does.
+    try:
+        from src.bootstrap.state import add_to_total_duration_state
+        from src.cost_tracker import record_api_usage
+
+        record_api_usage(
+            call_kwargs.get("model")
+            or getattr(response, "model", None)
+            or getattr(provider, "model", "unknown"),
+            raw_usage,
+        )
+        _api_ms = int((time.monotonic() - _t0) * 1000)
+        add_to_total_duration_state(_api_ms, _api_ms)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).debug(
+            "advisor cost recording failed", exc_info=True
+        )
 
     text = getattr(response, "content", None) or ""
     if not isinstance(text, str) or not text.strip():

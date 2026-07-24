@@ -16,7 +16,7 @@ from upstream_sync.core.layer_auditor import LayerAuditor
 from upstream_sync.core.patch_engine import create_engine
 from upstream_sync.core.patch_generator import PatchGenerator
 from upstream_sync.core.sync_orchestrator import SyncOrchestrator
-from upstream_sync.core.vendor import VendorManager
+from upstream_sync.core.vendor import VendorManager, short_commit_id
 from upstream_sync.core.backup_manager import BackupManager
 from upstream_sync.core.verifier import Verifier
 from upstream_sync.reporters.json_reporter import JSONReporter
@@ -82,10 +82,10 @@ def fetch(
     vendor.ensure_remote()
     if ref:
         commit = vendor.fetch_ref(ref)
-        typer.echo(f"Fetched upstream/{ref} at {commit}")
+        typer.echo(f"Fetched {vendor.remote_name}/{ref} at {commit}")
     else:
         commit = vendor.fetch()
-        typer.echo(f"Fetched upstream/{cfg.upstream.main_branch} at {commit}")
+        typer.echo(f"Fetched {vendor.remote_name}/{cfg.upstream.main_branch} at {commit}")
 
 
 @app.command()
@@ -109,16 +109,16 @@ def extract(
 
     # Fetch the ref first
     commit = vendor.fetch_ref(ref)
-    typer.echo(f"Fetched upstream/{ref} at {commit}")
+    typer.echo(f"Fetched {vendor.remote_name}/{ref} at {commit}")
 
     # Determine output path
-    short_ref = commit[:8]
+    short_ref = short_commit_id(commit)
     if output is None:
         output = Path("src") / "upstream" / short_ref
 
     # Extract the source subpath
     vendor.extract_to_path(
-        ref=ref,
+        ref=commit,
         subpath=cfg.upstream.source_subpath,
         target_path=output,
     )
@@ -166,7 +166,7 @@ def _resolve_commit_placeholder(path: Path, commit: str) -> Path:
     """Resolve {commit} placeholder in a path string."""
     path_str = str(path)
     if "{commit}" in path_str:
-        return Path(path_str.format(commit=commit))
+        return Path(path_str.format(commit=short_commit_id(commit)))
     return path
 
 
@@ -199,7 +199,7 @@ def apply(
     if cfg.patches.patch_subdir:
         # Per-commit subdirectory structure: patches/upstream/{commit}/
         patch_dir = _resolve_commit_placeholder(Path(cfg.patches.patch_subdir), commit)
-        series_file = patch_dir / f"{commit}_series"
+        series_file = patch_dir / f"{short_commit_id(commit)}_series"
     else:
         # Flat structure: patches/
         patch_dir = cfg.patches.directory
@@ -306,10 +306,11 @@ def generate_patch(
     """
     cfg = load_config(config)
     generator = PatchGenerator(Path("."), cfg)
+    new_commit_id = short_commit_id(new_commit)
 
     if output is None:
         if cfg.patches.patch_subdir:
-            output = Path(str(cfg.patches.patch_subdir).format(commit=new_commit))
+            output = Path(str(cfg.patches.patch_subdir).format(commit=new_commit_id))
         else:
             output = cfg.patches.directory
 
@@ -318,7 +319,7 @@ def generate_patch(
 
     if patches:
         # Create series file
-        series_file = output / f"{new_commit}_series"
+        series_file = output / f"{new_commit_id}_series"
         generator.create_series_file(patches, series_file)
         typer.echo(f"Generated {len(patches)} patches in {output}")
         typer.echo(f"Series file: {series_file}")
@@ -364,6 +365,7 @@ def regenerate_patches(
     """
     cfg = load_config(config)
     generator = PatchGenerator(Path("."), cfg)
+    commit_id = short_commit_id(commit)
 
     preserve_set = PatchGenerator.collect_preserve(
         preserve_args=preserve,
@@ -371,10 +373,10 @@ def regenerate_patches(
     )
 
     result = generator.regenerate(
-        commit=commit,
+        commit=commit_id,
         src_dir=src,
-        upstream_dir=upstream_root / commit,
-        patch_root=patch_root / commit,
+        upstream_dir=upstream_root / commit_id,
+        patch_root=patch_root / commit_id,
         allow_deletes=allow_deletes,
         preserve=preserve_set,
     )
@@ -474,19 +476,21 @@ def verify(
     3. Patch structure matches expected patterns
     """
     cfg = load_config(config)
+    old_commit_id = short_commit_id(old_commit)
+    new_commit_id = short_commit_id(new_commit)
 
     old_patches_dir = (
-        Path(str(cfg.patches.patch_subdir).format(commit=old_commit))
+        Path(str(cfg.patches.patch_subdir).format(commit=old_commit_id))
         if cfg.patches.patch_subdir
         else cfg.patches.directory
     )
     new_patches_dir = (
-        Path(str(cfg.patches.patch_subdir).format(commit=new_commit))
+        Path(str(cfg.patches.patch_subdir).format(commit=new_commit_id))
         if cfg.patches.patch_subdir
         else cfg.patches.directory
     )
-    old_upstream_dir = Path("src") / "upstream" / old_commit[:8]
-    new_upstream_dir = Path("src") / "upstream" / new_commit[:8]
+    old_upstream_dir = Path("src") / "upstream" / old_commit_id
+    new_upstream_dir = Path("src") / "upstream" / new_commit_id
     backup_dir = Path("backup")
 
     verifier = Verifier(Path("."))
@@ -546,6 +550,7 @@ def upgrade(
     cfg = load_config(config)
     vendor = VendorManager(Path("."), cfg.upstream)
     generator = PatchGenerator(Path("."), cfg)
+    old_commit_id = short_commit_id(old_commit)
 
     # Step 1: Sync current patches (ensure patches match current src/)
     typer.echo("=" * 60)
@@ -553,11 +558,11 @@ def upgrade(
     typer.echo("=" * 60)
 
     if cfg.patches.patch_subdir:
-        old_patch_dir = Path(str(cfg.patches.patch_subdir).format(commit=old_commit))
+        old_patch_dir = Path(str(cfg.patches.patch_subdir).format(commit=old_commit_id))
     else:
         old_patch_dir = cfg.patches.directory
 
-    old_upstream_dir = Path("src") / "upstream" / old_commit[:8]
+    old_upstream_dir = Path("src") / "upstream" / old_commit_id
 
     # Generate patches for current state (src/ vs old_upstream)
     typer.echo(f"Generating current patches from {old_upstream_dir}...")
@@ -594,16 +599,17 @@ def upgrade(
     typer.echo("=" * 60)
     vendor.ensure_remote()
     fetched_commit = vendor.fetch_ref(new_commit)
-    typer.echo(f"Fetched upstream/{new_commit} at {fetched_commit}")
+    new_commit_id = short_commit_id(fetched_commit)
+    typer.echo(f"Fetched {vendor.remote_name}/{new_commit} at {fetched_commit}")
 
     # Step 3: Extract new upstream source
     typer.echo()
     typer.echo("=" * 60)
     typer.echo("Step 3: Extracting new upstream source")
     typer.echo("=" * 60)
-    new_upstream_dir = Path("src") / "upstream" / new_commit[:8]
+    new_upstream_dir = Path("src") / "upstream" / new_commit_id
     vendor.extract_to_path(
-        ref=new_commit,
+        ref=fetched_commit,
         subpath=cfg.upstream.source_subpath,
         target_path=new_upstream_dir,
     )
@@ -621,19 +627,19 @@ def upgrade(
     typer.echo("=" * 60)
 
     if cfg.patches.patch_subdir:
-        new_patch_dir = Path(str(cfg.patches.patch_subdir).format(commit=new_commit))
+        new_patch_dir = Path(str(cfg.patches.patch_subdir).format(commit=new_commit_id))
     else:
         new_patch_dir = cfg.patches.directory
 
     typer.echo(f"Generating patches for {new_commit} based on {old_commit}...")
     new_patches = generator.generate_patches(
-        new_commit=new_commit,
+        new_commit=fetched_commit,
         old_commit=old_commit,
         patch_subdir=new_patch_dir,
     )
 
     if new_patches:
-        series_file = new_patch_dir / f"{new_commit}_series"
+        series_file = new_patch_dir / f"{new_commit_id}_series"
         generator.create_series_file(new_patches, series_file)
         typer.echo(f"  -> Generated {len(new_patches)} patches in {new_patch_dir}")
     else:
@@ -714,6 +720,7 @@ source_lang: "python"
 
 upstream:
   remote_url: "https://github.com/original/repo.git"
+  remote_name: "upstream"
   main_branch: "main"
   vendor_branch: "upstream/vendor"
   version_tag_format: "upstream/v{YYYY}_{MM}"
@@ -740,6 +747,7 @@ source_lang: "python"
 
 upstream:
   remote_url: "https://github.com/original/repo.git"
+  remote_name: "upstream"
   main_branch: "main"
   vendor_branch: "upstream/vendor"
   version_tag_format: "upstream/v{YYYY}_{MM}"

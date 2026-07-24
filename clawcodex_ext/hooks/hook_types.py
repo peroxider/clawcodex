@@ -9,7 +9,7 @@ from typing import Any, Literal
 # Hook events — Chapter-12 / Phase-1 / WI-1.1
 # ---------------------------------------------------------------------------
 #
-# 25-event taxonomy promoted from the legacy 10-event Literal. Mirrors
+# 28-event taxonomy promoted from the legacy 10-event Literal. Mirrors
 # typescript/src/utils/hooks/hooksConfigManager.ts:26-267 plus the chapter's
 # reference table (``ch12-extensibility.md`` §"Five Most Important Lifecycle
 # Events" + §"Reference table — remaining events").
@@ -240,10 +240,13 @@ class HookConfig:
     # Phase-1 / WI-1.3 — schema additions:
     #
     # ``if_condition`` — permission-rule grammar string (e.g.,
-    # ``"Bash(git commit*)"``). Evaluated by ``matches_hook_condition``
-    # (Phase 4 / WI-4.2) against the active tool call. ``None`` means "no
-    # extra filter beyond ``matcher``." Mirrors TS ``schemas/hooks.ts:19-27``
-    # ``if`` field.
+    # ``"Bash(git commit*)"``). Evaluated by
+    # ``hook_executor._matches_if_condition`` (SCHEMAS-1 — the port of TS
+    # ``prepareIfConditionMatcher``) against the active tool call before the
+    # hook spawns. ``None`` means "no extra filter beyond ``matcher``."
+    # Mirrors TS ``schemas/hooks.ts:19-27`` ``if`` field. (Prior to
+    # SCHEMAS-1 this comment named ``matches_hook_condition``, an evaluator
+    # that was never built — the field parsed but was inert.)
     if_condition: str | None = None
 
     # ``once`` — if True, the hook is removed from the session registry after
@@ -283,6 +286,11 @@ class HookResult:
     hook_permission_decision_reason: str | None = None
     hook_source: str | None = None
     updated_input: dict[str, Any] | None = None
+    # PermissionRequest-event extras (HOOKS-1): permission updates a hook may
+    # attach to an allow, and the deny-time turn-abort flag. Mirrors the TS
+    # PermissionRequest decision shape (utils/hooks.ts:833-840).
+    updated_permissions: list[dict[str, Any]] | None = None
+    interrupt: bool = False
     prevent_continuation: bool = False
     stop_reason: str | None = None
     additional_contexts: list[str] | None = None
@@ -338,8 +346,12 @@ class NotificationHookInput:
 
 @dataclass
 class UserPromptSubmitHookInput:
-    user_message: str = ""
+    # ch14 round-4 — the Claude Code hook contract's stdin field is
+    # ``prompt`` (matches the TS executor). ``user_message`` kept as a
+    # deprecated alias so any legacy reader still resolves.
+    prompt: str = ""
     session_id: str | None = None
+    user_message: str = ""
 
 
 @dataclass

@@ -41,6 +41,28 @@ from .types import (
 
 logger = logging.getLogger(__name__)
 
+
+def _parse_server_capabilities(caps: Any) -> ServerCapabilities:
+    """Parse the ``capabilities`` object from an MCP ``initialize`` result.
+
+    Factored out of ``connect()`` so the nested ``tools.listChanged`` parse —
+    which the ch15 list_changed refresh wiring gates on — is directly
+    testable. ``tools``/``prompts``/``resources`` collapse to a bool
+    (present-or-not); ``tools_list_changed`` is the nested
+    ``{tools: {listChanged: true}}`` sub-flag."""
+    if not isinstance(caps, dict):
+        caps = {}
+    tools_cap = caps.get("tools")
+    return ServerCapabilities(
+        tools=bool(tools_cap),
+        prompts=bool(caps.get("prompts")),
+        resources=bool(caps.get("resources")),
+        tools_list_changed=bool(
+            isinstance(tools_cap, dict) and tools_cap.get("listChanged")
+        ),
+    )
+
+
 # Tool-call timeout: 5 minutes default, mirrors TS canonical
 # (typescript/src/services/mcp/client.ts:DEFAULT_MCP_TOOL_TIMEOUT_MS = 300_000).
 # Operators raise via the MCP_TOOL_TIMEOUT env override when a long-running
@@ -128,6 +150,46 @@ class McpClient:
         # that want OAuth-protected MCP servers to work end-to-end;
         # legacy callers (stdio / open HTTP) pass None.
         self._auth_provider: Any = None
+        # MCP elicitation (server→client input requests, §6): optional async
+        # handler that presents the request to the user and returns the result
+        # ({"action": "accept"|"decline"|"cancel", "content": {...}}). Default
+        # (None) declines — a valid response, so elicitation-capable servers no
+        # longer hang on an ignored request.
+        self._elicitation_handler: Any = None
+        # ch15 round-4 — server→client NOTIFICATION handler (method, no id):
+        # notifications/tools/list_changed etc. Sync callback taking
+        # (method: str, params: dict). Default (None) drops the notification
+        # (back-compat). Wired by the runtime to trigger a tool re-fetch.
+        self._notification_handler: Any = None
+
+    def set_elicitation_handler(self, handler: Any) -> None:
+        """Inject the async elicitation handler (params dict -> result dict).
+
+        Wired in by the runtime to bridge an MCP server's input request to the
+        TUI. When unset, elicitation requests are declined.
+        """
+        self._elicitation_handler = handler
+
+    def set_notification_handler(self, handler: Any) -> None:
+        """ch15 round-4 — inject the server-notification handler.
+
+        ``handler(method: str, params: dict) -> None``. Wired by the runtime
+        so ``notifications/tools/list_changed`` re-fetches the server's tools.
+        When unset, notifications are dropped (prior behavior).
+        """
+        self._notification_handler = handler
+
+    def _dispatch_notification(self, msg: Any) -> None:
+        """Route a server notification to the registered handler, guarded so a
+        bad handler never kills the receive loop."""
+        handler = self._notification_handler
+        if handler is None:
+            return
+        try:
+            handler(msg.method, getattr(msg, "params", None) or {})
+        except Exception:  # noqa: BLE001
+            logger.debug("MCP notification handler failed: %s",
+                         msg.method, exc_info=True)
 
     def set_auth_provider(self, provider: Any) -> None:
         """Inject the McpAuthProvider used for HTTP/SSE/WS auth flows.
@@ -196,7 +258,7 @@ class McpClient:
                 "initialize",
                 {
                     "protocolVersion": "2024-11-05",
-                    "capabilities": {"roots": {}},
+                    "capabilities": {"roots": {}, "elicitation": {}},
                     "clientInfo": {
                         "name": "claude-code",
                         "version": "1.0.0",
@@ -205,11 +267,8 @@ class McpClient:
             )
 
             if init_result and isinstance(init_result, dict):
-                caps = init_result.get("capabilities", {})
-                self._capabilities = ServerCapabilities(
-                    tools=bool(caps.get("tools")),
-                    prompts=bool(caps.get("prompts")),
-                    resources=bool(caps.get("resources")),
+                self._capabilities = _parse_server_capabilities(
+                    init_result.get("capabilities", {})
                 )
                 server_info_raw = init_result.get("serverInfo")
                 if server_info_raw and isinstance(server_info_raw, dict):
@@ -344,12 +403,72 @@ class McpClient:
                         )
                     else:
                         future.set_result(msg.result)
+                elif msg.method is not None and msg.id is not None:
+                    # Incoming server→client REQUEST (e.g. elicitation/create).
+                    # Handle out-of-band so the loop keeps draining, then reply.
+                    asyncio.get_event_loop().create_task(
+                        self._handle_incoming_request(msg)
+                    )
+                elif msg.method is not None and msg.id is None:
+                    # ch15 round-4 — server→client NOTIFICATION (method set, no
+                    # id, per JSON-RPC 2.0): e.g. notifications/tools/list_changed.
+                    # Previously this matched NEITHER branch above and was
+                    # SILENTLY DROPPED, so a server that changed its tools
+                    # mid-session was invisible until a restart. Dispatch to the
+                    # registered handler (out-of-band so the loop keeps draining).
+                    self._dispatch_notification(msg)
         except Exception as e:
             logger.debug("MCP receive loop error: %s", e)
             for future in self._pending_requests.values():
                 if not future.done():
                     future.set_exception(e)
             self._pending_requests.clear()
+
+    async def _handle_incoming_request(self, msg: JsonRpcMessage) -> None:
+        """Reply to a server→client request (elicitation/create, etc.)."""
+        try:
+            if msg.method == "elicitation/create":
+                result = await self._run_elicitation(msg.params or {})
+                await self._send_response(msg.id, result=result)
+            else:
+                await self._send_response(
+                    msg.id,
+                    error={"code": -32601, "message": f"Method not found: {msg.method}"},
+                )
+        except Exception as e:  # never let a handler crash the receive loop
+            try:
+                await self._send_response(
+                    msg.id, error={"code": -32603, "message": str(e)}
+                )
+            except Exception:
+                pass
+
+    async def _run_elicitation(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Run the injected elicitation handler, or decline if none is set."""
+        handler = self._elicitation_handler
+        if handler is None:
+            return {"action": "decline"}
+        try:
+            # Thread the server name to the handler (C3): the MCP elicitation
+            # params don't carry it, but the elicitation hooks match on and
+            # report the server name (TS matchQuery: serverName).
+            handler_params = {**params, "serverName": self._name} if self._name else params
+            res = await handler(handler_params)
+            return res if isinstance(res, dict) and res.get("action") else {"action": "decline"}
+        except Exception:
+            return {"action": "decline"}
+
+    async def _send_response(
+        self,
+        request_id: int | str | None,
+        result: Any = None,
+        error: dict[str, Any] | None = None,
+    ) -> None:
+        if self._transport is None or request_id is None:
+            return
+        await self._transport.send(
+            JsonRpcMessage(id=request_id, result=result, error=error)
+        )
 
     async def _send_request(
         self,

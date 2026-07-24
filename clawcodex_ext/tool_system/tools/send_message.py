@@ -199,11 +199,22 @@ async def _route_in_process(
         context=context,
     )
     if result.resumed:
-        return _ok(
-            f"Agent {to!r} was {state.status!r}; resumed it in the background with your message.",
+        # ch10 round-4 (critic M1) — HONEST message. resume_agent_background
+        # re-registers the terminal agent as running and queues the message,
+        # but does NOT yet spawn a run_agent loop (resume_agent.py:163-165 —
+        # "wiring the resumed lifecycle into run_agent is a subsequent
+        # integration step"), so the follow-up is NOT processed. The old
+        # text claimed "resumed it in the background with your message,"
+        # which made the model wait for a reply that never comes — the exact
+        # silent-success failure this chapter's PR exists to eliminate.
+        # Report the limitation and tell the model to spawn a fresh agent.
+        # When the resume lifecycle lands, restore the success message.
+        return _err(
+            f"Agent {to!r} had already {state.status!r}. Live resume of a "
+            f"finished background agent is not yet supported, so your "
+            f"message will NOT be processed — spawn a fresh agent with the "
+            f"follow-up instead.",
             agent_id=agent_id,
-            output_file=result.output_file,
-            replayed_messages=result.replayed_message_count,
         )
     # Lost the race or unable to resume — queue onto whatever the
     # winner registered (or report an error if the agent state moved
@@ -320,6 +331,27 @@ def _broadcast(
     )
 
 
+def _approve_flag(message_obj: dict[str, Any]) -> bool:
+    """Read ``approve`` with the original's semanticBoolean→z.boolean strictness.
+
+    The original wraps ``approve`` in ``semanticBoolean()`` inside the union
+    branches (SendMessageTool.ts:55,61): the exact literals "true"/"false"
+    coerce, and anything else — junk strings, numbers, a missing field —
+    fails z.boolean(), rejecting the whole message. The port's loose oneOf
+    (no ``properties``) never type-checks ``approve``, so the strictness
+    must live here: shutdown/plan approvals are control-plane messages, and
+    a truthy junk value ("no", "0", 1) must not read as an approval.
+    """
+    from ..schema_validation import semantic_coerce
+
+    coerced = semantic_coerce(message_obj.get("approve"), {"type": "boolean"})
+    if not isinstance(coerced, bool):
+        raise ToolInputError(
+            'approve must be a boolean (or the string literal "true"/"false").'
+        )
+    return coerced
+
+
 def _structured_message_to_envelope(
     *,
     message_obj: dict[str, Any],
@@ -345,7 +377,7 @@ def _structured_message_to_envelope(
             "",  # caller passes the original ``to``
         )
     if msg_type == "shutdown_response":
-        approve = bool(message_obj.get("approve"))
+        approve = _approve_flag(message_obj)
         if approve:
             return (
                 create_shutdown_approved_message(
@@ -370,9 +402,13 @@ def _structured_message_to_envelope(
         # plan approvals (chapter §"Plan-mode lifecycle"; refactoring-
         # plan critic concern C3 sender-side check).
         if not is_team_lead(context):
-            raise ToolInputError("plan_approval_response can only be sent by the team lead.")
-        approve = bool(message_obj.get("approve"))
-        permission_mode = str(message_obj.get("permission_mode") or "default")
+            raise ToolInputError(
+                "plan_approval_response can only be sent by the team lead."
+            )
+        approve = _approve_flag(message_obj)
+        permission_mode = str(
+            message_obj.get("permission_mode") or "default"
+        )
         feedback = message_obj.get("feedback")
         if feedback is not None and not isinstance(feedback, str):
             raise ToolInputError("plan_approval_response.feedback must be a string.")

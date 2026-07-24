@@ -218,21 +218,22 @@ class SkillPromptCommand(PromptCommand):
         tc = getattr(context, "tool_context", None)
         if tc is None:
             from src.bootstrap.state import get_session_id
-            from clawcodex_ext.tool_system.context import ToolContext
-            from clawcodex_ext.tool_system.defaults import build_default_registry
+            from clawcodex_ext.skills.runtime_substitution import render_skill_prompt
 
-            registry = getattr(context, "tool_registry", None)
-            if registry is None:
-                registry = build_default_registry(provider=getattr(context, "provider", None))
-            tc = ToolContext(
-                workspace_root=context.workspace_root,
-                cwd=context.cwd,
-                tool_registry=registry,
+            # Headless command expansion has no permission/tool executor. Keep
+            # embedded shell blocks verbatim instead of manufacturing a
+            # registry and executing them outside an established tool context.
+            prompt = render_skill_prompt(
+                body=self.markdown_content,
+                args=args or "",
+                base_dir=self.skill_root,
+                argument_names=self.arg_names,
                 session_id=get_session_id(),
+                loaded_from=getattr(self, "loaded_from", self.source),
+                slash_command_name=f"/{self.name}",
+                shell_executor=None,
             )
-            tc._active_provider = getattr(context, "provider", None)
-            context.tool_context = tc
-            context.tool_registry = registry
+            return [{"type": "text", "text": prompt}]
 
         from clawcodex_ext.tool_system.tools.skill import run_user_invoked_skill
 
@@ -246,21 +247,21 @@ class SkillPromptCommand(PromptCommand):
                 else f"Unable to invoke skill: {self.name}"
             )
 
-        messages = getattr(res, "new_messages", None) or ()
-        if messages:
-            content = getattr(messages[0], "content", None)
-            if isinstance(content, str) and content.strip():
-                return [{"type": "text", "text": content}]
-
         if payload.get("status") in {"fork", "forked"}:
             result = payload.get("result")
             if isinstance(result, str) and result.strip():
                 return [{"type": "text", "text": result}]
 
         prompt = payload.get("prompt")
-        if not isinstance(prompt, str) or not prompt.strip():
-            raise RuntimeError(f"Skill produced empty prompt: {self.name}")
-        return [{"type": "text", "text": prompt}]
+        if isinstance(prompt, str) and prompt.strip():
+            return [{"type": "text", "text": prompt}]
+
+        messages = getattr(res, "new_messages", None) or ()
+        if messages:
+            content = getattr(messages[0], "content", None)
+            if isinstance(content, str) and content.strip():
+                return [{"type": "text", "text": content}]
+        raise RuntimeError(f"Skill produced empty prompt: {self.name}")
 
 
 @dataclass(frozen=True)
@@ -295,8 +296,9 @@ class LocalCommand(CommandBase):
 # TS interactive commands (``type: 'local-jsx'``) render an Ink element and
 # resolve via an ``onDone`` callback. The Python port replaces "render an
 # element" with "drive a surface-agnostic ``UIHost`` port", so one command
-# body works headless (REPL), in the Textual TUI, and (raising) under the
-# SDK / non-interactive null surface.
+# body works over whatever surface supplies a UIHost (and raises under the
+# SDK / non-interactive null surface). See
+# my-docs/get-parity-by-folder/commands-phase2-interactive-bridge-plan.md.
 
 
 @dataclass(frozen=True)

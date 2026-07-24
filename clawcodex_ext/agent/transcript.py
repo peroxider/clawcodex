@@ -52,6 +52,8 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Optional
 
+from src.utils.clawcodex_dirs import get_transcripts_dir
+
 logger = logging.getLogger(__name__)
 
 
@@ -88,14 +90,14 @@ def register_transcript_path_resolver(
 
 
 def _transcripts_root() -> Path:
-    """Return ``~/.clawcodex/transcripts/`` (created if absent).
+    """Return the transcripts dir (created if absent).
 
-    Mirrors the directory convention that ``typescript/src/utils/sessionStorage.ts``
-    uses for sidechain transcripts; the Python repo's home-relative
-    ``~/.clawcodex`` matches the bash background dir at
-    ``<tmp>/clawcodex-bg`` philosophically (per-user, not per-workspace).
+    Resolved through ``get_transcripts_dir()`` so it honors
+    ``$CLAWCODEX_CONFIG_DIR`` (default ``~/.clawcodex/transcripts``). Mirrors
+    the directory convention that ``typescript/src/utils/sessionStorage.ts``
+    uses for sidechain transcripts; per-user, not per-workspace.
     """
-    root = Path.home() / ".clawcodex" / "transcripts"
+    root = get_transcripts_dir()
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -387,6 +389,8 @@ class TranscriptWriter:
         # level. ``O_CLOEXEC`` keeps the fd from leaking to bash
         # subprocesses. ``0o600`` because transcripts can contain
         # sensitive prompt content — readable by the user only.
+        # ``O_CLOEXEC`` is POSIX-only; on Windows it is absent (and fds
+        # are non-inheritable by default since PEP 446), so fall back to 0.
         self._fd: int | None = os.open(
             self._path,
             os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_CLOEXEC", 0),

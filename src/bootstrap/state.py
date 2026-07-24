@@ -56,7 +56,7 @@ from src.utils.signal import Signal, create_signal
 # Python's NewType is purely a static-analysis hint — it does not enforce
 # the brand at runtime — but it prevents accidental crossover with other
 # string-typed identifiers in type-checked code.
-SessionId = NewType('SessionId', str)
+SessionId = NewType("SessionId", str)
 
 
 @dataclass
@@ -110,9 +110,9 @@ def _resolve_real_cwd() -> str:
     """
     raw = os.getcwd()
     try:
-        return unicodedata.normalize('NFC', os.path.realpath(raw))
+        return unicodedata.normalize("NFC", os.path.realpath(raw))
     except OSError:
-        return unicodedata.normalize('NFC', raw)
+        return unicodedata.normalize("NFC", raw)
 
 
 def _new_session_id() -> SessionId:
@@ -148,11 +148,16 @@ class _BootstrapState:
     # Pre-existing default is "claude-code"; TS source uses "cli"
     # (``bootstrap/state.ts:305``). Keep "claude-code" until existing
     # call sites are migrated; tracking as a follow-up.
-    client_type: str = 'claude-code'
+    client_type: str = "claude-code"
     session_trust_accepted: bool = False
     session_persistence_disabled: bool = False
     is_remote_mode: bool = False
     has_exited_plan_mode: bool = False
+    # Plan mode (TS state.ts:131-133, 1264-1286): one-shot flag driving the
+    # plan_mode_exit attachment, plus the per-session plan-file slug cache
+    # (TS getPlanSlugCache, state.ts:1391).
+    needs_plan_mode_exit_attachment: bool = False
+    plan_slug_cache: dict[str, str] = field(default_factory=dict)
 
     # --- Cost & timing (TS: lines 51-66) -----------------------------------
     total_cost_usd: float = 0.0
@@ -184,11 +189,11 @@ class _BootstrapState:
     # enum live in src/settings/, not here.
     allowed_setting_sources: list[str] = field(
         default_factory=lambda: [
-            'userSettings',
-            'projectSettings',
-            'localSettings',
-            'flagSettings',
-            'policySettings',
+            "userSettings",
+            "projectSettings",
+            "localSettings",
+            "flagSettings",
+            "policySettings",
         ]
     )
 
@@ -198,10 +203,10 @@ class _BootstrapState:
     invoked_skills: dict[str, InvokedSkillInfo] = field(default_factory=dict)
 
     # --- Cache optimization (TS: lines 122-123, 202-205, 207, 256) ---------
-    cached_claude_md_content: str | None = None
+    cached_clawcodex_md_content: str | None = None
     system_prompt_section_cache: dict[str, str | None] = field(default_factory=dict)
     pending_post_compaction: bool = False
-    additional_directories_for_claude_md: list[str] = field(default_factory=list)
+    additional_directories_for_clawcodex_md: list[str] = field(default_factory=list)
 
     # --- Model (TS: lines 68-70) -------------------------------------------
     main_loop_model_override: str | None = None
@@ -223,6 +228,27 @@ class _BootstrapState:
 
 
 _STATE: _BootstrapState = _BootstrapState()
+
+# ch07 round-4 (critic MAJOR) — the cost/duration/lines accumulators are
+# read-modify-write against the process-global _STATE. With Agent now
+# concurrency-safe (and pre-existing workflow parallel() fan-out), N
+# subagent OS threads call record_api_usage concurrently; the RMW is not
+# GIL-atomic (it spans many bytecodes with release points), so
+# unsynchronized writes lose updates → undercounted cost/tokens. This
+# reentrant lock makes the accumulator RMW atomic across threads. TS has
+# no analog (Node is single-threaded); this is a genuine port-only need.
+import threading as _threading
+
+_COST_STATE_LOCK = _threading.RLock()
+
+
+def cost_state_lock() -> "_threading.RLock":
+    """The lock guarding the cost/duration/lines accumulator RMW.
+
+    Callers whose read-modify-write spans multiple accessor calls (e.g.
+    ``cost_tracker.record_api_usage`` reads ``get_model_usage`` then calls
+    ``add_to_total_cost_state``) hold this across the whole sequence."""
+    return _COST_STATE_LOCK
 
 
 # ---------------------------------------------------------------------------
@@ -279,7 +305,7 @@ class SdkContext:
 
 
 _sdk_context: contextvars.ContextVar[SdkContext | None] = contextvars.ContextVar(
-    'sdk_context', default=None
+    "sdk_context", default=None
 )
 
 
@@ -415,7 +441,7 @@ def get_original_cwd() -> str:
 
 
 def set_original_cwd(path: str) -> None:
-    normalized = unicodedata.normalize('NFC', path)
+    normalized = unicodedata.normalize("NFC", path)
     ctx = _get_sdk_context()
     if ctx is not None:
         ctx.original_cwd = normalized
@@ -436,7 +462,7 @@ def get_project_root() -> str:
 def set_project_root(path: str) -> None:
     """Only for ``--worktree`` startup flag. Mirrors TS ``setProjectRoot``.
     Always mutates the global — does NOT respect SDK context."""
-    _STATE.project_root = unicodedata.normalize('NFC', path)
+    _STATE.project_root = unicodedata.normalize("NFC", path)
 
 
 def get_cwd_state() -> str:
@@ -447,7 +473,7 @@ def get_cwd_state() -> str:
 
 
 def set_cwd_state(path: str) -> None:
-    normalized = unicodedata.normalize('NFC', path)
+    normalized = unicodedata.normalize("NFC", path)
     ctx = _get_sdk_context()
     if ctx is not None:
         ctx.cwd = normalized
@@ -512,6 +538,32 @@ def set_has_exited_plan_mode(value: bool) -> None:
     _STATE.has_exited_plan_mode = bool(value)
 
 
+def needs_plan_mode_exit_attachment() -> bool:
+    return _STATE.needs_plan_mode_exit_attachment
+
+
+def set_needs_plan_mode_exit_attachment(value: bool) -> None:
+    _STATE.needs_plan_mode_exit_attachment = bool(value)
+
+
+def handle_plan_mode_transition(from_mode: str, to_mode: str) -> None:
+    """Mirrors ``handlePlanModeTransition`` (TS bootstrap/state.ts:1272-1286).
+
+    Entering plan mode clears any pending exit attachment (a quick
+    plan→other→plan toggle must not send both plan_mode and plan_mode_exit);
+    leaving plan mode arms the one-shot plan_mode_exit attachment.
+    """
+    if to_mode == "plan" and from_mode != "plan":
+        _STATE.needs_plan_mode_exit_attachment = False
+    if from_mode == "plan" and to_mode != "plan":
+        _STATE.needs_plan_mode_exit_attachment = True
+
+
+def get_plan_slug_cache() -> dict[str, str]:
+    """Session-id → plan-file word slug (TS ``getPlanSlugCache``)."""
+    return _STATE.plan_slug_cache
+
+
 def prefer_third_party_authentication() -> bool:
     """Mirrors TS ``preferThirdPartyAuthentication`` (state.ts:1157-1160).
 
@@ -519,7 +571,7 @@ def prefer_third_party_authentication() -> bool:
     ``'claude-vscode'`` (the IDE extension is treated as 1P for auth
     purposes even though it runs non-interactively).
     """
-    return get_is_non_interactive_session() and _STATE.client_type != 'claude-vscode'
+    return get_is_non_interactive_session() and _STATE.client_type != "claude-vscode"
 
 
 # ===========================================================================
@@ -537,8 +589,9 @@ def add_to_total_cost_state(
     model: str,
 ) -> None:
     """Record a cost event. Mirrors TS ``addToTotalCostState``."""
-    _STATE.model_usage[model] = model_usage
-    _STATE.total_cost_usd += cost
+    with _COST_STATE_LOCK:
+        _STATE.model_usage[model] = model_usage
+        _STATE.total_cost_usd += cost
 
 
 def get_total_api_duration() -> int:
@@ -550,8 +603,9 @@ def get_total_api_duration_without_retries() -> int:
 
 
 def add_to_total_duration_state(duration: int, duration_without_retries: int) -> None:
-    _STATE.total_api_duration += duration
-    _STATE.total_api_duration_without_retries += duration_without_retries
+    with _COST_STATE_LOCK:
+        _STATE.total_api_duration += duration
+        _STATE.total_api_duration_without_retries += duration_without_retries
 
 
 def get_total_tool_duration() -> int:
@@ -566,9 +620,10 @@ def add_to_tool_duration(duration: int) -> None:
     ``turn_tool_duration_ms`` AND the per-turn ``turn_tool_count``.
     All three update atomically.
     """
-    _STATE.total_tool_duration += duration
-    _STATE.turn_tool_duration_ms += duration
-    _STATE.turn_tool_count += 1
+    with _COST_STATE_LOCK:
+        _STATE.total_tool_duration += duration
+        _STATE.turn_tool_duration_ms += duration
+        _STATE.turn_tool_count += 1
 
 
 def get_total_lines_added() -> int:
@@ -580,8 +635,9 @@ def get_total_lines_removed() -> int:
 
 
 def add_to_total_lines_changed(added: int, removed: int) -> None:
-    _STATE.total_lines_added += added
-    _STATE.total_lines_removed += removed
+    with _COST_STATE_LOCK:
+        _STATE.total_lines_added += added
+        _STATE.total_lines_removed += removed
 
 
 def has_unknown_model_cost() -> bool:
@@ -625,14 +681,18 @@ def get_total_cache_read_input_tokens() -> int:
     """Sum of ``cache_read_input_tokens`` across every model in
     ``model_usage``. Mirrors TS ``getTotalCacheReadInputTokens``
     (state.ts:744-746)."""
-    return sum(usage.cache_read_input_tokens for usage in _STATE.model_usage.values())
+    return sum(
+        usage.cache_read_input_tokens for usage in _STATE.model_usage.values()
+    )
 
 
 def get_total_cache_creation_input_tokens() -> int:
     """Sum of ``cache_creation_input_tokens`` across every model in
     ``model_usage``. Mirrors TS ``getTotalCacheCreationInputTokens``
     (state.ts:748-750)."""
-    return sum(usage.cache_creation_input_tokens for usage in _STATE.model_usage.values())
+    return sum(
+        usage.cache_creation_input_tokens for usage in _STATE.model_usage.values()
+    )
 
 
 def get_total_web_search_requests() -> int:
@@ -691,7 +751,7 @@ def set_cost_state_for_restore(
 ) -> None:
     """Restore accumulators from a persisted session snapshot.
 
-    Called by the (deferred Phase 2) ``restore_cost_state_for_session``
+    Called by the ``restore_cost_state_for_session``
     orchestrator. Mirrors TS ``setCostStateForRestore``
     (``bootstrap/state.ts:955``).
     """
@@ -712,12 +772,12 @@ def set_cost_state_for_restore(
 # ===========================================================================
 
 
-def get_cached_claude_md_content() -> str | None:
-    return _STATE.cached_claude_md_content
+def get_cached_clawcodex_md_content() -> str | None:
+    return _STATE.cached_clawcodex_md_content
 
 
-def set_cached_claude_md_content(content: str | None) -> None:
-    _STATE.cached_claude_md_content = content
+def set_cached_clawcodex_md_content(content: str | None) -> None:
+    _STATE.cached_clawcodex_md_content = content
 
 
 def get_system_prompt_section_cache() -> dict[str, str | None]:
@@ -746,12 +806,12 @@ def consume_post_compaction() -> bool:
     return was
 
 
-def get_additional_directories_for_claude_md() -> list[str]:
-    return _STATE.additional_directories_for_claude_md
+def get_additional_directories_for_clawcodex_md() -> list[str]:
+    return _STATE.additional_directories_for_clawcodex_md
 
 
-def set_additional_directories_for_claude_md(directories: list[str]) -> None:
-    _STATE.additional_directories_for_claude_md = list(directories)
+def set_additional_directories_for_clawcodex_md(directories: list[str]) -> None:
+    _STATE.additional_directories_for_clawcodex_md = list(directories)
 
 
 # ===========================================================================
@@ -966,7 +1026,7 @@ def add_invoked_skill(
     1439). Same-key add overwrites. Mirrors TS ``addInvokedSkill``
     (state.ts:1433-1447).
     """
-    key = f'{agent_id or ""}:{skill_name}'
+    key = f"{agent_id or ''}:{skill_name}"
     _STATE.invoked_skills[key] = InvokedSkillInfo(
         skill_name=skill_name,
         skill_path=skill_path,
@@ -996,7 +1056,9 @@ def get_invoked_skills_for_agent(
     Python because we never pass ``undefined``.
     """
     return {
-        key: skill for key, skill in _STATE.invoked_skills.items() if skill.agent_id == agent_id
+        key: skill
+        for key, skill in _STATE.invoked_skills.items()
+        if skill.agent_id == agent_id
     }
 
 
@@ -1091,8 +1153,8 @@ def reset_state_for_tests() -> None:
         ``_STATE`` to mirror TS lines 756-775; the dataclass replace does
         not touch them, so we rebind them here explicitly)
     """
-    if os.environ.get('PYTEST_CURRENT_TEST') is None:
-        raise RuntimeError('reset_state_for_tests can only be called in tests')
+    if os.environ.get("PYTEST_CURRENT_TEST") is None:
+        raise RuntimeError("reset_state_for_tests can only be called in tests")
     global _STATE
     global _output_tokens_at_turn_start, _current_turn_token_budget
     global _budget_continuation_count
@@ -1103,126 +1165,152 @@ def reset_state_for_tests() -> None:
     _budget_continuation_count = 0
 
 
+# Legacy downstream spelling aliases. The canonical storage and new APIs use
+# CLAWCODEX.md, but existing TUI/REPL integrations still import the old names.
+def get_cached_claude_md_content() -> str | None:
+    return get_cached_clawcodex_md_content()
+
+
+def set_cached_claude_md_content(content: str | None) -> None:
+    set_cached_clawcodex_md_content(content)
+
+
+def get_additional_directories_for_claude_md() -> list[str]:
+    return get_additional_directories_for_clawcodex_md()
+
+
+def set_additional_directories_for_claude_md(directories: list[str]) -> None:
+    set_additional_directories_for_clawcodex_md(directories)
+
+
 __all__ = [
     # Types
-    'SessionId',
-    'ModelUsage',
-    'InvokedSkillInfo',
-    'SdkContext',
+    "SessionId",
+    "ModelUsage",
+    "InvokedSkillInfo",
+    "SdkContext",
     # Per-query context
-    'run_with_sdk_context',
+    "run_with_sdk_context",
     # Signal
-    'on_session_switch',
+    "on_session_switch",
     # Identity & paths
-    'get_session_id',
-    'regenerate_session_id',
-    'switch_session',
-    'get_parent_session_id',
-    'get_session_project_dir',
-    'get_original_cwd',
-    'set_original_cwd',
-    'get_project_root',
-    'set_project_root',
-    'get_cwd_state',
-    'set_cwd_state',
+    "get_session_id",
+    "regenerate_session_id",
+    "switch_session",
+    "get_parent_session_id",
+    "get_session_project_dir",
+    "get_original_cwd",
+    "set_original_cwd",
+    "get_project_root",
+    "set_project_root",
+    "get_cwd_state",
+    "set_cwd_state",
     # Session flags
-    'get_is_interactive',
-    'set_is_interactive',
-    'get_is_non_interactive_session',
-    'get_client_type',
-    'set_client_type',
-    'get_session_trust_accepted',
-    'set_session_trust_accepted',
-    'is_session_persistence_disabled',
-    'set_session_persistence_disabled',
-    'get_is_remote_mode',
-    'set_is_remote_mode',
-    'has_exited_plan_mode_in_session',
-    'set_has_exited_plan_mode',
-    'prefer_third_party_authentication',
+    "get_is_interactive",
+    "set_is_interactive",
+    "get_is_non_interactive_session",
+    "get_client_type",
+    "set_client_type",
+    "get_session_trust_accepted",
+    "set_session_trust_accepted",
+    "is_session_persistence_disabled",
+    "set_session_persistence_disabled",
+    "get_is_remote_mode",
+    "set_is_remote_mode",
+    "get_plan_slug_cache",
+    "handle_plan_mode_transition",
+    "has_exited_plan_mode_in_session",
+    "needs_plan_mode_exit_attachment",
+    "set_needs_plan_mode_exit_attachment",
+    "set_has_exited_plan_mode",
+    "prefer_third_party_authentication",
     # Cost & timing
-    'get_total_cost_usd',
-    'add_to_total_cost_state',
-    'get_total_api_duration',
-    'get_total_api_duration_without_retries',
-    'add_to_total_duration_state',
-    'get_total_tool_duration',
-    'add_to_tool_duration',
-    'get_total_lines_added',
-    'get_total_lines_removed',
-    'add_to_total_lines_changed',
-    'has_unknown_model_cost',
-    'set_has_unknown_model_cost',
-    'get_model_usage',
-    'get_usage_for_model',
-    'get_total_input_tokens',
-    'get_total_output_tokens',
-    'get_total_cache_read_input_tokens',
-    'get_total_cache_creation_input_tokens',
-    'get_total_web_search_requests',
-    'get_start_time',
-    'get_total_duration',
-    'get_last_interaction_time',
-    'update_last_interaction_time',
-    'reset_cost_state',
-    'set_cost_state_for_restore',
+    "get_total_cost_usd",
+    "add_to_total_cost_state",
+    "get_total_api_duration",
+    "get_total_api_duration_without_retries",
+    "add_to_total_duration_state",
+    "get_total_tool_duration",
+    "add_to_tool_duration",
+    "get_total_lines_added",
+    "get_total_lines_removed",
+    "add_to_total_lines_changed",
+    "has_unknown_model_cost",
+    "set_has_unknown_model_cost",
+    "get_model_usage",
+    "get_usage_for_model",
+    "get_total_input_tokens",
+    "get_total_output_tokens",
+    "get_total_cache_read_input_tokens",
+    "get_total_cache_creation_input_tokens",
+    "get_total_web_search_requests",
+    "get_start_time",
+    "get_total_duration",
+    "get_last_interaction_time",
+    "update_last_interaction_time",
+    "reset_cost_state",
+    "set_cost_state_for_restore",
     # Turn-level metrics
-    'get_turn_hook_duration_ms',
-    'add_to_turn_hook_duration',
-    'reset_turn_hook_duration',
-    'get_turn_hook_count',
-    'get_turn_tool_duration_ms',
-    'reset_turn_tool_duration',
-    'get_turn_tool_count',
-    'get_turn_classifier_duration_ms',
-    'add_to_turn_classifier_duration',
-    'reset_turn_classifier_duration',
-    'get_turn_classifier_count',
+    "get_turn_hook_duration_ms",
+    "add_to_turn_hook_duration",
+    "reset_turn_hook_duration",
+    "get_turn_hook_count",
+    "get_turn_tool_duration_ms",
+    "reset_turn_tool_duration",
+    "get_turn_tool_count",
+    "get_turn_classifier_duration_ms",
+    "add_to_turn_classifier_duration",
+    "reset_turn_classifier_duration",
+    "get_turn_classifier_count",
     # Turn-output-token budget
-    'get_turn_output_tokens',
-    'get_current_turn_token_budget',
-    'snapshot_output_tokens_for_turn',
-    'get_budget_continuation_count',
-    'increment_budget_continuation_count',
+    "get_turn_output_tokens",
+    "get_current_turn_token_budget",
+    "snapshot_output_tokens_for_turn",
+    "get_budget_continuation_count",
+    "increment_budget_continuation_count",
     # Allowed settings sources
-    'get_allowed_setting_sources',
-    'set_allowed_setting_sources',
+    "get_allowed_setting_sources",
+    "set_allowed_setting_sources",
     # Invoked skills
-    'add_invoked_skill',
-    'get_invoked_skills',
-    'get_invoked_skills_for_agent',
-    'clear_invoked_skills',
-    'clear_invoked_skills_for_agent',
+    "add_invoked_skill",
+    "get_invoked_skills",
+    "get_invoked_skills_for_agent",
+    "clear_invoked_skills",
+    "clear_invoked_skills_for_agent",
     # Slow operations (permanent no-op stubs)
-    'add_slow_operation',
-    'get_slow_operations',
+    "add_slow_operation",
+    "get_slow_operations",
     # REPL bridge stubs
-    'is_repl_bridge_active',
-    'get_repl_bridge_handle',
+    "is_repl_bridge_active",
+    "get_repl_bridge_handle",
     # Cache optimization
-    'get_cached_claude_md_content',
-    'set_cached_claude_md_content',
-    'get_system_prompt_section_cache',
-    'set_system_prompt_section_cache_entry',
-    'clear_system_prompt_section_state',
-    'mark_post_compaction',
-    'consume_post_compaction',
-    'get_additional_directories_for_claude_md',
-    'set_additional_directories_for_claude_md',
+    "get_cached_clawcodex_md_content",
+    "set_cached_clawcodex_md_content",
+    "get_cached_claude_md_content",
+    "set_cached_claude_md_content",
+    "get_system_prompt_section_cache",
+    "set_system_prompt_section_cache_entry",
+    "clear_system_prompt_section_state",
+    "mark_post_compaction",
+    "consume_post_compaction",
+    "get_additional_directories_for_clawcodex_md",
+    "set_additional_directories_for_clawcodex_md",
+    "get_additional_directories_for_claude_md",
+    "set_additional_directories_for_claude_md",
     # Model
-    'get_main_loop_model_override',
-    'set_main_loop_model_override',
-    'get_initial_main_loop_model',
-    'set_initial_main_loop_model',
+    "get_main_loop_model_override",
+    "set_main_loop_model_override",
+    "get_initial_main_loop_model",
+    "set_initial_main_loop_model",
     # API correlation
-    'get_prompt_id',
-    'set_prompt_id',
-    'get_last_main_request_id',
-    'set_last_main_request_id',
-    'get_last_api_completion_timestamp',
-    'set_last_api_completion_timestamp',
-    'get_last_emitted_date',
-    'set_last_emitted_date',
+    "get_prompt_id",
+    "set_prompt_id",
+    "get_last_main_request_id",
+    "set_last_main_request_id",
+    "get_last_api_completion_timestamp",
+    "set_last_api_completion_timestamp",
+    "get_last_emitted_date",
+    "set_last_emitted_date",
     # Test reset
-    'reset_state_for_tests',
+    "reset_state_for_tests",
 ]

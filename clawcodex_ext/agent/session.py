@@ -16,32 +16,24 @@ from __future__ import annotations
 
 import json
 import os
-import time
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
 from dataclasses import dataclass, field
 
 from src.bootstrap.state import (
-    get_model_usage,
     get_session_id,
-    get_start_time,
-    get_total_api_duration,
-    get_total_api_duration_without_retries,
-    get_total_cost_usd,
-    get_total_lines_added,
-    get_total_lines_removed,
-    get_total_tool_duration,
 )
+from src.utils.clawcodex_dirs import get_sessions_dir
 
 from .conversation import Conversation
 
 
 def _get_sessions_dir() -> Path:
-    override = str(os.environ.get("CLAWCODEX_SESSIONS_DIR", "")).strip()
+    override = os.environ.get("CLAWCODEX_SESSIONS_DIR", "").strip()
     if override:
         return Path(override).expanduser()
-    return Path.home() / ".clawcodex" / "sessions"
+    return get_sessions_dir()
 
 
 @dataclass
@@ -329,32 +321,12 @@ class Session:
 def _snapshot_cost_block() -> dict:
     """Build the cost block written by ``Session.save``.
 
-    Shape matches the reader at
-    ``src/services/cost_restore.py:restore_cost_state_for_session``.
-    Module-private; tests can call via the public ``Session.save``.
+    The schema owner lives beside the restore path so reader and writer
+    cannot drift.
     """
-    return {
-        "total_cost_usd": get_total_cost_usd(),
-        "total_api_duration": get_total_api_duration(),
-        "total_api_duration_without_retries": get_total_api_duration_without_retries(),
-        "total_tool_duration": get_total_tool_duration(),
-        "total_lines_added": get_total_lines_added(),
-        "total_lines_removed": get_total_lines_removed(),
-        # last_duration = elapsed since start_time. cost_restore uses
-        # this to back-date the new session's start_time so post-resume
-        # duration accumulators continue from where they left off.
-        "last_duration": time.time() - get_start_time(),
-        "model_usage": {
-            model: {
-                "input_tokens": u.input_tokens,
-                "output_tokens": u.output_tokens,
-                "cache_creation_input_tokens": u.cache_creation_input_tokens,
-                "cache_read_input_tokens": u.cache_read_input_tokens,
-                "cost_usd": u.cost_usd,
-            }
-            for model, u in get_model_usage().items()
-        },
-    }
+    from src.services.cost_restore import build_cost_block
+
+    return build_cost_block()
 
 
 def _load_from_enhanced_transcript(

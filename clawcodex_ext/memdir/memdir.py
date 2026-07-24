@@ -21,6 +21,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+from src.utils.clawcodex_dirs import get_sessions_dir
+
 from .memory_types import (
     MEMORY_FRONTMATTER_EXAMPLE,
     TRUSTING_RECALL_SECTION,
@@ -185,11 +187,49 @@ def _how_to_save_section(skip_index: bool) -> list[str]:
         "",
         f"**Step 2** — add a pointer to that file in `{ENTRYPOINT_NAME}`. `{ENTRYPOINT_NAME}` is an index, not a memory — each entry should be one line, under ~150 characters: `- [Title](file.md) — one-line hook`. It has no frontmatter. Never write memory content directly into `{ENTRYPOINT_NAME}`.",
         "",
-        f"- `{ENTRYPOINT_NAME}` is always loaded into your conversation context — lines after {MAX_ENTRYPOINT_LINES} will be truncated, so keep the index concise",
+        f"- `{ENTRYPOINT_NAME}` is always loaded into your conversation context — it is truncated after {MAX_ENTRYPOINT_LINES} lines or {_format_file_size(MAX_ENTRYPOINT_BYTES)}, whichever comes first, so keep the index concise (one short line per entry; long or many entries lose the tail)",
         "- Keep the name, description, and type fields in memory files up-to-date with the content",
         "- Organize memory semantically by topic, not chronologically",
         "- Update or remove memories that turn out to be wrong or outdated",
         "- Do not write duplicate memories. First check if there is an existing memory you can update before writing a new one.",
+    ]
+
+
+def build_searching_past_context_section(auto_mem_dir: str) -> list[str]:
+    """The "Searching past context" guidance (memdir.ts:375-407).
+
+    MEMDIR-1: upstream gates this on ``tengu_coral_fern``, which the vendored
+    GrowthBook stub's ``_openBuildDefaults`` sets to TRUE — so the reference
+    build emits it for every user, and this port emits it unconditionally
+    (no flag system here). TS picks shell-grep forms when the dedicated Grep
+    tool is hidden (ant-native embedded search / REPL script mode); this
+    port always ships the Grep tool, so the tool-invocation forms are used
+    unconditionally. The transcript target is this port's saved-session
+    store (the ``sessions/`` dir under the clawcodex config root —
+    ``$CLAWCODEX_CONFIG_DIR`` or ``~/.clawcodex`` — ``*.json``) rather than
+    the reference project-transcript dir.
+    """
+    sessions_dir = str(get_sessions_dir())
+    mem_search = (
+        f'Grep with pattern="<search term>" path="{auto_mem_dir}" glob="*.md"'
+    )
+    transcript_search = (
+        f'Grep with pattern="<search term>" path="{sessions_dir}/" glob="*.json"'
+    )
+    return [
+        "## Searching past context",
+        "",
+        "When looking for past context:",
+        "1. Search topic files in your memory directory:",
+        "```",
+        mem_search,
+        "```",
+        "2. Session transcript logs (last resort — large files, slow):",
+        "```",
+        transcript_search,
+        "```",
+        "Use narrow search terms (error messages, file paths, function names) rather than broad keywords.",
+        "",
     ]
 
 
@@ -236,6 +276,9 @@ def build_memory_lines(
             if guideline:
                 lines.append(guideline)
         lines.append("")
+
+    # memdir.ts:263 — the searching-past-context guidance closes the section.
+    lines.extend(build_searching_past_context_section(memory_dir))
 
     return lines
 

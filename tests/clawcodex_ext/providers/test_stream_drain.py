@@ -16,11 +16,15 @@ from __future__ import annotations
 
 import threading
 import time
+from unittest.mock import MagicMock
 import pytest
 
 from src.utils.abort_controller import create_abort_controller
 from src.providers._stream_abort import StreamAbortGuard
-from clawcodex_ext.providers._stream_drain import drain_text_stream_with_abort_poll
+from clawcodex_ext.providers._stream_drain import (
+    drain_event_stream_with_abort_poll,
+    drain_text_stream_with_abort_poll,
+)
 
 
 class _FakeStream:
@@ -162,3 +166,44 @@ def test_drain_does_not_swallow_baseexception():
             on_text=None,
             stream_name="test",
         )
+
+
+def test_event_drain_delivers_every_event_and_resets_watchdog():
+    events = [object(), object(), object()]
+    received: list[object] = []
+    watchdog = MagicMock()
+
+    drain_event_stream_with_abort_poll(
+        iter(events),
+        guard=StreamAbortGuard(None),
+        on_event=received.append,
+        watchdog=watchdog,
+        stream_name="test-events",
+    )
+
+    assert received == events
+    assert watchdog.reset.call_count == len(events)
+
+
+def test_event_drain_cancels_while_worker_is_blocked():
+    def _slow_events():
+        yield object()
+        time.sleep(60)
+
+    controller = create_abort_controller()
+    guard = StreamAbortGuard(controller.signal)
+
+    threading.Thread(
+        target=lambda: (time.sleep(0.05), controller.abort("test_interrupt")),
+        daemon=True,
+    ).start()
+
+    start = time.monotonic()
+    with pytest.raises(Exception):
+        drain_event_stream_with_abort_poll(
+            _slow_events(),
+            guard=guard,
+            on_event=lambda _event: None,
+            stream_name="test-events",
+        )
+    assert time.monotonic() - start < 0.5

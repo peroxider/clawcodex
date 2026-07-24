@@ -10,7 +10,7 @@ contract is deduced from the client side
   - WS endpoint accepts NDJSON-over-WS, with ``Authorization: Bearer``
     on the upgrade request OR ``?token=<token>`` query param.
   - 5-state ``SessionState`` lifecycle persisted to
-    ``~/.claude/server-sessions.json`` (via ``SessionManager``).
+    ``~/.clawcodex/server-sessions.json`` (via ``SessionManager``).
 
 **Architecture** — for robustness, the server uses **two separate
 listeners**: one HTTP (``asyncio.start_server`` + minimal HTTP/1.1
@@ -262,26 +262,18 @@ class DirectConnectServer:
         try:
             request = await _read_http_request(reader)
             if request is None:
-                writer.write(
-                    _build_http_response(
-                        status=400,
-                        reason='Bad Request',
-                        body=b'malformed request',
-                    )
-                )
+                writer.write(_build_http_response(
+                    status=400, reason='Bad Request', body=b'malformed request',
+                ))
                 await writer.drain()
                 return
 
             if request.method == 'POST' and request.path == '/sessions':
                 await self._handle_post_sessions(request, writer)
             else:
-                writer.write(
-                    _build_http_response(
-                        status=404,
-                        reason='Not Found',
-                        body=b'no such route',
-                    )
-                )
+                writer.write(_build_http_response(
+                    status=404, reason='Not Found', body=b'no such route',
+                ))
                 await writer.drain()
         except (ConnectionError, OSError) as exc:
             logger.debug('[server] HTTP connection error: %s', exc)
@@ -302,62 +294,47 @@ class DirectConnectServer:
             authz = request.headers.get('authorization', '')
             expected = f'Bearer {self.config.auth_token}'
             if authz != expected:
-                writer.write(
-                    _build_http_response(
-                        status=401,
-                        reason='Unauthorized',
-                        body=b'{"error":"invalid auth token"}',
-                    )
-                )
+                writer.write(_build_http_response(
+                    status=401, reason='Unauthorized',
+                    body=b'{"error":"invalid auth token"}',
+                ))
                 await writer.drain()
                 return
 
         try:
             payload = json.loads(request.body)
         except json.JSONDecodeError:
-            writer.write(
-                _build_http_response(
-                    status=400,
-                    reason='Bad Request',
-                    body=b'{"error":"invalid JSON body"}',
-                )
-            )
+            writer.write(_build_http_response(
+                status=400, reason='Bad Request',
+                body=b'{"error":"invalid JSON body"}',
+            ))
             await writer.drain()
             return
 
         if not isinstance(payload, dict):
-            writer.write(
-                _build_http_response(
-                    status=400,
-                    reason='Bad Request',
-                    body=b'{"error":"body must be a JSON object"}',
-                )
-            )
+            writer.write(_build_http_response(
+                status=400, reason='Bad Request',
+                body=b'{"error":"body must be a JSON object"}',
+            ))
             await writer.drain()
             return
 
         cwd = payload.get('cwd')
         if not isinstance(cwd, str) or not cwd:
-            writer.write(
-                _build_http_response(
-                    status=400,
-                    reason='Bad Request',
-                    body=b'{"error":"cwd is required (non-empty string)"}',
-                )
-            )
+            writer.write(_build_http_response(
+                status=400, reason='Bad Request',
+                body=b'{"error":"cwd is required (non-empty string)"}',
+            ))
             await writer.drain()
             return
 
         try:
             info = self.manager.create_session(cwd=cwd)
         except RuntimeError as exc:
-            writer.write(
-                _build_http_response(
-                    status=503,
-                    reason='Service Unavailable',
-                    body=json.dumps({'error': str(exc)}).encode('utf-8'),
-                )
-            )
+            writer.write(_build_http_response(
+                status=503, reason='Service Unavailable',
+                body=json.dumps({'error': str(exc)}).encode('utf-8'),
+            ))
             await writer.drain()
             return
 
@@ -368,21 +345,15 @@ class DirectConnectServer:
         ws_port = self._ws_port
         ws_url = f'ws://{host}:{ws_port}/ws/{info.id}?token={token}'
 
-        body = json.dumps(
-            {
-                'session_id': info.id,
-                'ws_url': ws_url,
-                'work_dir': info.work_dir,
-                'auth_token': token,
-            }
-        ).encode('utf-8')
-        writer.write(
-            _build_http_response(
-                status=201,
-                reason='Created',
-                body=body,
-            )
-        )
+        body = json.dumps({
+            'session_id': info.id,
+            'ws_url': ws_url,
+            'work_dir': info.work_dir,
+            'auth_token': token,
+        }).encode('utf-8')
+        writer.write(_build_http_response(
+            status=201, reason='Created', body=body,
+        ))
         await writer.drain()
 
     # ─── WS listener handler ─────────────────────────────────────────
@@ -400,7 +371,7 @@ class DirectConnectServer:
         if not path.startswith(prefix):
             await ws.close(code=1008, reason='no such route')
             return
-        sid_and_query = path[len(prefix) :]
+        sid_and_query = path[len(prefix):]
         sid, _, query_str = sid_and_query.partition('?')
         if not sid:
             await ws.close(code=1008, reason='missing session id')
@@ -411,15 +382,29 @@ class DirectConnectServer:
             await ws.close(code=1008, reason='no such session')
             return
 
-        # Token from header OR query param.
-        provided = ''
+        # Accept the per-session token T_s (minted above, carried in the ws_url
+        # query param) OR the launcher's global token T_g (required on POST
+        # /sessions). The REAL openclaude TS client keeps the global token and
+        # sends it as the WS ``Authorization: Bearer`` header — it ignores the
+        # per-session ``auth_token`` in the POST response — so a strict
+        # per-session-only check rejects it (client sends T_g, server expected
+        # T_s; see critic B1a / migration plan). Both tokens are per-launch
+        # secrets behind the loopback bind and the POST /sessions gate, so
+        # honouring either on the WS is no weaker than POST, which already
+        # accepts T_g. Check BOTH the Bearer header and the query param so a
+        # transport quirk (the real client's header is bun-only) can't lock a
+        # client out.
         authz = request.headers.get('authorization', '') if request.headers else ''
-        if authz.startswith('Bearer '):
-            provided = authz[len('Bearer ') :]
-        else:
-            params = parse_qs(query_str)
-            provided = (params.get('token') or [''])[0]
-        if not secrets.compare_digest(provided, expected_token):
+        header_token = authz[len('Bearer '):] if authz.startswith('Bearer ') else ''
+        query_token = (parse_qs(query_str).get('token') or [''])[0]
+        accepted = [t for t in (expected_token, self.config.auth_token) if t]
+
+        def _token_ok(provided: str) -> bool:
+            return bool(provided) and any(
+                secrets.compare_digest(provided, valid) for valid in accepted
+            )
+
+        if not (_token_ok(header_token) or _token_ok(query_token)):
             await ws.close(code=1008, reason='invalid token')
             return
 
@@ -488,8 +473,7 @@ class DirectConnectServer:
         in_task = asyncio.get_running_loop().create_task(inbound())
         try:
             await asyncio.wait(
-                [out_task, in_task],
-                return_when=asyncio.FIRST_COMPLETED,
+                [out_task, in_task], return_when=asyncio.FIRST_COMPLETED,
             )
         finally:
             for task in (out_task, in_task):

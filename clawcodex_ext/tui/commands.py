@@ -199,10 +199,20 @@ def build_command_suggestions(
         # F-53: auto-expose non-core tools as /<tool-name> slash commands
         # in the TUI command registry. Mirrors the REPL wiring in
         # ``clawcodex_ext/repl/app.py`` / ``clawcodex_ext/repl/core.py``.
+        tool_command_names: set[str] = set()
         try:
             from clawcodex_ext.cli.tool_cmd import register_tool_commands
 
+            names_before_tools = {
+                command.name.lower()
+                for command in private_reg.list_commands(include_disabled=True)
+            }
             register_tool_commands(private_reg)
+            tool_command_names = {
+                command.name.lower()
+                for command in private_reg.list_commands(include_disabled=True)
+                if command.name.lower() not in names_before_tools
+            }
         except Exception:
             pass
         for cmd in private_reg.list_commands(include_disabled=True):
@@ -218,7 +228,11 @@ def build_command_suggestions(
                     description=getattr(cmd, "description", "") or "",
                     aliases=aliases,
                     tag=tag,
-                    source=getattr(cmd, "loaded_from", "builtin") or "builtin",
+                    source=(
+                        "tools"
+                        if cmd.name.lower() in tool_command_names
+                        else getattr(cmd, "loaded_from", "builtin") or "builtin"
+                    ),
                 )
             )
     except Exception:

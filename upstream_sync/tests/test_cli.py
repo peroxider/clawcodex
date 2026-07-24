@@ -5,9 +5,17 @@ import pytest
 from pathlib import Path
 
 from typer.testing import CliRunner
-from upstream_sync.cli import app
+from upstream_sync.cli import _resolve_commit_placeholder, app
 
 runner = CliRunner()
+
+
+def test_commit_placeholder_uses_seven_character_snapshot_id():
+    resolved = _resolve_commit_placeholder(
+        Path("patches/upstream/{commit}"),
+        "120868e0933225df4137c1025361adc95e277fb0",
+    )
+    assert resolved == Path("patches/upstream/120868e")
 
 
 class TestInit:
@@ -37,7 +45,7 @@ class TestAudit:
         cfg.write_text(
             'project_name: "t"\nsource_lang: "python"\n'
             'upstream:\n  remote_url: "x"\n  main_branch: "m"\n'
-            'vendor_branch: "v"\n  version_tag_format: "x"\n'
+            '  vendor_branch: "v"\n  version_tag_format: "x"\n'
             "layers: []\n"
             'patches:\n  directory: "p"\n  engine: "quilt"\n'
             "sync:\n  report_formats: []\n",

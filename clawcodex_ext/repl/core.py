@@ -3614,13 +3614,23 @@ class ClawcodexREPL:
         ``_cron_loop`` is created in ``run()`` via ``new_event_loop()`` but
         never set as the thread's current loop, so ``asyncio.get_event_loop()``
         returns a DIFFERENT loop — hence the explicit preference. Falls back
-        to ``get_event_loop()`` when ``_cron_loop`` is absent (headless/test
-        paths without ``run()``).
+        to the thread's current loop when ``_cron_loop`` is absent
+        (headless/test paths without ``run()``), creating one when Python
+        3.11+ has no current loop configured.
         """
         loop = getattr(self, "_cron_loop", None)
         if loop is not None:
             return loop
-        return asyncio.get_event_loop()
+        try:
+            return asyncio.get_event_loop()
+        except RuntimeError:
+            # Since Python 3.11, get_event_loop() can raise after an
+            # asyncio.run() call (or whenever the policy has no loop for the
+            # current thread).  Keep the pre-3.11 synchronous REPL behaviour:
+            # provision a reusable loop for the caller to pump.
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            return loop
 
     def _interrupt_active_chat_from_im(self) -> bool:
         """Cancel the currently running REPL turn from an IM control command."""
@@ -5765,10 +5775,9 @@ class ClawcodexREPL:
             return False
 
         try:
-            result = self.tool_registry.dispatch(
-                ToolCall(name="Skill", input={"skill": skill_name, "args": args}),
-                self.tool_context,
-            )
+            from clawcodex_ext.tool_system.tools.skill import run_user_invoked_skill
+
+            result = run_user_invoked_skill(skill_name, args, self.tool_context)
         except Exception as e:
             self.console.print(f"[error]Skill error: {e}[/error]")
             return True
@@ -5798,6 +5807,17 @@ class ClawcodexREPL:
             meta_parts.append(f"tools={shown}{more}")
         if meta_parts:
             self.console.print(f"[dim]{' · '.join(meta_parts)}[/dim]")
+
+        if payload.get("status") in {"fork", "forked"}:
+            result_text = payload.get("result")
+            if isinstance(result_text, str) and result_text.strip():
+                self.console.print()
+                self.console.print(Markdown(result_text))
+                from clawcodex_ext.types.messages import create_message
+
+                self._engine_messages.append(create_message("assistant", result_text))
+                self.console.print()
+            return True
 
         prompt = payload.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip():

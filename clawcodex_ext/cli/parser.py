@@ -26,6 +26,19 @@ Examples:
     parser.add_argument("prompt", nargs="?", help="Prompt to send in non-interactive mode")
     parser.add_argument("--version", action="store_true", help="Show version information")
     parser.add_argument("--config", action="store_true", help="Show current configuration")
+    parser.add_argument(
+        "-w",
+        "--worktree",
+        nargs="?",
+        const=True,
+        default=None,
+        metavar="NAME",
+        help=(
+            "Run this session in an isolated git worktree at "
+            ".clawcodex/worktrees/NAME (a name is generated when omitted). "
+            "Prefer --worktree=NAME when combining it with a positional prompt."
+        ),
+    )
     parser.add_argument("--stream", action="store_true", help="Enable live rendering in REPL")
     parser.add_argument(
         "--agent-debug",
@@ -47,9 +60,12 @@ Examples:
     )
     parser.add_argument(
         "--effort",
-        choices=("normal", "swarm"),
-        default="normal",
-        help="Execution effort profile; 'swarm' enables dynamic task decomposition",
+        choices=("normal", "swarm", "low", "medium", "high", "xhigh", "max"),
+        default=None,
+        help=(
+            "Reasoning effort for this session; 'swarm' enables downstream "
+            "task decomposition and 'normal' keeps automatic model defaults"
+        ),
     )
 
     # ---- Interactive UI selection ----
@@ -115,6 +131,13 @@ Examples:
         type=str,
         default=None,
         help="Override the model used for this run",
+    )
+    noninteractive.add_argument(
+        "--fallback-model",
+        type=str,
+        default=None,
+        dest="fallback_model",
+        help="Model to use after repeated overloaded (529) errors",
     )
     noninteractive.add_argument(
         "--provider",

@@ -28,6 +28,7 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -335,6 +336,8 @@ def test_agent_bridge_plumbs_abort_controller_into_tool_context(
         return None
 
     context = ToolContext(workspace_root=tmp_path)
+    in_agent_loop = SimpleNamespace(value=False)
+    context._in_agent_loop = in_agent_loop
     # The dataclass factory always installs a default (untripped)
     # controller; the bridge replaces it on each ``submit()``.
     default_ctrl = context.abort_controller
@@ -353,6 +356,7 @@ def test_agent_bridge_plumbs_abort_controller_into_tool_context(
 
     submitted = bridge.submit("hello")
     assert submitted is True
+    assert in_agent_loop.value is True
 
     # The controller created inside submit() must be visible on the
     # shared tool context — this is the wiring that lets subagents
@@ -371,6 +375,7 @@ def test_agent_bridge_plumbs_abort_controller_into_tool_context(
     # short-circuit every tool dispatch. The field is non-optional, so
     # we install a new controller rather than clearing to ``None``.
     bridge._finish()
+    assert in_agent_loop.value is False
     assert context.abort_controller is not None
     assert context.abort_controller is not aborted_ctrl
     assert context.abort_controller.signal.aborted is False

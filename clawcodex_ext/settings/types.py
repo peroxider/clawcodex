@@ -8,6 +8,18 @@ from typing import Any
 
 # --- F-47: PermissionsConfig replaces the legacy `list[PermissionRule]` ---
 
+
+@dataclass
+class PermissionRule:
+    """Legacy flat permission rule retained for API and migration compatibility."""
+
+    tool: str = ""
+    allow: bool = True
+    glob: str | None = None
+    regex: str | None = None
+    description: str = ""
+    source: str = "user"
+
 _PERMISSIONS_KNOWN_SUBKEYS: frozenset[str] = frozenset(
     {
         "allow",
@@ -62,9 +74,18 @@ class PermissionsConfig:
     )
     additional_directories: list[str] = field(default_factory=list)
     additional: dict[str, Any] = field(default_factory=dict)
+    legacy_rules: list[PermissionRule] = field(default_factory=list, repr=False)
 
     @classmethod
     def from_dict(cls, data: Any) -> "PermissionsConfig":
+        if isinstance(data, list):
+            return cls(
+                legacy_rules=[
+                    PermissionRule(**item) if isinstance(item, dict) else item
+                    for item in data
+                    if isinstance(item, (dict, PermissionRule))
+                ]
+            )
         if not isinstance(data, dict):
             return cls()
 
@@ -103,7 +124,11 @@ class PermissionsConfig:
             additional=additional,
         )
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any] | list[dict[str, Any]]:
+        if self.legacy_rules:
+            from dataclasses import asdict
+
+            return [asdict(rule) for rule in self.legacy_rules]
         d: dict[str, Any] = dict(self.additional)
         d["allowBypassPermissionsMode"] = self.allow_bypass_permissions_mode
         if self.default_mode is not None:
@@ -113,6 +138,15 @@ class PermissionsConfig:
         if self.additional_directories:
             d["additionalDirectories"] = list(self.additional_directories)
         return d
+
+    def __len__(self) -> int:
+        return len(self.legacy_rules)
+
+    def __iter__(self):
+        return iter(self.legacy_rules)
+
+    def __getitem__(self, index: int) -> PermissionRule:
+        return self.legacy_rules[index]
 
 
 @dataclass
@@ -196,12 +230,45 @@ class FreezeSettings:
 
 
 @dataclass
+class SandboxSettings:
+    """Sandbox configuration — mirrors TS ``SandboxSettingsSchema``
+    (entrypoints/sandboxTypes.ts:91).
+
+    The port does NOT implement sandbox ENFORCEMENT (TS wraps the external
+    ``@anthropic-ai/sandbox-runtime`` — a deferred sub-chapter). So the port's
+    sandbox is permanently "unavailable", which maps onto TS's OWN documented
+    fallback (sandboxTypes.ts:96-103): when ``enabled`` is true but the sandbox
+    cannot start, ``failIfUnavailable`` decides between a hard startup error
+    (managed-settings hard gate) and "a warning is shown and commands run
+    unsandboxed". Parsing these fields (rather than dropping the whole
+    ``sandbox`` key) is what makes that guard possible — an unparsed key would
+    silently vanish, giving a false sense of security."""
+    enabled: bool = False
+    fail_if_unavailable: bool = False  # TS failIfUnavailable (default false)
+    auto_allow_bash_if_sandboxed: bool = True
+    allow_unsandboxed_commands: bool = True
+    excluded_commands: list[str] = field(default_factory=list)
+    # TS enabledPlatforms (sandboxTypes.ts:104): restrict sandboxing to
+    # specific platforms; on a platform NOT listed, TS treats sandbox as
+    # disabled (no gate, no warning). Empty = all platforms.
+    enabled_platforms: list[str] = field(default_factory=list)
+
+
+@dataclass
 class CompactSettings:
     """Compaction settings."""
 
     auto_compact: bool = True
     threshold_tokens: int = 100_000
     max_compact_retries: int = 3
+
+
+@dataclass
+class ModelLimitSettings:
+    """User-declared runtime limits for custom/private model IDs."""
+
+    context_window: int | None = None
+    max_output_tokens: int | None = None
 
 
 @dataclass
@@ -241,6 +308,15 @@ class SettingsSchema:
     # vacuous and let /model mutate provider selection.
     model_provider: str = ""
     small_fast_model: str = ""
+    # Per-model limits for gateways/private deployments whose metadata is not
+    # in the built-in catalog. JSON accepts both modelLimits/contextWindow and
+    # the Python-native snake_case spellings.
+    model_limits: dict[str, ModelLimitSettings] = field(default_factory=dict)
+    # /goal turn-budget backstop (src/goals). Claude Code ships the goal
+    # loop unbounded; the port pauses the goal after this many evaluated
+    # turns so a mis-judging evaluator can't spend unbounded tokens —
+    # ``/goal resume`` continues with a fresh budget. 0/negative → default.
+    goal_max_turns: int = 20
     # Advisor — reviewer tool. Empty string = unset (no /advisor).
     # Persisted analogue of TS appState.advisorModel; the /advisor slash
     # command writes here, and _call_model_sync reads from here at request
@@ -269,6 +345,53 @@ class SettingsSchema:
     # ``decide_advisor_mode`` returns INACTIVE whenever this is False.
     advisor_enabled: bool = False
 
+    # Auto-mode transcript classifier (ch06 round-4 PR-B). The
+    # ``feature('TRANSCRIPT_CLASSIFIER')`` analog: default OFF, so `auto`
+    # mode keeps today's zero-extra-cost STATIC heuristic. When True, the
+    # static heuristic stays the fast-path pre-filter (safe reads/edits/
+    # bash resolve with no LLM call) and only the residual asks fire a
+    # per-ask LLM security classification on the session provider. Enable
+    # only where a classifier model + prompt caching are affordable.
+    auto_mode_classifier_enabled: bool = False
+    # Optional classifier model/provider (TS getClassifierModel default =
+    # the main-loop model). Empty → the session provider + its model.
+    auto_mode_classifier_model: str = ""
+    auto_mode_classifier_provider: str = ""
+    # Iron gate on classifier ERROR (timeout/parse/abort). False (default)
+    # = fail-CLOSED (deny) — TS tengu_iron_gate_closed default true. True =
+    # fail-open (return the original ask).
+    auto_mode_iron_gate_open: bool = False
+
+    # ch11 round-4 — the LLM memory-relevance recall. Default OFF, faithful
+    # to TS (its recall is behind isAutoMemoryEnabled() &&
+    # feature('tengu_moth_copse'), off in OSS) and because firing an LLM
+    # side-query per user turn on the session provider is a real
+    # multi-provider cost. When True, the shared adapter recalls up to 5
+    # query-relevant memory files and injects their bodies as a
+    # <system-reminder>; the static MEMORY.md index injection is unaffected.
+    memory_relevance_prefetch_enabled: bool = False
+
+    # Bounded persistent memory + self-improvement review (hermes-agent
+    # port, src/memory/). Defaults are donor-faithful (hermes ships the
+    # store AND the post-turn review on by default; the review's request is
+    # engineered to hit the parent's warm prompt-cache prefix, every write
+    # is surfaced via a notification line, and the store is a bounded
+    # ≤2,200-char file — visible, reversible, cheap).
+    memory_store_enabled: bool = True       # MEMORY.md snapshot block + Memory tool
+    user_profile_enabled: bool = True       # USER.md snapshot block
+    memory_char_limit: int = 2200           # MEMORY.md budget (chars, not tokens)
+    user_char_limit: int = 1375             # USER.md budget
+    # Fire a background self-improvement review every N real user turns
+    # (0 disables). Donor: memory.nudge_interval, default 10.
+    memory_review_interval: int = 10
+    # Review notification verbosity: off | on | verbose (donor:
+    # display.memory_notifications). "off" suppresses the transcript line
+    # while the review still runs and writes.
+    memory_notifications: str = "on"
+    # Stage memory writes for user approval instead of committing
+    # (src/memory/write_approval.py). Donor default: off.
+    memory_write_approval: bool = False
+
     # Provider
     provider: str = "anthropic"
 
@@ -291,6 +414,9 @@ class SettingsSchema:
 
     # Output
     output_style: OutputStyleSettings = field(default_factory=OutputStyleSettings)
+
+    # Sandbox (parsed but enforcement deferred — see SandboxSettings + C8)
+    sandbox: SandboxSettings | None = None
 
     # Spinner verbs (None = built-in defaults)
     spinner_verbs: SpinnerVerbsSettings | None = None
@@ -317,7 +443,7 @@ class SettingsSchema:
     max_cost_usd: float = 0.0  # 0 = unlimited
 
     # Effort
-    effort: str = ""  # "", "low", "medium", "high", "max"
+    effort: str = ""  # "", "low", "medium", "high", "xhigh", "max"
 
     # Plan mode
     plan_mode: bool = False
@@ -406,6 +532,7 @@ class SettingsSchema:
 
         d = dataclasses.asdict(self)
         extra = d.pop("extra", {})
+        d["permissions"] = self.permissions.to_dict()
         d.update(extra)
         return d
 
@@ -424,7 +551,13 @@ class SettingsSchema:
         ``PermissionsConfig``).
         """
         import dataclasses
-
+        data = dict(data)
+        if "modelLimits" in data:
+            # Defaults are materialized in snake_case before user settings are
+            # merged, so both keys can coexist. The explicit camelCase user
+            # value must replace that default rather than being relegated to
+            # ``extra``.
+            data["model_limits"] = data.pop("modelLimits")
         known_fields = {f.name for f in dataclasses.fields(cls)}
         known: dict[str, Any] = {}
         extra: dict[str, Any] = {}
@@ -439,12 +572,40 @@ class SettingsSchema:
             known["permissions"] = PermissionsConfig.from_dict(known["permissions"])
         if "output_style" in known and isinstance(known["output_style"], dict):
             known["output_style"] = OutputStyleSettings(**known["output_style"])
+        # ``sandbox`` — TS's SandboxSettingsSchema uses camelCase + .passthrough();
+        # accept both cases and IGNORE unknown keys (the enforcement-only fields
+        # the port doesn't act on) so a valid settings.json never fails to load.
+        if "sandbox" in known and isinstance(known["sandbox"], dict):
+            _sb = known["sandbox"]
+            known["sandbox"] = SandboxSettings(
+                enabled=bool(_sb.get("enabled", False)),
+                fail_if_unavailable=bool(_sb.get("failIfUnavailable", _sb.get("fail_if_unavailable", False))),
+                auto_allow_bash_if_sandboxed=bool(_sb.get("autoAllowBashIfSandboxed", _sb.get("auto_allow_bash_if_sandboxed", True))),
+                allow_unsandboxed_commands=bool(_sb.get("allowUnsandboxedCommands", _sb.get("allow_unsandboxed_commands", True))),
+                excluded_commands=list(_sb.get("excludedCommands", _sb.get("excluded_commands", [])) or []),
+                enabled_platforms=list(_sb.get("enabledPlatforms", _sb.get("enabled_platforms", [])) or []),
+            )
         if "spinner_verbs" in known and isinstance(known["spinner_verbs"], dict):
             known["spinner_verbs"] = SpinnerVerbsSettings(**known["spinner_verbs"])
         if "compact" in known and isinstance(known["compact"], dict):
             known["compact"] = CompactSettings(**known["compact"])
         if "freeze" in known and isinstance(known["freeze"], dict):
             known["freeze"] = FreezeSettings(**known["freeze"])
+        if "model_limits" in known and isinstance(known["model_limits"], dict):
+            converted: dict[str, ModelLimitSettings] = {}
+            for name, value in known["model_limits"].items():
+                if isinstance(value, ModelLimitSettings):
+                    converted[str(name)] = value
+                elif isinstance(value, dict):
+                    converted[str(name)] = ModelLimitSettings(
+                        context_window=value.get(
+                            "contextWindow", value.get("context_window")
+                        ),
+                        max_output_tokens=value.get(
+                            "maxOutputTokens", value.get("max_output_tokens")
+                        ),
+                    )
+            known["model_limits"] = converted
         if "hooks" in known and isinstance(known["hooks"], dict):
             known["hooks"] = HookSettings(**known["hooks"])
         if "tools" in known and isinstance(known["tools"], dict):

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
 
 from .bash_security import analyze_bash_command
-from src.permissions.bash_suggestions import contains_unquoted_chaining
+from .bash_suggestions import contains_unquoted_chaining
 from .rules import (
     get_ask_rule_for_tool,
     get_deny_rule_for_tool,

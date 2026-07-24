@@ -34,6 +34,32 @@ a concern.
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("clawcodex-cli")
+except PackageNotFoundError:
+    __version__ = "1.2.1"
+__author__ = "Claw Codex Team"
+
+
+def __getattr__(name: str):
+    """Expose the upstream root API without defeating the thin import."""
+    if name in {"load_config", "get_provider_config"}:
+        from clawcodex_ext import config
+
+        value = getattr(config, name)
+        globals()[name] = value
+        return value
+    if name == "BaseProvider":
+        try:
+            from clawcodex_ext.providers.base import BaseProvider
+        except Exception:  # pragma: no cover - optional provider deps
+            BaseProvider = None  # type: ignore[assignment,misc]
+        globals()[name] = BaseProvider
+        return BaseProvider
+    raise AttributeError(name)
+
 # ---------------------------------------------------------------------------
 # Lazy extension installations
 # ---------------------------------------------------------------------------
@@ -126,6 +152,11 @@ def ensure_nested_transcript_initialized() -> None:
 
 
 __all__ = [
+    "__version__",
+    "__author__",
+    "load_config",
+    "get_provider_config",
+    "BaseProvider",
     "ensure_nested_transcript_initialized",
     "ensure_eager_extensions_installed",
 ]

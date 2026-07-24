@@ -325,6 +325,11 @@ def _skill_error(message: str) -> ToolResult:
     return ToolResult(name="Skill", output={"error": message}, is_error=True)
 
 
+def run_markdown_skill(skill_name: str, args: str, context: ToolContext) -> ToolResult:
+    """Public expansion entry point shared by typed and model invocations."""
+    return _run_markdown_skill(skill_name, args, context)
+
+
 def run_user_invoked_skill(
     skill_name: str,
     args: str,
@@ -355,16 +360,36 @@ def _run_markdown_skill(
 ) -> ToolResult:
     """Compatibility wrapper over the canonical user invocation service."""
 
+    if _resolved_skill is None:
+        # The historical helper resolves through the mutable compatibility
+        # registry populated by ``get_all_skills``.  Passing that exact object
+        # into the canonical service preserves old callers while the normal
+        # user/model surfaces continue using immutable workspace catalogues.
+        from clawcodex_ext.skills.loader import get_all_skills, get_registered_skill
+
+        get_all_skills(project_root=context.workspace_root)
+        _resolved_skill = get_registered_skill(skill_name)
+
     request = SkillInvocationRequest(
         skill_name=skill_name,
         args=args or "",
         origin=SkillInvocationOrigin.USER,
     )
-    result = DEFAULT_SKILL_INVOCATION_SERVICE.invoke(
-        request,
-        context,
-        resolved_skill=_resolved_skill,
+    # Legacy callers may render the same skill after the command surface has
+    # already activated it in this request (the old parity helper did not own
+    # recursion state). Temporarily remove only that matching marker.
+    active_before = tuple(context.active_skill_names)
+    context.active_skill_names = tuple(
+        name for name in active_before if name != skill_name
     )
+    try:
+        result = DEFAULT_SKILL_INVOCATION_SERVICE.invoke(
+            request,
+            context,
+            resolved_skill=_resolved_skill,
+        )
+    finally:
+        context.active_skill_names = active_before
     if result.success and result.context_modifier is not None:
         apply_skill_context_modifier(context, result.context_modifier)
     return _invocation_result_to_tool_result(
@@ -580,9 +605,9 @@ def _get_skills_dir() -> Path | None:
         p = Path(env).expanduser().resolve()
         if p.is_dir():
             return p
-    for d in (Path.home() / ".clawcodex" / "skills", Path.home() / ".claude" / "skills"):
-        if d.is_dir():
-            return d
+    d = Path.home() / ".clawcodex" / "skills"
+    if d.is_dir():
+        return d
     return None
 
 

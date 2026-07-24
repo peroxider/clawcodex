@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import threading
 
+from .batch import register_batch_skill
 from .debug import register_debug_skill
 from .loop import register_loop_skill
 from .orchestrator import register_orchestrator_skill
@@ -56,6 +57,7 @@ def init_bundled_skills() -> bool:
         register_simplify_skill,
         register_debug_skill,
         register_loop_skill,
+        register_batch_skill,
         register_stuck_skill,
         register_verify_content_skill,
         register_verify_skill,
@@ -105,6 +107,7 @@ __all__ = [
     "register_spec_audit_skill",
     "register_debug_skill",
     "register_loop_skill",
+    "register_batch_skill",
     "register_remember_skill",
     "register_stuck_skill",
     "register_update_config_skill",

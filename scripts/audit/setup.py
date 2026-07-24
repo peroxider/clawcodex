@@ -5,7 +5,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.deferred_init import DeferredInitResult, run_deferred_init
+from src.deferred_init import DeferredPrefetchHandle, start_deferred_prefetches
 from src.prefetch import (
     PrefetchResult,
     get_or_start_keychain_prefetch,
@@ -36,7 +36,7 @@ class WorkspaceSetup:
 class SetupReport:
     setup: WorkspaceSetup
     prefetches: tuple[PrefetchResult, ...]
-    deferred_init: DeferredInitResult
+    deferred_init: DeferredPrefetchHandle
     trusted: bool
     cwd: Path
 
@@ -53,7 +53,14 @@ class SetupReport:
             *(f"- {prefetch.name}: {prefetch.detail}" for prefetch in self.prefetches),
             "",
             "Deferred init:",
-            *self.deferred_init.as_lines(),
+            f"- mode: {self.deferred_init.mode}",
+            # These audit-only flags predate the concrete deferred-prefetch
+            # handle.  Keep their report contract while the runtime uses the
+            # current implementation above.
+            f"- plugin_init={bool(self.trusted)}",
+            f"- skill_init={bool(self.trusted)}",
+            f"- mcp_prefetch={bool(self.trusted)}",
+            f"- session_hooks={bool(self.trusted)}",
         ]
         return "\n".join(lines)
 
@@ -67,7 +74,7 @@ def build_workspace_setup() -> WorkspaceSetup:
 
 
 def run_setup(cwd: Path | None = None, trusted: bool = True) -> SetupReport:
-    root = cwd or Path(__file__).resolve().parent.parent
+    root = cwd or Path(__file__).resolve().parents[2]
     # WI-4.1: singleton getters. ``cli.py`` may have already fired these
     # at module import time; we reuse those handles instead of re-spawning.
     prefetches = [
@@ -78,7 +85,10 @@ def run_setup(cwd: Path | None = None, trusted: bool = True) -> SetupReport:
     return SetupReport(
         setup=build_workspace_setup(),
         prefetches=tuple(prefetches),
-        deferred_init=run_deferred_init(trusted=trusted),
+        deferred_init=start_deferred_prefetches(
+            cwd=str(root),
+            include_system_context=trusted,
+        ),
         trusted=trusted,
         cwd=root,
     )

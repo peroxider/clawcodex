@@ -200,12 +200,7 @@ class QueryEngine:
                 from clawcodex_ext.skills.visibility import filter_model_visible_skills
 
                 skill_commands = filter_model_visible_skills(
-                    get_skill_tool_commands(
-                        cwd,
-                        str(self._config.tool_context.session_id)
-                        if self._config.tool_context.session_id is not None
-                        else None,
-                    ),
+                    get_skill_tool_commands(cwd),
                     self._config.tool_context,
                 )
 
@@ -274,7 +269,7 @@ class QueryEngine:
 
         system_prompt, user_context, system_context = await self._build_system_prompt_parts()
 
-        # Prepend user context (CLAUDE.md + date) as <system-reminder>
+        # Prepend user context (CLAWCODEX.md + date) as <system-reminder>
         messages_for_query = prepend_user_context(
             list(self._mutable_messages),
             user_context,

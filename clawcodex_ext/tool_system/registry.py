@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import inspect
 import logging
 import tempfile
@@ -10,11 +9,11 @@ from typing import Any, Iterable
 
 from .build_tool import Tool, Tools, tool_matches_name
 from .context import ToolContext
-from clawcodex_ext.tool_system.protocol import ToolCall, ToolResult
-from .schema_validation import coerce_tool_input, validate_json_schema
-from clawcodex_ext.permissions.check import has_permissions_to_use_tool
-from clawcodex_ext.permissions.handler import handle_permission_ask
-from clawcodex_ext.permissions.types import (
+from .protocol import ToolCall, ToolResult
+from .schema_validation import validate_tool_input
+from src.permissions.check import has_permissions_to_use_tool
+from src.permissions.handler import handle_permission_ask
+from src.permissions.types import (
     PermissionAskDecision,
     PermissionAskHandler,
     PermissionAskReply,
@@ -85,11 +84,46 @@ def _apply_and_persist_updates(context: ToolContext, updates: tuple[PermissionUp
     )
 
     try:
+        updates_list = list(updates)
+        base_ctx = context.permission_context
+        prev_mode = getattr(base_ctx, "mode", None)
+        # Plan-mode port: a dialog-accepted setMode (e.g. the plan-approval
+        # "Yes, auto-accept edits") changes the LIVE mode mid-turn. Run the
+        # transition seam (plan enter/exit attachment flags, pre_plan_mode
+        # stash/clear) BEFORE applying — the entry-side stash reads the
+        # PRE-switch mode, so running it after apply would no-op.
+        final_mode = prev_mode
+        for u in updates_list:
+            if getattr(u, "type", "") == "setMode":
+                final_mode = getattr(u, "mode", final_mode)
+        mode_changed = (
+            final_mode != prev_mode
+            and prev_mode is not None
+            and final_mode is not None
+        )
+        if mode_changed:
+            try:
+                from src.permissions.plan_transitions import (
+                    transition_permission_mode,
+                )
+
+                base_ctx = transition_permission_mode(
+                    prev_mode, final_mode, base_ctx
+                )
+            except Exception:  # noqa: BLE001 — transition side effects are best-effort
+                log.debug("permission-mode transition seam failed", exc_info=True)
         # apply_permission_updates returns a FRESH context (input unchanged)
         # — rebind it so every later dispatch sees the new rules.
         context.permission_context = apply_permission_updates(
-            context.permission_context, list(updates)
+            base_ctx, updates_list
         )
+        if mode_changed:
+            cb = getattr(context, "on_permission_mode_change", None)
+            if cb is not None:
+                try:
+                    cb(str(final_mode))
+                except Exception:  # noqa: BLE001
+                    log.debug("permission-mode change notify failed", exc_info=True)
     except Exception:
         log.exception("failed to apply accepted permission updates in-memory")
     try:
@@ -184,6 +218,10 @@ class ToolRegistry:
     def __init__(self, tools: Iterable[Tool] | None = None) -> None:
         self._tools: Tools = []
         self._by_name: dict[str, Tool] = {}
+        # MCP servers whose tools are hidden (the original's MCPServerMultiselect-
+        # Dialog). A tool named ``mcp__<server>__<tool>`` is hidden when <server>
+        # is in this set — so list_tools() (the agent's view) excludes it.
+        self.disabled_servers: set[str] = set()
         if tools:
             for tool in tools:
                 self.register(tool)
@@ -220,11 +258,71 @@ class ToolRegistry:
             self._by_name.pop(alias.lower(), None)
         return True
 
+    def remove_tool(self, name: str) -> bool:
+        """ch15 round-4 — remove a tool (and its aliases) by name. Returns
+        True if a tool was removed. Needed so MCP tools can be SWAPPED live
+        when a server sends notifications/tools/list_changed — the registry
+        was otherwise append-only, so a re-fetch couldn't reach the agent.
+
+        Also backs ``_filter_registry`` (--allowed-tools/--disallowed-tools in
+        agent_server.py + headless.py): those call sites now call this method
+        directly. They historically called a non-existent
+        ``registry.unregister`` inside a try/except, so the registry-level
+        filtering silently no-op'd — the flags removed nothing from the pool
+        the model saw. Both paths only ever REMOVE tools, so activating them
+        can only narrow the toolset.
+
+        Resolving by ``name`` accepts a primary name OR an alias, then drops
+        the tool from ``_tools`` and EVERY ``_by_name`` key that still points
+        at it (canonical + aliases). Removing by an alias therefore also
+        clears the canonical key, so the tool can't stay dispatch-reachable
+        through a sibling key."""
+        tool = self._by_name.get(name.lower())
+        if tool is None:
+            return False
+        self._tools = [t for t in self._tools if t is not tool]
+        for key in (tool.name, *(getattr(tool, "aliases", ()) or ())):
+            # Only drop a key that still points at THIS tool (another tool may
+            # have claimed an alias — don't clobber that).
+            if self._by_name.get(key.lower()) is tool:
+                self._by_name.pop(key.lower(), None)
+        return True
+
     def get(self, name: str) -> Tool | None:
         return self._by_name.get(name.lower())
 
+    def canonicalize_names(self, names: Iterable[str]) -> set[str]:
+        """Resolve each requested name to its tool's lowercased PRIMARY name.
+
+        Backs ``--allowed-tools`` / ``--disallowed-tools`` so they match whether
+        the caller passes a tool's primary name or one of its aliases
+        (e.g. ``KillShell`` -> ``TaskStop``, ``Task`` -> ``Agent``).
+        ``list_tools()`` only yields primary names and ``remove_tool`` cleans a
+        tool's aliases with it, so canonicalizing the request set to primary
+        names is what makes alias-form flags actually filter. Unknown names
+        pass through lowercased — they simply match nothing."""
+        out: set[str] = set()
+        for name in names:
+            if not name or not name.strip():
+                # Skip blanks so a stray "" can't become a match-nothing
+                # allowlist that removes every tool.
+                continue
+            tool = self.get(name)
+            out.add((tool.name if tool else name).lower())
+        return out
+
     def list_tools(self) -> Tools:
+        """Tools visible to the agent — excludes disabled-MCP-server tools."""
+        if not self.disabled_servers:
+            return list(self._tools)
+        return [t for t in self._tools if not self._server_disabled(t.name)]
+
+    def all_tools(self) -> Tools:
+        """Every registered tool, including hidden ones (for the multiselect UI)."""
         return list(self._tools)
+
+    def _server_disabled(self, tool_name: str) -> bool:
+        return any(tool_name.startswith(f"mcp__{s}__") for s in self.disabled_servers)
 
     def dispatch(self, call: ToolCall, context: ToolContext) -> ToolResult:
         tool = self._by_name.get(call.name.lower())
@@ -262,21 +360,18 @@ class ToolRegistry:
             )
 
         context.ensure_tool_allowed(tool.name)
-        coerced_input = coerce_tool_input(
-            call.input,
-            tool.input_schema,
-            root_name=tool.name,
-        )
-        validate_json_schema(coerced_input, tool.input_schema, root_name=tool.name)
+        # Semantic-coerce + validate; the coerced input (string "true"/"30" →
+        # bool/number) replaces the raw model input for permissions and call,
+        # mirroring TS carrying ``parsedInput.data`` forward.
+        coerced_input = validate_tool_input(tool.name, call.input, tool.input_schema)
         if coerced_input is not call.input:
             call = ToolCall(
-                name=call.name,
-                input=coerced_input,
-                tool_use_id=call.tool_use_id,
+                name=call.name, input=coerced_input, tool_use_id=call.tool_use_id,
             )
 
-        # Plan mode runtime gate: block destructive tools unless targeting
-        # a temporary / scratch path.
+        # Downstream plan-mode defense-in-depth: the permission layer is the
+        # primary gate, while direct registry callers still cannot mutate
+        # project files (temporary/scratch paths remain available).
         if context.plan_mode and tool.name in _DESTRUCTIVE_TOOLS:
             if not _is_temp_path(tool.name, call.input, context):
                 return ToolResult(
@@ -332,6 +427,8 @@ class ToolRegistry:
                 decision,
                 handler_cb,
                 tool_input=call.input,
+                context=context,
+                tool_use_id=call.tool_use_id,
             )
 
             if final.behavior == "deny":
@@ -415,44 +512,19 @@ def _invoke_tool_call(tool: Any, input: dict, context: ToolContext) -> ToolResul
     if not inspect.iscoroutinefunction(fn):
         return fn(input, context)
 
-    # Async tool — drive the coroutine to completion.
-    try:
-        running = asyncio.get_running_loop()
-    except RuntimeError:
-        running = None
+    # Async tool — drive the coroutine to completion via the shared bridge
+    # (extracted to utils/async_bridge in HOOKS-1 so the permission-ask
+    # seam reuses the exact same run-or-thread semantics). No timeout on
+    # the wait — async tools are expected to self-bound (TaskOutput uses
+    # its own ``timeout`` knob; TaskStop uses ``asyncio.wait_for`` inside
+    # its body). A hang here is a tool bug, not something the dispatcher
+    # papers over with a global cap.
+    from src.utils.async_bridge import run_coroutine_blocking
 
-    if running is None:
-        return asyncio.run(fn(input, context))
-
-    # Already inside a loop — schedule on a worker thread to avoid
-    # nesting (Python disallows ``run_until_complete`` on a running
-    # loop). Same pattern as ``task_stop.py``'s async-kill bridge.
-    holder: dict[str, Any] = {}
-    done = threading.Event()
-
-    def _runner() -> None:
-        try:
-            holder["result"] = asyncio.run(fn(input, context))
-        except BaseException as exc:  # noqa: BLE001 — re-raise
-            holder["error"] = exc
-        finally:
-            done.set()
-
-    threading.Thread(
-        target=_runner,
-        daemon=True,
-        name=f"tool-async-bridge:{getattr(tool, 'name', '?')}",
-    ).start()
-    # No timeout on this wait — async tools are expected to self-bound
-    # (TaskOutput uses its own ``timeout`` knob; TaskStop uses
-    # ``asyncio.wait_for(timeout=5.0)`` inside its body). A hung
-    # ``done.wait()`` here is a tool bug, not something the dispatcher
-    # tries to paper over with a global cap. If a future tool grows a
-    # naturally-unbounded await, give it an internal deadline first.
-    done.wait()
-    if "error" in holder:
-        raise holder["error"]  # type: ignore[misc]
-    return holder["result"]  # type: ignore[no-any-return]
+    return run_coroutine_blocking(
+        fn(input, context),
+        thread_name=f"tool-async-bridge:{getattr(tool, 'name', '?')}",
+    )
 
 
 def get_all_base_tools(registry: ToolRegistry) -> Tools:

@@ -19,11 +19,10 @@ This test is the cross-validation: write the transcript the way
 exercises the full integration surface described in
 ``docs/FEATURE_PLAN.md`` §3.1.11 Phase 0.2.
 
-Patches ``SESSIONS_DIR`` to a tmp dir so the test does not touch
-the user's real ``~/.clawcodex/sessions``. Both
-:class:`SessionStorage` and :meth:`Session.load` resolve their
-session directory from ``SESSIONS_DIR``, so a single patch ensures
-write and read paths are aligned.
+Sets ``CLAWCODEX_SESSIONS_DIR`` to a tmp dir so the test does not touch
+the user's real ``~/.clawcodex/sessions``. Both :class:`SessionStorage`
+and :meth:`Session.load` honor that runtime override, keeping write and
+read paths aligned.
 """
 
 from __future__ import annotations
@@ -99,12 +98,10 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
             sessions_dir = Path(tmp) / "sessions"
             run_id = "run-f49-validation-1"
 
-            # Patch SESSIONS_DIR so both SessionStorage (write) and
-            # Session.load → SESSIONS_DIR (read via Session.resume)
-            # resolve to the same tmp dir.
-            with patch(
-                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
-                sessions_dir,
+            # Use the runtime override consumed by both the writer and reader.
+            with patch.dict(
+                "os.environ",
+                {"CLAWCODEX_SESSIONS_DIR": str(sessions_dir)},
             ):
                 # 1. Orchestrator side: write the transcript the way
                 #    AgentRunner does in ``_flush_turn_transcript``.
@@ -127,9 +124,8 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
                 )
 
                 # 2. ``--resume`` side: read the transcript back.
-                #    SESSIONS_DIR is still patched so both
-                #    Session.resume (Session.load → SESSIONS_DIR) and
-                #    resume_session (SessionStorage → SESSIONS_DIR)
+                #    CLAWCODEX_SESSIONS_DIR is still set so both
+                #    Session.resume and resume_session
                 #    find the same data.
                 from src.agent.session import Session
 

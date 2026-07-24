@@ -11,20 +11,33 @@ def test_run_cli_version_short_circuit(monkeypatch):
     """--version short-circuits without loading TUI/REPL."""
     from clawcodex_ext.cli.dispatch import run_cli
 
-    # Ensure clean state.
-    for name in list(sys.modules.keys()):
-        if name in ("src.tui.app", "src.repl.core", "src"):
-            sys.modules.pop(name, None)
+    def _is_cold_start_module(name: str) -> bool:
+        return name in ("src.tui.app", "src.repl.core") or name.startswith(
+            "src.entrypoints.tui"
+        )
 
-    # Also clear src.entrypoints.tui which may have cached src reference.
-    for name in list(sys.modules.keys()):
-        if name.startswith("src.entrypoints.tui"):
-            sys.modules.pop(name, None)
+    # Exercise a cold start without leaking the temporary module state into
+    # later tests.  Keep the parent ``src`` package itself loaded: removing it
+    # while retaining unrelated ``src.*`` children creates a second package
+    # object and breaks later string-based monkeypatches.
+    saved_modules = {
+        name: module
+        for name, module in list(sys.modules.items())
+        if _is_cold_start_module(name)
+    }
+    for name in saved_modules:
+        sys.modules.pop(name, None)
 
-    rc = run_cli(["clawcodex", "--version"])
-    assert rc == 0
-    assert "src.tui.app" not in sys.modules
-    assert "src.repl.core" not in sys.modules
+    try:
+        rc = run_cli(["clawcodex", "--version"])
+        assert rc == 0
+        assert "src.tui.app" not in sys.modules
+        assert "src.repl.core" not in sys.modules
+    finally:
+        for name in list(sys.modules):
+            if _is_cold_start_module(name):
+                sys.modules.pop(name, None)
+        sys.modules.update(saved_modules)
 
 
 def test_run_cli_with_args_config_skips_run_pre_action(monkeypatch):
@@ -45,8 +58,8 @@ def test_run_cli_with_args_config_skips_run_pre_action(monkeypatch):
     assert rc == 0
 
 
-def test_run_cli_default_invocation_calls_repl_via_src_cli(monkeypatch):
-    """Default (no flags) reaches REPLFrontend which creates ClawcodexREPL."""
+def test_run_cli_default_invocation_calls_downstream_repl(monkeypatch):
+    """Default invocation reaches REPLFrontend and creates the downstream REPL."""
     from clawcodex_ext.cli.dispatch import run_cli
     import src.entrypoints.tui as tui_module
 
@@ -57,9 +70,6 @@ def test_run_cli_default_invocation_calls_repl_via_src_cli(monkeypatch):
     monkeypatch.setattr("clawcodex_ext.cli.permissions.resolve_permission_state", lambda args: None)
     monkeypatch.setattr(tui_module, "should_use_tui", lambda explicit: False)
 
-    # Patch ClawcodexREPL.__init__ to capture kwargs, and .run to be a no-op.
-    original_init = None
-
     def fake_repl_init(self, **kwargs):
         repl_calls.append(kwargs)
 
@@ -69,7 +79,13 @@ def test_run_cli_default_invocation_calls_repl_via_src_cli(monkeypatch):
 
         self.run = noop_run
 
-    monkeypatch.setattr("src.repl.ClawcodexREPL.__init__", fake_repl_init)
+    monkeypatch.setattr(
+        "clawcodex_ext.repl.app.ClawCodexExtREPL.__init__", fake_repl_init
+    )
+    monkeypatch.setattr(
+        "clawcodex_ext.frontend.repl_extensions.install_repl_extensions",
+        lambda repl, ctx: None,
+    )
 
     rc = run_cli(["clawcodex"])
     assert rc == 0
@@ -90,6 +106,10 @@ def test_run_cli_permission_flags_resolved(monkeypatch):
 
     monkeypatch.setattr("src.init.run_pre_action", lambda args: None)
     monkeypatch.setattr(tui_ref, "should_use_tui", lambda explicit: False)
+    # The bypass flag is intentionally rejected for root outside a sandbox.
+    # Mark this cross-platform dispatch test as sandboxed; the dedicated
+    # dangerous-permission tests cover rejection for unsandboxed root.
+    monkeypatch.setenv("IS_SANDBOX", "1")
 
     # Patch RuntimeContext.build to capture options and still allow REPL to run
     original_build = None
@@ -115,7 +135,13 @@ def test_run_cli_permission_flags_resolved(monkeypatch):
         classmethod(lambda cls, opts: capture_runtime_build(cls, opts)),
     )
 
-    monkeypatch.setattr("src.repl.ClawcodexREPL.__init__", fake_repl_init)
+    monkeypatch.setattr(
+        "clawcodex_ext.repl.app.ClawCodexExtREPL.__init__", fake_repl_init
+    )
+    monkeypatch.setattr(
+        "clawcodex_ext.frontend.repl_extensions.install_repl_extensions",
+        lambda repl, ctx: None,
+    )
 
     rc = run_cli(["clawcodex", "--dangerously-skip-permissions"])
     assert rc == 0
@@ -319,8 +345,8 @@ def test_run_cli_provider_model_fast_paths_skip_pre_action(monkeypatch, capsys):
     assert provider_rc == 0
     assert model_rc == 0
     assert pre_action_calls == []
-    assert "Default provider set to: glm" in provider_out
-    assert "Default model for glm set to: zai/glm-4" in model_out
+    assert "Default provider set to: zai" in provider_out
+    assert "Default model for zai set to: zai/glm-4" in model_out
 
 
 def test_run_cli_model_flag_value_provider_does_not_route_as_subcommand(monkeypatch):
@@ -337,7 +363,13 @@ def test_run_cli_model_flag_value_provider_does_not_route_as_subcommand(monkeypa
         repl_calls.append(kwargs)
         self.run = lambda: 0
 
-    monkeypatch.setattr("src.repl.ClawcodexREPL.__init__", fake_repl_init)
+    monkeypatch.setattr(
+        "clawcodex_ext.repl.app.ClawCodexExtREPL.__init__", fake_repl_init
+    )
+    monkeypatch.setattr(
+        "clawcodex_ext.frontend.repl_extensions.install_repl_extensions",
+        lambda repl, ctx: None,
+    )
 
     rc = run_cli(["clawcodex", "--model", "claude-sonnet-4-6"])
 

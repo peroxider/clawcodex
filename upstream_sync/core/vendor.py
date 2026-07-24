@@ -10,8 +10,31 @@ from __future__ import annotations
 import subprocess
 from datetime import datetime
 from pathlib import Path
+from typing import Final
 
 from upstream_sync.config import UpstreamConfig
+
+
+HEX_COMMIT_LENGTH: Final[int] = 7
+
+
+def short_commit_id(commit: str, length: int = HEX_COMMIT_LENGTH) -> str:
+    """Return the stable directory key used for an upstream commit.
+
+    Snapshot and patch directories intentionally use seven hexadecimal
+    characters (``src/upstream/0573f4c``), regardless of whether callers pass
+    a full SHA or an already-short SHA.  Symbolic refs are left untouched so
+    the helper remains safe for generic CLI inputs.
+    """
+
+    value = commit.strip()
+    if len(value) >= length and all(ch in "0123456789abcdefABCDEF" for ch in value):
+        return value[:length].lower()
+    return value
+
+
+def _is_hex_commit(value: str) -> bool:
+    return len(value) >= HEX_COMMIT_LENGTH and all(ch in "0123456789abcdefABCDEF" for ch in value)
 
 
 class VendorManager:
@@ -21,40 +44,109 @@ class VendorManager:
         self.repo_root = repo_root
         self.cfg = upstream
 
+    @property
+    def remote_name(self) -> str:
+        """Configured local remote name (kept in one place for all git ops)."""
+
+        return self.cfg.remote_name
+
+    def _remote_ref(self, ref: str) -> str:
+        """Return a remote-tracking ref for a branch-like input."""
+
+        if ref.startswith(f"{self.remote_name}/") or ref.startswith("refs/"):
+            return ref
+        return f"{self.remote_name}/{ref}"
+
+    def _rev_parse(self, ref: str) -> str | None:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{ref}^{{commit}}"],
+            cwd=self.repo_root,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip()
+
+    def _resolve_fetched_ref(self, ref: str, *, prefer_fetch_head: bool = False) -> str:
+        """Resolve a ref to a full commit SHA after a fetch.
+
+        ``git fetch <remote> <40-char-sha>`` records the object in
+        ``FETCH_HEAD`` but does not create ``<remote>/<sha>``.  The old
+        implementation assumed the latter and therefore failed for the exact
+        commit IDs used by the snapshot workflow.
+        """
+
+        candidates: list[str] = []
+        if prefer_fetch_head:
+            candidates.append("FETCH_HEAD")
+        # A bare branch such as ``main`` may also exist in the downstream
+        # repository.  Prefer the canonical remote-tracking branch in that
+        # case; exact hexadecimal commits can be resolved directly.
+        if _is_hex_commit(ref) or ref.startswith("refs/"):
+            candidates.extend([ref, self._remote_ref(ref)])
+        else:
+            candidates.extend([self._remote_ref(ref), ref])
+        if not prefer_fetch_head:
+            candidates.append("FETCH_HEAD")
+        for candidate in candidates:
+            resolved = self._rev_parse(candidate)
+            if resolved:
+                return resolved
+        raise RuntimeError(
+            f"Could not resolve fetched ref {ref!r} using remote {self.remote_name!r}."
+        )
+
     # ------------------------------------------------------------------
     # Remote lifecycle
     # ------------------------------------------------------------------
 
     def ensure_remote(self) -> None:
-        """Add the upstream remote if it does not already exist."""
+        """Ensure the configured remote exists and points at the right URL.
+
+        Existing remotes are never silently repointed: a typo here can make a
+        sync appear successful while importing a completely different code
+        base.  Configure a distinct ``remote_name`` when a repository already
+        has an ``upstream`` remote for another purpose.
+        """
+
         result = subprocess.run(
-            ["git", "remote", "get-url", "upstream"],
+            ["git", "remote", "get-url", self.remote_name],
             cwd=self.repo_root,
             capture_output=True,
             text=True,
         )
         if result.returncode != 0:
             subprocess.run(
-                ["git", "remote", "add", "upstream", self.cfg.remote_url],
+                ["git", "remote", "add", self.remote_name, self.cfg.remote_url],
                 cwd=self.repo_root,
                 check=True,
+            )
+            return
+
+        configured = result.stdout.strip()
+
+        # Git accepts harmless spelling variants (trailing slash and .git),
+        # so compare a normalised form while retaining the user's URL in the
+        # error message.
+        def normalise(url: str) -> str:
+            return url.rstrip("/").removesuffix(".git").lower()
+
+        if normalise(configured) != normalise(self.cfg.remote_url):
+            raise RuntimeError(
+                f"Git remote {self.remote_name!r} points to {configured!r}, "
+                f"but upstream-sync.yaml specifies {self.cfg.remote_url!r}. "
+                f"Choose another remote_name or fix the remote explicitly."
             )
 
     def fetch(self) -> str:
         """Fetch upstream main and return the latest commit hash."""
         subprocess.run(
-            ["git", "fetch", "upstream", self.cfg.main_branch],
+            ["git", "fetch", self.remote_name, self.cfg.main_branch],
             cwd=self.repo_root,
             check=True,
         )
-        result = subprocess.run(
-            ["git", "rev-parse", f"upstream/{self.cfg.main_branch}"],
-            cwd=self.repo_root,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout.strip()
+        return self._resolve_fetched_ref(self.cfg.main_branch)
 
     def fetch_ref(self, ref: str) -> str:
         """Fetch a specific ref (commit, tag, or branch) from upstream.
@@ -65,19 +157,26 @@ class VendorManager:
         Returns:
             The full commit hash that was fetched.
         """
-        subprocess.run(
-            ["git", "fetch", "upstream", ref],
-            cwd=self.repo_root,
-            check=True,
-        )
         result = subprocess.run(
-            ["git", "rev-parse", f"upstream/{ref}"],
+            ["git", "fetch", self.remote_name, ref],
             cwd=self.repo_root,
             capture_output=True,
             text=True,
-            check=True,
         )
-        return result.stdout.strip()
+        if result.returncode != 0:
+            # A commit that is already present locally can still be used (for
+            # example after a shallow/partial clone); otherwise surface the
+            # original fetch failure with its stderr.
+            local = self._rev_parse(ref)
+            if local:
+                return local
+            raise subprocess.CalledProcessError(
+                result.returncode,
+                result.args,
+                output=result.stdout,
+                stderr=result.stderr,
+            )
+        return self._resolve_fetched_ref(ref, prefer_fetch_head=True)
 
     def extract_to_path(
         self,
@@ -100,58 +199,69 @@ class VendorManager:
             use_archive: If True, use git archive for efficient extraction.
                          If False, use git checkout.
         """
-        upstream_ref = f"upstream/{ref}"
-        target_path.mkdir(parents=True, exist_ok=True)
+        import io
+        import shutil
+        import tarfile
+        import tempfile
 
-        if use_archive:
-            import tarfile
-            import io
+        upstream_ref = self._resolve_fetched_ref(ref)
+        target_path = target_path.resolve()
+        repo_root = self.repo_root.resolve()
+        if target_path == repo_root or target_path == repo_root / ".git":
+            raise ValueError(f"Refusing to replace unsafe snapshot target: {target_path}")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Extract the full archive and filter to only the subpath members
-            proc = subprocess.run(
-                ["git", "archive", "--prefix=", upstream_ref],
-                cwd=self.repo_root,
-                capture_output=True,
-                check=True,
-            )
-            with tarfile.open(fileobj=io.BytesIO(proc.stdout)) as tar:
-                # Filter to only members under the subpath directory
-                members = [m for m in tar.getmembers() if m.name.startswith(f"{subpath}/")]
-                for member in members:
-                    # Strip the subpath/ prefix so contents go directly into target_path
-                    # e.g., "src/bridge/__init__.py" -> "bridge/__init__.py"
-                    member.name = member.name[len(subpath) + 1 :]
-                    if member.name:
-                        tar.extract(member, target_path)
-        else:
-            # Fallback: checkout to a temp branch and copy
-            import tempfile
-            import shutil
+        # Build the complete snapshot away from the destination.  Only after
+        # archive creation and extraction succeed do we replace the previous
+        # directory.  This prevents both stale files and half-written
+        # snapshots when a fetch/archive operation fails.
+        with tempfile.TemporaryDirectory(
+            dir=target_path.parent, prefix=f".{target_path.name}-extract-"
+        ) as tmpdir:
+            temporary_root = Path(tmpdir)
+            staged = temporary_root / "snapshot"
+            staged.mkdir()
+            archive_args = ["git", "archive", "--format=tar", upstream_ref, subpath]
 
-            with tempfile.TemporaryDirectory() as tmpdir:
-                tmp_branch = f"tmp-extract-{ref[:8]}"
-                subprocess.run(
-                    ["git", "checkout", "-b", tmp_branch, upstream_ref],
+            if use_archive:
+                proc = subprocess.run(
+                    archive_args,
                     cwd=self.repo_root,
+                    capture_output=True,
                     check=True,
                 )
-                src_path = Path(tmpdir) / subpath
-                if src_path.exists():
-                    # Copy contents directly (not the subpath directory itself)
-                    for item in src_path.iterdir():
-                        dest = target_path / item.name
-                        if item.is_dir():
-                            shutil.copytree(item, dest, dirs_exist_ok=True)
-                        else:
-                            shutil.copy2(item, dest)
-                subprocess.run(
-                    ["git", "checkout", "-"],
-                    cwd=self.repo_root,
-                )
-                subprocess.run(
-                    ["git", "branch", "-D", tmp_branch],
-                    cwd=self.repo_root,
-                )
+                archive = tarfile.open(fileobj=io.BytesIO(proc.stdout))
+            else:
+                archive_path = temporary_root / "snapshot.tar"
+                with archive_path.open("wb") as archive_file:
+                    subprocess.run(
+                        archive_args,
+                        cwd=self.repo_root,
+                        stdout=archive_file,
+                        check=True,
+                    )
+                archive = tarfile.open(archive_path)
+
+            with archive:
+                members = [m for m in archive.getmembers() if m.name.startswith(f"{subpath}/")]
+                for member in members:
+                    # Strip the subpath/ prefix so contents go directly into
+                    # the snapshot root.
+                    member.name = member.name[len(subpath) + 1 :]
+                    if member.name:
+                        archive.extract(member, staged)
+
+            previous = temporary_root / "previous"
+            if target_path.exists():
+                target_path.replace(previous)
+            try:
+                staged.replace(target_path)
+            except Exception:
+                if previous.exists() and not target_path.exists():
+                    previous.replace(target_path)
+                raise
+            if previous.exists():
+                shutil.rmtree(previous)
 
     # ------------------------------------------------------------------
     # Version tags
@@ -205,7 +315,7 @@ class VendorManager:
 
     def reset_vendor_to_upstream(self, commit: str | None = None) -> None:
         """Hard-reset vendor branch to the given upstream commit (default: FETCH_HEAD)."""
-        ref = commit or f"upstream/{self.cfg.main_branch}"
+        ref = commit or self._remote_ref(self.cfg.main_branch)
         subprocess.run(
             ["git", "checkout", self.cfg.vendor_branch],
             cwd=self.repo_root,
@@ -234,7 +344,7 @@ class VendorManager:
             RuntimeError: If the upstream remote has never been fetched.
         """
         # Ensure we have something to compare against
-        upstream_ref = f"upstream/{self.cfg.main_branch}"
+        upstream_ref = self._remote_ref(self.cfg.main_branch)
         result = subprocess.run(
             ["git", "rev-parse", upstream_ref],
             cwd=self.repo_root,

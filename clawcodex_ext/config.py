@@ -1,3 +1,7 @@
-"""Compatibility facade — see :mod:`src.config`."""
+"""Module-identity bridge to the canonical configuration module."""
 
-from src.config import *  # noqa: F401,F403
+import sys
+
+from src import config as _implementation
+
+sys.modules[__name__] = _implementation

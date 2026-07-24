@@ -1354,14 +1354,18 @@ class TestREPL(unittest.TestCase):
         repl = ClawcodexREPL.__new__(ClawcodexREPL)
         repl._cron_loop = None
         fallback = repl._get_chat_loop()
-        self.assertIsInstance(fallback, asyncio.AbstractEventLoop)
-
-        cron_loop = asyncio.new_event_loop()
-        repl._cron_loop = cron_loop
         try:
-            self.assertIs(repl._get_chat_loop(), cron_loop)
+            self.assertIsInstance(fallback, asyncio.AbstractEventLoop)
+
+            cron_loop = asyncio.new_event_loop()
+            repl._cron_loop = cron_loop
+            try:
+                self.assertIs(repl._get_chat_loop(), cron_loop)
+            finally:
+                cron_loop.close()
         finally:
-            cron_loop.close()
+            fallback.close()
+            asyncio.set_event_loop(None)
 
     def test_handle_command_slash_shows_commands_and_skills(self):
         skills_dir = Path(self.temp_dir) / "skills"
@@ -1436,9 +1440,40 @@ class TestREPL(unittest.TestCase):
                             is_bypass_permissions_mode_available=True,
                         )
                         repl.chat = Mock()
-                        repl.handle_command("/hello bob")
+                        handled = repl._try_run_skill_slash("/hello bob")
+                        self.assertTrue(handled)
                         args, _kwargs = repl.chat.call_args
                         self.assertIn("Hello bob", args[0])
+
+    def test_forked_skill_slash_renders_result_without_second_model_query(self):
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl._built_in_commands = set()
+        repl.tool_context = object()
+        repl.console = Mock()
+        repl.chat = Mock()
+        repl._engine_messages = []
+
+        result = SimpleNamespace(
+            is_error=False,
+            output={
+                "success": True,
+                "status": "fork",
+                "commandName": "verify",
+                "result": "runtime evidence\nVERDICT: PASS",
+            },
+        )
+        with patch(
+            "clawcodex_ext.tool_system.tools.skill.run_user_invoked_skill",
+            return_value=result,
+        ) as invoke:
+            handled = repl._try_run_skill_slash("/verify target.txt")
+
+        self.assertTrue(handled)
+        invoke.assert_called_once_with("verify", "target.txt", repl.tool_context)
+        repl.chat.assert_not_called()
+        self.assertEqual(len(repl._engine_messages), 1)
+        self.assertEqual(repl._engine_messages[0].role, "assistant")
+        self.assertIn("VERDICT: PASS", repr(repl._engine_messages[0].content))
 
     def test_save_session(self):
         """Test session saving."""
@@ -2094,12 +2129,15 @@ class TestREPL(unittest.TestCase):
 
             # If the bug regresses, bare input() is reached for the 'Other'
             # follow-up and the AssertionError makes the test fail loudly.
-            with patch(
-                "builtins.input",
-                side_effect=AssertionError(
-                    "bare input() reached the 'Other' branch — regression of "
-                    "src/repl/core.py:1037; 'Other' must read through "
-                    "_safe_input so LiveStatus can pause the spinner."
+            with (
+                patch("clawcodex_ext.repl.core.get_selection_mode", return_value="number"),
+                patch(
+                    "builtins.input",
+                    side_effect=AssertionError(
+                        "bare input() reached the 'Other' branch — regression; "
+                        "'Other' must read through _safe_input so LiveStatus "
+                        "can pause the spinner."
+                    ),
                 ),
             ):
                 answers = repl._ask_user_questions(
@@ -2429,9 +2467,9 @@ class TestREPLConversationSanitization(unittest.TestCase):
         repl._sanitize_conversation_for_api_error = sanitize_spy  # type: ignore[method-assign]
 
         # Patch QueryEngine.__init__ -> .submit_message to use our fake.
-        # ``chat()`` constructs a QueryEngine inline, so we patch the
-        # class to return a mock with our fake_submit_message.
-        with patch("clawcodex_ext.repl.core.QueryEngine") as mock_engine_class:
+        # ``chat()`` imports QueryEngine lazily from the engine module, so
+        # patch its definition there and return our fake_submit_message.
+        with patch("clawcodex_ext.query.engine.QueryEngine") as mock_engine_class:
             mock_engine = Mock()
             mock_engine.submit_message = fake_submit_message
             mock_engine.reset_abort_controller = Mock()
