@@ -4591,7 +4591,7 @@ class ClawcodexREPL:
 
         display_path = self._display_cwd()
         provider_label = f"{self.provider_name.upper()} Provider"
-        model_label = self.provider.model if self.provider else "N/A"
+        model_label = (self.provider.model if self.provider else None) or "N/A"
 
         if (
             Panel is None
