@@ -123,6 +123,14 @@ def _format_runtime_model_list(context: Any) -> str:
             f"{fallback}"
         )
 
+    # When the caller has no runtime context, the snapshot only contains the
+    # placeholder "unknown" provider with the SyntheticProvider's mock models.
+    # Fall back to the full registry listing so the user sees every
+    # configured provider instead of a single bogus "unknown:" section.
+    # Checked BEFORE the empty-models early-return so both paths are covered.
+    if provider_name == "unknown":
+        return format_model_list(provider=None)
+
     if current and current not in models:
         models.insert(0, current)
     if not models:

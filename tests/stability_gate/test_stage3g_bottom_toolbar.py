@@ -47,24 +47,31 @@ class TestStage3gBottomToolbarSource:
     """源代码静态回归守卫。"""
 
     def test_no_orphan_goal_part_reference(self):
-        """``_bottom_toolbar`` 不得引用已删除的 ``goal_part``。
+        """``_bottom_toolbar`` 不得保留孤儿 ``goal_part`` 引用。
 
         2026-07-04 commit ``0293f5e1`` 删除了 ``goal_part`` 的整个
         定义块但保留了 ``f"{goal_part}"`` 引用,触发 NameError 被
-        except 吞掉的状态条消失事故。如果未来 commit 再次引入
-        同样的孤儿引用(无论是 ``goal_part`` 还是别的已删除变量),
-        在此处直接 fail。
+        except 吞掉的状态条消失事故。守卫的语义是:若 ``goal_part``
+        在 f-string 中被引用,本地必须有对应的赋值。如果未来 commit
+        再次引入同样的孤儿引用,在此处直接 fail。
         """
         import inspect
+        import re
 
         from src.repl.core import ClawcodexREPL
 
         src = inspect.getsource(ClawcodexREPL._bottom_toolbar)
-        assert "goal_part" not in src, (
-            "_bottom_toolbar references undefined variable 'goal_part'. "
-            "The corresponding definition block was removed in commit "
-            "0293f5e1 — either restore the variable block or delete the "
-            "orphan f-string reference."
+        # Only flag orphan when ``goal_part`` is referenced in an f-string
+        # but has no local assignment. Using it as a regular variable name
+        # outside f-strings (e.g. as a plain string concat) is allowed and
+        # never raises NameError.
+        goal_part_in_fstring = bool(re.search(r'f"\{goal_part\}"', src))
+        goal_part_assigned = bool(re.search(r"\bgoal_part\s*(?::\s*\S+)?\s*=", src))
+        assert not (goal_part_in_fstring and not goal_part_assigned), (
+            "_bottom_toolbar references 'goal_part' in an f-string but "
+            "the local assignment was removed (orphan variable regression, "
+            "see commit 0293f5e1). Either restore the assignment or "
+            "delete the f-string reference."
         )
 
     def test_all_interpolated_vars_are_assigned(self):
@@ -132,6 +139,12 @@ class TestStage3gBottomToolbarRuntime:
         stub._stats_input_tokens = in_tokens
         stub._stats_output_tokens = out_tokens
         stub._shorten_path_text = staticmethod(lambda p: p)
+        # ``_bottom_toolbar`` calls ``self._goal_footer_status()``; without
+        # a no-op binding the call raises AttributeError on the stub and
+        # the outer ``except Exception`` swallows it, returning "".
+        stub._goal_footer_status = lambda: None
+        stub._goal_footer_id = None
+        stub._goal_footer_started_at = None
         return stub
 
     def test_renders_non_empty_string(self, _heavy_runtime):

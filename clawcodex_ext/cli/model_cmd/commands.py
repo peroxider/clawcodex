@@ -99,7 +99,14 @@ def format_model_list(provider: str | None = None, *, wait_for_refresh: bool = F
 
     provider = canonical_provider_name(provider)
     resolved_current = resolution.model if resolution is not None else None
-    providers = [provider]
+    # When no provider is specified (or the fallback is "unknown" because
+    # the caller has no runtime context), iterate over every configured
+    # provider so the fallback still surfaces useful catalog information.
+    # Otherwise restrict to the single requested provider.
+    if not provider or provider == "unknown":
+        providers = registry.provider_names()
+    else:
+        providers = [provider]
     lines = ["Models:"]
     for provider_name in providers:
         registry.validate_provider(provider_name)

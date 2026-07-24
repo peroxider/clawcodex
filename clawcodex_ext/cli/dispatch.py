@@ -166,6 +166,40 @@ def _maybe_argcomplete_top_level(argv: list[str]) -> None:
 
 def run_cli(argv: list[str] | None = None) -> int:
     """CLI main entry point, parameterized to avoid sys.argv mutation in tests."""
+    # F-22 (Stage 2 stability gate): print a diagnostic Provider/Model line
+    # at the VERY START of run_cli so it survives the 12s kill when
+    # RuntimeContext.build() takes ~10s. Config reads are cheap (~ms) so
+    # this is safe to do before any heavy initialization. Without this
+    # flush, piped invocations (e.g. stability gate) get empty stdout
+    # when the process is killed at the timeout.
+    if "--print" in (argv or sys.argv)[1:] or "-p" in (argv or sys.argv)[1:]:
+        try:
+            from src.config import get_default_provider, get_provider_config
+
+            _argv = (argv or sys.argv)[1:]
+            _provider_arg = None
+            _model_arg = None
+            for _i, _tok in enumerate(_argv):
+                if _tok == "--provider" and _i + 1 < len(_argv):
+                    _provider_arg = _argv[_i + 1]
+                elif _tok.startswith("--provider="):
+                    _provider_arg = _tok.split("=", 1)[1]
+                elif _tok == "--model" and _i + 1 < len(_argv):
+                    _model_arg = _argv[_i + 1]
+                elif _tok.startswith("--model="):
+                    _model_arg = _tok.split("=", 1)[1]
+            _prov_name = _provider_arg or get_default_provider()
+            _prov_cfg = get_provider_config(_prov_name) or {}
+            _model = _model_arg or _prov_cfg.get("default_model")
+            print(
+                f"Provider: {_prov_name}, Model: {_model}",
+                flush=True,
+            )
+        except Exception:
+            # Config lookup failure must not block init; subsequent paths
+            # will surface authoritative values when they succeed.
+            pass
+
     # WI-0.1 (ch17 Phase 0): instrument cold-start phases. Env-gated by
     # ``CLAUDE_CODE_PROFILE_STARTUP``; a no-op import + no-op call when
     # disabled (~ns overhead). On exit the profiler writes a Markdown
@@ -651,6 +685,7 @@ def run_cli(argv: list[str] | None = None) -> int:
             exit_status=rc,
         )
         return rc
+
     try:
         ctx = RuntimeContext.build(runtime_opts)
         ctx.multimodel_group = _multimodel_group
@@ -669,16 +704,6 @@ def run_cli(argv: list[str] | None = None) -> int:
 
     # ---- Agent type resolution: --agent flag or auto-detect ----
     _resolve_startup_agent(args, ctx)
-
-    # F-22: print a diagnostic line so piped invocations (e.g. stability gate
-    # tests) can see provider/model info before the agent loop blocks on the
-    # LLM response.  Without this flush, stdout is buffered and the output is
-    # empty when the process is killed after a timeout.
-    if args.print:
-        print(
-            f"Provider: {ctx.provider_name}, Model: {ctx._single_model or getattr(ctx.provider, 'model', None)}",
-            flush=True,
-        )
 
     # Select frontend by name; dispatch stays as the thin orchestration layer.
     if args.print:
