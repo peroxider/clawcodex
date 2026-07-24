@@ -12,21 +12,24 @@ shape (TS keeps spawn metadata + Popen handle + reaper bookkeeping on the
 state record). The ``kill`` method here is the polymorphic dispatch target
 for ``stop_task`` (Phase 5).
 """
-
 from __future__ import annotations
 
 import os
+import logging
 import subprocess
 from dataclasses import dataclass, field
 from typing import IO, Any, Literal, TYPE_CHECKING, TypeAlias
 
-# F-88: task kind discriminator mirroring CCB LocalShellTask.tsx.
-TaskKind: TypeAlias = Literal['shell', 'monitor']
-
-from clawcodex_ext.tasks_core import TaskStateBase
+from src.tasks_core import TaskStateBase
 
 if TYPE_CHECKING:
-    from clawcodex_ext.task_registry import RuntimeTaskRegistry
+    from src.task_registry import RuntimeTaskRegistry
+
+logger = logging.getLogger(__name__)
+
+# F-88 downstream monitor tasks share the background-shell lifecycle while
+# retaining their own discriminator and refresh metadata.
+TaskKind: TypeAlias = Literal["shell", "monitor"]
 
 
 @dataclass(kw_only=True)
@@ -51,30 +54,41 @@ class LocalShellTaskState(TaskStateBase):
       ``field(repr=False)`` so they don't leak into snapshots / logs.
     """
 
-    type: Literal['local_bash'] = 'local_bash'  # type: ignore[assignment]
-    command: str = ''
-    cwd: str = ''
+    type: Literal["local_bash"] = "local_bash"  # type: ignore[assignment]
+    command: str = ""
+    cwd: str = ""
     pid: int | None = None
-    output_path: str = ''
+    output_path: str = ""
     exit_code: int | None = None
     finished_at: float | None = None
+    # The agent that spawned this background bash (``None`` = the main
+    # session). Set at spawn from ``ToolContext.agent_id`` so a completing
+    # sub-agent can reap the shells it started — the port analog of TS's
+    # ``LocalShellTaskState.agentId`` + ``killShellTasksForAgent``, preventing
+    # a ``run_in_background`` loop outliving its agent as a PPID=1 zombie.
+    agent_id: str | None = None
+    # ch10 round-4 WI-2 — eviction grace fields (mirror LocalAgentTaskState).
+    # Without these on the shell state, schedule_eviction's hasattr guard
+    # made it a no-op, so terminal background bash tasks could NEVER be
+    # reclaimed by the sweeper (they piled up in /tasks forever). ``retain``
+    # lets a UI pin the entry; ``evict_after`` is the grace deadline.
+    retain: bool = False
+    evict_after: float | None = None
+    kind: TaskKind = "shell"
+    interval_sec: int | None = None
+    tail_buffer_size: int = 200_000
+    auto_refresh: bool = False
     proc: subprocess.Popen | None = field(default=None, repr=False, compare=False)
     handle: IO[bytes] | None = field(default=None, repr=False, compare=False)
 
-    # F-88 Monitor fields (all have defaults so existing callers keep working).
-    kind: TaskKind = 'shell'           # 'shell' = normal background bash; 'monitor' = long-running monitor
-    interval_sec: int | None = None    # watch interval when kind == 'monitor'
-    tail_buffer_size: int = 200_000    # TUI tail buffer size (bytes)
-    auto_refresh: bool = False         # TUI auto-refresh flag
-
-    def derived_status(self) -> Literal['running', 'completed', 'failed']:
+    def derived_status(self) -> Literal["running", "completed", "failed"]:
         """Compute the legacy three-value status string used by the bash
         background reader. Independent of ``self.status`` (which uses the
         canonical 5-value chapter-10 vocabulary)."""
         rc = self.exit_code
         if rc is None:
-            return 'running'
-        return 'completed' if rc == 0 else 'failed'
+            return "running"
+        return "completed" if rc == 0 else "failed"
 
     def to_legacy_dict(self) -> dict[str, Any]:
         """Project back to the dict-of-dicts shape that the pre-Chunk-B
@@ -83,19 +97,19 @@ class LocalShellTaskState(TaskStateBase):
         the historical key set unchanged.
         """
         return {
-            'task_id': self.id,
-            'command': self.command,
-            'description': self.description,
-            'cwd': self.cwd,
-            'started_at': self.start_time,
-            'output_path': self.output_path,
-            'pid': self.pid,
-            '_proc': self.proc,
-            '_handle': self.handle,
-            'exit_code': self.exit_code,
-            'finished_at': self.finished_at,
-            'kind': self.kind,
-            'interval_sec': self.interval_sec,
+            "task_id": self.id,
+            "command": self.command,
+            "description": self.description,
+            "cwd": self.cwd,
+            "started_at": self.start_time,
+            "output_path": self.output_path,
+            "pid": self.pid,
+            "_proc": self.proc,
+            "_handle": self.handle,
+            "exit_code": self.exit_code,
+            "finished_at": self.finished_at,
+            "kind": self.kind,
+            "interval_sec": self.interval_sec,
         }
 
 
@@ -119,10 +133,12 @@ class LocalShellTask:
     so the bash machinery isn't moved across chunks.
     """
 
-    name: str = 'LocalShellTask'
-    type: Literal['local_bash'] = 'local_bash'
+    name: str = "LocalShellTask"
+    type: Literal["local_bash"] = "local_bash"
 
-    async def kill(self, task_id: str, registry: 'RuntimeTaskRegistry') -> None:
+    async def kill(
+        self, task_id: str, registry: "RuntimeTaskRegistry"
+    ) -> None:
         state = registry.get(task_id)
         if not is_local_shell_task(state):
             return
@@ -131,11 +147,57 @@ class LocalShellTask:
         if proc is None:
             return
         if proc.poll() is not None:
+            # Already dead → let the reaper deliver a natural completion
+            # notification (TS killTask gates on status === 'running',
+            # killShellTasks.ts:38-44).
             return
+        # Mark status='killed' + notified=True BEFORE the signal (TS killTask).
+        # This is the PRODUCTION kill path (TaskStop → stop_task → this), so the
+        # mark must live here — not in stop_background_bash, which stop_task
+        # only reaches AFTER the first SIGTERM has often already killed the
+        # process (its proc.poll() gate then bails before marking). Marking
+        # BEFORE os.killpg also closes the reaper-vs-killer race: the reaper is
+        # blocked in proc.wait() and cannot wake until the signal is delivered,
+        # by which point notified=True is committed — so the reaper's
+        # enqueue_shell_notification no-ops instead of sending a spurious
+        # "failed with exit code -15" (critic C5-P1 #3, reproduced 8/8).
+        from dataclasses import replace as _replace
+
+        def _mark_killed(prev: Any) -> Any:
+            if isinstance(prev, LocalShellTaskState):
+                return _replace(prev, status="killed", notified=True)
+            return prev
+
+        registry.update(task_id, _mark_killed)
         try:
-            os.killpg(os.getpgid(proc.pid), 15)
-        except (ProcessLookupError, PermissionError):
+            if hasattr(os, "killpg") and hasattr(os, "getpgid"):
+                os.killpg(os.getpgid(proc.pid), 15)
+            else:
+                proc.terminate()
+        except (ProcessLookupError, PermissionError, OSError):
             return
+
+
+async def kill_shell_tasks_for_agent(
+    agent_id: str, registry: "RuntimeTaskRegistry"
+) -> None:
+    """Kill every running background-bash task spawned by ``agent_id``.
+
+    Port of ``killShellTasksForAgent`` (typescript/src/tasks/LocalShellTask/
+    killShellTasks.ts:53), called from the sub-agent lifecycle's ``finally``
+    so a ``run_in_background`` shell doesn't outlive the agent that started it
+    (the "10-day fake-logs.sh zombie" case). Never raises."""
+    killer = LocalShellTask()
+    for task in list(registry.by_type("local_bash")):
+        if (
+            is_local_shell_task(task)
+            and getattr(task, "agent_id", None) == agent_id
+            and task.status == "running"
+        ):
+            try:
+                await killer.kill(task.id, registry)
+            except Exception:  # noqa: BLE001 — one bad task must not block the rest
+                logger.debug("kill_shell_tasks_for_agent: failed on %s", task.id, exc_info=True)
 
 
 # Per Chunk-C N1 fold-in: registration moved to
@@ -144,8 +206,9 @@ class LocalShellTask:
 # adapter; it no longer mutates the registry on import.
 
 __all__ = [
-    'LocalShellTaskState',
-    'LocalShellTask',
-    'is_local_shell_task',
-    'TaskKind',
+    "LocalShellTaskState",
+    "LocalShellTask",
+    "is_local_shell_task",
+    "kill_shell_tasks_for_agent",
+    "TaskKind",
 ]

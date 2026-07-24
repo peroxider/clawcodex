@@ -110,31 +110,26 @@ class TestCapabilityProtocols:
         assert hasattr(HeadlessOptionsProtocol, "workspace_root")
         assert hasattr(HeadlessRunnerProtocol, "__call__")
 
-    def test_headless_runner_stub_backend(self):
+    def test_headless_runner_stub_backend(self, monkeypatch):
         """HeadlessSessionOptions and stub backend work without upstream imports."""
-        import os
+        from extensions.capabilities import headless_runner
+        from pathlib import Path
+        import io
 
-        # Use stub backend — no upstream import possible
-        os.environ["CLAW_HEADLESS_BACKEND"] = "stub"
-        try:
-            from extensions.capabilities.headless_runner import (
-                HeadlessSessionOptions,
-                run_headless_session,
-            )
-            from pathlib import Path
-            import io
+        # The module caches its environment override at import time. Patch the
+        # cached value so this remains deterministic even when another test
+        # imported the module before setting CLAW_HEADLESS_BACKEND.
+        monkeypatch.setattr(headless_runner, "_HEADLESS_RUNNER_BACKEND", "stub")
 
-            stdout = io.StringIO()
-            opts = HeadlessSessionOptions(
-                prompt="test",
-                workspace_root=Path.cwd(),
-                stdout=stdout,
-                stderr=stdout,
-            )
-            exit_code = run_headless_session(opts)
-            assert exit_code == 0
-        finally:
-            os.environ.pop("CLAW_HEADLESS_BACKEND", None)
+        stdout = io.StringIO()
+        opts = headless_runner.HeadlessSessionOptions(
+            prompt="test",
+            workspace_root=Path.cwd(),
+            stdout=stdout,
+            stderr=stdout,
+        )
+        exit_code = headless_runner.run_headless_session(opts)
+        assert exit_code == 0
 
 
 class TestPatchSeriesIntegrity:

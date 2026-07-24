@@ -33,7 +33,6 @@ block. The provider keeps full control over fallbacks (e.g.
 Anthropic's ``StreamWatchdog`` non-streaming recovery) — the guard
 just owns the listener lifecycle.
 """
-
 from __future__ import annotations
 
 import sys
@@ -49,32 +48,17 @@ __all__ = ["StreamAbortGuard"]
 
 
 def _close_transport_safely(response: Any) -> None:
-    """Best-effort close of the underlying httpx transport — never raises.
+    """Best-effort close of the downstream httpx transport fallback.
 
-    F-99 方案2: ``response.close()`` only releases the application-level
-    stream handle; the underlying TCP connection (and its blocking
-    read) can stay open on platforms where ``close()`` is advisory.
-    Closing the transport forcibly closes the socket so the
-    SDK/httpx layer's blocking read returns immediately with a
-    ``RemoteProtocolError`` / ``ReadError`` (or Windows-equivalent
-    ``ConnectionResetError``) instead of waiting for the read
-    timeout. The subsequent exception is translated to
-    ``AbortError`` by :meth:`StreamAbortGuard.reraise_if_aborted`.
-
-    The transport attribute is httpx-internal — protected by
-    ``getattr`` so a future SDK / httpx version that renames it
-    degrades gracefully to ``response.close()``-only semantics.
-    Skipped on Windows where forcibly closing a socket mid-read
-    can deadlock some kernel-side socket code paths; on Windows
-    we fall back to ``response.close()`` only (方案1's
-    ``read_timeout=5`` is the bound).
+    The upstream socket shutdown is the primary unblock mechanism. On
+    non-Windows platforms we also retain the fork's transport close for SDK or
+    proxy response objects that do not expose ``extensions.network_stream``.
     """
+
     if sys.platform == "win32":
         return
     try:
         transport = getattr(response, "_transport", None)
-        if transport is None:
-            return
         close = getattr(transport, "close", None)
         if callable(close):
             close()
@@ -83,34 +67,26 @@ def _close_transport_safely(response: Any) -> None:
 
 
 def _close_response_safely(stream: Any) -> None:
-    """Best-effort close of ``stream.response`` — never raises.
+    """Best-effort force-close of ``stream.response`` — never raises.
 
     Both the Anthropic SDK (``client.messages.stream``'s
     ``MessageStream``) and the OpenAI SDK (``Stream`` from
     ``client.chat.completions.create(stream=True)``) expose the
-    underlying httpx ``Response`` as ``stream.response``. Close is
-    idempotent on httpx (``if not self.is_closed`` guard), so a
-    double-close (e.g., listener fires AND the post-loop path also
+    underlying httpx ``Response`` as ``stream.response``. Delegates to
+    :func:`src.utils.stream_watchdog.force_close_response`, which
+    shuts the underlying socket down BEFORE closing — a bare
+    ``response.close()`` from the abort thread does not wake a
+    consumer parked in ``ssl.read()``, so the interrupt would stop
+    the chunks yet leave the turn hung. Shutdown+close is idempotent,
+    so a double-close (listener fires AND the post-loop path also
     closes) is harmless.
-
-    Failures in the listener thread must not propagate — the close is
-    purely defensive; the next-chunk read will eventually fail by
-    other means (timeout, server-side disconnect) even if the close
-    is a no-op.
-
-    F-99 方案2 also closes the underlying httpx transport so the
-    blocking socket read is interrupted at the kernel level rather
-    than waiting for ``response.close()`` to trickle through.
     """
-    try:
-        response = getattr(stream, "response", None)
-        if response is not None:
-            close = getattr(response, "close", None)
-            if callable(close):
-                close()
-            _close_transport_safely(response)
-    except Exception:
-        pass
+    from src.utils.stream_watchdog import force_close_response
+
+    force_close_response(stream)
+    response = getattr(stream, "response", None)
+    if response is not None:
+        _close_transport_safely(response)
 
 
 class StreamAbortGuard:

@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
+import random
+import re
 import sys
 import time
 from dataclasses import dataclass, field
@@ -48,7 +51,18 @@ from src.utils.advisor import (
 )
 
 from .config import QueryConfig, build_query_config
+from src.query.continuation_nudge import (
+    MAX_CONTINUATION_NUDGES,
+    NUDGE_MESSAGE,
+    detect_continuation_signal,
+)
 from .hook_registry import call_hooks, LoopHookPhase
+from .stop_hooks import StopHookResult, handle_stop_hooks_streaming
+from .token_budget import ContinueDecision, check_token_budget, create_budget_tracker
+from src.query.tool_failure_loop_guard import (
+    create_tool_failure_loop_guard_state,
+    update_tool_failure_loop_guard,
+)
 
 # ---------------------------------------------------------------------------
 # F-68: Feature-gate helper for hook phases.
@@ -96,8 +110,31 @@ from clawcodex_ext.utils.token_estimation import rough_token_count_estimation_fo
 logger = logging.getLogger(__name__)
 
 ESCALATED_MAX_TOKENS = 64_000
+
+# ch04 round-3 G3 — 529/overloaded retry lane. TS withRetry.ts: general
+# budget DEFAULT_MAX_RETRIES=10 with a 529-specific MAX_529_RETRIES=3
+# counter that triggers model-fallback or the external-user bail
+# (:346-385); the port adopts the bail posture (3 retries then the
+# existing model_error path). Gated to foreground sources only
+# (withRetry.ts:62-90) -- background lanes (compact, session_memory)
+# bail immediately to avoid gateway amplification.
+MAX_529_RETRIES = 3
+# ch04 round-4 GAP B — general retryable budget (429/5xx/connection/
+# timeout), TS DEFAULT_MAX_RETRIES (withRetry.ts:52).
+DEFAULT_MAX_RETRIES = 10
+RETRY_BASE_DELAY_SECONDS = 0.5
+# Narrower than TS's FOREGROUND_529_RETRY_SOURCES (agents/compact/
+# side_question etc., withRetry.ts:62-90) -- minimal posture; widen to
+# agent sources when subagent traffic matters. 'sdk' added in ch05
+# round-4 alongside the headless query_source relabel ('repl_main_thread'
+# -> 'sdk'): TS's set includes 'sdk' (withRetry.ts:67), so headless keeps
+# the yield-based retry lane after the relabel.
+FOREGROUND_529_RETRY_SOURCES = frozenset({"repl_main_thread", "sdk"})
 MAX_OUTPUT_TOKENS_RECOVERY_LIMIT = 3
-MAX_CONTINUATION_NUDGES = 2
+# The downstream empty-end-turn recovery is deliberately tighter than the
+# upstream action-intent continuation lane: two retries avoid an extra model
+# call when a provider repeatedly emits empty end_turn responses.
+EMPTY_END_TURN_NUDGE_LIMIT = 2
 CONTINUATION_NUDGE_MESSAGE = (
     "Your previous response ended without any visible text or a tool call. "
     "The task may still be in progress. Continue from the latest tool result. "
@@ -147,8 +184,21 @@ class QueryParams:
     # pick it up.
     model: str | None = None
     query_source: str = "repl_main_thread"
+    # Optional per-turn output budget used by the upstream continuation lane.
+    token_budget: int | None = None
     max_output_tokens_override: int | None = None
     max_turns: int | None = None
+    # ch04 round-4 GAP B — model to switch to after MAX_529_RETRIES
+    # consecutive overloaded errors (TS QueryParams.fallbackModel,
+    # query.ts:276; --fallback-model in headless). Session-sticky switch
+    # via provider.model; never persisted to settings.
+    fallback_model: str | None = None
+    # ch05 round-4 note — N/A-by-architecture on the LIVE paths: the
+    # adapter's build_effective_system_prompt already injects CLAWCODEX.md
+    # ("## Project Instructions") and the date via the SYSTEM prompt, so
+    # wiring TS's prependUserContext there would double-inject. Only the
+    # test-only engine path uses the message-based mechanism
+    # (prepend_user_context at engine.py:221). One mechanism per surface.
     user_context: dict[str, str] | None = None
     system_context: dict[str, str] | None = None
     pipeline_config: PipelineConfig | None = None
@@ -167,10 +217,28 @@ class QueryParams:
     # raise AbortError from inside the SDK's stream context to tear
     # down the HTTP socket on ESC.
     on_text_chunk: Callable[[str], None] | None = None
-    # Live streaming thinking callback. When set, the provider's
-    # chat_stream_response calls this for each reasoning_content delta,
-    # allowing the UI to display thinking in real time.
+    # Live thinking deltas (separate channel from on_text_chunk) for the TUI's
+    # streaming thinking view. None → thinking isn't surfaced live.
     on_thinking_chunk: Callable[[str], None] | None = None
+
+    # Extended thinking ("adaptive" mode) — opt the model into a private
+    # reasoning scratchpad before producing its visible answer. Defaults
+    # to ``None`` which auto-enables on Anthropic Claude 4.x models
+    # (the only family the API supports it on) and stays off elsewhere.
+    # Pass ``False`` to force-disable (e.g. for determinism in tests).
+    # Mirrors the TS reference which always passes
+    # ``thinking: {type: "adaptive"}`` on these models.
+    extended_thinking: bool | None = None
+    # Output-effort hint forwarded as ``output_config.effort`` on models
+    # that support it. ``None`` = auto: the persisted ``settings.effort``
+    # when set, else the parameter is OMITTED and the API applies its model
+    # default (TS parity). An explicit value ("low" | "medium" | "high" |
+    # "xhigh" | "max") wins over settings — precedence mirrors TS
+    # ``parseEffortValue(options.effort) ?? getInitialEffortSetting()``
+    # (main.tsx:2631). "xhigh" degrades to "high" on models that reject it
+    # (see :func:`resolve_thinking_effort`). Only sent when extended
+    # thinking is active.
+    thinking_effort: str | None = None
 
 
 @dataclass
@@ -248,6 +316,68 @@ def _create_max_turns_attachment(max_turns: int, turn_count: int) -> SystemMessa
         content=f"Reached maximum number of turns ({max_turns})",
         subtype="max_turns_reached",
     )
+
+
+async def _fire_post_sampling_hooks(
+    assistant_messages: list[AssistantMessage],
+    provider: Any,
+    tool_use_context: Any,
+) -> None:
+    """Run configured ``PostSampling`` hooks for a completed model stream.
+
+    ch01 round-4 WI-2 — restores the dependency-graph edge "Query Loop
+    fires Hooks" for the one event TS fires from query.ts itself
+    (``executePostSamplingHooks``, query.ts:1079-1089). Reads the global
+    ``AsyncHookRegistry`` (populated at startup by
+    ``bootstrap_hook_config_manager``); with no ``PostSampling`` hooks
+    configured this returns after one in-memory lookup.
+
+    Deviation from TS, deliberate: awaited inline instead of
+    fire-and-forget. The agent-server drives each turn with
+    ``asyncio.run(...)``, so a task created on the loop's final iteration
+    would be cancelled at teardown — losing the hook on exactly the
+    turn-final response. Inline await trades stream/hook overlap for a
+    completion guarantee.
+
+    Hook failures are logged and swallowed — a hook must never kill the
+    turn (TS parity: logError + continue). ``additional_contexts`` from
+    hook results are debug-logged and dropped: TS post-sampling hooks
+    return void, so there are no injection semantics to mirror; a uniform
+    injection lane across events is the ch12 round-4 subject.
+    """
+    if not assistant_messages:
+        return
+    try:
+        from ..hooks.post_sampling_hooks import run_post_sampling_hooks
+        from ..hooks.trust_gate import should_skip_hook_due_to_trust
+
+        last = assistant_messages[-1]
+        results = await run_post_sampling_hooks(
+            model=(
+                getattr(last, "model", None)
+                or getattr(provider, "model", None)
+                or ""
+            ),
+            usage=getattr(last, "usage", None) or {},
+            stop_reason=getattr(last, "stop_reason", None),
+            # Same trust rule as the tool-hook lane: untrusted workspace →
+            # policy hooks only (trust_gate WI-0.2).
+            untrusted_workspace=should_skip_hook_due_to_trust(tool_use_context),
+        )
+        for entry in results:
+            injected = entry.get("injected_messages")
+            if injected:
+                logger.debug(
+                    "PostSampling hook additional_contexts dropped "
+                    "(no injection lane yet — ch12): %d block(s)",
+                    len(injected),
+                )
+    except (asyncio.CancelledError, AbortError):
+        # User intent wins — AbortError subclasses Exception, so without the
+        # explicit re-raise the blanket handler below would swallow it.
+        raise
+    except Exception:  # noqa: BLE001 — hook failure must never kill the turn
+        logger.error("PostSampling hook execution failed", exc_info=True)
 
 
 def _drain_pending_user_messages(tool_use_context: Any) -> list[UserMessage]:
@@ -333,6 +463,16 @@ def _get_context_window(provider: BaseProvider) -> int:
     cw = getattr(provider, "context_window", None)
     if isinstance(cw, int) and cw > 0:
         return cw
+    model = getattr(provider, "model", None)
+    if isinstance(model, str) and model:
+        try:
+            from src.models.context import get_context_window_for_model
+
+            return get_context_window_for_model(
+                model, base_url=getattr(provider, "base_url", None)
+            )
+        except Exception:
+            logger.debug("model context-window resolution failed", exc_info=True)
     return 200_000
 
 
@@ -408,11 +548,289 @@ def _is_hook_stopped_continuation(msg: Message | None) -> bool:
     return False
 
 
-def _skill_effort_kwargs(provider: BaseProvider, effort: str | int | None) -> dict[str, Any]:
-    """Translate a skill effort override only for providers that support it."""
+_THINKING_ELIGIBLE_MODEL_PATTERN = re.compile(
+    r"claude-(?:sonnet|opus|haiku|fable)-(?:4-\d+|[5-9]\b|\d{2,})",
+    re.IGNORECASE,
+)
+
+
+def _model_supports_extended_thinking(model: str | None) -> bool:
+    """True iff the model supports extended thinking at all (any type).
+
+    Thinking was introduced with the Claude 4 series — the Anthropic API
+    rejects any ``thinking`` param on 3.x and earlier. On the first-party
+    endpoint every Claude 4+ model (Sonnet, Opus, AND Haiku 4.5) supports
+    thinking (TS ``modelSupportsThinking``, thinking.ts:117-148, firstParty
+    branch). Detection is by name pattern so unreleased snapshots
+    (e.g. ``claude-opus-4-7-20260201``) opt in automatically.
+
+    NOTE: supporting thinking does NOT imply supporting the *adaptive*
+    thinking type — that's the narrower :func:`_model_supports_adaptive_thinking`
+    allowlist. Models here that aren't adaptive-capable take a token budget
+    instead (see the caller in ``_call_model_sync``).
+    """
+    if not model:
+        return False
+    return bool(_THINKING_ELIGIBLE_MODEL_PATTERN.search(model))
+
+
+def _model_supports_adaptive_thinking(model: str | None) -> bool:
+    """True iff the model supports the *adaptive* thinking type.
+
+    Only a subset of Claude 4 models accept ``thinking={"type": "adaptive"}``;
+    the rest support thinking only with an explicit ``budget_tokens``. Sending
+    adaptive to a non-adaptive model is rejected with HTTP 400 "adaptive
+    thinking is not supported on this model". Allowlist ported from TS
+    ``modelSupportsAdaptiveThinking`` (thinking.ts:152-169): Opus 4.6/4.7
+    and Sonnet 4.6; extended with Opus 4.8 and Fable 5, where adaptive is
+    the ONLY accepted thinking config — the budget fallback below would be
+    a hard 400 on them (``budget_tokens`` is removed on 4.7+; Fable 5 also
+    rejects ``{"type": "disabled"}``, and accepts adaptive or an omitted
+    param). Substring match mirrors the reference's ``.includes()`` so
+    dated snapshots (``claude-sonnet-4-6-20250929``) match.
+    """
+    if not model:
+        return False
+    m = model.lower()
+    return (
+        "fable-5" in m
+        or "opus-4-8" in m
+        or "opus-4-7" in m
+        or "opus-4-6" in m
+        or "sonnet-4-6" in m
+    )
+
+
+def _model_supports_effort(model: str | None) -> bool:
+    """True iff the model accepts ``output_config={"effort": ...}``.
+
+    Narrower than thinking support — Opus 4.6/4.8, Sonnet 4.6, and Fable 5
+    (TS ``modelSupportsEffort``, effort.ts:32-51, plus the 4.8/Fable
+    additions where effort is GA). Sending effort to a model that doesn't
+    support it is rejected, so the caller gates on this independently of
+    the thinking type.
+    """
+    if not model:
+        return False
+    m = model.lower()
+    return (
+        "fable-5" in m
+        or "opus-4-8" in m
+        or "opus-4-6" in m
+        or "sonnet-4-6" in m
+    )
+
+
+def _model_supports_xhigh_effort(model: str | None) -> bool:
+    """True iff the model accepts ``output_config={"effort": "xhigh"}``.
+
+    The Claude effort ladder is low|medium|high|xhigh|max, but ``xhigh``
+    acceptance is model-dependent. Wire-probed on the first-party API
+    2026-07-18: opus-4-8 accepts it; sonnet-4-6 and opus-4-6 reject it with
+    400 "This model does not support effort level 'xhigh'. Supported
+    levels: high, low, max, medium" — note the same error confirms ``max``
+    is broadly accepted, so only ``xhigh`` needs gating (the vendored TS
+    snapshot's opus-4-6-only ``modelSupportsMaxEffort`` predates this).
+    Fable 5 is included by analogy with opus-4-8 (Claude Code exposes the
+    full ladder on it; unprobed — subscription plans don't carry it).
+    """
+    if not model:
+        return False
+    m = model.lower()
+    return "opus-4-8" in m or "fable-5" in m
+
+
+# Kept in sync with settings.constants.VALID_EFFORT_VALUES (minus the empty
+# "auto" sentinel) — a dedicated test asserts the two ladders match.
+VALID_THINKING_EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+
+
+def resolve_thinking_effort(explicit: str | None, model: str | None) -> str | None:
+    """Effective ``output_config.effort`` value for one request, or ``None``
+    to omit the parameter entirely.
+
+    Precedence mirrors TS main.tsx:2631 ``parseEffortValue(options.effort)
+    ?? getInitialEffortSetting()``: an explicit per-session value (the
+    ``--effort`` flag via ``QueryParams.thinking_effort``) wins over the
+    persisted ``settings.effort``. When NEITHER is set the parameter is
+    omitted, matching TS ``configureEffortParams`` (services/api/claude.ts:
+    449-463 — ``effortValue === undefined`` sends no ``outputConfig``) and
+    letting the API apply its own model default (per TS
+    ``getDisplayedEffortLevel`` that default is "high"; the pre-wiring
+    Python hardcode of "medium" was a divergence, not the wire default).
+    ``"xhigh"`` degrades to ``"high"`` on models outside
+    :func:`_model_supports_xhigh_effort`'s allowlist rather than 400ing the
+    request; ``"max"`` passes through everywhere effort-capable (see the
+    probe notes on the allowlist helper).
+    """
+    value = (explicit or "").strip().lower()
+    if value not in VALID_THINKING_EFFORT_LEVELS:
+        # Local import: settings is read at the wire boundary only, keeping
+        # QueryParams construction sites free of hidden global reads.
+        from ..settings.settings import get_settings
+
+        try:
+            value = (get_settings().effort or "").strip().lower()
+        except Exception:  # noqa: BLE001 — settings must never break a request
+            value = ""
+    if value not in VALID_THINKING_EFFORT_LEVELS:
+        return None
+    if value == "xhigh" and not _model_supports_xhigh_effort(model):
+        logger.debug(
+            "effort xhigh not supported on %s; sending high instead", model
+        )
+        return "high"
+    return value
+
+
+def _is_overloaded_error(e: Exception) -> bool:
+    """Anthropic 529 / overloaded_error classification (duck-typed so
+    test fakes and other providers' shapes participate)."""
+    status = getattr(e, "status_code", None)
+    if status == 529:
+        return True
+    text = str(e).lower()
+    return "overloaded_error" in text or "overloaded" in text
+
+def _retry_after_seconds(e: Exception, default: float) -> float:
+    """Honor a Retry-After header when the SDK exposes response headers."""
+    response = getattr(e, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers:
+        raw = headers.get("retry-after")
+        if raw:
+            try:
+                value = float(raw)
+                if 0 < value <= 60:
+                    return value
+            except (TypeError, ValueError):
+                pass
+    return default
+
+
+async def _fire_stop_failure_hooks(last_message: Any, tool_use_context: Any) -> None:
+    """Dispatch StopFailure hooks at the error-exit paths (ch05 G1).
+
+    TS fires fire-and-forget at query.ts:1256/:1263/:1347; the port
+    awaits (terminal paths; latency bounded by the hook timeout) and
+    never raises.
+    """
+    try:
+        from ..hooks.hook_executor import execute_stop_failure_hooks
+
+        async for _result in execute_stop_failure_hooks(
+            last_message, tool_use_context
+        ):
+            pass
+    except Exception:
+        logger.debug("StopFailure hook dispatch failed", exc_info=True)
+
+
+# ch04 round-4 GAP C.2 — required whenever a system block carries
+# cache_control.scope == "global" (TS constants/betas.ts:17-18).
+PROMPT_CACHING_SCOPE_BETA_HEADER = "prompt-caching-scope-2026-01-05"
+
+
+def _strip_block_metadata(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return copies of ``blocks`` ready for the 1P Anthropic wire: the
+    internal ``_cache_scope`` key removed AND the dynamic-boundary marker
+    block dropped.
+
+    The Anthropic provider forwards system blocks verbatim to its SDK
+    (``call_kwargs["system"] = system_prompt``), so the inert ``_cache_scope``
+    tag emitted by the prompt assembler must be stripped before it lands on a
+    1P request. ch04 round-4 GAP C: the boundary is a SPLIT SIGNAL, never
+    wire content — TS's splitSysPromptPrefix skips it (utils/api.ts:388,424);
+    before this fix the literal ``__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__`` text
+    block went out on every 1P request. Non-Anthropic providers flatten via
+    ``_split_system_prompt_blocks``, which already drops it.
+    """
+    from ..context_system.cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
+
+    cleaned: list[dict[str, Any]] = []
+    for blk in blocks:
+        if (
+            isinstance(blk, dict)
+            and blk.get("type") == "text"
+            and blk.get("text") == SYSTEM_PROMPT_DYNAMIC_BOUNDARY
+        ):
+            continue
+        if isinstance(blk, dict) and "_cache_scope" in blk:
+            blk = {k: v for k, v in blk.items() if k != "_cache_scope"}
+        cleaned.append(blk)
+    return cleaned
+
+
+def _split_system_prompt_blocks(
+    blocks: list[dict[str, Any]], *, relocate_request_scope: bool
+) -> tuple[str, str]:
+    """Flatten system-prompt blocks for an OpenAI-compatible provider.
+
+    Returns ``(system_text, volatile_tail_text)``.
+
+    The ``__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__`` marker is always dropped (it is
+    an Anthropic cache-only signal that would be unintelligible prose to other
+    models).
+
+    When ``relocate_request_scope`` is True (DeepSeek only), blocks tagged
+    ``_cache_scope == "request"`` — the env section, the auto-memory section
+    (which embeds the mutable ``MEMORY.md`` body), plan-mode / non-interactive
+    / tool-restriction sections — are routed into ``volatile_tail_text`` so the
+    caller can place them AFTER the conversation history. That keeps the
+    ``system + tools + history`` prefix byte-stable across turns, so DeepSeek's
+    automatic prefix cache covers it even when memory or the environment
+    changes mid-session.
+
+    When False (every other provider), the tail is empty and all non-boundary
+    text is concatenated into ``system_text`` — byte-for-byte the prior
+    behaviour.
+    """
+    from ..context_system.cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
+
+    stable: list[str] = []
+    volatile: list[str] = []
+    for blk in blocks:
+        if not isinstance(blk, dict):
+            continue
+        text = blk.get("text")
+        if not text or text == SYSTEM_PROMPT_DYNAMIC_BOUNDARY:
+            continue
+        if relocate_request_scope and blk.get("_cache_scope") == "request":
+            volatile.append(str(text))
+        else:
+            stable.append(str(text))
+    return "\n\n".join(stable), "\n\n".join(volatile)
+
+
+def _append_session_context_tail(
+    api_messages: list[dict[str, Any]], tail_text: str
+) -> list[dict[str, Any]]:
+    """Place the DeepSeek relocated-volatile sections AFTER the conversation.
+
+    Wrapped as ambient ``<system-reminder>`` context. Merged into the trailing
+    user message when that is a plain user turn (string content, or a
+    content-block list with no ``tool_result``) so the wire keeps strict
+    user/assistant alternation. Otherwise — e.g. the turn ends in a tool result
+    (which converts to ``role:tool`` on the wire) — appended as a standalone
+    trailing user message, which lands correctly after the tool messages.
+    Returns a new list; ``api_messages`` is not mutated.
+    """
+    reminder = (
+        "<system-reminder>\n"
+        "Current session/environment context (ambient — not a new user request):\n"
+        f"{tail_text}\n"
+        "</system-reminder>"
+    )
+    return {}
+
+
+def _skill_effort_kwargs(
+    provider: BaseProvider,
+    effort: str | int | None,
+) -> dict[str, Any]:
+    """Translate a skill effort override only for supporting providers."""
     if effort is None or effort == "":
         return {}
-
     module_name = type(provider).__module__.lower()
     class_name = type(provider).__name__.lower()
     if "anthropic_provider" in module_name and "minimax" not in class_name:
@@ -421,16 +839,13 @@ def _skill_effort_kwargs(provider: BaseProvider, effort: str | int | None) -> di
         return {"reasoning_config": {"effort": effort}}
     if any(marker in module_name for marker in ("openai", "litellm", "grok")):
         return {"reasoning_effort": effort}
-
     mapper = getattr(provider, "skill_effort_kwargs", None)
     if callable(mapper):
         try:
-            mapped = mapper(effort)
-            return dict(mapped or {})
+            return dict(mapper(effort) or {})
         except Exception:
             logger.warning("provider skill effort mapping failed", exc_info=True)
             return {}
-
     logger.warning(
         "Provider %s does not support skill effort override %r; continuing without it",
         type(provider).__name__,
@@ -451,6 +866,9 @@ async def _call_model_sync(
     abort_signal: Any = None,
     on_text_chunk: Callable[[str], None] | None = None,
     on_thinking_chunk: Callable[[str], None] | None = None,
+    extended_thinking: bool | None = None,
+    thinking_effort: str | None = None,
+    sdk_max_retries: int | None = None,
 ) -> tuple[list[AssistantMessage], list[ToolUseBlock]]:
 
     # Advisor activation decision. Three outcomes:
@@ -561,8 +979,10 @@ async def _call_model_sync(
                         block_types.append(str(type(b).__name__))
                 logger.warning("[DIAG]   msg[%d] role=%s  blocks=%s", i, role, block_types)
     _t0 = time.monotonic()
+    request_model = model or getattr(provider, "model", None) or ""
+    request_tools = filter_tools_for_request(tools, request_model, api_messages)
     tool_schemas = []
-    for tool in tools:
+    for tool in request_tools:
         # Filter out internal/hidden tools (is_enabled=False) so they
         # don't leak into the API tools[] alongside the advisor schema
         # we append below. Some callers pass an unfiltered tool list
@@ -609,10 +1029,9 @@ async def _call_model_sync(
         # Opt into the server-side advisor tool. ``betas`` lives outside
         # ``extra_headers`` because the SDK auto-converts it into the
         # ``anthropic-beta`` header AND filters out 3P-incompatible
-        # entries on Bedrock/Vertex transports. Currently we send only
-        # the advisor beta; if other betas are introduced, change this
-        # to ``call_kwargs.setdefault("betas", []).append(...)``.
-        call_kwargs["betas"] = [ADVISOR_BETA_HEADER]
+        # entries on Bedrock/Vertex transports. setdefault-append so it
+        # composes with the global-cache-scope beta (GAP C.2) below.
+        call_kwargs.setdefault("betas", []).append(ADVISOR_BETA_HEADER)
         # CLIENT_SIDE deliberately does NOT set betas — 3P endpoints
         # reject the advisor beta, and 1P-with-force-client doesn't
         # need it because the advisor schema is a regular tool here.
@@ -654,6 +1073,26 @@ async def _call_model_sync(
                     "%s — ADVISOR_TOOL_INSTRUCTIONS NOT injected",
                     type(system_prompt).__name__,
                 )
+        # Strip the inert ``_cache_scope`` metadata + the dynamic-boundary
+        # marker block; Anthropic forwards the system list verbatim to its
+        # SDK, so neither must reach the 1P wire (GAP C).
+        if isinstance(system_prompt, list):
+            system_prompt = _strip_block_metadata(system_prompt)
+            # ch04 round-4 GAP C.2 — scope:'global' requires the
+            # prompt-caching-scope beta (TS claude.ts:1231-1236 pushes
+            # PROMPT_CACHING_SCOPE_BETA_HEADER whenever global cache is
+            # active). The scope only appears when the operator enabled
+            # CLAUDE_CODE_ENABLE_GLOBAL_CACHE_SCOPE; without the header the
+            # API rejects/ignores the field.
+            if any(
+                isinstance(blk, dict)
+                and isinstance(blk.get("cache_control"), dict)
+                and blk["cache_control"].get("scope") == "global"
+                for blk in system_prompt
+            ):
+                call_kwargs.setdefault("betas", []).append(
+                    PROMPT_CACHING_SCOPE_BETA_HEADER
+                )
         call_kwargs["system"] = system_prompt
     else:
         # Non-Anthropic providers (OpenAI-compat, GLM, etc.) consume the
@@ -666,6 +1105,20 @@ async def _call_model_sync(
         # signal for the Anthropic backend; emitting it as raw text into
         # a non-Anthropic system prompt embeds an unintelligible token in
         # the prose that may confuse those models.
+        #
+        # DeepSeek-only: route the per-request-volatile (REQUEST-scope)
+        # sections to a trailing tail so the system prefix stays byte-stable
+        # for DeepSeek's automatic prefix cache. ``relocate_request_scope`` is
+        # False for every other provider, so ``flattened`` keeps every
+        # non-boundary block (byte-for-byte the prior behaviour) and
+        # ``volatile_tail`` is "".
+        # ``is True`` (not ``bool(...)``): every real provider sets the flag to a
+        # literal ``True``/``False`` (see ``BaseProvider.is_deepseek``), so this
+        # is identical in production — but it also makes a bare test double (e.g.
+        # ``MagicMock()``, whose auto-attributes are truthy) fall through to the
+        # non-relocating path instead of silently exercising DeepSeek relocation.
+        is_deepseek = getattr(provider, "is_deepseek", False) is True
+        volatile_tail = ""
         if isinstance(system_prompt, list):
             flattened = "\n\n".join(
                 str(blk.get("text", ""))
@@ -687,8 +1140,80 @@ async def _call_model_sync(
                 flattened = ADVISOR_TOOL_INSTRUCTIONS
         api_messages = [{"role": "system", "content": flattened}, *api_messages]
 
-    if max_output_tokens_override is not None:
+    if is_anthropic:
+        # ch04 round-3 G0: resolve max_tokens on EVERY Anthropic request
+        # (override → CLAUDE_CODE_MAX_OUTPUT_TOKENS env → per-model
+        # table). Previously only the override branch set it and normal
+        # requests silently went out at the provider-default 4096.
+        # Non-Anthropic providers keep their override-only behavior —
+        # they send NO max_tokens today (the provider-API default
+        # applies) and capping them at the table default would be a
+        # silent behavior change outside this gap's evidence.
+        from src.models.context import resolve_max_output_tokens
+
+        call_kwargs["max_tokens"] = resolve_max_output_tokens(
+            max_output_tokens_override,
+            getattr(provider, "model", None),
+            base_url=getattr(provider, "base_url", None),
+        )
+    elif max_output_tokens_override is not None:
         call_kwargs["max_tokens"] = max_output_tokens_override
+
+    # Extended thinking (Claude 4.x family). Forwarded straight through
+    # the provider's kwargs pass-through to client.messages.stream(
+    # thinking=..., output_config=...). Off-API on older Claude versions
+    # and on non-Anthropic providers, so guarded by both. ``None`` =
+    # auto-enable; ``True`` / ``False`` = caller override.
+    #
+    # The adaptive-vs-budget selection mirrors TS claude.ts:1612-1640:
+    # models that support thinking AND the adaptive type get
+    # ``{type: "adaptive"}``; models that support thinking but NOT adaptive
+    # (Sonnet 4.5, Haiku 4.5, older Opus 4.x, …) get an explicit
+    # ``{type: "enabled", budget_tokens: N}`` instead — sending adaptive to
+    # them is a hard 400 ("adaptive thinking is not supported on this
+    # model"). ``output_config.effort`` is gated separately and even more
+    # narrowly (Opus 4.6 / Sonnet 4.6 only). Getting either gate wrong
+    # breaks every request on the affected model — including the whole
+    # subscription/OAuth path, which is how this surfaced.
+    if extended_thinking is not False and is_anthropic:
+        provider_model = getattr(provider, "model", None) or call_kwargs.get("model")
+        if extended_thinking is True or _model_supports_extended_thinking(provider_model):
+            if _model_supports_adaptive_thinking(provider_model):
+                call_kwargs["thinking"] = {"type": "adaptive"}
+            else:
+                # Non-adaptive (incl. an explicit ``extended_thinking=True``
+                # on an unknown alias): budget thinking. This is the safe
+                # direction — budget works on any thinking-capable model,
+                # whereas adaptive 400s where unsupported; TS defaults an
+                # unknown first-party alias to adaptive (thinking.ts:178-183),
+                # we deliberately prefer budget. budget_tokens must be ≥ 1024
+                # (API minimum) and strictly less than max_tokens, which is
+                # already resolved above for every Anthropic request. TS uses
+                # maxOutputTokens-1 (claude.ts:1628-1635); we clamp identically.
+                _max_tok = int(call_kwargs.get("max_tokens") or 0)
+                if _max_tok > 1024:
+                    call_kwargs["thinking"] = {
+                        "type": "enabled",
+                        "budget_tokens": max(1024, _max_tok - 1),
+                    }
+                else:
+                    # No budget in [1024, max_tokens) fits — omit thinking
+                    # rather than send an invalid request (max_tokens this
+                    # small only happens via an explicit tiny override).
+                    logger.debug(
+                        "thinking omitted: max_tokens=%s too small for a "
+                        "valid budget on non-adaptive model %s",
+                        _max_tok, provider_model,
+                    )
+            if _model_supports_effort(provider_model):
+                resolved_effort = resolve_thinking_effort(
+                    thinking_effort, provider_model
+                )
+                # None = nothing requested anywhere — omit the parameter so
+                # the API applies its own model default (TS parity; see
+                # resolve_thinking_effort).
+                if resolved_effort is not None:
+                    call_kwargs["output_config"] = {"effort": resolved_effort}
 
     # TS callModel() uses SSE streaming for faster first-byte latency and
     # progressive text display.  Use chat_stream_response() which streams
@@ -697,33 +1222,24 @@ async def _call_model_sync(
     if _diag:
         logger.warning("[DIAG] _call_model_sync: calling provider (streaming)...")
 
-    # Enforce minimum interval between successive provider requests.
-    # The interval is configured via AgentConfig.delay_between_requests_ms
-    # and propagated through the CLAWCODEX_PROVIDER_REQUEST_DELAY_MS env var.
-    # Implementation lives in extensions/api/query_middleware.py so the
-    # upstream query loop stays free of orchestrator-specific throttling.
-    try:
-        from extensions.api.query_middleware import enforce_request_delay
-
-        enforce_request_delay()
-    except ImportError:
-        pass
-
-    try:
+    def _do_provider_call() -> ChatResponse:
+        # Keep the downstream request throttle in the same blocking lane as
+        # the provider call. Background agents therefore wait off-loop while
+        # the middleware's process-wide lock preserves the configured spacing.
         try:
-            # ``abort_signal`` reaches the provider so a tripped controller
-            # can close the streaming HTTP response immediately rather than
-            # waiting for the model to finish generating. Without this
-            # plumb, ESC during a tool-use-only response (no intermediate
-            # text chunks for an ``on_text_chunk`` to observe) waits the
-            # full model latency before the outer query loop bails.
-            # Forward on_text_chunk so the SDK fires chunks live (and
-            # the chunk callback can raise AbortError to tear down the
-            # stream mid-flight). Falls back to a kwargless call if
-            # the provider's signature doesn't accept on_text_chunk.
+            from extensions.api.query_middleware import enforce_request_delay
+
+            enforce_request_delay()
+        except ImportError:
+            pass
+
+        # ``abort_signal`` reaches the provider so a tripped controller can
+        # close the streaming response immediately. Preserve both downstream
+        # live callbacks and the compatibility retries for older providers.
+        try:
             if on_text_chunk is not None:
                 try:
-                    response = provider.chat_stream_response(
+                    stream_response = provider.chat_stream_response(
                         api_messages,
                         on_text_chunk=on_text_chunk,
                         on_thinking_chunk=on_thinking_chunk,
@@ -731,24 +1247,32 @@ async def _call_model_sync(
                         **call_kwargs,
                     )
                 except TypeError:
-                    # Provider doesn't accept on_thinking_chunk (or on_text_chunk)
-                    response = provider.chat_stream_response(
-                        api_messages,
-                        abort_signal=abort_signal,
-                        **call_kwargs,
-                    )
+                    # Provider doesn't accept on_thinking_chunk — retry text-only,
+                    # then kwargless, so text streaming never regresses.
+                    try:
+                        stream_response = provider.chat_stream_response(
+                            api_messages,
+                            on_text_chunk=on_text_chunk,
+                            abort_signal=abort_signal,
+                            **call_kwargs,
+                        )
+                    except TypeError:
+                        stream_response = provider.chat_stream_response(
+                            api_messages, abort_signal=abort_signal, **call_kwargs,
+                        )
             else:
-                response = provider.chat_stream_response(
-                    api_messages,
-                    abort_signal=abort_signal,
-                    **call_kwargs,
+                stream_response = provider.chat_stream_response(
+                    api_messages, abort_signal=abort_signal, **call_kwargs,
                 )
+            if not isinstance(stream_response, ChatResponse):
+                raise NotImplementedError("provider returned no structured stream response")
+            return stream_response
         except (NotImplementedError, AttributeError):
             if _diag:
                 logger.warning(
                     "[DIAG] _call_model_sync: streaming not supported, falling back to chat()"
                 )
-            response = provider.chat(api_messages, **call_kwargs)
+            fallback_response = provider.chat(api_messages, **call_kwargs)
             # Emulate streaming chunks from the final text when the
             # caller asked for live streaming (on_text_chunk set) but
             # the provider only supports plain chat(). Legacy
@@ -758,10 +1282,21 @@ async def _call_model_sync(
             # ``stream=True`` caller paired with a non-streaming
             # provider would see the entire response materialize at
             # once after the model finishes.
-            if on_text_chunk is not None and response.content:
+            if on_text_chunk is not None and fallback_response.content:
                 from clawcodex_ext.tool_system.renderers import _emit_text_chunks
 
-                _emit_text_chunks(on_text_chunk, response.content)
+                _emit_text_chunks(on_text_chunk, fallback_response.content)
+            return fallback_response
+
+    try:
+        # Provider streaming is synchronous. Run background/workflow calls off
+        # the event loop so parallel agents do not serialize. Keep either live
+        # callback on the event-loop thread because UI consumers are not
+        # required to be thread-safe.
+        if on_text_chunk is None and on_thinking_chunk is None:
+            response = await asyncio.to_thread(_do_provider_call)
+        else:
+            response = _do_provider_call()
     except AbortError:
         # User-initiated cancel — propagate so the query loop's
         # ``except AbortError: pass`` boundary unwinds to the
@@ -871,6 +1406,15 @@ async def _call_model_sync(
     assistant_blocks: list[Any] = []
     tool_use_blocks: list[ToolUseBlock] = []
 
+    # Signed Anthropic thinking must precede the visible text/tool blocks in
+    # exactly the order returned. Keeping it in history preserves reasoning
+    # state across tool turns and exposes it to stream-json/session logging.
+    if response.thinking_blocks:
+        from clawcodex_ext.types.content_blocks import content_block_from_dict
+
+        for raw in response.thinking_blocks:
+            assistant_blocks.append(content_block_from_dict(raw))
+
     if response.content:
         assistant_blocks.append(TextBlock(text=response.content))
 
@@ -917,9 +1461,37 @@ async def _call_model_sync(
             response.usage,
         )
 
+    # ch04 round-3 G1: the cost-accumulation head (TS addToTotalSessionCost,
+    # claude.ts:2270-2275). Streaming and the watchdog chat() fallback
+    # converge here, so every main-loop response is counted exactly once.
+    # Empty usage (a stream whose final-message read failed) records zeros.
+    try:
+        from ..bootstrap.state import add_to_total_duration_state
+        from ..cost_tracker import record_api_usage
+
+        record_api_usage(
+            getattr(response, "model", None) or getattr(provider, "model", "unknown"),
+            response.usage,
+        )
+        # The original records per-request API duration alongside cost
+        # (addToTotalDuration beside addToTotalSessionCost); this feeds
+        # /cost's "Total duration (API)". This layer can't split retries:
+        # provider-internal ones are inside the span (so both counters get
+        # the same value), while a raise-then-retry by our caller records
+        # nothing for the failed attempt (the original's including-retries
+        # counter would) — a slight undercount, accepted.
+        _api_ms = int((time.monotonic() - _t0) * 1000)
+        add_to_total_duration_state(_api_ms, _api_ms)
+    except Exception:
+        logger.debug("cost recording failed", exc_info=True)
+
     assistant_msg = AssistantMessage(
         content=assistant_blocks if assistant_blocks else "",
         stop_reason=stop_reason,
+        # TS assistant messages carry the responding model (query.ts message
+        # assembly); consumers like the PostSampling hook payload and cost
+        # attribution read it. Same fallback chain as record_api_usage above.
+        model=getattr(response, "model", None) or getattr(provider, "model", None),
         usage=response.usage,
         duration_ms=_inference_ms,
     )
@@ -1515,9 +2087,14 @@ async def query(
     See :func:`run_query` for a convenience helper that consumes the
     generator and returns ``(messages, terminal)``.
 
-    This PR (Phase A) introduces the typed Terminal infrastructure;
-    recovery integration, stop hooks, token budget, model fallback,
-    and continuation nudge land in subsequent PRs.
+    Recovery integration, stop hooks, token budget, the continuation
+    nudge (ch05 rounds 2-3), and the retry lane with model fallback
+    (ch04 round-4) are all wired: after ``MAX_529_RETRIES`` consecutive
+    overloaded errors with ``params.fallback_model`` configured, the lane
+    switches ``provider.model`` session-sticky (never persisted) and
+    keeps going. No tombstones by design — the lane only retries when
+    nothing streamed, so no partial assistant message ever needs
+    retraction (TS retries wrap partial streams and must tombstone).
     """
 
     _diag = os.environ.get("CLAWCODEX_DEBUG", "").lower() in ("1", "true", "yes")
@@ -1532,6 +2109,18 @@ async def query(
         max_output_tokens_override=params.max_output_tokens_override,
     )
     config = build_query_config()
+    # Keep one guard state for the entire query so repeated tool failures can
+    # be detected across turns; successful results reset its counters.
+    tool_failure_guard_state = create_tool_failure_loop_guard_state()
+    from ..bootstrap.state import snapshot_output_tokens_for_turn
+
+    if (
+        getattr(params.tool_use_context, "agent_id", None) is None
+        and params.query_source not in ("compact", "session_memory")
+    ):
+        snapshot_output_tokens_for_turn(params.token_budget)
+    budget_tracker = create_budget_tracker()
+    params.tool_use_context.options.tools = list(params.tools)
     goal_runtime = None
     goal_turn_id: str | None = None
     goal_turn_start_id: str | None = None
@@ -1652,6 +2241,24 @@ async def query(
             goal_runtime.on_turn_abort(turn_id)
         else:
             goal_runtime.on_turn_stop(turn_id)
+
+    # ch09 round-4 WI-1 — capture the parent's rendered system prompt onto
+    # its context so a fork spawned DURING this turn threads the parent's
+    # EXACT prompt (byte-identical), letting the fork child chain onto the
+    # parent's warm [system+tools+history] cache. Without this the field
+    # was dead scaffolding (permanently None) and fork children fell back
+    # to DEFAULT_AGENT_PROMPT — diverging at byte 0 and reprocessing the
+    # whole history at full price (fork's entire economic point, inert).
+    # TS: toolUseContext.renderedSystemPrompt (AgentTool.tsx:496). The
+    # captured value is the INPUT to _call_model_sync's assembly; the fork
+    # child threads the same input and goes through the same assembly, so
+    # the wire bytes match. Set unconditionally (cheap; only fork reads it;
+    # a fork-of-subagent is guarded regardless).
+    if params.system_prompt:
+        try:
+            params.tool_use_context.rendered_system_prompt = params.system_prompt
+        except Exception:  # noqa: BLE001 — read-only stub context
+            pass
 
     def _exceeded_max_turns(next_turn_count: int) -> int | None:
         max_turns = int(params.max_turns or 0)
@@ -1833,31 +2440,165 @@ async def query(
         needs_follow_up = False
 
         effective_tools = _resolve_effective_tools(params, tool_use_context, messages)
+        # ch04 round-3 G3, widened by round-4 GAP B: the retry lane.
+        # Yield-based like TS withRetry (status surfaces in the message
+        # stream, not a side channel). Constraints preserved from round-3:
+        # foreground sources only; never after partial output (a mid-stream
+        # failure with rendered text follows the normal error path — no
+        # duplicate text); SDK auto-retry disabled underneath via
+        # sdk_max_retries=0 so attempt counts tell the truth.
+        #
+        # Round-4 additions (TS withRetry.ts parity):
+        #   * general retryable classes — 429 / 5xx / connection / timeout —
+        #     retry under DEFAULT_MAX_RETRIES with exponential backoff +
+        #     0-25% jitter (TS getRetryDelay); quota-exhausted and
+        #     non-retryable errors bail immediately;
+        #   * model fallback — after MAX_529_RETRIES consecutive 529s with
+        #     params.fallback_model configured, switch provider.model
+        #     (session-sticky like TS's mainLoopModel switch; NOT persisted
+        #     to settings), announce it, reset the 529 counter, keep going.
+        #     No tombstones needed (deliberate divergence): this lane only
+        #     retries when NOTHING streamed; TS's retry wraps partial
+        #     streams and must tombstone the orphans (query.ts:795-824).
+        _is_foreground = params.query_source in FOREGROUND_529_RETRY_SOURCES
+        _streamed_any = [False]
+        _outer_chunk_cb = params.on_text_chunk
+
+        def _marking_chunk_cb(text: str) -> None:
+            _streamed_any[0] = True
+            if _outer_chunk_cb is not None:
+                _outer_chunk_cb(text)
 
         try:
+            _general_attempts = 0
+            _consecutive_529s = 0
+            while True:
+                _streamed_any[0] = False
+                try:
+                    returned_assistants, returned_tool_blocks = await _call_model_sync(
+                        provider=params.provider,
+                        messages=messages,
+                        system_prompt=current_system_prompt,
+                        tools=effective_tools,
+                        model=tool_use_context.skill_model_override or params.model,
+                        effort_override=tool_use_context.skill_effort_override,
+                        max_output_tokens_override=max_output_tokens_override,
+                        abort_signal=params.abort_controller.signal,
+                        on_text_chunk=(
+                            _marking_chunk_cb if _outer_chunk_cb is not None
+                            else None
+                        ),
+                        on_thinking_chunk=params.on_thinking_chunk,
+                        extended_thinking=params.extended_thinking,
+                        thinking_effort=params.thinking_effort,
+                        sdk_max_retries=0 if _is_foreground else None,
+                    )
+                    break
+                except AbortError:
+                    raise
+                except Exception as retry_exc:
+                    if (
+                        not _is_foreground
+                        or _streamed_any[0]
+                        or params.abort_controller.signal.aborted
+                    ):
+                        raise
 
-            async def _call_model_attempt(_attempt: int, _retry_ctx: Any):
-                return await _call_model_sync(
-                    provider=params.provider,
-                    messages=messages,
-                    system_prompt=current_system_prompt,
-                    tools=effective_tools,
-                    model=tool_use_context.skill_model_override or params.model,
-                    effort_override=tool_use_context.skill_effort_override,
-                    max_output_tokens_override=max_output_tokens_override,
-                    abort_signal=params.abort_controller.signal,
-                    on_text_chunk=params.on_text_chunk,
-                    on_thinking_chunk=params.on_thinking_chunk,
-                )
+                    from ..services.api.errors import (
+                        categorize_retryable_api_error,
+                        is_quota_exhausted,
+                    )
 
-            returned_assistants, returned_tool_blocks = await with_retry(
-                _call_model_attempt,
-                RetryOptions(
-                    model=params.model or getattr(params.provider, "model", "") or "",
-                    signal=params.abort_controller.signal,
-                    query_source=params.query_source,
-                ),
-            )
+                    is_529 = _is_overloaded_error(retry_exc)
+                    if not is_529:
+                        classification = categorize_retryable_api_error(retry_exc)
+                        if not classification.retryable or is_quota_exhausted(retry_exc):
+                            raise
+
+                    _general_attempts += 1
+                    if is_529:
+                        _consecutive_529s += 1
+                    else:
+                        _consecutive_529s = 0
+
+                    # Model fallback — TS withRetry.ts:345-369 →
+                    # query.ts:977-1032. Fires once; a 529 storm on the
+                    # fallback model then follows the normal exhaustion path
+                    # (the model equality check keeps it single-shot).
+                    if (
+                        is_529
+                        and _consecutive_529s >= MAX_529_RETRIES
+                        and params.fallback_model
+                        and params.fallback_model
+                        != getattr(params.provider, "model", None)
+                    ):
+                        _original_model = getattr(params.provider, "model", "?")
+                        try:
+                            params.provider.model = params.fallback_model
+                        except Exception:  # noqa: BLE001 — read-only provider stub
+                            raise retry_exc
+                        logger.warning(
+                            "model fallback: %s -> %s after %d consecutive "
+                            "overloaded errors",
+                            _original_model, params.fallback_model,
+                            _consecutive_529s,
+                        )
+                        yield SystemMessage(
+                            content=(
+                                f"Switched to {params.fallback_model} due to "
+                                f"high demand for {_original_model}"
+                            ),
+                            level="warning",
+                            subtype="model_fallback",
+                        )
+                        _consecutive_529s = 0
+                        continue
+
+                    if is_529 and _consecutive_529s > MAX_529_RETRIES:
+                        raise
+                    if _general_attempts > DEFAULT_MAX_RETRIES:
+                        raise
+
+                    _base = RETRY_BASE_DELAY_SECONDS * (2 ** (_general_attempts - 1))
+                    # 0-25% jitter (TS getRetryDelay, withRetry.ts:561-566);
+                    # capped so a long exponential tail can't exceed the
+                    # Retry-After clamp either way.
+                    _base = min(_base, 60.0) * (1.0 + random.random() * 0.25)
+                    delay = _retry_after_seconds(retry_exc, _base)
+                    if is_529:
+                        _status = (
+                            f"Server overloaded — retrying in {delay:.1f}s "
+                            f"(attempt {_consecutive_529s}/{MAX_529_RETRIES})"
+                        )
+                    else:
+                        _status = (
+                            f"API error ({classification.error_type}) — "
+                            f"retrying in {delay:.1f}s "
+                            f"(attempt {_general_attempts}/{DEFAULT_MAX_RETRIES})"
+                        )
+                    yield SystemMessage(
+                        content=_status, level="warning", subtype="api_retry",
+                    )
+                    # Abort-aware backoff (critic): TS sleeps WITH the
+                    # signal (withRetry sleep(delay, signal)); a
+                    # Retry-After can direct up to 60s — ESC must not
+                    # be stuck behind it. Sliced sleep, checked every
+                    # 250ms; an abort falls through to the existing
+                    # aborted_streaming handling on the next attempt.
+                    _remaining = delay
+                    while _remaining > 0:
+                        if params.abort_controller.signal.aborted:
+                            break
+                        _tick = min(0.25, _remaining)
+                        await asyncio.sleep(_tick)
+                        _remaining -= _tick
+                    if params.abort_controller.signal.aborted:
+                        # Land in the REAL abort lane (the outer
+                        # except AbortError + post-call abort block),
+                        # so the user sees the interruption message
+                        # rather than a retry-lane model_error.
+                        raise AbortError("interrupted during retry backoff") from retry_exc
+                    continue
             assistant_messages = returned_assistants
             tool_use_blocks = returned_tool_blocks
             needs_follow_up = len(tool_use_blocks) > 0
@@ -1937,6 +2678,16 @@ async def query(
             _goal_finish_turn("abort")
             return
 
+        # ch01 round-4 WI-2 — PostSampling hook wire (TS query.ts:1079-1089).
+        # Placed after the abort check: TS fires before it, but its call is
+        # non-blocking (`void …`) so pre-abort is free there; an inline await
+        # before the abort return would delay ESC responsiveness by the hook
+        # runtime. Consequence: hooks do not fire for user-aborted streams.
+        if assistant_messages:
+            await _fire_post_sampling_hooks(
+                assistant_messages, params.provider, tool_use_context,
+            )
+
         if not needs_follow_up:
             last_message = assistant_messages[-1] if assistant_messages else None
 
@@ -1947,7 +2698,7 @@ async def query(
                 state.transition is not None
                 and state.transition.reason in {"next_turn", "continuation_nudge"}
                 and _assistant_response_is_empty(assistant_messages)
-                and state.continuation_nudge_count < MAX_CONTINUATION_NUDGES
+                and state.continuation_nudge_count < EMPTY_END_TURN_NUDGE_LIMIT
             ):
                 nudge = _create_user_message(CONTINUATION_NUDGE_MESSAGE, is_meta=True)
                 yield nudge
@@ -1986,7 +2737,7 @@ async def query(
                     error_type=error_type,
                 )
                 strategy_applied = False
-                retry_with_new_state = False
+                recovered_state: QueryState | None = None
                 for strategy in find_recovery_strategies(error_type, state):
                     try:
                         raw_result = strategy.fn(recovery_ctx)
@@ -2003,8 +2754,7 @@ async def query(
                         for msg in yield_messages:
                             yield msg
                         if new_state is not None:
-                            state = new_state
-                            retry_with_new_state = True
+                            recovered_state = new_state
                             break
                         # new_state is None: terminate
                         if error_type == "media_size":
@@ -2044,15 +2794,21 @@ async def query(
                                     Terminal(reason="completed"),
                                 )
                                 _goal_finish_turn("stop")
+                        await _fire_stop_failure_hooks(
+                            last_message,
+                            tool_use_context,
+                        )
                         return
-                if retry_with_new_state:
+                # 如果没有任何策略适用，yield last_message 并 fallthrough
+                if recovered_state is not None:
+                    state = recovered_state
                     _goal_finish_turn("stop")
                     continue
-                # 如果没有任何策略适用，yield last_message 并 fallthrough
                 if not strategy_applied and last_message is not None:
                     yield last_message
 
             if last_message and getattr(last_message, "isApiErrorMessage", False):
+                await _fire_stop_failure_hooks(last_message, tool_use_context)
                 if _active_evaluator_goal() is not None:
                     terminal_error = _terminal_error_for_api_message(last_message)
                     set_terminal(
@@ -2069,9 +2825,7 @@ async def query(
             evaluator_goal = _active_evaluator_goal()
             if evaluator_goal is not None and evaluator_goal.goal_id != goal_turn_start_id:
                 # The response was generated from the previous goal (or from
-                # no goal at all).  Do not let it satisfy a replacement goal.
-                # Finish this accounting turn, inject the replacement
-                # directive, and only evaluate output from the next turn.
+                # no goal at all). Do not let it satisfy a replacement goal.
                 from clawcodex_ext.goal.steering import evaluator_start_message
 
                 steering_messages = (
@@ -2114,6 +2868,167 @@ async def query(
                     transition=Transition(reason="stop_hook_blocking"),
                 )
                 continue
+
+            stop_result = StopHookResult()
+            try:
+                async for item in handle_stop_hooks_streaming(
+                    messages,
+                    assistant_messages,
+                    params.system_prompt if isinstance(params.system_prompt, str) else "",
+                    tool_use_context,
+                    params.query_source,
+                    state.stop_hook_active,
+                ):
+                    if isinstance(item, StopHookResult):
+                        stop_result = item
+                    else:
+                        yield item
+            except Exception:
+                logger.exception("stop hooks failed; continuing to exit")
+
+            if stop_result.prevent_continuation:
+                set_terminal(
+                    holder,
+                    natural_termination,
+                    Terminal(reason="stop_hook_prevented"),
+                )
+                _goal_finish_turn("stop")
+                return
+
+            if stop_result.blocking_errors:
+                _goal_finish_turn("stop")
+                state = QueryState(
+                    messages=[
+                        *messages,
+                        *assistant_messages,
+                        *stop_result.blocking_errors,
+                    ],
+                    tool_use_context=tool_use_context,
+                    auto_compact_tracking=state.auto_compact_tracking,
+                    max_output_tokens_recovery_count=0,
+                    has_attempted_reactive_compact=has_attempted_reactive_compact,
+                    max_output_tokens_override=None,
+                    stop_hook_active=True,
+                    turn_count=turn_count,
+                    pending_tool_use_summary=None,
+                    continuation_nudge_count=state.continuation_nudge_count,
+                    transition=Transition(reason="stop_hook_blocking"),
+                )
+                continue
+
+            from ..bootstrap.state import (
+                get_current_turn_token_budget,
+                get_turn_output_tokens,
+                increment_budget_continuation_count,
+            )
+
+            budget_decision = check_token_budget(
+                budget_tracker,
+                getattr(tool_use_context, "agent_id", None),
+                get_current_turn_token_budget(),
+                get_turn_output_tokens(),
+            )
+            if isinstance(budget_decision, ContinueDecision):
+                increment_budget_continuation_count()
+                _goal_finish_turn("stop")
+                state = QueryState(
+                    messages=[
+                        *messages,
+                        *assistant_messages,
+                        UserMessage(content=budget_decision.nudge_message, isMeta=True),
+                    ],
+                    tool_use_context=tool_use_context,
+                    auto_compact_tracking=state.auto_compact_tracking,
+                    max_output_tokens_recovery_count=0,
+                    has_attempted_reactive_compact=False,
+                    max_output_tokens_override=None,
+                    stop_hook_active=None,
+                    turn_count=turn_count,
+                    pending_tool_use_summary=None,
+                    continuation_nudge_count=state.continuation_nudge_count,
+                    transition=Transition(reason="token_budget_continuation"),
+                )
+                continue
+
+            # The model said it would continue acting but emitted no tool
+            # call. Mirror the upstream continuation lane and cap the
+            # automatic nudges per turn-chain.
+            if (
+                assistant_messages
+                and (params.max_turns is None or turn_count < params.max_turns)
+                and state.continuation_nudge_count < MAX_CONTINUATION_NUDGES
+            ):
+                last_assistant = assistant_messages[-1]
+                content = getattr(last_assistant, "content", "")
+                if isinstance(content, str):
+                    last_text = content
+                else:
+                    last_text = " ".join(
+                        getattr(block, "text", "")
+                        for block in content
+                        if getattr(block, "type", None) == "text"
+                    )
+                # An apparent completion is not sufficient for a request that
+                # explicitly asks for every/multiple result. Require one
+                # bounded audit pass before accepting a clean exit; the latch
+                # survives tool rounds so this cannot become an infinite loop.
+                from src.query.continuation_nudge import (
+                    EXHAUSTIVE_AUDIT_NUDGE,
+                    requests_exhaustive_results,
+                )
+
+                exhaustive_request = any(
+                    not getattr(msg, "isMeta", False)
+                    and getattr(msg, "role", None) == "user"
+                    and requests_exhaustive_results(
+                        getattr(msg, "content", "")
+                        if isinstance(getattr(msg, "content", ""), str)
+                        else ""
+                    )
+                    for msg in messages
+                )
+                if exhaustive_request and not state.exhaustive_audit_performed:
+                    logger.debug("Exhaustive-result audit nudge triggered")
+                    _goal_finish_turn("stop")
+                    state = QueryState(
+                        messages=[
+                            *messages,
+                            *assistant_messages,
+                            UserMessage(content=EXHAUSTIVE_AUDIT_NUDGE, isMeta=True),
+                        ],
+                        tool_use_context=tool_use_context,
+                        auto_compact_tracking=state.auto_compact_tracking,
+                        max_output_tokens_recovery_count=0,
+                        has_attempted_reactive_compact=False,
+                        max_output_tokens_override=None,
+                        stop_hook_active=None,
+                        turn_count=turn_count,
+                        pending_tool_use_summary=None,
+                        continuation_nudge_count=state.continuation_nudge_count,
+                        exhaustive_audit_performed=True,
+                        transition=Transition(reason="continuation_nudge"),
+                    )
+                    continue
+                if last_text and detect_continuation_signal(last_text):
+                    _goal_finish_turn("stop")
+                    state = QueryState(
+                        messages=[
+                            *messages,
+                            *assistant_messages,
+                            UserMessage(content=NUDGE_MESSAGE, isMeta=True),
+                        ],
+                        tool_use_context=tool_use_context,
+                        auto_compact_tracking=state.auto_compact_tracking,
+                        max_output_tokens_recovery_count=0,
+                        has_attempted_reactive_compact=False,
+                        max_output_tokens_override=None,
+                        stop_hook_active=None,
+                        turn_count=turn_count,
+                        pending_tool_use_summary=None,
+                        continuation_nudge_count=state.continuation_nudge_count + 1,
+                        transition=Transition(reason="continuation_nudge"),
+                    )
+                    continue
 
             if evaluator_goal is not None:
                 # _active_evaluator_goal() only returns a goal when a runtime
@@ -2373,6 +3288,15 @@ async def query(
         if params.abort_controller.signal.aborted:
             if params.abort_controller.signal.reason != "interrupt":
                 yield _create_user_interruption_message(tool_use=True)
+            # ch05 round-4 GAP C — TS query.ts:1621-1629: an abort that
+            # lands ON the max-turns boundary also announces the limit
+            # before the aborted_tools return (the terminal reason stays
+            # aborted_tools either way).
+            next_turn_count_on_abort = turn_count + 1
+            if params.max_turns and next_turn_count_on_abort > params.max_turns:
+                yield _create_max_turns_attachment(
+                    params.max_turns, next_turn_count_on_abort,
+                )
             set_terminal(holder, natural_termination, Terminal(reason="aborted_tools"))
             _goal_finish_turn("abort")
             return
@@ -2400,6 +3324,38 @@ async def query(
             )
             _goal_finish_turn("stop")
             return
+
+        # Run after abort/hook-stop handling and before max-turns, matching
+        # upstream's terminal precedence while retaining the downstream tool
+        # execution lane above.
+        guard_decision = update_tool_failure_loop_guard(
+            state=tool_failure_guard_state,
+            tool_use_blocks=tool_use_blocks,
+            tool_results=tool_results,
+        )
+        if guard_decision.tripped:
+            logger.debug(
+                "Tool failure loop guard tripped: kind=%s threshold=%s "
+                "tool_name=%s error_category=%s path=%s",
+                guard_decision.kind,
+                guard_decision.threshold,
+                guard_decision.tool_name,
+                guard_decision.error_category,
+                guard_decision.path,
+            )
+            yield _create_assistant_api_error_message(guard_decision.message or "")
+            set_terminal(
+                holder,
+                natural_termination,
+                Terminal(reason="tool_failure_loop"),
+            )
+            _goal_finish_turn("error", RuntimeError("tool failure loop"))
+            return
+
+        advisory_messages = [
+            UserMessage(content=advisory)
+            for advisory in guard_decision.advisories
+        ]
 
         next_turn_count = turn_count + 1
 
@@ -2431,7 +3387,13 @@ async def query(
         _goal_finish_turn("stop")
 
         state = QueryState(
-            messages=[*messages, *assistant_messages, *tool_results, *injected_messages],
+            messages=[
+                *messages,
+                *assistant_messages,
+                *tool_results,
+                *advisory_messages,
+                *injected_messages,
+            ],
             tool_use_context=tool_use_context,
             auto_compact_tracking=state.auto_compact_tracking,
             turn_count=next_turn_count,
@@ -2441,6 +3403,7 @@ async def query(
             stop_hook_active=state.stop_hook_active,
             # Phase A: reset per-turn counter; carry pending summary forward.
             continuation_nudge_count=0,
+            exhaustive_audit_performed=state.exhaustive_audit_performed,
             pending_tool_use_summary=state.pending_tool_use_summary,
             transition=Transition(reason="next_turn"),
         )
@@ -2497,8 +3460,8 @@ async def run_query(
 
     Drives the canonical :func:`query` async generator, collects all
     yielded messages into a list, and returns ``(messages, terminal)``.
-    The terminal's reason discriminates why the loop stopped (10
-    distinct reasons per chapter §"Terminal States").
+    The terminal's reason discriminates why the loop stopped (11
+    distinct reasons, matching :mod:`query.transitions`).
 
     Tests and convenience entry points should use this helper.
     Streaming consumers (REPL, TUI) should keep using ``async for``

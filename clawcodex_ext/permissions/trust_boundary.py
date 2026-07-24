@@ -61,6 +61,7 @@ __all__ = [
     "apply_full_config_environment_variables",
     "establish_session_trust",
     "extract_mdm_env",
+    "extract_mdm_safe_env",
     "reset_trust_boundary_for_test_only",
 ]
 
@@ -447,3 +448,9 @@ def extract_mdm_env(payload: str | None) -> dict[str, str]:
     if not isinstance(env, dict):
         return {}
     return _coerce_env_block(env)
+
+
+def extract_mdm_safe_env(payload: str | None) -> dict[str, str]:
+    """Legacy safe-only view of the managed environment payload."""
+
+    return {key: value for key, value in extract_mdm_env(payload).items() if is_safe_env_key(key)}

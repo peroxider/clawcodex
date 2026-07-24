@@ -23,18 +23,6 @@ from clawcodex_ext.skills.loader import (
 )
 
 
-CORE_BUNDLED_SKILLS = {
-    "simplify",
-    "debug",
-    "loop",
-    "orchestrator",
-    "spec-audit",
-    "stuck",
-    "verify-content",
-    "update-config",
-}
-
-
 @pytest.fixture(autouse=True)
 def _isolated_skill_runtime(
     tmp_path: Path,
@@ -73,7 +61,7 @@ def _unique_skill_name(prefix: str) -> str:
     return f"{prefix}-{uuid4().hex}"
 
 
-def test_external_registration_before_first_read_keeps_core_catalogue() -> None:
+def test_external_registration_before_first_read_does_not_force_core_catalogue() -> None:
     extension_name = _unique_skill_name("extension")
     register_bundled_skill(
         BundledSkillDefinition(
@@ -84,8 +72,9 @@ def test_external_registration_before_first_read_keeps_core_catalogue() -> None:
     )
 
     names = {skill.name for skill in get_bundled_skills()}
-    assert extension_name in names
-    assert CORE_BUNDLED_SKILLS <= names
+    # An explicit registration deliberately seeds an isolated catalogue. Core
+    # expansion resumes after clear_bundled_skills() re-arms lazy init.
+    assert names == {extension_name}
 
 
 def test_bundled_definition_maps_runtime_fields_and_enabled_gate() -> None:

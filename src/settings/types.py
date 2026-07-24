@@ -15,11 +15,18 @@ been imported yet.
 
 from __future__ import annotations
 
+# ruff: noqa: F822
+
 __all__ = [
+    'PermissionRule',
     'PermissionsConfig',
     'ToolSettings',
     'OutputStyleSettings',
     'CompactSettings',
+    'SpinnerVerbsSettings',
+    'SandboxSettings',
+    'ModelLimitSettings',
+    'FreezeSettings',
     'HookSettings',
     'McpServerSettings',
     'SettingsSchema',
@@ -34,3 +41,10 @@ def __getattr__(name: str):
         globals()[name] = val
         return val
     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
+
+import sys
+
+import clawcodex_ext.settings.types as _implementation
+
+sys.modules[__name__] = _implementation

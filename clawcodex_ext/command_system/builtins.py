@@ -64,25 +64,26 @@ from src.command_system.stickers_command import STICKERS_COMMAND
 from src.command_system.rename_command import RENAME_COMMAND
 from src.command_system.logo_command import LOGO_COMMAND
 from src.command_system.mcp_command import MCP_COMMAND
+from src.command_system.eco_command import ECO_COMMAND
 
 logger = logging.getLogger(__name__)
 
 
 # Official Claude Code /init prompts (Simplified)
-NEW_INIT_PROMPT = """Set up a CLAUDE.md file for this repo. CLAUDE.md is loaded into every Claude Code session, so it must be concise — only include what Claude would get wrong without it.
+NEW_INIT_PROMPT = """Set up a CLAWCODEX.md file for this repo. CLAWCODEX.md is loaded into every clawcodex session, so it must be concise — only include what the agent would get wrong without it.
 
 ## Step 1: Ask what to set up
 
 Use AskUserQuestion to ask the user:
-- "Which CLAUDE.md files should /init set up?" with options: "Project CLAUDE.md" | "Personal CLAUDE.local.md" | "Both project + personal"
+- "Which CLAWCODEX.md files should /init set up?" with options: "Project CLAWCODEX.md" | "Personal CLAWCODEX.local.md" | "Both project + personal"
 
 Use AskUserQuestion to ask:
-- "Also set up skills and hooks?" with options: "Skills + hooks" | "Skills only" | "Hooks only" | "Neither, just CLAUDE.md"
+- "Also set up skills and hooks?" with options: "Skills + hooks" | "Skills only" | "Hooks only" | "Neither, just CLAWCODEX.md"
 
 ## Step 2: Explore the codebase
 
 Use tools to understand the project:
-- Read key files: README, package.json, pyproject.toml, Cargo.toml, Makefile, existing CLAUDE.md
+- Read key files: README, package.json, pyproject.toml, Cargo.toml, Makefile, existing CLAWCODEX.md
 - Detect: build/test/lint commands, languages, frameworks, project structure
 - Detect: code style rules, required env vars, gotchas
 - Check for formatter config (ruff, black, prettier, etc.)
@@ -94,9 +95,9 @@ Use AskUserQuestion to ask only things you CAN'T figure out from code:
 - Non-obvious workflows or commands
 - Communication preferences (terse vs detailed)
 
-## Step 4: Write CLAUDE.md
+## Step 4: Write CLAWCODEX.md
 
-Write a minimal CLAUDE.md at the project root.
+Write a minimal CLAWCODEX.md at the project root.
 
 Include:
 - Build/test/lint commands that aren't standard (e.g., "uv run pytest" not just "pytest")
@@ -105,22 +106,22 @@ Include:
 - Non-obvious gotchas
 
 Exclude:
-- File structure (Claude can discover this)
-- Standard conventions Claude already knows
+- File structure (the agent can discover this)
+- Standard conventions the agent already knows
 - Generic advice
 
 Prefix with:
 ```
-# CLAUDE.md
+# CLAWCODEX.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to clawcodex when working with code in this repository.
 ```
 
-If CLAUDE.md exists: read it, propose specific improvements.
+If CLAWCODEX.md exists: read it, propose specific improvements.
 
-## Step 5: Write CLAUDE.local.md (if user chose personal or both)
+## Step 5: Write CLAWCODEX.local.md (if user chose personal or both)
 
-Write CLAUDE.local.md at project root. Add it to .gitignore.
+Write CLAWCODEX.local.md at project root. Add it to .gitignore.
 
 Include:
 - User's role and familiarity with codebase
@@ -129,7 +130,7 @@ Include:
 
 ## Step 6: Create skills (if user chose skills)
 
-Create skills at `.claude/skills/<name>/SKILL.md`:
+Create skills at `.clawcodex/skills/<name>/SKILL.md`:
 ```yaml
 ---
 name: <skill-name>
@@ -154,15 +155,15 @@ Persist hooks only through the Config tool. Do not edit settings JSON directly.
 Tell the user what was set up and suggest any additional optimizations."""
 
 # Fallback prompt for simpler initialization
-OLD_INIT_PROMPT = """Please analyze this codebase and create a CLAUDE.md file, which will be given to future instances of Claude Code to operate in this repository.
+OLD_INIT_PROMPT = """Please analyze this codebase and create a CLAWCODEX.md file, which will be given to future clawcodex sessions operating in this repository.
 
 What to add:
 1. Commands that will be commonly used, such as how to build, lint, and run tests. Include the necessary commands to develop in this codebase, such as how to run a single test.
 2. High-level code architecture and structure so that future instances can be productive more quickly. Focus on the "big picture" architecture that requires reading multiple files to understand.
 
 Usage notes:
-- If there's already a CLAUDE.md, suggest improvements to it.
-- When you make the initial CLAUDE.md, do not repeat yourself and do not include obvious instructions like "Provide helpful error messages to users", "Write unit tests for all new utilities", "Never include sensitive information (API keys, tokens) in code or commits".
+- If there's already a CLAWCODEX.md, suggest improvements to it.
+- When you make the initial CLAWCODEX.md, do not repeat yourself and do not include obvious instructions like "Provide helpful error messages to users", "Write unit tests for all new utilities", "Never include sensitive information (API keys, tokens) in code or commits".
 - Avoid listing every component or file structure that can be easily discovered.
 - Don't include generic development practices.
 - If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (in .github/copilot-instructions.md), make sure to include the important parts.
@@ -171,9 +172,9 @@ Usage notes:
 - Be sure to prefix the file with the following text:
 
 ```
-# CLAUDE.md
+# CLAWCODEX.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to clawcodex when working with code in this repository.
 ```"""
 
 
@@ -199,6 +200,17 @@ def clear_command_call(args: str, context: CommandContext) -> LocalCommandResult
 
     if hasattr(context.history, "events"):
         context.history.events.clear()
+
+    # A cleared conversation starts a fresh cache epoch. Keep this a direct
+    # reset so /clear is not recorded as a compaction event.
+    try:
+        from src.context_system.system_prompt_cache import (
+            clear_system_prompt_sections,
+        )
+
+        clear_system_prompt_sections()
+    except Exception:
+        pass
 
     return LocalCommandResult(
         type="text",
@@ -765,15 +777,15 @@ def context_command_call(args: str, context: CommandContext) -> LocalCommandResu
         # Get custom agents info from config
         custom_agents = context.config.get("custom_agents", [])
 
-        # Get CLAUDE.md content
-        claude_md_content = ""
+        # Get CLAWCODEX.md content
+        clawcodex_md_content = ""
         try:
             import asyncio
-            from src.context_system.claude_md import get_claude_mds, get_memory_files
+            from ..context_system.clawcodex_md import get_clawcodex_mds, get_memory_files
 
             async def _load():
                 files = await get_memory_files(cwd=str(context.cwd or context.workspace_root))
-                return get_claude_mds(files)
+                return get_clawcodex_mds(files)
 
             try:
                 loop = asyncio.get_running_loop()
@@ -783,9 +795,9 @@ def context_command_call(args: str, context: CommandContext) -> LocalCommandResu
                 import concurrent.futures
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                    claude_md_content = pool.submit(asyncio.run, _load()).result(timeout=10)
+                    clawcodex_md_content = pool.submit(asyncio.run, _load()).result(timeout=10)
             else:
-                claude_md_content = asyncio.run(_load())
+                clawcodex_md_content = asyncio.run(_load())
         except Exception:
             pass
 
@@ -810,7 +822,7 @@ def context_command_call(args: str, context: CommandContext) -> LocalCommandResu
             model=model,
             system_prompt=system_prompt,
             tool_schemas=tool_schemas,
-            claude_md_content=claude_md_content,
+            clawcodex_md_content=clawcodex_md_content,
             skills_frontmatter_tokens=skills_frontmatter_tokens,
             skills_count=skills_count,
             api_usage=api_usage,
@@ -1687,9 +1699,53 @@ HELP_COMMAND = LocalCommand(
 
 INIT_COMMAND = PromptCommand(
     name="init",
-    description="Initialize new CLAUDE.md file(s) and optional skills/hooks with codebase documentation",
+    description="Initialize new CLAWCODEX.md file(s) and optional skills/hooks with codebase documentation",
     markdown_content=NEW_INIT_PROMPT,
     progress_message="analyzing your codebase",
+    content_length=0,
+    source="builtin",
+)
+
+# Port of typescript/src/commands/auto-fix.ts (type: 'prompt'). Text is verbatim.
+AUTO_FIX_PROMPT = (
+    "The user wants to configure auto-fix settings. Auto-fix automatically runs lint "
+    "and test commands after AI file edits, feeding errors back for self-repair.\n\n"
+    "Current settings location: `.clawcodex/settings.json` or "
+    "`.clawcodex/settings.local.json`\n\n"
+    "Example configuration:\n```json\n{\n  \"autoFix\": {\n    \"enabled\": true,\n"
+    "    \"lint\": \"eslint . --fix\",\n    \"test\": \"bun test\",\n"
+    "    \"maxRetries\": 3,\n    \"timeout\": 30000\n  }\n}\n```\n\n"
+    "Ask the user what lint and test commands they use, then help them set up the "
+    "configuration."
+)
+
+REVIEW_PROMPT = """
+You are an expert code reviewer. Follow these steps:
+
+1. If no PR number is provided in the args, run `gh pr list` to show open PRs
+2. If a PR number is provided, run `gh pr view <number>` to get PR details
+3. Run `gh pr diff <number>` to get the diff
+4. Analyze correctness, conventions, performance, tests, security, and risks
+
+Give a concise but thorough review with clear sections and bullet points.
+
+PR number: $ARGUMENTS
+"""
+
+AUTO_FIX_COMMAND = PromptCommand(
+    name="auto-fix",
+    description="Configure auto-fix: run lint/test after AI edits",
+    markdown_content=AUTO_FIX_PROMPT,
+    progress_message="Configuring auto-fix...",
+    content_length=0,
+    source="builtin",
+)
+
+REVIEW_COMMAND = PromptCommand(
+    name="review",
+    description="Review a pull request",
+    markdown_content=REVIEW_PROMPT,
+    progress_message="reviewing pull request",
     content_length=0,
     source="builtin",
 )
@@ -1791,13 +1847,17 @@ def get_builtin_commands() -> list[Command]:
         SKILLS_COMMAND,
         TELEMETRY_COMMAND,
         # Upstream interactive/prompt commands (b24b8cb)
-        MODEL_COMMAND,
-        EFFORT_COMMAND,
-        THEME_COMMAND,
-        EXPORT_COMMAND,
-        OUTPUT_STYLE_COMMAND,
-        STATUSLINE_COMMAND,
+        AUTO_FIX_COMMAND,
+        REVIEW_COMMAND,
         SECURITY_REVIEW_COMMAND,
+        STATUSLINE_COMMAND,
+        PERMISSIONS_COMMAND,
+        OUTPUT_STYLE_COMMAND,
+        EXPORT_COMMAND,
+        THEME_COMMAND,
+        ECO_COMMAND,
+        EFFORT_COMMAND,
+        MODEL_COMMAND,
         PROACTIVE_COMMAND,
         RESUME_COMMAND,
         BTW_COMMAND,
@@ -1807,7 +1867,6 @@ def get_builtin_commands() -> list[Command]:
         DOCTOR_COMMAND,
         DIFF_COMMAND,
         TASKS_COMMAND,
-        PERMISSIONS_COMMAND,
         RELEASE_NOTES_COMMAND,
         COPY_COMMAND,
         VIM_COMMAND,

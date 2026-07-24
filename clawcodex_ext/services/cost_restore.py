@@ -37,11 +37,87 @@ from src.bootstrap.state import (
     SessionId,
     set_cost_state_for_restore,
 )
+from src.utils.clawcodex_dirs import get_sessions_dir
 
 
 def _sessions_dir() -> Path:
-    """Persistence directory — extracted so tests can monkeypatch."""
-    return Path.home() / ".clawcodex" / "sessions"
+    """Persistence directory — extracted so tests can monkeypatch.
+
+    Delegates to ``get_sessions_dir()`` so it honors ``$CLAWCODEX_CONFIG_DIR``
+    (default ``~/.clawcodex/sessions``).
+    """
+    return get_sessions_dir()
+
+
+def build_cost_block() -> dict[str, Any]:
+    """Snapshot the bootstrap cost counters as the persisted ``cost`` block.
+
+    ch03 round-4 GAP B — single schema owner, colocated with the reader
+    below so writer/reader can't drift. Writers: the live agent-server
+    persister (``_save_session``) and the legacy ``Session.save`` (which
+    delegates here).
+    """
+    import time
+
+    from src.bootstrap.state import (
+        get_model_usage,
+        get_start_time,
+        get_total_api_duration,
+        get_total_api_duration_without_retries,
+        get_total_cost_usd,
+        get_total_lines_added,
+        get_total_lines_removed,
+        get_total_tool_duration,
+    )
+
+    model_usage = get_model_usage()
+    # List-price cost estimate, ALWAYS computed (even under a subscription,
+    # where ``cost_usd`` is $0 because plan allowance is consumed rather than
+    # metered credits — see cost_tracker.record_api_usage's billing_mode
+    # gate). This is an OBSERVABILITY figure — what the tokens would have
+    # cost at metered API rates — mirroring Claude Code, which reports a
+    # non-zero cost on subscription runs. It never feeds the live ``/cost``
+    # display or budget gate (those keep reading the billed ``total_cost_usd``
+    # / ``cost_usd``); it exists so downstream trajectory/leaderboard tooling
+    # has a comparable cost column.
+    from src.services.pricing import compute_cost
+
+    estimated_cost_usd = 0.0
+    for model, u in model_usage.items():
+        estimated_cost_usd += compute_cost(
+            model,
+            {
+                "input_tokens": u.input_tokens,
+                "output_tokens": u.output_tokens,
+                "cache_creation_input_tokens": u.cache_creation_input_tokens,
+                "cache_read_input_tokens": u.cache_read_input_tokens,
+            },
+        )
+
+    return {
+        "total_cost_usd": get_total_cost_usd(),
+        "estimated_cost_usd": estimated_cost_usd,
+        "total_api_duration": get_total_api_duration(),
+        "total_api_duration_without_retries":
+            get_total_api_duration_without_retries(),
+        "total_tool_duration": get_total_tool_duration(),
+        "total_lines_added": get_total_lines_added(),
+        "total_lines_removed": get_total_lines_removed(),
+        # last_duration = elapsed since start_time. The restore reader
+        # back-dates the new session's start_time so post-resume duration
+        # accumulators continue from where they left off.
+        "last_duration": time.time() - get_start_time(),
+        "model_usage": {
+            model: {
+                "input_tokens": u.input_tokens,
+                "output_tokens": u.output_tokens,
+                "cache_creation_input_tokens": u.cache_creation_input_tokens,
+                "cache_read_input_tokens": u.cache_read_input_tokens,
+                "cost_usd": u.cost_usd,
+            }
+            for model, u in model_usage.items()
+        },
+    }
 
 
 def _restore_from_cost_block(cost_block: dict[str, Any]) -> None:

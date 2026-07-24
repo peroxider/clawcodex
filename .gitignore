@@ -222,6 +222,7 @@ telemetry.toml
 /.orchestrator_control/
 /.orchestrator_workspace/
 /patches/upstream/0573f4c/backup/
+/patches/upstream/398b44f/backup/
 /.cortexkit/
 /.opencode/
 /.reports/

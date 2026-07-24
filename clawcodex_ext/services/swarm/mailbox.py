@@ -44,7 +44,9 @@ import json
 import logging
 import os
 import re
+import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -53,6 +55,37 @@ logger = logging.getLogger(__name__)
 
 
 _VALID_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_MAILBOX_LOCKS_GUARD = threading.Lock()
+_MAILBOX_LOCKS: dict[str, threading.Lock] = {}
+
+
+@contextmanager
+def _mailbox_write_lock(path: Path):
+    """Serialize Windows appends locally and across processes."""
+    key = str(path.resolve())
+    with _MAILBOX_LOCKS_GUARD:
+        local_lock = _MAILBOX_LOCKS.setdefault(key, threading.Lock())
+    with local_lock:
+        if os.name != "nt":
+            yield
+            return
+
+        import msvcrt
+
+        lock_path = path.with_suffix(path.suffix + ".lock")
+        lock_fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            if os.fstat(lock_fd).st_size == 0:
+                os.write(lock_fd, b"\0")
+            os.lseek(lock_fd, 0, os.SEEK_SET)
+            msvcrt.locking(lock_fd, msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                os.lseek(lock_fd, 0, os.SEEK_SET)
+                msvcrt.locking(lock_fd, msvcrt.LK_UNLCK, 1)
+        finally:
+            os.close(lock_fd)
 
 
 def _sanitize_name(name: str, *, kind: str) -> str:
@@ -124,20 +157,27 @@ def write_to_mailbox(
     line = json.dumps(message.to_jsonable(), ensure_ascii=False, separators=(",", ":")) + "\n"
     encoded = line.encode("utf-8")
 
-    fd = os.open(
-        str(path),
-        os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC,
-        0o600,
-    )
-    try:
-        view = memoryview(encoded)
-        while view:
-            written = os.write(fd, view)
-            if written <= 0:
-                raise OSError(f"mailbox write returned {written} for {path}")
-            view = view[written:]
-    finally:
-        os.close(fd)
+    # ``O_APPEND`` makes every write atomic at the file-position level.
+    # ``O_CLOEXEC`` keeps the fd from leaking to bash subprocesses.
+    # ``0o600`` because mailboxes can carry sensitive plan content —
+    # readable by the user only. ``O_CLOEXEC`` is POSIX-only; on Windows
+    # it is absent (and fds are non-inheritable by default since PEP 446),
+    # so fall back to 0.
+    with _mailbox_write_lock(path):
+        fd = os.open(
+            str(path),
+            os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_CLOEXEC", 0),
+            0o600,
+        )
+        try:
+            view = memoryview(encoded)
+            while view:
+                written = os.write(fd, view)
+                if written <= 0:
+                    raise OSError(f"mailbox write returned {written} for {path}")
+                view = view[written:]
+        finally:
+            os.close(fd)
 
 
 def read_mailbox(

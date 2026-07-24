@@ -92,6 +92,8 @@ class OverloadedError(Exception):
 
 
 class FallbackTriggeredError(Exception):
+    """Downstream compatibility signal for the retained retry engine."""
+
     def __init__(self, original_model: str, fallback_model: str):
         super().__init__(f"Model fallback triggered: {original_model} -> {fallback_model}")
         self.original_model = original_model

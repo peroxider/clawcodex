@@ -7,3 +7,9 @@ callers keep working without modification.
 """
 
 from clawcodex_ext.utils.token_estimation import *  # noqa: F401,F403
+
+import sys
+
+from clawcodex_ext.utils import token_estimation as _implementation
+
+sys.modules[__name__] = _implementation

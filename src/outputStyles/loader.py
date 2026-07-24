@@ -7,7 +7,7 @@ plain-body-only loader and chapter
 * YAML frontmatter parsing — ``name`` / ``description`` / ``model``
   override the defaults derived from the file basename. Reuses the
   existing :mod:`src.skills.frontmatter` parser; no new dependency.
-* Default ``~/.claude/outputStyles/`` lookup — ``resolve_output_style``
+* Default ``~/.clawcodex/outputStyles/`` lookup — ``resolve_output_style``
   with ``search_dir=None`` now consults the user-config directory before
   falling back to built-ins. Previously the ``None`` path returned
   built-ins only.
@@ -19,6 +19,7 @@ plain-body-only loader and chapter
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 from src.skills.frontmatter import parse_frontmatter
@@ -29,14 +30,33 @@ from .styles import BUILTIN_OUTPUT_STYLES, OutputStyle
 _logger = logging.getLogger(__name__)
 
 
-def _default_user_dir() -> Path:
-    """Resolve the default user output-styles directory lazily.
+def _user_style_dirs() -> list[Path]:
+    """User output-style directories (OS-1 G4).
 
-    Lazy so test environments that monkeypatch ``HOME`` after import see
-    the override. Mirrors the keybindings-loader pattern.
+    ``GLOBAL_CONFIG_DIR/outputStyles`` — this port's config home (the
+    INTEG-1 canon rule; lazy import so test re-points are honored). The
+    old ``~/.claude/outputStyles`` read-through is gone with the
+    directory rebrand: legacy content is copied over once by
+    ``src/utils/legacy_migration.py`` instead of being read in place.
+    Lazy so tests that monkeypatch ``HOME`` / ``GLOBAL_CONFIG_DIR``
+    after import see the override.
     """
+    from src.config import GLOBAL_CONFIG_DIR
 
-    return Path('~/.claude/outputStyles').expanduser()
+    home = Path(os.environ.get("HOME") or Path.home())
+    return [
+        Path(GLOBAL_CONFIG_DIR) / "outputStyles",
+        home / ".claude" / "outputStyles",
+    ]
+
+
+def _load_default_user_styles() -> dict[str, OutputStyle]:
+    """Merged builtins + user-dir styles (user wins name collisions)."""
+    styles: dict[str, OutputStyle] = dict(BUILTIN_OUTPUT_STYLES)
+    for directory in _user_style_dirs():
+        if directory.is_dir():
+            styles.update(load_output_styles_dir(directory))
+    return styles
 
 
 def load_output_styles_dir(path: str | Path) -> dict[str, OutputStyle]:
@@ -53,11 +73,11 @@ def load_output_styles_dir(path: str | Path) -> dict[str, OutputStyle]:
     if not root.exists() or not root.is_dir():
         return styles
 
-    for file in sorted(root.glob('*.md')):
+    for file in sorted(root.glob("*.md")):
         try:
-            raw = file.read_text(encoding='utf-8')
+            raw = file.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
-            _logger.warning('could not read output style at %s: %s', file, exc)
+            _logger.warning("could not read output style at %s: %s", file, exc)
             continue
         if not raw.strip():
             continue
@@ -67,8 +87,8 @@ def load_output_styles_dir(path: str | Path) -> dict[str, OutputStyle]:
         body = result.body.strip()
 
         # ``name`` precedence: explicit frontmatter > file stem.
-        name = _coerce_str(meta.get('name')) or file.stem
-        prompt_field = _coerce_str(meta.get('prompt'))
+        name = _coerce_str(meta.get("name")) or file.stem
+        prompt_field = _coerce_str(meta.get("prompt"))
         # ``prompt`` precedence: explicit frontmatter > body content.
         # Frontmatter ``prompt`` lets a user keep documentation in the
         # body without shipping it to the model.
@@ -80,8 +100,8 @@ def load_output_styles_dir(path: str | Path) -> dict[str, OutputStyle]:
             name=name,
             prompt=prompt,
             source_path=file,
-            description=_coerce_str(meta.get('description')),
-            model=_coerce_str(meta.get('model')),
+            description=_coerce_str(meta.get("description")),
+            model=_coerce_str(meta.get("model")),
         )
     return styles
 
@@ -95,7 +115,7 @@ def resolve_output_style(
     Resolution order:
 
     1. ``search_dir`` if explicitly given.
-    2. Default ``~/.claude/outputStyles/`` if it exists.
+    2. Default ``~/.clawcodex/outputStyles/`` if it exists.
     3. Built-ins (``default``, ``explanatory``).
 
     Falls back to the ``"default"`` style when ``name`` is not known —
@@ -105,14 +125,10 @@ def resolve_output_style(
     if search_dir is not None:
         styles = load_output_styles_dir(search_dir)
     else:
-        default_dir = _default_user_dir()
-        if default_dir.is_dir():
-            styles = load_output_styles_dir(default_dir)
-        else:
-            styles = dict(BUILTIN_OUTPUT_STYLES)
+        styles = _load_default_user_styles()
 
-    key = (name or 'default').strip() or 'default'
-    return styles.get(key, styles['default'])
+    key = (name or "default").strip() or "default"
+    return styles.get(key, styles["default"])
 
 
 def _coerce_str(value: object) -> str | None:
@@ -125,6 +141,41 @@ def _coerce_str(value: object) -> str | None:
 
 
 __all__ = [
-    'load_output_styles_dir',
-    'resolve_output_style',
+    "load_output_styles_dir",
+    "resolve_output_style",
 ]
+
+def output_style_from_settings(cwd: str | None = None) -> str | None:
+    """The startup producer (OS-1 G1): ``settings.output_style.style`` →
+    the style name the live context should carry, or ``None`` for default.
+
+    TS reads ``settings?.outputStyle`` at prompt-build time
+    (constants/outputStyles.ts:207); this port carries the style on the
+    tool context, so entrypoints call this once at context construction.
+    Never raises (a broken settings file must not block startup).
+    """
+    try:
+        from src.settings.settings import load_settings
+
+        style = load_settings(cwd=cwd).output_style.style
+        if style and style != "default":
+            return str(style)
+    except Exception:  # noqa: BLE001
+        _logger.debug("output_style_from_settings failed", exc_info=True)
+    return None
+
+def available_output_styles(search_dir: str | Path | None = None) -> list[str]:
+    """Names of all resolvable styles — builtins ∪ user files. OS-1 W3:
+    feeds the set_output_style validation/reply and the client
+    /output-style listing. Mirrors resolve_output_style's directory
+    resolution exactly (same styles resolvable = same names listed)."""
+    try:
+        styles = (
+            load_output_styles_dir(search_dir)
+            if search_dir is not None
+            else _load_default_user_styles()
+        )
+        return list(styles)
+    except Exception:  # noqa: BLE001 — listing is best-effort
+        _logger.debug("available_output_styles: scan failed", exc_info=True)
+        return list(BUILTIN_OUTPUT_STYLES)

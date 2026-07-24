@@ -1,3 +1,9 @@
-"""Compatibility facade — see :mod:`clawcodex_ext.memdir.team_mem_paths`."""
+"""Module-identity facade for downstream team-memory path handling."""
 
-from clawcodex_ext.memdir.team_mem_paths import *  # noqa: F401,F403
+from __future__ import annotations
+
+import sys
+
+from clawcodex_ext.memdir import team_mem_paths as _module
+
+sys.modules[__name__] = _module

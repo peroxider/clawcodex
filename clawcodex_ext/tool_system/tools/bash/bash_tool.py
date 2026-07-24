@@ -119,6 +119,13 @@ def _run_bash_with_abort(
     else:
         popen_kwargs["start_new_session"] = True
 
+    if "env" not in popen_kwargs:
+        # Scrub secret env vars when CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set
+        # (anti-exfiltration; parity with TS subprocessEnv at the Bash site).
+        from src.utils.subprocess_env import subprocess_env
+
+        popen_kwargs["env"] = subprocess_env()
+
     proc = subprocess.Popen(argv, **popen_kwargs)
 
     deadline = _time_mod.monotonic() + timeout_s
@@ -162,8 +169,26 @@ def _run_bash_with_abort(
     # output that buffered before the signal landed.
     try:
         stdout, stderr = proc.communicate(timeout=_KILL_REAP_TIMEOUT_S)
-    except subprocess.TimeoutExpired:
-        stdout, stderr = "", ""
+    except subprocess.TimeoutExpired as exc:
+        # A user command can intentionally detach a descendant without using
+        # ``run_in_background`` (for example ``nohup server ... &``). The
+        # shell exits, but the descendant's intermediary shell may retain our
+        # pipe, so communicate cannot observe EOF. TimeoutExpired still
+        # carries everything already read; preserve it instead of replacing a
+        # successful command's output with "(Bash completed with no output)".
+        def _captured(value: Any) -> str:
+            if isinstance(value, bytes):
+                return value.decode(errors="replace")
+            return value if isinstance(value, str) else ""
+
+        stdout = _captured(exc.output)
+        stderr = _captured(exc.stderr)
+        for pipe in (proc.stdout, proc.stderr):
+            if pipe is not None:
+                try:
+                    pipe.close()
+                except OSError:
+                    pass
 
     return _BashRunResult(
         returncode=proc.returncode if proc.returncode is not None else -1,
@@ -189,8 +214,8 @@ from ...build_tool import SearchOrReadResult, Tool, ValidationResult, build_tool
 from ...context import ToolContext
 from ...errors import ToolInputError, ToolPermissionError
 from ...protocol import ToolResult
-from src.permissions.bash_security import check_bash_command_safety
-from clawcodex_ext.permissions.types import PermissionPassthroughResult, PermissionResult
+from src.permissions.bash_security import analyze_bash_command, check_bash_command_safety
+from src.permissions.types import PermissionPassthroughResult, PermissionResult
 from src.utils.format import format_duration
 
 from .background import spawn_background_bash
@@ -199,7 +224,6 @@ from clawcodex_ext.utils.shell_resolver import (
     resolve_shell,
 )
 from .command_semantics import interpret_command_result
-from .destructive_warnings import get_destructive_command_warning
 from .prompt import get_bash_prompt, get_default_timeout_ms, get_max_timeout_ms
 from .read_only_validation import is_command_read_only
 from .search_classification import (
@@ -224,6 +248,12 @@ def _resolve_shell_from_input(tool_input: dict) -> tuple[str, list[str]]:
 
 
 def _try_extract_cd(command: str) -> Path | None:
+    """Return the target only for a standalone ``cd <path>`` command.
+
+    Compound commands must run in the shell.  Treating
+    ``cd /work && make`` as a pure directory change silently discards
+    everything after the path.
+    """
     stripped = command.strip()
     if not stripped.startswith("cd "):
         return None
@@ -231,10 +261,6 @@ def _try_extract_cd(command: str) -> Path | None:
         parts = shlex.split(stripped, posix=True)
     except ValueError:
         return None
-    # Only short-circuit a standalone ``cd <path>``.  Compound commands such
-    # as ``cd /repo && pytest`` must reach the shell; treating their first
-    # argument as a pure directory change silently drops every command after
-    # the path and returns an empty successful result.
     if len(parts) == 2 and parts[0] == "cd":
         return Path(parts[1])
     return None
@@ -244,8 +270,43 @@ def _bash_check_permissions(
     tool_input: dict[str, Any],
     context: ToolContext,
 ) -> PermissionResult:
+    """Bash's own permission stage — TS-parity rewrite.
+
+    Mirrors the original's per-command pipeline (bashPermissions.ts): deny/ask
+    RULES run upstream in ``has_permissions_to_use_tool_inner`` (compound-aware
+    and normalization-hardened) before this is called; here we resolve:
+
+    1. STRUCTURAL refusals only — a command the parser can't statically
+       analyze (control flow, unparseable quoting) or one hiding executable
+       substitution asks with NO suggestions (TS too-complex/injection asks,
+       ``suggestions: []``), except that a raw exact-string allow rule is
+       honored first (TS checkEarlyExitDeny exact-allow: the user consciously
+       saved that literal command).
+    2. acceptEdits mode — filesystem-write commands (mkdir/touch/rm/rmdir/
+       mv/cp/sed; rm/rmdir still gated on critical paths) and redirect-free
+       read-only commands auto-allow (TS modeValidation.ts).
+    3. Read-only auto-allow — a provably read-only, in-roots command runs
+       with NO prompt and NO rule in any mode (TS bashPermissions.ts:1136
+       "Read-only command is allowed").
+    4. Everything else → passthrough → the generic prompt, which now carries
+       the "don't ask again" suggestion ladder.
+
+    The old class-based screen (dangerous/destructive/unknown → un-grantable
+    safety ask that also preempted allow rules) is gone — the original has no
+    such screen; its dialog shows a warning for destructive commands instead
+    (forwarded via the ``warning`` field on the can_use_tool request). The
+    classifier still consumes ``analyze_bash_command`` via auto mode, and the
+    hardcoded dangerous patterns + sandbox hard-gate still refuse at spawn
+    (``bash_command_safety_guard``).
+    """
+    command = (tool_input or {}).get("command", "")
+    if not command:
+        return PermissionPassthroughResult()
+
     try:
-        from extensions.sop_converter.sop_exploration_guard import sop_exploration_permission_check
+        from extensions.sop_converter.sop_exploration_guard import (
+            sop_exploration_permission_check,
+        )
 
         guard = sop_exploration_permission_check("Bash", tool_input, context)
         if getattr(guard, "behavior", None) == "deny":
@@ -253,26 +314,212 @@ def _bash_check_permissions(
     except ImportError:
         pass
 
-    command = (tool_input or {}).get("command", "")
-    if not command:
+    shell_kind, _argv = _resolve_shell_from_input(tool_input)
+    if shell_kind in {"powershell", "pwsh"}:
+        windows_decision = check_bash_command_safety(
+            command,
+            cwd=str(context.cwd) if context.cwd else None,
+            shell="powershell",
+        )
+        if windows_decision is not None:
+            return windows_decision
+
+    from src.permissions.bash_mode_validation import check_accept_edits_bash
+    from src.permissions.bash_suggestions import (
+        contains_executable_substitution,
+    )
+    from src.permissions.read_only_commands import (
+        check_read_only_constraints,
+    )
+    from src.permissions.types import (
+        PermissionAllowDecision,
+        PermissionAskDecision,
+        SafetyCheckDecisionReason,
+    )
+
+    cwd_str = str(context.cwd) if getattr(context, "cwd", None) else _os_mod.getcwd()
+    perm_ctx = getattr(context, "permission_context", None)
+
+    # bypassPermissions (and plan+bypass-available) runs everything — the
+    # tool's own structural/write asks must not preempt it (they are
+    # SafetyCheck asks, which otherwise short-circuit before the bypass branch
+    # in has_permissions_to_use_tool_inner). Deny rules still apply upstream.
+    _mode = getattr(perm_ctx, "mode", None)
+    if _mode == "bypassPermissions" or (
+        _mode == "plan"
+        and getattr(perm_ctx, "is_bypass_permissions_mode_available", False)
+    ):
         return PermissionPassthroughResult()
 
-    cwd_str = str(context.cwd) if context.cwd else None
-    shell = (tool_input or {}).get("shell", "auto")
-    if shell == "auto":
-        import sys as _sys_mod2
-        from clawcodex_ext.utils.shell_resolver import find_powershell_path
+    allowed_roots: list[str] = []
+    try:
+        allowed_roots = [str(r) for r in context.allowed_roots()]
+    except Exception:
+        allowed_roots = []
+    if not allowed_roots:
+        allowed_roots = [cwd_str]
 
-        shell = (
-            "powershell"
-            if _sys_mod2.platform == "win32" and find_powershell_path() is not None
-            else "bash"
+    # 1. Structural refusals (parser gives up / hidden substitution /
+    #    eval-like builtins whose arguments ARE code). Two TS analogs with
+    #    DIFFERENT exact-allow handling:
+    #    * PARSE refusals (AST too-complex / injection substitution) go through
+    #      checkEarlyExitDeny, which honors an exact-string ALLOW rule
+    #      (bashPermissions.ts:2124-2131) — the user saved that literal command.
+    #    * checkSemantics refusals (EVAL_LIKE_BUILTINS, NAME-eval subscript)
+    #      go through checkSemanticsDeny, which only honors DENY rules, NEVER an
+    #      allow — so an exact ``Bash(eval "…")`` rule must NOT run eval.
+    #    All ask with empty suggestions.
+    from src.permissions.read_only_commands import (
+        accesses_proc_environ,
+        find_eval_like_builtin,
+        find_name_eval_subscript_attack,
+    )
+
+    analysis = analyze_bash_command(command)
+    parse_reason: str | None = None      # exact-allow honored
+    semantics_reason: str | None = None  # exact-allow NOT honored
+    if analysis.is_complex:
+        parse_reason = f"Complex command: {analysis.reason}"
+    elif contains_executable_substitution(command):
+        parse_reason = "Command contains substitution that executes hidden commands"
+    else:
+        eval_like = find_eval_like_builtin(command)
+        subscript = find_name_eval_subscript_attack(command)
+        if eval_like is not None:
+            semantics_reason = (
+                f"`{eval_like}` executes its arguments as shell code, which "
+                "cannot be statically analyzed"
+            )
+        elif subscript is not None:
+            semantics_reason = (
+                f"`{subscript}` arithmetically evaluates an array subscript, "
+                "which can execute a command substitution even when quoted"
+            )
+        elif accesses_proc_environ(command):
+            semantics_reason = (
+                "Accesses /proc/*/environ, which may expose environment "
+                "secrets of another process"
+            )
+    if parse_reason is not None:
+        exact_rule = _exact_allow_rule(perm_ctx, command)
+        if exact_rule is not None:
+            from src.permissions.types import RuleDecisionReason
+
+            return PermissionAllowDecision(
+                behavior="allow",
+                updated_input=tool_input,
+                decision_reason=RuleDecisionReason(rule=exact_rule),
+            )
+    if parse_reason is not None or semantics_reason is not None:
+        return PermissionAskDecision(
+            behavior="ask",
+            message=(
+                "This command requires confirmation: "
+                f"{parse_reason or semantics_reason}"
+            ),
+            decision_reason=SafetyCheckDecisionReason(
+                reason=parse_reason or semantics_reason,
+                classifier_approvable=True,
+            ),
+            suggestions=(),  # never suggest saving an unanalyzable command
         )
-    result = check_bash_command_safety(command, cwd=cwd_str, shell=shell)
-    if result is not None:
-        return result
 
+    # 2. acceptEdits mode: filesystem writes + read-only commands auto-allow.
+    if perm_ctx is not None and getattr(perm_ctx, "mode", None) == "acceptEdits":
+        accept_edits = check_accept_edits_bash(
+            command, cwd=cwd_str, allowed_roots=allowed_roots
+        )
+        if accept_edits is True:
+            from src.permissions.types import ModeDecisionReason
+
+            return PermissionAllowDecision(
+                behavior="allow",
+                updated_input=tool_input,
+                decision_reason=ModeDecisionReason(mode="acceptEdits"),
+            )
+        if isinstance(accept_edits, PermissionAskDecision):
+            return accept_edits  # dangerous rm/rmdir target — always surface
+
+    # 2.5. A filesystem-write command aimed at a DANGEROUS-removal target
+    # (`/`, `~`, a direct child of `/`) or OUTSIDE the workspace can never be
+    # auto-allowed — not by acceptEdits, not by a Bash(rm:*) rule. Surface a
+    # SafetyCheck ask with NO suggestions (mirrors TS checkPathConstraints /
+    # checkDangerousRemovalPaths, which "cannot be auto-allowed by permission
+    # rules" and never suggests saving the command). Returning it here — as a
+    # SafetyCheck ask — makes it preempt the content-rule allow in check.py
+    # (the safetyCheck coercion runs before rule matching), so a saved
+    # ``Bash(rm:*)`` still can't reach ``rm -rf ~``.
+    from src.permissions.bash_mode_validation import (
+        rule_allow_path_gate,
+        ACCEPT_EDITS_WRITE_COMMANDS,
+    )
+    from src.permissions.bash_suggestions import (
+        contains_unquoted_chaining,
+        split_chained_command,
+    )
+
+    write_legs = [command]
+    if contains_unquoted_chaining(command):
+        _subs = split_chained_command(command)
+        write_legs = _subs if _subs is not None else [command]
+    for _leg in write_legs:
+        _tok = _leg.strip().split(None, 1)[0] if _leg.strip() else ""
+        _base = _os_mod.path.basename(_tok)
+        if _base in ACCEPT_EDITS_WRITE_COMMANDS and not rule_allow_path_gate(
+            _leg, cwd=cwd_str, allowed_roots=allowed_roots
+        ):
+            return PermissionAskDecision(
+                behavior="ask",
+                message=(
+                    f"This command targets a protected or out-of-workspace "
+                    f"path and requires confirmation: {_leg.strip()}"
+                ),
+                decision_reason=SafetyCheckDecisionReason(
+                    reason="Write to a dangerous or out-of-workspace path",
+                    classifier_approvable=False,
+                ),
+                suggestions=(),
+            )
+
+    # 3. Read-only auto-allow (no rule, no prompt — any mode).
+    if check_read_only_constraints(
+        command, cwd=cwd_str, allowed_roots=allowed_roots
+    ):
+        from src.permissions.types import OtherDecisionReason
+
+        return PermissionAllowDecision(
+            behavior="allow",
+            updated_input=tool_input,
+            decision_reason=OtherDecisionReason(
+                reason="Read-only command is allowed",
+            ),
+        )
+
+    # 4. No verdict here — rules and the prompt flow decide.
     return PermissionPassthroughResult()
+
+
+def _exact_allow_rule(perm_ctx: Any, command: str) -> Any | None:
+    """Raw exact-string allow rule for ``command``, or None.
+
+    TS honors an exact-match allow even for commands its analyzers refuse to
+    reason about (bashPermissions.ts:2124-2131) — the user saved that literal
+    string on purpose. Only full-string equality qualifies.
+    """
+    if perm_ctx is None:
+        return None
+    try:
+        from src.permissions.rules import get_rule_by_contents_for_tool
+
+        stripped = command.strip()
+        for rule_content, rule in get_rule_by_contents_for_tool(
+            perm_ctx, "Bash", "allow"
+        ).items():
+            if stripped and stripped == str(rule_content).strip():
+                return rule
+    except Exception:
+        return None
+    return None
 
 
 def _bash_validate_input(
@@ -285,11 +532,51 @@ def _bash_validate_input(
         return ValidationResult.fail(
             f"Blocked: {sleep_pattern}. Run blocking commands in the background "
             "with run_in_background: true -- you'll get a completion notification "
-            "when done. If you genuinely need a delay (rate limiting, deliberate "
-            "pacing), keep it under 2 seconds.",
+            "when done. If you genuinely need a short delay (rate limiting, "
+            "deliberate pacing), keep it at 5 seconds or less.",
             error_code=10,
         )
     return ValidationResult.ok()
+
+
+def bash_command_safety_guard(command: str) -> None:
+    """Pre-spawn safety for any shell command run through the bash machinery:
+    the hardcoded-dangerous-pattern block + the C8 sandbox hard-gate.
+
+    Shared by ``_bash_call`` (foreground + run_in_background) AND the Monitor
+    tool, which spawns via ``spawn_background_bash`` directly — so Monitor
+    can't be a way around these guards (critic C5-P2). Raises
+    ``ToolPermissionError`` to refuse; the sandbox check is best-effort (a
+    settings problem must not crash the tool), but a hard-gate refusal always
+    propagates."""
+    for pat in _HARDCODED_DANGEROUS_PATTERNS:
+        if pat.search(command):
+            raise ToolPermissionError("refusing to run potentially dangerous command")
+
+    # Sandbox guard (C8): the port has no sandbox ENFORCEMENT, so a
+    # ``sandbox.enabled`` setting maps onto TS's documented sandbox-unavailable
+    # path (sandboxTypes.ts:96-103). failIfUnavailable → REFUSE (the
+    # managed-settings hard gate: never silently run unsandboxed); otherwise
+    # warn once and proceed unsandboxed.
+    try:
+        from src.permissions.sandbox_guard import (
+            sandbox_hard_gate_error,
+            warn_if_unsandboxed_once,
+        )
+        from src.settings.settings import get_settings
+
+        _settings = get_settings()
+        _gate = sandbox_hard_gate_error(_settings)
+        if _gate:
+            raise ToolPermissionError(_gate)
+        warn_if_unsandboxed_once(_settings)
+    except ToolPermissionError:
+        raise
+    except Exception:  # noqa: BLE001 — the guard must never break the tool
+        import logging as _logging
+        _logging.getLogger(__name__).debug(
+            "[sandbox] guard check failed", exc_info=True
+        )
 
 
 def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -299,11 +586,11 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     if "\x00" in command:
         raise ToolInputError("command contains NUL byte")
 
-    # Defense-in-depth: block obviously dangerous commands even when called
-    # directly (bypassing the registry's check_permissions flow).
-    for pat in _HARDCODED_DANGEROUS_PATTERNS:
-        if pat.search(command):
-            raise ToolPermissionError("refusing to run potentially dangerous command")
+    # Defense-in-depth: block obviously dangerous commands + apply the C8
+    # sandbox hard-gate. Shared with the Monitor tool (which spawns via
+    # spawn_background_bash directly, bypassing this function) — so the guards
+    # can't drift and Monitor can't be a hole around them.
+    bash_command_safety_guard(command)
 
     explicit_cwd = tool_input.get("cwd")
     if explicit_cwd is not None:
@@ -527,11 +814,101 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     if is_silent_command(command, shell=shell_kind):
         output["noOutputExpected"] = True
 
+    # /eco: compress the model-bound rendering. The raw stdout/stderr stay in
+    # the output dict (and, for lossy filters, in the per-session tee file);
+    # note the TUI transcript renders the mapped content, so the user sees
+    # the same compact string the model does. Runs on the full pre-truncation
+    # output so the tee recovery file is complete.
+    _maybe_apply_eco(
+        output,
+        command=command,
+        exit_code=completed_returncode,
+        full_stdout=completed_stdout,
+        full_stderr=completed_stderr,
+        context=context,
+    )
+
     return ToolResult(
         name=BASH_TOOL_NAME,
         output=output,
         is_error=interpretation.is_error,
     )
+
+
+def _assemble_bash_body(stdout: str, stderr: str) -> str:
+    """The stdout+stderr part of the model-bound content (no interrupt
+    marker, no returnCodeInterpretation). Factored out so the eco engine's
+    never-worse guard compares against exactly what the mapper would emit."""
+    processed_stdout = strip_leading_blank_lines(stdout).rstrip() if stdout else ""
+    parts: list[str] = []
+    if processed_stdout:
+        parts.append(processed_stdout)
+    if stderr and stderr.strip():
+        parts.append(stderr.strip())
+    return "\n".join(parts)
+
+
+def _eco_tee_dir(context: ToolContext) -> Path | None:
+    """Per-session directory for eco raw-recovery files, co-located with the
+    Step-11 ``tool-results`` persistence dir (``.../<session>/eco/``)."""
+    try:
+        from src.services.tool_execution.tool_result_persistence import (
+            resolve_tool_results_dir,
+        )
+
+        return resolve_tool_results_dir(context).parent / "eco"
+    except Exception:  # noqa: BLE001 — recovery dir is best-effort
+        return None
+
+
+def _maybe_apply_eco(
+    output: dict[str, Any],
+    *,
+    command: str,
+    exit_code: int,
+    full_stdout: str,
+    full_stderr: str,
+    context: ToolContext,
+) -> None:
+    """When ``/eco`` is on, attach a compressed model-bound rendering.
+
+    Sets ``output["ecoContent"]`` (consumed by ``_bash_map_result_to_api``)
+    plus ``ecoFilter``/``ecoSavedTokens`` metadata. Never raises; never
+    touches the raw stdout/stderr fields, exit code, or error semantics.
+    (The TUI renders the mapped content, so the compact rendering is also
+    what the user sees in the transcript.) Skips image output (the data URI
+    must reach the image mapper intact). The interrupted/timeout/background/
+    cd paths return before this is called.
+    """
+    try:
+        from src.eco import is_eco_session
+
+        if not is_eco_session():
+            return
+        if output.get("isImage"):
+            return
+        from src.eco.engine import compress_bash_output
+
+        baseline = _assemble_bash_body(
+            output.get("stdout", ""), output.get("stderr", "")
+        )
+        if not baseline.strip():
+            return
+        outcome = compress_bash_output(
+            command=command,
+            exit_code=exit_code,
+            full_text=_assemble_bash_body(full_stdout, full_stderr),
+            baseline=baseline,
+            tee_dir=_eco_tee_dir(context),
+        )
+        if outcome is not None:
+            output["ecoContent"] = outcome.content
+            output["ecoFilter"] = outcome.filter_name
+            output["ecoSavedTokens"] = outcome.saved_tokens
+    except Exception:  # noqa: BLE001 — eco must never break the Bash tool
+        import logging as _logging
+
+        _logging.getLogger(__name__).debug("[eco] apply failed", exc_info=True)
 
 
 def _bash_map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
@@ -574,19 +951,22 @@ def _bash_map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
         interpretation = output.get("returnCodeInterpretation")
         interrupted = output.get("interrupted", False)
 
-        processed_stdout = strip_leading_blank_lines(stdout).rstrip() if stdout else ""
+        # /eco: a compressed rendering replaces the stdout+stderr assembly on
+        # the wire only — the display fields stay raw. Interrupt marker and
+        # returnCodeInterpretation append after it either way. (eco is never
+        # set on interrupted results, so the joined string is byte-identical
+        # to the historical assembly whenever ecoContent is absent.)
+        eco_content = output.get("ecoContent")
+        if isinstance(eco_content, str) and eco_content.strip():
+            body = eco_content
+        else:
+            body = _assemble_bash_body(stdout, stderr)
 
         parts: list[str] = []
-        if processed_stdout:
-            parts.append(processed_stdout)
-
-        error_parts: list[str] = []
-        if stderr and stderr.strip():
-            error_parts.append(stderr.strip())
+        if body:
+            parts.append(body)
         if interrupted:
-            error_parts.append("<error>Command was aborted before completion</error>")
-        if error_parts:
-            parts.append("\n".join(error_parts))
+            parts.append("<error>Command was aborted before completion</error>")
 
         if interpretation:
             parts.append(interpretation)

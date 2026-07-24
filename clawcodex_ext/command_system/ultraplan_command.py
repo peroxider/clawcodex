@@ -285,6 +285,10 @@ ULTRAPLAN_COMMAND = UltraplanCommand(
     argument_hint="[create|run|pause|resume|status|ls|show|rm|template] ...",
     supports_non_interactive=True,
 )
+# LocalCommand consumers inspect this implementation slot when validating the
+# registry. Ultraplan overrides ``call`` for its richer error handling, but it
+# still publishes the same executable contract as every other local command.
+ULTRAPLAN_COMMAND.set_call(ULTRAPLAN_COMMAND.call)
 
 
 def run_ultraplan_command_sync(args: str, context: CommandContext) -> LocalCommandResult:

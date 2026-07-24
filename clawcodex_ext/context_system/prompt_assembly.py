@@ -3,7 +3,7 @@ System prompt assembly — aligned with typescript/src/utils/queryContext.ts.
 
 Provides fetch_system_prompt_parts() which concurrently fetches:
   - default system prompt sections
-  - user context (CLAUDE.md + date)
+  - user context (CLAWCODEX.md + date)
   - system context (git status)
 
 Also provides append_system_context() and prepend_user_context() matching
@@ -17,12 +17,12 @@ import os
 from datetime import datetime
 from typing import Any
 
-from clawcodex_ext.types.messages import Message, UserMessage
-from clawcodex_ext.context_system.cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
-from clawcodex_ext.context_system.claude_md import (
-    _should_disable_claude_md,
+from ..types.messages import Message, UserMessage
+from .cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
+from .clawcodex_md import (
+    _should_disable_context_mds,
     clear_memory_file_caches,
-    get_claude_mds,
+    get_clawcodex_mds,
     get_memory_files,
 )
 from clawcodex_ext.context_system.git_context import (
@@ -70,10 +70,10 @@ async def get_user_context(
     cwd: str | None = None,
 ) -> dict[str, str]:
     """
-    Get memoized user context: CLAUDE.md content + current date.
+    Get memoized user context: CLAWCODEX.md content + current date.
 
     Mirrors TS getUserContext from context.ts.
-    Returns dict with keys: claudeMd, currentDate.
+    Returns dict with keys: clawcodexMd, currentDate.
     """
     global _user_context_cache
     if _user_context_cache is not None:
@@ -89,26 +89,26 @@ async def get_user_context(
     # would bust the cache on every turn.
     context["currentDate"] = _get_session_start_date_iso()
 
-    # CLAUDE.md content (skip in --bare mode unless --add-dir used)
-    claude_md_content = ""
-    if not _should_disable_claude_md():
+    # CLAWCODEX.md content (skip in --bare mode unless --add-dir used)
+    clawcodex_md_content = ""
+    if not _should_disable_context_mds():
         try:
             memory_files = await get_memory_files(cwd=cwd)
-            claude_md_content = get_claude_mds(memory_files)
-            if claude_md_content:
-                context["claudeMd"] = claude_md_content
+            clawcodex_md_content = get_clawcodex_mds(memory_files)
+            if clawcodex_md_content:
+                context["clawcodexMd"] = clawcodex_md_content
         except Exception:
             pass
 
-    # Cache CLAUDE.md into the bootstrap singleton (TS context.ts:173-176):
+    # Cache CLAWCODEX.md into the bootstrap singleton (TS context.ts:173-176):
     # the DAG-leaf cache exists to break the classifier→filesystem→
     # permissions→classifier import cycle. The TS consumer (yoloClassifier,
     # the auto-mode transcript classifier) is unported — this is forward
     # provisioning so the cache is real when ch06/ch12 land the consumer.
     try:
-        from src.bootstrap.state import set_cached_claude_md_content
+        from ..bootstrap.state import set_cached_clawcodex_md_content
 
-        set_cached_claude_md_content(claude_md_content or None)
+        set_cached_clawcodex_md_content(clawcodex_md_content or None)
     except Exception:
         pass
 
@@ -252,7 +252,7 @@ def prepend_user_context(
     context: dict[str, str],
 ) -> list[Message]:
     """
-    Prepend a <system-reminder> user message with CLAUDE.md + date.
+    Prepend a <system-reminder> user message with CLAWCODEX.md + date.
 
     Mirrors TS prependUserContext from api.ts.
     """
@@ -355,9 +355,47 @@ def _compute_env_info(cwd: str) -> str:
     parts: list[str] = []
     parts.append(f"CWD: {cwd}")
     parts.append(f"OS: {platform.system()} {platform.release()}")
-    parts.append(f"Date: {_get_local_iso_date()}")
+    # ch17 round-4 — date-only for cache stability (see _build_env_section).
+    parts.append(f"Date: {_get_session_start_date_iso()}")
+    data_line = _clawcodex_data_dir_line()
+    if data_line:
+        parts.append(data_line)
 
     return "\n".join(parts)
+
+
+def _clawcodex_data_dir_line() -> str | None:
+    """One-line pointer to clawcodex's session store for the env section.
+
+    clawcodex is a distinct product from the real Claude Code harness and
+    keeps its previous-session state under a rebranded root — never
+    ``~/.claude``, which belongs to the other tool. Without this line the
+    model, when asked to inspect "previous session history", falls back on
+    its trained prior and greps ``~/.claude`` (or even a mangled
+    ``~/.Claude Code/sessions``), landing on the wrong tool's data or
+    nothing at all.
+
+    Anchored on ``get_user_config_dir()`` (``$CLAWCODEX_CONFIG_DIR`` or
+    ``~/.clawcodex``): the ``sessions/`` and ``transcripts/`` stores now
+    resolve through ``get_sessions_dir()``/``get_transcripts_dir()`` (same
+    resolver), so they relocate WITH the override — naming that root points
+    the model at the real location in both default and override configs.
+    The value is constant per process (the override is an env var fixed
+    before start), so it is safe to embed in the REQUEST-scoped
+    # Environment block without busting the cache prefix.
+    """
+    try:
+        from src.utils.clawcodex_dirs import get_user_config_dir
+
+        root = str(get_user_config_dir())
+    except Exception:
+        return None
+    return (
+        f"clawcodex data directory: {root} — this tool's previous session "
+        f"history and transcripts live in the sessions/ and transcripts/ "
+        f"subdirectories here, NOT under ~/.claude (which belongs to a "
+        f"different tool)"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -414,7 +452,6 @@ def build_full_system_prompt(
     40. Agent instructions — definitions and usage
     50. Skill listing — available skills
     60. Output style — additional configured style overlay
-    70. Plan mode — plan mode instructions
     80. Non-interactive mode — headless instructions
     90. Tool restrictions — availability constraints
     """
@@ -508,10 +545,20 @@ def build_full_system_prompt(
     if memory_section:
         sections.append(memory_section)
 
-    # 30. MCP instructions
+    # 26. Bounded persistent-memory snapshot (hermes-agent port)
+    memory_store_section = _build_memory_store_section()
+    if memory_store_section:
+        sections.append(memory_store_section)
+
+    # 30. MCP servers (session-cached name list)
     mcp_section = _build_mcp_section(mcp_servers, use_cache, ctx)
     if mcp_section:
         sections.append(mcp_section)
+
+    # 31. MCP server instructions (REQUEST-scoped, uncached — C2)
+    mcp_instructions = _build_mcp_instructions_section(mcp_servers)
+    if mcp_instructions:
+        sections.append(mcp_instructions)
 
     # 40. Agent instructions
     agent_section = _build_agent_section(agents, use_cache, ctx)
@@ -707,9 +754,15 @@ def build_full_system_prompt_blocks(
     memory_section = _build_memory_section(ctx)
     if memory_section:
         sections.append(memory_section)
+    memory_store_section = _build_memory_store_section()
+    if memory_store_section:
+        sections.append(memory_store_section)
     mcp_section = _build_mcp_section(mcp_servers, use_cache, ctx)
     if mcp_section:
         sections.append(mcp_section)
+    mcp_instructions = _build_mcp_instructions_section(mcp_servers)
+    if mcp_instructions:
+        sections.append(mcp_instructions)
     agent_section = _build_agent_section(agents, use_cache, ctx)
     if agent_section:
         sections.append(agent_section)
@@ -907,6 +960,12 @@ _DOING_TASKS_SECTION = (
     "the error, check your assumptions, try a focused fix. Don't retry "
     "the identical action blindly, but don't abandon a viable approach "
     "after a single failure either.\n"
+    "- Before finishing, audit the result against every explicit requirement "
+    "in the user's request and verify the requirements that can be checked. "
+    "Do not treat producing a plausible result as proof that the task is "
+    "complete. When the user asks for all, every, multiple, or an exhaustive "
+    "set of results, actively search for additional valid results instead of "
+    "stopping after the first one.\n"
     "- Be cautious not to introduce security vulnerabilities such as "
     "command injection, XSS, SQL injection, and other OWASP top 10 "
     "vulnerabilities.\n"
@@ -1220,13 +1279,26 @@ def _build_env_section(cwd: str | None, use_cache: bool, runtime_ctx: dict[str, 
     parts.append("# Environment")
     parts.append(f"- CWD: {target}")
     parts.append(f"- OS: {platform.system()} {platform.release()}")
-    parts.append(f"- Date: {_get_local_iso_date()}")
+    # ch17 round-4 — memoized DATE-ONLY (not per-second wall clock). This
+    # block is REQUEST-scope, and the REQUEST group's last block carries a
+    # cache_control marker, so a per-second timestamp busts the REQUEST cache
+    # breakpoint (1 of only 4 the request is allowed) on EVERY turn — writing
+    # a +25% cache entry that's never read back. _get_session_start_date_iso
+    # is the in-file cache-safe helper built for exactly this (the older
+    # "safe after the DYNAMIC_BOUNDARY" rationale was invalidated when the
+    # REQUEST group gained its own marker).
+    parts.append(f"- Date: {_get_session_start_date_iso()}")
     shell = os.environ.get("SHELL", "unknown")
     parts.append(f"- Shell: {shell}")
     try:
         parts.append(f"- User: {getpass.getuser()}")
     except Exception:
         pass
+    # Tell the model where clawcodex keeps its own state so it stops guessing
+    # the real Claude Code harness's ~/.claude when asked about session history.
+    data_line = _clawcodex_data_dir_line()
+    if data_line:
+        parts.append(f"- {data_line}")
 
     content = "\n".join(parts)
     # Environment changes per request (CWD, date)
@@ -1271,6 +1343,77 @@ def _build_memory_section(runtime_ctx: dict[str, Any] | None = None) -> SystemPr
     )
 
 
+#: Behavioral guidance injected alongside the bounded-memory snapshot
+#: (donor: hermes prompt_builder.MEMORY_GUIDANCE, adapted — clawcodex has
+#: no session_search/skill_manage tools yet, so those routes are phrased
+#: as plain "don't save it here" rules).
+_MEMORY_STORE_GUIDANCE = (
+    "You have persistent bounded memory across sessions (distinct from the "
+    "auto-memory directory). Save durable facts using the Memory tool: user "
+    "preferences, environment details, tool quirks, and stable conventions. "
+    "This memory is injected into every session, so keep it compact and "
+    "focused on facts that will still matter later.\n"
+    "Prioritize what reduces future user steering — the most valuable memory "
+    "is one that prevents the user from having to correct or remind you "
+    "again. User preferences and recurring corrections matter more than "
+    "procedural task details.\n"
+    "Do NOT save task progress, session outcomes, completed-work logs, or "
+    "temporary TODO state. Specifically: do not record PR numbers, issue "
+    "numbers, commit SHAs, 'fixed bug X', 'submitted PR Y', 'Phase N done', "
+    "file counts, or any artifact that will be stale in 7 days. If a fact "
+    "will be stale in a week, it does not belong in this memory.\n"
+    "Write memories as declarative facts, not instructions to yourself. "
+    "'User prefers concise responses' ✓ — 'Always respond concisely' ✗. "
+    "'Project uses pytest with xdist' ✓ — 'Run tests with pytest -n 4' ✗. "
+    "Imperative phrasing gets re-read as a directive in later sessions and "
+    "can cause repeated work or override the user's current request."
+)
+
+
+def _build_memory_store_section() -> SystemPromptSection | None:
+    """The bounded persistent-memory snapshot (hermes-agent port).
+
+    Renders the guidance plus the frozen MEMORY.md / USER.md snapshot from
+    ``src.memory`` — reloaded from disk at every *build* so each prompt
+    rebuild (session start, model switch, /clear) captures fresh state,
+    then byte-stable until the next rebuild. SESSION scope keeps it inside
+    the cached prefix: mid-session Memory-tool writes are durable on disk
+    but invisible until the next cache-boundary event — the donor's
+    frozen-snapshot semantics (memory refreshes only where the prefix
+    cache already restarts; ``01-memory-architecture.md``).
+    """
+    try:
+        from src.memory import get_memory_store
+        from src.settings.settings import get_settings
+    except Exception:
+        return None
+    try:
+        settings = get_settings()
+        if not bool(getattr(settings, "memory_store_enabled", True)):
+            return None
+        user_profile_enabled = bool(getattr(settings, "user_profile_enabled", True))
+        store = get_memory_store()
+        store.load_from_disk()
+    except Exception:  # noqa: BLE001 — memory is optional; never break the prompt
+        return None
+
+    parts: list[str] = ["# Persistent Memory\n", _MEMORY_STORE_GUIDANCE]
+    mem_block = store.format_for_system_prompt("memory")
+    if mem_block:
+        parts.append(mem_block)
+    if user_profile_enabled:
+        user_block = store.format_for_system_prompt("user")
+        if user_block:
+            parts.append(user_block)
+
+    return SystemPromptSection(
+        id="memory_store",
+        content="\n\n".join(parts),
+        cache_scope=CacheScope.SESSION,
+        order=26,
+    )
+
+
 def _build_mcp_section(
     mcp_servers: list[Any] | None,
     use_cache: bool,
@@ -1299,6 +1442,43 @@ def _build_mcp_section(
     if use_cache:
         _prompt_cache.set("mcp", content, scope=CacheScope.SESSION)
     return SystemPromptSection(id="mcp", content=content, cache_scope=CacheScope.SESSION, order=30)
+
+
+def _build_mcp_instructions_section(
+    mcp_servers: list[Any] | None,
+) -> SystemPromptSection | None:
+    """Server-authored ``instructions`` (MCP InitializeResult handshake) —
+    port of ``getMcpInstructions`` (constants/prompts.ts:572-596).
+
+    REQUEST-scoped and NEVER ``_prompt_cache``d, mirroring TS's
+    ``DANGEROUS_uncachedSystemPromptSection('mcp_instructions', …, reason:
+    "MCP servers connect/disconnect between turns")`` (prompts.ts:506-513):
+    a late/OAuth-gated connect or a ``/mcp`` toggle must re-render on the
+    next prompt build without serving a stale session-cached copy, and
+    REQUEST scope keeps the volatile block out of the cached prefix. (The
+    render previously lived inside the SESSION-cached ``mcp`` section — the
+    utils-critic's M1; moved out here as part of the C2 live wiring.)"""
+    if not mcp_servers:
+        return None
+    instruction_blocks = [
+        f"## {getattr(server, 'name', str(server))}\n{instr}"
+        for server in mcp_servers
+        if (instr := (getattr(server, "instructions", None) or "").strip())
+    ]
+    if not instruction_blocks:
+        return None
+    content = (
+        "# MCP Server Instructions\n\n"
+        "The following MCP servers have provided instructions for how to "
+        "use their tools and resources:\n\n"
+        + "\n\n".join(instruction_blocks)
+    )
+    return SystemPromptSection(
+        id="mcp_instructions",
+        content=content,
+        cache_scope=CacheScope.REQUEST,
+        order=31,
+    )
 
 
 def _build_agent_section(
@@ -1338,7 +1518,13 @@ def _build_skill_section(
     skills: list[Any] | None,
     use_cache: bool,
     runtime_ctx: dict[str, Any] | None = None,
+    *,
+    context_window_tokens: int | None = None,
 ) -> SystemPromptSection | None:
+    # Reserved for model-aware skill-list budgeting.  The forked-agent path
+    # already supplies this value, so keep the compatibility seam even though
+    # the current renderer does not truncate the list yet.
+    _ = context_window_tokens
     override = consult_section_builders("skills", runtime_ctx)
     if override is not None:
         return override
@@ -1417,10 +1603,10 @@ def _build_proactive_section(runtime_ctx: dict[str, Any] | None = None) -> Syste
 _PLAN_MODE_PROMPT = (
     "# Plan Mode\n"
     "You are in PLAN MODE. In this mode:\n"
-    "- Analyze the user's request and create a detailed plan\n"
-    "- Do NOT make any changes to files\n"
-    "- Do NOT execute any commands\n"
-    "- Focus on understanding the problem and proposing a solution\n"
+    "- Analyze the user's request and create a detailed implementation plan\n"
+    "- Do not make changes to project files\n"
+    "- Use read-only exploration tools when needed to ground the plan\n"
+    "- Do not run commands that mutate files, dependencies, or external state\n"
     "- Ask clarifying questions if needed\n"
     "- Present the plan in a clear, structured format"
 )

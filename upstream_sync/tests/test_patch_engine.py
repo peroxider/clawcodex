@@ -3,6 +3,7 @@
 
 import pytest
 from pathlib import Path
+from pydantic import ValidationError
 
 from upstream_sync.config import PatchConfig
 from upstream_sync.core.patch_engine import create_engine, ApplyResult, PatchEngine
@@ -54,10 +55,9 @@ class TestCreateEngine:
         engine = create_engine(custom_cfg)
         assert isinstance(engine, PatchEngine)
 
-    def test_raises_on_unknown_engine(self, tmp_path):
-        cfg = PatchConfig(directory=tmp_path / "p", engine="unknown")
-        with pytest.raises(ValueError, match="Unknown patch engine"):
-            create_engine(cfg)
+    def test_config_rejects_unknown_engine(self, tmp_path):
+        with pytest.raises(ValidationError, match="engine"):
+            PatchConfig(directory=tmp_path / "p", engine="unknown")
 
 
 class TestQuiltEngine:

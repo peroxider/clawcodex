@@ -2,8 +2,8 @@
 
 Three-level config hierarchy matching TypeScript config.ts:
   Global:  ~/.clawcodex/config.json
-  Project: <git-root>/.claude/config.json
-  Local:   <git-root>/.claude/config.local.json
+  Project: <git-root>/.clawcodex/config.json
+  Local:   <git-root>/.clawcodex/config.local.json
 
 Inheritance: local > project > global (deep merge).
 
@@ -35,7 +35,8 @@ GLOBAL_CONFIG_DIR = Path.home() / '.clawcodex'
 GLOBAL_CONFIG_FILE = GLOBAL_CONFIG_DIR / 'config.json'
 HISTORY_FILE = GLOBAL_CONFIG_DIR / 'history.jsonl'
 
-PROJECT_CONFIG_DIR_NAME = '.claude'
+PROJECT_CONFIG_DIR_NAME = '.clawcodex'
+LEGACY_PROJECT_CONFIG_DIR_NAME = '.claude'
 PROJECT_CONFIG_FILE_NAME = 'config.json'
 LOCAL_CONFIG_FILE_NAME = 'config.local.json'
 
@@ -147,6 +148,10 @@ def get_default_config() -> dict[str, Any]:
     try:
         from src.providers import PROVIDER_INFO
 
+        from clawcodex_ext.providers import _init_provider_extensions
+
+        _init_provider_extensions()
+
         providers = {
             name: {
                 'api_key': '',
@@ -175,15 +180,18 @@ _UNTRUSTED_TIER_BLOCKED_KEYS: frozenset[str] = frozenset(
 )
 
 
-def _session_trusted() -> bool:
-    try:
-        from src.bootstrap.state import get_session_trust_accepted
+def _session_trusted(cwd: str | Path | None = None) -> bool:
+    """Return the trust verdict for the workspace being loaded.
 
-        return get_session_trust_accepted()
+    The persisted cwd-scoped verdict is required by agent-server children,
+    which do not inherit the parent's in-process bootstrap flag.
+    """
+    try:
+        from src.services.startup_gates import check_trust_accepted
+
+        return check_trust_accepted(cwd)
     except Exception:
-        # Bootstrap state unavailable (early import, standalone script):
-        # fail toward the pre-round-3 behavior rather than breaking reads.
-        return True
+        return False
 
 
 def _strip_untrusted_keys(tier: dict[str, Any]) -> dict[str, Any]:
@@ -225,13 +233,27 @@ class ConfigManager:
     def load_project(self) -> dict[str, Any]:
         if self._project_cache is None:
             path = get_project_config_path(self.cwd)
-            self._project_cache = _read_json(path) if path else {}
+            current = _read_json(path) if path else {}
+            root = _find_git_root(self.cwd)
+            legacy = (
+                _read_json(root / LEGACY_PROJECT_CONFIG_DIR_NAME / PROJECT_CONFIG_FILE_NAME)
+                if root
+                else {}
+            )
+            self._project_cache = _deep_merge(legacy, current)
         return dict(self._project_cache)
 
     def load_local(self) -> dict[str, Any]:
         if self._local_cache is None:
             path = get_local_config_path(self.cwd)
-            self._local_cache = _read_json(path) if path else {}
+            current = _read_json(path) if path else {}
+            root = _find_git_root(self.cwd)
+            legacy = (
+                _read_json(root / LEGACY_PROJECT_CONFIG_DIR_NAME / LOCAL_CONFIG_FILE_NAME)
+                if root
+                else {}
+            )
+            self._local_cache = _deep_merge(legacy, current)
         return dict(self._local_cache)
 
     def get_merged(self) -> dict[str, Any]:
@@ -239,7 +261,7 @@ class ConfigManager:
 
         While the session is untrusted, the project/local tiers are
         stripped of trust-sensitive keys before merging (ch02 round-3
-        gap A5): a committable ``.claude/config.json`` must not be able
+        gap A5): a committable ``.clawcodex/config.json`` must not be able
         to redirect API traffic (``providers.*.base_url`` riding the
         user's global ``api_key``) or inject env before the folder-trust
         gate. Checked at merge time so a mid-session trust grant takes
@@ -250,7 +272,7 @@ class ConfigManager:
         merged = self.load_global()
         project = self.load_project()
         local = self.load_local()
-        if not _session_trusted():
+        if not _session_trusted(self.cwd):
             project = _strip_untrusted_keys(project)
             local = _strip_untrusted_keys(local)
         merged = _deep_merge(merged, project)
@@ -360,6 +382,12 @@ def update_project_entry(
     except OSError:
         return False
     _get_default_manager().invalidate()
+    try:
+        from src.services.startup_gates import _invalidate_trust_memo
+
+        _invalidate_trust_memo()
+    except Exception:
+        pass
     return True
 
 
@@ -433,7 +461,6 @@ def get_provider_config(provider: str) -> dict[str, Any]:
     ``glm`` -> ``zai``, ``kimi`` -> ``moonshot`` …) passed via ``--provider``
     resolves to the provider's default config block.
     """
-    config = load_config()
     config = load_config()
     providers = config.get('providers', {})
     if provider in providers:

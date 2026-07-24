@@ -702,12 +702,9 @@ class ClawCodexTUI(App):
         if not skill_name:
             return False
         try:
-            from src.tool_system import ToolCall
+            from clawcodex_ext.tool_system.tools.skill import run_user_invoked_skill
 
-            result = self.tool_registry.dispatch(
-                ToolCall(name="Skill", input={"skill": skill_name, "args": args}),
-                self.tool_context,
-            )
+            result = run_user_invoked_skill(skill_name, args, self.tool_context)
         except Exception as e:
             transcript.append_system(f"Skill error: {e}", style="error")
             return True
@@ -719,6 +716,11 @@ class ClawCodexTUI(App):
                 else "Unknown skill error"
             )
             transcript.append_system(err, style="error")
+            return True
+        if payload.get("status") in {"fork", "forked"}:
+            result_text = payload.get("result")
+            if isinstance(result_text, str) and result_text.strip():
+                transcript.append_assistant(result_text, agent_name=skill_name)
             return True
         prompt = payload.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip():

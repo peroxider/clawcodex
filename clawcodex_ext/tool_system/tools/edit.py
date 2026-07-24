@@ -10,11 +10,15 @@ from typing import Any
 
 from ..build_tool import Tool, build_tool
 from ..context import ToolContext
-from ..diff_utils import unified_diff_hunks
-from ..errors import ToolInputError, ToolPermissionError
+from ..diff_utils import (
+    convert_leading_tabs_to_spaces,
+    record_patch_line_totals,
+    unified_diff_hunks,
+)
+from .read import _backfill_read_edit_path  # shared file_path expander
+from ..errors import ToolInputError
 from ..protocol import ToolResult
-from clawcodex_ext.permissions.types import (
-    PermissionAskDecision,
+from src.permissions.types import (
     PermissionPassthroughResult,
     PermissionResult,
 )
@@ -190,17 +194,14 @@ def _find_similar_file(file_path: str, cwd: Path) -> str | None:
 
 
 def _check_permissions(tool_input: dict[str, Any], context: ToolContext) -> PermissionResult:
-    file_path = tool_input.get("file_path")
-    if not isinstance(file_path, str):
-        return PermissionPassthroughResult()
-    try:
-        path = context.ensure_allowed_path(file_path)
-    except ToolPermissionError:
-        return PermissionPassthroughResult()
-    if path.suffix.lower() in {".md", ".markdown"} and not context.allow_docs:
-        return PermissionAskDecision(
-            message="Editing documentation files is blocked unless allow_docs is enabled",
-        )
+    # NB: no docs gate. The port used to raise an explicit ask for
+    # ``.md``/``.markdown`` edits unless ``allow_docs`` — the original Claude
+    # Code has no such permission gate (stray-docs discouragement lives in
+    # the system prompt), and being an explicit ask it was structurally
+    # un-grantable: no "allow all edits this session" option and immune to
+    # acceptEdits (both are passthrough-gated), so every markdown edit
+    # re-prompted forever. Markdown now flows like any other edit: prompt in
+    # default mode WITH the session option, auto-allow under acceptEdits.
     return PermissionPassthroughResult()
 
 
@@ -254,6 +255,14 @@ def _edit_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(new_string, encoding="utf-8")
         context.mark_file_read(path)
+        # The original's edit-create counts the real '' -> content patch
+        # (FileEditTool.ts:534 -> getPatchForEdit -> countLinesChanged),
+        # whose hunk is one "+" line per content line — NOT Write's
+        # empty-patch split special case (which also counts a trailing-
+        # newline empty segment). Synthesize that hunk.
+        record_patch_line_totals(
+            [{"lines": ["+" + ln for ln in new_string.splitlines()]}]
+        )
         return ToolResult(
             name="Edit",
             output={
@@ -324,8 +333,8 @@ def _edit_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     path.write_text(updated, encoding="utf-8")
     context.mark_file_read(path)
 
-    before_lines = original.splitlines(keepends=True)
-    after_lines = updated.splitlines(keepends=True)
+    before_lines = convert_leading_tabs_to_spaces(original).splitlines(keepends=True)
+    after_lines = convert_leading_tabs_to_spaces(updated).splitlines(keepends=True)
     diff_lines = list(
         difflib.unified_diff(
             before_lines,
@@ -337,6 +346,7 @@ def _edit_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
         )
     )
     hunks = unified_diff_hunks(diff_lines)
+    record_patch_line_totals(hunks)
 
     return ToolResult(
         name="Edit",
@@ -405,6 +415,9 @@ EditTool: Tool = build_tool(
     is_destructive=lambda _input: True,
     is_concurrency_safe=lambda _input: False,
     check_permissions=_check_permissions,
+    # ch06 round-4 PR-A GAP B — expand file_path before permissions +
+    # PreToolUse hooks (TS FileEditTool.ts:115); shared with Read.
+    backfill_observable_input=_backfill_read_edit_path,
     get_path=lambda input_data: input_data.get("file_path", ""),
     user_facing_name=lambda input_data: (
         f"Edit: {(input_data or {}).get('file_path', '')}" if input_data else "Edit"

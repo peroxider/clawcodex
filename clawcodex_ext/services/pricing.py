@@ -41,6 +41,12 @@ _TIER_5_25 = {
     "cache_creation": 6.25 / 1_000_000,
     "cache_read": 0.50 / 1_000_000,
 }
+_TIER_10_50 = {
+    "input": 10.0 / 1_000_000,
+    "output": 50.0 / 1_000_000,
+    "cache_creation": 12.50 / 1_000_000,
+    "cache_read": 1.00 / 1_000_000,
+}
 _TIER_HAIKU_45 = {
     "input": 1.0 / 1_000_000,
     "output": 5.0 / 1_000_000,
@@ -78,6 +84,57 @@ _TIER_DEEPSEEK_PRO = {
     "cache_creation": 0.435 / 1_000_000,
     "cache_read": 0.003625 / 1_000_000,
 }
+# MiniMax M3 pay-as-you-go rates in USD per million tokens. Prompt size is the
+# complete request input, including cache creation and cache read tokens.
+_MINIMAX_M3_INPUT_TIER_LIMIT = 512_000
+_TIER_MINIMAX_M3_STANDARD = {
+    "input": 0.30 / 1_000_000,
+    "output": 1.20 / 1_000_000,
+    "cache_creation": 0.30 / 1_000_000,
+    "cache_read": 0.06 / 1_000_000,
+}
+_TIER_MINIMAX_M3_STANDARD_LONG = {
+    "input": 0.60 / 1_000_000,
+    "output": 2.40 / 1_000_000,
+    "cache_creation": 0.60 / 1_000_000,
+    "cache_read": 0.12 / 1_000_000,
+}
+_TIER_MINIMAX_M3_PRIORITY = {
+    "input": 0.45 / 1_000_000,
+    "output": 1.80 / 1_000_000,
+    "cache_creation": 0.45 / 1_000_000,
+    "cache_read": 0.09 / 1_000_000,
+}
+_TIER_MINIMAX_M3_PRIORITY_LONG = {
+    "input": 0.90 / 1_000_000,
+    "output": 3.60 / 1_000_000,
+    "cache_creation": 0.90 / 1_000_000,
+    "cache_read": 0.18 / 1_000_000,
+}
+_TIER_MINIMAX_M27 = {
+    "input": 0.30 / 1_000_000,
+    "output": 1.20 / 1_000_000,
+    "cache_creation": 0.375 / 1_000_000,
+    "cache_read": 0.06 / 1_000_000,
+}
+# Meta Muse Spark 1.1 (api.meta.ai, OpenAI-compatible). Meta's published rates:
+# $1.25/M input, $4.25/M output, $0.15/M cached input. OpenAI-style caching has
+# no separate cache-write charge, so ``cache_creation`` mirrors ``input``.
+# NOTE: the generic OpenAI-compat usage builder does not (yet) map
+# ``prompt_tokens_details.cached_tokens`` onto ``cache_read_input_tokens`` —
+# only the hand-written DeepSeek provider does — so today ``cache_read`` is
+# inert for Meta: cached input is billed at the full input rate in the cost
+# display, an over-estimate on the cached portion ($1.25 vs $0.15/M, ~8x).
+# The displayed cost is thus a safe upper bound, consistent with the other
+# registry providers; wiring the mapping into ``_build_usage_dict`` is a
+# separate change (it would affect all OpenAI-compat providers). The real
+# cache-read rate is recorded here for when that lands.
+_TIER_MUSE_SPARK = {
+    "input": 1.25 / 1_000_000,
+    "output": 4.25 / 1_000_000,
+    "cache_creation": 1.25 / 1_000_000,
+    "cache_read": 0.15 / 1_000_000,
+}
 
 
 # Exact-match table — keyed by canonical model name. Order DOESN'T matter
@@ -95,7 +152,10 @@ PRICING: dict[str, dict[str, float]] = {
     "claude-3-7-sonnet-20250219": _TIER_3_15,
     "claude-3-5-sonnet-20241022": _TIER_3_15,
     "claude-3-5-sonnet-20240620": _TIER_3_15,
+    # Fable family — frontier tier above Opus (10/50)
+    "claude-fable-5": _TIER_10_50,
     # Opus family — 4.5+ on the 5/25 tier, 4.0/4.1 on 15/75
+    "claude-opus-4-8": _TIER_5_25,
     "claude-opus-4-7": _TIER_5_25,
     "claude-opus-4-6": _TIER_5_25,
     "claude-opus-4-5": _TIER_5_25,
@@ -106,6 +166,10 @@ PRICING: dict[str, dict[str, float]] = {
     # every proxied model is priced at its upstream rate.
     "deepseek-v4-flash": _TIER_DEEPSEEK_FLASH,
     "deepseek-v4-pro": _TIER_DEEPSEEK_PRO,
+    "MiniMax-M3": _TIER_MINIMAX_M3_STANDARD,
+    "MiniMax-M2.7": _TIER_MINIMAX_M27,
+    # Meta Muse Spark (api.meta.ai)
+    "muse-spark-1.1": _TIER_MUSE_SPARK,
 }
 
 
@@ -124,9 +188,11 @@ DEFAULT_PRICING: dict[str, float] = _TIER_3_15
 # tier. Unknown opus-4.x now falls through to None instead of being
 # tagged with the wrong price.
 _FAMILY_PREFIXES: list[tuple[str, dict[str, float]]] = [
+    ("claude-fable-5", _TIER_10_50),
     ("claude-haiku-4", _TIER_HAIKU_45),
     ("claude-3-5-haiku", _TIER_HAIKU_45),
     ("claude-3-haiku", _TIER_HAIKU_3),
+    ("claude-opus-4-8", _TIER_5_25),
     ("claude-opus-4-7", _TIER_5_25),
     ("claude-opus-4-6", _TIER_5_25),
     ("claude-opus-4-5", _TIER_5_25),
@@ -137,8 +203,40 @@ _FAMILY_PREFIXES: list[tuple[str, dict[str, float]]] = [
 ]
 
 
-def get_pricing(model: str) -> dict[str, float] | None:
+def _get_exact_pricing(
+    model: str,
+    *,
+    input_tokens: int,
+    service_tier: str,
+) -> dict[str, float] | None:
+    if model != "MiniMax-M3":
+        return PRICING.get(model)
+
+    is_long_context = input_tokens > _MINIMAX_M3_INPUT_TIER_LIMIT
+    if service_tier == "priority":
+        return (
+            _TIER_MINIMAX_M3_PRIORITY_LONG
+            if is_long_context
+            else _TIER_MINIMAX_M3_PRIORITY
+        )
+    return (
+        _TIER_MINIMAX_M3_STANDARD_LONG
+        if is_long_context
+        else _TIER_MINIMAX_M3_STANDARD
+    )
+
+
+def get_pricing(
+    model: str,
+    *,
+    input_tokens: int = 0,
+    service_tier: str = "standard",
+) -> dict[str, float] | None:
     """Return per-token prices for ``model``, or ``None`` if unknown.
+
+    ``input_tokens`` is the complete prompt size for one request. MiniMax M3
+    uses it with ``service_tier`` to select its standard/priority and
+    short/long-context rate.
 
     Lookup order:
       1. Exact match in ``PRICING``.
@@ -158,11 +256,19 @@ def get_pricing(model: str) -> dict[str, float] | None:
     if not model:
         return None
     if model in PRICING:
-        return PRICING[model]
+        return _get_exact_pricing(
+            model,
+            input_tokens=input_tokens,
+            service_tier=service_tier,
+        )
     if "/" in model:
         bare = model.split("/", 1)[1]
         if bare in PRICING:
-            return PRICING[bare]
+            return _get_exact_pricing(
+                bare,
+                input_tokens=input_tokens,
+                service_tier=service_tier,
+            )
         for prefix, pricing in _FAMILY_PREFIXES:
             if bare.startswith(prefix):
                 return pricing
@@ -192,13 +298,18 @@ def compute_cost(model: str, usage: dict[str, Any]) -> float:
     from ``usage``. Missing keys default to zero so callers that only
     track input+output still get a sensible result.
     """
-    pricing = get_pricing(model)
-    if pricing is None:
-        return 0.0
     input_tokens = int(usage.get("input_tokens", 0) or 0)
     output_tokens = int(usage.get("output_tokens", 0) or 0)
     cache_creation = int(usage.get("cache_creation_input_tokens", 0) or 0)
     cache_read = int(usage.get("cache_read_input_tokens", 0) or 0)
+    prompt_tokens = input_tokens + cache_creation + cache_read
+    pricing = get_pricing(
+        model,
+        input_tokens=prompt_tokens,
+        service_tier=str(usage.get("service_tier") or "standard"),
+    )
+    if pricing is None:
+        return 0.0
     return (
         input_tokens * pricing["input"]
         + output_tokens * pricing["output"]
@@ -244,8 +355,7 @@ def compute_session_cost(
     """Compute (worker_cost, advisor_cost, total_cost) for a session.
 
     Caller passes the running token accumulators from whichever surface
-    is rendering (REPL bottom_toolbar reads its ``_stats_*``, TUI
-    StatusLine reads ``state.usage``). The function does the per-model
+    is rendering. The function does the per-model
     pricing lookups and returns the three dollar amounts so the caller
     can format/display however it wants.
 

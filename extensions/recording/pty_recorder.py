@@ -22,16 +22,21 @@ from __future__ import annotations
 
 import json
 import os
-import pty
 import select
 import signal
 import struct
 import subprocess
 import sys
-import termios
 import time
 from pathlib import Path
 from typing import Sequence
+
+try:
+    import pty
+    import termios
+except ImportError:  # Windows has no POSIX terminal control modules.
+    pty = None  # type: ignore[assignment]
+    termios = None  # type: ignore[assignment]
 
 
 class _PtyRecorder:
@@ -77,6 +82,8 @@ class _PtyRecorder:
 
     def run(self) -> int:
         """Fork the command, record its PTY output, and return its exit code."""
+        if pty is None or termios is None or not hasattr(pty, "fork"):
+            raise OSError("native PTY recording is unavailable on this platform")
         self._out_path.parent.mkdir(parents=True, exist_ok=True)
 
         pid, master_fd = pty.fork()

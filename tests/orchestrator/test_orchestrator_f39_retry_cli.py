@@ -340,8 +340,12 @@ class TestResolveOperator(unittest.TestCase):
         original_user = os.environ.pop("USER", None)
         original_username = os.environ.pop("USERNAME", None)
         try:
-            result = _resolve_operator(None)
-            self.assertIn(result, {"unknown"})  # os.getlogin() may also work
+            with patch(
+                "extensions.orchestrator.cli.issue.os.getlogin",
+                side_effect=OSError("no controlling terminal"),
+            ):
+                result = _resolve_operator(None)
+            self.assertEqual(result, "unknown")
         finally:
             if original_user is not None:
                 os.environ["USER"] = original_user

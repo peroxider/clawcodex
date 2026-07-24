@@ -66,6 +66,16 @@ def run_mcp_subcommand(rest: list[str]) -> int:
         return _set_disabled(rest[1:], enabled=False)
     if verb == "doctor":
         return _doctor_server(rest[1:])
+    if verb == "serve":
+        # Keep the existing management CLI and add the upstream stdio-server
+        # path that re-exposes ClawCodex tools to another MCP client.
+        import os
+
+        os.environ.setdefault("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "true")
+        from src.entrypoints.mcp_serve import run_serve
+
+        args = rest[1:]
+        return run_serve(debug="--debug" in args, verbose="--verbose" in args)
     print(f"clawcodex mcp: unknown verb {verb!r}", file=sys.stderr)
     _print_usage()
     return 2
@@ -82,6 +92,7 @@ def _print_usage() -> None:
     print("  enable  NAME                Re-enable a disabled server (process-local)")
     print("  disable NAME                Disable a server without removing its config")
     print("  doctor  [options]           Health-check servers")
+    print("  serve   [--debug] [--verbose] Re-expose tools as an MCP stdio server")
     print("")
     print("list options:")
     print("  --scope <scope>             Filter by scope (user/project/local/...)")

@@ -14,7 +14,7 @@ from clawcodex_ext.skills.loader import (
     PromptSkill,
     load_skills_from_dir,
 )
-from .registry import CommandRegistry, register_command
+from .registry import CommandRegistry, get_command_registry, register_command
 from .types import PromptCommand, SkillPromptCommand
 
 
@@ -103,10 +103,11 @@ def load_and_register_skills(
     registered_commands: list[PromptCommand] = []
     for skill in skills:
         command = skill_to_prompt_command(skill)
-        if registry:
-            registry.register(command)
-        else:
-            register_command(command)
+        target_registry = registry or get_command_registry()
+        # Built-in/core command names are reserved. A project skill must not
+        # replace /review, /help, or another command that was registered first.
+        if not target_registry.has(command.name):
+            target_registry.register(command)
         registered_commands.append(command)
 
     return registered_commands

@@ -18,7 +18,6 @@ treats ``runtime_tasks.update`` as the single atomic-mutation
 primitive — the A6/C5 contract (mutator must be sync; never await
 under the registry lock) is honored throughout.
 """
-
 from __future__ import annotations
 
 import asyncio
@@ -26,11 +25,11 @@ import time
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, TYPE_CHECKING
 
-from clawcodex_ext.tasks_core import TaskStateBase, is_terminal_task_status
+from src.tasks_core import TaskStateBase, is_terminal_task_status
 
 if TYPE_CHECKING:
-    from clawcodex_ext.task_registry import RuntimeTaskRegistry
-    from clawcodex_ext.tasks.progress import AgentProgress
+    from src.task_registry import RuntimeTaskRegistry
+    from src.tasks.progress import AgentProgress
 
 
 @dataclass(kw_only=True)
@@ -69,30 +68,39 @@ class LocalAgentTaskState(TaskStateBase):
         result_text / error — final output container.
     """
 
-    type: Literal['local_agent'] = 'local_agent'  # type: ignore[assignment]
-    agent_id: str = ''
-    agent_type: str = ''
-    prompt: str = ''
+    type: Literal["local_agent"] = "local_agent"  # type: ignore[assignment]
+    agent_id: str = ""
+    agent_type: str = ""
+    prompt: str = ""
     selected_agent: Any = None  # AgentDefinition; loose to avoid cycles.
     model: str | None = None
     abort_event: asyncio.Event | None = field(default=None, repr=False, compare=False)
+    # R6 — the async run's AbortController (query() polls
+    # ``signal.aborted``). ``kill_async_agent`` calls ``.abort()`` on it so a
+    # killed background agent actually STOPS the live run instead of running
+    # to natural completion. Flag-based abort is GIL-atomic → safe to fire
+    # from the kill thread while the run polls on the background loop (the
+    # same cross-thread pattern the turn-interrupt path already uses).
+    abort_controller: Any = field(default=None, repr=False, compare=False)
     pending_messages: list[str] = field(default_factory=list)
     is_backgrounded: bool = True
     retain: bool = False
     disk_loaded: bool = False
     evict_after: float | None = None
-    progress: 'AgentProgress | None' = None
+    progress: "AgentProgress | None" = None
     last_reported_tool_count: int = 0
     last_reported_token_count: int = 0
-    result_text: str = ''
+    result_text: str = ""
     error: str | None = None
+    # Downstream transcript isolation: background agents spawned by different
+    # parent sessions may reuse an agent id without sharing a transcript.
+    parent_session_id: str = ""
     # Chunk F / WI-7.4 race guard. Set True by the auto-resume claim
     # mutator when this terminal state is being re-spawned; concurrent
     # SendMessage callers see the flag and back off to queueing the
     # message onto the resumed agent's pending_messages instead.
     # Reset to False on the fresh state ``register_async_agent`` upserts.
     is_resuming: bool = False
-    parent_session_id: str = ''
 
 
 def is_local_agent_task(state: Any) -> bool:
@@ -119,7 +127,8 @@ def register_async_agent(
     model: str | None = None,
     tool_use_id: str | None = None,
     parent_session_id: str | None = None,
-    registry: 'RuntimeTaskRegistry',
+    abort_controller: Any = None,
+    registry: "RuntimeTaskRegistry",
 ) -> LocalAgentTaskState:
     """Register a brand-new background agent on the runtime registry.
 
@@ -142,12 +151,15 @@ def register_async_agent(
     # the cycle untangled.
     from src.agent.transcript import get_agent_transcript_path
 
-    output_file = get_agent_transcript_path(agent_id, parent_session_id=parent_session_id)
+    output_file = get_agent_transcript_path(
+        agent_id,
+        parent_session_id=parent_session_id,
+    )
 
     state = LocalAgentTaskState(
         id=agent_id,
-        type='local_agent',
-        status='running',
+        type="local_agent",
+        status="running",
         description=description,
         start_time=time.time(),
         output_file=output_file,
@@ -157,7 +169,8 @@ def register_async_agent(
         selected_agent=selected_agent,
         model=model,
         tool_use_id=tool_use_id,
-        parent_session_id=parent_session_id or '',
+        parent_session_id=parent_session_id or "",
+        abort_controller=abort_controller,
         is_backgrounded=True,
     )
     registry.upsert(state)
@@ -167,7 +180,7 @@ def register_async_agent(
 def queue_pending_message(
     task_id: str,
     message: str,
-    registry: 'RuntimeTaskRegistry',
+    registry: "RuntimeTaskRegistry",
 ) -> bool:
     """Append a message to the agent's pending-messages inbox.
 
@@ -196,7 +209,7 @@ def queue_pending_message(
 
 def drain_pending_messages(
     task_id: str,
-    registry: 'RuntimeTaskRegistry',
+    registry: "RuntimeTaskRegistry",
 ) -> list[str]:
     """Atomically pop every pending message; return them in FIFO order.
 
@@ -221,8 +234,8 @@ def drain_pending_messages(
 
 def update_agent_progress(
     task_id: str,
-    progress: 'AgentProgress',
-    registry: 'RuntimeTaskRegistry',
+    progress: "AgentProgress",
+    registry: "RuntimeTaskRegistry",
 ) -> None:
     """Replace the agent's progress snapshot. No-op on terminal state.
 
@@ -230,11 +243,10 @@ def update_agent_progress(
     if a background-summarization service has set one — the per-message
     progress update should not clobber the summary text.
     """
-
     def _set(prev: TaskStateBase) -> TaskStateBase:
         if not isinstance(prev, LocalAgentTaskState):
             return prev
-        if prev.status != 'running':
+        if prev.status != "running":
             return prev
         existing_summary = prev.progress.summary if prev.progress is not None else None
         new_progress = progress
@@ -246,14 +258,14 @@ def update_agent_progress(
 
 
 def _terminal_replace(
-    prev: 'LocalAgentTaskState',
+    prev: "LocalAgentTaskState",
     *,
     status: str,
     result_text: str | None = None,
     error: str | None = None,
     grace_seconds: float | None = None,
     now: float | None = None,
-) -> 'LocalAgentTaskState':
+) -> "LocalAgentTaskState":
     """Compose the standard terminal-state mutation: status flip,
     end_time stamp, and ``evict_after`` deadline (Chunk D / WI-3.4).
 
@@ -270,11 +282,11 @@ def _terminal_replace(
     if grace_seconds is None:
         grace_seconds = PANEL_GRACE_SECONDS
 
-    extras: dict[str, Any] = {'status': status, 'end_time': moment}
+    extras: dict[str, Any] = {"status": status, "end_time": moment}
     if result_text is not None:
-        extras['result_text'] = result_text
+        extras["result_text"] = result_text
     if error is not None:
-        extras['error'] = error
+        extras["error"] = error
     transitioned = replace(prev, **extras)
     return schedule_eviction(transitioned, grace_seconds=grace_seconds, now=moment)
 
@@ -283,16 +295,15 @@ def complete_agent_task(
     task_id: str,
     *,
     result_text: str,
-    registry: 'RuntimeTaskRegistry',
+    registry: "RuntimeTaskRegistry",
 ) -> None:
     """Flip status to ``completed``, stash the final text, schedule eviction."""
-
     def _complete(prev: TaskStateBase) -> TaskStateBase:
         if not isinstance(prev, LocalAgentTaskState):
             return prev
         if is_terminal_task_status(prev.status):
             return prev
-        return _terminal_replace(prev, status='completed', result_text=result_text)
+        return _terminal_replace(prev, status="completed", result_text=result_text)
 
     registry.update(task_id, _complete)
 
@@ -301,10 +312,9 @@ def fail_agent_task(
     task_id: str,
     *,
     error: str,
-    registry: 'RuntimeTaskRegistry',
+    registry: "RuntimeTaskRegistry",
 ) -> None:
     """Flip status to ``failed``, record error, schedule eviction."""
-
     def _fail(prev: TaskStateBase) -> TaskStateBase:
         if not isinstance(prev, LocalAgentTaskState):
             return prev
@@ -314,7 +324,7 @@ def fail_agent_task(
         # the final text still see something useful (TS does this).
         return _terminal_replace(
             prev,
-            status='failed',
+            status="failed",
             error=error,
             result_text=prev.result_text or error,
         )
@@ -324,7 +334,7 @@ def fail_agent_task(
 
 def kill_async_agent(
     task_id: str,
-    registry: 'RuntimeTaskRegistry',
+    registry: "RuntimeTaskRegistry",
     *,
     enqueue_notification: bool = True,
 ) -> None:
@@ -342,35 +352,50 @@ def kill_async_agent(
     emits its own SDK event — pass False.
     """
     aborted_event: asyncio.Event | None = None
+    aborted_controller: Any = None
     captured_description: str | None = None
-    captured_output_file: str = ''
+    captured_output_file: str = ""
     fired = False
 
     def _kill(prev: TaskStateBase) -> TaskStateBase:
-        nonlocal aborted_event, captured_description, captured_output_file, fired
+        nonlocal aborted_event, aborted_controller, captured_description
+        nonlocal captured_output_file, fired
         if not isinstance(prev, LocalAgentTaskState):
             return prev
         if is_terminal_task_status(prev.status):
             return prev
         aborted_event = prev.abort_event
+        aborted_controller = prev.abort_controller
         captured_description = prev.description
         captured_output_file = prev.output_file
         fired = True
-        return _terminal_replace(prev, status='killed')
+        return _terminal_replace(prev, status="killed")
 
     registry.update(task_id, _kill)
-    # Set the event OUTSIDE the registry lock so a misbehaving Event
-    # subclass that schedules a callback can't deadlock against the
-    # registry. (Default ``asyncio.Event`` is a thin flag; this is
-    # defense-in-depth for the A6/C5 contract.)
+    # R6 — abort the live run OUTSIDE the registry lock. This is the wire
+    # that makes a kill actually STOP a background agent: the async run's
+    # query() loop polls ``abort_controller.signal.aborted`` at every yield
+    # point (query.py:1433/1520/1571/2046), so ``.abort()`` here halts the
+    # run at the next check instead of letting it finish naturally and keep
+    # burning tokens. Flag set is GIL-atomic → safe from this (kill) thread
+    # while the run polls on the background loop.
+    if aborted_controller is not None:
+        try:
+            aborted_controller.abort("killed by user")
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "failed to abort run for killed agent %s", task_id
+            )
+    # Legacy abort_event too (defensive; the cooperative-event path was the
+    # original design but was never wired — abort_controller is the live one).
     if aborted_event is not None:
         try:
             aborted_event.set()
         except Exception:
             import logging
-
             logging.getLogger(__name__).exception(
-                'failed to set abort event for killed agent %s', task_id
+                "failed to set abort event for killed agent %s", task_id
             )
 
     # Notification emission OUTSIDE the lock as well — `enqueue_agent_notification`
@@ -385,7 +410,7 @@ def kill_async_agent(
         enqueue_agent_notification(
             task_id=task_id,
             description=captured_description,
-            status='killed',
+            status="killed",
             output_file=captured_output_file,
             registry=registry,
         )
@@ -404,23 +429,25 @@ class LocalAgentTask:
     update + abort signal stay in one place.
     """
 
-    name: str = 'LocalAgentTask'
-    type: Literal['local_agent'] = 'local_agent'
+    name: str = "LocalAgentTask"
+    type: Literal["local_agent"] = "local_agent"
 
-    async def kill(self, task_id: str, registry: 'RuntimeTaskRegistry') -> None:
+    async def kill(
+        self, task_id: str, registry: "RuntimeTaskRegistry"
+    ) -> None:
         kill_async_agent(task_id, registry)
 
 
 __all__ = [
-    'LocalAgentTaskState',
-    'LocalAgentTask',
-    'is_local_agent_task',
-    'is_local_agent_task_terminal',
-    'register_async_agent',
-    'queue_pending_message',
-    'drain_pending_messages',
-    'update_agent_progress',
-    'complete_agent_task',
-    'fail_agent_task',
-    'kill_async_agent',
+    "LocalAgentTaskState",
+    "LocalAgentTask",
+    "is_local_agent_task",
+    "is_local_agent_task_terminal",
+    "register_async_agent",
+    "queue_pending_message",
+    "drain_pending_messages",
+    "update_agent_progress",
+    "complete_agent_task",
+    "fail_agent_task",
+    "kill_async_agent",
 ]

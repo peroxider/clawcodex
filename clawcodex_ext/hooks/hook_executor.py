@@ -142,9 +142,210 @@ def has_hook_for_event(event: str, tool_use_context: Any) -> bool:
     return bool(hooks.get(event))
 
 
+_IF_CONDITION_EVENTS = frozenset(
+    {"PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest"}
+)
+# The seven tools whose TS analogs implement preparePermissionMatcher
+# (each matches its rule pattern with matchWildcardPattern):
+#   file-path tools → file_path / notebook_path;
+#   pattern tools (Glob/Grep/Monitor) → pattern;
+#   Bash → command (with any-subcommand semantics).
+_IF_FILE_PATH_TOOLS = frozenset(
+    {"Read", "Edit", "MultiEdit", "Write", "NotebookEdit"}
+)
+_IF_PATTERN_TOOLS = frozenset({"Glob", "Grep"})
+# Bash + Monitor match on the COMMAND with prefix-or-wildcard semantics
+# (TS MonitorTool.preparePermissionMatcher also uses `command`, Bash-style).
+# Monitor is unreachable today (the port has no Monitor tool) but the
+# categorization is kept faithful for when it lands.
+_IF_COMMAND_TOOLS = frozenset({"Bash", "Monitor"})
+
+_ESCAPED_STAR = "\x00ESC_STAR\x00"
+_ESCAPED_BACKSLASH = "\x00ESC_BSL\x00"
+
+
+def _match_wildcard_pattern(pattern: str, value: str) -> bool:
+    """Port of `matchWildcardPattern`
+    (utils/permissions/shellRuleMatching.ts:90) — the SAME matcher every
+    TS tool's preparePermissionMatcher uses for `if`, so it is faithful for
+    both Bash commands and file/pattern values (and, unlike the Bash-only
+    permission matcher, carries no command-chaining strictness)."""
+    import re
+
+    trimmed = pattern.strip()
+    # Escape-sequence handling: \* → literal star, \\ → literal backslash.
+    processed_chars: list[str] = []
+    i = 0
+    while i < len(trimmed):
+        ch = trimmed[i]
+        if ch == "\\" and i + 1 < len(trimmed):
+            nxt = trimmed[i + 1]
+            if nxt == "*":
+                processed_chars.append(_ESCAPED_STAR)
+                i += 2
+                continue
+            if nxt == "\\":
+                processed_chars.append(_ESCAPED_BACKSLASH)
+                i += 2
+                continue
+        processed_chars.append(ch)
+        i += 1
+    processed = "".join(processed_chars)
+
+    escaped = re.sub(r"""[.+?^${}()|\[\]\\'"]""", lambda m: "\\" + m.group(0), processed)
+    with_wildcards = escaped.replace("*", ".*")
+    regex_pattern = (
+        with_wildcards.replace(_ESCAPED_STAR, "\\*").replace(_ESCAPED_BACKSLASH, "\\\\")
+    )
+    # Trailing ' *' (the only unescaped wildcard) → optional, so 'git *'
+    # matches bare 'git' too (prefix-rule alignment).
+    unescaped_star_count = processed.count("*")
+    if regex_pattern.endswith(" .*") and unescaped_star_count == 1:
+        regex_pattern = regex_pattern[:-3] + "( .*)?"
+    return re.match(f"^{regex_pattern}$", value, re.DOTALL) is not None
+
+
+def _extract_rule_prefix(rule_content: str) -> str | None:
+    """Port of `permissionRuleExtractPrefix` (shellRuleMatching.ts:43-48):
+    the legacy colon form ``git:*`` → prefix ``git``; anything else → None."""
+    import re
+
+    m = re.match(r"^(.+):\*$", rule_content)
+    return m.group(1) if m else None
+
+
+def _strip_env_prefix(command: str) -> str:
+    """Strip leading ``VAR=val`` assignments so ``FOO=bar git push`` matches
+    ``Bash(git *)`` (TS matches on argv, BashTool preparePermissionMatcher)."""
+    import re
+
+    prev = None
+    cur = command.strip()
+    while cur != prev:
+        prev = cur
+        cur = re.sub(r"^[A-Za-z_][A-Za-z0-9_]*=\S*\s+", "", cur)
+    return cur
+
+
+def _command_rule_matches(rule_content: str, command: str) -> bool:
+    """The Bash/Monitor command matcher (BashTool.preparePermissionMatcher):
+    the colon-prefix branch (``git:*`` → exact or prefix+space), else the
+    wildcard matcher — applied to the env-stripped command."""
+    cmd = _strip_env_prefix(command)
+    prefix = _extract_rule_prefix(rule_content)
+    if prefix is not None:
+        return cmd == prefix or cmd.startswith(prefix + " ")
+    return _match_wildcard_pattern(rule_content, cmd)
+
+
+def _matchable_values_for_tool(
+    tool_name: str, tool_input: dict[str, Any]
+) -> list[str] | None:
+    """The value(s) a tool's `if` rule content matches against, or None
+    when the tool has no matcher analog (→ fail-OPEN, run + warn). Bash
+    returns the command plus each chained sub-command (any-subcommand
+    match, BashTool preparePermissionMatcher), so `if:"Bash(git *)"` fires
+    on `git push && npm test`."""
+    if tool_name in _IF_COMMAND_TOOLS:
+        cmd = tool_input.get("command")
+        if not isinstance(cmd, str):
+            return None
+        cands = [cmd]
+        try:
+            from src.permissions.bash_suggestions import (
+                contains_unquoted_chaining,
+                split_chained_command,
+            )
+
+            if contains_unquoted_chaining(cmd):
+                cands.extend(split_chained_command(cmd) or [])
+        except Exception:  # noqa: BLE001
+            pass
+        return cands
+    if tool_name in _IF_FILE_PATH_TOOLS:
+        val = tool_input.get("file_path") or tool_input.get("notebook_path")
+        return [val] if isinstance(val, str) else None
+    if tool_name in _IF_PATTERN_TOOLS:
+        val = tool_input.get("pattern")
+        return [val] if isinstance(val, str) else None
+    return None
+
+
+def _matches_if_condition(
+    if_condition: str | None, event: str, tool_name: str | None,
+    tool_input: dict[str, Any] | None,
+) -> bool:
+    """SCHEMAS-1 — the port of `prepareIfConditionMatcher`
+    (utils/hooks.ts:1571-1610): a hook's `if` permission-rule pre-filter.
+
+    Returns True (run the hook) or False (skip). Semantics match TS:
+    * no condition → run;
+    * present condition on a NON-tool event → SKIP (TS's caller sees an
+      undefined matcher and returns false — hooks.ts:2023-2027);
+    * rule tool-name ≠ current tool → skip;
+    * no rule-content → run;
+    * rule-content → matched with matchWildcardPattern against the tool's
+      value(s); a tool WITHOUT a matcher analog fails OPEN (run + warn) so
+      a configured hook is never silently disabled.
+    """
+    if not if_condition:
+        return True
+
+    from src.permissions.rule_parser import (
+        normalize_legacy_tool_name,
+        permission_rule_value_from_string,
+    )
+
+    if event not in _IF_CONDITION_EVENTS or not tool_name:
+        # A tool-syntax `if` cannot be evaluated for a non-tool event → skip
+        # (TS parity, hooks.ts:2023-2027). Not "ignore and run".
+        logger.debug(
+            "hook `if` condition %r cannot be evaluated for non-tool event %s; skipping",
+            if_condition, event,
+        )
+        return False
+
+    current = normalize_legacy_tool_name(tool_name)
+    parsed = permission_rule_value_from_string(if_condition)
+    if normalize_legacy_tool_name(parsed.tool_name or "") != current:
+        return False
+    if not parsed.rule_content:
+        return True  # tool-name-only condition → run
+
+    values = _matchable_values_for_tool(current, tool_input or {})
+    if values is None:
+        # No matcher analog for this tool — fail OPEN (run) with a visible
+        # warning rather than silently disabling a configured hook.
+        logger.warning(
+            "hook `if` condition %r on tool %s has no matcher; running the "
+            "hook unconditionally (no per-tool matcher for %s)",
+            if_condition, current, current,
+        )
+        return True
+
+    # Command-class tools (Bash/Monitor) use the prefix-or-wildcard matcher
+    # (so colon rules like `Bash(rm:*)` work — the canonical rule form);
+    # file/pattern tools use the plain wildcard matcher.
+    matcher = (
+        _command_rule_matches
+        if current in _IF_COMMAND_TOOLS
+        else _match_wildcard_pattern
+    )
+    return any(matcher(parsed.rule_content, v) for v in values)
+
+
 def _matches_tool(matcher: str | None, tool_name: str) -> bool:
     if matcher is None:
         return True
+    # A non-string matcher (e.g. a hand-edited settings.json with
+    # ``"matcher": 0`` — the parser stores it verbatim, config_manager.py:63)
+    # must not crash the match loop: the .endswith/.startswith calls below
+    # would raise AttributeError, aborting ALL hooks for the event and
+    # (on the elicitation decision path) silently dropping a block/override —
+    # a guardrail fail-open (critic C3). Treat a malformed matcher as
+    # NON-matching (not match-all), isolating the bad hook to itself.
+    if not isinstance(matcher, str):
+        return False
     if matcher == tool_name:
         return True
     if matcher.endswith("*"):
@@ -188,8 +389,13 @@ def _build_hook_env(
 
     env_file = _env_file_for_event(event_name)
 
+    from src.utils.subprocess_env import subprocess_env
+
     return {
-        **os.environ,
+        # subprocess_env() scrubs secret vars when CLAUDE_CODE_SUBPROCESS_ENV_SCRUB
+        # is set (anti-exfiltration; parity with TS subprocessEnv at the hook
+        # spawn site) — otherwise a pass-through copy of os.environ.
+        **subprocess_env(),
         "CLAUDE_HOOK_EVENT": event_name,
         "CLAUDE_PROJECT_DIR": workspace_root,
         "CLAUDE_PLUGIN_ROOT": hook.skill_root or "",
@@ -368,11 +574,103 @@ async def _execute_command_hook(
                     result.hook_permission_decision_reason = parsed.reason
                 if parsed.updatedInput:
                     result.updated_input = parsed.updatedInput
+                if parsed.updatedPermissions:
+                    result.updated_permissions = parsed.updatedPermissions
+                if parsed.interrupt:
+                    result.interrupt = True
+                hso = parsed.hookSpecificOutput or {}
+                # EVENT-NAME GATE (critic C1-M1/M3): TS validates the emitted
+                # hookEventName against the RUNNING event at the TOP of the
+                # `if (json.hookSpecificOutput)` block (hooks.ts:757-765,
+                # "Hook returned incorrect event name") — BEFORE the switch
+                # that maps the envelope/permissionDecision forms — and rejects
+                # the WHOLE output on mismatch. Placed here (above the envelope
+                # block below) so it covers ALL hso extraction, not just the
+                # permissionDecision path: otherwise a hook registered under
+                # the wrong event emitting EITHER form leaks a decision into
+                # the permission grant (fail-OPEN). Port posture is warn+drop
+                # (the WI-1.4 analog of TS's throw); mirroring TS's
+                # `if (expectedHookEvent && …)`, the check is SKIPPED when the
+                # running event is absent (direct/test calls pass no
+                # ``hook_event``). Also closes m1 (additionalContext
+                # over-extraction on wrong-event forms).
+                _running_event = stdin_data.get("hook_event")
+                _hso_event = hso.get("hookEventName") if isinstance(hso, dict) else None
+                if _running_event and _hso_event and _hso_event != _running_event:
+                    logger.warning(
+                        "Hook %r hookSpecificOutput.hookEventName=%r != running "
+                        "event %r; dropping the hookSpecificOutput payload.",
+                        command, _hso_event, _running_event,
+                    )
+                    hso = {}
+                # TS wire-envelope compat (utils/hooks.ts:833-840): a hook
+                # written for the reference CLI emits
+                # ``hookSpecificOutput.decision`` — normalize onto the same
+                # fields; the flat form (above) wins on conflict.
+                hso_decision = hso.get("decision") if isinstance(hso, dict) else None
+                if isinstance(hso_decision, dict):
+                    behavior = hso_decision.get("behavior")
+                    if result.permission_behavior is None and behavior in ("allow", "deny", "ask"):
+                        result.permission_behavior = behavior
+                        result.hook_permission_decision_reason = (
+                            hso_decision.get("message") or result.hook_permission_decision_reason
+                        )
+                    if result.updated_input is None and isinstance(hso_decision.get("updatedInput"), dict):
+                        result.updated_input = hso_decision["updatedInput"]
+                    if result.updated_permissions is None and isinstance(hso_decision.get("updatedPermissions"), list):
+                        result.updated_permissions = hso_decision["updatedPermissions"]
+                    if hso_decision.get("interrupt"):
+                        result.interrupt = True
+                # PreToolUse structured form (types/hooks.ts:73-78, mapped at
+                # utils/hooks.ts:726-800): ``hookSpecificOutput.permissionDecision``
+                # is the DOCUMENTED way a PreToolUse hook allows/denies/asks.
+                # TS treats it as the MORE SPECIFIC decision — it OVERRIDES the
+                # flat ``decision`` (unlike the PermissionRequest envelope
+                # above, which only fills when unset). A deny's message rides
+                # hook_permission_decision_reason (the port's single-path deny
+                # convention — TS also sets a separate blockingError, which
+                # here would double-yield a denial). The event-name gate above
+                # has already dropped this whole payload on a wrong-event emit.
+                if isinstance(hso, dict) and hso.get("hookEventName") == "PreToolUse":
+                    pd = hso.get("permissionDecision")
+                    if pd is not None:
+                        if pd in ("allow", "deny", "ask"):
+                            result.permission_behavior = pd
+                            if pd == "deny":
+                                result.hook_permission_decision_reason = (
+                                    hso.get("permissionDecisionReason")
+                                    or parsed.reason
+                                    or "Blocked by hook"
+                                )
+                        else:
+                            # TS throws "Unknown hook permissionDecision
+                            # type"; the port's WI-1.4 posture is warn + drop.
+                            logger.warning(
+                                "Hook %r emitted unknown permissionDecision %r;"
+                                " valid types are: allow, deny, ask. Dropping.",
+                                command, pd,
+                            )
+                    pdr = hso.get("permissionDecisionReason")
+                    if isinstance(pdr, str) and pdr:
+                        result.hook_permission_decision_reason = pdr
+                    if isinstance(hso.get("updatedInput"), dict):
+                        result.updated_input = hso["updatedInput"]
                 if parsed.preventContinuation:
                     result.prevent_continuation = True
                     result.stop_reason = parsed.stopReason
                 if parsed.additionalContexts:
                     result.additional_contexts = parsed.additionalContexts
+                # ``hookSpecificOutput.additionalContext`` (singular string —
+                # the PreToolUse/PostToolUse/UserPromptSubmit/SessionStart
+                # forms all carry it, utils/hooks.ts:793-800): APPEND onto the
+                # additional_contexts list (after the flat assignment above,
+                # so both survive) → the hook_additional_context attachment.
+                if isinstance(hso, dict):
+                    _hso_ac = hso.get("additionalContext")
+                    if isinstance(_hso_ac, str) and _hso_ac:
+                        result.additional_contexts = (
+                            list(result.additional_contexts or []) + [_hso_ac]
+                        )
                 if parsed.updatedMCPToolOutput is not None:
                     result.updated_mcp_tool_output = parsed.updatedMCPToolOutput
 
@@ -464,8 +762,16 @@ async def _run_hooks_for_event(
     tool_use_id = stdin_data.get("tool_use_id", str(uuid4()))
     parent_tool_use_id = ""
 
+    tool_input = stdin_data.get("tool_input") if isinstance(stdin_data.get("tool_input"), dict) else None
+
     for hook in event_hooks:
         if tool_name and not _matches_tool(hook.matcher, tool_name):
+            continue
+        # SCHEMAS-1 — the `if` permission-rule pre-filter (was inert: the
+        # field parsed but never evaluated, so `if` hooks ran unconditionally).
+        if not _matches_if_condition(
+            getattr(hook, "if_condition", None), event, tool_name, tool_input
+        ):
             continue
 
         yield {
@@ -497,6 +803,8 @@ async def _run_hooks_for_event(
                 "permission_behavior": result.permission_behavior,
                 "hook_permission_decision_reason": result.hook_permission_decision_reason,
                 "updated_input": result.updated_input,
+                "updated_permissions": result.updated_permissions,
+                "interrupt": result.interrupt,
             }
 
         if result.prevent_continuation:
@@ -574,6 +882,45 @@ async def execute_pre_tool_hooks(
 
     async for result in _run_hooks_for_event(
         "PreToolUse",
+        tool_name,
+        stdin_data,
+        tool_use_context,
+        abort_signal=abort_signal,
+    ):
+        yield result
+
+
+async def execute_permission_request_hooks(
+    tool_name: str,
+    tool_use_id: str,
+    tool_input: dict[str, Any],
+    tool_use_context: Any,
+    permission_suggestions: list[Any] | None = None,
+) -> AsyncGenerator[dict[str, Any], None]:
+    """Run PermissionRequest hooks for a pending permission ask.
+
+    HOOKS-1 (my-docs/get-parity-by-folder/hooks-refactoring-plan.md W1) —
+    the port of ``executePermissionRequestHooks`` (utils/hooks.ts:4392-4427):
+    fired at the ask seam BEFORE any interactive prompt, matcher-scoped by
+    tool name like PreToolUse. A hook may resolve the ask (allow with
+    optional updatedInput/updatedPermissions; deny with message + optional
+    interrupt) or stay silent (normal prompt flow continues).
+    """
+    stdin_data: dict[str, Any] = {
+        "tool_name": tool_name,
+        "tool_use_id": tool_use_id,
+        "tool_input": tool_input,
+    }
+    if permission_suggestions:
+        stdin_data["permission_suggestions"] = permission_suggestions
+
+    abort_signal = None
+    abort_ctrl = getattr(tool_use_context, "abort_controller", None)
+    if abort_ctrl:
+        abort_signal = abort_ctrl.signal
+
+    async for result in _run_hooks_for_event(
+        "PermissionRequest",
         tool_name,
         stdin_data,
         tool_use_context,
@@ -718,3 +1065,266 @@ def _flatten_text(content: Any) -> str:
                 parts.append(text)
         return " ".join(parts)
     return str(content or "")
+
+async def execute_teammate_idle_hooks(
+    teammate_name: str,
+    team_name: str,
+    tool_use_context: Any,
+    permission_mode: str | None = None,
+) -> AsyncGenerator[dict[str, Any], None]:
+    """QUERY-1 — port of ``executeTeammateIdleHooks`` (utils/hooks.ts:3920):
+    fired from the teammate's stop path after the core Stop/SubagentStop
+    loop. Matcher-less (no tool scoping); hook stdin carries the teammate
+    identity."""
+    stdin_data: dict[str, Any] = {
+        "teammate_name": teammate_name,
+        "team_name": team_name,
+    }
+    if permission_mode:
+        stdin_data["permission_mode"] = permission_mode
+    abort_signal = None
+    abort_ctrl = getattr(tool_use_context, "abort_controller", None)
+    if abort_ctrl:
+        abort_signal = abort_ctrl.signal
+
+    async for result in _run_hooks_for_event(
+        "TeammateIdle",
+        None,
+        stdin_data,
+        tool_use_context,
+        abort_signal,
+    ):
+        yield result
+
+
+async def execute_task_completed_hooks(
+    task_id: str,
+    task_subject: str,
+    task_description: str | None,
+    teammate_name: str,
+    team_name: str,
+    tool_use_context: Any,
+    permission_mode: str | None = None,
+) -> AsyncGenerator[dict[str, Any], None]:
+    """QUERY-1 — port of ``executeTaskCompletedHooks`` (utils/hooks.ts:4000):
+    fired once per in-progress task OWNED by the stopping teammate. Hook
+    stdin carries the task fields + teammate identity
+    (TaskCompletedHookInput)."""
+    stdin_data: dict[str, Any] = {
+        "task_id": task_id,
+        "task_subject": task_subject,
+        "task_description": task_description,
+        "teammate_name": teammate_name,
+        "team_name": team_name,
+    }
+    if permission_mode:
+        stdin_data["permission_mode"] = permission_mode
+    abort_signal = None
+    abort_ctrl = getattr(tool_use_context, "abort_controller", None)
+    if abort_ctrl:
+        abort_signal = abort_ctrl.signal
+
+    async for result in _run_hooks_for_event(
+        "TaskCompleted",
+        None,
+        stdin_data,
+        tool_use_context,
+        abort_signal,
+    ):
+        yield result
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MCP elicitation hooks (C3) — the 3-event UNIT.
+#
+# Port of executeElicitationHooks / executeElicitationResultHooks /
+# executeNotificationHooks (utils/hooks.ts:4623-4810) + the
+# elicitationHandler.ts:220-313 wrapping. These fire around an MCP server's
+# elicitation request: an Elicitation hook BEFORE (may provide a response or
+# block), an ElicitationResult hook AFTER (may OVERRIDE the user's response or
+# block — shipping only the notification would be a correctness trap), and a
+# Notification hook for observability. Matched on the server name.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _parse_elicitation_hook_output(
+    result: "HookResult", expected_event: str
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Mirror ``parseElicitationHookOutput`` (utils/hooks.ts:4623): return
+    ``(response, blocking_error)`` from one hook's result.
+
+    exit 2 → blocking; JSON ``decision:'block'`` → blocking; otherwise
+    ``hookSpecificOutput.{hookEventName==expected, action, content}`` → response
+    (and ``action=='decline'`` ALSO yields a blocking_error, matching TS)."""
+    # exit code 2 = blocking (same convention as the tool-hook path)
+    if result.exit_code == 2:
+        return None, {
+            "blockingError": (result.stdout or "").strip() or "Elicitation blocked by hook",
+            "command": result.command,
+        }
+    out = (result.stdout or "").strip()
+    if not out or not out.startswith("{"):
+        return None, None
+    try:
+        parsed = json.loads(out)
+    except (json.JSONDecodeError, ValueError):
+        return None, None
+    if not isinstance(parsed, dict):
+        return None, None
+    # Async hook output (TS isAsyncHookJSONOutput, utils/hooks.ts:4652-4654) is
+    # ignored for elicitation — an {"async": true, ...} payload carries no
+    # synchronous decision.
+    if parsed.get("async") is True:
+        return None, None
+    if parsed.get("decision") == "block":
+        return None, {
+            "blockingError": parsed.get("reason") or "Elicitation blocked by hook",
+            "command": result.command,
+        }
+    hso = parsed.get("hookSpecificOutput")
+    if not isinstance(hso, dict) or hso.get("hookEventName") != expected_event:
+        return None, None
+    action = hso.get("action")
+    if not action:
+        return None, None
+    response = {"action": action, "content": hso.get("content")}
+    blocking = None
+    if action == "decline":
+        default = (
+            "Elicitation denied by hook"
+            if expected_event == "Elicitation"
+            else "Elicitation result blocked by hook"
+        )
+        blocking = {"blockingError": parsed.get("reason") or default, "command": result.command}
+    return response, blocking
+
+
+async def _run_elicitation_event_hooks(
+    event: str,
+    server_name: str,
+    stdin_data: dict[str, Any],
+    tool_use_context: Any,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Run all hooks matching ``event`` + ``server_name`` (trust-gated,
+    snapshot-sourced — same machinery as the tool-hook path) and fold their
+    parsed outputs: the LAST non-empty response wins and any blocking error is
+    retained (TS loops with ``response`` overwrite + ``blockingError`` keep)."""
+    trust_skip = should_skip_hook_due_to_trust(tool_use_context)
+    hooks = _get_hooks_from_snapshot(tool_use_context)
+    event_hooks = hooks.get(event, [])
+    if trust_skip:
+        event_hooks = [h for h in event_hooks if h.source.is_policy]
+    abort_signal = None
+    abort_ctrl = getattr(tool_use_context, "abort_controller", None)
+    if abort_ctrl:
+        abort_signal = abort_ctrl.signal
+
+    response: dict[str, Any] | None = None
+    blocking: dict[str, Any] | None = None
+    for hook in event_hooks:
+        # matcher matches the SERVER NAME (TS matchQuery: serverName)
+        if server_name and not _matches_tool(hook.matcher, server_name):
+            continue
+        result = await _execute_command_hook(
+            hook, {**stdin_data, "hook_event": event},
+            abort_signal=abort_signal, tool_use_context=tool_use_context,
+        )
+        r, b = _parse_elicitation_hook_output(result, event)
+        if b is not None:
+            blocking = b
+        if r is not None:
+            response = r
+    return response, blocking
+
+
+async def execute_elicitation_hooks(
+    server_name: str,
+    message: str,
+    tool_use_context: Any,
+    *,
+    requested_schema: dict[str, Any] | None = None,
+    mode: str | None = None,
+    url: str | None = None,
+    elicitation_id: str | None = None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """BEFORE the user prompt (executeElicitationHooks). Returns
+    ``(response, blocking_error)``: blocking → decline; response →
+    short-circuit the prompt with ``{action, content}``."""
+    stdin_data = {
+        "mcp_server_name": server_name,
+        "message": message,
+        "mode": mode,
+        "url": url,
+        "elicitation_id": elicitation_id,
+        "requested_schema": requested_schema,
+    }
+    return await _run_elicitation_event_hooks(
+        "Elicitation", server_name, stdin_data, tool_use_context
+    )
+
+
+async def execute_elicitation_result_hooks(
+    server_name: str,
+    action: str,
+    content: dict[str, Any] | None,
+    tool_use_context: Any,
+    *,
+    mode: str | None = None,
+    elicitation_id: str | None = None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """AFTER the user responds (executeElicitationResultHooks). The response
+    may OVERRIDE the user's ``action``/``content``; blocking → decline."""
+    stdin_data = {
+        "mcp_server_name": server_name,
+        "action": action,
+        "content": content,
+        "mode": mode,
+        "elicitation_id": elicitation_id,
+    }
+    return await _run_elicitation_event_hooks(
+        "ElicitationResult", server_name, stdin_data, tool_use_context
+    )
+
+
+async def execute_notification_hooks(
+    message: str,
+    notification_type: str,
+    tool_use_context: Any,
+    *,
+    title: str | None = None,
+) -> None:
+    """Fire-and-forget Notification hooks (observability) matched on
+    ``notification_type`` (TS matchQuery: notificationType). Output is
+    ignored — a notification hook cannot change control flow.
+
+    This is ``-> None`` fire-and-forget (TS ``void executeNotificationHooks``,
+    elicitationHandler.ts:283/298/307): the ENTIRE body is guarded so it can
+    NEVER raise. Callers ``await`` it while computing a return value (e.g.
+    ``_finish_elicitation``); if a raise here propagated, it would discard a
+    block/override decision — the exact guardrail bypass SERVICES-3 flagged
+    (critic C3-MAJOR: a malformed non-string Notification matcher would raise
+    AttributeError in ``_matches_tool``)."""
+    try:
+        trust_skip = should_skip_hook_due_to_trust(tool_use_context)
+        hooks = _get_hooks_from_snapshot(tool_use_context)
+        event_hooks = hooks.get("Notification", [])
+        if trust_skip:
+            event_hooks = [h for h in event_hooks if h.source.is_policy]
+        abort_signal = None
+        abort_ctrl = getattr(tool_use_context, "abort_controller", None)
+        if abort_ctrl:
+            abort_signal = abort_ctrl.signal
+        stdin_data = {"message": message, "notification_type": notification_type, "title": title}
+        for hook in event_hooks:
+            try:
+                if notification_type and not _matches_tool(hook.matcher, notification_type):
+                    continue
+                await _execute_command_hook(
+                    hook, {**stdin_data, "hook_event": "Notification"},
+                    abort_signal=abort_signal, tool_use_context=tool_use_context,
+                )
+            except Exception:  # noqa: BLE001 — one bad hook must not stop the rest
+                logger.debug("[hooks] notification hook failed", exc_info=True)
+    except Exception:  # noqa: BLE001 — observability must NEVER break the flow
+        logger.debug("[hooks] notification dispatch failed", exc_info=True)

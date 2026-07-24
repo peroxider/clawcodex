@@ -1,3 +1,7 @@
-"""Compatibility facade — see :mod:`src.bootstrap.state`."""
+"""Module-identity bridge to the canonical bootstrap state singleton."""
 
-from src.bootstrap.state import *  # noqa: F401,F403
+import sys
+
+from src.bootstrap import state as _implementation
+
+sys.modules[__name__] = _implementation

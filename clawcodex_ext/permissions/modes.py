@@ -98,6 +98,7 @@ def initial_permission_mode_from_cli(
     permission_mode_cli: str | None = None,
     dangerously_skip_permissions: bool = False,
     settings_default_mode: str | None = None,
+    disable_bypass_permissions_mode: bool | None = None,
 ) -> PermissionMode:
     """Resolve the effective :class:`PermissionMode` from CLI flags + settings.
 
@@ -114,6 +115,9 @@ def initial_permission_mode_from_cli(
     Unknown / mistyped mode strings degrade to ``default`` via
     :func:`permission_mode_from_string`.
     """
+    if disable_bypass_permissions_mode is None:
+        disable_bypass_permissions_mode = is_bypass_permissions_mode_disabled()
+
     candidates: list[PermissionMode] = []
     if dangerously_skip_permissions:
         candidates.append("bypassPermissions")
@@ -121,8 +125,14 @@ def initial_permission_mode_from_cli(
         candidates.append(permission_mode_from_string(permission_mode_cli))
     if settings_default_mode:
         candidates.append(permission_mode_from_string(settings_default_mode))
-    if candidates:
-        return candidates[0]
+    for candidate in candidates:
+        if candidate == "bypassPermissions" and disable_bypass_permissions_mode:
+            log.warning(
+                "Bypass permissions mode was disabled by settings/policy "
+                "(permissions.disableBypassPermissionsMode); falling back."
+            )
+            continue
+        return candidate
     return "default"
 
 
@@ -183,3 +193,46 @@ def has_allow_bypass_permissions_mode() -> bool:
         return False
 
     return bool(_settings_perms(settings).get("allowBypassPermissionsMode"))
+
+
+def is_bypass_permissions_mode_disabled() -> bool:
+    """Return whether any settings tier applies the bypass lockdown."""
+    try:
+        from src.config import ConfigManager
+
+        manager = ConfigManager()
+        for loader in (
+            manager.load_global,
+            manager.load_local,
+            manager.load_project,
+        ):
+            permissions = loader().get("settings", {}).get("permissions")
+            if (
+                isinstance(permissions, dict)
+                and permissions.get("disableBypassPermissionsMode") == "disable"
+            ):
+                return True
+
+        try:
+            import json
+
+            from src.settings.managed_path import resolve_managed_settings_path
+
+            managed_path = resolve_managed_settings_path()
+            if managed_path is not None and managed_path.exists():
+                with managed_path.open(encoding="utf-8") as stream:
+                    managed = json.load(stream)
+                permissions = (managed or {}).get("permissions")
+                if (
+                    isinstance(permissions, dict)
+                    and permissions.get("disableBypassPermissionsMode") == "disable"
+                ):
+                    return True
+        except Exception:
+            log.debug(
+                "managed settings unreadable for bypass-disable check",
+                exc_info=True,
+            )
+    except Exception:
+        return False
+    return False

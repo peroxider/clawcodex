@@ -14,3 +14,8 @@ import extensions.ports.transports.hybrid_v1 as _mod
 
 _globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
 globals().update(_globals)
+
+# Keep private URL conversion helpers reachable through the historical path.
+import sys
+
+sys.modules[__name__] = _mod

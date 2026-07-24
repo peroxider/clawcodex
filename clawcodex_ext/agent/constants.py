@@ -50,24 +50,28 @@ CUSTOM_AGENT_DISALLOWED_TOOLS: frozenset[str] = frozenset(
 )
 
 # Whitelist of tools allowed for async (background) agents.
-# Mirrors ASYNC_AGENT_ALLOWED_TOOLS from typescript/src/constants/tools.ts.
-ASYNC_AGENT_ALLOWED_TOOLS: frozenset[str] = frozenset(
-    [
-        "Read",
-        "WebSearch",
-        "TodoWrite",
-        "Grep",
-        "WebFetch",
-        "Glob",
-        "Bash",
-        "Edit",
-        "Write",
-        "Skill",
-        "StructuredOutput",
-        "EnterWorktree",
-        "ExitWorktree",
-    ]
-)
+# Mirrors ASYNC_AGENT_ALLOWED_TOOLS from typescript/src/constants/tools.ts
+# (:53-69). "PowerShell" (via TS SHELL_TOOL_NAMES) is deliberately absent —
+# this port has no PowerShell tool. This set is BOTH the async-agent runtime
+# whitelist (agent_tool_utils.filter_tools_for_agent) and the source of the
+# coordinator's rendered worker-tools list (coordinator/mode.py).
+ASYNC_AGENT_ALLOWED_TOOLS: frozenset[str] = frozenset([
+    "Read",
+    "WebSearch",
+    "TodoWrite",
+    "Grep",
+    "WebFetch",
+    "Glob",
+    "Bash",
+    "Edit",
+    "Write",
+    "NotebookEdit",
+    "Skill",
+    "StructuredOutput",
+    "ToolSearch",
+    "EnterWorktree",
+    "ExitWorktree",
+])
 
 # Default agent system prompt when agent definition doesn't provide one.
 # Mirrors DEFAULT_AGENT_PROMPT from typescript/src/constants/prompts.ts.

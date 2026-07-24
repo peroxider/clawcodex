@@ -226,7 +226,11 @@ def test_bare_catalog_only_keeps_additional_bundled_and_mcp_skills(
 
     _write_skill(workspace / ".claude" / "skills", "project-standard", "PROJECT")
     _write_skill(workspace / ".clawcodex" / "skills", "project-legacy", "LEGACY PROJECT")
-    _write_skill(additional / ".claude" / "skills", "explicit-additional", "ADDITIONAL")
+    _write_skill(
+        additional / ".clawcodex" / "skills",
+        "explicit-additional",
+        "ADDITIONAL",
+    )
     _write_skill(user, "legacy-user", "LEGACY USER")
     _write_skill(managed, "managed-extra", "MANAGED")
     _write_skill(dynamic, "dynamic-hidden", "DYNAMIC")

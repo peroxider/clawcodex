@@ -151,8 +151,8 @@ class ToolContext:
     _agent_dir_override: Path | None = None
     # Session-cumulative tokens spent on client-side advisor calls.
     # ``src/tool_system/tools/advisor.py`` accumulates here on every
-    # consultation; the REPL bottom_toolbar + TUI StatusLine read
-    # them to display ``advisor: <in>/<out>`` next to the worker's
+    # consultation; the status surface reads them to display
+    # ``advisor: <in>/<out>`` next to the worker's
     # token counts. Distinct from ``tool_result_chars_so_far`` (which
     # is a per-message budget tied to API-result persistence) — these
     # are per-session totals for UI display.
@@ -189,6 +189,11 @@ class ToolContext:
     # Cron scheduler instance -- set by attach_cron_runtime() on REPL init.
     # Read via getattr(ctx, "cron_scheduler", None) at runtime.py:97.
     cron_scheduler: Any = None
+    # Mutable flag shared by the TUI agent bridge and cron scheduler.  The
+    # entrypoint installs the concrete flag object; declaring the slot here is
+    # required because ToolContext uses ``slots=True`` and therefore rejects
+    # ad-hoc attributes at runtime.
+    _in_agent_loop: Any | None = field(default=None, repr=False)
     # Cron jitter config loader -- set by attach_cron_runtime() on REPL init.
     # Read via getattr(ctx, "cron_jitter_config", None) at runtime.py:97.
     cron_jitter_config: Any = None
@@ -199,11 +204,17 @@ class ToolContext:
     # shape here so any external test fixtures or readers that haven't
     # migrated yet continue to work. Removed in a follow-up phase.
     background_bash_tasks: dict[str, dict[str, Any]] = field(default_factory=dict)
-    plan_mode: bool = False
     worktree_root: Path | None = None
     outbox: list[OutboxEvent] = field(default_factory=list)
     ask_user: Callable[[list[dict[str, Any]]], dict[str, str]] | None = None
     crons: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Live scheduled-task engine (src.scheduled_tasks.SessionCronScheduler).
+    # Set for the MAIN agent-server session only; when present the Cron*
+    # and ScheduleWakeup tools register real firing jobs on it, and the
+    # worker's idle branch runs due prompts as internal turns. When None
+    # (subagents, SDK, bare tests) CronCreate falls back to the inert
+    # legacy ``crons`` dict above.
+    cron_scheduler: Any | None = None
     team: dict[str, Any] | None = None
     output_style_name: str | None = None
     output_style_dir: Path | None = None
@@ -220,6 +231,14 @@ class ToolContext:
     # when omitted so existing call sites keep working.
     default_permission_handler: Callable[..., Any] | None = None
 
+    # Plan-mode port — fired whenever the LIVE permission mode changes off
+    # the control channel (a chosen_updates setMode from a permission dialog,
+    # EnterPlanMode/ExitPlanMode transitions). The agent-server wires this to
+    # its status push (`{type:'system', subtype:'status', permission_mode}`,
+    # the print.ts:1054-1073 analog) so the TUI footer badge tracks mid-turn
+    # flips; None (SDK/tests) skips the notification.
+    on_permission_mode_change: Callable[[str], None] | None = None
+
     options: ToolUseOptions = field(default_factory=ToolUseOptions)
     # Always present; callers that own the per-run cancellation lifecycle
     # (TUI bridge, REPL engine) overwrite this with their own controller
@@ -233,6 +252,11 @@ class ToolContext:
     messages: list[Any] = field(default_factory=list)
     set_response_length: Callable[[Callable[[int], int]], None] | None = None
     set_in_progress_tool_use_ids: Callable[[Callable[[set[str]], set[str]]], None] | None = None
+    # Optional hook to stream a spawned subagent's live progress to the UI
+    # (the Agent tool sets run_params.on_message → this). Wired only by the
+    # agent-server (forwards an ``agent_progress`` message to the client); SDK /
+    # REPL / unit-test paths leave it ``None`` and emit nothing.
+    agent_progress_emit: Callable[[dict[str, Any]], None] | None = None
     # Mirrors TS Tool.ts:231
     # ``setHasInterruptibleToolInProgress?: (v: boolean) => void``.
     # Optional callback wired only in interactive (REPL/TUI) contexts; SDK
@@ -249,6 +273,13 @@ class ToolContext:
     glob_limits: GlobLimits | None = None
     content_replacement_state: Any | None = None
     agent_id: str | None = None
+    # QUERY-1 — teammate identity (TS teammate.ts:125: a teammate requires
+    # BOTH). Threaded by the Agent tool's NAMED spawn (run_agent →
+    # create_subagent_context) when the parent carries a TeamCreate'd team;
+    # None for plain subagents, so the teammate stop-hook block never fires
+    # for them.
+    teammate_name: str | None = None
+    team_name: str | None = None
     agent_type: str | None = None
     # Main-loop agent definition for ``--agent <bundle_dir>`` (overview allowlist).
     startup_agent: Any | None = None
@@ -324,7 +355,17 @@ class ToolContext:
     # transitions (GrowthBook cold→warm) and bust the prompt cache; the
     # main loop should populate this field whenever it has the rendered
     # bytes on hand for the parent's last turn.
-    rendered_system_prompt: str | None = None
+    #
+    # ch09 round-4 WI-1 — now POPULATED by query() at turn entry
+    # (query.py, after the options.tools sync). Accepts the parent's actual
+    # ``system_prompt`` shape: a ``list[dict]`` on the live agent-server /
+    # headless path (build_effective_system_prompt) or a ``str`` on
+    # string-prompt callers. The fork threads it verbatim into the child's
+    # QueryParams.system_prompt so both sides run the identical
+    # _call_model_sync assembly → byte-identical wire prefix.
+    rendered_system_prompt: "str | list[dict[str, Any]] | None" = None
+
+    plan_mode: bool = False
 
     def __post_init__(self) -> None:
         self.workspace_root = Path(self.workspace_root).resolve()
@@ -404,6 +445,20 @@ class ToolContext:
         roots = self.allowed_roots()
         if any(_is_within(p, root) for root in roots):
             return p
+        # The current session's plan files (~/.clawcodex/plans/{slug}*.md)
+        # are writable even though they sit outside the working roots — TS's
+        # checkEditableInternalPath exempts them BEFORE the working-dir gate
+        # (filesystem.ts:1259-1268), and the plan-mode attachment explicitly
+        # directs the model to write there. Session-scoped slug prefix +
+        # ``.md`` suffix keeps the carve-out narrow; failures fall through to
+        # the normal refusal (fail closed).
+        try:
+            from src.utils.plans import is_session_plan_file
+
+            if is_session_plan_file(str(p)):
+                return p
+        except Exception:  # noqa: BLE001
+            pass
         roots_str = ", ".join(str(r) for r in roots)
         raise ToolPermissionError(
             f"path is outside allowed working directories: {p} (allowed: {roots_str})"

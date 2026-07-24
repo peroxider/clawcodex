@@ -1,10 +1,9 @@
-"""Facade — compact_service/messages.py moved to clawcodex_ext/compact_service/.
+"""Module-identity facade for compact-service message helpers."""
 
-The compact-service message helpers (``is_compact_boundary_message``,
-``create_compact_boundary_message``, etc.) now live in
-:mod:`clawcodex_ext.compact_service.messages`. This module re-exports
-them verbatim so existing ``from src.compact_service.messages import
-...`` callers keep working.
-"""
+from __future__ import annotations
 
-from clawcodex_ext.compact_service.messages import *  # noqa: F401,F403
+import importlib
+import sys
+
+_ext_mod = importlib.import_module("clawcodex_ext.compact_service.messages")
+sys.modules[__name__] = _ext_mod

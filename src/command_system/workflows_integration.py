@@ -1,6 +1,6 @@
 """Contribute saved + bundled workflows as slash commands.
 
-Discovers ``.claude/workflows/*.py`` (project) and ``~/.claude/workflows/*.py``
+Discovers ``.clawcodex/workflows/*.py`` (project) and ``~/.clawcodex/workflows/*.py``
 (personal), plus the bundled ``/deep-research``, and turns each into a
 ``PromptCommand`` (``kind="workflow"``) that directs the model to launch it via
 the Workflow tool. Project workflows win over personal ones on a name clash.
@@ -86,13 +86,14 @@ def bundled_workflow_commands() -> list[Command]:
     ``/deep-research``).
 
     Surfaced via ``get_builtin_commands()`` so they register into the global
-    command registry that both command suggestions and dispatch read — the
-    aggregator's :func:`get_commands` that also lists them has no real consumers.
+    command registry that headless/test dispatch reads — the aggregator's
+    :func:`get_commands` that also lists them has no real consumers.
     Project/personal workflows are cwd-dependent and remain the aggregator's job.
 
-    Includes the ``/workflows`` viewer so the Rich REPL can dispatch it (the TUI
-    has its own ``open_dialog`` fast-path, which runs before registry dispatch,
-    so registering here doesn't disturb it).
+    The interactive surface (Ink TUI → agent-server) does NOT go through this
+    registry: it drives the ``workflows`` / ``list_workflow_commands`` /
+    ``workflow_command`` control requests in ``src/server/agent_server.py``,
+    which call :func:`load_workflow_commands` directly.
     """
     from .workflows_command import WORKFLOWS_COMMAND
 
@@ -128,8 +129,8 @@ def load_workflow_commands(cwd: str) -> list[Command]:
         commands.append(deep)
 
     # Project first so it reserves the name before the personal copy.
-    project = _discover_dir(Path(cwd) / ".claude" / "workflows", "project")
-    personal = _discover_dir(Path.home() / ".claude" / "workflows", "user")
+    project = _discover_dir(Path(cwd) / ".clawcodex" / "workflows", "project")
+    personal = _discover_dir(Path.home() / ".clawcodex" / "workflows", "user")
 
     seen = {c.name for c in commands}
     for cmd in [*project, *personal]:
@@ -150,8 +151,10 @@ def load_and_register_workflows(
     This is the workflow analogue of :func:`load_and_register_skills`, and exists
     for the same reason: the aggregator's ``get_commands()`` lists these but has
     no real consumers, so dispatch + suggestions (which read the GLOBAL registry)
-    never saw saved workflows. The REPL/TUI call this at startup, right after
-    ``load_and_register_skills``.
+    never saw saved workflows. The deleted Rich REPL / Textual TUI called this at
+    startup; the surviving interactive surface (agent-server) instead reads
+    :func:`load_workflow_commands` from disk per control request, so today this
+    helper serves registry-based (headless/test) dispatch only.
 
     Precedence, all via the shadowing guard (a name already in the target wins):
     builtins/bundled (registered first) beat saved workflows; **project beats
@@ -168,8 +171,8 @@ def load_and_register_workflows(
     from .registry import get_command_registry
 
     cwd = Path(project_root) if project_root is not None else Path.cwd()
-    project = _discover_dir(cwd / ".claude" / "workflows", "project")
-    personal = _discover_dir(Path.home() / ".claude" / "workflows", "user")
+    project = _discover_dir(cwd / ".clawcodex" / "workflows", "project")
+    personal = _discover_dir(Path.home() / ".clawcodex" / "workflows", "user")
 
     target = registry if registry is not None else get_command_registry()
     registered: list[PromptCommand] = []

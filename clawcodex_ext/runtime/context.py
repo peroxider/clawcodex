@@ -24,6 +24,8 @@ class RuntimeOptions:
 
     provider_name: str | None = None
     model: str | None = None
+    fallback_model: str | None = None
+    effort: str | None = None
     prompt: str | None = None
     output_format: str = "text"
     input_format: str = "text"
@@ -53,6 +55,7 @@ class RuntimeOptions:
     record_width: int | None = None
     record_height: int | None = None
     multimodel_group: str = ""
+    worktree_session: Any | None = None
 
 
 @dataclass

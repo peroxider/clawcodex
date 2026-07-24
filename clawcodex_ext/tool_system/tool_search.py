@@ -178,9 +178,9 @@ def is_deferred_tool(tool: Tool) -> bool:
     """
     if getattr(tool, "name", None) == "MCP":
         return False
-    if tool.is_mcp:
+    if getattr(tool, "is_mcp", False):
         return True
-    if tool.should_defer:
+    if getattr(tool, "should_defer", False):
         return True
     return False
 

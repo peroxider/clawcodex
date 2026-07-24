@@ -6,10 +6,14 @@ source_lang: "python"
 
 upstream:
   remote_url: "https://github.com/agentforce314/clawcodex.git"
+  # ``upstream`` is the GitCode integration repository in this fork; keep the
+  # canonical source repository on an unambiguous remote.
+  remote_name: "source-upstream"
   main_branch: "main"
   vendor_branch: "upstream/vendor"
   # Use git short commit hash as version tag (e.g. "b125e16")
   version_tag_format: "{commit}"
+  source_subpath: "src"
 
 layers:
   - name: "upstream"

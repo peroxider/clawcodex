@@ -14,26 +14,24 @@ parity-snapshot metadata. The chapter-10 coordinator pattern lives in:
 
 Parity-snapshot metadata still exposed (the parity audit reads it).
 """
-
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from clawcodex_ext.coordinator.mode import (
+from src.coordinator.mode import (
     INTERNAL_WORKER_TOOLS,
+    coordinator_main_loop_registry,
     filter_coordinator_tools,
     filter_worker_tools,
     get_coordinator_user_context,
     is_coordinator_mode,
     match_session_mode,
 )
-from clawcodex_ext.coordinator.prompt import get_coordinator_system_prompt
-from clawcodex_ext.coordinator.worker_agent import WORKER_AGENT, get_coordinator_agents
+from src.coordinator.prompt import get_coordinator_system_prompt
+from src.coordinator.worker_agent import WORKER_AGENT, get_coordinator_agents
 
-SNAPSHOT_PATH = (
-    Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'coordinator.json'
-)
+SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'coordinator.json'
 _SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
 
 ARCHIVE_NAME = _SNAPSHOT['archive_name']
@@ -41,23 +39,24 @@ MODULE_COUNT = _SNAPSHOT['module_count']
 SAMPLE_FILES = tuple(_SNAPSHOT['sample_files'])
 PORTING_NOTE = (
     f"Python coordinator package for '{ARCHIVE_NAME}' "
-    f'({MODULE_COUNT} archived module reference(s)). '
-    f'Chapter-10 / Chunk G implements is_coordinator_mode + system prompt + '
-    f'INTERNAL_WORKER_TOOLS filter + WORKER agent + fork mutex.'
+    f"({MODULE_COUNT} archived module reference(s)). "
+    f"Chapter-10 / Chunk G implements is_coordinator_mode + system prompt + "
+    f"INTERNAL_WORKER_TOOLS filter + WORKER agent + fork mutex."
 )
 
 __all__ = [
-    'ARCHIVE_NAME',
-    'MODULE_COUNT',
-    'PORTING_NOTE',
-    'SAMPLE_FILES',
-    'INTERNAL_WORKER_TOOLS',
-    'WORKER_AGENT',
-    'filter_coordinator_tools',
-    'filter_worker_tools',
-    'get_coordinator_agents',
-    'get_coordinator_system_prompt',
-    'get_coordinator_user_context',
-    'is_coordinator_mode',
-    'match_session_mode',
+    "ARCHIVE_NAME",
+    "MODULE_COUNT",
+    "PORTING_NOTE",
+    "SAMPLE_FILES",
+    "INTERNAL_WORKER_TOOLS",
+    "WORKER_AGENT",
+    "coordinator_main_loop_registry",
+    "filter_coordinator_tools",
+    "filter_worker_tools",
+    "get_coordinator_agents",
+    "get_coordinator_system_prompt",
+    "get_coordinator_user_context",
+    "is_coordinator_mode",
+    "match_session_mode",
 ]

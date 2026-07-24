@@ -1,3 +1,9 @@
-"""Compatibility facade — see :mod:`clawcodex_ext.skills.bundled_skills`."""
+"""Module-identity facade for bundled-skill registry compatibility."""
 
-from clawcodex_ext.skills.bundled_skills import *  # noqa: F401,F403
+from __future__ import annotations
+
+import importlib
+import sys
+
+_ext_mod = importlib.import_module("clawcodex_ext.skills.bundled_skills")
+sys.modules[__name__] = _ext_mod

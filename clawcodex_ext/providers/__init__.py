@@ -135,6 +135,12 @@ def _KimiCodingProvider_lazy():
     return KimiCodingProvider
 
 
+def _GLMProvider_lazy():
+    from src.providers.glm_provider import GLMProvider
+
+    return GLMProvider
+
+
 def _ClawcodexAnthropicProvider_lazy():
     from clawcodex_ext.providers.anthropic_provider import ClawcodexAnthropicProvider
 
@@ -255,6 +261,15 @@ def _init_provider_extensions() -> None:
         },
         _KimiCodingProvider_lazy,  # type: ignore[arg-type]
     )
+
+    # Keep the historical native class route for direct callers without
+    # registering ``glm`` as a second provider identity.  Provider/model CLI,
+    # config persistence, and catalog lookup must all normalize ``glm`` to the
+    # canonical upstream ``zai`` entry; ``src.providers.get_provider_class``
+    # deliberately checks this literal compatibility route before aliasing.
+    from src.providers import _EXTRA_PROVIDER_CLASSES
+
+    _EXTRA_PROVIDER_CLASSES.setdefault("glm", _GLMProvider_lazy)  # type: ignore[arg-type]
 
     # Cancel-latency overrides
     register_provider(

@@ -37,6 +37,7 @@ from clawcodex_ext.utils.env import is_env_truthy
 
 if TYPE_CHECKING:
     from src.tool_system.build_tool import Tool
+    from src.tool_system.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +153,7 @@ _COORDINATOR_ALLOWED_TOOLS: Final[frozenset[str]] = frozenset(
         "SendMessage",
         "TeamCreate",
         "TaskStop",
+        "StructuredOutput",
         "Read",
         "WebSearch",
         "WebFetch",
@@ -161,10 +163,34 @@ _COORDINATOR_ALLOWED_TOOLS: Final[frozenset[str]] = frozenset(
     }
 )
 
+PR_ACTIVITY_TOOL_SUFFIXES: Final[tuple[str, ...]] = (
+    "subscribe_pr_activity",
+    "unsubscribe_pr_activity",
+)
+
+
+def is_pr_activity_subscription_tool(name: str) -> bool:
+    """Return whether an MCP tool manages GitHub PR activity subscriptions."""
+    return any(name.endswith(suffix) for suffix in PR_ACTIVITY_TOOL_SUFFIXES)
+
 
 def filter_coordinator_tools(all_tools: Iterable["Tool"]) -> list["Tool"]:
     """Return the coordinator's allowed tool set — delegation + lightweight read-only tools."""
-    return [t for t in all_tools if t.name in _COORDINATOR_ALLOWED_TOOLS]
+    return [
+        tool
+        for tool in all_tools
+        if tool.name in _COORDINATOR_ALLOWED_TOOLS
+        or is_pr_activity_subscription_tool(tool.name)
+    ]
+
+
+def coordinator_main_loop_registry(registry: "ToolRegistry") -> "ToolRegistry":
+    """Return a non-mutating coordinator-filtered registry for the main loop."""
+    if not is_coordinator_mode():
+        return registry
+    from src.tool_system.registry import ToolRegistry
+
+    return ToolRegistry(filter_coordinator_tools(registry.list_tools()))
 
 
 def filter_worker_tools(all_tools: Iterable["Tool"]) -> list["Tool"]:
@@ -266,6 +292,9 @@ __all__ = [
     "coordinator_mode_context",
     "match_session_mode",
     "INTERNAL_WORKER_TOOLS",
+    "PR_ACTIVITY_TOOL_SUFFIXES",
+    "is_pr_activity_subscription_tool",
+    "coordinator_main_loop_registry",
     "filter_coordinator_tools",
     "filter_worker_tools",
     "get_coordinator_user_context",

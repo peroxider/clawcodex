@@ -1,20 +1,25 @@
-"""memory — ``/memory`` memory-file picker (port of TS local-jsx, degraded no-spawn).
+"""memory — ``/memory`` memory-file picker (port of TS local-jsx).
 
 Port of ``typescript/src/commands/memory/`` + the core of ``MemoryFileSelector``.
-Presents the CLAUDE.md memory hierarchy — the synthetic **User memory**
-(``~/.claude/CLAUDE.md``) and **Project memory** (nearest loaded ancestor
-``CLAUDE.md``, falling back to ``{cwd}/CLAUDE.md``) candidates, differentiated via
+Presents the CLAWCODEX.md memory hierarchy — the synthetic **User memory**
+(``~/.clawcodex/CLAWCODEX.md``) and **Project memory** (nearest loaded ancestor
+``CLAWCODEX.md``, falling back to ``{cwd}/CLAWCODEX.md``) candidates, differentiated via
 option *descriptions* (the TS selector's real channel), plus the existing files
-enumerated by the ``claude_md`` port — ensure-creates the selected file
+enumerated by the ``clawcodex_md`` port — ensure-creates the selected file
 (exclusive-create; existing content preserved), and reports its path with an editor
 hint.
 
+The FULL port — picker overlay + TS ``editFileInEditor``'s suspend-aware
+``$EDITOR`` spawn + post-edit cache bust — lives in the Ink TUI
+(``ui-tui/src/components/memoryPicker.tsx`` + ``ui-tui/src/lib/memoryEdit.ts``),
+fed by the agent-server's ``memory_targets`` / ``memory_edited`` controls over
+``build_memory_options`` below. This InteractiveCommand remains the UIHost-driven
+fallback for non-TUI hosts (and yields the clean ``NullUIHost`` engine error on
+headless surfaces); with no way to suspend a caller's screen from here, it
+reports the path instead of spawning (the ``/copy`` clipboard standard — the
+cancel/error strings stay TS-verbatim).
+
 Deliberate divergences (documented for parity review):
-  * **No ``$EDITOR`` spawn.** TS ``editFileInEditor`` suspends the Ink app; Python has
-    no suspend-aware helper, and spawning an editor inside the Textual TUI corrupts the
-    screen. The success message is adapted accordingly (an "Opened … in your editor"
-    claim would be false — the ``/copy`` clipboard standard); the cancel/error strings
-    stay TS-verbatim.
   * **Folder-open extras dropped** (auto-memory / team / agent folders — need the
     open-folder mechanism and those subsystems).
   * Rules files are listed flat (the ``select`` primitive has flat labels; TS indents).
@@ -54,24 +59,26 @@ def _display_path(path: str, cwd: str) -> str:
 
 def _resolve_project_memory_path(files: list, cwd: str) -> str:
     """TS ``getProjectMemoryPathForSelector``: prefer the **nearest** already-loaded
-    root-level Project CLAUDE.md (TS walks cwd upward; ``get_memory_files`` enumerates
-    root→cwd, so iterate reversed — last match = nearest); fall back to
-    ``{cwd}/CLAUDE.md`` only when none exists — so a repo subdirectory still points at
-    the real project memory."""
+    root-level Project CLAWCODEX.md (TS walks cwd upward; ``get_memory_files``
+    enumerates root→cwd, so iterate reversed — last match = nearest); fall back to
+    ``{cwd}/CLAWCODEX.md`` only when none exists — so a repo subdirectory still
+    points at the real project memory."""
+    from src.context_system.clawcodex_md import CONTEXT_MD
+
     for info in reversed(files):
         if (
             getattr(info, "parent", None) is None
             and getattr(info, "type", None) == "Project"
-            and os.path.basename(info.path) == "CLAUDE.md"
+            and os.path.basename(info.path) == CONTEXT_MD
         ):
             return info.path
-    return str(Path(cwd) / "CLAUDE.md")
+    return str(Path(cwd) / CONTEXT_MD)
 
 
 async def build_memory_options(cwd: str) -> list[UIOption]:
     """Public: the memory-target hierarchy, shared by ``/memory`` and
     the C9 ``#`` shortcut so the two pickers can never drift."""
-    from src.context_system.claude_md import (
+    from src.context_system.clawcodex_md import (
         clear_memory_file_caches,
         get_memory_files,
     )
@@ -83,7 +90,7 @@ async def build_memory_options(cwd: str) -> list[UIOption]:
         files = []
 
     home = Path.home()
-    user_path = str(home / ".claude" / "CLAUDE.md")
+    user_path = str(home / ".clawcodex" / "CLAWCODEX.md")
     project_path = _resolve_project_memory_path(files, cwd)
 
     # Git-aware project description (TS: `${isGit ? 'Checked in at' : 'Saved in'} ./…`).
@@ -104,11 +111,38 @@ async def build_memory_options(cwd: str) -> list[UIOption]:
         UIOption(
             value=user_path,
             label="User memory",
-            description="Saved in ~/.claude/CLAUDE.md",  # verbatim TS (hardcoded tilde)
+            description="Saved in ~/.clawcodex/CLAWCODEX.md",  # hardcoded tilde (TS shape)
         ),
         UIOption(value=project_path, label="Project memory", description=project_desc),
     ]
     seen: set[str] = {os.path.realpath(user_path), os.path.realpath(project_path)}
+
+    # Bounded persistent-memory stores (hermes-agent port, src/memory):
+    # §-delimited MEMORY.md / USER.md the Memory tool curates. Editable
+    # here too — the store's drift guard protects tool rewrites against
+    # free-form external edits.
+    try:
+        from src.memory import get_memory_dir
+
+        bounded_dir = get_memory_dir()
+        for fname, label in (
+            ("MEMORY.md", "Agent memory (bounded)"),
+            ("USER.md", "User profile (bounded)"),
+        ):
+            bpath = str(bounded_dir / fname)
+            real = os.path.realpath(bpath)
+            if real in seen:
+                continue
+            seen.add(real)
+            options.append(
+                UIOption(
+                    value=bpath,
+                    label=label,
+                    description="§-delimited entries — curated by the Memory tool",
+                )
+            )
+    except Exception:
+        pass  # the bounded store is optional; the picker must still open
 
     # Remaining enumerated files (managed/user/project + rules), deduped by realpath
     # (stronger than TS's exact-path dedup — deliberate). Parented files were
@@ -129,11 +163,11 @@ async def build_memory_options(cwd: str) -> list[UIOption]:
 
 
 def _ensure_file(path: str) -> None:
-    """TS parity: mkdir the claude home when the path is under it, then
+    """TS parity: mkdir the config home when the path is under it, then
     exclusive-create an empty file (existing content preserved)."""
-    claude_home = str(Path.home() / ".claude")
-    if path.startswith(claude_home):
-        Path(claude_home).mkdir(parents=True, exist_ok=True)
+    config_home = str(Path.home() / ".clawcodex")
+    if path.startswith(config_home):
+        Path(config_home).mkdir(parents=True, exist_ok=True)
     try:
         with open(path, "x", encoding="utf-8"):
             pass

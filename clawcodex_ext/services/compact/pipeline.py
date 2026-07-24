@@ -76,6 +76,7 @@ class PipelineConfig:
 
     # Layer 5: autocompact
     context_window: int = 200_000
+    max_output_tokens: int | None = None
     autocompact_threshold: float = 0.80
     autocompact_tracking: AutoCompactTracking | None = None
 
@@ -114,6 +115,55 @@ class PipelineConfig:
     # ``<goal-steering`` are preserved from compaction so the model
     # never loses sight of the current objective.
     goal_active: bool = False
+
+
+def build_production_pipeline_config(
+    provider: Any,
+    tool_context: Any,
+    autocompact_tracking: "AutoCompactTracking | None",
+) -> PipelineConfig:
+    """The minimal correct PipelineConfig for the live surfaces.
+
+    ch05 round-4 GAP A — mirrors the test-only ``QueryEngine``'s
+    construction (``query/engine.py:233-250``) exactly: provider + model +
+    the read-file fingerprints (so post-compact file restoration fires) +
+    the SESSION-scoped ``autocompact_tracking``. The tracking instance MUST
+    outlive single turns — the 3-consecutive-failures circuit breaker
+    counts across prompts; a per-turn instance would reset it every turn
+    (the exact reason the engine holds one at ``engine.py:74-79``).
+    """
+    fingerprints = getattr(tool_context, "read_file_fingerprints", None) or {}
+    read_file_state = {
+        str(path): {"timestamp": fp[0]}
+        for path, fp in fingerprints.items()
+        if isinstance(fp, (tuple, list)) and fp
+    }
+    model = getattr(provider, "model", "") or ""
+    context_window = 200_000
+    max_output_tokens = None
+    if model:
+        try:
+            from src.models.context import (
+                get_context_window_for_model,
+                get_model_max_output_tokens,
+            )
+
+            context_window = get_context_window_for_model(
+                model, base_url=getattr(provider, "base_url", None)
+            )
+            max_output_tokens = get_model_max_output_tokens(
+                model, base_url=getattr(provider, "base_url", None)
+            )
+        except Exception:
+            logger.debug("model context-window resolution failed", exc_info=True)
+    return PipelineConfig(
+        provider=provider,
+        model=model,
+        context_window=context_window,
+        max_output_tokens=max_output_tokens,
+        read_file_state=read_file_state or None,
+        autocompact_tracking=autocompact_tracking,
+    )
 
 
 class CompressionPipeline:
@@ -278,7 +328,8 @@ class CompressionPipeline:
                     cfg.context_window,
                     cfg.provider,
                     cfg.model,
-                    threshold_fraction=effective_threshold,
+                    max_output_tokens=cfg.max_output_tokens,
+                    threshold_fraction=cfg.autocompact_threshold,
                     tracking=cfg.autocompact_tracking,
                     custom_instructions=cfg.custom_instructions,
                     read_file_state=cfg.read_file_state,
@@ -289,7 +340,31 @@ class CompressionPipeline:
                     total_saved += result.tokens_saved
                     layers_applied.append("autocompact")
                     autocompact_result = result
-                    logger.debug("Layer 5 (autocompact): saved %d tokens", result.tokens_saved)
+                    # R6 — APPLY the compaction to the working messages. This
+                    # was the bug: the pipeline computed the summary (an LLM
+                    # call, cost incurred) but returned the UNCOMPACTED
+                    # current_messages, so query() kept the full conversation
+                    # and auto-compact re-fired every turn without ever
+                    # shrinking the context — the exact opposite of what a
+                    # long task needs. Assemble the compacted conversation the
+                    # way the manual /compact path does (compact_service/
+                    # service.py:101-104): the summary (a USER message — safe
+                    # as the first message) + kept recent messages + the
+                    # post-compact attachments (file-state a coding agent needs
+                    # after compaction). The system boundary_marker is
+                    # bookkeeping for the persisted conversation and is omitted
+                    # from the working set (as the reactive path does), so the
+                    # working messages stay API-clean.
+                    n_before = len(current_messages)
+                    current_messages = (
+                        list(result.summary_messages)
+                        + list(result.messages_to_keep)
+                        + list(result.attachments)
+                    )
+                    logger.debug(
+                        "Layer 5 (autocompact): saved %d tokens, %d -> %d msgs",
+                        result.tokens_saved, n_before, len(current_messages),
+                    )
             except Exception:
                 logger.warning("Layer 5 (autocompact) failed", exc_info=True)
 

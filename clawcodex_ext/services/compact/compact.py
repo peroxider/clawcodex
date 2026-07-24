@@ -176,6 +176,44 @@ def _is_prompt_too_long_error(error_str: str) -> bool:
     )
 
 
+def _mark_post_compaction_state() -> None:
+    """Set the bootstrap pending_post_compaction flag (ch05 round-3 G4).
+
+    Consume side is OTel cache-miss telemetry (TS consumePostCompaction,
+    services/api/logging.ts) — deferred; the mark keeps the state real.
+    Never raises."""
+    try:
+        from src.bootstrap.state import mark_post_compaction
+
+        mark_post_compaction()
+    except Exception:
+        logger.debug("mark_post_compaction failed", exc_info=True)
+
+
+def _record_compaction_usage(context: "CompactContext", usage: Any) -> None:
+    """Record a summarize call's usage into the bootstrap cost totals
+    (ch04 round-3 G1 — TS counts every API call via addToTotalSessionCost
+    in the API layer; the port's direct provider calls must self-record).
+    Records under the summarize model (``context.model``), falling back
+    to the provider's. Never raises.
+
+    Known gap: unlike the main loop and the advisor, summarize calls feed
+    no ``add_to_total_duration_state`` (this helper runs after the call,
+    with no start time in scope), so /cost's "Total duration (API)"
+    excludes compaction while its cost total includes it."""
+    try:
+        from src.cost_tracker import record_api_usage
+
+        model = (
+            getattr(context, "model", None)
+            or getattr(getattr(context, "provider", None), "model", None)
+            or "unknown"
+        )
+        record_api_usage(model, usage)
+    except Exception:
+        logger.debug("compaction cost recording failed", exc_info=True)
+
+
 def _fallback_summary(messages: list[Message]) -> str:
     """Generate a simple text fallback summary when the LLM call fails."""
     user_msgs: list[str] = []

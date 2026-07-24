@@ -46,6 +46,13 @@ def should_use_litellm() -> bool:
     return getenv("CLAW_USE_LITELLM", "").lower() in {"1", "true", "yes", "on"}
 
 
+def get_provider_class(provider_name: str):
+    """Compatibility indirection retained for callers/tests that patch it."""
+    from src.providers import get_provider_class as resolve_provider_class
+
+    return resolve_provider_class(provider_name)
+
+
 # ---------------------------------------------------------------------------
 # Provider factory
 # ---------------------------------------------------------------------------
@@ -53,8 +60,6 @@ def should_use_litellm() -> bool:
 
 def create_provider(provider_name: str, *args, **kwargs) -> BaseProvider:
     """Create a provider instance for runtime use."""
-    from src.providers import get_provider_class
-
     if should_use_litellm():
         from clawcodex_ext.providers._litellm_adapter import create_litellm_provider
 
@@ -122,6 +127,7 @@ def register_provider_info(name: str, info: "ProviderInfo") -> None:
 
 __all__ = [
     "create_provider",
+    "get_provider_class",
     "should_use_litellm",
     "register_provider",
     "register_provider_info",
@@ -147,4 +153,6 @@ __all__ = [
 # ``response.close()`` plus our ``_close_transport_safely`` helper
 # (which is a silent no-op on ``httpx.Response`` since the
 # ``_transport`` attribute lives on the client, not the response).
-import clawcodex_ext.providers  # noqa: E402, F401  -- side-effect import
+import clawcodex_ext.providers as _providers_ext  # noqa: E402
+
+_providers_ext._init_provider_extensions()

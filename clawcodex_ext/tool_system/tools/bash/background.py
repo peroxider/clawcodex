@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from ...context import ToolContext
-from clawcodex_ext.utils.shell_resolver import build_bg_wrapper, build_shell_argv
+from clawcodex_ext.utils.shell_resolver import build_bg_wrapper, resolve_shell
 
 from src.tasks.local_shell import LocalShellTaskState
 from clawcodex_ext.tasks_core import generate_task_id
@@ -49,7 +49,7 @@ def spawn_background_bash(
     cwd: Path,
     description: str | None,
     context: ToolContext,
-    shell: str = "bash",
+    shell: str = "auto",
 ) -> dict[str, Any]:
     """Spawn *command* in the background and register it on *context*.
 
@@ -68,15 +68,21 @@ def spawn_background_bash(
 
     # Exit code is appended to the log after the process exits so
     # ``TaskOutput`` can report it even if Popen.wait() races with the reader.
-    wrapped = build_bg_wrapper(shell, command)
+    shell_kind, shell_argv_factory = resolve_shell(shell)
+    wrapped = build_bg_wrapper(shell_kind, command)
 
     # ``stdin=DEVNULL`` mirrors the foreground bash path: prevents background
     # commands that read fd 0 from blocking on a TTY inherited from clawcodex's
     # REPL (see bash_tool.py:_run_bash_with_abort for the same reasoning).
-    _, shell_argv = build_shell_argv(shell, wrapped)
+    shell_argv = shell_argv_factory(wrapped)
+    from src.utils.subprocess_env import subprocess_env
+
     proc = subprocess.Popen(
         shell_argv,
         cwd=str(cwd),
+        # Keep credentials out of prompt-injected subprocesses when the
+        # subprocess environment scrubber is enabled.
+        env=subprocess_env(),
         stdin=subprocess.DEVNULL,
         stdout=output_handle,
         stderr=subprocess.STDOUT,
@@ -106,6 +112,9 @@ def spawn_background_bash(
         output_path=str(output_path),
         proc=proc,
         handle=output_handle,
+        # Associate child shells with their spawning agent so agent teardown
+        # can reap only the tasks it owns.
+        agent_id=getattr(context, "agent_id", None),
     )
     context.runtime_tasks.upsert(state)
     # Chunk-B compat view: keep the legacy dict-of-dicts alive in lockstep
@@ -135,16 +144,57 @@ def spawn_background_bash(
                 # so a still-pending TaskStop call has the Popen reference.
                 from dataclasses import replace
 
-                new_status = "completed" if rc == 0 else "failed"
-                return replace(
+                from src.tasks.eviction import schedule_eviction
+
+                # A user-initiated stop must not be reported as a failure by
+                # the reaper racing with the termination path.
+                new_status = (
+                    "killed"
+                    if getattr(prev, "status", None) == "killed"
+                    else ("completed" if rc == 0 else "failed")
+                )
+                terminal = replace(
                     prev,
                     exit_code=rc,
                     finished_at=finished_at,
                     end_time=finished_at,
                     status=new_status,
                 )
+                return schedule_eviction(terminal)
 
             context.runtime_tasks.update(task_id, _patch)
+            # Completion delivery atomically flips ``notified`` and enqueues
+            # the model-visible task notification. A prior TaskStop makes this
+            # a no-op, preventing duplicate notifications.
+            try:
+                from src.utils.task_notification import enqueue_shell_notification
+
+                enqueue_shell_notification(
+                    task_id=task_id,
+                    description=description or command,
+                    status="completed" if rc == 0 else "failed",
+                    output_file=str(output_path),
+                    registry=context.runtime_tasks,
+                    exit_code=rc,
+                    tool_use_id=getattr(context, "tool_use_id", None),
+                )
+            except Exception:  # noqa: BLE001 - notification cannot break reaping
+                import logging as _logging
+
+                _logging.getLogger(__name__).debug(
+                    "[bg] shell completion notification failed", exc_info=True
+                )
+                try:
+                    from dataclasses import replace as _replace
+
+                    def _force_notified(prev: Any) -> Any:
+                        if isinstance(prev, LocalShellTaskState) and not prev.notified:
+                            return _replace(prev, notified=True)
+                        return prev
+
+                    context.runtime_tasks.update(task_id, _force_notified)
+                except Exception:  # noqa: BLE001
+                    pass
             # Mirror to the legacy dict in lockstep so old readers see the
             # exit code without round-tripping through runtime_tasks. The
             # legacy dict carries the chapter-10 status string too — older
@@ -281,10 +331,26 @@ def stop_background_bash(context: ToolContext, task_id: str) -> bool:
     proc: subprocess.Popen | None = entry.get("_proc")
     if proc is None or proc.poll() is not None:
         return False
+    # Mark first to close the reaper-versus-killer race. The cross-platform
+    # process termination below remains the downstream implementation.
+    try:
+        from dataclasses import replace as _replace
+
+        def _mark_killed(prev: Any) -> Any:
+            if isinstance(prev, LocalShellTaskState):
+                return _replace(prev, status="killed", notified=True)
+            return prev
+
+        context.runtime_tasks.update(task_id, _mark_killed)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         # Kill the whole process group started with ``start_new_session=True``
         # so that ``bash -lc "cmd"`` and any children terminate together.
-        os.killpg(os.getpgid(proc.pid), 15)
-    except (ProcessLookupError, PermissionError):
+        if hasattr(os, "killpg") and hasattr(os, "getpgid"):
+            os.killpg(os.getpgid(proc.pid), 15)
+        else:
+            proc.terminate()
+    except (ProcessLookupError, PermissionError, OSError):
         return False
     return True

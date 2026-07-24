@@ -3,25 +3,24 @@ prefetches" (ch02 round-3 GAP B).
 
 Mirrors the minimal core of TS ``startDeferredPrefetches``
 (main.tsx:392-439) and the non-interactive early kicks
-(main.tsx:1973-1990): warm the memoized user context (CLAUDE.md walk)
+(main.tsx:1973-1990): warm the memoized user context (CLAWCODEX.md walk)
 and — when the session is trusted — the system context (git status
 probes) so the first turn's ``fetch_system_prompt_parts`` hits warm
 caches instead of paying the cold filesystem/subprocess cost inside the
 user's first request.
 
 Trust gating mirrors TS ``prefetchSystemContextIfSafe``: system context
-(git subprocess execution in the workspace) only runs when
-``bootstrap.state.get_session_trust_accepted()`` is True. Post ch02
-round-3 PR-1 that flag covers both TS conditions (explicit trust OR
-non-interactive implicit trust). Deliberately NOT gated on
-``ToolContext.workspace_trusted`` — that field has no production
-setters yet (ch12 follow-up).
+(git subprocess execution in the workspace) only runs when the workspace
+is trusted. ch02 round-4: the gate is ``check_trust_accepted(cwd)`` —
+the session-flag short-circuit covers the parent's explicit/implicit
+grants, and the persisted per-project verdict covers the agent-server
+child, which never sets the in-process flag.
 
 Two execution modes, because the port's entrypoints split by loop
 ownership:
 
-* **Running asyncio loop** (Textual TUI): tasks are scheduled on it.
-* **No loop** (headless / legacy REPL, which call ``asyncio.run`` per
+* **Running asyncio loop**: tasks are scheduled on it.
+* **No loop** (headless, which calls ``asyncio.run`` per
   query): a daemon thread drives its own short-lived loop. The memo
   caches in ``context_system.prompt_assembly`` are plain module-level
   dict assignments — atomic under the GIL; a race with the first query
@@ -55,11 +54,17 @@ class DeferredPrefetchHandle:
             self.thread.join(timeout=timeout)
 
 
-def _system_context_allowed() -> bool:
+def _system_context_allowed(cwd: str | None = None) -> bool:
+    # ch02 round-4 WI-1: cwd-composed. The agent-server CHILD never sets
+    # the in-process session flag (the parent's establish_session_trust
+    # ran in the parent), so the old bootstrap-flag read kept the git half
+    # dead on the interactive path. check_trust_accepted embeds the
+    # session-flag short-circuit (parent semantics unchanged) and
+    # otherwise reads the persisted per-project verdict for THIS cwd.
     try:
-        from src.bootstrap.state import get_session_trust_accepted
+        from src.services.startup_gates import check_trust_accepted
 
-        return get_session_trust_accepted()
+        return check_trust_accepted(cwd)
     except Exception:
         return False
 
@@ -102,7 +107,7 @@ def start_deferred_prefetches(
     fills lanes that are still cold.
     """
     if include_system_context is None:
-        include_system_context = _system_context_allowed()
+        include_system_context = _system_context_allowed(cwd)
 
     try:
         loop = asyncio.get_running_loop()

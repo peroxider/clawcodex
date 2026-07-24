@@ -25,6 +25,7 @@ from .glob import GlobTool
 from .grep import GrepTool
 from .lsp import LSPTool
 from .mcp import MCPTool
+from .memory import MemoryTool
 from .notebook_edit import NotebookEditTool
 from .mcp_resources import ListMcpResourcesTool, ReadMcpResourceTool
 from .misc import ClipboardReadTool, ClipboardWriteTool, StatusTool
@@ -32,6 +33,7 @@ from .monitor import MonitorTool
 from .plan_mode import EnterPlanModeTool, ExitPlanModeTool
 from .read import ReadTool
 from .remote_trigger import RemoteTriggerTool
+from .schedule_wakeup import ScheduleWakeupTool
 from .send_message import SendMessageTool
 from .send_user_message import SendUserMessageTool
 from .skill import SkillTool
@@ -83,10 +85,12 @@ ALL_STATIC_TOOLS: list[Tool] = [
     ListMcpResourcesTool,
     MCPTool,
     MonitorTool,
+    MemoryTool,
     NotebookEditTool,
     ReadMcpResourceTool,
     ReadTool,
     RemoteTriggerTool,
+    ScheduleWakeupTool,
     SendMessageTool,
     SendUserMessageTool,
     SkillTool,
@@ -94,7 +98,13 @@ ALL_STATIC_TOOLS: list[Tool] = [
     SleepTool,
     SnipTool,
     StatusTool,
-    StructuredOutputTool,
+    # StructuredOutputTool is deliberately NOT registered: it is a
+    # "special" tool (TS tools.ts:293-299 specialTools excludes
+    # SyntheticOutputTool from getAllBaseTools). The genuine schema
+    # path injects a per-call VALIDATING instance
+    # (workflow/structured.py make_structured_output_tool); the static
+    # unvalidated one exposed interactively was a footgun — its output
+    # dead-ends in outbox with no consumer (tools-round critic, C6).
     TaskCreateTool,
     TaskDecomposeTool,
     TaskGetTool,
@@ -138,10 +148,12 @@ __all__ = [
     "ListMcpResourcesTool",
     "MCPTool",
     "MonitorTool",
+    "MemoryTool",
     "NotebookEditTool",
     "ReadMcpResourceTool",
     "ReadTool",
     "RemoteTriggerTool",
+    "ScheduleWakeupTool",
     "SendMessageTool",
     "SendUserMessageTool",
     "SkillTool",
@@ -149,6 +161,7 @@ __all__ = [
     "SleepTool",
     "SnipTool",
     "StatusTool",
+    "MonitorTool",
     "StructuredOutputTool",
     "TaskCreateTool",
     "TaskDecomposeTool",

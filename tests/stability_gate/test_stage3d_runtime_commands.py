@@ -35,6 +35,7 @@ def _build_context(*, runtime_context: bool = False):
     from clawcodex_ext.command_system.engine import create_command_context
 
     provider = SimpleNamespace(
+        provider_name="anthropic",
         model="test-model",
         get_available_models=lambda: ["test-model"],
     )

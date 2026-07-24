@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from src.types.messages import Message, message_to_dict, message_from_dict
+from src.utils.clawcodex_dirs import get_sessions_dir
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +76,9 @@ def _locked_append(file_path: Path) -> Iterator[Any]:
             fh.close()
 
 
-# Default directories
-SESSIONS_DIR = Path.home() / ".clawcodex" / "sessions"
+# Canonical default honors CLAWCODEX_CONFIG_DIR. The downstream-specific
+# CLAWCODEX_SESSIONS_DIR override remains available via resolve_sessions_dir.
+SESSIONS_DIR = get_sessions_dir()
 CONTENT_DIR_NAME = "content"
 
 # Thresholds

@@ -41,12 +41,18 @@ class Conversation:
     # this cap is just a memory-safety backstop.
     max_history: int = 2000
 
-    def add_message(self, role: str, content: MessageContent):
+    def add_message(
+        self,
+        role: str,
+        content: MessageContent,
+        *,
+        usage: dict[str, Any] | None = None,
+    ):
         if len(self.messages) >= self.max_history:
             self.messages.pop(0)
 
         normalized_content = _normalize_message_content(content)
-        self.messages.append(create_message(role, normalized_content))
+        self.messages.append(create_message(role, normalized_content, usage=usage))
 
     def add_existing_message(self, message: Message) -> None:
         """Append a fully-formed Message, preserving all of its fields.

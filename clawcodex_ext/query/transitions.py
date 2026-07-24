@@ -111,6 +111,9 @@ class QueryState:
     # when the model keeps matching continuation signals without tool calls.
     # Mirrors TS State.continuationNudgeCount at query.ts:218.
     continuation_nudge_count: int = 0
+    # Session-chain latch for the one-time exhaustive-result audit. Unlike
+    # continuation_nudge_count, this survives successful tool rounds.
+    exhaustive_audit_performed: bool = False
     transition: Transition | None = None
     # P102-E: 逐 turn 回调注册。外部消费者（如 F-69 Budget Mode）可以
     # 在 turn 开始/结束时注入自定义逻辑，无需修改 query() 函数体。

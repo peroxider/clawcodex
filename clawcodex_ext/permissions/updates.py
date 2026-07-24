@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from dataclasses import replace
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
@@ -117,18 +118,19 @@ def _replace_ruleset(
     key = _ruleset_key(behavior)
     current = dict(getattr(context, key))
     current[destination] = new_strings
+    # dataclasses.replace (not a field-explicit constructor) so every field
+    # not named here — including later additions like ``pre_plan_mode`` —
+    # carries through instead of silently resetting to its default. The
+    # ruleset dicts are still defensively copied (functional-update
+    # contract: the input context is left unchanged).
     kwargs: dict[str, Any] = {
-        "mode": context.mode,
         "additional_working_directories": dict(context.additional_working_directories),
         "always_allow_rules": dict(context.always_allow_rules),
         "always_deny_rules": dict(context.always_deny_rules),
         "always_ask_rules": dict(context.always_ask_rules),
-        "is_bypass_permissions_mode_available": context.is_bypass_permissions_mode_available,
-        "should_avoid_permission_prompts": context.should_avoid_permission_prompts,
-        "await_automated_checks_before_dialog": context.await_automated_checks_before_dialog,
     }
     kwargs[key] = current
-    return ToolPermissionContext(**kwargs)
+    return replace(context, **kwargs)
 
 
 def apply_permission_update(
@@ -153,15 +155,13 @@ def apply_permission_update(
     """
     if isinstance(update, PermissionUpdateSetMode):
         log.debug("permission update: setMode -> %s", update.mode)
-        return ToolPermissionContext(
+        return replace(
+            context,
             mode=update.mode,
             additional_working_directories=dict(context.additional_working_directories),
             always_allow_rules=dict(context.always_allow_rules),
             always_deny_rules=dict(context.always_deny_rules),
             always_ask_rules=dict(context.always_ask_rules),
-            is_bypass_permissions_mode_available=context.is_bypass_permissions_mode_available,
-            should_avoid_permission_prompts=context.should_avoid_permission_prompts,
-            await_automated_checks_before_dialog=context.await_automated_checks_before_dialog,
         )
 
     if isinstance(update, PermissionUpdateAddRules):
@@ -225,15 +225,12 @@ def apply_permission_update(
                 path=path,
                 source=update.destination,  # type: ignore[arg-type]
             )
-        return ToolPermissionContext(
-            mode=context.mode,
+        return replace(
+            context,
             additional_working_directories=new_dirs,
             always_allow_rules=dict(context.always_allow_rules),
             always_deny_rules=dict(context.always_deny_rules),
             always_ask_rules=dict(context.always_ask_rules),
-            is_bypass_permissions_mode_available=context.is_bypass_permissions_mode_available,
-            should_avoid_permission_prompts=context.should_avoid_permission_prompts,
-            await_automated_checks_before_dialog=context.await_automated_checks_before_dialog,
         )
 
     if isinstance(update, PermissionUpdateRemoveDirectories):
@@ -244,15 +241,12 @@ def apply_permission_update(
         new_dirs = dict(context.additional_working_directories)
         for path in update.directories:
             new_dirs.pop(path, None)
-        return ToolPermissionContext(
-            mode=context.mode,
+        return replace(
+            context,
             additional_working_directories=new_dirs,
             always_allow_rules=dict(context.always_allow_rules),
             always_deny_rules=dict(context.always_deny_rules),
             always_ask_rules=dict(context.always_ask_rules),
-            is_bypass_permissions_mode_available=context.is_bypass_permissions_mode_available,
-            should_avoid_permission_prompts=context.should_avoid_permission_prompts,
-            await_automated_checks_before_dialog=context.await_automated_checks_before_dialog,
         )
 
     return context
@@ -465,12 +459,11 @@ _NO_SESSION_OPTION_TOOLS: frozenset[str] = frozenset(
     {"AskUserQuestion", "EnterPlanMode", "ExitPlanMode"}
 )
 
-# NB: the original surfaces this option with a "(shift+tab)" hint, because there
-# the key cycles permission modes. This port has the cycle *logic*
-# (``src.permissions.cycle.cycle_permission_mode``) but no keybinding wired to
-# it — mode changes go through the ``/permissions`` command — so advertising the
-# shortcut would promise a keypress that does nothing. The hint is intentionally
-# omitted until a shift+tab binding exists.
+# NB: the original surfaces this option with a "(shift+tab)" hint, because
+# there the key cycles permission modes. The TUI wired shift+tab cycling in
+# ch13 round-4 (ui-tui useInputHandlers → cycle_permission_mode control), so
+# the hint would now be truthful — it stays off the LABEL only because the
+# option text mirrors the original's wording exactly.
 
 _PATH_INPUT_KEYS: tuple[str, ...] = ("file_path", "notebook_path", "path")
 
@@ -599,7 +592,36 @@ def default_session_suggestions(
                 )
         return updates
 
-    # Every other tool (WebFetch, Skill, MCP, …): persisted content-less rule.
+    # WebFetch: domain-scoped rule (TS WebFetchTool.ts:346 buildSuggestions) —
+    # "don't ask again" grants the HOST, not every future fetch. Normally the
+    # tool's own check supplies this on its passthrough; this branch is the
+    # fallback for callers that build suggestions from tool_input directly.
+    if tool_name == "WebFetch":
+        url = tool_input.get("url", "")
+        hostname = None
+        if isinstance(url, str) and url:
+            import urllib.parse
+
+            try:
+                hostname = urllib.parse.urlparse(url).hostname
+            except Exception:
+                hostname = None
+        if hostname:
+            return [
+                PermissionUpdateAddRules(
+                    destination="localSettings",
+                    behavior="allow",
+                    rules=(
+                        PermissionRuleValue(
+                            tool_name="WebFetch",
+                            rule_content=f"domain:{hostname}",
+                        ),
+                    ),
+                )
+            ]
+        # Unparseable URL → fall through to the content-less rule below.
+
+    # Every other tool (Skill, MCP, …): persisted content-less rule.
     if tool_name:
         return [
             PermissionUpdateAddRules(
@@ -659,3 +681,84 @@ def session_option_label(
     if base:
         return f"and {base}"
     return None
+
+
+def deserialize_permission_update(data: dict) -> "Any":
+    """Wire dict → PermissionUpdate dataclass (None on unrecognized type).
+
+    Promoted from the agent-server (HOOKS-1): the can_use_tool reply AND
+    PermissionRequest-hook ``updatedPermissions`` both arrive in the same
+    wire shape, so the one parser lives here with the update types.
+    """
+    from .types import (
+        PermissionRuleValue,
+        PermissionUpdateAddDirectories,
+        PermissionUpdateAddRules,
+        PermissionUpdateRemoveDirectories,
+        PermissionUpdateRemoveRules,
+        PermissionUpdateReplaceRules,
+        PermissionUpdateSetMode,
+    )
+
+    utype = data.get("type")
+    dest = data.get("destination", "session")
+    behavior = data.get("behavior", "allow")
+
+    def _rules() -> tuple:
+        return tuple(
+            PermissionRuleValue(
+                tool_name=str(r.get("tool_name", "")),
+                rule_content=r.get("rule_content"),
+            )
+            for r in (data.get("rules") or []) if isinstance(r, dict)
+        )
+
+    if utype == "addRules":
+        return PermissionUpdateAddRules(destination=dest, behavior=behavior, rules=_rules())
+    if utype == "replaceRules":
+        return PermissionUpdateReplaceRules(destination=dest, behavior=behavior, rules=_rules())
+    if utype == "removeRules":
+        return PermissionUpdateRemoveRules(destination=dest, behavior=behavior, rules=_rules())
+    if utype == "setMode":
+        return PermissionUpdateSetMode(destination=dest, mode=data.get("mode", "default"))
+    if utype == "addDirectories":
+        return PermissionUpdateAddDirectories(
+            destination=dest, directories=tuple(data.get("directories") or ()),
+        )
+    if utype == "removeDirectories":
+        return PermissionUpdateRemoveDirectories(
+            destination=dest, directories=tuple(data.get("directories") or ()),
+        )
+    return None
+
+
+def serialize_permission_update(update: "Any") -> dict:
+    """PermissionUpdate dataclass → wire dict (the shape hooks and the TUI
+    see; ``deserialize_permission_update`` reverses it).
+
+    Promoted from the agent-server (HOOKS-1 critic round): the can_use_tool
+    round-trip and PermissionRequest-hook stdin both need the SAME canonical
+    JSON — nested rules as ``{"tool_name", "rule_content"}`` dicts, never
+    Python reprs.
+    """
+    out: dict = {
+        "type": getattr(update, "type", "addRules"),
+        "destination": getattr(update, "destination", "session"),
+    }
+    behavior = getattr(update, "behavior", None)
+    if behavior is not None:
+        out["behavior"] = behavior
+    rules = getattr(update, "rules", None)
+    if rules:
+        out["rules"] = [
+            {"tool_name": getattr(r, "tool_name", ""),
+             "rule_content": getattr(r, "rule_content", None)}
+            for r in rules
+        ]
+    mode = getattr(update, "mode", None)
+    if mode is not None:
+        out["mode"] = mode
+    directories = getattr(update, "directories", None)
+    if directories:
+        out["directories"] = list(directories)
+    return out

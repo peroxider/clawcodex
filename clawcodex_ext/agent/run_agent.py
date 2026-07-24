@@ -3,27 +3,31 @@
 Mirrors typescript/src/tools/AgentTool/runAgent.ts and forkedAgent.ts.
 Provides the core run_agent() async generator and filter_incomplete_tool_calls().
 """
-
 from __future__ import annotations
 
+import copy
 import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator
 from uuid import uuid4
 
-from clawcodex_ext.permissions.types import PermissionMode, ToolPermissionContext
-from clawcodex_ext.providers.base import BaseProvider
-from clawcodex_ext.tool_system.build_tool import Tools
-from clawcodex_ext.tool_system.context import ToolContext
-from clawcodex_ext.tool_system.registry import ToolRegistry
-from clawcodex_ext.types.content_blocks import ToolUseBlock
-from clawcodex_ext.types.messages import AssistantMessage, Message, UserMessage
-from clawcodex_ext.utils.abort_controller import AbortController
+from ..permissions.types import PermissionMode, ToolPermissionContext
+from ..providers.base import BaseProvider
+from ..tool_system.build_tool import Tools
+from ..tool_system.context import ToolContext
+from ..tool_system.registry import ToolRegistry
+from ..types.content_blocks import ToolUseBlock
+from ..types.messages import AssistantMessage, Message, UserMessage
+from ..utils.abort_controller import AbortController
 
-from clawcodex_ext.agent.agent_definitions import AgentDefinition, is_built_in_agent
-from .agent_tool_utils import resolve_agent_tools, count_tool_uses
-from clawcodex_ext.agent.constants import AGENT_TOOL_NAME
+from .agent_definitions import AgentDefinition, is_built_in_agent
+from .agent_tool_utils import (
+    count_tool_uses,
+    get_query_source_for_agent,
+    resolve_agent_tools,
+)
+from .constants import AGENT_TOOL_NAME
 from .prompt import get_agent_system_prompt
 from .subagent_context import SubagentContextOverrides, create_subagent_context
 
@@ -40,7 +44,6 @@ class RunAgentParams:
 
     Mirrors the parameters accepted by the runAgent() generator in TypeScript.
     """
-
     parent_context: ToolContext
     agent_definition: AgentDefinition
     prompt: str
@@ -51,10 +54,14 @@ class RunAgentParams:
     # Optional overrides
     model: str | None = None
     agent_id: str | None = None
+    # QUERY-1 — the spawn's addressable name (Agent tool `name` param).
+    # A NAMED agent inside a team is this port's teammate: the identity is
+    # threaded to the subagent context so teammate stop hooks can gate.
+    agent_name: str | None = None
     is_async: bool = False
     max_turns: int | None = None
     system_prompt_override: str | None = None
-    parent_system_prompt: str | None = None
+    parent_system_prompt: "str | list | None" = None
     permission_mode_override: PermissionMode | None = None
     context_messages: list[Message] | None = None
     abort_controller: AbortController | None = None
@@ -66,14 +73,13 @@ class RunAgentParams:
     # Identifier threaded into ``ToolUseOptions.query_source`` for the
     # primary recursive-fork guard. Mirrors the TS ``querySource`` argument.
     query_source: str | None = None
-    # Rebuild model-visible skill listing from the isolated child context.
+    # Rebuild the model-visible skills list from the isolated child context.
     refresh_skill_listing: bool = False
 
 
 @dataclass
 class RunAgentResult:
     """Aggregated result of an agent run."""
-
     messages: list[Message]
     agent_id: str
     agent_type: str
@@ -144,7 +150,9 @@ def _build_permission_context(
         avoid_for_isolation = False
     else:
         avoid_for_isolation = is_async
-    should_avoid = parent_perm.should_avoid_permission_prompts or avoid_for_isolation
+    should_avoid = (
+        parent_perm.should_avoid_permission_prompts or avoid_for_isolation
+    )
 
     # Async-but-can-prompt agents wait for classifier / hooks before
     # interrupting the user. Sync agents and prompt-avoiding agents
@@ -182,9 +190,7 @@ def filter_incomplete_tool_calls(messages: list[Message]) -> list[Message]:
         if not isinstance(content, list):
             continue
         for block in content:
-            block_type = (
-                block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
-            )
+            block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
             if block_type != "tool_result":
                 continue
             tool_use_id = (
@@ -202,20 +208,15 @@ def filter_incomplete_tool_calls(messages: list[Message]) -> list[Message]:
             if isinstance(content, list):
                 has_incomplete_tool_call = False
                 for block in content:
-                    block_type = (
-                        block.get("type")
-                        if isinstance(block, dict)
-                        else getattr(block, "type", None)
-                    )
+                    block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
                     if block_type != "tool_use":
                         continue
                     tool_use_id = (
-                        block.get("id") if isinstance(block, dict) else getattr(block, "id", None)
+                        block.get("id")
+                        if isinstance(block, dict)
+                        else getattr(block, "id", None)
                     )
-                    if (
-                        isinstance(tool_use_id, str)
-                        and tool_use_id not in tool_use_ids_with_results
-                    ):
+                    if isinstance(tool_use_id, str) and tool_use_id not in tool_use_ids_with_results:
                         has_incomplete_tool_call = True
                         break
                 if has_incomplete_tool_call:
@@ -237,7 +238,7 @@ async def run_agent(params: RunAgentParams) -> AsyncGenerator[Message, None]:
     4. Yields messages as they arrive
     5. Cleans up on completion or abort
     """
-    from src.query.query import QueryParams, StreamEvent, query
+    from ..query.query import QueryParams, StreamEvent, query
 
     # --- Setup ---
     agent_def = params.agent_definition
@@ -276,8 +277,9 @@ async def run_agent(params: RunAgentParams) -> AsyncGenerator[Message, None]:
             )
 
     # Build system prompt
-    system_prompt = params.system_prompt_override or get_agent_system_prompt(
-        agent_def, params.parent_system_prompt
+    system_prompt = (
+        params.system_prompt_override
+        or get_agent_system_prompt(agent_def, params.parent_system_prompt)
     )
 
     # Determine abort controller.
@@ -320,7 +322,6 @@ async def run_agent(params: RunAgentParams) -> AsyncGenerator[Message, None]:
     if params.query_source is not None:
         # Shallow-copy the parent options so we don't mutate them in place.
         from copy import copy as _shallow_copy
-
         options_override = _shallow_copy(params.parent_context.options)
         options_override.query_source = params.query_source
 
@@ -328,6 +329,7 @@ async def run_agent(params: RunAgentParams) -> AsyncGenerator[Message, None]:
     overrides = SubagentContextOverrides(
         agent_id=agent_id,
         agent_type=agent_def.agent_type,
+        teammate_name=params.agent_name,
         messages=sanitized_context_messages,
         abort_controller=abort_controller,
         permission_context=perm_context,
@@ -344,21 +346,6 @@ async def run_agent(params: RunAgentParams) -> AsyncGenerator[Message, None]:
         overrides,
     )
 
-    # Always scope subagent tools to the resolved agent definition — do not
-    # inherit the parent overview's full tool pool (SOP bundle isolation).
-    subagent_context.options.tools = list(agent_tools)
-
-    if params.refresh_skill_listing:
-        from clawcodex_ext.skills.visibility import refresh_agent_skill_listing
-
-        system_prompt = refresh_agent_skill_listing(
-            system_prompt,
-            context=subagent_context,
-            tool_registry=params.tool_registry,
-            tools=agent_tools,
-            provider=params.provider,
-        )
-
     # Build initial messages.
     # When ``params.prompt`` is empty (e.g. fork path, where the directive is
     # already embedded inside ``context_messages`` via build_forked_messages),
@@ -374,19 +361,58 @@ async def run_agent(params: RunAgentParams) -> AsyncGenerator[Message, None]:
     # TS has no built-in fallback, but we keep a safety net to prevent runaway agents.
     max_turns = params.max_turns or agent_def.max_turns or SUBAGENT_DEFAULT_MAX_TURNS
 
+    # ch08 round-4 WI-1 — per-subagent model resolution (TS getAgentModel,
+    # runAgent.ts:340). Resolve the model from the tool param / agent-def /
+    # env, then apply it to a per-subagent provider CLONE. NEVER mutate the
+    # shared session provider: ch07 made Agent concurrency-safe, so N
+    # parallel subagents share params.provider — mutating provider.model
+    # would race across them. copy.copy shares the HTTP client (thread-safe,
+    # per-request model) and gives this subagent its own .model.
+    turn_provider = params.provider
+    try:
+        from .agent_model import get_agent_model
+
+        resolved_model = get_agent_model(
+            params.model, agent_def.model, params.provider,
+        )
+        if resolved_model and resolved_model != getattr(
+            params.provider, "model", None
+        ):
+            turn_provider = copy.copy(params.provider)
+            turn_provider.model = resolved_model
+    except Exception:  # noqa: BLE001 — model resolution never blocks a spawn
+        logger.debug("subagent model resolution failed; using session model",
+                     exc_info=True)
+        turn_provider = params.provider
+
+    if params.refresh_skill_listing:
+        from ..skills.visibility import refresh_agent_skill_listing
+
+        system_prompt = refresh_agent_skill_listing(
+            system_prompt,
+            context=subagent_context,
+            tool_registry=params.tool_registry,
+            tools=agent_tools,
+            provider=turn_provider,
+        )
+
     # --- Query loop ---
     # TS microcompact is a no-op for subagents (only fires for
     # repl_main_thread). Don't pass pipeline_config so we don't
     # aggressively clear tool results the model just read.
-    effective_query_source = params.query_source or f"agent_{agent_def.agent_type}"
+    # ch08 round-4 WI-2 — query_source labeling parity (agent:builtin:<type>
+    # / agent:custom), TS promptCategory.getQuerySourceForAgent. The fork
+    # path threads its own 'agent:builtin:fork' via params.query_source.
+    effective_query_source = params.query_source or get_query_source_for_agent(
+        agent_def.agent_type, is_built_in_agent(agent_def),
+    )
     query_params = QueryParams(
         messages=initial_messages,
         system_prompt=system_prompt,
         tools=agent_tools,
         tool_registry=params.tool_registry,
         tool_use_context=subagent_context,
-        provider=params.provider,
-        model=params.model,
+        provider=turn_provider,
         abort_controller=abort_controller,
         query_source=effective_query_source,
         max_turns=max_turns,
@@ -409,6 +435,19 @@ async def run_agent(params: RunAgentParams) -> AsyncGenerator[Message, None]:
         logger.error("Agent %s (%s) failed: %s", agent_id, agent_def.agent_type, exc)
         raise
     finally:
+        # Reap any run_in_background bash this agent spawned, so a shell loop
+        # doesn't outlive the agent as a PPID=1 zombie. Placed in the CORE
+        # generator's finally (the single path every agent — async, sync, and
+        # workflow — traverses), matching TS's killShellTasksForAgent at
+        # runAgent.ts:849. Never raises.
+        try:
+            from src.tasks.local_shell import kill_shell_tasks_for_agent
+
+            registry = getattr(subagent_context, "runtime_tasks", None)
+            if registry is not None:
+                await kill_shell_tasks_for_agent(agent_id, registry)
+        except Exception:  # noqa: BLE001 — cleanup must not break agent exit
+            logger.debug("kill_shell_tasks_for_agent failed", exc_info=True)
         # Cleanup: release cloned file state cache memory
         subagent_context.read_file_fingerprints.clear()
         # Release initial messages

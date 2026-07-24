@@ -1,3 +1,9 @@
-"""Facade — permissions/trust_boundary.py moved to clawcodex_ext/permissions/."""
+"""Module-identity facade for the downstream trust-boundary implementation."""
 
-from clawcodex_ext.permissions.trust_boundary import *  # noqa: F401,F403
+from __future__ import annotations
+
+import sys
+
+from clawcodex_ext.permissions import trust_boundary as _module
+
+sys.modules[__name__] = _module
