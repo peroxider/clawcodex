@@ -274,6 +274,8 @@ class Orchestrator:
             workflow.hooks,
             git_username=workflow.workspace.git_username,
             git_email=workflow.workspace.git_email,
+            upstream_clone_url=workflow.workspace.upstream_clone_url,
+            fork_clone_url=workflow.workspace.repo_clone_url,
         )
         self._state = OrchestratorState(
             poll_interval_ms=workflow.polling.interval_ms,
@@ -3233,9 +3235,13 @@ class Orchestrator:
                             "followup"
                             if session.run_kind
                             in ("agent_followup", "review_followup", "review_retry")
-                            and not isinstance(self.tracker, __import__(
-                                "extensions.orchestrator.local_tracker.adapter", fromlist=["LocalTrackerAdapter"]
-                            ).LocalTrackerAdapter)
+                            and not isinstance(
+                                self.tracker,
+                                __import__(
+                                    "extensions.orchestrator.local_tracker.adapter",
+                                    fromlist=["LocalTrackerAdapter"],
+                                ).LocalTrackerAdapter,
+                            )
                             else "default"
                         )
                         sync_result = await self.git_sync.sync(session, mode=sync_mode)
@@ -4146,15 +4152,17 @@ class Orchestrator:
             status = record.clarification_status
             if status in ("awaiting_author", "awaiting_local", "manual_required", "resolved"):
                 elapsed = now - (record.updated_at or now)
-                entries.append(ClarificationEntry(
-                    issue_id=issue_id,
-                    status=status or "",
-                    open_questions=list(record.open_questions),
-                    round_num=record.clarification_round,
-                    max_rounds=max_rounds,
-                    elapsed_seconds=elapsed,
-                    author_login=record.author_login,
-                ))
+                entries.append(
+                    ClarificationEntry(
+                        issue_id=issue_id,
+                        status=status or "",
+                        open_questions=list(record.open_questions),
+                        round_num=record.clarification_round,
+                        max_rounds=max_rounds,
+                        elapsed_seconds=elapsed,
+                        author_login=record.author_login,
+                    )
+                )
         self.status_dashboard.on_clarification_update(entries)
 
     def _compute_workspace_focus_for_clarifier(self, issue: "Issue") -> list[dict]:
@@ -4170,6 +4178,7 @@ class Orchestrator:
             if not changed:
                 return []
             from clawcodex_ext.intent_forecast.focus import compute_workspace_focuses
+
             return compute_workspace_focuses(changed_files=changed, recent_messages=[])
         except Exception as exc:
             logger.warning("Workspace focus computation failed for issue %s: %s", issue.id, exc)

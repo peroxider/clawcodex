@@ -174,7 +174,7 @@ def add_workflow_parser(subparsers: argparse._SubParsersAction) -> None:
         "-o",
         default="",
         metavar="OWNER",
-        help="Repository owner (e.g. my-org)",
+        help="Upstream repository owner (e.g. my-org)",
     )
     init_parser.add_argument(
         "--repo",
@@ -206,6 +206,12 @@ def add_workflow_parser(subparsers: argparse._SubParsersAction) -> None:
         default="/tmp/symphony_workspaces/myproject",
         metavar="PATH",
         help="Local workspace root path",
+    )
+    init_parser.add_argument(
+        "--fork-owner",
+        default="",
+        metavar="OWNER",
+        help="Fork owner for fork workflow (empty or same as owner = single-repo mode)",
     )
     init_parser.add_argument(
         "--output",
@@ -313,7 +319,7 @@ def _run_init(args: argparse.Namespace) -> int:
         )
         return 1
 
-    owner = val(args.owner, "Repository owner")
+    owner = val(args.owner, "Upstream repository owner")
     repo = val(args.repo, "Repository name")
     endpoint = val(args.endpoint, "API endpoint (leave blank for default)")
     assignee = val(args.assignee, "Issue assignee (leave blank for all)")
@@ -329,6 +335,24 @@ def _run_init(args: argparse.Namespace) -> int:
         if owner and repo:
             clone_url = f"https://{domain}/{owner}/{repo}.git"
             push_user = owner
+
+    # Fork 工作流：--owner/--repo 是上游，--fork-owner 是 fork 方
+    #   repo_clone_url    = fork 仓库 (clone/push)  → https://domain/fork_owner/repo.git
+    #   upstream_clone_url = 上游仓库 (PR 目标)      → https://domain/owner/repo.git
+    #   --fork-owner 为空或与 --owner 相同 → 两者相同，退化为单仓库模式
+    upstream_clone_url = clone_url  # 上游 URL，始终由 --owner/--repo 拼接
+    if kind in ("github", "gitcode", "gitee") and repo:
+        domain = domains.get(kind, "github.com")
+        fork_owner = args.fork_owner
+        if not fork_owner and interactive:
+            fork_owner = _prompt(
+                "Fork owner (leave blank for single-repo mode)",
+                "",
+            ).strip()
+        if fork_owner and fork_owner != owner:
+            clone_url = f"https://{domain}/{fork_owner}/{repo}.git"
+        else:
+            clone_url = upstream_clone_url  # 单仓库模式：两者相同
 
     # Determine token env var
     token_env_map = {
@@ -354,6 +378,7 @@ def _run_init(args: argparse.Namespace) -> int:
         "REPO_OWNER": owner,
         "REPO_NAME": repo,
         "REPO_CLONE_URL": clone_url,
+        "UPSTREAM_CLONE_URL": upstream_clone_url,
         "TRACKER_API_KEY_ENV": token_env,
         "REPO_ASSIGNEE": assignee,
         "BRANCH_PREFIX": branch_prefix,

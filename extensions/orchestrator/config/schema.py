@@ -466,6 +466,9 @@ class WorkspaceConfig:
     root: str = field(default_factory=_default_tmp_workspace)
     hooks: dict[str, Any] = field(default_factory=dict)
     repo_clone_url: str | None = None
+    # Fork workflow: upstream repo URL (PR target). Falls back to single-repo
+    # mode when absent or equal to repo_clone_url.
+    upstream_clone_url: str | None = None
     clone_depth: int | None = 1
     checkout_issue_branch: bool = True
     git_username: str | None = None
@@ -1029,6 +1032,7 @@ class WorkflowConfig:
             root=workspace_root,
             hooks=workspace_raw.get("hooks", {}),
             repo_clone_url=_resolve_env_value(workspace_raw.get("repo_clone_url")),
+            upstream_clone_url=_resolve_env_value(workspace_raw.get("upstream_clone_url")),
             clone_depth=workspace_raw.get("clone_depth", 1),
             checkout_issue_branch=workspace_raw.get("checkout_issue_branch", True),
             git_username=_resolve_env_value(workspace_raw.get("git_username")),

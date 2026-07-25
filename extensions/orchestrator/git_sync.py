@@ -101,6 +101,8 @@ class GitSyncService:
         hooks_config: HooksConfig | None = None,
         git_username: str | None = None,
         git_email: str | None = None,
+        upstream_clone_url: str | None = None,
+        fork_clone_url: str | None = None,
     ) -> None:
         self.tracker = tracker
         self._branch_prefix = branch_prefix
@@ -108,6 +110,8 @@ class GitSyncService:
         self._hooks_config = hooks_config or HooksConfig()
         self._git_username = git_username
         self._git_email = git_email
+        self._upstream_clone_url = upstream_clone_url
+        self._fork_clone_url = fork_clone_url
         self._gitignore_patterns = gitignore_patterns or [
             ".event_streams",
             ".orchestrator_control",
@@ -128,6 +132,32 @@ class GitSyncService:
             "changes_summary.md",
             "verification_report.md",
         ]
+
+    def _fork_mode(self) -> bool:
+        """是否处于 fork 工作流模式（upstream 和 fork 不同）。"""
+        upstream = self._upstream_clone_url
+        if not upstream:
+            return False
+        fork = self._fork_clone_url
+        if not fork:
+            return False
+        return upstream.rstrip("/") != fork.rstrip("/")
+
+    @staticmethod
+    def _extract_owner_from_url(clone_url: str) -> str | None:
+        """从 clone URL 提取 owner（如 https://gitcode.com/owner/repo.git → owner）。"""
+        import re
+
+        m = re.search(r"[:/]([^/]+?)/([^/]+?)(?:\.git)?$", clone_url.rstrip("/"))
+        return m.group(1) if m else None
+
+    @staticmethod
+    def _extract_owner_repo_from_url(clone_url: str) -> str | None:
+        """Extract owner/repo from clone URL (e.g. https://gitcode.com/owner/repo.git → owner/repo)."""
+        import re
+
+        m = re.search(r"[:/]([^/]+?)/([^/]+?)(?:\.git)?$", clone_url.rstrip("/"))
+        return f"{m.group(1)}/{m.group(2)}" if m else None
 
     async def sync(
         self,
@@ -333,9 +363,15 @@ class GitSyncService:
         # 即便分支被 push 也不能创建 PR — 否则会留下 0 commit 的空 PR。
         has_reviewable_commit = committed or has_run_commit
         if pr_ref is None and branch_name != base_branch and not no_push and has_reviewable_commit:
+            # Fork 工作流：head 需要标注 fork owner/repo（如 tree-zby/repo:branch）
+            head_ref = branch_name
+            if self._fork_mode() and self._fork_clone_url:
+                fork_owner_repo = self._extract_owner_repo_from_url(self._fork_clone_url)
+                if fork_owner_repo:
+                    head_ref = f"{fork_owner_repo}:{branch_name}"
             pr_ref = await self.tracker.ensure_pull_request(
                 issue=issue,
-                head_branch=branch_name,
+                head_branch=head_ref,
                 base_branch=base_branch,
                 title=pr_title,
                 body=self._build_pr_body(
@@ -352,7 +388,7 @@ class GitSyncService:
             if pr_ref is not None and (not pr_ref.number or not pr_ref.url):
                 pr_ref = await self._find_pr_fallback(
                     pr_ref,
-                    head_branch=branch_name,
+                    head_branch=head_ref,
                     base_branch=base_branch,
                 )
 
@@ -929,7 +965,7 @@ class GitSyncService:
 
         # Branch doesn't exist locally — determine best creation strategy
         # Case 1: remote branch exists → checkout with --track to wire it to origin
-        # Case 2: completely new branch → create with -b
+        # Case 2: completely new branch → create from upstream/base (fork mode) or locally
         remote_ref = f"origin/{branch_name}"
         check_remote = self._run_git_output(
             ["rev-parse", "--verify", f"refs/remotes/{remote_ref}"], repo_root
@@ -938,6 +974,12 @@ class GitSyncService:
             # Remote branch exists — wire it up with --track
             stdout, stderr, rc = _run_git(
                 ["checkout", "--track", remote_ref],
+                repo_root,
+            )
+        elif self._fork_mode():
+            # Fork 工作流：从 upstream/base_branch 创建新分支，确保基于上游最新代码
+            stdout, stderr, rc = _run_git(
+                ["checkout", "-b", branch_name, f"upstream/{base_branch}"],
                 repo_root,
             )
         else:
