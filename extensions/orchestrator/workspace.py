@@ -312,16 +312,18 @@ class WorkspaceManager:
                     ["git", "remote", "add", "origin", self.config.repo_clone_url],
                     cwd=str(path),
                 )
+                # Fork 工作流：添加 upstream remote
+                await self._add_upstream_remote(path)
                 integration_branch = (
                     self.config.integration_branch or self.config.base_branch or ""
                 ).strip()
                 if integration_branch:
-                    # 从本地来源仓库 fetch 集成 branch
+                    remote = "upstream" if self._upstream_configured() else "origin"
                     fetch_cmd = [
                         "git",
                         "fetch",
-                        "origin",
-                        f"{integration_branch}:refs/remotes/origin/{integration_branch}",
+                        remote,
+                        f"{integration_branch}:refs/remotes/{remote}/{integration_branch}",
                     ]
                     await self._try_process(fetch_cmd, cwd=str(path))
                 return True
@@ -366,6 +368,37 @@ class WorkspaceManager:
         command.extend([effective_url, str(path)])
         await self._run_process(command, cwd=str(path.parent))
 
+        # Fork 工作流：clone 后添加 upstream remote
+        await self._add_upstream_remote(path)
+
+    async def _add_upstream_remote(self, path: Path) -> None:
+        """如果配置了 upstream_clone_url 且与 repo_clone_url 不同，添加 upstream remote。"""
+        upstream_url = self.config.upstream_clone_url
+        if not upstream_url:
+            return
+        repo_url = self.config.repo_clone_url
+        if repo_url and upstream_url.rstrip("/") == repo_url.rstrip("/"):
+            return
+        effective_url = upstream_url
+        if self.config.git_username and self.config.git_token:
+            effective_url = upstream_url.replace(
+                "https://", f"https://{self.config.git_username}:{self.config.git_token}@"
+            )
+        await self._try_process(
+            ["git", "remote", "add", "upstream", effective_url],
+            cwd=str(path),
+        )
+
+    def _upstream_configured(self) -> bool:
+        """是否配置了独立的 upstream（fork 工作流模式）。"""
+        upstream = self.config.upstream_clone_url
+        if not upstream:
+            return False
+        repo = self.config.repo_clone_url
+        if not repo:
+            return False
+        return upstream.rstrip("/") != repo.rstrip("/")
+
     async def _checkout_base_branch(self, path: Path) -> None:
         base_branch = (self.config.base_branch or "").strip()
         if not base_branch:
@@ -374,12 +407,15 @@ class WorkspaceManager:
             return
         if await self._try_process(["git", "checkout", base_branch], cwd=str(path)):
             return
+
+        # Fork 工作流：从 upstream fetch base branch；否则从 origin fetch
+        remote = "upstream" if self._upstream_configured() else "origin"
         await self._try_process(
             [
                 "git",
                 "fetch",
-                "origin",
-                f"{base_branch}:refs/remotes/origin/{base_branch}",
+                remote,
+                f"{base_branch}:refs/remotes/{remote}/{base_branch}",
             ],
             cwd=str(path),
         )
@@ -389,7 +425,7 @@ class WorkspaceManager:
                 "show-ref",
                 "--verify",
                 "--quiet",
-                f"refs/remotes/origin/{base_branch}",
+                f"refs/remotes/{remote}/{base_branch}",
             ],
             cwd=str(path),
         ):
@@ -399,7 +435,7 @@ class WorkspaceManager:
                     "checkout",
                     "-b",
                     base_branch,
-                    f"refs/remotes/origin/{base_branch}",
+                    f"refs/remotes/{remote}/{base_branch}",
                 ],
                 cwd=str(path),
             )

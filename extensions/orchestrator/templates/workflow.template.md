@@ -32,8 +32,8 @@ tracker:
   # --- Repository-backed trackers (github / gitee / gitcode) ---
   owner: {{REPO_OWNER}}                                   # e.g. chadwweng
   repo: {{REPO_NAME}}                                     # e.g. AgentSDK
-  clone_url: {{REPO_CLONE_URL}}                           # e.g. https://gitcode.com/{{REPO_OWNER}}/{{REPO_NAME}}.git
-  api_key: ${{TRACKER_API_KEY_ENV}}                       # $VAR form reads from env at load time
+  clone_url: {{UPSTREAM_CLONE_URL}}                       # upstream URL (issue/PR API target)
+  api_key: ${{TRACKER_API_KEY_ENV}}                       # $VAR form reads env at load time
   # Only poll issues assigned to this user/login. Leave blank to track all.
   assignee: {{REPO_ASSIGNEE}}
   # Branch prefix the orchestrator uses when checking out issue branches.
@@ -62,7 +62,9 @@ polling:
 # ============================================================================
 workspace:
   root: {{WORKSPACE_ROOT}}                                 # e.g. /tmp/symphony_workspaces/myrepo
-  repo_clone_url: {{REPO_CLONE_URL}}                       # clone URL passed to `git clone`
+  repo_clone_url: {{REPO_CLONE_URL}}                       # clone URL (passed to `git clone`)
+  # Fork workflow: upstream repo URL (PR target). Same as repo_clone_url = single-repo mode.
+  upstream_clone_url: {{UPSTREAM_CLONE_URL}}               # upstream repo URL (PR target)
   clone_depth: 1                                           # shallow clone for speed
   base_branch: main                                         # repository default branch (main / master)
   checkout_issue_branch: true                              # create per-issue branch from main
