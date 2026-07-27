@@ -82,6 +82,14 @@ readonly PYTHON_MAX_SUPPORTED="3.13"
 readonly ENTRY_POINT="clawcodex-dev"   # the single registered entry in pyproject.toml
 readonly RC_MARKER="# clawcodex installer — managed by install.sh"
 
+# --- Upstream source for src/ directory (Claude Code upstream fork) ---
+# When src/ is not present in the repo, the installer pulls it from the
+# upstream source at the pinned commit and applies the corresponding patches.
+readonly UPSTREAM_URL="https://github.com/agentforce314/clawcodex.git"
+# UPSTREAM_REF is intentionally NOT readonly — update this on each version sync
+# to match the patches/upstream/<commit>/ directory.
+UPSTREAM_REF="398b44f"
+
 # ============================================================================
 #  UI helpers
 # ============================================================================
@@ -274,11 +282,11 @@ install_uv() {
     rm -f "$tmp"
 
     # Make uv visible to this session, then verify.
-    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+    export PATH="$HOME/.local:$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
     if [[ "${DRY_RUN:-0}" -eq 0 ]] && ! command -v uv >/dev/null 2>&1; then
         die_with_help "uv still not on PATH after install." \
                       "Check:    ls -la $HOME/.local/bin/uv" \
-                      "Or:       export PATH=\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH" \
+                      "Or:       export PATH=\$HOME/.local:\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH" \
                       "Then:     $0"
     fi
     log_ok "uv $(uv --version | awk '{print $2}') installed"
@@ -436,6 +444,117 @@ clone_or_update_repo() {
                       "Diagnose: $0 doctor"
     fi
     log_ok "Cloned default branch (clawcodex version NOT pinned)"
+}
+
+# ============================================================================
+#  Set up upstream src/ directory (clone + apply patches)
+#  When src/ is not present in the repo (i.e. it was removed to reduce the
+#  repo size), this step pulls the upstream source at the pinned commit and
+#  applies the corresponding patches from patches/upstream/<commit>/merged/.
+# ============================================================================
+setup_upstream_src() {
+    if [[ "${FORCE_SRC:-0}" -eq 1 ]]; then
+        if [[ -d "$CLAWCODEX_HOME/src" ]]; then
+            log_info "Removing existing src/ (--force-src)..."
+            rm -rf "$CLAWCODEX_HOME/src"
+        fi
+    fi
+
+    if [[ -d "$CLAWCODEX_HOME/src" ]]; then
+        log_ok "src/ already present (skipping upstream source setup)"
+        return
+    fi
+
+    log_info "src/ not found — pulling upstream source (ref: $UPSTREAM_REF)..."
+
+    if [[ "${DRY_RUN:-0}" -eq 1 ]]; then
+        _script_p1
+        echo "[DRY-RUN] would clone: $UPSTREAM_URL (ref: $UPSTREAM_REF) -> temp"
+        _script_p1
+        echo "[DRY-RUN] would copy: src/ -> $CLAWCODEX_HOME/src"
+        _script_p1
+        echo "[DRY-RUN] would apply patches from: patches/upstream/$UPSTREAM_REF/merged/"
+        return 0
+    fi
+
+    local upstream_tmp
+    upstream_tmp=$(mktemp -d)
+    # Cleanup helper: always remove the temp dir on exit or return
+    _cleanup_upstream_tmp() { rm -rf "${upstream_tmp:-}"; }
+    trap _cleanup_upstream_tmp RETURN
+
+    log_info "Cloning $UPSTREAM_URL (ref: $UPSTREAM_REF)..."
+
+    # Commit hash (7-40 hex chars) can't be used with --branch for shallow clone.
+    # Skip the shallow attempt and go straight to full clone + checkout.
+    if [[ "$UPSTREAM_REF" =~ ^[0-9a-f]{7,40}$ ]]; then
+        if ! git clone "$UPSTREAM_URL" "$upstream_tmp" 2>/dev/null; then
+            die_with_help "Failed to clone upstream source." \
+                          "Check your network connection." \
+                          "Verify:  git ls-remote $UPSTREAM_URL" \
+                          "Retry:   $0"
+        fi
+        if ! (cd "$upstream_tmp" && git checkout "$UPSTREAM_REF" 2>/dev/null); then
+            die_with_help "Failed to checkout upstream ref '$UPSTREAM_REF'." \
+                          "Verify:  git ls-remote $UPSTREAM_URL $UPSTREAM_REF" \
+                          "Retry:   $0 update"
+        fi
+    else
+        # Try shallow clone first (works for branches and tags), fall back to full clone.
+        if ! (git clone --depth 1 --branch "$UPSTREAM_REF" "$UPSTREAM_URL" "$upstream_tmp" 2>/dev/null); then
+            log_warn "Shallow clone failed — trying full clone..."
+            if ! git clone "$UPSTREAM_URL" "$upstream_tmp" 2>/dev/null; then
+                die_with_help "Failed to clone upstream source." \
+                              "Check your network connection." \
+                              "Verify:  git ls-remote $UPSTREAM_URL" \
+                              "Retry:   $0"
+            fi
+            if ! (cd "$upstream_tmp" && git checkout "$UPSTREAM_REF" 2>/dev/null); then
+                die_with_help "Failed to checkout upstream ref '$UPSTREAM_REF'." \
+                              "Verify:  git ls-remote $UPSTREAM_URL $UPSTREAM_REF" \
+                              "Retry:   $0 update"
+            fi
+        fi
+    fi
+
+    if [[ ! -d "$upstream_tmp/src" ]]; then
+        die_with_help "src/ directory not found in upstream source." \
+                      "Verify:  ls $upstream_tmp/" \
+                      "The upstream repo may have changed its layout."
+    fi
+
+    cp -r "$upstream_tmp/src" "$CLAWCODEX_HOME/src"
+    log_ok "Upstream src/ copied (ref: $UPSTREAM_REF)"
+
+    # Apply patches
+    local patch_dir="$CLAWCODEX_HOME/patches/upstream/$UPSTREAM_REF/merged"
+    if [[ -d "$patch_dir" ]]; then
+        log_info "Applying patches from patches/upstream/$UPSTREAM_REF/merged/..."
+        local patch_count=0 fail_count=0
+        pushd "$CLAWCODEX_HOME/src" >/dev/null
+        for patch in "$patch_dir"/*.patch; do
+            [[ -f "$patch" ]] || continue
+            if patch -p1 < "$patch" >/dev/null 2>&1; then
+                patch_count=$((patch_count + 1))
+            else
+                fail_count=$((fail_count + 1))
+                if [[ $fail_count -le 5 ]]; then
+                    log_warn "Patch failed: $(basename "$patch")"
+                fi
+            fi
+        done
+        popd >/dev/null
+        if [[ $fail_count -eq 0 ]]; then
+            log_ok "Applied $patch_count patches successfully"
+        else
+            log_warn "Applied $patch_count patches, $fail_count failed (check .rej files in src/)"
+        fi
+    else
+        log_warn "Patch directory not found: $patch_dir — src/ is unpatched upstream"
+    fi
+
+    _cleanup_upstream_tmp
+    trap - RETURN
 }
 
 # ============================================================================
@@ -744,7 +863,7 @@ EOF
 #  Patch shell rc files to include ~/.local/bin in PATH
 # ============================================================================
 update_shell_rc() {
-    local path_line='export PATH="$HOME/.local/bin:$PATH"'
+    local path_line='export PATH="$HOME/.local:$HOME/.local/bin:$PATH"'
     local rc_files=()
 
     [[ -f "$HOME/.bashrc" ]] && rc_files+=("$HOME/.bashrc")
@@ -808,6 +927,8 @@ cmd_status() {
     echo "  Installer   : v${INSTALLER_VERSION}  (would install clawcodex v${CLAWCODEX_VERSION})"
     echo "  Repo URL    : $REPO_URL"
     echo "  Git ref     : $REPO_REF"
+    echo "  Upstream URL: $UPSTREAM_URL"
+    echo "  Upstream ref: $UPSTREAM_REF"
     echo "  Install dir : $CLAWCODEX_HOME"
     echo "  Config dir  : $CONFIG_DIR"
     echo "  Local bin   : $LOCAL_BIN"
@@ -825,6 +946,11 @@ cmd_status() {
             echo "  Venv        : present (Python: $py_ver)"
         else
             echo "  Venv        : MISSING (run '$0 update' to recreate)"
+        fi
+        if [[ -d "$CLAWCODEX_HOME/src" ]]; then
+            echo "  src/        : present"
+        else
+            echo "  src/        : MISSING (will be pulled from upstream on install)"
         fi
     else
         echo "  Git state   : NOT INSTALLED (run '$0 install')"
@@ -1186,6 +1312,8 @@ OPTIONS
     --dry-run              Preview every change without applying it. Prints
                            each command that would run as '[DRY-RUN] would
                            run: ...'. Combines well with status / doctor.
+    --force-src            Force re-fetch of upstream src/ from the pinned
+                           commit. Removes existing src/ before pulling.
     --yes, -y              Assume 'yes' for any interactive prompts.
     --log-file <path>      Tee all output (stdout + stderr) to <path>. The
                            EXIT summary prints the log file path on success
@@ -1344,6 +1472,8 @@ clawcodex 安装脚本 v${INSTALLER_VERSION}  (安装 clawcodex v${CLAWCODEX_VER
     --dry-run              预览所有改动但不实际执行。把每条会运行的命令打
                            印为 '[DRY-RUN] would run: ...'。与 status /
                            doctor 配合使用效果更佳。
+    --force-src            强制重新拉取上游 src/ 源码。移除已有 src/ 后
+                           从固定 commit 重新拉取并应用补丁。
     --yes, -y              对所有交互式提示默认回答 yes。
     --log-file <路径>      把所有输出（stdout + stderr）同时写入 <路径>。
                            退出摘要会在成功 / 失败时都打印日志路径。
@@ -1483,34 +1613,37 @@ install_main() {
         echo -e "  ${C_BOLD}Debug:${C_RESET}       ${C_YELLOW}ON (set -x trace)${C_RESET}"
     fi
 
-    log_step "1/9  Checking prerequisites"
+    log_step "1/10  Checking prerequisites"
     check_git
 
-    log_step "2/9  Installing uv (Astral, no sudo)"
+    log_step "2/10  Installing uv (Astral, no sudo)"
     # Re-source in case it wasn't on PATH at the top of the script.
-    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+    export PATH="$HOME/.local:$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
     install_uv
 
-    log_step "3/9  Provisioning Python $PYTHON_MIN_VERSION+"
+    log_step "3/10  Provisioning Python $PYTHON_MIN_VERSION+"
     ensure_python
     ensure_python_pyo3_compat
 
-    log_step "4/9  Cloning / updating repository"
+    log_step "4/10  Cloning / updating repository"
     clone_or_update_repo
 
-    log_step "5/9  Initializing local release .env"
+    log_step "5/10  Setting up upstream source (src/)"
+    setup_upstream_src
+
+    log_step "6/10  Initializing local release .env"
     ensure_local_env_file
 
-    log_step "6/9  $([[ $USE_VENV -eq 1 ]] && echo "Creating virtual environment" || echo "Preparing (no venv — using system Python)")"
+    log_step "7/10  $([[ $USE_VENV -eq 1 ]] && echo "Creating virtual environment" || echo "Preparing (no venv — using system Python)")"
     create_venv
 
-    log_step "7/9  Installing dependencies (uv sync --extra all, lock-pinned)"
+    log_step "8/10  Installing dependencies (uv sync --extra all, lock-pinned)"
     install_deps
 
-    log_step "8/9  Installing local Git hooks"
+    log_step "9/10  Installing local Git hooks"
     install_git_hooks
 
-    log_step "9/9  Registering global commands & patching PATH"
+    log_step "10/10  Registering global commands & patching PATH"
     register_commands
     update_shell_rc
 
@@ -1543,6 +1676,7 @@ CONFIG_DIR_OVERRIDE=""
 USE_VENV=1       # --no-venv flips to 0
 RUN_SETUP=1      # --no-setup flips to 0
 DRY_RUN=0        # --dry-run flips to 1
+FORCE_SRC=0      # --force-src flips to 1 (force re-fetch upstream src/)
 ASSUME_YES=0     # --yes/-y flips to 1
 LOG_FILE=""      # --log-file <path>
 DEBUG=0          # --debug flips to 1 (set -x trace)
@@ -1575,6 +1709,8 @@ parse_args() {
                 LOG_FILE="$2"; shift 2 ;;
             --dry-run)
                 DRY_RUN=1; shift ;;
+            --force-src)
+                FORCE_SRC=1; shift ;;
             --yes|-y)
                 ASSUME_YES=1; shift ;;
             --no-venv)
@@ -1653,7 +1789,7 @@ END_MSG
 fi
 
 # Make uv visible early in case it's already installed but not on PATH for this shell.
-export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.local:$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
 # Set up log-file tee if requested. Must happen AFTER parse_args so LOG_FILE
 # is set, but BEFORE any other output. After this exec, [[ -t 1 ]] is false
