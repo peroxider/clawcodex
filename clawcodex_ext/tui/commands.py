@@ -55,6 +55,8 @@ LOCAL_BUILTINS: tuple[str, ...] = (
     "/resume",
     # Phase 4 dialogs:
     "/permission",
+    # 398b44f plan-mode parity:
+    "/plan",
 )
 
 
@@ -138,6 +140,7 @@ _LOCAL_BUILTIN_DESCRIPTIONS: dict[str, str] = {
     "/rewind": "Rewind conversation to an earlier turn",
     "/resume": "Resume a saved session",
     "/permission": "Change permission mode",
+    "/plan": "Enable plan mode or view the current session plan",
 }
 
 
@@ -168,6 +171,7 @@ def build_command_suggestions(
                 name=word[1:],
                 description=_LOCAL_BUILTIN_DESCRIPTIONS.get(word, ""),
                 source="builtin",
+                takes_args=word == "/plan",
             )
         )
 
@@ -402,6 +406,15 @@ def dispatch_local_command(
         return CommandDispatchResult(handled=True, open_dialog="resume")
     if name == "/permission":
         return CommandDispatchResult(handled=True, open_dialog="permission")
+    if name == "/plan":
+        description = raw.split(maxsplit=1)[1].strip() if " " in raw else ""
+        if description.lower() == "open":
+            description = ""
+        return CommandDispatchResult(
+            handled=True,
+            prompt_text=description or None,
+            system_text="__plan__",
+        )
     if name == "/forecast":
         parts = raw.split(maxsplit=1)
         action = parts[1].strip().lower() if len(parts) > 1 else ""

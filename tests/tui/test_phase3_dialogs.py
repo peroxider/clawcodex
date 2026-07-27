@@ -26,7 +26,12 @@ from src.tui.widgets.structured_diff import (
     parse_structured_patch,
     parse_unified_diff,
 )
-from src.tui.widgets.task_list import Task, TaskListWidget
+from src.tui.widgets.task_list import (
+    _STATUS_STYLES,
+    Task,
+    TaskListWidget,
+    render_task_tree,
+)
 from src.tui.widgets.tool_activity.edit import EditActivity, _format_edit_summary
 
 
@@ -338,6 +343,33 @@ def test_task_list_progress_counts_leaves_only():
     done, total = widget.progress()
     assert done == 1
     assert total == 3
+
+
+def test_task_list_uses_current_glyphs_and_keeps_failed_hierarchy():
+    rendered = render_task_tree(
+        [
+            Task(
+                id="root",
+                title="parent",
+                status="in_progress",
+                children=[
+                    Task(id="done", title="done", status="completed"),
+                    Task(id="todo", title="todo", status="pending"),
+                    Task(id="failed", title="failed", status="failed"),
+                ],
+            )
+        ]
+    ).plain
+
+    assert "◼ parent" in rendered
+    assert "├── ✔ done" in rendered
+    assert "├── ◻ todo" in rendered
+    assert "└── ✖ failed" in rendered
+
+
+def test_task_list_default_tone_inherits_active_theme_text():
+    assert _STATUS_STYLES["pending"][1] == ""
+    assert "color: $text" in TaskListWidget.DEFAULT_CSS
 
 
 @pytest.mark.asyncio

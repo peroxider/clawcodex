@@ -7,7 +7,11 @@ import pytest
 pytest.importorskip("textual")
 
 from src.tui.state import AppState
-from src.tui.widgets.status_line import _goal_status_segment
+from src.tui.widgets.status_line import StatusLine, _goal_status_segment
+
+
+def test_status_line_uses_adaptive_muted_text_color() -> None:
+    assert "color: $text-muted" in StatusLine.DEFAULT_CSS
 
 
 def test_status_line_matches_claude_active_goal_indicator() -> None:

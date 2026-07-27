@@ -2672,7 +2672,7 @@ class TestREPLResumeReplay(unittest.TestCase):
         )
 
         # Both tool-use headers should be rendered.
-        tool_headers = [ln for ln in printed_lines if "●" in ln]
+        tool_headers = [ln for ln in printed_lines if "[success]⏺[/success]" in ln]
         self.assertEqual(
             len(tool_headers),
             2,

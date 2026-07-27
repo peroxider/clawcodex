@@ -174,6 +174,40 @@ async def test_prompt_input_mounts_indicator_and_footer():
 
 
 @pytest.mark.asyncio
+async def test_prompt_input_uses_bare_prompt_and_bash_visual_mode():
+    """The visual shell changes without rewriting the submitted draft."""
+
+    from src.tui.widgets.prompt_input import PromptInput
+
+    class _HostVisual(App):
+        def compose(self) -> ComposeResult:
+            yield PromptInput(words_provider=lambda: [], vim_mode=False)
+
+    async with _HostVisual().run_test() as pilot:
+        await pilot.pause()
+        prompt = pilot.app.screen.query_one(PromptInput)
+        assert str(prompt._prompt_prefix.render()) == "❯"
+        assert not prompt._composer_frame.has_class("-bash")
+
+        prompt._input.value = "!pwd"
+        await pilot.pause()
+        assert prompt._input.value == "!pwd"
+        assert str(prompt._prompt_prefix.render()) == "$"
+        assert prompt._composer_frame.has_class("-bash")
+        assert prompt._footer.last_line.startswith("! for bash mode")
+
+
+def test_prompt_input_visual_shell_uses_adaptive_theme_tokens():
+    """Normal composer colors must remain legible in light themes."""
+
+    from src.tui.widgets.prompt_input import PromptInput
+
+    assert "border-top: round $primary" in PromptInput.DEFAULT_CSS
+    assert "border-bottom: round $primary" in PromptInput.DEFAULT_CSS
+    assert "color: $text" in PromptInput.DEFAULT_CSS
+
+
+@pytest.mark.asyncio
 async def test_prompt_input_set_vim_mode_refreshes_indicator():
     """``PromptInput.set_vim_mode`` must propagate to the indicator."""
     from src.tui.widgets.prompt_input import PromptInput

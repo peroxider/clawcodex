@@ -797,6 +797,9 @@ class ClawCodexTUI(App):
             transcript.clear_transcript()
             self._agent_bridge.reset_advisor_dedup()
             return
+        if result.system_text == "__plan__":
+            self._handle_plan_command(result.prompt_text, transcript)
+            return
         if result.system_text in (
             "__stream_on__",
             "__stream_off__",
@@ -835,6 +838,69 @@ class ClawCodexTUI(App):
             self.submit_to_agent(result.prompt_text)
         if result.should_query:
             self._agent_bridge.continue_goal_if_idle()
+
+    def _handle_plan_command(
+        self,
+        description: str | None,
+        transcript: Transcript,
+    ) -> None:
+        """Apply the 398b44f ``/plan`` semantics on the Textual surface."""
+
+        current_mode = "default"
+        try:
+            from src.permissions.modes import to_external_permission_mode
+
+            ctx = self.tool_context
+            if ctx is not None and ctx.permission_context is not None:
+                current_mode = to_external_permission_mode(
+                    ctx.permission_context.mode or "default"
+                )
+        except Exception:
+            pass
+
+        if current_mode != "plan":
+            try:
+                self._runtime_permission_controller.set_mode("plan")
+            except Exception as exc:
+                transcript.append_system(
+                    f"Failed to enable plan mode: {exc}",
+                    style="error",
+                )
+                return
+
+            transcript.append_system("Enabled plan mode.", style="muted")
+            if description:
+                transcript.append_user(
+                    f"(from /plan) {description[:80]}"
+                    + ("…" if len(description) > 80 else "")
+                )
+                self.submit_to_agent(description)
+            return
+
+        try:
+            from src.utils.plans import get_plan, get_plan_file_path
+
+            plan = get_plan()
+            plan_file_path = get_plan_file_path()
+        except Exception as exc:
+            transcript.append_system(
+                f"Unable to read the current plan: {exc}",
+                style="error",
+            )
+            return
+
+        if not plan:
+            transcript.append_system(
+                "Already in plan mode. No plan written yet.",
+                style="muted",
+            )
+            return
+
+        transcript.append_system(
+            f"Current Plan\n{plan_file_path}\n\n{plan}",
+            style="muted",
+            render="markdown",
+        )
 
     # ---- Phase 2 dialog dispatcher -------------------------------------
     def _open_phase2_dialog(self, name: str, transcript: Transcript) -> None:

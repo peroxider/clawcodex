@@ -58,10 +58,32 @@ def test_cancel_callback_invoked_directly() -> None:
     assert called == ["ok"]
 
 
-def test_spinner_frames_are_finite_braille() -> None:
-    # Sanity: 10 distinct braille frames; matches rich's ``dots`` spinner.
-    assert len(_SPINNER_FRAMES) == 10
+def test_spinner_frames_match_official_ping_pong_star() -> None:
+    assert _SPINNER_FRAMES == (
+        "·",
+        "✢",
+        "✳",
+        "✶",
+        "✻",
+        "✽",
+        "✽",
+        "✻",
+        "✶",
+        "✳",
+        "✢",
+        "·",
+    )
     assert all(len(frame) == 1 for frame in _SPINNER_FRAMES)
+
+
+def test_status_shimmer_preserves_explicit_markup() -> None:
+    plain = LiveStatus._apply_status_shimmer([("class:status", "Thinking…")], tick=3)
+    assert any(style == "class:shimmer" for style, _ in plain)
+    assert "".join(text for _, text in plain) == "Thinking…"
+
+    warning_style = "class:status fg:#ffc107"
+    warning = LiveStatus._apply_status_shimmer([(warning_style, "Cancelling…")], tick=3)
+    assert warning == [(warning_style, "Cancelling…")]
 
 
 def test_submit_handler_clears_buffer_and_queues_text() -> None:

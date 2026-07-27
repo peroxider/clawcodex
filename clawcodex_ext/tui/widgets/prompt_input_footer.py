@@ -22,7 +22,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from rich.cells import cell_len
 from rich.text import Text
+from textual import events
 from textual.widgets import Static
 
 from ..vim import VimState
@@ -30,6 +32,24 @@ from ..vim import VimState
 # Use the same separator the status line uses, so the visual rhythm of
 # the bottom region is consistent across the two rows.
 _SEPARATOR = " · "
+
+
+@dataclass(frozen=True)
+class _ModeBadge:
+    """Visual description of an Ink-style permission-mode badge."""
+
+    symbol: str
+    label: str
+    tone: str
+
+
+_MODE_BADGES: dict[str, _ModeBadge] = {
+    "acceptEdits": _ModeBadge("▶▶", "accept edits on", "primary"),
+    "auto": _ModeBadge("▶▶", "auto mode on", "warning"),
+    "bypassPermissions": _ModeBadge("▶▶", "bypass permissions on", "error"),
+    "dontAsk": _ModeBadge("▶▶", "don't ask on", "error"),
+    "plan": _ModeBadge("⏸", "plan mode on", "info"),
+}
 
 
 @dataclass(frozen=True)
@@ -55,7 +75,8 @@ class PromptInputFooter(Static):
         height: 1;
         width: 1fr;
         color: $text-muted;
-        padding: 0 1;
+        background: transparent;
+        padding: 0 2;
     }
     PromptInputFooter.-hidden {
         display: none;
@@ -76,6 +97,7 @@ class PromptInputFooter(Static):
         # in bash mode it shows "! for bash mode".
         self._loading: bool = False
         self._bash_mode: bool = False
+        self._permission_mode: str = ""
         # When the `?` shortcuts panel is open it replaces the footer (TS
         # PromptInputFooter.tsx:135 `if (helpOpen) return <HelpMenu>`). The
         # footer owns its own `-hidden` class — `_set_help` toggles this flag
@@ -88,6 +110,11 @@ class PromptInputFooter(Static):
 
     # ---- lifecycle ----
     def on_mount(self) -> None:
+        self._redraw()
+
+    def on_resize(self, _: events.Resize) -> None:
+        """Keep the permission badge pinned to the right after resizing."""
+
         self._redraw()
 
     # ---- external triggers ----
@@ -120,6 +147,15 @@ class PromptInputFooter(Static):
         if bash_mode == self._bash_mode:
             return
         self._bash_mode = bash_mode
+        self._redraw()
+
+    def set_permission_mode(self, mode: str | None) -> None:
+        """Show the active permission mode as the composer's right badge."""
+
+        permission_mode = mode or ""
+        if permission_mode == self._permission_mode:
+            return
+        self._permission_mode = permission_mode
         self._redraw()
 
     def set_suppressed(self, suppressed: bool) -> None:
@@ -195,15 +231,59 @@ class PromptInputFooter(Static):
                 except Exception:
                     continue
             visible.append(hint)
-        if not visible:
+        badge = _MODE_BADGES.get(self._permission_mode)
+        if not visible and badge is None:
             self._last_line = ""
             self.add_class("-hidden")
             self.update(Text(""))
             return
         self.remove_class("-hidden")
-        line = _SEPARATOR.join(f"{h.keys} {h.label}" for h in visible)
-        self._last_line = line
-        self.update(Text(line))
+        left = _SEPARATOR.join(f"{h.keys} {h.label}" for h in visible)
+        right = ""
+        if badge is not None:
+            right = f"{badge.symbol} {badge.label} (shift+tab to cycle)"
+
+        # ``content_size`` is populated once mounted.  Before layout (unit
+        # construction / early state changes), fall back to a compact gap;
+        # the resize event redraws with the badge right-aligned immediately.
+        available = self.content_size.width
+        if right:
+            minimum_gap = 1 if left else 0
+            gap = max(available - cell_len(left) - cell_len(right), minimum_gap)
+        else:
+            gap = 0
+
+        line = Text()
+        if left:
+            line.append(
+                left,
+                style="#FD5DB1" if self._bash_mode else "dim",
+            )
+        if badge is not None:
+            if gap:
+                line.append(" " * gap)
+            line.append(
+                f"{badge.symbol} {badge.label}",
+                style=self._badge_style(badge),
+            )
+            line.append(" (shift+tab to cycle)", style="dim")
+
+        self._last_line = line.plain
+        self.update(line)
+
+    def _badge_style(self, badge: _ModeBadge) -> str:
+        """Resolve badge colors through the active light/dark palette."""
+
+        try:
+            color = getattr(self.app.palette, badge.tone)
+        except Exception:
+            color = {
+                "error": "#FF6B80",
+                "info": "#48968C",
+                "primary": "#D77757",
+                "warning": "#FFC107",
+            }[badge.tone]
+        return f"bold {color}"
 
 
 __all__ = ["FooterHint", "PromptInputFooter"]

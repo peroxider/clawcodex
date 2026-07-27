@@ -119,12 +119,12 @@ class RowHeader(Static):
     RowHeader {
         height: 1;
         width: auto;
-        padding: 0 1;
+        padding: 0;
     }
-    RowHeader.-user { color: $primary; text-style: bold; }
-    RowHeader.-assistant { color: $secondary; text-style: bold; }
-    RowHeader.-tool { color: $warning; text-style: bold; }
-    RowHeader.-tool-success { color: $success; text-style: bold; }
+    RowHeader.-user { color: $text-muted; }
+    RowHeader.-assistant { color: $text; }
+    RowHeader.-tool { color: $text; }
+    RowHeader.-tool-success { color: $text; }
     RowHeader.-tool-error { color: $error; text-style: bold; }
     """
 

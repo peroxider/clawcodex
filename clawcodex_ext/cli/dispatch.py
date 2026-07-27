@@ -181,8 +181,9 @@ def run_cli(argv: list[str] | None = None) -> int:
     # at the VERY START of run_cli so it survives the 12s kill when
     # RuntimeContext.build() takes ~10s. Config reads are cheap (~ms) so
     # this is safe to do before any heavy initialization. Without this
-    # flush, piped invocations (e.g. stability gate) get empty stdout
-    # when the process is killed at the timeout.
+    # flush, piped invocations (e.g. stability gate) get no diagnostic
+    # when the process is killed at the timeout. Keep it on stderr so
+    # --output-format json/stream-json leaves stdout machine-parseable.
     if "--print" in (argv or sys.argv)[1:] or "-p" in (argv or sys.argv)[1:]:
         try:
             from src.config import get_default_provider, get_provider_config
@@ -204,6 +205,7 @@ def run_cli(argv: list[str] | None = None) -> int:
             _model = _model_arg or _prov_cfg.get("default_model")
             print(
                 f"Provider: {_prov_name}, Model: {_model}",
+                file=sys.stderr,
                 flush=True,
             )
         except Exception:

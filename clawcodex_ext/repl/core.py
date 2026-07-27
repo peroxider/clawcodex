@@ -1335,19 +1335,20 @@ class ClawcodexREPL:
         :class:`LiveStatus`) and any other path that needs to surface a
         user-authored message into scrollback.
 
-        Uses ``prompt_fg`` (terminal default foreground) for the ``❯``
-        prefix so queued messages match the visual style of normal input
-        typed directly in the prompt buffer.
+        The official transcript uses a subtle neutral ``❯`` role marker and
+        ordinary body text; orange remains reserved for interactive chrome.
+        Queued messages stay transparent so they do not leave a full-width
+        background slab behind in scrollback.
         """
 
         try:
-            color = self._repl_palette.prompt_fg
+            color = self._repl_palette.border
         except Exception:
             color = ""
         from rich.text import Text
 
         body = text.replace("\n", "\n  ")
-        prefix = Text("❯ ", style=f"bold {color}")
+        prefix = Text("❯ ", style=color)
         self.console.print(
             prefix + Text(body),
             markup=False,
@@ -2440,7 +2441,10 @@ class ClawcodexREPL:
                         if subtype == "goal_evaluator_error"
                         else "dim"
                     )
-                    self.console.print(f"[{style}]{escape(str(message.content))}[/{style}]")
+                    self.console.print(
+                        f"[muted]·[/muted] [{style}]"
+                        f"{escape(str(message.content))}[/{style}]"
+                    )
 
         def _on_tool_event(event: ToolEvent) -> None:
             tool_use_id = str(event.tool_use_id or "")
@@ -2450,7 +2454,7 @@ class ClawcodexREPL:
                 summary = summarize_tool_use(event.tool_name, event.tool_input or {})
                 suffix = f" ({escape(summary)})" if summary else ""
                 self.console.print(
-                    f"[success]●[/success] [bold][info]{event.tool_name}[/info][/bold]{suffix}"
+                    f"[success]⏺[/success] [bold][tool]{event.tool_name}[/tool][/bold]{suffix}"
                 )
                 return
 
@@ -2501,7 +2505,7 @@ class ClawcodexREPL:
             self._last_chat_outcome = "cancelled"
             abort_controller.abort("background")
 
-        self.console.print("\n[bold]Assistant[/bold]")
+        self.console.print("\n[agent]⏺[/agent] [muted]Assistant[/muted]")
         try:
             loop = self._get_chat_loop()
         except RuntimeError:
@@ -3118,7 +3122,7 @@ class ClawcodexREPL:
                     removes += 1
 
         summary = _format_edit_summary_text(adds, removes) or "no changes"
-        summary_text = Text(summary, style="dim")
+        summary_text = Text(summary, style=self._repl_palette.text_muted)
 
         # Snap to a sane width: ``self.console.width`` falls back to 80
         # when stdout is not a TTY. Fenced to 1 so degenerate widths don't
@@ -4061,7 +4065,7 @@ class ClawcodexREPL:
             parts.append(f"[bold]{in_progress}[/bold] in progress")
         parts.append(f"[bold]{pending}[/bold] open")
         header = (
-            f"[success]●[/success] [bold][info]Tasks[/info][/bold] "
+            f"[success]⏺[/success] [bold][tool]Tasks[/tool][/bold] "
             f"[dim]([bold]{len(sorted_tasks)}[/bold] total: {', '.join(parts)})[/dim]"
         )
         self.console.print(header)
@@ -4336,7 +4340,7 @@ class ClawcodexREPL:
         Produces the same visual output the user saw before exiting:
         * User messages with ``❯`` prefix
         * Assistant text rendered as Rich Markdown
-        * Tool calls as ``● ToolName(args)`` headers
+        * Tool calls as ``⏺ ToolName(args)`` headers
         * Tool results as ``  ⎿  result`` lines (with edit diff support)
         * Thinking blocks rendered if visible, or stashed for Ctrl+O expansion
 
@@ -4397,7 +4401,9 @@ class ClawcodexREPL:
                             if subtype == "goal_achieved"
                             else "dim"
                         )
-                        self.console.print(f"[{style}]{escape(display)}[/{style}]")
+                        self.console.print(
+                            f"[muted]·[/muted] [{style}]{escape(display)}[/{style}]"
+                        )
                 continue
 
             if role == "user":
@@ -4449,7 +4455,7 @@ class ClawcodexREPL:
                 # Only print the agent label when the message has visible
                 # text content.  Tool-only messages (ToolUseBlock without
                 # any TextBlock) suppress the label — the deferred
-                # ``● ToolName(args)`` header already identifies the call
+                # ``⏺ ToolName(args)`` header already identifies the call
                 # when its result arrives.  Without this check every
                 # tool-only assistant message would produce a lonely
                 # "Assistant" line with nothing underneath, stacking up
@@ -4465,7 +4471,9 @@ class ClawcodexREPL:
                 elif isinstance(content, str):
                     _has_text = bool(content.strip())
                 if _has_text:
-                    self.console.print(f"\n[bold]{_agent_label}[/bold]")
+                    self.console.print(
+                        f"\n[agent]⏺[/agent] [muted]{escape(_agent_label)}[/muted]"
+                    )
                 if isinstance(content, list):
                     for block in content:
                         if isinstance(block, TextBlock) and (block.text or "").strip():
@@ -4491,7 +4499,7 @@ class ClawcodexREPL:
                             if tool_block_needs_leading_space:
                                 self.console.print()
                             self.console.print(
-                                f"[success]●[/success] [bold][info]{block.name}[/info][/bold]"
+                                f"[success]⏺[/success] [bold][tool]{block.name}[/tool][/bold]"
                                 + (f" {call_args}" if call_args else "")
                             )
                             tool_block_needs_leading_space = True
@@ -4611,7 +4619,8 @@ class ClawcodexREPL:
             or Text is None
             or Columns is None
         ):
-            print(f"ClawCodex v{__version__}")
+            print(f"✦ ClawCodex v{__version__}")
+            print("a coding agent in your terminal")
             print(f"{model_label} · {provider_label}")
             print(f"{display_path}\n")
             return
@@ -4619,27 +4628,30 @@ class ClawcodexREPL:
         width = getattr(self.console, "width", 80)
         content_width = max(28, min(width - 12, 72))
         table = Table.grid(padding=(0, 1))
-        table.add_column(style="bright_black", justify="right", no_wrap=True)
-        table.add_column(style="white", ratio=1)
+        table.add_column(style=self._p.text_muted, justify="right", no_wrap=True)
+        table.add_column(style=self._p.text, ratio=1)
         table.add_row(
             "Version",
             Text.assemble(
                 ("ClawCodex", f"bold {self._p.text}"),
                 ("  ", ""),
-                (f"v{__version__}", f"bold {self._p.info}"),
+                (f"v{__version__}", self._p.text_muted),
             ),
         )
-        table.add_row("Model", Text(model_label, style=f"bold {self._p.secondary}"))
-        table.add_row("Provider", Text(provider_label, style=f"bold {self._p.success}"))
+        table.add_row("Model", Text(model_label, style=f"bold {self._p.text}"))
+        table.add_row("Provider", Text(provider_label, style=self._p.text_muted))
         table.add_row(
             "Workspace",
             Text(
                 self._truncate_middle(display_path, content_width - 12),
-                style=f"bold {self._p.primary}",
+                style=self._p.text_muted,
             ),
         )
 
-        footer = Text("/help  •  /tools  •  /tui  •  /stream  •  /exit", style="dim")
+        footer = Text(
+            "/help for commands  ·  /tools  ·  /tui  ·  /stream  ·  /exit",
+            style=self._p.text_muted,
+        )
 
         # F-97 telemetry notice — show when both stats collection and error
         # reporting are enabled.  Best-effort & swallowed on failure so a
@@ -4670,9 +4682,9 @@ class ClawcodexREPL:
             body = Group(table, Text(""), Align.center(footer))
         header = Panel(
             body,
-            border_style="bright_black",
-            title="[bold][info] CLAWCODEX [/info][/bold]",
-            subtitle="[dim]interactive terminal[/dim]",
+            border_style=self._p.border,
+            title="[bold][primary] ✦ clawcodex [/primary][/bold]",
+            subtitle="[dim]a coding agent in your terminal[/dim]",
             padding=(1, 2),
         )
         self.console.print(header)
@@ -6319,7 +6331,9 @@ class ClawcodexREPL:
             _agent_label = "Assistant"
             if agent_attachments:
                 _agent_label = agent_attachments[0].get("agent_type", "Assistant")
-            self.console.print(f"\n[bold]{_agent_label}[/bold]")
+            self.console.print(
+                f"\n[agent]⏺[/agent] [muted]{escape(_agent_label)}[/muted]"
+            )
 
             stream_started = False
 
@@ -6519,7 +6533,7 @@ class ClawcodexREPL:
                 turn_tokens = 0
                 # Track whether a Task*/TodoWrite round is "in flight" so we
                 # can coalesce a run of task-management calls into a single
-                # TaskListV2-style snapshot instead of dumping one ``●`` bullet
+                # TaskListV2-style snapshot instead of dumping one ``⏺`` bullet
                 # per call. This mirrors the behaviour of
                 # ``typescript/src/components/TaskListV2.tsx``, which re-renders
                 # a single widget each time the ``tasks`` slice of AppState
@@ -6527,7 +6541,7 @@ class ClawcodexREPL:
                 pending_task_flush = False
                 task_tool_ids: set[str] = set()
                 # When the assistant emits multiple tool_use blocks in one
-                # message, printing all ``● Tool(args)`` lines eagerly and
+                # message, printing all ``⏺ Tool(args)`` lines eagerly and
                 # then dumping every ``⎿ preview`` underneath stacks the
                 # output into one tall, hard-to-scan block. Defer each
                 # header so it prints right above its matching result —
@@ -6616,10 +6630,10 @@ class ClawcodexREPL:
                                 elif isinstance(block, ToolUseBlock):
                                     tool_use_map[block.id] = (block.name, block.input)
                                     # Show the tool name in the spinner
-                                    # so "Thinking…" → "● Bash" / "● Read"
+                                    # so "Thinking…" → "⏺ Bash" / "⏺ Read"
                                     # instead of a static message.
                                     if _engine_status_ref:
-                                        _engine_status_ref[0].update(f"● {block.name}")
+                                        _engine_status_ref[0].update(f"⏺ {block.name}")
                                     if block.name in _TASK_WIDGET_TOOL_NAMES:
                                         task_tool_ids.add(block.id)
                                         pending_task_flush = True
@@ -6631,7 +6645,7 @@ class ClawcodexREPL:
                                     summary = summarize_tool_use(block.name, block.input)
                                     if isinstance(summary, str) and summary:
                                         summary = self._shorten_path_text(summary)
-                                    # Mirror the compact ``● ToolName(args)``
+                                    # Mirror the compact ``⏺ ToolName(args)``
                                     # rendering used by
                                     # ``typescript/src/components/REPL.tsx``
                                     # (and Claude Code's Ink UI). The function-
@@ -6640,14 +6654,14 @@ class ClawcodexREPL:
                                     # and is easier to scan.
                                     # Args go inside parens in a dim style;
                                     # omit them entirely when we have nothing
-                                    # meaningful to show so ``● ToolName`` reads
+                                    # meaningful to show so ``⏺ ToolName`` reads
                                     # cleaner than a literal ``ToolName()``.
                                     if summary:
                                         call_args = f"[dim]([/dim]{escape(summary)}[dim])[/dim]"
                                     else:
                                         call_args = ""
                                     pending_tool_use_prints[block.id] = (
-                                        f"[success]●[/success] [bold][info]{block.name}[/info][/bold]"
+                                        f"[success]⏺[/success] [bold][tool]{block.name}[/tool][/bold]"
                                         + (f" {call_args}" if call_args else "")
                                     )
                         continue
@@ -6658,7 +6672,7 @@ class ClawcodexREPL:
                             _stop_status_once()
                             stream_started = True
                             self.console.print(
-                                f"[warning]Reached maximum number of turns. "
+                                f"[muted]·[/muted] [warning]Reached maximum number of turns. "
                                 f"The task may be incomplete.[/warning]"
                             )
                         elif subtype in {"goal_evaluation", "goal_achieved"}:
@@ -6674,7 +6688,10 @@ class ClawcodexREPL:
                                 if _engine_status_ref:
                                     _engine_status_ref[0].set_tokens(turn_tokens)
                             style = "success" if subtype == "goal_achieved" else "dim"
-                            self.console.print(f"[{style}]{escape(str(msg.content))}[/{style}]")
+                            self.console.print(
+                                f"[muted]·[/muted] [{style}]"
+                                f"{escape(str(msg.content))}[/{style}]"
+                            )
                             add_existing = getattr(
                                 self.session.conversation,
                                 "add_existing_message",
@@ -6697,7 +6714,10 @@ class ClawcodexREPL:
                                 turn_tokens += in_toks + out_toks
                                 if _engine_status_ref:
                                     _engine_status_ref[0].set_tokens(turn_tokens)
-                            self.console.print(f"[warning]{escape(str(msg.content))}[/warning]")
+                            self.console.print(
+                                f"[muted]·[/muted] [warning]"
+                                f"{escape(str(msg.content))}[/warning]"
+                            )
                             add_existing = getattr(
                                 self.session.conversation,
                                 "add_existing_message",
@@ -6740,7 +6760,7 @@ class ClawcodexREPL:
                                                 f"[error]  ⎿  {escape(err_text) if err_text else 'Error'}[/error]"
                                             )
                                         continue
-                                    # Print the deferred ``● Tool(args)``
+                                    # Print the deferred ``⏺ Tool(args)``
                                     # header right above this result so each
                                     # call renders as a self-contained block.
                                     header = pending_tool_use_prints.pop(block.tool_use_id, None)

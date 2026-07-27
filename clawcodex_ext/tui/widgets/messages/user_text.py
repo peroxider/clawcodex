@@ -1,8 +1,9 @@
 """User turn row.
 
-Port of ``typescript/src/components/messages/UserTextMessage.tsx``.
-Renders a single row with a ``❯`` prefix in the primary color followed
-by the user's prompt in bold text. Multi-line prompts are preserved.
+Port of the 398b44f transcript treatment: a full-width, weak-gray band
+carries the emphasis while a subtle ``❯`` pointer and plain body text keep
+the row quieter than a traditional colored/bold chat bubble. Multi-line
+prompts are preserved.
 """
 
 from __future__ import annotations
@@ -20,9 +21,12 @@ class UserTextMessage(BaseRow):
     DEFAULT_CSS = """
     UserTextMessage {
         height: auto;
+        width: 100%;
+        background: #373737;
     }
     UserTextMessage > Static {
         padding: 0 1;
+        width: 100%;
     }
     """
 
@@ -30,16 +34,31 @@ class UserTextMessage(BaseRow):
         super().__init__()
         self._text = text
 
+    def on_mount(self) -> None:
+        """Apply the active palette's user-band color.
+
+        A literal dark fallback in ``DEFAULT_CSS`` keeps this standalone
+        widget valid in small Textual test harnesses that do not install the
+        application-level palette variables.
+        """
+
+        try:
+            self.styles.background = self.app.palette.surface_alt
+        except Exception:
+            pass
+
     def compose(self) -> ComposeResult:
         yield Static(self._build_text(), markup=False)
 
     def _build_text(self) -> Text:
         try:
-            color = self.app.palette.user
+            pointer_color = self.app.palette.user
+            body_color = self.app.palette.text
         except Exception:
-            color = "#8ab4f8"
-        prefix = Text("❯ ", style=f"bold {color}")
-        body = Text(self._text, style="bold")
+            pointer_color = "#505050"
+            body_color = "#FFFFFF"
+        prefix = Text("❯ ", style=pointer_color)
+        body = Text(self._text, style=body_color)
         return prefix + body
 
     def snapshot(self) -> Text:
