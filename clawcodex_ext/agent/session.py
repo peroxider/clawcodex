@@ -194,14 +194,21 @@ class Session:
                     data = json.load(f)
             except (OSError, json.JSONDecodeError):
                 return None
-            return cls(
-                session_id=data["session_id"],
-                provider=data["provider"],
-                model=data["model"],
-                conversation=Conversation.from_dict(data["conversation"]),
-                created_at=data["created_at"],
-                updated_at=data["updated_at"],
-            )
+            # If the snapshot has real messages, use it. If messages is
+            # empty (e.g. orchestrator's _save_json_snapshot couldn't load
+            # messages from storage, or the snapshot was written before the
+            # first turn flushed the transcript), fall through to the
+            # transcript-reading branch below so the REPL can display the
+            # actual conversation history from transcript.jsonl.
+            if data.get("conversation", {}).get("messages"):
+                return cls(
+                    session_id=data["session_id"],
+                    provider=data["provider"],
+                    model=data["model"],
+                    conversation=Conversation.from_dict(data["conversation"]),
+                    created_at=data["created_at"],
+                    updated_at=data["updated_at"],
+                )
 
         # Final fallback: orchestrator/cron sessions that only wrote
         # metadata + plain message JSONL. Read metadata for model and

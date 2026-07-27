@@ -4,7 +4,7 @@ Given an issue identifier (or run_id), loads the SessionStorage
 transcript written by the headless agent, calls :func:`Session.resume`
 to update bootstrap state + restore cost counters, then renders a
 short summary so the operator can confirm the LLM context is intact
-before either re-attaching via ``issue attach`` or starting a fresh
+before either taking over via ``issue takeover`` or starting a fresh
 REPL.
 
 This is the orchestrator-side counterpart to
@@ -176,4 +176,5 @@ def _run_resume_session(
         )
 
     print(_render_summary(label, result))
+
     return 0

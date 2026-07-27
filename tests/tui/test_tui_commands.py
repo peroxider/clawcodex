@@ -157,6 +157,27 @@ def test_command_suggestions_include_multimodel(tmp_path: Path):
     assert entry.slash == "/multimodel"
 
 
+def test_build_command_suggestions_surfaces_skill_aliases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Skills with aliases must surface them so typing an alias (e.g. /orch)
+    annotates the canonical name (e.g. /orchestrator (orch)) — mirroring how
+    builtin aliases like /exit (quit, q) are displayed."""
+    from types import SimpleNamespace
+
+    import src.skills.loader as skills_loader
+
+    fake_skill = SimpleNamespace(name="my-skill", description="a skill", aliases=["ms", "my"])
+    monkeypatch.setattr(skills_loader, "get_all_skills", lambda project_root=None: [fake_skill])
+
+    suggestions = build_command_suggestions(tmp_path)
+    entry = next((s for s in suggestions if s.name == "my-skill"), None)
+
+    assert entry is not None
+    assert entry.aliases == ("ms", "my")
+    assert entry.source == "skills"
+
+
 @pytest.mark.asyncio
 async def test_registry_fork_result_is_returned_as_assistant_text(
     monkeypatch: pytest.MonkeyPatch,

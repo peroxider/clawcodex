@@ -1055,5 +1055,81 @@ class TestRulesReferenceInjection(unittest.TestCase):
         self.assertNotIn("Review conventions", rendered)
 
 
+class TestGetOperatorHints(unittest.TestCase):
+    """``_get_operator_hints`` one-shot semantics + repro section preservation."""
+
+    def test_returns_none_when_file_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            from extensions.orchestrator.prompt_builder import _get_operator_hints
+
+            result = _get_operator_hints(Path(d))
+            self.assertIsNone(result)
+
+    def test_returns_content_and_clears_inject_hints(self) -> None:
+        """Inject hints are one-shot: read once, then cleared."""
+        with tempfile.TemporaryDirectory() as d:
+            from extensions.orchestrator.prompt_builder import _get_operator_hints
+
+            hints_file = Path(d) / ".operator_hints.md"
+            hints_file.write_text("--- Operator Hint #1 ---\nhello\n---\n", encoding="utf-8")
+            result = _get_operator_hints(Path(d))
+            self.assertIsNotNone(result)
+            self.assertIn("hello", result)
+            # File should be cleared (one-shot).
+            self.assertEqual(hints_file.read_text(encoding="utf-8").strip(), "")
+
+    def test_preserves_reproduction_section(self) -> None:
+        """The ## Reproduction established section from repro_gate must
+        persist across reads — it is prepended to every prompt.
+        """
+        with tempfile.TemporaryDirectory() as d:
+            from extensions.orchestrator.prompt_builder import _get_operator_hints
+
+            hints_file = Path(d) / ".operator_hints.md"
+            hints_file.write_text(
+                "--- Operator Hint #1 ---\nhello\n---\n\n"
+                "## Reproduction established\n"
+                "A reproduction command is in place and currently FAILS:\n\n"
+                "```\npytest test_foo.py\n```\n",
+                encoding="utf-8",
+            )
+            result = _get_operator_hints(Path(d))
+            self.assertIsNotNone(result)
+            self.assertIn("hello", result)
+            self.assertIn("Reproduction established", result)
+            # After read, inject hint cleared but repro section preserved.
+            remaining = hints_file.read_text(encoding="utf-8")
+            self.assertNotIn("hello", remaining)
+            self.assertIn("## Reproduction established", remaining)
+            self.assertIn("pytest test_foo.py", remaining)
+
+    def test_second_read_returns_only_repro_section(self) -> None:
+        """After the first read clears inject hints, a second read
+        should return only the persisted repro section.
+        """
+        with tempfile.TemporaryDirectory() as d:
+            from extensions.orchestrator.prompt_builder import _get_operator_hints
+
+            hints_file = Path(d) / ".operator_hints.md"
+            hints_file.write_text(
+                "--- Operator Hint #1 ---\nhello\n---\n\n"
+                "## Reproduction established\n"
+                "pytest test_foo.py\n",
+                encoding="utf-8",
+            )
+            # First read: returns everything, clears inject hint.
+            first = _get_operator_hints(Path(d))
+            self.assertIsNotNone(first)
+            self.assertIn("hello", first)
+            # Second read: returns only repro section.
+            second = _get_operator_hints(Path(d))
+            self.assertIsNotNone(second)
+            self.assertNotIn("hello", second)
+            self.assertIn("Reproduction established", second)
+            # Repro section still in file.
+            remaining = hints_file.read_text(encoding="utf-8")
+            self.assertIn("Reproduction established", remaining)
+
+
 if __name__ == "__main__":
     unittest.main()

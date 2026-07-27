@@ -12,9 +12,11 @@ Covers:
     each lookup mode: ``--id`` (IssueRegistry), ``--run`` +
     ``--workspace`` (registry bypass), and the not-found / no-run-id
     / no-workspace-path / no-registry negative cases.
-
-The Step 2 slice covers only the parser, dispatcher, and resolver.
-Socket send + REPL spawn + end-to-end land in Steps 3 and 4.
+  * Full flow: the handler sends a ``flush_transcript`` command over
+    the control socket (so the latest conversation is on disk), then
+    spawns a ``--resume`` REPL. The agent is NOT paused — no
+    ``pause``/``stop``/``takeover`` commands are sent. Takeover is a
+    pure read-only snapshot of the on-disk ``transcript.jsonl``.
 
 Uses ``unittest.TestCase`` (the resolver / parser are sync) and
 ``tempfile.TemporaryDirectory`` for IssueRegistry isolation.
@@ -40,12 +42,8 @@ from extensions.orchestrator.cli.takeover import (
     _resolve_target,
     _run_takeover,
     _run_takeover_async,
-    _send_pause_and_takeover,
 )
-from extensions.orchestrator.control_socket import (
-    ControlCommand,
-    ControlSocket,
-)
+from extensions.orchestrator.control_socket import ControlSocket
 from extensions.orchestrator.issue_registry import (
     IssueRecord,
     IssueRegistry,
@@ -89,6 +87,27 @@ def _make_record(
         workspace_strategy="worktree",
         run_id=run_id,
     )
+
+
+async def _drain_one_command(
+    cs: ControlSocket,
+    timeout: float = 0.5,
+) -> object | None:
+    """Read at most one command from the control socket's queue.
+
+    Returns the command if one arrives within ``timeout``, else ``None``.
+    Used to assert that takeover does NOT send any commands.
+    """
+
+    async def _next() -> object | None:
+        async for cmd in cs.poll_commands():
+            return cmd
+        return None
+
+    try:
+        return await asyncio.wait_for(_next(), timeout=timeout)
+    except asyncio.TimeoutError:
+        return None
 
 
 # ------------------------------------------------------------------
@@ -140,6 +159,19 @@ class TestTakeoverParser(unittest.TestCase):
         self.assertIsNone(args.id)
         self.assertIsNone(args.run)
         self.assertIsNone(args.workspace)
+
+    def test_takeover_parser_has_no_handback_flag(self) -> None:
+        """The --no-handback flag was removed when takeover became
+        a read-only snapshot viewer (no handback flow exists).
+        """
+        from extensions.orchestrator.cli.issue import add_issue_parser
+
+        parent = argparse.ArgumentParser()
+        sub = parent.add_subparsers(dest="top")
+        add_issue_parser(sub)
+        # Parsing --no-handback should fail (unknown arg).
+        with self.assertRaises(SystemExit):
+            parent.parse_args(["issue", "takeover", "--no-handback"])
 
 
 # ------------------------------------------------------------------
@@ -341,14 +373,14 @@ class TestResolveTarget(unittest.TestCase):
 
 
 # ------------------------------------------------------------------
-# _run_takeover — Step 1 stub behaviour
+# _run_takeover — arg validation + stub behaviour
 # ------------------------------------------------------------------
 
 
 class TestRunTakeoverStub(unittest.TestCase):
-    """The Step 1 stub validates args + resolves the target +
-    prints a TODO. Step 3 replaces the stub body with the socket
-    + REPL flow but keeps the same exit-code contract.
+    """The handler validates args + resolves the target + spawns
+    the REPL. ``_wait_for_transcript`` is patched out so the stub
+    tests don't block on the 3 s transcript-poll timeout.
     """
 
     def test_missing_id_and_run_returns_2(self) -> None:
@@ -389,130 +421,44 @@ class TestRunTakeoverStub(unittest.TestCase):
 
     def test_run_with_no_resolution_returns_0(self) -> None:
         """--run + --workspace bypasses the registry and resolves
-        cleanly. The stub-era version of this test asserted
-        ``rc == 0`` based on a TODO stub; the full flow is now
-        patched at the spawn layer so we can assert the same
+        cleanly. The spawn layer is patched so we can assert the
         success code without launching a real REPL.
         """
         with patch(
-            "extensions.orchestrator.cli.takeover.subprocess.call",
-            return_value=0,
+            "extensions.orchestrator.cli.takeover._wait_for_transcript",
         ):
-            err = io.StringIO()
-            with redirect_stderr(err):
-                args = argparse.Namespace(
-                    id=None,
-                    run="r-1",
-                    workspace="/w",
-                )
-                rc = _run_takeover(None, Path("/w"), args)
+            with patch(
+                "extensions.orchestrator.cli.takeover._ensure_session_stub",
+            ):
+                with patch(
+                    "extensions.orchestrator.cli.takeover.subprocess.call",
+                    return_value=0,
+                ):
+                    err = io.StringIO()
+                    with redirect_stderr(err):
+                        args = argparse.Namespace(
+                            id=None,
+                            run="r-1",
+                            workspace="/w",
+                        )
+                        rc = _run_takeover(None, Path("/w"), args)
         self.assertEqual(rc, 0)
 
 
 # ------------------------------------------------------------------
-# _send_pause_and_takeover — Phase 1 socket
-# ------------------------------------------------------------------
-
-
-async def _wait_for_clients(
-    cs: ControlSocket,
-    expected: int = 1,
-    timeout: float = 2.0,
-) -> None:
-    """Poll until the server has registered ``expected`` clients.
-
-    Mirrors the helper at
-    ``test_orchestrator_f49_control_socket.py`` so this test
-    file is self-contained. The Unix-socket accept task races
-    the client's first send, so callers that need to broadcast
-    must wait for the server to register the writer.
-    """
-    deadline = asyncio.get_event_loop().time() + timeout
-    while asyncio.get_event_loop().time() < deadline:
-        if len(cs._clients) >= expected:
-            return
-        await asyncio.sleep(0.01)
-    raise TimeoutError(
-        f"Expected {expected} connected client(s), got {len(cs._clients)}",
-    )
-
-
-async def _drain_one(
-    cs: ControlSocket,
-    timeout: float = 2.0,
-) -> ControlCommand | None:
-    """Read at most one command from the control socket's queue.
-
-    Returns the command if one arrives within ``timeout``,
-    else ``None``. Mirrors the helper at
-    ``test_orchestrator_f49_control_socket.py``.
-    """
-
-    async def _next() -> ControlCommand | None:
-        async for cmd in cs.poll_commands():
-            return cmd
-        return None
-
-    try:
-        return await asyncio.wait_for(_next(), timeout=timeout)
-    except asyncio.TimeoutError:
-        return None
-
-
-class TestSendPauseAndTakeover(unittest.IsolatedAsyncioTestCase):
-    """The socket sender writes the right verbs in the right order."""
-
-    async def test_sends_pause_and_takeover_commands(self) -> None:
-        with TemporaryDirectory() as tmp:
-            sock_path = Path(tmp) / "ctrl.sock"
-            cs = ControlSocket(sock_path)
-            await cs.start()
-            try:
-                ok = await _send_pause_and_takeover(sock_path)
-                self.assertTrue(ok)
-                # The sender is one-shot: it opens, sends, closes.
-                # By the time we get here the server's read loop has
-                # already processed the two lines and discarded the
-                # writer from cs._clients. Drain the queue — that is
-                # the authoritative record of what was sent.
-                first = await _drain_one(cs)
-                second = await _drain_one(cs)
-                self.assertIsNotNone(first)
-                self.assertIsNotNone(second)
-                assert first is not None and second is not None
-                self.assertEqual(first.cmd, "pause")
-                self.assertEqual(second.cmd, "takeover")
-            finally:
-                await cs.stop()
-
-    async def test_returns_false_when_socket_missing(self) -> None:
-        """No socket file at the path → returns False, no exception."""
-        with TemporaryDirectory() as tmp:
-            sock_path = Path(tmp) / "no-such.sock"
-            ok = await _send_pause_and_takeover(sock_path)
-        self.assertFalse(ok)
-
-    async def test_returns_false_on_connection_refused(self) -> None:
-        """sock_path exists but no listener is bound."""
-        with TemporaryDirectory() as tmp:
-            sock_path = Path(tmp) / "ctrl.sock"
-            sock_path.touch()  # not a socket; open_unix_connection fails
-            ok = await _send_pause_and_takeover(sock_path)
-        self.assertFalse(ok)
-
-
-# ------------------------------------------------------------------
-# _run_takeover — full flow (socket + REPL spawn)
+# _run_takeover — full flow (REPL spawn, no pause)
 # ------------------------------------------------------------------
 
 
 class TestRunTakeoverFullFlow(unittest.IsolatedAsyncioTestCase):
-    """The full flow: resolve → socket send (if alive) → REPL spawn.
+    """The full flow: resolve → spawn ``--resume`` REPL.
 
-    The REPL spawn is patched out (``subprocess.call``) so the
-    test does not launch a real Python interpreter; the test
-    asserts the right command was constructed and the right exit
-    code is propagated.
+    The agent is NOT paused — no commands are sent over the control
+    socket. The REPL spawn is patched out (``subprocess.call``) so the
+    test does not launch a real Python interpreter; the test asserts
+    the right command was constructed and the right exit code is
+    propagated. ``_wait_for_transcript`` is patched to avoid the 3 s
+    poll delay.
     """
 
     async def test_socket_path_missing_spawns_repl_anyway(self) -> None:
@@ -539,40 +485,39 @@ class TestRunTakeoverFullFlow(unittest.IsolatedAsyncioTestCase):
             # Intentionally do NOT create the sock file.
 
             with patch(
-                "extensions.orchestrator.cli.takeover.subprocess.call",
-                return_value=0,
-            ) as mock_call:
+                "extensions.orchestrator.cli.takeover._wait_for_transcript",
+            ):
                 with patch(
-                    "extensions.orchestrator.cli.takeover.time.sleep",
-                ) as mock_sleep:
-                    args = argparse.Namespace(
-                        id="owner/repo#42",
-                        run=None,
-                        workspace=None,
-                    )
-                    rc = await _run_takeover_async(
-                        registry_path,
-                        tmp_path,
-                        args,
-                    )
-            self.assertEqual(rc, 0)
-            # No socket → no pause, no quiet period.
-            mock_sleep.assert_not_called()
-            # REPL spawned with --resume run-1 --workspace <ws>
-            self.assertEqual(mock_call.call_count, 1)
-            cmd = mock_call.call_args[0][0]
-            self.assertEqual(cmd[0], "python3")
-            self.assertIn("--resume", cmd)
-            self.assertIn("run-1", cmd)
-            self.assertIn("--workspace", cmd)
-            self.assertIn(str(workspace), cmd)
+                    "extensions.orchestrator.cli.takeover._ensure_session_stub",
+                ):
+                    with patch(
+                        "extensions.orchestrator.cli.takeover.subprocess.call",
+                        return_value=0,
+                    ) as mock_call:
+                        args = argparse.Namespace(
+                            id="owner/repo#42",
+                            run=None,
+                            workspace=None,
+                        )
+                        rc = await _run_takeover_async(
+                            registry_path,
+                            tmp_path,
+                            args,
+                        )
+        self.assertEqual(rc, 0)
+        # REPL spawned with --resume run-1, cwd=<workspace>
+        self.assertEqual(mock_call.call_count, 1)
+        cmd = mock_call.call_args[0][0]
+        self.assertEqual(cmd[0], "python3")
+        self.assertIn("--resume", cmd)
+        self.assertIn("run-1", cmd)
+        self.assertNotIn("--workspace", cmd)
+        self.assertEqual(mock_call.call_args[1]["cwd"], str(workspace))
 
-    async def test_socket_path_present_sends_pause_and_takeover(
-        self,
-    ) -> None:
-        """If the .sock is alive, the handler sends pause +
-        takeover over the socket, waits the quiet period, then
-        spawns the REPL.
+    async def test_socket_present_sends_flush_not_pause(self) -> None:
+        """If the .sock is alive, the handler sends only ``flush_transcript``
+        (so the REPL can read the latest conversation). It does NOT send
+        ``pause``/``stop``/``takeover`` — the agent keeps running.
         """
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -595,39 +540,45 @@ class TestRunTakeoverFullFlow(unittest.IsolatedAsyncioTestCase):
             await cs.start()
             try:
                 with patch(
-                    "extensions.orchestrator.cli.takeover.subprocess.call",
-                    return_value=0,
-                ) as mock_call:
+                    "extensions.orchestrator.cli.takeover._wait_for_transcript",
+                ):
                     with patch(
-                        "extensions.orchestrator.cli.takeover.time.sleep",
-                    ) as mock_sleep:
-                        args = argparse.Namespace(
-                            id="owner/repo#42",
-                            run=None,
-                            workspace=None,
-                        )
-                        rc = await _run_takeover_async(
-                            registry_path,
-                            tmp_path,
-                            args,
-                        )
-                        # Drain the queue (sender closed, so the
-                        # server's read loop has already discarded
-                        # the writer — no need to wait for clients).
-                        first = await _drain_one(cs)
-                        second = await _drain_one(cs)
+                        "extensions.orchestrator.cli.takeover._ensure_session_stub",
+                    ):
+                        with patch(
+                            "extensions.orchestrator.cli.takeover.asyncio.sleep",
+                        ):
+                            with patch(
+                                "extensions.orchestrator.cli.takeover.subprocess.call",
+                                return_value=0,
+                            ) as mock_call:
+                                args = argparse.Namespace(
+                                    id="owner/repo#42",
+                                    run=None,
+                                    workspace=None,
+                                )
+                                rc = await _run_takeover_async(
+                                    registry_path,
+                                    tmp_path,
+                                    args,
+                                )
+
+                # Exactly one command should have been sent:
+                # flush_transcript. NOT pause/stop/takeover.
+                cmd = await _drain_one_command(cs, timeout=0.5)
+                self.assertIsNotNone(cmd, "expected flush_transcript command")
+                assert cmd is not None
+                self.assertEqual(cmd.cmd, "flush_transcript")
+                # No more commands (no pause/stop/takeover).
+                extra = await _drain_one_command(cs, timeout=0.3)
+                self.assertIsNone(
+                    extra,
+                    "takeover must not send pause/stop/takeover",
+                )
             finally:
                 await cs.stop()
 
         self.assertEqual(rc, 0)
-        self.assertIsNotNone(first)
-        self.assertIsNotNone(second)
-        assert first is not None and second is not None
-        self.assertEqual(first.cmd, "pause")
-        self.assertEqual(second.cmd, "takeover")
-        # Quiet period called with the default 1.5s.
-        mock_sleep.assert_called_once()
-        self.assertAlmostEqual(mock_sleep.call_args[0][0], 1.5, places=2)
         # REPL spawned with --resume <run_id>.
         self.assertEqual(mock_call.call_count, 1)
         cmd = mock_call.call_args[0][0]
@@ -635,27 +586,24 @@ class TestRunTakeoverFullFlow(unittest.IsolatedAsyncioTestCase):
         self.assertIn(run_id, cmd)
 
     async def test_run_mode_resolves_via_run_id(self) -> None:
-        """--run + --workspace bypasses the registry; the
-        handler still sends pause + takeover over the resolved
-        socket and spawns the REPL.
+        """--run + --workspace bypasses the registry; the handler
+        spawns the REPL with ``--resume <run_id>``.
         """
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             workspace = tmp_path / "ws"
             workspace.mkdir()
             run_id = "run-3"
-            sock_path = workspace / ".run_control" / f"{run_id}.sock"
-            sock_path.parent.mkdir(parents=True, exist_ok=True)
-            cs = ControlSocket(sock_path)
-            await cs.start()
-            try:
+            with patch(
+                "extensions.orchestrator.cli.takeover._wait_for_transcript",
+            ):
                 with patch(
-                    "extensions.orchestrator.cli.takeover.subprocess.call",
-                    return_value=0,
+                    "extensions.orchestrator.cli.takeover._ensure_session_stub",
                 ):
                     with patch(
-                        "extensions.orchestrator.cli.takeover.time.sleep",
-                    ):
+                        "extensions.orchestrator.cli.takeover.subprocess.call",
+                        return_value=0,
+                    ) as mock_call:
                         args = argparse.Namespace(
                             id=None,
                             run=run_id,
@@ -666,46 +614,37 @@ class TestRunTakeoverFullFlow(unittest.IsolatedAsyncioTestCase):
                             tmp_path,
                             args,
                         )
-                        first = await _drain_one(cs)
-                        second = await _drain_one(cs)
-            finally:
-                await cs.stop()
-
         self.assertEqual(rc, 0)
-        self.assertIsNotNone(first)
-        self.assertIsNotNone(second)
-        assert first is not None and second is not None
-        self.assertEqual(first.cmd, "pause")
-        self.assertEqual(second.cmd, "takeover")
+        self.assertEqual(mock_call.call_count, 1)
+        cmd = mock_call.call_args[0][0]
+        self.assertIn("--resume", cmd)
+        self.assertIn(run_id, cmd)
 
 
 # ------------------------------------------------------------------
-# End-to-end: socket + transcript persistence + REPL spawn
+# End-to-end: transcript persistence + REPL spawn
 # ------------------------------------------------------------------
 
 
 class TestTakeoverEndToEnd(unittest.IsolatedAsyncioTestCase):
     """Full integration: orchestrator writes a transcript →
-    takeover sends pause+takeover over the live socket →
-    spawns the ``--resume`` REPL against the on-disk
+    takeover spawns the ``--resume`` REPL against the on-disk
     ``transcript.jsonl``.
 
-    Mirrors the round-trip exercised by
+    The agent is NOT paused. Mirrors the round-trip exercised by
     ``test_orchestrator_f49_resume.py::TestResumeSessionEndToEnd``
-    (orchestrator writes a transcript; resume-session CLI
-    reads it) but for the takeover flow specifically: the
-    REPL is spawned with ``--resume <run_id>`` so its
-    inputs would land in the same transcript.
+    (orchestrator writes a transcript; resume-session CLI reads it)
+    but for the takeover flow specifically: the REPL is spawned with
+    ``--resume <run_id>`` so it displays the conversation history.
     """
 
-    async def test_socket_pause_then_resume_repl_round_trip(self) -> None:
+    async def test_transcript_snapshot_repl_round_trip(self) -> None:
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             workspace = tmp_path / "ws"
             workspace.mkdir()
             sessions_dir = tmp_path / "sessions"
             run_id = "run-f49-takeover-e2e"
-            sock_path = workspace / ".run_control" / f"{run_id}.sock"
 
             # 1. Orchestrator side: write a transcript the way
             #    the headless agent would. Patches
@@ -764,23 +703,19 @@ class TestTakeoverEndToEnd(unittest.IsolatedAsyncioTestCase):
                     (sessions_dir / run_id / "metadata.json").exists(),
                 )
 
-            # 2. Control socket: start a real ``ControlSocket``
-            #    in the workspace's ``.run_control`` directory.
-            sock_path.parent.mkdir(parents=True, exist_ok=True)
-            cs = ControlSocket(sock_path)
-            await cs.start()
-
-            # 3. Run the takeover. Patch ``subprocess.call`` so
+            # 2. Run the takeover. Patch ``subprocess.call`` so
             #    the REPL does not actually launch, and assert
             #    the right argv was constructed.
-            try:
+            with patch(
+                "extensions.orchestrator.cli.takeover._wait_for_transcript",
+            ):
                 with patch(
-                    "extensions.orchestrator.cli.takeover.subprocess.call",
-                    return_value=0,
-                ) as mock_call:
+                    "extensions.orchestrator.cli.takeover._ensure_session_stub",
+                ):
                     with patch(
-                        "extensions.orchestrator.cli.takeover.time.sleep",
-                    ):
+                        "extensions.orchestrator.cli.takeover.subprocess.call",
+                        return_value=0,
+                    ) as mock_call:
                         args = argparse.Namespace(
                             id=None,
                             run=run_id,
@@ -791,36 +726,19 @@ class TestTakeoverEndToEnd(unittest.IsolatedAsyncioTestCase):
                             tmp_path,
                             args,
                         )
-                        # Drain the two control commands the
-                        # sender wrote to the queue.
-                        first = await _drain_one(cs)
-                        second = await _drain_one(cs)
-            finally:
-                await cs.stop()
 
-            # 4. Verify: takeover returned 0, the socket saw
-            #    ``pause`` then ``takeover`` in that order, and
-            #    the patched ``subprocess.call`` was invoked
-            #    with the ``--resume <run_id> --workspace <ws>``
-            #    argv the REPL would use.
+            # 3. Verify: takeover returned 0 and the patched
+            #    ``subprocess.call`` was invoked with the
+            #    ``--resume <run_id>`` argv (workspace conveyed
+            #    via ``cwd``, not a CLI flag).
             self.assertEqual(rc, 0)
-            self.assertIsNotNone(first)
-            self.assertIsNotNone(second)
-            assert first is not None and second is not None
-            self.assertEqual(first.cmd, "pause")
-            self.assertEqual(second.cmd, "takeover")
             self.assertEqual(mock_call.call_count, 1)
             argv = mock_call.call_args[0][0]
             self.assertEqual(argv[0], "python3")
             self.assertIn("--resume", argv)
             self.assertIn(run_id, argv)
-            self.assertIn("--workspace", argv)
-            self.assertIn(str(workspace), argv)
+            self.assertNotIn("--workspace", argv)
             self.assertEqual(mock_call.call_args[1]["cwd"], str(workspace))
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 if __name__ == "__main__":

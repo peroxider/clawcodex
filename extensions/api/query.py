@@ -9,10 +9,11 @@ import asyncio
 import io
 import logging
 import queue
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable
 
 from .debug_log import append_debug_event
 
@@ -72,6 +73,16 @@ class QueryConfig:
     # across every turn, while the per-issue data (identifier, description,
     # labels) lives in ``prompt`` as the user message.
     append_system_prompt: str | None = None
+    # F-129 Phase 4: agent identity for pending_messages drain.
+    # When set, the headless session's ToolContext gets this agent_id
+    # and runtime_tasks, enabling real-time inject at ToolResult
+    # boundaries.
+    agent_id: str | None = None
+    runtime_tasks: Any | None = None
+    # When set, the headless session loads the existing transcript via
+    # Session.resume(resume_session_id) instead of starting with an empty
+    # Conversation. Used by the CLI/REPL --resume path.
+    resume_session_id: str | None = None
     # Per-run wall-clock timeout in seconds. When > 0, the event-drain
     # loop in ``stream_events`` enforces this budget and yields
     # ``SessionComplete(reason="exit_code=124")`` on expiry.  Default
@@ -129,6 +140,26 @@ class QueryConfig:
     # ``None`` (the default) keeps the query loop allocation-free for
     # the common non-recording path.
     capture: Any = None
+    # F-129: callback invoked by the stream's polling loop (every ~60ms)
+    # to drain control-socket commands. Returns a non-None signal
+    # (e.g. ``"stop"``) when the stream should abort and break; ``None``
+    # to continue normally. When ``None`` (the default), the stream does
+    # not drain — preserving backward compatibility for non-orchestrator
+    # callers.
+    control_drain_fn: Callable[[], str | None] | None = None
+    # F-129: async callback invoked by the stream's polling loop after
+    # the drain. When the session is paused, this callback blocks
+    # (internally running a drain-and-wait loop) so that resume/stop
+    # commands are still processed. When not paused, it returns
+    # immediately. When ``None`` (the default), the stream does not
+    # pause-check — preserving backward compatibility.
+    pause_wait_fn: Callable[[], Awaitable[None]] | None = None
+    # F-129: threading.Event used as a "pause gate" — when cleared,
+    # the headless session's on_event callback blocks before putting
+    # events into event_queue, preventing further LLM API calls.
+    # Set = running (default), clear = paused. ``None`` = no pause
+    # gate (backward compatibility for non-orchestrator callers).
+    pause_gate: threading.Event | None = None
 
 
 @dataclass
@@ -241,6 +272,12 @@ class QueryRunner:
         # loop checks per tick.
         tool_watchdog_state: dict[str, Any] = {"wd": None, "tripped": False, "last_trip": None}
 
+        # F-129: capture pause_gate and abort_controller references for
+        # the on_event closure. Both are defined here so the closure
+        # captures them by reference (late binding).
+        _pause_gate = self.config.pause_gate
+        abort_controller = make_abort_controller()
+
         def on_event(tool_event: Any) -> None:
             nonlocal tool_event_count, last_event_at
             try:
@@ -274,19 +311,24 @@ class QueryRunner:
                         wd.observe_tool_use(str(tool_use_id), str(tool_name or ""))
                     elif kind in ("tool_result", "tool_error"):
                         wd.observe_tool_result(str(tool_use_id))
+                # F-129: block on pause_gate before queuing the event.
+                # When paused, the headless session's thread blocks here,
+                # preventing further LLM API calls. The abort check
+                # ensures we unblock when stop/takeover is received.
+                if _pause_gate is not None:
+                    while not _pause_gate.is_set():
+                        if abort_controller.signal.aborted:
+                            return
+                        _pause_gate.wait(timeout=1)
                 event_queue.put(tool_event)
             except Exception:
                 pass
 
         stdout = io.StringIO()
-        # Cooperative-cancellation handle. We cannot kill an executor
-        # thread, but the headless session unwinds at its next
-        # cancellation point (LLM call / tool boundary) once this trips.
-        # Fired on BOTH exits below: the wall-clock budget break and
-        # generator teardown (outer ``asyncio.wait_for`` timeout or
-        # ``issue stop`` task.cancel()). Without it a timed-out run kept
-        # spawning workers for minutes — observed live on 2026-07-02.
-        abort_controller = make_abort_controller()
+        # abort_controller was created above (before on_event) so the
+        # closure can reference it. The cooperative-cancellation handle
+        # allows us to signal the headless session to unwind on
+        # timeout / teardown / operator stop.
 
         # F-108 P108-C — build the gap watchdog now that the abort
         # controller exists. ``tool_watchdog_state`` captures the
@@ -358,6 +400,9 @@ class QueryRunner:
             env=self.config.env or {},
             append_system_prompt=self.config.append_system_prompt,
             abort_controller=abort_controller,
+            agent_id=self.config.agent_id,
+            runtime_tasks=self.config.runtime_tasks,
+            resume_session_id=self.config.resume_session_id,
         )
 
         loop = asyncio.get_running_loop()
@@ -433,6 +478,23 @@ class QueryRunner:
         last_stdout_change_at = loop_started_at
         try:
             while True:
+                # F-129: drain control-socket commands at every polling
+                # iteration so pause/stop/inject/resume take effect within
+                # ~60ms (the queue-timeout + sleep interval) instead of
+                # waiting for the next tool event. The callback is
+                # non-blocking (uses ``get_nowait`` internally).
+                if self.config.control_drain_fn is not None:
+                    _drain_signal = self.config.control_drain_fn()
+                    if _drain_signal is not None:
+                        abort_controller.abort(f"operator_{_drain_signal}")
+                        break
+                # F-129: if the session is paused, block here in a
+                # drain-and-wait loop (the callback handles resume/stop
+                # delivery while paused). This prevents the stream from
+                # yielding events while paused AND keeps the command
+                # queue draining so resume is not deadlocked.
+                if self.config.pause_wait_fn is not None:
+                    await self.config.pause_wait_fn()
                 try:
                     ev: Any = event_queue.get(timeout=0.05)
                     event = convert_tool_event(ev)
@@ -480,10 +542,7 @@ class QueryRunner:
                     # plugin installs abort before the 1800 s
                     # ``timeout_s`` retroactively kicks in.
                     agent_loop_budget = self.config.agent_loop_timeout_s
-                    if (
-                        agent_loop_budget > 0
-                        and (now - loop_started_at) >= agent_loop_budget
-                    ):
+                    if agent_loop_budget > 0 and (now - loop_started_at) >= agent_loop_budget:
                         timed_out = True
                         break
                     # F-108 P108-C: stream-stall watchdog. "Activity" is
@@ -511,10 +570,7 @@ class QueryRunner:
                     elif stall_warn_s > 0:
                         if stall_warned_at is not None and last_activity_at > stall_warned_at:
                             stall_warned_at = None  # activity resumed — re-arm
-                        if (
-                            stall_warned_at is None
-                            and (now - last_activity_at) >= stall_warn_s
-                        ):
+                        if stall_warned_at is None and (now - last_activity_at) >= stall_warn_s:
                             stall_warned_at = last_activity_at
                             logger.warning(
                                 "query stall suspected run_id=%s: no activity "
@@ -530,9 +586,7 @@ class QueryRunner:
                                 stall_warn_s=stall_warn_s,
                                 stall_timeout_s=stall_timeout_s,
                                 seconds_since_last_event=round(now - last_event_at, 3),
-                                seconds_since_stdout_change=round(
-                                    now - last_stdout_change_at, 3
-                                ),
+                                seconds_since_stdout_change=round(now - last_stdout_change_at, 3),
                                 stdout_len=stdout_pos,
                                 tool_events=tool_event_count,
                             )
@@ -545,9 +599,7 @@ class QueryRunner:
                                 run_id=self.config.run_id,
                                 stall_timeout_s=stall_timeout_s,
                                 seconds_since_last_event=round(now - last_event_at, 3),
-                                seconds_since_stdout_change=round(
-                                    now - last_stdout_change_at, 3
-                                ),
+                                seconds_since_stdout_change=round(now - last_stdout_change_at, 3),
                                 seconds_since_start=round(now - loop_started_at, 3),
                                 stdout_len=stdout_pos,
                                 tool_events=tool_event_count,
@@ -584,6 +636,12 @@ class QueryRunner:
                     )
                 except Exception:
                     pass
+            # F-129: unblock the pause gate so the headless session's
+            # on_event callback can exit its wait loop and check the
+            # abort signal. Without this, a paused session would
+            # deadlock on teardown.
+            if _pause_gate is not None:
+                _pause_gate.set()
 
         if timed_out:
             # The abort controller (finally above) asks the still-running
@@ -624,6 +682,19 @@ class QueryRunner:
             # takes over — recovery in ~stall_timeout_s instead of the
             # full wall-clock budget.
             exit_code = 125
+        elif abort_controller.signal.aborted:
+            # F-129: operator stop/takeover via control_drain_fn. The
+            # abort was tripped by the drain callback, not by a timeout
+            # or stall. Don't block on ``await future`` — the headless
+            # session is unwinding cooperatively in the background.
+            append_debug_event(
+                debug_log_path,
+                "query_runner.operator_abort",
+                run_id=self.config.run_id,
+                reason=abort_controller.signal.reason,
+                seconds_since_start=round(time.monotonic() - loop_started_at, 3),
+            )
+            exit_code = -1
         else:
             try:
                 exit_code = await future

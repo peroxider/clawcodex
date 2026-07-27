@@ -2716,6 +2716,17 @@ class Orchestrator:
             pause_resume_event=asyncio.Event(),
             event_queue=asyncio.Queue(),
         )
+
+        # F-129 wire pause-state notification so the socket path
+        # (_drain_control_commands in agent_runner) can sync the
+        # registry when pause/resume is processed.
+        def _on_pause_change(issue_id: str, paused: bool, reason: str) -> None:
+            if paused:
+                self._registry.mark_paused(issue_id, reason=reason)
+            else:
+                self._registry.mark_resumed(issue_id)
+
+        session._on_pause_state_change = _on_pause_change
         clarification_record = self._registry.get(issue.id or "")
         if clarification_record is not None and clarification_record.local_answer:
             session.clarification_answer = clarification_record.local_answer
@@ -4691,16 +4702,17 @@ class Orchestrator:
 
         session = self._state.running[issue_id]
         if cmd == "pause":
-            session.paused = True
-            session.pause_reason = extra or "operator requested pause"
-            session.pause_resume_event.clear()
+            AgentRunner._apply_pause_session(session, extra or "operator requested pause")
             logger.info("Paused issue %s: %s", issue_id, session.pause_reason)
             self._emit_im_event(issue_id, "control.pause", EventLevel.INFO, session.pause_reason)
+            # Persist paused state to the registry.
+            self._registry.mark_paused(issue_id, reason=session.pause_reason)
         elif cmd == "resume":
-            session.paused = False
-            session.pause_resume_event.set()
+            AgentRunner._apply_resume_session(session)
             logger.info("Resumed issue %s", issue_id)
             self._emit_im_event(issue_id, "control.resume", EventLevel.INFO, "resumed")
+            # Restore running state in the registry.
+            self._registry.mark_resumed(issue_id)
         elif cmd == "stop":
             # Request cancellation via task cancel
             logger.info("Stop requested for issue %s", issue_id)

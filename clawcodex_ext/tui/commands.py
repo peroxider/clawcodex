@@ -251,6 +251,7 @@ def build_command_suggestions(
                 CommandSuggestion(
                     name=skill.name,
                     description=getattr(skill, "description", "") or "",
+                    aliases=tuple(getattr(skill, "aliases", []) or []),
                     source="skills",
                 )
             )

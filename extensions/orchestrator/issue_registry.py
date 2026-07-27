@@ -36,6 +36,7 @@ class IssueStatus(str, Enum):
     PENDING_REVIEW = "pending_review"  # awaiting human review (LocalTracker only)
     COMPLETED = "completed"  # session finished successfully
     FAILED = "failed"  # session ended with a non-success status
+    PAUSED = "paused"  # agent session paused by operator control command
     ABANDONED = "abandoned"  # retry limit reached, gave up
     VERIFICATION_FAILED = "verification_failed"
 
@@ -162,6 +163,11 @@ class IssueRecord:
     conflict_files: list[str] = field(default_factory=list)
     rebase_attempt_count: int = 0
     last_rebase_attempt_at: float | None = None
+    # F-129 pause reason recorded when the issue is paused by an operator
+    # control command. Set by mark_paused(); cleared by mark_resumed().
+    # Absent from records written before this field — _load() handles
+    # back-compat via the known_fields filter.
+    pause_reason: str = ""
 
     def touch(self) -> None:
         self.updated_at = time.time()
@@ -611,6 +617,28 @@ class IssueRegistry:
         record.verification_output = output
         record.last_hook_error = hook_error
         record.attempt_count += 1
+        record.touch()
+        self._save()
+        return record
+
+    def mark_paused(self, issue_id: str, *, reason: str = "") -> IssueRecord | None:
+        """Mark an issue as paused by an operator control command."""
+        record = self._records.get(issue_id)
+        if record is None:
+            return None
+        record.status = IssueStatus.PAUSED
+        record.pause_reason = reason
+        record.touch()
+        self._save()
+        return record
+
+    def mark_resumed(self, issue_id: str) -> IssueRecord | None:
+        """Restore an issue to running after being paused."""
+        record = self._records.get(issue_id)
+        if record is None:
+            return None
+        record.status = IssueStatus.RUNNING
+        record.pause_reason = ""
         record.touch()
         self._save()
         return record

@@ -1,30 +1,22 @@
-"""F-49 takeover: socket-aligned stop-agent-and-spawn-REPL flow.
+"""F-49 takeover: read-only snapshot viewer for a running orchestrator agent.
 
-Replaces the legacy control-file path with the Phase 1 Unix
-control socket. The agent is paused (not killed) at the next
-turn boundary; the operator's REPL then resumes the same
-``run_id`` so inputs flow into the existing
-``transcript.jsonl``.
+Spawns a ``--resume`` REPL against the agent's ``run_id`` so the operator
+can inspect the current conversation history. The orchestrator agent is
+**not** paused — it continues running unaffected. When the REPL exits,
+the orchestrator proceeds normally. There is no handback: takeover is a
+pure read-only snapshot of the on-disk ``transcript.jsonl``.
 
     clawcodex orchestrator issue takeover --id ISSUE-1
         │
         ├─ IssueRegistry.get_by_issue_ref(issue_id)
         │   → (run_id, workspace_path)             # authoritative
         │
-        ├─ compute socket: {workspace}/.run_control/{run_id}.sock
-        │
-        ├─ if socket exists:
-        │   open socket → send "pause" + "takeover" → close
-        │   wait 1.5s for the runner to reach the next turn
-        │     boundary and call _flush_turn_transcript() + flush()
-        │
-        └─ subprocess: python3 -m src.cli --resume <run_id> --workspace <ws>
+        └─ subprocess: python3 -m src.cli --resume <run_id>
+              │   (cwd = workspace_path)
               │
               └─ ClawCodexExtREPL(resume_session_id=run_id)
                     → Session.resume(run_id)            # directory format
-                    → REPL inputs write to the same transcript.jsonl
-                      via Session._save_to_session_storage()
-                      (session_id == run_id)
+                    → REPL displays the conversation history
 
 Reads only; no orchestrator coupling beyond :class:`IssueRegistry`.
 """
@@ -35,17 +27,8 @@ import argparse
 import asyncio
 import subprocess
 import sys
-import time
 from dataclasses import dataclass
 from pathlib import Path
-
-
-# Default grace period for the runner to reach the next turn
-# boundary and flush the JSONL. Tuned to the runner's per-turn
-# tail latency (see ``agent_runner.py:_flush_turn_transcript`` at
-# the ``SessionComplete`` branch). The runner's per-turn flush
-# is the canonical moment the JSONL becomes consistent.
-_DEFAULT_TAKEOVER_QUIET_SECONDS = 1.5
 
 
 @dataclass
@@ -66,8 +49,7 @@ def _resolve_target(
     """Look up ``(run_id, workspace_path)`` via :class:`IssueRegistry`
     or accept ``--run`` + ``--workspace`` directly.
 
-    Lookup priority (mirrors
-    :func:`extensions.orchestrator.cli.attach._resolve_attach_target`):
+    Lookup priority:
       1. ``--id <issue_id>`` via
          :meth:`IssueRegistry.get_by_issue_ref`. Returns the
          record's ``run_id`` and ``workspace_path``.
@@ -110,71 +92,15 @@ def _resolve_target(
     return None
 
 
-async def _send_pause_and_takeover(sock_path: Path) -> bool:
-    """Open the control socket, send ``pause`` + ``takeover``,
-    close. Returns ``True`` on success, ``False`` on connection
-    error / socket missing.
-
-    The two commands have different effects at the runner drain
-    loop (``agent_runner.py:_drain_control_loop``):
-      * ``pause`` sets ``session.paused = True`` and clears
-        ``pause_resume_event`` so the runner blocks on
-        ``pause_resume_event.wait()`` at the next tool-call
-        boundary.
-      * ``takeover`` annotates ``session_end_reason`` and
-        ``session_end_summary`` for diagnostics.
-    Neither cancels the agent task — the runner stays blocked on
-    the pause event until ``resume`` is sent.
-
-    Reuses :func:`extensions.orchestrator.cli.attach._send_cmd`
-    (the canonical one-shot sender for the Phase 1 protocol)
-    rather than duplicating the JSON-line writer.
-    """
-    from extensions.orchestrator.cli.attach import _send_cmd
-
-    try:
-        reader, writer = await asyncio.open_unix_connection(
-            str(sock_path),
-        )
-    except (ConnectionRefusedError, FileNotFoundError, OSError):
-        return False
-    try:
-        await _send_cmd(writer, "pause")
-        await _send_cmd(writer, "takeover")
-    except Exception:
-        try:
-            writer.close()
-        except Exception:
-            pass
-        return False
-    try:
-        writer.close()
-    except Exception:
-        pass
-    return True
-
-
-def _wait_for_quiet_period(seconds: float) -> None:
-    """Block briefly so the runner can reach a turn boundary and
-    flush the JSONL via :func:`_flush_turn_transcript` +
-    :meth:`SessionStorage.flush`.
-
-    This is a coarse synchronization — the runner's
-    ``_flush_turn_transcript`` is called at every turn boundary, so
-    the JSONL is always internally consistent. The wait exists to
-    make the race window between CLI socket-close and REPL read
-    shorter in the common case (turn takes < 1.5s).
-    """
-    time.sleep(seconds)
-
-
 def _spawn_resume_repl(
     run_id: str,
     workspace_path: Path,
 ) -> int:
-    """Spawn ``python3 -m src.cli --resume <run_id> --workspace <ws>``
-    and block on its exit code. The REPL inherits stdout/stderr so
-    the operator sees the same UX as a direct ``--resume`` call.
+    """Spawn ``python3 -m src.cli --resume <run_id>`` with
+    ``cwd=workspace_path`` and block on its exit code. The REPL
+    inherits stdout/stderr so the operator sees the same UX as a
+    direct ``--resume`` call. The workspace is conveyed via
+    ``cwd`` — the CLI parser has no ``--workspace`` flag.
 
     Returns the REPL's exit code.
     """
@@ -186,8 +112,6 @@ def _spawn_resume_repl(
                 "src.cli",
                 "--resume",
                 run_id,
-                "--workspace",
-                str(workspace_path),
             ],
             cwd=str(workspace_path),
         )
@@ -198,7 +122,7 @@ def _spawn_resume_repl(
         )
         return 1
     except Exception as exc:
-        print(f"error: REPL spawn failed: {exc}", file=sys.stderr)
+        print(f"error: REPL spawn failed — {exc}", file=sys.stderr)
         return 1
 
 
@@ -271,40 +195,135 @@ async def _run_takeover_async(
             )
         return 1
 
-    sock_path = target.workspace_path / ".run_control" / f"{target.run_id}.sock"
-
-    # Send pause + takeover if the socket is alive. The agent
-    # might already have ended (socket cleaned up at
-    # ``SessionComplete``) — in that case the operator is taking
-    # over a finished session. The takeover is still valid; the
-    # ``--resume`` REPL will read whatever the headless agent
-    # left on disk.
-    if sock_path.exists():
-        sent = await _send_pause_and_takeover(sock_path)
-        if sent:
-            print(
-                f"Pausing agent for {target.issue_id} (run {target.run_id})…",
-                file=sys.stderr,
-            )
-            _wait_for_quiet_period(_DEFAULT_TAKEOVER_QUIET_SECONDS)
-        else:
-            print(
-                f"warning: could not reach control socket at "
-                f"{sock_path}. Agent may have already ended — "
-                f"spawning REPL against the on-disk transcript.",
-                file=sys.stderr,
-            )
-    else:
-        print(
-            f"No active control socket at {sock_path}. "
-            f"Agent may have already ended — spawning REPL against "
-            f"the on-disk transcript.",
-            file=sys.stderr,
-        )
-
     print(
         f"Starting takeover REPL for {target.issue_id} "
         f"(run {target.run_id}) in {target.workspace_path}",
         file=sys.stderr,
     )
+
+    # Ask the running agent to flush its in-memory transcript buffer to
+    # disk so the REPL can display the latest conversation history. The
+    # agent is NOT paused — it keeps running. If the control socket is
+    # unavailable (agent already ended or not started), skip and rely on
+    # whatever is already on disk.
+    sock_path = target.workspace_path / ".run_control" / f"{target.run_id}.sock"
+    if sock_path.exists():
+        flushed = await _send_flush_transcript(sock_path)
+        if flushed:
+            # Give the agent a moment to process the command and flush.
+            await asyncio.sleep(1.0)
+
+    # Wait for transcript.jsonl to land so the REPL can display the
+    # conversation history. If it doesn't appear within the timeout
+    # (agent still warming up), fall back to a minimal session.json stub
+    # so the REPL starts cleanly. The agent is NOT paused — it keeps
+    # running while the operator inspects the snapshot. If the transcript
+    # already exists, no stub is written (it would shadow the real data).
+    _wait_for_transcript(target.run_id, timeout=5.0)
+    _ensure_session_stub(target.run_id)
+
     return _spawn_resume_repl(target.run_id, target.workspace_path)
+
+
+async def _send_flush_transcript(sock_path: Path) -> bool:
+    """Send a ``flush_transcript`` command over the control socket.
+
+    This asks the running agent to flush its in-memory transcript buffer
+    to ``transcript.jsonl`` so the REPL can read the latest conversation
+    history. The agent is NOT paused — it keeps running.
+
+    Returns ``True`` if the command was sent, ``False`` if the socket is
+    unavailable (agent already ended or not started).
+    """
+    from extensions.orchestrator.control_socket import send_cmd
+
+    try:
+        _reader, writer = await asyncio.open_unix_connection(str(sock_path))
+    except (ConnectionRefusedError, FileNotFoundError, OSError):
+        return False
+
+    try:
+        await send_cmd(writer, "flush_transcript")
+    except Exception:
+        return False
+    finally:
+        try:
+            writer.close()
+        except Exception:
+            pass
+    return True
+
+
+def _wait_for_transcript(session_id: str, timeout: float = 3.0) -> None:
+    """Wait up to *timeout* seconds for ``transcript.jsonl`` to appear.
+
+    The orchestrator's agent flushes its transcript asynchronously during
+    the turn loop.  Waiting briefly here avoids "Session not found" when
+    the REPL starts.
+
+    Best-effort: returns immediately on timeout rather than blocking the
+    takeover flow.  Session.load() will return None and the REPL starts
+    a fresh session (acceptable for agents that had no conversation).
+    """
+    import time as _time
+
+    try:
+        from clawcodex_ext.services.session_storage import resolve_sessions_dir
+
+        transcript_path = resolve_sessions_dir() / session_id / "transcript.jsonl"
+        deadline = _time.monotonic() + timeout
+        while _time.monotonic() < deadline:
+            if transcript_path.exists():
+                return
+            _time.sleep(0.2)
+    except Exception:
+        pass  # Best-effort
+
+
+def _ensure_session_stub(session_id: str) -> None:
+    """Write a minimal ``session.json`` for session_id if none exists.
+
+    Used as fallback when ``transcript.jsonl`` hasn't been flushed yet.
+    The stub includes a single chat message so ``Conversation.add_message()``
+    does not crash with ``IndexError`` (``pop from empty list``).
+    Best-effort: failures are silently swallowed.
+
+    IMPORTANT: if ``transcript.jsonl`` already exists, the session is real
+    — this function returns without writing anything. A stub would shadow
+    the transcript in ``Session.load()`` (Branch 2 trusts ``session.json``
+    unconditionally), hiding the actual conversation history from the REPL.
+    """
+    import json as _json
+    import time as _time
+
+    try:
+        from clawcodex_ext.services.session_storage import resolve_sessions_dir
+
+        session_dir = resolve_sessions_dir() / session_id
+        session_file = session_dir / "session.json"
+        if session_file.exists():
+            return
+        # If the transcript already exists, the session is real — don't
+        # shadow it with a stub. Session.load() will read the transcript
+        # directly (either via _load_from_enhanced_transcript or the
+        # metadata+transcript fallback). The stub is only for agents that
+        # haven't written any session data yet.
+        transcript_path = session_dir / "transcript.jsonl"
+        if transcript_path.exists():
+            return
+        session_dir.mkdir(parents=True, exist_ok=True)
+        now = _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime())
+        stub = {
+            "session_id": session_id,
+            "provider": "",
+            "model": "",
+            "conversation": {
+                "messages": [{"role": "chat", "content": "Takeover session."}],
+                "max_history": 100,
+            },
+            "created_at": now,
+            "updated_at": now,
+        }
+        session_file.write_text(_json.dumps(stub, indent=2), encoding="utf-8")
+    except Exception:
+        pass
