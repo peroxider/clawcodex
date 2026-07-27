@@ -165,17 +165,13 @@ _DEFAULT_FLAGS: list[FeatureFlag] = [
         name="DAEMON",
         default=False,
         description=(
-            "Enable the long-running daemon supervisor that owns "
-            "task_server / cron workers (F-84)"
+            "Enable the long-running daemon supervisor that owns task_server / cron workers (F-84)"
         ),
     ),
     FeatureFlag(
         name="BRIDGE_MODE",
         default=False,
-        description=(
-            "Enable the multi-session bridge subsystem "
-            "(F-84 P84-G, F-82 dependency)"
-        ),
+        description=("Enable the multi-session bridge subsystem (F-84 P84-G, F-82 dependency)"),
     ),
     # --- CI/CD ---
     FeatureFlag(
@@ -214,31 +210,14 @@ _DEFAULT_FLAGS: list[FeatureFlag] = [
         description="Enable the F-88 Monitor tool and /monitor slash command",
     ),
     FeatureFlag(
-        name="logical_kanban",
+        name="LKB_PLAN_GRAPH",
         default=False,
         description=(
-            "Enable Logical Kanban propose/validate/commit gating for "
-            "todo and task status mutations (F-126)"
+            "Master switch for Logical Kanban (LKB): enables the Task V2 "
+            "tool surface (including headless sessions) backed by the "
+            "project-level persistent Plan Graph (Store authority, "
+            "board.json, atomic Claim, revision vectors)."
         ),
-    ),
-    FeatureFlag(
-        name="LKB_CAUSAL",
-        default=False,
-        description=(
-            "Enable the F-141 causal verification layer (CAP-compatible "
-            "in-process engine) that augments symbolic validation runs "
-            "with a causal_weight, is_significant flag, and mechanism tag."
-        ),
-        deps=["logical_kanban"],
-    ),
-    FeatureFlag(
-        name="LKB_LLM_FACTS",
-        default=False,
-        description=(
-            "Enable F-143 runtime LLM-derived facts for Logical Kanban, "
-            "allowing the agent loop to contribute facts at validation time."
-        ),
-        deps=["logical_kanban"],
     ),
     # --- Skill search ---
     FeatureFlag(

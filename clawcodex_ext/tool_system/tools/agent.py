@@ -51,6 +51,8 @@ from clawcodex_ext.agent.fork_subagent import (
 )
 from src.agent.prompt import get_agent_prompt, get_agent_system_prompt
 from clawcodex_ext.agent.run_agent import RunAgentParams, run_agent
+from clawcodex_ext.tool_system.task_manager import TaskManagerClosedError
+from clawcodex_ext.utils.abort_controller import AbortController, AbortError
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +191,6 @@ def _parse_plan_transcript(
     return (title, summary, tuple(steps))
 
 
-
 def _emit_terminal_agent_progress(
     parent_context: Any,
     *,
@@ -211,16 +212,19 @@ def _emit_terminal_agent_progress(
     try:
         emit = getattr(parent_context, "agent_progress_emit", None)
         if emit is not None:
-            emit({
-                "agent_id": agent_id,
-                "name": name,
-                "description": description,
-                "subagent_type": subagent_type,
-                "activity": None,
-                "status": status,
-            })
+            emit(
+                {
+                    "agent_id": agent_id,
+                    "name": name,
+                    "description": description,
+                    "subagent_type": subagent_type,
+                    "activity": None,
+                    "status": status,
+                }
+            )
     except Exception:  # noqa: BLE001
         logger.debug("terminal subagent progress emit failed", exc_info=True)
+
 
 # Input schema matching typescript/src/tools/AgentTool/AgentTool.tsx
 AGENT_INPUT_SCHEMA: dict[str, Any] = {
@@ -750,16 +754,18 @@ def make_agent_tool(
                     if acts:
                         last = acts[-1]
                         activity = last.activity_description or last.tool_name
-                    _emit_progress({
-                        "agent_id": agent_id,
-                        "name": agent_name,
-                        "description": description,
-                        "subagent_type": subagent_type,
-                        "activity": activity,
-                        "tool_use_count": _tracker.tool_use_count,
-                        "tokens": total_tokens_from_tracker(_tracker),
-                        "status": "running",
-                    })
+                    _emit_progress(
+                        {
+                            "agent_id": agent_id,
+                            "name": agent_name,
+                            "description": description,
+                            "subagent_type": subagent_type,
+                            "activity": activity,
+                            "tool_use_count": _tracker.tool_use_count,
+                            "tokens": total_tokens_from_tracker(_tracker),
+                            "status": "running",
+                        }
+                    )
                 except Exception:
                     logger.debug("subagent progress emit failed", exc_info=True)
 
@@ -960,12 +966,15 @@ def make_agent_tool(
                 loop.run_until_complete(_go())
             finally:
                 loop.close()
+
         # R5 (ch13) — the HUD goal label: use the SAME name/description the
         # running emits use, not the truncated prompt (critic residual).
-        _hud_name = agent_name if agent_name is not None else \
-            getattr(run_params.agent_definition, "agent_type", "")
-        _hud_desc = description if description is not None else \
-            (run_params.prompt or "")[:80]
+        _hud_name = (
+            agent_name
+            if agent_name is not None
+            else getattr(run_params.agent_definition, "agent_type", "")
+        )
+        _hud_desc = description if description is not None else (run_params.prompt or "")[:80]
 
         run_exc: BaseException | None = None
         try:
@@ -1116,6 +1125,7 @@ def make_agent_tool(
             LocalAgentTaskState,
             complete_agent_task,
             fail_agent_task,
+            kill_async_agent,
             register_async_agent,
         )
         from clawcodex_ext.tasks.progress import (
@@ -1144,26 +1154,20 @@ def make_agent_tool(
             except AgentNameAlreadyClaimedError as exc:
                 raise ToolInputError(str(exc)) from exc
 
-        # R6 — a dedicated AbortController for this background run, stored on
-        # the task state so kill_async_agent can .abort() it (→ the run's
-        # query() loop halts). It is FRESH (not the parent turn's), so it
-        # preserves async isolation (killing the parent turn doesn't kill the
-        # bg agent) — the same isolation run_agent would otherwise get from
-        # its own internal controller (run_agent.py:291), but now reachable.
-        # Setting run_params.abort_controller makes run_agent use THIS one
-        # (run_agent.py:286-287) instead of an unreachable internal one.
-        from src.utils.abort_controller import AbortController as _AbortController
-        _async_abort = _AbortController()
-        run_params.abort_controller = _async_abort
+        if run_params.abort_controller is None:
+            # Async agents deliberately do not inherit the parent turn's
+            # controller. Keep the independent controller reachable so
+            # TaskStop and session shutdown can still terminate the worker.
+            run_params.abort_controller = AbortController()
 
         register_async_agent(
             agent_id=agent_id,
             description=description,
             prompt=prompt,
             agent_type=agent_type,
-            abort_controller=_async_abort,
             registry=context.runtime_tasks,
             parent_session_id=get_session_id(),
+            abort_controller=run_params.abort_controller,
         )
         # ``register_async_agent`` populated ``output_file`` with the
         # JSONL transcript path; pull it back so the writer points at
@@ -1258,12 +1262,14 @@ def make_agent_tool(
                     # say so (the ui-tui mapping handles killed).
                     _st = context.runtime_tasks.get(agent_id)
                     _final_status = (
-                        str(getattr(_st, "status", "completed"))
-                        if _st is not None else "completed"
+                        str(getattr(_st, "status", "completed")) if _st is not None else "completed"
                     )
                     _emit_terminal_agent_progress(
-                        context, agent_id=agent_id, name=agent_name,
-                        description=description, subagent_type=agent_type,
+                        context,
+                        agent_id=agent_id,
+                        name=agent_name,
+                        description=description,
+                        subagent_type=agent_type,
                         status=_final_status,
                     )
                     # Chunk D / WI-3.1 + WI-3.2 — enqueue a single
@@ -1302,6 +1308,33 @@ def make_agent_tool(
                         len(messages),
                         result.total_tokens,
                     )
+                except AbortError as exc:
+                    # TaskStop/session shutdown marks the entry killed before
+                    # tripping the controller. An AbortError raised internally
+                    # by the child is instead a genuine failed run.
+                    state = context.runtime_tasks.get(agent_id)
+                    if state is None or state.status != "killed":
+                        partial = extract_partial_result(messages)
+                        err_text = partial or str(exc)
+                        fail_agent_task(
+                            agent_id,
+                            error=err_text,
+                            registry=context.runtime_tasks,
+                        )
+                        enqueue_agent_notification(
+                            task_id=agent_id,
+                            description=description,
+                            status="failed",
+                            output_file=transcript_path,
+                            error=str(exc),
+                            final_message=partial,
+                            registry=context.runtime_tasks,
+                        )
+                        logger.exception(
+                            "Async agent %s (%s) aborted internally",
+                            agent_id,
+                            agent_type,
+                        )
                 except Exception as exc:
                     partial = extract_partial_result(messages)
                     err_text = partial or str(exc)
@@ -1321,8 +1354,11 @@ def make_agent_tool(
                     )
                     # R5 (ch13) — mark the failed async subagent terminal too.
                     _emit_terminal_agent_progress(
-                        context, agent_id=agent_id, name=agent_name,
-                        description=description, subagent_type=agent_type,
+                        context,
+                        agent_id=agent_id,
+                        name=agent_name,
+                        description=description,
+                        subagent_type=agent_type,
                         status="failed",
                     )
                     logger.exception(
@@ -1338,19 +1374,31 @@ def make_agent_tool(
                 if transcript is not None:
                     transcript.close()
 
+        def _runner(_stop_event: Any) -> None:
+            asyncio.run(_background_lifecycle())
+
+        # Always detach background agents from the parent turn's asyncio
+        # loop. Otherwise asyncio.run() waits for their executor work while
+        # unwinding a cancelled turn, leaving the UI stuck on "Cancelling…".
         try:
-            running_loop = asyncio.get_running_loop()
-        except RuntimeError:
-            running_loop = None
-
-        if running_loop is not None:
-            running_loop.create_task(_background_lifecycle())
-        else:
-
-            def _runner(_stop_event: Any) -> None:
-                asyncio.run(_background_lifecycle())
-
-            context.task_manager.start(name=f"agent:{agent_type}", target=_runner)
+            context.task_manager.start(
+                name=f"agent:{agent_type}:{agent_id}",
+                target=_runner,
+                on_stop=lambda: kill_async_agent(
+                    agent_id,
+                    context.runtime_tasks,
+                    enqueue_notification=False,
+                ),
+            )
+        except TaskManagerClosedError as exc:
+            kill_async_agent(
+                agent_id,
+                context.runtime_tasks,
+                enqueue_notification=False,
+            )
+            if agent_name is not None and context.agent_name_registry.get(agent_name) == agent_id:
+                context.agent_name_registry.release(agent_name)
+            raise ToolInputError("Cannot start background agent: session is shutting down") from exc
 
         return ToolResult(
             name=AGENT_TOOL_NAME,

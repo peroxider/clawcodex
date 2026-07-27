@@ -36,7 +36,7 @@ _USAGE = (
     "  restart <name>   Rebuild a channel adapter and reload its config.\n"
     "  status           Daemon health + all-channels overview (unified view).\n"
     "  status <name>    Show channel health/status.\n"
-    "  setup            Guided channel configuration wizard.\n"
+    "  setup            Configure channels, then restart the Gateway daemon.\n"
     "  disconnect <name> Remove the active REPL/orchestrator connection.\n"
     "  login <name>     WeChat iLink QR login.\n"
     "  --state-dir PATH  Override gateway state directory.\n"
@@ -137,7 +137,11 @@ def run_gateway_command(args: list[str]) -> int:
     if verb == "setup":
         from clawcodex_ext.cli.channels_cmd.commands import run_wizard
 
-        return run_wizard(None)
+        config_path = paths.state_dir / "channels.yaml"
+        setup_result = run_wizard(str(config_path))
+        if setup_result != 0:
+            return setup_result
+        return daemon.restart(verbose=verbose)
 
     print(f"error: unknown gateway subcommand {verb!r}", file=sys.stderr)
     print(_USAGE, file=sys.stderr)

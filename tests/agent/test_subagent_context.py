@@ -31,6 +31,17 @@ def _make_parent_context(**kwargs) -> ToolContext:
 
 
 class TestDefaultIsolation:
+    def test_lkb_plan_binding_is_inherited(self):
+        parent = _make_parent_context(
+            session_id="parent-session",
+            lkb_plan_id="plan-shared-explicitly",
+        )
+
+        child = create_subagent_context(parent)
+
+        assert child.session_id == "parent-session"
+        assert child.lkb_plan_id == "plan-shared-explicitly"
+
     def test_read_file_fingerprints_starts_empty(self):
         parent = _make_parent_context()
         parent.read_file_fingerprints[Path("/tmp/a.py")] = (100, 200)

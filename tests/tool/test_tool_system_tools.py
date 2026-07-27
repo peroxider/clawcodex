@@ -575,6 +575,18 @@ class TestNewParityTools(ToolSystemTests):
         task_out = _asyncio.run(TaskOutputTool.call({"task_id": task_id}, self.ctx)).output
         self.assertEqual(task_out["task"]["task_id"], task_id)
 
+    def test_task_self_owner_sentinel_uses_trusted_context_identity(self) -> None:
+        self.ctx.agent_id = "native-agent-id"
+        created = TaskCreateTool.call(
+            {"subject": "Claim locally", "description": "D"},
+            self.ctx,
+        ).output
+        task_id = created["task"]["id"]
+
+        TaskUpdateTool.call({"taskId": task_id, "owner": "$self"}, self.ctx)
+
+        self.assertEqual(self.ctx.tasks[task_id]["owner"], "native-agent-id")
+
     def test_task_cascade_delete_removes_blockers(self) -> None:
         """Deleting a task removes its ID from blocks/blockedBy of all other tasks."""
         t1 = TaskCreateTool.call({"subject": "T1", "description": "D1"}, self.ctx).output["task"][

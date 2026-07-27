@@ -60,6 +60,7 @@ from ..widgets.fullscreen_layout import FullscreenLayout
 from ..widgets.header import StartupHeader
 from ..widgets.prompt_input import PromptInput, PromptSubmitted
 from ..widgets.status_line import StatusLine
+from ..widgets.task_list import TaskProgressPanel, task_from_mapping
 from ..widgets.transcript_view import Transcript
 from ..messages import QueuedPromptReady
 from ..widgets.multimodel import MultiModelLivePanel
@@ -126,6 +127,7 @@ class REPLScreen(Screen):
             workspace_root=self._workspace_root,
             provider_instance=provider_instance,
         )
+        self.task_panel = TaskProgressPanel()
         self.prompt_input = PromptInput(
             words_provider=words_provider,
             suggestions_provider=suggestions_provider,
@@ -152,6 +154,7 @@ class REPLScreen(Screen):
         self._fullscreen.scroll_region().mount(self.header_widget)
         self._fullscreen.scroll_region().mount(self.transcript)
         self._fullscreen.bottom_region().mount(self.live_region)
+        self._fullscreen.bottom_region().mount(self.task_panel)
         self._fullscreen.bottom_region().mount(self.status_bar)
         self._fullscreen.bottom_region().mount(self.prompt_input)
         # Bind the status line to app state so the spinner / queue count
@@ -181,6 +184,12 @@ class REPLScreen(Screen):
             "Ready. Type a prompt, or '/' for commands. "
             "Ctrl+D, /exit, or /repl to leave the Textual TUI.",
         )
+        self.refresh_task_panel(force_projection=True)
+        # Child Agents mutate the shared LKB Store through isolated
+        # ToolContexts, so their task events do not necessarily reach this
+        # screen. Poll the authoritative projection at a light, throttled
+        # cadence to keep the fixed panel live throughout the conversation.
+        self.set_interval(1.0, self.refresh_task_panel)
 
     # ---- actions ----
     def action_clear_transcript(self) -> None:
@@ -366,6 +375,55 @@ class REPLScreen(Screen):
             is_error=message.is_error,
             error=message.error,
         )
+        if message.kind in ("tool_result", "tool_error") and message.tool_name in {
+            "Agent",
+            "Lkb",
+            "TaskCreate",
+            "TaskGet",
+            "TaskList",
+            "TaskOutput",
+            "TaskUpdate",
+        }:
+            self.refresh_task_panel(force_projection=True)
+
+    def refresh_task_panel(self, *, force_projection: bool = False) -> None:
+        """Refresh the fixed panel from the authoritative task projection."""
+
+        app = self.app
+        context = getattr(app, "tool_context", None)
+        if context is not None:
+            try:
+                from lkb.repl_status import refresh_task_projection
+
+                refresh_task_projection(context, force=force_projection)
+            except Exception:
+                # LKB is optional and projection refresh is best-effort. The
+                # native TaskContext projection below remains usable.
+                pass
+        raw_tasks = getattr(context, "tasks", {}) if context is not None else {}
+        if not isinstance(raw_tasks, dict):
+            self.task_panel.set_tasks([])
+            return
+        try:
+            rows = [
+                task_from_mapping(task)
+                for task in list(raw_tasks.values())
+                if isinstance(task, dict) and task.get("id")
+            ]
+        except RuntimeError:
+            # A worker may have replaced the projection between list() and
+            # conversion. The next task event will refresh again.
+            return
+        rows.sort(key=lambda task: task.id)
+        self.task_panel.set_tasks(rows)
+
+    def focus_task_panel(self) -> None:
+        """Refresh and focus the persistent panel used by the /tasks command."""
+
+        self.refresh_task_panel()
+        if self.task_panel.tasks:
+            self.task_panel.focus()
+            self.task_panel.scroll_visible()
 
     def on_advisor_event_message(self, message: AdvisorEventMessage) -> None:
         self.transcript.append_advisor_event(

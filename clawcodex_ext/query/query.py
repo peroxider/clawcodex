@@ -239,6 +239,13 @@ class QueryParams:
     # (see :func:`resolve_thinking_effort`). Only sent when extended
     # thinking is active.
     thinking_effort: str | None = None
+    # Persist-only callback for meta attachments injected by the canonical
+    # loop. Live surfaces wire this to their Conversation; unlike
+    # ``on_message`` it does not render the reminder as user-authored text.
+    on_attachment: Callable[[Message], None] | None = None
+    # False for notification/goal maintenance turns that do not represent a
+    # fresh user interaction. Such turns must not consume reminder cadence.
+    task_reminder_enabled: bool = True
 
 
 @dataclass
@@ -353,11 +360,7 @@ async def _fire_post_sampling_hooks(
 
         last = assistant_messages[-1]
         results = await run_post_sampling_hooks(
-            model=(
-                getattr(last, "model", None)
-                or getattr(provider, "model", None)
-                or ""
-            ),
+            model=(getattr(last, "model", None) or getattr(provider, "model", None) or ""),
             usage=getattr(last, "usage", None) or {},
             stop_reason=getattr(last, "stop_reason", None),
             # Same trust rule as the tool-hook lane: untrusted workspace →
@@ -468,9 +471,7 @@ def _get_context_window(provider: BaseProvider) -> int:
         try:
             from src.models.context import get_context_window_for_model
 
-            return get_context_window_for_model(
-                model, base_url=getattr(provider, "base_url", None)
-            )
+            return get_context_window_for_model(model, base_url=getattr(provider, "base_url", None))
         except Exception:
             logger.debug("model context-window resolution failed", exc_info=True)
     return 200_000
@@ -593,11 +594,7 @@ def _model_supports_adaptive_thinking(model: str | None) -> bool:
         return False
     m = model.lower()
     return (
-        "fable-5" in m
-        or "opus-4-8" in m
-        or "opus-4-7" in m
-        or "opus-4-6" in m
-        or "sonnet-4-6" in m
+        "fable-5" in m or "opus-4-8" in m or "opus-4-7" in m or "opus-4-6" in m or "sonnet-4-6" in m
     )
 
 
@@ -613,12 +610,7 @@ def _model_supports_effort(model: str | None) -> bool:
     if not model:
         return False
     m = model.lower()
-    return (
-        "fable-5" in m
-        or "opus-4-8" in m
-        or "opus-4-6" in m
-        or "sonnet-4-6" in m
-    )
+    return "fable-5" in m or "opus-4-8" in m or "opus-4-6" in m or "sonnet-4-6" in m
 
 
 def _model_supports_xhigh_effort(model: str | None) -> bool:
@@ -676,9 +668,7 @@ def resolve_thinking_effort(explicit: str | None, model: str | None) -> str | No
     if value not in VALID_THINKING_EFFORT_LEVELS:
         return None
     if value == "xhigh" and not _model_supports_xhigh_effort(model):
-        logger.debug(
-            "effort xhigh not supported on %s; sending high instead", model
-        )
+        logger.debug("effort xhigh not supported on %s; sending high instead", model)
         return "high"
     return value
 
@@ -691,6 +681,7 @@ def _is_overloaded_error(e: Exception) -> bool:
         return True
     text = str(e).lower()
     return "overloaded_error" in text or "overloaded" in text
+
 
 def _retry_after_seconds(e: Exception, default: float) -> float:
     """Honor a Retry-After header when the SDK exposes response headers."""
@@ -718,9 +709,7 @@ async def _fire_stop_failure_hooks(last_message: Any, tool_use_context: Any) -> 
     try:
         from ..hooks.hook_executor import execute_stop_failure_hooks
 
-        async for _result in execute_stop_failure_hooks(
-            last_message, tool_use_context
-        ):
+        async for _result in execute_stop_failure_hooks(last_message, tool_use_context):
             pass
     except Exception:
         logger.debug("StopFailure hook dispatch failed", exc_info=True)
@@ -1090,9 +1079,7 @@ async def _call_model_sync(
                 and blk["cache_control"].get("scope") == "global"
                 for blk in system_prompt
             ):
-                call_kwargs.setdefault("betas", []).append(
-                    PROMPT_CACHING_SCOPE_BETA_HEADER
-                )
+                call_kwargs.setdefault("betas", []).append(PROMPT_CACHING_SCOPE_BETA_HEADER)
         call_kwargs["system"] = system_prompt
     else:
         # Non-Anthropic providers (OpenAI-compat, GLM, etc.) consume the
@@ -1203,12 +1190,11 @@ async def _call_model_sync(
                     logger.debug(
                         "thinking omitted: max_tokens=%s too small for a "
                         "valid budget on non-adaptive model %s",
-                        _max_tok, provider_model,
+                        _max_tok,
+                        provider_model,
                     )
             if _model_supports_effort(provider_model):
-                resolved_effort = resolve_thinking_effort(
-                    thinking_effort, provider_model
-                )
+                resolved_effort = resolve_thinking_effort(thinking_effort, provider_model)
                 # None = nothing requested anywhere — omit the parameter so
                 # the API applies its own model default (TS parity; see
                 # resolve_thinking_effort).
@@ -1258,11 +1244,15 @@ async def _call_model_sync(
                         )
                     except TypeError:
                         stream_response = provider.chat_stream_response(
-                            api_messages, abort_signal=abort_signal, **call_kwargs,
+                            api_messages,
+                            abort_signal=abort_signal,
+                            **call_kwargs,
                         )
             else:
                 stream_response = provider.chat_stream_response(
-                    api_messages, abort_signal=abort_signal, **call_kwargs,
+                    api_messages,
+                    abort_signal=abort_signal,
+                    **call_kwargs,
                 )
             if not isinstance(stream_response, ChatResponse):
                 raise NotImplementedError("provider returned no structured stream response")
@@ -1614,6 +1604,26 @@ def _build_user_cancelled_result(tool_use_id: str) -> UserMessage:
     )
 
 
+def _build_unavailable_tool_result(tool_use_id: str, tool_name: str) -> UserMessage:
+    """Reject a tool call that was not exposed to the current agent.
+
+    Agent runs receive a filtered ``tools`` list but share the host registry.
+    The registry is intentionally broader because other contexts reuse it;
+    therefore the execution boundary must enforce the per-agent view before
+    dispatch instead of trusting the model to call only advertised tools.
+    """
+
+    return UserMessage(
+        content=[
+            ToolResultBlock(
+                tool_use_id=tool_use_id,
+                content=f"Error: Tool {tool_name!r} is not available in this agent context.",
+                is_error=True,
+            )
+        ],
+    )
+
+
 def _dispatch_single_tool(
     block: ToolUseBlock,
     tool_registry: ToolRegistry,
@@ -1644,6 +1654,13 @@ def _dispatch_single_tool(
     # (typescript/src/services/tools/StreamingToolExecutor.ts:278-292).
     if _is_user_cancelled_abort(tool_use_context):
         return _build_user_cancelled_result(block.id), []
+
+    # ``tools=None`` is the legacy unrestricted path. An explicit list,
+    # including an empty list, is the authoritative capability boundary for
+    # this query/agent and must be checked before the shared registry runs.
+    selected_tool = find_tool_by_name(tools, block.name) if tools is not None else None
+    if tools is not None and selected_tool is None:
+        return _build_unavailable_tool_result(block.id, block.name), []
 
     try:
         call = ToolCall(
@@ -1679,7 +1696,7 @@ def _dispatch_single_tool(
         if _is_user_cancelled_abort(tool_use_context):
             return _build_user_cancelled_result(block.id), []
 
-        tool = find_tool_by_name(tools, block.name) if tools else None
+        tool = selected_tool
         metadata: dict[str, Any] = {}
         if isinstance(result.output, dict):
             metadata["tool_output"] = result.output
@@ -2114,9 +2131,9 @@ async def query(
     tool_failure_guard_state = create_tool_failure_loop_guard_state()
     from ..bootstrap.state import snapshot_output_tokens_for_turn
 
-    if (
-        getattr(params.tool_use_context, "agent_id", None) is None
-        and params.query_source not in ("compact", "session_memory")
+    if getattr(params.tool_use_context, "agent_id", None) is None and params.query_source not in (
+        "compact",
+        "session_memory",
     ):
         snapshot_output_tokens_for_turn(params.token_budget)
     budget_tracker = create_budget_tracker()
@@ -2440,6 +2457,36 @@ async def query(
         needs_follow_up = False
 
         effective_tools = _resolve_effective_tools(params, tool_use_context, messages)
+        # LKB/Task-v2 periodic reminder. Evaluate at every model-call boundary
+        # so a read-only TaskList round can become the tenth idle assistant
+        # turn and trigger immediately before the follow-up call. Counting
+        # uses the uncompressed QueryState history; the reminder itself joins
+        # the working message stream and is persisted through the attachment
+        # callback for cross-request cadence de-duplication.
+        if params.task_reminder_enabled:
+            try:
+                from .task_reminder import build_task_reminder
+
+                task_reminder = build_task_reminder(
+                    state.messages,
+                    tool_use_context,
+                    effective_tools,
+                    query_source=params.query_source,
+                )
+                if task_reminder is not None:
+                    messages = [*messages, task_reminder]
+                    if params.on_attachment is not None:
+                        try:
+                            params.on_attachment(task_reminder)
+                        except Exception:
+                            logger.debug(
+                                "task-reminder attachment persistence failed",
+                                exc_info=True,
+                            )
+                    yield task_reminder
+            except Exception:
+                logger.debug("task-reminder wiring failed", exc_info=True)
+
         # ch04 round-3 G3, widened by round-4 GAP B: the retry lane.
         # Yield-based like TS withRetry (status surfaces in the message
         # stream, not a side channel). Constraints preserved from round-3:
@@ -2484,10 +2531,7 @@ async def query(
                         effort_override=tool_use_context.skill_effort_override,
                         max_output_tokens_override=max_output_tokens_override,
                         abort_signal=params.abort_controller.signal,
-                        on_text_chunk=(
-                            _marking_chunk_cb if _outer_chunk_cb is not None
-                            else None
-                        ),
+                        on_text_chunk=(_marking_chunk_cb if _outer_chunk_cb is not None else None),
                         on_thinking_chunk=params.on_thinking_chunk,
                         extended_thinking=params.extended_thinking,
                         thinking_effort=params.thinking_effort,
@@ -2529,8 +2573,7 @@ async def query(
                         is_529
                         and _consecutive_529s >= MAX_529_RETRIES
                         and params.fallback_model
-                        and params.fallback_model
-                        != getattr(params.provider, "model", None)
+                        and params.fallback_model != getattr(params.provider, "model", None)
                     ):
                         _original_model = getattr(params.provider, "model", "?")
                         try:
@@ -2538,9 +2581,9 @@ async def query(
                         except Exception:  # noqa: BLE001 — read-only provider stub
                             raise retry_exc
                         logger.warning(
-                            "model fallback: %s -> %s after %d consecutive "
-                            "overloaded errors",
-                            _original_model, params.fallback_model,
+                            "model fallback: %s -> %s after %d consecutive overloaded errors",
+                            _original_model,
+                            params.fallback_model,
                             _consecutive_529s,
                         )
                         yield SystemMessage(
@@ -2577,7 +2620,9 @@ async def query(
                             f"(attempt {_general_attempts}/{DEFAULT_MAX_RETRIES})"
                         )
                     yield SystemMessage(
-                        content=_status, level="warning", subtype="api_retry",
+                        content=_status,
+                        level="warning",
+                        subtype="api_retry",
                     )
                     # Abort-aware backoff (critic): TS sleeps WITH the
                     # signal (withRetry sleep(delay, signal)); a
@@ -2685,7 +2730,9 @@ async def query(
         # runtime. Consequence: hooks do not fire for user-aborted streams.
         if assistant_messages:
             await _fire_post_sampling_hooks(
-                assistant_messages, params.provider, tool_use_context,
+                assistant_messages,
+                params.provider,
+                tool_use_context,
             )
 
         if not needs_follow_up:
@@ -3295,7 +3342,8 @@ async def query(
             next_turn_count_on_abort = turn_count + 1
             if params.max_turns and next_turn_count_on_abort > params.max_turns:
                 yield _create_max_turns_attachment(
-                    params.max_turns, next_turn_count_on_abort,
+                    params.max_turns,
+                    next_turn_count_on_abort,
                 )
             set_terminal(holder, natural_termination, Terminal(reason="aborted_tools"))
             _goal_finish_turn("abort")
@@ -3353,8 +3401,7 @@ async def query(
             return
 
         advisory_messages = [
-            UserMessage(content=advisory)
-            for advisory in guard_decision.advisories
+            UserMessage(content=advisory) for advisory in guard_decision.advisories
         ]
 
         next_turn_count = turn_count + 1

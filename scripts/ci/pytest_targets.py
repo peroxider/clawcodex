@@ -44,6 +44,17 @@ AGENT_SMOKE_PYTEST = (
 
 STABILITY_GATE_PYTEST = ("tests/stability_gate",)
 
+# LKB Plan Graph fast gate. The complete AgentLoop drill remains an explicit
+# release-owner action, so it is not part of this routine preset.
+LKB_PYTEST = (
+    "extensions/lkb/tests/unit",
+    "extensions/lkb/tests/repository",
+    "extensions/lkb/tests/integration",
+    "extensions/lkb/tests/concurrency",
+    "extensions/lkb/tests/ui",
+    "tests/command_system/test_lkb_board_command.py",
+)
+
 RELEASE_SMOKE_PYTEST = (*CORE_PYTEST, *AGENT_SMOKE_PYTEST, *ORCHESTRATOR_PYTEST)
 
 PRESETS: dict[str, tuple[str, ...]] = {
@@ -52,6 +63,7 @@ PRESETS: dict[str, tuple[str, ...]] = {
     "agent-smoke": AGENT_SMOKE_PYTEST,
     "stability-gate": STABILITY_GATE_PYTEST,
     "release-smoke": RELEASE_SMOKE_PYTEST,
+    "lkb": LKB_PYTEST,
 }
 
 

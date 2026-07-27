@@ -110,7 +110,6 @@ class ToolContext:
     lsp_client: Any | None = None
     todos: list[dict[str, Any]] = field(default_factory=list)
     tasks: dict[str, dict[str, Any]] = field(default_factory=dict)
-    logical_kanban: Any | None = None
     # Chapter-10 / Chunk B / WI-1.3 — typed runtime-task registry. Houses
     # ``LocalShellTaskState`` / ``LocalAgentTaskState`` / etc. as
     # ``TaskStateBase`` subclasses. Replaces the un-typed
@@ -299,6 +298,14 @@ class ToolContext:
     # interpreted as "unknown" by callers; substitutions yield an empty
     # string in that case.
     session_id: str | None = None
+    # LKB Plan binding.  The workspace selects a shared Board, while this
+    # session-scoped field selects one Plan graph inside it.  Subagents
+    # inherit the value explicitly; unrelated sessions do not.
+    lkb_plan_id: str | None = None
+    # Throttle/signature cache for the optional LKB REPL/TUI projection
+    # refresher. ToolContext uses slots, so the integration cannot attach
+    # this state dynamically at runtime.
+    _lkb_repl_status_state: dict[str, Any] | None = None
     # F-122 goal-mode model tools. ``session_id`` is the normal persisted
     # thread id; ``goal_thread_id`` lets tests or protocol adapters pin the
     # recoverable thread explicitly. ``goal_service`` is injected when a

@@ -154,6 +154,25 @@ def is_invalid_api_key(error: Exception) -> bool:
     return status == 401
 
 
+def is_api_timeout_error(error: BaseException) -> bool:
+    """Recognize local and provider-SDK timeout wrappers.
+
+    OpenAI-compatible providers surface socket timeouts as
+    ``openai.APITimeoutError``. That class inherits the SDK's ``APIError``
+    hierarchy rather than Python's built-in :class:`TimeoutError`, so a plain
+    ``isinstance(error, TimeoutError)`` check incorrectly treats it as a
+    permanent unknown error.
+
+    Match the local compatibility exception directly and provider wrappers by
+    class name. The latter keeps this shared module independent of optional
+    provider SDK imports while remaining narrower than message matching.
+    """
+
+    return isinstance(error, (APITimeoutError, TimeoutError)) or any(
+        cls.__name__ == "APITimeoutError" for cls in type(error).__mro__
+    )
+
+
 def is_media_size_error(raw: str) -> bool:
     return (
         ("image exceeds" in raw and "maximum" in raw)
@@ -324,6 +343,13 @@ def categorize_retryable_api_error(error: Exception) -> ErrorClassification:
         return ErrorClassification(
             retryable=True,
             error_type="transport_error",
+            message=str(error),
+        )
+
+    if is_api_timeout_error(error):
+        return ErrorClassification(
+            retryable=True,
+            error_type="timeout",
             message=str(error),
         )
 

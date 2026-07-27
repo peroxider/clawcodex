@@ -413,6 +413,7 @@ all = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "qrcode" },
+    { name = "rdflib" },
     { name = "ruff" },
     { name = "twine" },
     { name = "z3-solver" },
@@ -423,9 +424,11 @@ chrome = [
 ]
 dev = [
     { name = "build" },
+    { name = "clingo" },
     { name = "import-linter" },
     { name = "lark-oapi" },
     { name = "mypy" },
+    { name = "ortools" },
     { name = "pexpect" },
     { name = "pre-commit" },
     { name = "pyte" },
@@ -433,8 +436,10 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "qrcode" },
+    { name = "rdflib" },
     { name = "ruff" },
     { name = "twine" },
+    { name = "z3-solver" },
 ]
 feishu = [
     { name = "lark-oapi" },
@@ -460,6 +465,7 @@ requires-dist = [
     { name = "build", marker = "extra == 'all'", specifier = ">=1.0.0" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "clingo", marker = "extra == 'all'", specifier = ">=5.8" },
+    { name = "clingo", marker = "extra == 'dev'", specifier = ">=5.8" },
     { name = "clingo", marker = "extra == 'lkb-asp'", specifier = ">=5.8" },
     { name = "cryptography", specifier = ">=42.0.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
@@ -477,6 +483,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13.0" },
     { name = "openai" },
     { name = "ortools", marker = "extra == 'all'", specifier = ">=9.8" },
+    { name = "ortools", marker = "extra == 'dev'", specifier = ">=9.8" },
     { name = "ortools", marker = "extra == 'scheduling'", specifier = ">=9.8" },
     { name = "outlines", specifier = ">=0.0.80" },
     { name = "pathspec", specifier = ">=0.11" },
@@ -502,6 +509,8 @@ requires-dist = [
     { name = "qrcode", marker = "extra == 'all'", specifier = "==7.4.2" },
     { name = "qrcode", marker = "extra == 'dev'", specifier = "==7.4.2" },
     { name = "qrcode", marker = "extra == 'feishu'", specifier = "==7.4.2" },
+    { name = "rdflib", marker = "extra == 'all'", specifier = ">=7.0.0" },
+    { name = "rdflib", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "rdflib", marker = "extra == 'lkb-rdf'", specifier = ">=7.0.0" },
     { name = "rich" },
     { name = "ruff", marker = "extra == 'all'", specifier = ">=0.8.0" },
@@ -516,6 +525,7 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
     { name = "websockets", specifier = ">=14.0" },
     { name = "z3-solver", marker = "extra == 'all'", specifier = ">=4.12" },
+    { name = "z3-solver", marker = "extra == 'dev'", specifier = ">=4.12" },
     { name = "z3-solver", marker = "extra == 'lkb-smt'", specifier = ">=4.12" },
     { name = "zhipuai" },
 ]
@@ -2516,6 +2526,18 @@ dependencies = [
 sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/ab/ab/b599762933eba04de7dc5b31ae083112a6c9a9db15b01d3109ad797559d9/pyte-0.8.2.tar.gz", hash = "sha256:5af970e843fa96a97149d64e170c984721f20e52227a2f57f0a54207f08f083f" }
 wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/59/d0/bb522283b90853afbf506cd5b71c650cf708829914efd0003d615cf426cd/pyte-0.8.2-py3-none-any.whl", hash = "sha256:85db42a35798a5aafa96ac4d8da78b090b2c933248819157fc0e6f78876a0135" },
+]
+
+[[package]]
+name = "pyte"
+version = "0.8.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "wcwidth" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ab/ab/b599762933eba04de7dc5b31ae083112a6c9a9db15b01d3109ad797559d9/pyte-0.8.2.tar.gz", hash = "sha256:5af970e843fa96a97149d64e170c984721f20e52227a2f57f0a54207f08f083f", size = 92301, upload-time = "2023-11-12T09:33:43.217Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/59/d0/bb522283b90853afbf506cd5b71c650cf708829914efd0003d615cf426cd/pyte-0.8.2-py3-none-any.whl", hash = "sha256:85db42a35798a5aafa96ac4d8da78b090b2c933248819157fc0e6f78876a0135", size = 31627, upload-time = "2023-11-12T09:33:41.096Z" },
 ]
 
 [[package]]

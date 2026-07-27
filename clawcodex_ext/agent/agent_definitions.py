@@ -15,8 +15,6 @@ from clawcodex_ext.agent.verification import (
     VERIFICATION_WHEN_TO_USE,
 )
 from clawcodex_ext.permissions.types import PermissionMode
-from clawcodex_ext.logical_kanban.flags import is_logical_kanban_enabled
-
 
 AgentSource = Literal[
     "built-in",
@@ -110,22 +108,26 @@ _SHARED_GUIDELINES = (
 def task_v2_guidelines() -> str:
     """Return Task V2 / Logical Kanban guidance for multi-step agents.
 
-    This guidance is surfaced only when the Logical Kanban feature flag is
-    enabled, so agents see the same TaskCreate/TaskUpdate semantics whether they
-    are running in an interactive session or were launched by the orchestrator.
+    This guidance is surfaced only when the merged LKB flag
+    (``LKB_PLAN_GRAPH``) is enabled, so agents see the same
+    TaskCreate/TaskUpdate semantics whether they are running in an
+    interactive session or were launched by the orchestrator. The flag
+    is read lazily so this module stays importable before the optional
+    LKB package / feature-gate stack is available.
     """
-    if not is_logical_kanban_enabled():
+    try:
+        from lkb.flags import is_plan_graph_enabled
+    except Exception:
+        return ""
+    if not is_plan_graph_enabled():
         return ""
     return (
         "\n\nTask tracking guidelines:\n"
         "- For multi-step work, create structured tasks with TaskCreate and track them "
         "with TaskList.\n"
-        "- For complex goals with 3+ steps, use TaskDecompose first to get a validated "
-        "plan, then create the proposed tasks with TaskCreate.\n"
         "- Declare dependencies with TaskUpdate `addBlockedBy` before starting work.\n"
         "- Only mark a task `in_progress` after TaskGet confirms its `blockedBy` list is empty.\n"
-        "- Only mark a task `completed` when the work is fully done and tests pass. "
-        "When strict acceptance is enabled, attach `metadata.lkb.acceptance_proof` first.\n"
+        "- Only mark a task `completed` when the work is fully done and tests pass.\n"
         "- If a task becomes blocked, use TaskList/TaskGet to read the blocked reason and "
         "repair suggestions, then act on them."
     )
@@ -136,7 +138,7 @@ def _general_purpose_system_prompt(**_kwargs: Any) -> str:
     return (
         f"{_SHARED_PREFIX} When you complete the task, respond with a concise "
         "report covering what was done and any key findings \u2014 the caller will relay this to "
-        f"the user, so it only needs the essentials.\n\n{_SHARED_GUIDELINES}{task_v2_guidelines()}"
+        f"the user, so it only needs the essentials.\n\n{_SHARED_GUIDELINES}"
     )
 
 

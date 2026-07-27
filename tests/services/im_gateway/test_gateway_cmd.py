@@ -255,20 +255,51 @@ def test_gateway_stop_with_name_errors(capsys) -> None:
     assert "stop takes no channel name" in err.lower()
 
 
-def test_gateway_setup_calls_wizard(monkeypatch) -> None:
-    """`gateway setup` calls run_wizard(None)."""
-    called: list[str | None] = []
+def test_gateway_setup_uses_state_dir_then_restarts_daemon(tmp_path, monkeypatch) -> None:
+    """A successful setup writes the selected config and applies it via restart."""
+    wizard_calls: list[str | None] = []
+    restart_calls: list[bool] = []
 
     def _fake_wizard(path: str | None = None, *, input_fn=None) -> int:
-        called.append(path)
+        wizard_calls.append(path)
         return 0
+
+    class _FakeDaemon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def restart(self, verbose=False):
+            restart_calls.append(verbose)
+            return 0
 
     from clawcodex_ext.cli.channels_cmd import commands as ch
 
     monkeypatch.setattr(ch, "run_wizard", _fake_wizard)
-    rc = run_gateway_command(["setup"])
+    monkeypatch.setattr("extensions.im_gateway.server.GatewayDaemon", _FakeDaemon)
+    rc = run_gateway_command(["setup", "--state-dir", str(tmp_path), "--verbose"])
     assert rc == 0
-    assert called == [None]
+    assert wizard_calls == [str(tmp_path / "channels.yaml")]
+    assert restart_calls == [True]
+
+
+def test_gateway_setup_failure_does_not_restart(monkeypatch) -> None:
+    restart_calls: list[bool] = []
+
+    class _FakeDaemon:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def restart(self, verbose=False):
+            restart_calls.append(verbose)
+            return 0
+
+    from clawcodex_ext.cli.channels_cmd import commands as ch
+
+    monkeypatch.setattr(ch, "run_wizard", lambda _path: 1)
+    monkeypatch.setattr("extensions.im_gateway.server.GatewayDaemon", _FakeDaemon)
+
+    assert run_gateway_command(["setup"]) == 1
+    assert restart_calls == []
 
 
 def test_gateway_restart_channel(monkeypatch) -> None:

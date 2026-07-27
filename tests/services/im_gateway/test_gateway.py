@@ -462,6 +462,40 @@ def test_gateway_loads_wechat_channel_from_config(tmp_path) -> None:
     assert adapter._account_status == "unconfigured"
 
 
+def test_gateway_loads_wechat_and_feishu_inbound_channels_together(tmp_path) -> None:
+    cfg = GatewayConfig(state_dir=str(tmp_path))
+    cfg.channels.extend(
+        [
+            ChannelConfig(
+                type=ChannelType.WECHAT,
+                webhook_url="https://ilinkai.weixin.qq.com/dummy",
+                name="wechat",
+                enabled=True,
+                extra={"account_id": "default"},
+            ),
+            ChannelConfig(
+                type=ChannelType.FEISHU,
+                webhook_url="",
+                name="feishu",
+                enabled=True,
+                extra={
+                    "connection_mode": "websocket",
+                    "app_id": "cli_test",
+                    "app_secret": "test-secret",
+                },
+            ),
+        ]
+    )
+
+    gateway = MessageGateway(cfg)
+
+    assert set(gateway.registry.names()) == {"wechat", "feishu"}
+    assert {adapter.channel_id for adapter in gateway._inbound_adapters} == {
+        "wechat",
+        "feishu",
+    }
+
+
 def test_gateway_normalizes_legacy_wechat_name_and_reuses_legacy_auth(tmp_path) -> None:
     from clawcodex_ext.services.channels.models import ChannelType
     from clawcodex_ext.services.channels.wechat_ilink import WeChatAuthRecord, WeChatIlinkAuthStore

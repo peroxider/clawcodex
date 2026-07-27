@@ -1,1 +1,1 @@
-"""lkb standalone test suite."""
+"""LKB Plan Graph test suite."""

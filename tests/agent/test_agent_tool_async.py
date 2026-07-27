@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import asyncio
+import threading
 import time
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
+from clawcodex_ext.utils.abort_controller import AbortError
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 from clawcodex_ext.tool_system.protocol import ToolCall
@@ -106,3 +111,57 @@ def test_async_agent_launch_marks_failed_output(tmp_path: Path) -> None:
         final_status = _wait_for_task_status(context, task_id)
         assert final_status == "failed"
         assert "boom" in _task_output_text(context, task_id)
+
+
+@pytest.mark.asyncio
+async def test_async_agent_is_detached_and_session_shutdown_aborts_it(tmp_path: Path) -> None:
+    """Background agents must not become pending tasks on the parent loop.
+
+    A session-level shutdown still reaches the child's independent abort
+    controller, marks the runtime task killed, and joins the managed worker.
+    """
+
+    registry = build_default_registry(provider=object())
+    context = ToolContext(workspace_root=tmp_path)
+    started = threading.Event()
+    aborted = threading.Event()
+    child_params = {}
+
+    async def _blocking_run_agent(params):
+        child_params["value"] = params
+        started.set()
+        while not params.abort_controller.signal.aborted:
+            await asyncio.sleep(0.01)
+        aborted.set()
+        raise AbortError("task_stopped")
+        if False:  # pragma: no cover - keeps this an async generator
+            yield AssistantMessage(content=[TextBlock(text="unused")])
+
+    with patch("src.tool_system.tools.agent.run_agent", _blocking_run_agent):
+        result = registry.dispatch(
+            ToolCall(
+                name="Agent",
+                input={
+                    "description": "detached background test",
+                    "prompt": "wait until session shutdown",
+                    "run_in_background": True,
+                },
+            ),
+            context,
+        )
+
+        task_id = str(result.output["agent_id"])
+        assert started.wait(1.0)
+        # Regression guard: the old in-loop branch skipped TaskManager here,
+        # causing asyncio.run() to wait for this child during parent cancel.
+        assert context.task_manager.list()
+        context.abort_controller.abort("user_interrupt")
+        await asyncio.sleep(0.05)
+        assert child_params["value"].abort_controller.signal.aborted is False
+        assert context.runtime_tasks.get(task_id).status == "running"
+
+        assert context.task_manager.shutdown(timeout=2.0) is True
+        assert aborted.wait(1.0)
+        state = context.runtime_tasks.get(task_id)
+        assert state is not None
+        assert state.status == "killed"
