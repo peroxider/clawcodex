@@ -67,6 +67,7 @@ param(
     [switch]$NoVenv,
     [switch]$NoSetup,
     [switch]$DryRun,
+    [switch]$ForceSrc,
     [switch]$Force,
     [string]$LogFile,
     [switch]$Uninstall,
@@ -106,6 +107,14 @@ $script:InstallerVersion  = '2026.6.24'
 $script:ClawCodexVersion  = '2026.6.24'
 ${script:RepoRef}           = "dev"
 $script:RepoUrl           = 'https://gitcode.com/chadwweng/clawcodex'
+
+# --- Upstream source for src/ directory (Claude Code upstream fork) ---
+# When src/ is not present in the repo, the installer pulls it from the
+# upstream source at the pinned commit and applies the corresponding patches.
+$script:UpstreamUrl      = 'https://github.com/agentforce314/clawcodex.git'
+# UpstreamRef is NOT readonly — update this on each version sync to match the
+# patches/upstream/<commit>/ directory.
+$script:UpstreamRef      = '398b44f'
 
 # Overridable paths.  Resolved from $env:USERPROFILE so we work under both
 # the SYSTEM and the interactive user context (the latter is the common case).
@@ -604,6 +613,140 @@ function script:Clone-OrUpdate-Repo {
 }
 
 # ============================================================================
+#  Set up upstream src/ directory (clone + apply patches)
+#  When src/ is not present in the repo (i.e. it was removed to reduce the
+#  repo size), this step pulls the upstream source at the pinned commit and
+#  applies the corresponding patches from patches/upstream/<commit>/merged/.
+# ============================================================================
+function script:Setup-UpstreamSrc {
+    $srcDir = Join-Path $ClawCodexHome 'src'
+
+    if ($ForceSrc) {
+        if (Test-Path $srcDir) {
+            Log-Info 'Removing existing src/ (-ForceSrc)...'
+            Remove-Item -LiteralPath $srcDir -Recurse -Force
+        }
+    }
+
+    if (Test-Path $srcDir) {
+        Log-Ok 'src/ already present (skipping upstream source setup)'
+        return
+    }
+
+    Log-Info "src/ not found — pulling upstream source (ref: $UpstreamRef)..."
+
+    if ($DryRun) {
+        ScriptP1
+        Write-Host "[DRY-RUN] would clone: $UpstreamUrl (ref: $UpstreamRef) -> temp"
+        ScriptP1
+        Write-Host "[DRY-RUN] would copy: src/ -> $ClawCodexHome\src"
+        ScriptP1
+        Write-Host "[DRY-RUN] would apply patches from: patches/upstream/$UpstreamRef/merged/"
+        return
+    }
+
+    $upstreamTmp = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
+    New-Item -ItemType Directory -Path $upstreamTmp -Force | Out-Null
+    try {
+        Log-Info "Cloning $UpstreamUrl (ref: $UpstreamRef) ..."
+
+        # Commit hash (7-40 hex chars) can't be used with --branch for shallow clone.
+        # Skip the shallow attempt and go straight to full clone + checkout.
+        if ($UpstreamRef -match '^[0-9a-f]{7,40}$') {
+            $cloneOut = & git clone $UpstreamUrl $upstreamTmp 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Die-With-Help 'Failed to clone upstream source.' `
+                    'Check your network connection.' `
+                    "Verify:  git ls-remote $UpstreamUrl" `
+                    "Retry:   $SponsorScript"
+            }
+            Push-Location $upstreamTmp
+            try {
+                & git checkout $UpstreamRef 2>&1 | Out-Null
+            } finally { Pop-Location }
+            if ($LASTEXITCODE -ne 0) {
+                Die-With-Help "Failed to checkout upstream ref '$UpstreamRef'." `
+                    "Verify:  git ls-remote $UpstreamUrl $UpstreamRef" `
+                    "Retry:   $SponsorScript update"
+            }
+        } else {
+            # Try shallow clone first (works for branches and tags), fall back to full clone.
+            $cloneArgs = @('--depth', '1', '--branch', $UpstreamRef, $UpstreamUrl, $upstreamTmp)
+            $cloneOut = & git clone @cloneArgs 2>&1
+            $cloneExit = $LASTEXITCODE
+            if ($cloneExit -ne 0) {
+                Log-Warn 'Shallow clone failed — trying full clone ...'
+                $cloneOut = & git clone $UpstreamUrl $upstreamTmp 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    Die-With-Help 'Failed to clone upstream source.' `
+                        'Check your network connection.' `
+                        "Verify:  git ls-remote $UpstreamUrl" `
+                        "Retry:   $SponsorScript"
+                }
+                Push-Location $upstreamTmp
+                try {
+                    & git checkout $UpstreamRef 2>&1 | Out-Null
+                } finally { Pop-Location }
+                if ($LASTEXITCODE -ne 0) {
+                    Die-With-Help "Failed to checkout upstream ref '$UpstreamRef'." `
+                        "Verify:  git ls-remote $UpstreamUrl $UpstreamRef" `
+                        "Retry:   $SponsorScript update"
+                }
+            }
+        }
+
+        $upstreamSrc = Join-Path $upstreamTmp 'src'
+        if (-not (Test-Path $upstreamSrc)) {
+            Die-With-Help 'src/ directory not found in upstream source.' `
+                "Verify:  Get-ChildItem $upstreamTmp" `
+                'The upstream repo may have changed its layout.'
+        }
+
+        Copy-Item -LiteralPath $upstreamSrc -Destination $srcDir -Recurse
+        Log-Ok "Upstream src/ copied (ref: $UpstreamRef)"
+
+        # Apply patches
+        $patchDir = Join-Path $ClawCodexHome "patches/upstream/$UpstreamRef/merged"
+        if (Test-Path $patchDir) {
+            Log-Info "Applying patches from patches/upstream/$UpstreamRef/merged/ ..."
+            $script:patchCount = 0
+            $script:failCount = 0
+            $savedEAP = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            Push-Location $srcDir
+            try {
+                Get-ChildItem $patchDir -Filter '*.patch' | Sort-Object Name | ForEach-Object {
+                    & git apply -p1 $_.FullName 2>&1 | Out-Null
+                    if ($LASTEXITCODE -eq 0) {
+                        $script:patchCount++
+                    } else {
+                        Log-Warn "Patch failed: $($_.Name) — trying with --reject ..."
+                        & git apply -p1 --reject $_.FullName 2>&1 | Out-Null
+                        if ($LASTEXITCODE -eq 0) {
+                            $script:patchCount++
+                        } else {
+                            $script:failCount++
+                        }
+                    }
+                }
+            } finally {
+                Pop-Location
+                $ErrorActionPreference = $savedEAP
+            }
+            if ($script:failCount -eq 0) {
+                Log-Ok "Applied $($script:patchCount) patches successfully"
+            } else {
+                Log-Warn "Applied $($script:patchCount) patches, $($script:failCount) failed (check .rej files in src/)"
+            }
+        } else {
+            Log-Warn "Patch directory not found: $patchDir — src/ is unpatched upstream"
+        }
+    } finally {
+        Remove-Item -LiteralPath $upstreamTmp -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# ============================================================================
 #  Initialize local release .env
 # ============================================================================
 function script:Ensure-Local-EnvFile {
@@ -987,6 +1130,8 @@ function script:Get-InstallStatus {
     Write-Host "  Installer   : v$InstallerVersion  (would install clawcodex v$ClawCodexVersion)"
     Write-Host "  Repo URL    : $RepoUrl"
     Write-Host "  Git ref     : $RepoRef"
+    Write-Host "  Upstream URL: $UpstreamUrl"
+    Write-Host "  Upstream ref: $UpstreamRef"
     Write-Host "  Install dir : $ClawCodexHome"
     Write-Host "  Config dir  : $ConfigDir"
     Write-Host "  Local bin   : $LocalBin"
@@ -1014,6 +1159,12 @@ function script:Get-InstallStatus {
             Write-Host "  Venv        : present (Python: $pyVer)"
         } else {
             Write-Host "  Venv        : MISSING (run '$SponsorScript update' to recreate)"
+        }
+        $srcDir = Join-Path $ClawCodexHome 'src'
+        if (Test-Path $srcDir) {
+            Write-Host '  src/        : present'
+        } else {
+            Write-Host '  src/        : MISSING (will be pulled from upstream on install)'
         }
     } else {
         Write-Host "  Git state   : NOT INSTALLED (run '$SponsorScript install')"
@@ -1393,6 +1544,8 @@ function script:Show-Help {
         "    -DryRun                Preview every change without applying it.  Prints each"
         "                           command that would run as '[DRY-RUN] would run: ...'."
         "                           Combines well with status / doctor."
+        "    -ForceSrc             Force re-fetch of upstream src/ from the pinned"
+        "                           commit.  Removes existing src/ before pulling."
         "    -Yes / -Force          Assume 'yes' for any interactive prompts."
         "    -LogFile <path>        Tee all output (stdout + stderr) to <path>.  The EXIT"
         "                           summary prints the log file path on success and on"
@@ -1683,34 +1836,37 @@ function script:Install-Main {
     if ($DryRun)    { Write-Host "  ${C_Bold}Mode:${C_Reset}        ${C_Yellow}DRY-RUN (no changes will be made)${C_Reset}" }
     if ($LogFile)   { Write-Host "  ${C_Bold}Log file:${C_Reset}    $LogFile" }
 
-    Log-Step '1/9  Checking prerequisites'
+    Log-Step '1/10  Checking prerequisites'
     Check-Git
 
-    Log-Step '2/9  Installing uv (Astral, no admin)'
+    Log-Step '2/10  Installing uv (Astral, no admin)'
     # Re-expose uv on PATH in case it was installed earlier in this session.
     $env:Path = "$LocalBin;$((Join-Path $env:USERPROFILE '.cargo\bin'));$env:Path"
     Install-Uv
 
-    Log-Step "3/9  Provisioning Python $PythonMinVersion+"
+    Log-Step "3/10  Provisioning Python $PythonMinVersion+"
     Ensure-Python
     Ensure-Python-Pyo3Compat
 
-    Log-Step '4/9  Cloning / updating repository'
+    Log-Step '4/10  Cloning / updating repository'
     Clone-OrUpdate-Repo
 
-    Log-Step '5/9  Initializing local release .env'
+    Log-Step '5/10  Setting up upstream source (src/)'
+    Setup-UpstreamSrc
+
+    Log-Step '6/10  Initializing local release .env'
     Ensure-Local-EnvFile
 
-    if ($UseVenv) { Log-Step '6/9  Creating virtual environment' } else { Log-Step '6/9  Preparing (no venv — using system Python)' }
+    if ($UseVenv) { Log-Step '7/10  Creating virtual environment' } else { Log-Step '7/10  Preparing (no venv — using system Python)' }
     Create-Venv
 
-    Log-Step '7/9  Installing dependencies (uv sync --extra all, lock-pinned)'
+    Log-Step '8/10  Installing dependencies (uv sync --extra all, lock-pinned)'
     Install-Deps
 
-    Log-Step '8/9  Installing local Git hooks'
+    Log-Step '9/10  Installing local Git hooks'
     Install-Git-Hooks
 
-    Log-Step '9/9  Registering global commands & patching PATH'
+    Log-Step '10/10  Registering global commands & patching PATH'
     Register-Commands
     Update-User-Path
 
