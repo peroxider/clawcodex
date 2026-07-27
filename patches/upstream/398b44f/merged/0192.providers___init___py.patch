@@ -1,19 +1,23 @@
 diff --git a/providers/__init__.py b/providers/__init__.py
 --- a/providers/__init__.py	2026-07-23 08:42:36.000000 +0000
-+++ b/providers/__init__.py	2026-07-21 04:56:27.000000 -0700
-@@ -206,6 +206,11 @@
++++ b/providers/__init__.py	2026-07-24 14:13:17.000000 +0800
+@@ -206,6 +206,15 @@
  for _alias, _canonical in _spec_aliases().items():
      PROVIDER_ALIASES.setdefault(_alias, _canonical)
  
-+# Native downstream implementations remain addressable under their historical
-+# ids while the upstream ``zai`` and ``moonshot`` providers coexist.
-+PROVIDER_ALIASES["glm"] = "glm"
++# ``glm`` intentionally remains an alias of the canonical upstream ``zai``
++# provider.  The downstream extension keeps its historical native class
++# addressable through ``get_provider_class("glm")`` without turning ``glm``
++# back into a second provider identity.
++#
++# Kimi is still a distinct downstream provider implementation rather than the
++# generic ``moonshot`` registry alias, so keep that historical id literal.
 +PROVIDER_ALIASES["kimi"] = "kimi"
 +
  
  def _canonical_provider_name(provider_name: str) -> str:
      """Resolve a legacy/alternate provider spelling to its canonical id."""
-@@ -225,15 +230,48 @@
+@@ -225,15 +234,48 @@
  
  def get_provider_info(provider_name: str) -> ProviderInfo:
      """Get provider info by name (legacy aliases accepted)."""
@@ -62,7 +66,7 @@ diff --git a/providers/__init__.py b/providers/__init__.py
      if provider_name == "anthropic":
          from .anthropic_provider import AnthropicProvider
  
-@@ -371,10 +409,27 @@
+@@ -371,10 +413,27 @@
  AVAILABLE_PROVIDERS: dict[str, str] = {k: v["label"] for k, v in PROVIDER_INFO.items()}
  
  
@@ -90,7 +94,7 @@ diff --git a/providers/__init__.py b/providers/__init__.py
      "get_provider_class",
      "get_provider_info",
      "canonical_provider_name",
-@@ -385,4 +440,7 @@
+@@ -385,4 +444,7 @@
      "PROVIDER_INFO",
      "PROVIDER_ALIASES",
      "AVAILABLE_PROVIDERS",
