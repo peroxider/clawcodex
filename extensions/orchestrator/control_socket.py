@@ -17,6 +17,11 @@ multiple concurrent clients. Incoming lines are newline-delimited JSON
   * Long content (transcript, large tool outputs) does NOT flow over
     this socket — that lives in ``transcript.jsonl``. The socket carries
     small control + small event frames only (typical < 1 KB).
+
+The module-level :func:`send_cmd` is the canonical one-shot client for
+the Phase 1 protocol — used by CLI tools (takeover, inject, etc.) that
+need to send a single control command without keeping a long-lived
+connection.
 """
 
 from __future__ import annotations
@@ -31,7 +36,7 @@ from typing import Any, AsyncIterator, Literal
 
 logger = logging.getLogger(__name__)
 
-ControlCmd = Literal["pause", "resume", "inject", "stop", "detach", "takeover"]
+ControlCmd = Literal["pause", "resume", "inject", "stop", "detach", "takeover", "flush_transcript"]
 
 
 @dataclass
@@ -39,9 +44,10 @@ class ControlCommand:
     """A control command received from a socket client.
 
     ``cmd`` is the verb (pause / resume / inject / stop / detach /
-    takeover). ``payload`` is an opaque string whose meaning depends on
-    the verb: for ``resume`` it overrides the agent's next prompt, for
-    ``inject`` it is a free-form hint, for the others it is ignored.
+    takeover / flush_transcript). ``payload`` is an opaque string whose
+    meaning depends on the verb: for ``resume`` it overrides the agent's
+    next prompt, for ``inject`` it is a free-form hint, for the others
+    it is ignored.
     """
 
     cmd: ControlCmd
@@ -250,7 +256,10 @@ class ControlSocket:
         """Per-connection read loop: newline-delimited JSON commands."""
         try:
             while True:
-                line = await reader.readline()
+                try:
+                    line = await reader.readline()
+                except (BrokenPipeError, ConnectionResetError, OSError):
+                    break  # client disconnected abruptly
                 if not line:
                     break
                 try:
@@ -286,3 +295,25 @@ class ControlSocket:
                 writer.close()
             except Exception:
                 pass
+
+
+# ----------------------------------------------------------------------
+# Client-side helper
+# ----------------------------------------------------------------------
+
+
+async def send_cmd(
+    writer: asyncio.StreamWriter,
+    verb: str,
+    payload: str = "",
+) -> None:
+    """Send one newline-delimited JSON control command to a ControlSocket.
+
+    This is the canonical one-shot client for the Phase 1 protocol.
+    Used by CLI tools (takeover, inject, pause/resume/stop) that open a
+    short-lived connection, send one or more commands, then close.
+    """
+    writer.write(
+        (json.dumps({"cmd": verb, "payload": payload}) + "\n").encode("utf-8"),
+    )
+    await writer.drain()

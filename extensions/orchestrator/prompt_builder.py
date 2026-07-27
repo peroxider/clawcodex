@@ -825,7 +825,16 @@ def _get_workspace_diff(ws_path: Path) -> str | None:
 
 
 def _get_operator_hints(ws_path: Path) -> str | None:
-    """Read ``.operator_hints.md`` from workspace and return its contents.
+    """Read ``.operator_hints.md`` from workspace, return contents.
+
+    Inject hints are one-shot: once read they are removed so the agent
+    sees them exactly once (the next turn-boundary prompt) and historical
+    injects do not accumulate across turns or runs.
+
+    However, ``repro_gate.append_repro_hint`` also writes to this file —
+    a ``## Reproduction established`` section that MUST persist across
+    every turn's prompt until the fix is complete. This method preserves
+    that section when clearing inject hints.
 
     Returns ``None`` when the file is missing or empty so callers can
     skip injecting the operator-hints block entirely.
@@ -835,6 +844,12 @@ def _get_operator_hints(ws_path: Path) -> str | None:
         return None
     try:
         content = hints_file.read_text(encoding="utf-8").strip()
+        # Preserve the ## Reproduction established section (from
+        # repro_gate.append_repro_hint) which must persist across turns.
+        # Only clear inject hints (one-shot semantics).
+        repro_idx = content.find("## Reproduction established")
+        repro_section = content[repro_idx:] if repro_idx >= 0 else ""
+        hints_file.write_text(repro_section, encoding="utf-8")
         if content:
             return content
     except (OSError, UnicodeDecodeError) as exc:

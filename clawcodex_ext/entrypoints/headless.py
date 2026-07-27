@@ -178,6 +178,12 @@ class HeadlessOptions:
     record_height: int | None = None
     capture: Any | None = None
 
+    # F-129 Phase 4: agent identity for pending_messages drain.
+    # When set, ToolContext gets this agent_id + runtime_tasks so
+    # _drain_pending_user_messages fires at ToolResult boundaries.
+    agent_id: str | None = None
+    runtime_tasks: Any | None = None
+
 
 def run_headless(options: HeadlessOptions) -> int:
     """Run one or more prompts in headless mode. Returns the exit code."""
@@ -270,15 +276,11 @@ def _run_headless_core(options: HeadlessOptions) -> int:
         try:
             provider_cfg = get_provider_config(provider_name)
         except Exception:
-            validate_provider_at_startup(
-                provider_name, interactive=False, exit_code=2
-            )
+            validate_provider_at_startup(provider_name, interactive=False, exit_code=2)
             raise  # pragma: no cover - validator exits on failure
         api_key = resolve_api_key(provider_name, provider_cfg)
         if not api_key and provider_requires_api_key(provider_name):
-            validate_provider_at_startup(
-                provider_name, interactive=False, exit_code=2
-            )
+            validate_provider_at_startup(provider_name, interactive=False, exit_code=2)
         provider_cls = get_provider_class(provider_name)
         model = options.model or provider_cfg.get("default_model")
         provider = provider_cls(api_key=api_key, base_url=provider_cfg.get("base_url"), model=model)
@@ -386,9 +388,7 @@ def _run_headless_core(options: HeadlessOptions) -> int:
     # form (e.g. --disallowed-tools KillShell) resolves while its tool is still
     # registered.
     allow = (
-        tool_registry.canonicalize_names(options.allowed_tools)
-        if options.allowed_tools
-        else None
+        tool_registry.canonicalize_names(options.allowed_tools) if options.allowed_tools else None
     )
     deny = (
         tool_registry.canonicalize_names(options.disallowed_tools)
@@ -505,6 +505,13 @@ def _run_headless_core(options: HeadlessOptions) -> int:
         agent_type=getattr(options.startup_agent, "agent_type", None),
         bundle_context=getattr(options, "bundle_context", None),
     )
+    # F-129 Phase 4: wire agent_id + runtime_tasks so the
+    # pending_messages drain fires for the orchestrator's top-level
+    # agent (enables real-time inject at ToolResult boundaries).
+    if getattr(options, "agent_id", None):
+        tool_context.agent_id = options.agent_id
+    if getattr(options, "runtime_tasks", None) is not None:
+        tool_context.runtime_tasks = options.runtime_tasks
     tool_context.mcp_clients = getattr(options, "mcp_clients", {}) or {}
     tool_context.mcp_manager_loop = getattr(options, "mcp_manager_loop", None)
     from clawcodex_ext.runtime.tool_context_binding import bind_tool_context_runtime
@@ -584,9 +591,7 @@ def _run_headless_core(options: HeadlessOptions) -> int:
     except Exception:  # noqa: BLE001
         import logging as _logging
 
-        _logging.getLogger(__name__).debug(
-            "headless trust check failed", exc_info=True
-        )
+        _logging.getLogger(__name__).debug("headless trust check failed", exc_info=True)
 
     try:
         from src.services.compact.autocompact import AutoCompactTracking
@@ -2119,13 +2124,9 @@ def _run_one_agent_loop(
         effective_system_prompt = _CompatPromptBlocks(effective_system_prompt)
     if options.append_system_prompt:
         if isinstance(effective_system_prompt, list):
-            effective_system_prompt.append(
-                {"type": "text", "text": options.append_system_prompt}
-            )
+            effective_system_prompt.append({"type": "text", "text": options.append_system_prompt})
         else:
-            effective_system_prompt = (
-                f"{effective_system_prompt}\n\n{options.append_system_prompt}"
-            )
+            effective_system_prompt = f"{effective_system_prompt}\n\n{options.append_system_prompt}"
 
     def _persist(msg: Any) -> None:
         try:
@@ -2227,17 +2228,13 @@ def _run_one_agent_loop(
                 fallback_model=options.fallback_model,
                 thinking_effort=options.effort,
                 pipeline_config=(
-                    pipeline_config_factory()
-                    if pipeline_config_factory is not None
-                    else None
+                    pipeline_config_factory() if pipeline_config_factory is not None else None
                 ),
                 query_source="sdk",
                 on_event=on_event,
                 on_text_chunk=on_text_chunk,
                 on_message=_persist,
-                on_attachment=lambda m: session.conversation.add_message(
-                    m.role, m.content
-                ),
+                on_attachment=lambda m: session.conversation.add_message(m.role, m.content),
                 abort_controller=abort_controller,
             )
         )

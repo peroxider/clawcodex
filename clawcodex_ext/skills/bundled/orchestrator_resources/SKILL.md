@@ -14,7 +14,8 @@ allowed-tools: [Bash, Read, Grep, Glob]
 2. **口语化翻译**：把用户的自然语言需求翻译成 `clawcodex-dev orchestrator` 系列命令，执行并报告结果。
 3. **安全确认**：停止、重试、变基、清理、删除等破坏性操作必须经用户确认。
 4. **不确定就问**：配置项缺失、Issue ID 模糊、操作有歧义时，询问用户，不要猜测。
-5. **命令参考见 `references/command-reference.md`**（其中命令正确可信，可直接使用），配置参考见 `references/workflow-config-reference.md`，workflow 模板见 `references/workflow.template.md`。仅当对某子命令的具体参数/用法拿不准时，才跑 `clawcodex-dev orchestrator <command> -h` 核实——无需每次执行前都查，那样太慢。
+5. **进程安全（硬规则，违反会自杀）**：**绝不用 `pkill`/`killall`/`kill -f` 按模式名杀进程**。含 "clawcodex"/"orchestrator"/"dashboard"/"python" 的模式会命中 `clawcodex-dev` 宿主进程（agent 自身运行时）和 Bash 子进程（模式串出现在 `bash -lc` 命令行里），导致 agent 杀死自己的会话。停进程只能：①用专用 CLI（如 `server stop --all`，按 metadata 里的 PID 精确停止）；②或按端口查到具体 PID（`lsof -ti :<port>`）后 `kill <具体 PID>`。
+6. **命令参考见 `references/command-reference.md`**（其中命令正确可信，可直接使用），配置参考见 `references/workflow-config-reference.md`，workflow 模板见 `references/workflow.template.md`。仅当对某子命令的具体参数/用法拿不准时，才跑 `clawcodex-dev orchestrator <command> -h` 核实——无需每次执行前都查，那样太慢。
 
 ## 虚拟环境
 
@@ -226,6 +227,8 @@ clawcodex-dev orchestrator issue workspace --id <issue-id> --ls    # 工作区�
 
 **触发条件**：用户说"停掉" / "关机" / "不跑了"。
 
+**范围**："停止编排器" = 停止**守护进程**（`server stop`）。dashboard 是独立的监控进程，**不自动停止**——仅当用户明确说"停 dashboard"/"关仪表盘"时才停（见下文安全停法）。
+
 **决策流程**：
 - 有正在运行的 Issue？→ 列出并警告，确认后先停 Issue 再停守护进程
 - 无运行中的 Issue？→ 直接停止
@@ -233,6 +236,18 @@ clawcodex-dev orchestrator issue workspace --id <issue-id> --ls    # 工作区�
 ```bash
 clawcodex-dev orchestrator server stop --all
 clawcodex-dev orchestrator server stop --workspace /tmp/workspaces
+```
+
+### 停止 dashboard（仅用户明确要求时）
+
+dashboard（`clawcodex-dev orchestrator dashboard`）是独立前台 HTTP 进程，**无 CLI stop 子命令、无 PID 文件**。必须按端口查到具体 PID 再 `kill`，**禁止 `pkill`/`killall`/`kill -f`**（会误杀 `clawcodex-dev` 宿主，见核心原则进程安全）：
+
+```bash
+# 按端口查 PID（lsof 优先；ss 兜底）
+DASH_PID=$(lsof -ti :8080 2>/dev/null || ss -lptn 'sport = :8080' 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)
+[ -n "$DASH_PID" ] && kill "$DASH_PID" || echo "no dashboard on :8080"
+# 若未退出，等 2s 后按同一 PID 强杀（仅该 PID，勿用 pkill）
+# sleep 2 && kill -9 "$DASH_PID" 2>/dev/null
 ```
 
 **停止报告**：本轮运行统计（已完成/失败/总 Token）+ 保留工作区列表 + 询问是否清理。

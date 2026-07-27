@@ -10,6 +10,7 @@ import logging
 import os
 import random
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -204,11 +205,16 @@ class AgentSession:
     # agent run.
     control_socket: Any | None = None
     # Public path of the listening socket. Stored on the session so the
-    # Phase 2 ``attach`` CLI can discover it via the registry without
-    # scanning the workspace tree.
+    # CLI control commands (pause/resume/stop/inject/takeover) can
+    # discover it via the registry without scanning the workspace tree.
     control_socket_path: str | None = None
     run_kind: str = "issue"
     run_id: str | None = None
+    # F-129 Phase 4: RuntimeTaskRegistry for this session. When set,
+    # the agent_id (== run_id) is wired into the QueryConfig so
+    # _drain_pending_user_messages fires at ToolResult boundaries,
+    # enabling real-time inject via queue_pending_message.
+    _runtime_tasks: Any | None = None
     summary_comment_id: str | None = None
     tool_count: int = 0
     verification_status: str | None = None
@@ -292,6 +298,15 @@ class AgentSession:
     conflict_files: tuple[str, ...] | None = None
     _snapshot_provider: str = ""
     _snapshot_model: str = ""
+    # F-129: threading.Event used as a "pause gate" — when cleared,
+    # the headless session's on_event callback blocks, preventing
+    # further LLM API calls while paused. Set = running, clear = paused.
+    _pause_gate: Any = None
+    # Callback invoked by _drain_control_commands when pause/resume is
+    # processed via the socket path, so the orchestrator can sync the
+    # registry status. Signature: (issue_id: str, paused: bool, reason: str) -> None.
+    # Set by orcheator._launch_issue; None for test sessions.
+    _on_pause_state_change: Any | None = None
 
     def _save_json_snapshot(self) -> None:
         """F-49 Phase 0.4.5: write a ``src.agent.Session``-compatible
@@ -339,6 +354,7 @@ class AgentSession:
             cost_block: dict = {}
             try:
                 import time as _time
+
                 # Phase 3: route through Protocol-injected BootstrapState
                 # when available; otherwise fall back to legacy direct
                 # import.
@@ -518,9 +534,12 @@ class AgentRunner:
         so a partial event still serializes cleanly.
         """
         from extensions.api.query import (
+            PhaseComplete,
+            SessionComplete,
             TextDelta,
             ToolCallEvent,
             ToolResultEvent,
+            TurnComplete,
         )
 
         if isinstance(event, TextDelta):
@@ -538,7 +557,366 @@ class AgentRunner:
                 "tool_use_id": getattr(event, "tool_use_id", None),
                 "result": dict(getattr(event, "result", {}) or {}),
             }
+        if isinstance(event, PhaseComplete):
+            return {
+                "phase": getattr(event, "phase", 0),
+                "turn_count": getattr(event, "turn_count", 0),
+            }
+        if isinstance(event, TurnComplete):
+            return {"turn": getattr(event, "turn", 0)}
+        if isinstance(event, SessionComplete):
+            return {"reason": str(getattr(event, "reason", ""))}
         return {}
+
+    @staticmethod
+    async def _broadcast_to_socket(session: "AgentSession", event: Any) -> None:
+        """Broadcast an event to attached control-socket clients.
+
+        Defensive: a broken socket must never abort the agent run.
+        The whole method is wrapped in try/except and guarded by
+        ``is not None``.
+        """
+        if session.control_socket is None:
+            return
+        try:
+            await session.control_socket.send_event(
+                {
+                    "type": event.__class__.__name__,
+                    "data": AgentRunner._event_to_broadcast_dict(event),
+                }
+            )
+        except Exception:
+            pass
+
+    @staticmethod
+    def _apply_pause_session(session: "AgentSession", reason: str = "operator_interrupt") -> None:
+        """Apply pause state to a session (shared by socket + control-file paths).
+
+        Sets ``paused``, clears ``pause_resume_event`` and ``_pause_gate``
+        so the agent stops making LLM API calls.  Does **not** notify the
+        registry — callers are responsible for that via
+        ``_on_pause_state_change`` (socket path) or ``registry.mark_paused``
+        (control-file path).
+        """
+        session.paused = True
+        session.pause_reason = reason
+        if session.pause_resume_event is not None:
+            session.pause_resume_event.clear()
+        if session._pause_gate is not None:
+            session._pause_gate.clear()
+
+    @staticmethod
+    def _apply_resume_session(session: "AgentSession", prompt_override: str | None = None) -> None:
+        """Apply resume state to a session (shared by socket + control-file paths).
+
+        Sets ``paused = False``, restores ``pause_resume_event`` and
+        ``_pause_gate`` so the agent resumes LLM API calls.  Does **not**
+        notify the registry — callers are responsible for that.
+        """
+        if prompt_override:
+            session.prompt_override = prompt_override
+        session.paused = False
+        if session.pause_resume_event is not None:
+            session.pause_resume_event.set()
+        if session._pause_gate is not None:
+            session._pause_gate.set()
+
+    @staticmethod
+    def _drain_control_commands(session: "AgentSession") -> bool:
+        """Drain pending control-socket commands non-blockingly.
+
+        Returns ``True`` if ``stop`` or ``takeover`` was received,
+        signaling the caller should break out of the event stream
+        loop. ``pause`` / ``resume`` / ``inject`` / ``detach`` are
+        handled inline and never request an early break.
+
+        F-129 Phase 2: ``inject`` now writes to ``.operator_hints.md``
+        (converging with the file-based ``issue inject`` path).
+        ``stop`` now sets ``session.status = "failed"`` (was
+        metadata-only). ``detach`` is logged (basic version).
+        """
+        if session.control_socket is None:
+            return False
+        stop_requested = False
+        try:
+            _q = session.control_socket._command_queue
+            while True:
+                try:
+                    cmd = _q.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                if cmd.cmd == "pause":
+                    AgentRunner._apply_pause_session(session, "operator_interrupt")
+                    # Notify orchestrator to sync registry status.
+                    if session._on_pause_state_change is not None:
+                        try:
+                            session._on_pause_state_change(
+                                session.issue.id if session.issue else "",
+                                True,
+                                session.pause_reason,
+                            )
+                        except Exception:
+                            logger.exception("_on_pause_state_change failed")
+                elif cmd.cmd == "resume":
+                    AgentRunner._apply_resume_session(session, cmd.payload)
+                    # Notify orchestrator to sync registry status.
+                    if session._on_pause_state_change is not None:
+                        try:
+                            session._on_pause_state_change(
+                                session.issue.id if session.issue else "",
+                                False,
+                                "",
+                            )
+                        except Exception:
+                            logger.exception("_on_pause_state_change failed")
+                elif cmd.cmd == "stop":
+                    session.status = "failed"
+                    session.session_end_reason = "operator_stop"
+                    session.session_end_summary = "operator sent stop via control socket"
+                    if session.pause_resume_event is not None:
+                        session.pause_resume_event.set()
+                    stop_requested = True
+                elif cmd.cmd == "takeover":
+                    session.status = "failed"
+                    session.session_end_reason = "operator_takeover"
+                    session.session_end_summary = "operator requested takeover via control socket"
+                    stop_requested = True
+                elif cmd.cmd == "inject":
+                    # Write the message to the transcript as a UserMessage
+                    # so it appears in the conversation history (visible
+                    # via takeover REPL). The agent is expected to be
+                    # paused when this command arrives (the CLI sends
+                    # pause → inject → resume).
+                    if session._transcript_storage is not None:
+                        try:
+                            from extensions.orchestrator_runtime.utils.messages_impl import (
+                                TextBlock,
+                                create_user_message,
+                            )
+
+                            session._transcript_storage.write_message(
+                                create_user_message(
+                                    content=[TextBlock(text=cmd.payload)],
+                                    origin="inject",
+                                ),
+                            )
+                            session._transcript_storage.flush()
+                            logger.info(
+                                "inject written to transcript run_id=%s len=%d",
+                                session.run_id,
+                                len(cmd.payload),
+                            )
+                        except Exception:
+                            logger.exception(
+                                "Failed to write inject to transcript run_id=%s",
+                                session.run_id,
+                            )
+
+                    # Queue the message for the in-memory Conversation
+                    # so the LLM sees it at the next tool-round boundary.
+                    if session._runtime_tasks is not None and session.run_id:
+                        try:
+                            from src.tasks.local_agent import queue_pending_message
+
+                            queued = queue_pending_message(
+                                session.run_id,
+                                cmd.payload,
+                                session._runtime_tasks,
+                            )
+                            if not queued:
+                                AgentRunner._write_operator_hint(session, cmd.payload)
+                        except Exception:
+                            AgentRunner._write_operator_hint(session, cmd.payload)
+                    else:
+                        AgentRunner._write_operator_hint(session, cmd.payload)
+
+                    # Emit InjectDelivered immediately — the CLI waits
+                    # for this confirmation.
+                    if session.control_socket is not None:
+                        try:
+                            import asyncio as _inject_asyncio
+
+                            _snippet = cmd.payload[:80] if cmd.payload else ""
+                            _coro = session.control_socket.send_event(
+                                {
+                                    "type": "InjectDelivered",
+                                    "data": {
+                                        "hint_snippet": _snippet,
+                                    },
+                                },
+                            )
+                            try:
+                                _loop = _inject_asyncio.get_running_loop()
+                                _loop.create_task(_coro)
+                            except RuntimeError:
+                                _inject_asyncio.run(_coro)
+                        except Exception:
+                            logger.exception("Failed to emit InjectDelivered")
+                elif cmd.cmd == "detach":
+                    logger.info(
+                        "control_socket detach received run_id=%s",
+                        session.run_id,
+                    )
+                elif cmd.cmd == "flush_transcript":
+                    if session._transcript_storage is not None:
+                        try:
+                            session._transcript_storage.flush()
+                            logger.info(
+                                "Transcript flushed on request run_id=%s",
+                                session.run_id,
+                            )
+                        except Exception:
+                            logger.exception(
+                                "Failed to flush transcript run_id=%s",
+                                session.run_id,
+                            )
+        except Exception:
+            logger.exception("control_socket drain failed")
+        return stop_requested
+
+    @staticmethod
+    def _make_control_drain_fn(
+        session: "AgentSession",
+    ) -> "Callable[[], str | None]":
+        """Build a callback for ``QueryConfig.control_drain_fn``.
+
+        The returned closure is invoked by ``QueryRunner.stream()``'s
+        polling loop (every ~60ms) to drain control-socket commands
+        without waiting for the next tool event. This makes
+        pause/stop/inject/resume take effect near-real-time.
+
+        Returns ``"stop"`` when stop/takeover was received (the stream
+        should abort); ``None`` otherwise (pause/inject/resume are
+        handled inline and don't require a stream break).
+        """
+
+        def _drain() -> str | None:
+            if AgentRunner._drain_control_commands(session):
+                return "stop"
+            return None
+
+        return _drain
+
+    @staticmethod
+    def _make_pause_wait_fn(
+        session: "AgentSession",
+    ) -> "Callable[[], Awaitable[None]]":
+        """Build an async callback for ``QueryConfig.pause_wait_fn``.
+
+        Called by ``QueryRunner.stream()``'s polling loop after the
+        drain. When the session is paused, this blocks in a
+        drain-and-wait loop so that resume/stop/inject commands are
+        still processed while paused (fixing the resume deadlock).
+        Emits ``Paused`` / ``Resumed`` events via the control socket
+        so connected CLI clients receive confirmation.
+        """
+
+        async def _pause_wait() -> None:
+            if not session.paused or session.pause_resume_event is None:
+                return
+
+            # Emit Paused event for CLI confirmation.
+            if session.control_socket is not None:
+                try:
+                    await session.control_socket.send_event(
+                        {
+                            "type": "Paused",
+                            "data": {
+                                "turn": session.turn_count,
+                                "tool_name": session.last_tool_name,
+                                "issue_id": session.issue.id,
+                                "run_id": session.run_id,
+                            },
+                        }
+                    )
+                except Exception:
+                    pass
+
+            logger.info(
+                "Agent paused at turn %s, tool %r — draining commands until resume",
+                session.turn_count,
+                session.last_tool_name,
+            )
+
+            # Drain-and-wait loop: keep processing commands while paused.
+            while session.paused:
+                AgentRunner._drain_control_commands(session)
+                if not session.paused:
+                    break  # resume received
+                # Stop/takeover set status to "failed" — break so the
+                # stream loop can pick up the stop_requested signal
+                # and abort the session.
+                if session.status == "failed":
+                    session.paused = False
+                    break
+                try:
+                    await asyncio.wait_for(
+                        session.pause_resume_event.wait(),
+                        timeout=0.06,
+                    )
+                except asyncio.TimeoutError:
+                    continue  # loop back to drain
+
+            # Emit Resumed event.
+            if session.control_socket is not None:
+                try:
+                    await session.control_socket.send_event(
+                        {
+                            "type": "Resumed",
+                            "data": {
+                                "turn": session.turn_count,
+                                "issue_id": session.issue.id,
+                                "run_id": session.run_id,
+                            },
+                        }
+                    )
+                except Exception:
+                    pass
+
+            logger.info("Agent resumed at turn %s", session.turn_count)
+
+        return _pause_wait
+
+    @staticmethod
+    def _write_operator_hint(session: "AgentSession", hint: str) -> None:
+        """Write an operator hint to ``.operator_hints.md``.
+
+        Mirrors the format used by ``issue.py:_inject_hint`` so the
+        file-based and socket-based inject paths converge. Best-effort:
+        failures are logged but never propagate. Idempotent: skips
+        if the hint text already exists in the file.
+        """
+        if not hint or not session.run_id:
+            return
+        try:
+            import time as _time
+            from pathlib import Path as _Path
+
+            ws_path = getattr(session.workspace, "path", None)
+            if not ws_path:
+                return
+            hints_file = _Path(str(ws_path)) / ".operator_hints.md"
+            # Count existing hints for the numbering.
+            next_num = 1
+            if hints_file.exists():
+                content = hints_file.read_text(encoding="utf-8")
+                # F-129 Phase 5: idempotency — skip if the hint
+                # text already exists (same check as issue.py).
+                if hint.strip() in content:
+                    return
+                next_num = content.count("--- Operator Hint #") + 1
+            timestamp = _time.strftime("%Y-%m-%d %H:%M:%S")
+            header = f"--- Operator Hint #{next_num} (injected at {timestamp}) ---\n"
+            separator = "-" * 50 + "\n"
+            with open(hints_file, "a", encoding="utf-8") as f:
+                f.write(header)
+                f.write(hint + "\n")
+                f.write(separator)
+        except Exception:
+            logger.exception(
+                "Failed to write operator hint run_id=%s",
+                session.run_id,
+            )
 
     def _append_tool_event_log(
         self,
@@ -965,12 +1343,44 @@ class AgentRunner:
         workspace = session.workspace
         if session.run_id is None:
             session.run_id = self._build_run_id(session)
+        # F-129 Phase 4: register a LocalAgentTaskState for this
+        # session so _drain_pending_user_messages fires at ToolResult
+        # boundaries. The agent_id is the run_id; the runtime_tasks
+        # registry is stored on the session for the socket inject
+        # handler to call queue_pending_message.
+        if session._runtime_tasks is None and session.run_id:
+            try:
+                from clawcodex_ext.task_registry import RuntimeTaskRegistry
+                from src.tasks.local_agent import LocalAgentTaskState
+
+                registry = RuntimeTaskRegistry()
+                registry.upsert(
+                    LocalAgentTaskState(
+                        id=session.run_id,
+                        agent_id=session.run_id,
+                        status="running",
+                        description=f"orchestrator-{session.issue.identifier or session.issue.id}",
+                        prompt="",
+                    ),
+                )
+                session._runtime_tasks = registry
+            except Exception:
+                logger.debug(
+                    "Failed to init runtime_tasks for run_id=%s",
+                    session.run_id,
+                    exc_info=True,
+                )
         # F-49 Phase 0.4.5: stash provider/model on the session so the
         # exit-callback can write the .json snapshot even when the
         # session has been partially cleaned up or the run aborted via
         # exception / early return.
         session._snapshot_provider = self.agent_config.provider or ""
         session._snapshot_model = self.agent_config.model or ""
+        # F-129: create the pause gate — a threading.Event that blocks
+        # the headless session's on_event callback when paused, preventing
+        # further LLM API calls. Set = running (default), clear = paused.
+        session._pause_gate = threading.Event()
+        session._pause_gate.set()
         # F-105: initialise the per-session tracker poll cache. Built
         # once at run() start so the rest of the loop shares a single
         # instance; concurrent sessions still get their own. Setting
@@ -1260,10 +1670,8 @@ class AgentRunner:
                             # upstream ``SessionStorage``; tests can inject a
                             # custom impl.
                             self._resolve_protocols()
-                            session._transcript_storage = (
-                                self._session_storage._upstream(
-                                    session_id=session.run_id,
-                                )
+                            session._transcript_storage = self._session_storage._upstream(
+                                session_id=session.run_id,
                             )
                             session._transcript_storage.init_metadata(
                                 model=self.agent_config.model or "",
@@ -1362,6 +1770,24 @@ class AgentRunner:
                     # and stops the daemon from re-sending 5KB of background
                     # in every user message.
                     append_system_prompt=getattr(session, "_system_prompt_append", None),
+                    # F-129 Phase 4: wire agent identity so
+                    # _drain_pending_user_messages fires at ToolResult
+                    # boundaries for real-time inject.
+                    agent_id=session.run_id,
+                    runtime_tasks=session._runtime_tasks,
+                    # F-129: drain control-socket commands from inside the
+                    # stream's polling loop so pause/stop/inject/resume take
+                    # effect within ~60ms instead of waiting for the next
+                    # tool event. Returns "stop" when the stream should abort.
+                    control_drain_fn=self._make_control_drain_fn(session),
+                    # F-129: async pause-check that blocks in a
+                    # drain-and-wait loop when paused, so resume
+                    # commands are not deadlocked.
+                    pause_wait_fn=self._make_pause_wait_fn(session),
+                    # F-129: threading.Event passed to the headless
+                    # session's on_event. When cleared (pause), on_event
+                    # blocks, preventing further LLM API calls.
+                    pause_gate=session._pause_gate,
                 )
                 runner = QueryRunner(query_config)
 
@@ -1491,9 +1917,11 @@ class AgentRunner:
                                     issue.id,
                                 )
 
-                            # Pause support: wait for resume if session is paused
-                            if session.paused and session.pause_resume_event is not None:
-                                await session.pause_resume_event.wait()
+                            # F-129: pause blocking now happens at the stream
+                            # level via pause_wait_fn (drain-and-wait loop),
+                            # not here. This fixes the resume deadlock where
+                            # control_drain_fn couldn't run while the agent
+                            # was blocked on pause_resume_event.wait().
 
                             # F-45: in headless (orchestrator) mode the api.query
                             # stream yields ToolCallEvent with _approved=None
@@ -1677,6 +2105,22 @@ class AgentRunner:
                                 # so the outer loop re-issues the turn prompt.
                                 break
 
+                            # F-129 Phase 2: drain control commands at the
+                            # ToolResult boundary (mid-turn) so pause/inject/
+                            # stop take effect without waiting for the turn to
+                            # end. If stop/takeover is received and no tools
+                            # are in-flight, break the stream loop early.
+                            if pending_tool_results <= 0:
+                                _stop_requested = self._drain_control_commands(session)
+                                if _stop_requested:
+                                    logger.info(
+                                        "Mid-turn control stop/takeover for "
+                                        "issue %s run_id=%s — breaking stream",
+                                        issue.id,
+                                        session.run_id,
+                                    )
+                                    break
+
                             # Mega-turn early stop: throttled workspace-idle
                             # probe. Triggers only when user-visible changes
                             # exist AND the workspace has been unchanged for
@@ -1760,6 +2204,52 @@ class AgentRunner:
                                 return
 
                         elif isinstance(event, SessionComplete):
+                            # F-129: if operator stop/takeover was received via
+                            # control_drain_fn (stream-level drain), the
+                            # session_end_reason is already set. Skip 429
+                            # detection, turn-boundary processing, and
+                            # stagnation checks — go directly to terminal
+                            # handling. This avoids misleading PhaseComplete/
+                            # TurnComplete emission and a spurious _is_429
+                            # check against partial LLM output.
+                            if session.session_end_reason in (
+                                "operator_stop",
+                                "operator_takeover",
+                            ):
+                                logger.info(
+                                    "Agent run ended by operator %s issue_id=%s run_id=%s",
+                                    session.session_end_reason,
+                                    issue.id,
+                                    session.run_id,
+                                )
+                                session_complete_evt = SessionComplete(
+                                    reason=session.session_end_reason,
+                                )
+                                await self._broadcast_to_socket(session, session_complete_evt)
+                                if sink is not None:
+                                    self._dispatch_sink(
+                                        sink,
+                                        "on_session_complete",
+                                        session_complete_evt,
+                                        session,
+                                    )
+                                if session._transcript_storage is not None:
+                                    try:
+                                        self._flush_turn_transcript(session)
+                                        session._transcript_storage.flush()
+                                    except Exception:
+                                        logger.exception(
+                                            "Failed to flush transcript on operator stop run_id=%s",
+                                            session.run_id,
+                                        )
+                                if session.control_socket is not None:
+                                    try:
+                                        await session.control_socket.stop()
+                                    except Exception:
+                                        pass
+                                    session.control_socket = None
+                                return
+
                             # 429-aware backoff: detect rate limit BEFORE the
                             # normal completion handling so we can re-issue
                             # the same turn after sleeping instead of failing.
@@ -1789,49 +2279,11 @@ class AgentRunner:
 
                             # Normal completion path — increment the turn
                             # counter and emit PhaseComplete.
-                            # F-49 Phase 1: drain control commands at the
-                            # turn boundary. We use ``get_nowait()`` rather
-                            # than the ``poll_commands()`` async generator
-                            # so the runner does not block waiting for a
-                            # command that may never arrive — the common case
-                            # in headless / CI tests is no clients connected.
-                            # Defensive: each branch wrapped so a malformed
-                            # command never aborts the run.
-                            if session.control_socket is not None:
-                                try:
-                                    _q = session.control_socket._command_queue
-                                    while True:
-                                        try:
-                                            cmd = _q.get_nowait()
-                                        except asyncio.QueueEmpty:
-                                            break
-                                        if cmd.cmd == "pause":
-                                            session.paused = True
-                                            session.pause_reason = "operator_interrupt"
-                                            if session.pause_resume_event is not None:
-                                                session.pause_resume_event.clear()
-                                        elif cmd.cmd == "resume":
-                                            if cmd.payload:
-                                                session.prompt_override = cmd.payload
-                                            session.paused = False
-                                            if session.pause_resume_event is not None:
-                                                session.pause_resume_event.set()
-                                        elif cmd.cmd == "stop":
-                                            session.session_end_reason = "operator_stop"
-                                            session.session_end_summary = (
-                                                "operator sent stop via control socket"
-                                            )
-                                        elif cmd.cmd == "takeover":
-                                            session.session_end_reason = "operator_takeover"
-                                            session.session_end_summary = (
-                                                "operator requested takeover via control socket"
-                                            )
-                                        # inject / detach: parsed, no agent
-                                        # action yet (TODO Phase 2/3).
-                                except Exception:
-                                    logger.exception(
-                                        "control_socket.poll_commands failed",
-                                    )
+                            # F-129 Phase 2: drain control commands via the
+                            # shared helper (handles pause/resume/stop/
+                            # takeover/inject/detach). Returns True if
+                            # stop/takeover was received.
+                            self._drain_control_commands(session)
                             turn_number += 1
                             session.turn_count = turn_number
                             # F-49 Phase 0.1: emit any buffered turn content
@@ -1847,19 +2299,12 @@ class AgentRunner:
                                         "Failed to flush transcript run_id=%s",
                                         session.run_id,
                                     )
-                            # F-49 Phase 1: stop the control socket so the
-                            # .sock file is cleaned up and any attached
-                            # clients see EOF. Defensive: a stop failure
-                            # must not propagate out of the turn.
-                            if session.control_socket is not None:
-                                try:
-                                    await session.control_socket.stop()
-                                except Exception:
-                                    logger.exception(
-                                        "Failed to stop control_socket run_id=%s",
-                                        session.run_id,
-                                    )
-                                session.control_socket = None
+                            # F-129 Phase 1: the control socket now persists
+                            # across turns — attached clients stay connected
+                            # and receive a PhaseComplete/TurnComplete frame
+                            # as the turn-boundary signal (replacing the old
+                            # per-turn EOF). The socket is only stopped on
+                            # terminal SessionComplete / max_turns exit.
                             append_debug_event(
                                 session.debug_log_path,
                                 "agent_runner.turn_complete",
@@ -1876,6 +2321,12 @@ class AgentRunner:
                                 phase=turn_number,
                                 turn_count=turn_number,
                             )
+                            turn_event = TurnComplete(turn=turn_number)
+                            # F-129: broadcast turn-boundary events to
+                            # attached socket clients so they can render
+                            # turn separators without disconnecting.
+                            await self._broadcast_to_socket(session, phase_event)
+                            await self._broadcast_to_socket(session, turn_event)
                             if sink is not None:
                                 # F-40: dispatch PhaseComplete + TurnComplete
                                 # through the new protocol methods. The old
@@ -1887,7 +2338,7 @@ class AgentRunner:
                                 self._dispatch_sink(
                                     sink,
                                     "on_turn_complete",
-                                    TurnComplete(turn=turn_number),
+                                    turn_event,
                                     session,
                                 )
 
@@ -2459,13 +2910,18 @@ class AgentRunner:
                             # noop / max_turns / failure paths above) so
                             # the dashboard sees a uniform
                             # ``session_{reason}`` stage.
+                            session_complete_event = SessionComplete(
+                                reason=session.session_end_reason or event.reason
+                            )
+                            # F-129: broadcast SessionComplete to attached
+                            # socket clients so they see a clean "session
+                            # ended" frame before the socket is stopped.
+                            await self._broadcast_to_socket(session, session_complete_event)
                             if sink is not None:
                                 self._dispatch_sink(
                                     sink,
                                     "on_session_complete",
-                                    SessionComplete(
-                                        reason=session.session_end_reason or event.reason
-                                    ),
+                                    session_complete_event,
                                     session,
                                 )
                             # F-49 Phase 0.1: final flush before returning.
@@ -2516,6 +2972,42 @@ class AgentRunner:
                     # Not a 429 — re-raise to preserve existing behavior.
                     raise
 
+                # F-129 Phase 2: if stop/takeover was received mid-turn
+                # via the socket drain, the stream loop broke early.
+                # Flush the transcript and return immediately — the
+                # session is ending, not continuing to the next turn.
+                if session.session_end_reason in (
+                    "operator_stop",
+                    "operator_takeover",
+                ):
+                    if session._transcript_storage is not None:
+                        try:
+                            self._flush_turn_transcript(session)
+                            session._transcript_storage.flush()
+                        except Exception:
+                            logger.exception(
+                                "Failed to flush transcript on control stop run_id=%s",
+                                session.run_id,
+                            )
+                    session_complete_evt = SessionComplete(
+                        reason=session.session_end_reason or "operator_stop",
+                    )
+                    await self._broadcast_to_socket(session, session_complete_evt)
+                    if sink is not None:
+                        self._dispatch_sink(
+                            sink,
+                            "on_session_complete",
+                            session_complete_evt,
+                            session,
+                        )
+                    if session.control_socket is not None:
+                        try:
+                            await session.control_socket.stop()
+                        except Exception:
+                            pass
+                        session.control_socket = None
+                    return
+
                 # F-?? root-cause fix: when the per-turn tool cap fires we
                 # break out of the QueryRunner stream above.  Without this
                 # block the outer loop would re-issue the *same* turn (turn
@@ -2536,15 +3028,8 @@ class AgentRunner:
                                 "Failed to flush transcript after cap break run_id=%s",
                                 session.run_id,
                             )
-                    if session.control_socket is not None:
-                        try:
-                            await session.control_socket.stop()
-                        except Exception:
-                            logger.exception(
-                                "Failed to stop control_socket after cap break run_id=%s",
-                                session.run_id,
-                            )
-                        session.control_socket = None
+                    # F-129 Phase 1: socket persists across the forced
+                    # turn boundary (cap-break) — no stop here.
                     append_debug_event(
                         session.debug_log_path,
                         "agent_runner.turn_complete",

@@ -2270,6 +2270,114 @@ class TestSession(unittest.TestCase):
                 self.assertEqual(len(loaded.conversation.messages), 1)
                 self.assertEqual(loaded.conversation.messages[0].content, "Test message")
 
+    def test_load_falls_through_empty_session_json_to_transcript(self):
+        """When session.json exists but has empty messages, Session.load()
+        should fall through to reading transcript.jsonl (Branch 3) instead
+        of returning an empty conversation.
+
+        This is the fix for the orchestrator takeover scenario where
+        _save_json_snapshot writes session.json with messages:[] (because
+        storage.load_messages() fails), shadowing the real transcript.
+        """
+        import json as _json
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            sessions_dir = Path(temp_dir) / ".clawcodex" / "sessions"
+            session_id = "test-empty-snapshot"
+            sid_dir = sessions_dir / session_id
+            sid_dir.mkdir(parents=True, exist_ok=True)
+
+            # Write session.json with empty messages (simulates
+            # _save_json_snapshot with load_messages() bug).
+            session_data = {
+                "session_id": session_id,
+                "provider": "zai",
+                "model": "glm-5",
+                "conversation": {"messages": [], "max_history": 0},
+                "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-01-01T00:00:00Z",
+            }
+            (sid_dir / "session.json").write_text(_json.dumps(session_data), encoding="utf-8")
+
+            # Write metadata.json.
+            (sid_dir / "metadata.json").write_text(
+                _json.dumps(
+                    {
+                        "session_id": session_id,
+                        "model": "glm-5",
+                        "start_time": "2026-01-01T00:00:00",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            # Write transcript.jsonl with real messages.
+            from src.services.session_storage import SessionStorage
+            from src.types.messages import UserMessage, AssistantMessage, message_to_dict
+
+            storage = SessionStorage(
+                session_id=session_id,
+                sessions_dir=sessions_dir,
+            )
+            storage.init_metadata(model="glm-5", cwd=str(sid_dir), title="test")
+            storage.write_raw(
+                message_to_dict(UserMessage(content=[{"type": "text", "text": "fix the bug"}]))
+            )
+            storage.write_raw(
+                message_to_dict(
+                    AssistantMessage(
+                        content=[{"type": "text", "text": "Reading the file."}],
+                        model="glm-5",
+                    )
+                )
+            )
+            storage.flush()
+
+            with patch("clawcodex_ext.agent.session.Path.home", return_value=Path(temp_dir)):
+                loaded = Session.load(session_id)
+                self.assertIsNotNone(loaded, "Session.load() should fall through to transcript")
+                # Messages should come from transcript, not the empty session.json.
+                self.assertGreater(
+                    len(loaded.conversation.messages),
+                    0,
+                    "Should have messages from transcript.jsonl",
+                )
+
+    def test_load_returns_session_json_when_messages_nonempty(self):
+        """When session.json has real messages, Session.load() should use
+        it directly (Branch 2) without falling through to transcript.
+        """
+        import json as _json
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            sessions_dir = Path(temp_dir) / ".clawcodex" / "sessions"
+            session_id = "test-real-snapshot"
+            sid_dir = sessions_dir / session_id
+            sid_dir.mkdir(parents=True, exist_ok=True)
+
+            # Write session.json with real messages.
+            session_data = {
+                "session_id": session_id,
+                "provider": "zai",
+                "model": "glm-5",
+                "conversation": {
+                    "messages": [
+                        {"role": "user", "content": "hello from snapshot"},
+                    ],
+                    "max_history": 100,
+                },
+                "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-01-01T00:00:00Z",
+            }
+            (sid_dir / "session.json").write_text(_json.dumps(session_data), encoding="utf-8")
+
+            with patch("clawcodex_ext.agent.session.Path.home", return_value=Path(temp_dir)):
+                loaded = Session.load(session_id)
+                self.assertIsNotNone(loaded)
+                self.assertEqual(loaded.provider, "zai")
+                self.assertEqual(len(loaded.conversation.messages), 1)
+                self.assertIn("hello from snapshot", str(loaded.conversation.messages[0].content))
+
 
 class TestREPLConversationSanitization(unittest.TestCase):
     """Pins the REPL-side mirror of the engine's image-strip recovery.

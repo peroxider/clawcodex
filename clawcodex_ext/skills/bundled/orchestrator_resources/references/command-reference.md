@@ -142,6 +142,12 @@ clawcodex-dev orchestrator dashboard                                            
 clawcodex-dev orchestrator dashboard --port 8080                                # 指定端口
 ```
 
+> dashboard 是独立前台 HTTP 进程，**无 CLI stop 子命令**。停止需按端口查 PID 再 `kill`，**禁止 `pkill`/`killall`/`kill -f`**（模式含 "clawcodex"/"orchestrator"/"dashboard" 会误杀 `clawcodex-dev` 宿主进程）：
+> ```bash
+> DASH_PID=$(lsof -ti :8080 2>/dev/null || ss -lptn 'sport = :8080' 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)
+> [ -n "$DASH_PID" ] && kill "$DASH_PID"
+> ```
+
 ## IM 网关
 
 ```bash

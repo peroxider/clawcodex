@@ -29,19 +29,14 @@ Design principles:
 from __future__ import annotations
 
 import argparse
+import asyncio
+import json
 import os
 import re
 import sys
 from pathlib import Path
 from typing import Any
 
-# F-49 Phase 2: live TUI client for the Unix control socket. The
-# handler is imported here (rather than via a local import inside
-# ``run()``) so it is patchable as a module attribute in tests
-# (see ``test_orchestrator_f49_attach.py::test_dispatch_to_run_attach``).
-# The attach module keeps the Textual import deferred so importing
-# this stays cheap.
-from extensions.orchestrator.cli.attach import _run_attach  # noqa: E402
 from extensions.orchestrator.cli.resume_session import (  # noqa: E402
     _run_resume_session,
 )
@@ -214,48 +209,6 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Limit to the first N messages",
     )
 
-    # --- issue attach (F-49 Phase 2) ---
-    attach_parser = issue_sub.add_parser(
-        "attach",
-        help="Open a live TUI to a running issue's agent session",
-        description=(
-            "Connect to the Unix control socket of a running "
-            "orchestrator session and render a live event stream. "
-            "Keyboard: p=pause, r=resume, s=stop, t=takeover, "
-            "i=inject, q=detach+quit. In non-TTY environments "
-            "(piped, CI), falls back to a JSON-line printer that "
-            "accepts the same verbs on stdin."
-        ),
-    )
-    attach_parser.add_argument(
-        "--id",
-        type=str,
-        default=None,
-        metavar="ISSUE_ID",
-        help="Issue identifier or ID (resolves to run_id + workspace via the registry)",
-    )
-    attach_parser.add_argument(
-        "--run",
-        type=str,
-        default=None,
-        metavar="RUN_ID",
-        help="Run identifier (requires --workspace so the socket path is known)",
-    )
-    attach_parser.add_argument(
-        "--workspace",
-        type=str,
-        default=None,
-        metavar="PATH",
-        help="Explicit workspace root path (overrides registry; required with --run)",
-    )
-    attach_parser.add_argument(
-        "--workflow",
-        type=str,
-        default=None,
-        metavar="PATH",
-        help="Path to WORKFLOW.md (resolution hint when metadata is missing)",
-    )
-
     # --- issue stop ---
     stop_parser = issue_sub.add_parser(
         "stop",
@@ -277,6 +230,13 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         action="store_true",
         default=False,
         help="Skip confirmation prompt",
+    )
+    stop_parser.add_argument(
+        "--no-wait",
+        dest="no_wait",
+        action="store_true",
+        default=False,
+        help="Send stop and return immediately without waiting for agent to terminate",
     )
 
     # --- issue pause ---
@@ -300,6 +260,13 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         default="",
         help="Reason for pausing (visible to the agent)",
     )
+    pause_parser.add_argument(
+        "--no-wait",
+        dest="no_wait",
+        action="store_true",
+        default=False,
+        help="Send pause and return immediately without waiting for confirmation",
+    )
 
     # --- issue resume ---
     resume_parser = issue_sub.add_parser(
@@ -315,6 +282,13 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         metavar="ISSUE_ID",
         help="Issue identifier to resume",
     )
+    resume_parser.add_argument(
+        "--no-wait",
+        dest="no_wait",
+        action="store_true",
+        default=False,
+        help="Send resume and return immediately without waiting for confirmation",
+    )
 
     # --- issue resume-session ---
     # F-49 Phase 3: load the JSONL transcript written by the
@@ -329,7 +303,7 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
             "call Session.resume(run_id) to update bootstrap state, "
             "and read the JSONL transcript written by the headless "
             "agent. Prints a short summary of the rehydrated "
-            "Conversation. Use `issue attach --id X` to take over a "
+            "Conversation. Use `issue takeover --id X` to take over a "
             "live run, or start a fresh REPL against the same "
             "workspace to continue the conversation."
         ),
@@ -350,25 +324,22 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
     )
 
     # --- issue takeover ---
-    # F-49: aligned to the Phase 1 control-socket protocol. Sends
-    # pause + takeover over the socket, then spawns a --resume REPL
-    # against the same transcript.jsonl. ``--id`` is preferred;
-    # ``--run`` + ``--workspace`` is a fallback when the registry
-    # is unavailable.
+    # Read-only snapshot viewer: spawns a --resume REPL against the
+    # agent's run_id so the operator can inspect the current
+    # conversation history. The agent is NOT paused — it keeps
+    # running unaffected. ``--id`` is preferred; ``--run`` +
+    # ``--workspace`` is a fallback when the registry is unavailable.
     takeover_parser = issue_sub.add_parser(
         "takeover",
-        help="Take over an issue manually (pause agent + start REPL)",
+        help="Take a read-only snapshot of an issue's conversation history",
         description=(
-            "Pause the running agent via the control socket and "
-            "start an interactive clawcodex REPL with "
-            "--resume <run_id> in the issue's workspace. The REPL "
-            "writes to the same transcript.jsonl the headless "
-            "agent used, so the operator's takeover continues the "
-            "LLM context. Idempotent: if the agent has already "
-            "ended, the REPL loads the on-disk transcript "
-            "directly. The headless task is paused, not killed — "
-            "use `clawcodex orchestrator issue attach --id "
-            "<issue>` to send 'resume' after the REPL exits."
+            "Start an interactive clawcodex REPL with "
+            "--resume <run_id> in the issue's workspace to inspect "
+            "the agent's current conversation history. The agent is "
+            "NOT paused — it continues running unaffected. When the "
+            "REPL exits, the orchestrator proceeds normally. "
+            "Idempotent: if the agent has already ended, the REPL "
+            "loads the on-disk transcript directly."
         ),
     )
     takeover_parser.add_argument(
@@ -456,9 +427,20 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
     inject_parser = issue_sub.add_parser(
         "inject",
         help="Inject operator hints into a running agent",
-        description="Write a hint to .operator_hints.md in the issue workspace. "
-        "The agent reads and displays these hints at each tool call boundary. "
-        "Idempotent: re-injecting the same hint is a no-op.",
+        description=(
+            "Send a hint to the agent. When the agent's control "
+            "socket is alive, the hint is queued via pending_messages for "
+            "delivery at the next tool result boundary (near-real-time). "
+            "Otherwise, the hint is written to .operator_hints.md and the "
+            "agent reads it at the next turn boundary. "
+            "Idempotent: re-injecting the same hint is a no-op.\n\n"
+            "Tips: Be concise and directive — the hint is added to the "
+            "LLM's context as an operator instruction. Good examples: "
+            "'Run pytest before committing', 'Check the error handling "
+            "in src/api.py', 'The bug is in the date parsing logic'. "
+            "The agent will see the hint in its next response but may "
+            "choose how to act on it."
+        ),
     )
     inject_parser.add_argument(
         "--id",
@@ -485,6 +467,13 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         type=int,
         metavar="N",
         help="Remove hint number N",
+    )
+    inject_parser.add_argument(
+        "--no-wait",
+        dest="no_wait",
+        action="store_true",
+        default=False,
+        help="Send inject and return immediately without waiting for delivery confirmation",
     )
 
     # --- issue workspace ---
@@ -719,6 +708,14 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         metavar="PATH",
         help="Path to WORKFLOW.md (resolution hint when metadata is missing)",
     )
+    retry_parser.add_argument(
+        "--stop-first",
+        dest="stop_first",
+        action="store_true",
+        default=False,
+        help="If the agent is still running, stop it first before retrying. "
+        "Equivalent to 'issue stop' followed by 'issue retry'.",
+    )
 
     # --- issue init ---
     init_parser = issue_sub.add_parser(
@@ -887,8 +884,6 @@ def run(args: argparse.Namespace) -> int:
         return _run_tail(registry_path, args)
     elif cmd == "transcript":
         return _run_transcript(registry_path, args)
-    elif cmd == "attach":
-        return _run_attach(registry_path, ws, args)
     elif cmd == "stop":
         return _run_stop(args, registry_path=registry_path, workspace_root=ws)
     elif cmd == "pause":
@@ -939,12 +934,144 @@ def _control_path(workspace_root: str | Path | None = None) -> Path:
     return base / ".orchestrator_control"
 
 
+def _resolve_sock_path(
+    issue_id: str,
+    workspace_root: str | Path | None = None,
+) -> Path | None:
+    """Resolve the control socket path for an issue via the registry."""
+    try:
+        ws = Path(workspace_root) if workspace_root else None
+        if ws is None:
+            from extensions.orchestrator.workspace_locator import get_registry_path
+
+            registry_path = get_registry_path()
+        else:
+            registry_path = ws / ".clawcodex_issue_registry.json"
+        if registry_path is None or not registry_path.exists():
+            return None
+        from extensions.orchestrator.issue_registry import IssueRegistry
+
+        registry = IssueRegistry(registry_path)
+        record = registry.get(issue_id) or registry.get_by_identifier(issue_id)
+        if record is None or not record.run_id or not record.workspace_path:
+            return None
+        sock_path = Path(record.workspace_path) / ".run_control" / f"{record.run_id}.sock"
+        return sock_path if sock_path.exists() else None
+    except Exception:
+        return None
+
+
+async def _send_and_wait(
+    sock_path: Path,
+    cmd: str,
+    payload: str,
+    expected_type: str,
+    timeout: float = 30.0,
+) -> dict | None:
+    """Send a control command via socket and wait for a confirmation event.
+
+    Opens a Unix socket connection, sends the command, then keeps the
+    connection open reading event lines until one matching
+    ``expected_type`` arrives. Returns the event's ``data`` dict, or
+    ``None`` on timeout.
+    """
+    import json as _json
+
+    reader, writer = await asyncio.open_unix_connection(str(sock_path))
+    started = asyncio.get_event_loop().time()
+    try:
+        # Send the command.
+        writer.write(
+            (_json.dumps({"cmd": cmd, "payload": payload}) + "\n").encode("utf-8"),
+        )
+        await writer.drain()
+
+        # Listen for the confirmation event.
+        while True:
+            remaining = timeout - (asyncio.get_event_loop().time() - started)
+            if remaining <= 0:
+                return None
+            try:
+                line = await asyncio.wait_for(reader.readline(), timeout=remaining)
+            except asyncio.TimeoutError:
+                return None
+            if not line:
+                return None  # socket closed
+            try:
+                event = _json.loads(line.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            if event.get("type") == expected_type:
+                return event.get("data", {})
+            # Ignore other event types (TextDelta, ToolCallEvent, etc.)
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+
+
 def _write_control(
     cmd: str, issue_id: str, extra: str = "", workspace_root: str | Path | None = None
 ) -> int:
-    """Write a control command to be picked up by the orchestrator on next poll."""
+    """Send a control command, preferring the Unix socket for near-real-time
+    delivery. Falls back to the control-file mechanism (picked up on the
+    orchestrator's next poll cycle) when the socket is unavailable.
+
+    F-129 Phase 2: socket-first delivery eliminates the 30s poll-cycle
+    latency for ``pause`` / ``resume`` / ``stop`` when the agent is
+    running and the control socket is alive.
+    """
     from pathlib import Path
 
+    # F-129 Phase 2: try to resolve run_id + workspace_path from the
+    # registry so we can attempt a direct socket connection.
+    # Only agent-level commands (pause/resume/stop) go through the
+    # socket; orchestrator-level commands (retry/rebase/etc.) always
+    # go through the control file.
+    _SOCKET_CMDS = {"pause", "resume", "stop"}
+    if cmd in _SOCKET_CMDS and workspace_root is not None:
+        try:
+            registry_path = Path(workspace_root) / ".clawcodex_issue_registry.json"
+            if registry_path.exists():
+                from extensions.orchestrator.issue_registry import IssueRegistry
+
+                registry = IssueRegistry(registry_path)
+                record = registry.get(issue_id) or registry.get_by_identifier(issue_id)
+                if record is not None and record.run_id and record.workspace_path:
+                    sock_path = (
+                        Path(record.workspace_path) / ".run_control" / f"{record.run_id}.sock"
+                    )
+                    if sock_path.exists():
+                        import asyncio as _asyncio
+                        import json as _json
+
+                        async def _send_via_socket() -> None:
+                            _reader, writer = await _asyncio.open_unix_connection(
+                                str(sock_path),
+                            )
+                            try:
+                                payload = {"cmd": cmd, "payload": extra}
+                                writer.write(
+                                    (_json.dumps(payload) + "\n").encode("utf-8"),
+                                )
+                                await writer.drain()
+                            finally:
+                                writer.close()
+                                try:
+                                    await writer.wait_closed()
+                                except Exception:
+                                    pass
+
+                        _asyncio.run(_send_via_socket())
+                        print(f"Control command '{cmd}' sent for issue {issue_id} (via socket)")
+                        print(f"  The agent will process this at the next tool-result boundary.")
+                        return 0
+        except Exception:
+            pass  # Fall through to control-file path.
+
+    # Fallback: write a control file for the orchestrator's next poll.
     control_dir = _control_path(workspace_root=workspace_root)
     control_dir.mkdir(parents=True, exist_ok=True)
 
@@ -952,12 +1079,61 @@ def _write_control(
     payload = f"{cmd}\n{issue_id}\n{extra}\n"
     try:
         control_file.write_text(payload, encoding="utf-8")
-        print(f"Control command '{cmd}' sent for issue {issue_id}")
+        print(f"Control command '{cmd}' sent for issue {issue_id} (via control file)")
         print(f"  The orchestrator will pick this up on its next poll cycle.")
         return 0
     except Exception as exc:
         print(f"Failed to send '{cmd}' for issue {issue_id}: {exc}", file=sys.stderr)
         return 1
+
+
+def _try_socket_inject(issue_id: str, hint: str) -> bool:
+    """Try to send an inject command via the control socket.
+
+    Returns ``True`` if the hint was queued via the socket (which
+    routes to ``queue_pending_message`` for real-time delivery at
+    the next ToolResult boundary). Returns ``False`` if the socket
+    is unavailable — the caller should fall back to file-based inject.
+
+    F-129 Phase 4: CLI ``issue inject`` prefers socket delivery for
+    near-real-time inject, matching the socket ``inject`` command.
+    """
+    try:
+        from extensions.orchestrator.workspace_locator import get_registry_path
+
+        registry_path = get_registry_path()
+        if registry_path is None or not registry_path.exists():
+            return False
+        from extensions.orchestrator.issue_registry import IssueRegistry
+
+        registry = IssueRegistry(registry_path)
+        record = registry.get(issue_id) or registry.get_by_identifier(issue_id)
+        if record is None or not record.run_id or not record.workspace_path:
+            return False
+        sock_path = Path(record.workspace_path) / ".run_control" / f"{record.run_id}.sock"
+        if not sock_path.exists():
+            return False
+        import asyncio as _asyncio
+        import json as _json
+
+        async def _send() -> None:
+            _reader, writer = await _asyncio.open_unix_connection(str(sock_path))
+            try:
+                writer.write(
+                    (_json.dumps({"cmd": "inject", "payload": hint}) + "\n").encode("utf-8"),
+                )
+                await writer.drain()
+            finally:
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+
+        _asyncio.run(_send())
+        return True
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -1774,7 +1950,28 @@ def _run_stop(
             return 0
 
     print(f"Issue stop: sending stop command for {issue_id}")
-    return _write_control("stop", issue_id, workspace_root=workspace_root)
+    no_wait = getattr(args, "no_wait", False)
+
+    sock_path = _resolve_sock_path(issue_id, workspace_root)
+    if sock_path is not None and not no_wait:
+
+        async def _do_stop() -> int:
+            t0 = asyncio.get_event_loop().time()
+            data = await _send_and_wait(sock_path, "stop", "", "SessionComplete", timeout=10.0)
+            elapsed = asyncio.get_event_loop().time() - t0
+            if data is not None:
+                print(f"Agent stopped ({elapsed:.1f}s).")
+                return 0
+            else:
+                print(
+                    f"Stop sent. Agent is unwinding "
+                    f"(may take a few seconds for long-running tools)."
+                )
+                return 0
+
+        return asyncio.run(_do_stop())
+    else:
+        return _write_control("stop", issue_id, workspace_root=workspace_root)
 
 
 # ---------------------------------------------------------------------------
@@ -1789,8 +1986,35 @@ def _run_pause(args: argparse.Namespace, workspace_root: str | Path | None = Non
         print("error: --id is required", file=sys.stderr)
         return 2
     reason = getattr(args, "reason", "") or "operator requested pause"
-    print(f"Issue pause: sending pause command for {issue_id}")
-    return _write_control("pause", issue_id, reason, workspace_root=workspace_root)
+    no_wait = getattr(args, "no_wait", False)
+
+    sock_path = _resolve_sock_path(issue_id, workspace_root)
+    if sock_path is not None and not no_wait:
+        started = asyncio.get_event_loop().time() if asyncio.get_event_loop().is_running() else None
+
+        async def _do_pause() -> int:
+            t0 = asyncio.get_event_loop().time()
+            data = await _send_and_wait(sock_path, "pause", reason, "Paused", timeout=30.0)
+            elapsed = asyncio.get_event_loop().time() - t0
+            if data is not None:
+                turn = data.get("turn", "?")
+                tool = data.get("tool_name", "?")
+                print(f"Agent paused at turn {turn}, tool {tool!r} ({elapsed:.1f}s).")
+                return 0
+            else:
+                print(
+                    f"Pause acknowledged but agent is in a long operation "
+                    f"(30s timeout). It will pause at the next tool boundary."
+                )
+                return 0
+
+        return asyncio.run(_do_pause())
+    elif sock_path is not None and no_wait:
+        # Fire and forget via socket.
+        return _write_control("pause", issue_id, reason, workspace_root=workspace_root)
+    else:
+        print(f"Issue pause: sending pause command for {issue_id}")
+        return _write_control("pause", issue_id, reason, workspace_root=workspace_root)
 
 
 # ---------------------------------------------------------------------------
@@ -1804,8 +2028,28 @@ def _run_resume(args: argparse.Namespace, workspace_root: str | Path | None = No
     if not issue_id:
         print("error: --id is required", file=sys.stderr)
         return 2
-    print(f"Issue resume: sending resume command for {issue_id}")
-    return _write_control("resume", issue_id, workspace_root=workspace_root)
+    no_wait = getattr(args, "no_wait", False)
+
+    sock_path = _resolve_sock_path(issue_id, workspace_root)
+    if sock_path is not None and not no_wait:
+
+        async def _do_resume() -> int:
+            t0 = asyncio.get_event_loop().time()
+            data = await _send_and_wait(sock_path, "resume", "", "Resumed", timeout=5.0)
+            elapsed = asyncio.get_event_loop().time() - t0
+            if data is not None:
+                print(f"Agent resumed ({elapsed:.1f}s).")
+                return 0
+            else:
+                print(f"Resume sent but no confirmation (5s). The agent may already be running.")
+                return 0
+
+        return asyncio.run(_do_resume())
+    elif sock_path is not None and no_wait:
+        return _write_control("resume", issue_id, workspace_root=workspace_root)
+    else:
+        print(f"Issue resume: sending resume command for {issue_id}")
+        return _write_control("resume", issue_id, workspace_root=workspace_root)
 
 
 # ---------------------------------------------------------------------------
@@ -1944,7 +2188,87 @@ def _run_inject(args: argparse.Namespace) -> int:
     elif remove_hint is not None:
         return _remove_hint(issue_id, hints_file, remove_hint)
     elif hint:
-        return _inject_hint(issue_id, hints_file, hint)
+        no_wait = getattr(args, "no_wait", False)
+        sock_path = _resolve_sock_path(issue_id)
+        if sock_path is not None and not no_wait:
+
+            async def _do_inject() -> int:
+                t0 = asyncio.get_event_loop().time()
+
+                # 1. Pause the agent so the message can be safely
+                #    written to the transcript at a clean boundary.
+                try:
+                    pause_data = await _send_and_wait(
+                        sock_path,
+                        "pause",
+                        "",
+                        "Paused",
+                        timeout=30.0,
+                    )
+                    if pause_data is None:
+                        print(
+                            "warning: pause not confirmed within 30s — "
+                            "agent may be in a long operation or already "
+                            "paused. Injecting anyway.",
+                            file=sys.stderr,
+                        )
+                except (ConnectionRefusedError, FileNotFoundError, OSError):
+                    # Socket gone — fall back to file.
+                    return _inject_hint(issue_id, hints_file, hint)
+
+                # 2. Inject the message (writes UserMessage to transcript
+                #    + queues for in-memory Conversation).
+                try:
+                    data = await _send_and_wait(
+                        sock_path,
+                        "inject",
+                        hint,
+                        "InjectDelivered",
+                        timeout=30.0,
+                    )
+                except (ConnectionRefusedError, FileNotFoundError, OSError):
+                    return _inject_hint(issue_id, hints_file, hint)
+
+                # 3. Auto-resume so the agent processes the message.
+                try:
+                    await _send_and_wait(
+                        sock_path,
+                        "resume",
+                        "",
+                        "Resumed",
+                        timeout=30.0,
+                    )
+                except (ConnectionRefusedError, FileNotFoundError, OSError):
+                    pass  # Best-effort resume
+
+                elapsed = asyncio.get_event_loop().time() - t0
+                if data is not None:
+                    snippet = data.get("hint_snippet", "")
+                    print(
+                        f"Message injected and agent resumed ({elapsed:.1f}s). "
+                        f"Agent will see it in its next response."
+                    )
+                    if snippet:
+                        print(f"  hint: {snippet}{'...' if len(hint) > 80 else ''}")
+                    return 0
+                else:
+                    print(
+                        f"Hint queued ({elapsed:.1f}s). "
+                        f"Will be delivered at next tool result boundary."
+                    )
+                    return 0
+
+            return asyncio.run(_do_inject())
+        elif sock_path is not None and no_wait:
+            if _try_socket_inject(issue_id, hint):
+                print(
+                    f"\u2713 hint injected for issue {issue_id}"
+                    f" \u00b7 agent will receive it at the next tool result boundary"
+                )
+                return 0
+            return _inject_hint(issue_id, hints_file, hint)
+        else:
+            return _inject_hint(issue_id, hints_file, hint)
     else:
         return _list_hints(issue_id, hints_file)
 
@@ -1993,10 +2317,20 @@ def _parse_hints_file(hints_file: Path) -> list[tuple[float, str]]:
 
 
 def _inject_hint(issue_id: str, hints_file: Path, hint: str) -> int:
-    """Append a hint to the .operator_hints.md file."""
+    """Append a hint to the .operator_hints.md file.
+
+    Idempotent: if the hint text already exists in the file, it is
+    not duplicated.
+    """
     import time
 
     hints = _parse_hints_file(hints_file)
+    # F-129 Phase 5: idempotency — skip if the exact hint text
+    # already exists.
+    for _ts, existing_hint in hints:
+        if existing_hint.strip() == hint.strip():
+            print(f"Hint already exists for issue {issue_id} — no action taken.")
+            return 0
     next_num = len(hints) + 1
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     header = f"--- Operator Hint #{next_num} (injected at {timestamp}) ---\n"
@@ -2008,7 +2342,7 @@ def _inject_hint(issue_id: str, hints_file: Path, hint: str) -> int:
             f.write(separator)
         print(
             f"\u2713 hint injected for issue {issue_id}"
-            f" \u00b7 agent will pick it up on next tool call"
+            f" \u00b7 agent will pick it up at the next tool result boundary"
         )
         return 0
     except Exception as exc:
@@ -3024,6 +3358,40 @@ def _run_retry(
 
     registry = IssueRegistry(registry_path)
     record = registry.get_by_issue_ref(issue_id)
+
+    # F-129: --stop-first: if the agent is still running, stop it
+    # before retrying. Equivalent to 'issue stop' + 'issue retry'.
+    stop_first = bool(getattr(args, "stop_first", False))
+    if stop_first and record is not None and record.status.value == "running":
+        sock_path = _resolve_sock_path(issue_id, workspace_root)
+        if sock_path is not None:
+            print(f"Stopping running agent for {issue_id} before retry…")
+
+            async def _stop_for_retry() -> bool:
+                data = await _send_and_wait(sock_path, "stop", "", "SessionComplete", timeout=10.0)
+                return data is not None
+
+            stopped = asyncio.run(_stop_for_retry())
+            if stopped:
+                print("Agent stopped. Proceeding with retry.")
+            else:
+                print(
+                    "warning: stop sent but agent may still be unwinding. "
+                    "Proceeding with retry anyway.",
+                    file=sys.stderr,
+                )
+        else:
+            print(
+                f"warning: could not find control socket for {issue_id}. "
+                f"Writing stop control file as fallback.",
+                file=sys.stderr,
+            )
+            _write_control("stop", issue_id, workspace_root=workspace_root)
+    elif stop_first and record is not None and record.status.value != "running":
+        print(
+            f"Issue {issue_id} is not running (status: {record.status.value}). "
+            f"No need to stop before retry."
+        )
     if record is None:
         # Auto-register so the daemon can find the record on its next
         # poll. CLI retry is a legitimate way to bootstrap an issue
@@ -3081,7 +3449,6 @@ def _run_retry(
             registry.reset_for_retry(registry_issue_id, reset_retry_count=True)
             if tracker is not None:
                 try:
-                    import asyncio
 
                     async def reopen_tracker_issue() -> None:
                         try:
