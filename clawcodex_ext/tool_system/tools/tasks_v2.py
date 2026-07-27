@@ -7,23 +7,10 @@ from ..build_tool import Tool, build_tool
 from ..context import ToolContext
 from ..errors import ToolInputError
 from ..protocol import ToolResult
-from clawcodex_ext.logical_kanban.context_adapter import task_lkb_view, task_list_view
-from clawcodex_ext.logical_kanban import prepare_task_change
-from clawcodex_ext.logical_kanban.flags import is_logical_kanban_enabled
-from clawcodex_ext.logical_kanban.fuzzy_types import Clarification
-from clawcodex_ext.logical_kanban.runtime import get_logical_kanban
 from src.utils.task_flags import is_todo_v2_enabled
 
 
 _TASK_STATUSES = {"pending", "in_progress", "completed"}
-_LKB_METADATA_FIELDS = {
-    "acceptance_proof": str,
-    "strict_acceptance": bool,
-    "assertions": list,
-    "assumptions": list,
-    "validation_run_id": str,
-    "assumption_clarifications": list,
-}
 
 
 def _new_task_id() -> str:
@@ -137,64 +124,17 @@ def _cascade_delete(task_id: str, context: ToolContext) -> None:
             other["blockedBy"] = [x for x in blocked_by if x != task_id]
 
 
-def _task_update_change_kind(tool_input: dict[str, Any]) -> str:
-    status = tool_input.get("status")
-    if status == "deleted":
-        return "delete_task"
-    if status is not None:
-        return "transition_status"
-    if tool_input.get("addBlocks") is not None or tool_input.get("addBlockedBy") is not None:
-        return "add_dependency"
-    return "update_task_fields"
-
-
-def _bind_lkb_validation(task: dict[str, Any], lkb: dict[str, Any] | None) -> None:
-    if lkb is None:
-        return
-    validation_run_id = lkb.get("validationRunId")
-    if not validation_run_id:
-        return
-    metadata = dict(task.get("metadata") or {})
-    lkb_metadata = dict(metadata.get("lkb") or {})
-    lkb_metadata["validation_run_id"] = validation_run_id
-    metadata["lkb"] = lkb_metadata
-    task["metadata"] = metadata
-
-
-def _validate_lkb_metadata(metadata: dict[str, Any]) -> None:
-    lkb = metadata.get("lkb")
-    if lkb is None:
-        return
-    if not isinstance(lkb, dict):
-        raise ToolInputError("metadata.lkb must be an object when provided")
-    for key, value in lkb.items():
-        expected = _LKB_METADATA_FIELDS.get(key)
-        if expected is None:
-            raise ToolInputError(f"metadata.lkb.{key} is not a supported LKB metadata field")
-        if value is None:
-            continue
-        if expected is list:
-            if key == "assumption_clarifications":
-                if not isinstance(value, list) or not all(
-                    isinstance(x, dict) and "assumption_id" in x and "action" in x for x in value
-                ):
-                    raise ToolInputError(
-                        "metadata.lkb.assumption_clarifications must be a list of objects "
-                        "with assumption_id and action"
-                    )
-            elif not isinstance(value, list) or not all(isinstance(x, str) for x in value):
-                raise ToolInputError(f"metadata.lkb.{key} must be an array of strings")
-        elif not isinstance(value, expected):
-            type_name = "boolean" if expected is bool else "string"
-            raise ToolInputError(f"metadata.lkb.{key} must be a {type_name}")
-
-
 # ---------------------------------------------------------------------------
 # Tool call implementations
 # ---------------------------------------------------------------------------
 
 
 def _task_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
+    from lkb.clawcodex_task_adapter import try_handle
+
+    handled, result = try_handle("TaskCreate", tool_input, context)
+    if handled:
+        return result
     subject = tool_input.get("subject")
     description = tool_input.get("description")
     active_form = tool_input.get("activeForm") or ""
@@ -207,22 +147,8 @@ def _task_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
         raise ToolInputError("activeForm must be a string when provided")
     if not isinstance(metadata, dict):
         raise ToolInputError("metadata must be an object when provided")
-    _validate_lkb_metadata(metadata)
 
     task_id = _new_task_id()
-    denied, lkb = prepare_task_change(
-        change_kind="create_task",
-        tool_input={
-            "taskId": task_id,
-            "subject": subject,
-            "description": description,
-            "activeForm": active_form,
-            "metadata": dict(metadata),
-        },
-        context=context,
-    )
-    if denied is not None:
-        return denied
     context.tasks[task_id] = {
         "id": task_id,
         "subject": subject,
@@ -235,18 +161,9 @@ def _task_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
         "metadata": dict(metadata),
         "output": "",
     }
-    _bind_lkb_validation(context.tasks[task_id], lkb)
-    output: dict[str, Any] = {"task": {"id": task_id, "subject": subject}}
-    if lkb is not None:
-        lkb["createdFacts"] = [
-            f"Task({task_id})",
-            f"Pending({task_id})",
-            f"Status({task_id}, pending)",
-        ]
-        output["lkb"] = lkb
     return ToolResult(
         name="TaskCreate",
-        output=output,
+        output={"task": {"id": task_id, "subject": subject}},
     )
 
 
@@ -316,6 +233,11 @@ All tasks are created with status `pending`.
 
 
 def _task_get_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
+    from lkb.clawcodex_task_adapter import try_handle
+
+    handled, result = try_handle("TaskGet", tool_input, context)
+    if handled:
+        return result
     task_id = tool_input.get("taskId")
     if not isinstance(task_id, str) or not task_id.strip():
         raise ToolInputError("taskId must be a non-empty string")
@@ -330,8 +252,6 @@ def _task_get_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResu
         "blocks": list(task.get("blocks") or []),
         "blockedBy": list(task.get("blockedBy") or []),
     }
-    if is_logical_kanban_enabled():
-        task_data["lkb"] = task_lkb_view(context, task_id, include_proof_trace=True)
     return ToolResult(
         name="TaskGet",
         output={"task": task_data},
@@ -381,9 +301,14 @@ Returns full task details:
 
 
 def _task_list_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
+    from lkb.clawcodex_task_adapter import try_handle
+
+    handled, result = try_handle("TaskList", tool_input, context)
+    if handled:
+        return result
     return ToolResult(
         name="TaskList",
-        output={"tasks": task_list_view(context, include_lkb=is_logical_kanban_enabled())},
+        output={"tasks": list(context.tasks.values())},
     )
 
 
@@ -423,6 +348,12 @@ Use TaskGet with a specific task ID to view full details including description a
 
 
 def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
+    from lkb.clawcodex_task_adapter import resolve_task_owner, try_handle
+
+    tool_input = resolve_task_owner(tool_input, context)
+    handled, result = try_handle("TaskUpdate", tool_input, context)
+    if handled:
+        return result
     task_id = tool_input.get("taskId")
     if not isinstance(task_id, str) or not task_id.strip():
         raise ToolInputError("taskId must be a non-empty string")
@@ -447,15 +378,6 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
         md = tool_input["metadata"]
         if not isinstance(md, dict):
             raise ToolInputError("metadata must be an object when provided")
-        _validate_lkb_metadata(md)
-
-    denied, lkb = prepare_task_change(
-        change_kind=_task_update_change_kind(tool_input),
-        tool_input=tool_input,
-        context=context,
-    )
-    if denied is not None:
-        return denied
 
     task = context.tasks.get(task_id)
     if task is None:
@@ -465,8 +387,6 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
             "updatedFields": [],
             "error": "Task not found",
         }
-        if lkb is not None:
-            out["lkb"] = lkb
         return ToolResult(name="TaskUpdate", output=out)
 
     for field in ("subject", "description", "activeForm", "owner"):
@@ -491,13 +411,11 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
                     "success": True,
                     "taskId": task_id,
                     "updatedFields": ["deleted"],
-                    **({"lkb": lkb} if lkb is not None else {}),
                 },
             )
         if status != task.get("status"):
             status_change = {"from": str(task.get("status")), "to": status}
             task["status"] = status
-            _bind_lkb_validation(task, lkb)
             updated_fields.append("status")
 
     for rel_field, input_key in (("blocks", "addBlocks"), ("blockedBy", "addBlockedBy")):
@@ -528,76 +446,9 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
         "updatedFields": updated_fields,
     }
 
-    # F-135: process assumption clarifications after metadata merge.
-    _process_assumption_clarifications(task_id, task, context, out)
-
-    if status_change is not None:
-        _bind_lkb_validation(task, lkb)
-
     if status_change is not None:
         out["statusChange"] = status_change
-    if lkb is not None:
-        out["lkb"] = lkb
     return ToolResult(name="TaskUpdate", output=out)
-
-
-def _process_assumption_clarifications(
-    task_id: str,
-    task: dict[str, Any],
-    context: ToolContext,
-    out: dict[str, Any],
-) -> None:
-    """Apply any assumption clarifications stored in task metadata."""
-    if not is_logical_kanban_enabled():
-        return
-    metadata = task.get("metadata")
-    if not isinstance(metadata, dict):
-        return
-    lkb_metadata = metadata.get("lkb")
-    if not isinstance(lkb_metadata, dict):
-        return
-    clarifications = lkb_metadata.get("assumption_clarifications")
-    if not isinstance(clarifications, list) or not clarifications:
-        return
-
-    runtime = get_logical_kanban(context)
-    service = runtime.service
-    applied: list[dict[str, Any]] = []
-    for raw in clarifications:
-        if not isinstance(raw, dict):
-            continue
-        assumption_id = raw.get("assumption_id")
-        action = raw.get("action")
-        if not isinstance(assumption_id, str) or not isinstance(action, str):
-            continue
-        clarification = Clarification(
-            assumption_id=assumption_id,
-            action=action,
-            new_value=raw.get("new_value", ""),
-        )
-        new_record, old_record, validation_run = service.clarify_assumption(
-            context, assumption_id, clarification
-        )
-        applied.append(
-            {
-                "assumptionId": new_record.assumption_id,
-                "action": action,
-                "newValue": new_record.value,
-                "validationRunId": validation_run.validation_run_id if validation_run else None,
-            }
-        )
-        if validation_run is not None:
-            _bind_lkb_validation(task, {"validationRunId": validation_run.validation_run_id})
-
-    # Clear the clarifications so they are not reprocessed.  _bind_lkb_validation
-    # may have replaced the task's lkb dict, so refresh from the task before
-    # clearing.
-    task_metadata = task.get("metadata")
-    if isinstance(task_metadata, dict):
-        task_lkb = task_metadata.get("lkb")
-        if isinstance(task_lkb, dict):
-            task_lkb["assumption_clarifications"] = []
-    out["assumptionClarificationsApplied"] = applied
 
 
 TaskUpdateTool: Tool = build_tool(
@@ -615,6 +466,8 @@ TaskUpdateTool: Tool = build_tool(
             "addBlockedBy": {"type": "array", "items": {"type": "string"}},
             "owner": {"type": "string"},
             "metadata": {"type": "object"},
+            "reason": {"type": "string"},
+            "overrideReason": {"type": "string"},
         },
         "required": ["taskId"],
     },
@@ -653,8 +506,11 @@ Use this tool to update a task in the task list.
 - **subject**: Change the task title (imperative form, e.g., "Run tests")
 - **description**: Change the task description
 - **activeForm**: Present continuous form shown in spinner when in_progress (e.g., "Running tests")
-- **owner**: Change the task owner (agent name)
+- **owner**: Use `$self` to claim for the current trusted agent. A different
+  explicit owner is a privileged transfer, not an ordinary claim.
 - **metadata**: Merge metadata keys into the task (set a key to null to delete it)
+- **reason / overrideReason**: Audit reason for a reopen, handoff, explicitly authorized
+  transfer, or override
 - **addBlocks**: Mark tasks that cannot start until this one completes
 - **addBlockedBy**: Mark tasks that must complete before this one can start
 
@@ -662,7 +518,18 @@ Use this tool to update a task in the task list.
 
 Status progresses: `pending` -> `in_progress` -> `completed`
 
+To explicitly reopen a completed task because requirements or prior work changed,
+set its status back to `pending` and include the reason. Do not try to move a
+completed task directly to `in_progress`. With LKB enabled, reopening releases
+the old claim, clears the owner, and marks completed downstream tasks for
+recheck; claim the reopened task again before starting it.
+
 Use `deleted` to permanently remove a task.
+
+When a status or ownership update is denied, STOP the dependent work and report
+the denial. Do not treat files, sub-agent output, or prose completion as a
+successful task transition. Read the latest task, correct the rejected
+transition, and retry through TaskUpdate before proceeding.
 
 ## Staleness
 
@@ -680,15 +547,23 @@ Mark task as completed after finishing work:
 {"taskId": "1", "status": "completed"}
 ```
 
+Reopen a completed task after a requirement change:
+```json
+{"taskId": "1", "status": "pending", "reason": "Requirements changed; revise the result"}
+```
+
 Delete a task:
 ```json
 {"taskId": "1", "status": "deleted"}
 ```
 
-Claim a task by setting owner:
+Atomically claim and start a task for the current trusted agent:
 ```json
-{"taskId": "1", "owner": "my-name"}
+{"taskId": "1", "owner": "$self", "status": "in_progress"}
 ```
+
+Never invent a display name such as `writer-agent` or `subagent-alpha` for a
+self-claim. The host resolves `$self` to the real ToolContext agent identity.
 
 Set up task dependencies:
 ```json
@@ -766,18 +641,9 @@ async def _task_output_call(tool_input: dict[str, Any], context: ToolContext) ->
         "description": task.get("description"),
         "output": output,
     }
-    if is_logical_kanban_enabled():
-        lkb = task_lkb_view(context, task_id, include_proof_trace=True)
-        task_payload["lkb"] = {
-            "validation_status": lkb["validation_status"],
-            "last_validation_run_id": lkb["last_validation_run_id"],
-            "blocked_reason": lkb["blockedReason"],
-            **(
-                {"proof_trace_summary": lkb["proofTraceSummary"]}
-                if "proofTraceSummary" in lkb
-                else {}
-            ),
-        }
+    lkb = task.get("lkb")
+    if isinstance(lkb, dict):
+        task_payload["lkb"] = dict(lkb)
     return ToolResult(
         name="TaskOutput",
         output={

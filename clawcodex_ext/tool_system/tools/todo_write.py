@@ -6,7 +6,6 @@ from ..build_tool import Tool, build_tool
 from ..context import ToolContext
 from ..errors import ToolInputError
 from ..protocol import ToolResult
-from clawcodex_ext.logical_kanban import prepare_todo_write
 from src.utils.task_flags import is_todo_v2_enabled
 
 
@@ -33,17 +32,10 @@ def _todo_write_call(tool_input: dict[str, Any], context: ToolContext) -> ToolRe
         all_done = all_done and status == "completed"
         normalized.append({"content": content, "status": status, "activeForm": active_form})
 
-    denied, lkb = prepare_todo_write(tool_input={"todos": normalized}, context=context)
-    if denied is not None:
-        return denied
-
     context.todos = [] if all_done else normalized
-    output: dict[str, Any] = {"oldTodos": old, "newTodos": normalized}
-    if lkb is not None:
-        output["lkb"] = lkb
     return ToolResult(
         name="TodoWrite",
-        output=output,
+        output={"oldTodos": old, "newTodos": normalized},
     )
 
 

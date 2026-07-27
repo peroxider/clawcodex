@@ -308,6 +308,11 @@ def _pytest_targets_for_steps(python_files: list[str], *, all_files: bool) -> di
             changed_files,
             include_prefixes=("tests/agent/",),
         ),
+        "lkb": pytest_targets.targets_for_preset(
+            "lkb",
+            changed_files,
+            include_prefixes=("extensions/lkb/tests/",),
+        ),
     }
 
 
@@ -368,6 +373,17 @@ def _build_steps(env: dict[str, str], *, all_files: bool, base: str) -> list[Ste
             description="stable core pytest smoke plus changed pytest files",
             commands=[[sys.executable, "-m", "pytest", *pytest_target_sets["core"], "-q"]],
             skip_reason=None if _env_bool(env, "CI_RUN_PYTHON") else "no Python/package/CI changes",
+            env=_clean_provider_env(),
+        ),
+        Step(
+            name="ci / pytest-lkb",
+            description="LKB Plan Graph unit/repository/integration/concurrency/ui",
+            commands=[[sys.executable, "-m", "pytest", *pytest_target_sets["lkb"], "-q"]],
+            skip_reason=(
+                None
+                if _env_bool(env, "CI_RUN_PYTHON") or _env_bool(env, "CI_RUN_LKB")
+                else "no LKB/package/CI changes"
+            ),
             env=_clean_provider_env(),
         ),
         Step(

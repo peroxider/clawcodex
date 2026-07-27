@@ -175,9 +175,10 @@ def test_agent_loop_propagates_cancel_set_via_tool_context(
         # enter its poll loop before we trip the abort. This avoids a
         # sleep-based race on CI where the scheduler might keep the
         # main thread running long enough that the abort fires before
-        # dispatch reaches the tool. The 5s ceiling turns a wedged
-        # test into a loud failure instead of an indefinite hang.
-        assert entered_event.wait(timeout=5.0), "Slow tool never entered"
+        # dispatch reaches the tool. The 15s ceiling turns a wedged
+        # test into a loud failure instead of an indefinite hang, while
+        # tolerating CPU contention from parallel test batches.
+        assert entered_event.wait(timeout=15.0), "Slow tool never entered"
         controller.abort("user_interrupt")
 
     threading.Thread(target=_trip_when_tool_enters, daemon=True).start()
@@ -369,6 +370,7 @@ def test_agent_bridge_plumbs_abort_controller_into_tool_context(
     aborted_ctrl = context.abort_controller
     assert bridge.cancel() is True
     assert aborted_ctrl.signal.aborted is True
+    assert bridge.shutdown(timeout=0.01) is False
 
     # Finishing a run swaps in a FRESH (untripped) controller so the
     # next prompt doesn't start with a stale aborted signal that would
@@ -376,6 +378,7 @@ def test_agent_bridge_plumbs_abort_controller_into_tool_context(
     # we install a new controller rather than clearing to ``None``.
     bridge._finish()
     assert in_agent_loop.value is False
+    assert bridge.shutdown(timeout=0.01) is True
     assert context.abort_controller is not None
     assert context.abort_controller is not aborted_ctrl
     assert context.abort_controller.signal.aborted is False

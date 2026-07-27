@@ -1252,6 +1252,13 @@ def _run_headless_core(options: HeadlessOptions) -> int:
                 )
     finally:
         restore_sigint()
+        # Async Agent workers are detached from the per-turn event loop.
+        # Headless owns the session lifetime, so make their cancellation and
+        # subprocess teardown explicit before returning to the caller.
+        try:
+            tool_context.task_manager.shutdown(timeout=2.0)
+        except Exception:
+            pass
         # F-22: stop the cron scheduler background thread. The scheduler
         # registers its own atexit hooks, but explicit stop prevents the
         # thread from outliving the headless run in long-lived embedders.

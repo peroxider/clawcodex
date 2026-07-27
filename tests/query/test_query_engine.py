@@ -100,6 +100,37 @@ class TestQueryEngine(unittest.TestCase):
         self.assertEqual(assistants[0].content, [TextBlock(text="Recovered response")])
         self.assertEqual(provider.chat_stream_response.call_count, 2)
 
+    def test_submit_message_retries_provider_sdk_timeout(self):
+        provider = MagicMock()
+        provider.model = "test-model"
+        sdk_timeout_type = type("APITimeoutError", (Exception,), {})
+        err = sdk_timeout_type("Request timed out.")
+        err.headers = {"retry-after": "0.01"}  # type: ignore[attr-defined]
+        provider.chat_stream_response.side_effect = [
+            err,
+            ChatResponse(
+                content="Recovered after timeout",
+                model="test-model",
+                usage={"input_tokens": 10, "output_tokens": 5},
+                finish_reason="end_turn",
+                tool_uses=None,
+            ),
+        ]
+
+        engine = self._make_engine(provider)
+        collected = []
+
+        async def run():
+            async for msg in engine.submit_message("Continue"):
+                collected.append(msg)
+
+        _run(run())
+
+        assistants = [m for m in collected if isinstance(m, AssistantMessage)]
+        self.assertEqual(len(assistants), 1)
+        self.assertEqual(assistants[0].content, [TextBlock(text="Recovered after timeout")])
+        self.assertEqual(provider.chat_stream_response.call_count, 2)
+
     def test_messages_accumulate(self):
         provider = MagicMock()
         provider.chat_stream_response.side_effect = NotImplementedError()

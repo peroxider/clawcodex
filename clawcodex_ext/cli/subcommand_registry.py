@@ -92,9 +92,6 @@ def load_builtin_subcommands() -> None:
 
     register_community_radar_subcommand()
 
-    # F-153: ``clawcodex-dev lkb method list|show|propose|approve|reject|deprecate|coverage``
-    from clawcodex_ext.cli.lkb_method_cmd import commands as _lkb_method_commands
-
     # F-108 P108-H: ``clawcodex-dev diag freeze-report|viewer|status`` subcommand
     # for Layer-4 freeze-detection diagnostics. Imports the module so the
     # ``@register('diag')`` decorator fires; the handler is looked up

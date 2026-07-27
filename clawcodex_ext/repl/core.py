@@ -1165,12 +1165,15 @@ class ClawcodexREPL:
         """Single-line status footer for the input prompt.
 
         Mirrors the TS Ink reference's persistent status row at the
-        bottom: provider, model, current working directory, and
-        accumulated turn / token counts for the session. Kept terse so
-        it doesn't compete with the input row for attention.
+        bottom: provider, model, current working directory, accumulated
+        turn / token counts, and compact Task/LKB progress for the session.
+        Kept terse so it doesn't compete with the input row for attention.
         """
 
         try:
+            refresh_tasks = getattr(self, "_maybe_refresh_lkb_tasks", None)
+            if callable(refresh_tasks):
+                refresh_tasks()
             provider = getattr(self.provider, "provider_name", None) or self.provider_name or "?"
             model = getattr(self.provider, "model", "") or "?"
             cwd_full = str(self.tool_context.cwd or self.tool_context.workspace_root)
@@ -1247,6 +1250,7 @@ class ClawcodexREPL:
             _fmt = lambda n: f"{n / 1000:.1f}k" if n >= 1000 else str(n)
             goal_segment = self._goal_footer_status()
             goal_part = f" · {goal_segment}" if goal_segment else ""
+            task_part = self._task_toolbar_part()
             return (
                 f" {provider} · {model} · {cwd} · "
                 f"mode: {permission_mode_short_title(self._permission_mode)} · "
@@ -1257,6 +1261,7 @@ class ClawcodexREPL:
                 f"{advisor_tokens}"
                 f"{cost_part}"
                 f"{goal_part}"
+                f"{task_part}"
                 f" "
             )
         except Exception:
@@ -1327,6 +1332,28 @@ class ClawcodexREPL:
                 exc_info=True,
             )
             return True
+
+    def _task_toolbar_part(self) -> str:
+        """Return the optional LKB-owned task progress footer segment."""
+
+        try:
+            from lkb.repl_status import format_task_progress
+
+            return format_task_progress(self.tool_context)
+        except Exception:
+            logger.debug("LKB task footer render failed", exc_info=True)
+            return ""
+
+    def _maybe_refresh_lkb_tasks(self, *, force: bool = False) -> bool:
+        """Delegate the optional LKB projection refresh to the extension."""
+
+        try:
+            from lkb.repl_status import refresh_task_projection
+
+            return refresh_task_projection(self.tool_context, force=force)
+        except Exception:
+            logger.debug("LKB task footer refresh failed", exc_info=True)
+            return False
 
     def _echo_user_input(self, text: str) -> None:
         """Print a user message to the transcript (transparent background).
@@ -3713,9 +3740,14 @@ class ClawcodexREPL:
         original_erase_when_done = getattr(app, "erase_when_done", False)
 
         async def _watch_outbox():
-            """Watch for cron events and wake the prompt when found."""
+            """Watch for cron events and refresh the persistent task footer."""
             while True:
                 await asyncio.sleep(1.0)
+                if self._maybe_refresh_lkb_tasks(force=True):
+                    try:
+                        app.invalidate()
+                    except Exception:
+                        pass
                 outbox = getattr(self.tool_context, "outbox", None)
                 if outbox and getattr(app, "future", None) is not None:
                     app.erase_when_done = True
@@ -4751,6 +4783,13 @@ class ClawcodexREPL:
         try:
             self._run_main_loop()
         finally:
+            # Background agents are detached from individual turn loops so a
+            # cancelled turn can return promptly. The REPL session owns them,
+            # and must stop them explicitly before closing its runtime loop.
+            try:
+                self.tool_context.task_manager.shutdown(timeout=2.0)
+            except Exception:
+                pass
             # tear down the IM gateway client if it was connected
             im_client = getattr(self, "_gateway_client", None)
             if im_client is not None:

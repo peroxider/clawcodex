@@ -9,13 +9,16 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
 pytest.importorskip("textual")
 
 from src.tui.app import ClawCodexTUI
+from src.tui.messages import ToolEventMessage
 from src.tui.widgets import PromptInput, StartupHeader, StatusBar, Transcript
+from src.tui.widgets.task_list import TaskProgressPanel
 from src.tool_system.registry import ToolRegistry
 from src.tool_system.context import ToolContext
 
@@ -45,6 +48,39 @@ def _make_app(tmp_path: Path) -> ClawCodexTUI:
     )
 
 
+def test_second_ctrl_c_force_exits_busy_app(tmp_path, monkeypatch):
+    app = _make_app(tmp_path)
+    cancel = Mock(return_value=True)
+    exit_app = Mock()
+    announce = Mock()
+    monkeypatch.setattr(app._agent_bridge, "cancel", cancel)
+    monkeypatch.setattr(app, "exit", exit_app)
+    monkeypatch.setattr(app.announcer, "announce", announce)
+    ticks = iter((10.0, 10.5))
+    monkeypatch.setattr("clawcodex_ext.tui.app.time.monotonic", lambda: next(ticks))
+
+    app.action_cancel_or_quit()
+    exit_app.assert_not_called()
+    app.action_cancel_or_quit()
+
+    assert cancel.call_count == 2
+    exit_app.assert_called_once_with(return_code=130)
+
+
+def test_managed_task_shutdown_is_idempotent(tmp_path, monkeypatch):
+    app = _make_app(tmp_path)
+    bridge_shutdown = Mock(return_value=True)
+    shutdown = Mock(return_value=True)
+    monkeypatch.setattr(app._agent_bridge, "shutdown", bridge_shutdown)
+    monkeypatch.setattr(app.tool_context.task_manager, "shutdown", shutdown)
+
+    app._shutdown_managed_tasks()
+    app._shutdown_managed_tasks()
+
+    bridge_shutdown.assert_called_once_with(timeout=2.0)
+    shutdown.assert_called_once_with(timeout=2.0)
+
+
 @pytest.mark.asyncio
 async def test_app_boots_with_all_core_widgets(tmp_path):
     app = _make_app(tmp_path)
@@ -57,6 +93,106 @@ async def test_app_boots_with_all_core_widgets(tmp_path):
         assert screen.query_one(Transcript) is not None
         assert screen.query_one(StatusBar) is not None
         assert screen.query_one(PromptInput) is not None
+        assert screen.query_one(TaskProgressPanel) is not None
+
+
+@pytest.mark.asyncio
+async def test_task_progress_panel_tracks_task_and_lkb_results(tmp_path, monkeypatch):
+    app = _make_app(tmp_path)
+    projection_refresh = Mock(return_value=False)
+    monkeypatch.setattr("lkb.repl_status.refresh_task_projection", projection_refresh)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        panel = app.screen.query_one(TaskProgressPanel)
+        assert panel.tasks == []
+        assert panel.has_class("-active") is False
+
+        app.tool_context.tasks["T-1"] = {
+            "id": "T-1",
+            "subject": "Publish",
+            "status": "pending",
+            "owner": None,
+            "lkb": {"derivedStatus": "ready"},
+        }
+        app.screen.post_message(
+            ToolEventMessage(
+                kind="tool_result",
+                tool_name="TaskCreate",
+                tool_output={"task": {"id": "T-1"}},
+            )
+        )
+        await pilot.pause()
+        assert panel.has_class("-active") is True
+        assert [(task.id, task.status) for task in panel.tasks] == [("T-1", "pending")]
+
+        app.tool_context.tasks["T-1"]["status"] = "completed"
+        app.tool_context.tasks["T-1"]["lkb"] = {"derivedStatus": "verified"}
+        app.screen.post_message(
+            ToolEventMessage(
+                kind="tool_result",
+                tool_name="Lkb",
+                tool_output={"success": True, "taskId": "T-1"},
+            )
+        )
+        await pilot.pause()
+        assert [(task.id, task.status) for task in panel.tasks] == [("T-1", "completed")]
+        assert any(call.kwargs == {"force": True} for call in projection_refresh.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_task_progress_panel_hydrates_child_lkb_context(tmp_path, monkeypatch):
+    """The fixed panel reads Store changes made through another ToolContext."""
+
+    from clawcodex_ext.feature_gate import get_registry
+    from lkb.repository import JsonFileLkbRepository
+    import lkb.repository as repository_module
+    from src.tool_system.tools import TaskCreateTool, TaskUpdateTool
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("CLAWCODEX_HOME", str(home))
+    monkeypatch.setitem(get_registry()._overrides, "LKB_PLAN_GRAPH", True)
+    monkeypatch.setattr(
+        repository_module,
+        "_repository_singleton",
+        JsonFileLkbRepository(home=home),
+    )
+
+    app = _make_app(tmp_path)
+    app.tool_context.agent_id = "parent-agent"
+    app.tool_context.session_id = "shared-panel-session"
+    child = ToolContext(workspace_root=tmp_path)
+    child.agent_id = "child-agent"
+    child.session_id = "shared-panel-session"
+    task_id = TaskCreateTool.call(
+        {"subject": "Child work", "description": "Cross-context panel refresh"},
+        app.tool_context,
+    ).output["task"]["id"]
+    assert app.tool_context.lkb_plan_id is not None
+    child.lkb_plan_id = app.tool_context.lkb_plan_id
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        panel = app.screen.query_one(TaskProgressPanel)
+        assert [(task.id, task.status) for task in panel.tasks] == [(task_id, "pending")]
+
+        for update in (
+            {"taskId": task_id, "owner": "child-agent"},
+            {"taskId": task_id, "status": "in_progress"},
+            {"taskId": task_id, "status": "completed"},
+        ):
+            result = TaskUpdateTool.call(update, child)
+            assert not result.is_error, result.output
+        from lkb.repl_status import refresh_task_projection
+
+        assert refresh_task_projection(app.tool_context, force=True)
+        assert app.tool_context.tasks[task_id]["status"] == "completed"
+        app.screen.refresh_task_panel(force_projection=True)
+        await pilot.pause()
+
+        assert [(task.id, task.status) for task in panel.tasks] == [(task_id, "completed")]
 
 
 @pytest.mark.asyncio

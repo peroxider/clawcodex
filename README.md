@@ -146,6 +146,7 @@ Concretely, this repo ships:
 - 🩹 **PR Review Auto-Fix (F-37)** — reads review comments + CI logs, iterates on the same branch
 - ✅ **Verification Gate (F-38)** — pre-commit / pre-push / post-sync `pytest` gate with Markdown + JSON report
 - 🔁 **Issue Re-run (F-39)** — `agent:retry`/`agent:follow-up`/`agent:blocked` labels drive re-runs
+- 🧭 **Logical Kanban (LKB)** — opt-in, workspace-scoped persistent task graph behind the existing Task-v2 tools
 
 The upstream's REPL, TUI, tool system, MCP, hooks, memory, permissions, and provider layer are still there — this fork plugs into them, it does not replace them.
 
@@ -339,11 +340,10 @@ through one capability-gated gateway.
 
 ```bash
 clawcodex-dev gateway start|stop|status|restart # IM gateway lifecycle control
-clawcodex-dev gateway setup # IM gateway quick setup
+clawcodex-dev gateway setup # IM gateway quick setup; restarts the daemon automatically
 
 # Feishu setup (recommended)
 uv sync --locked --extra feishu # install Feishu App SDK + terminal QR deps; included by --extra dev
-clawcodex-dev gateway restart # restart the daemon after first Feishu setup
 clawcodex-dev gateway status feishu # show Feishu connection mode, health, and approval-card support
 
 # WeChat setup (currently not recommended; proactive outbound messages are limited)
@@ -351,7 +351,7 @@ clawcodex-dev gateway restart wechat # restart WeChat IM channel
 clawcodex-dev gateway status wechat # show WeChat login health and REPL/orchestrator connection status
 ```
 
-With the gateway daemon running and a bidirectional app channel logged in, start REPL or Orchestrator normally, then connect that runtime to the IM channel. WeChat direct/private messages or Feishu p2p messages can drive the agent, and replies flow back to the actual sender. Feishu setup uses QR scan-to-create registration when available and falls back to manual app credentials if the scan is denied, expires, or cannot complete. After first-time Feishu setup, restart the whole gateway daemon so the Feishu SDK loads in a fresh process.
+With the gateway daemon running and a bidirectional app channel logged in, start REPL or Orchestrator normally, then connect that runtime to the IM channel. WeChat direct/private messages or Feishu p2p messages can drive the agent, and replies flow back to the actual sender. Feishu setup uses QR scan-to-create registration when available and falls back to manual app credentials if the scan is denied, expires, or cannot complete. When the setup wizard exits successfully, it restarts the whole gateway daemon automatically so all channel changes load in a fresh process.
 
 While a Feishu message is being processed, ClawCodex adds a `Typing` reaction to the original message. It removes the reaction after success or cancellation and replaces it with `CrossMark` after failure. Set `FEISHU_REACTIONS=false`, or set the Feishu channel's `extra.reactions` to `false`, to disable this behavior. Manually created apps need the Feishu **Send and delete message reactions** permission (`im:message.reactions:write_only`).
 
@@ -377,7 +377,7 @@ clawcodex-dev orchestrator server connect-gateway
 clawcodex-dev orchestrator server disconnect-gateway
 ```
 
-Startup `--gateway` and runtime connect both bind all direct/private senders for the active bidirectional IM app channel by default. Only one runtime can own the channel at a time: connecting a REPL binding disconnects an orchestrator binding, and connecting an orchestrator binding disconnects a REPL binding. V1 supports only one active bidirectional app channel (`wechat` or Feishu WebSocket); `gateway setup` disables the other inbound app channel when enabling Feishu WebSocket. Legacy Feishu/Slack/Discord webhooks remain outbound-only. `CLAWCODEX_GATEWAY_SOCK` can override the daemon socket; specific-origin binding remains available only for targeted debugging or future multi-origin automation.
+Startup `--gateway` and runtime connect both bind all direct/private senders across the enabled bidirectional IM app channels by default. WeChat and Feishu WebSocket can run together. Only one runtime can own the shared binding at a time: connecting a REPL binding disconnects an orchestrator binding, and connecting an orchestrator binding disconnects a REPL binding. Legacy Feishu/Slack/Discord webhooks remain outbound-only. `CLAWCODEX_GATEWAY_SOCK` can override the daemon socket; specific-origin binding remains available only for targeted debugging or future multi-origin automation.
 
 **Command Control:**
 
@@ -432,6 +432,62 @@ clawcodex-dev coordinator team delete --name build-team
 
 ---
 
+### Logical Kanban (LKB)
+
+> **Current status:** experimental and opt-in. The required feature flag is off by default.
+
+LKB keeps the familiar Task-v2 tool names exposed to the model. When its persistent Plan Graph mode is active, a host adapter routes supported Task-v2 calls to the current session's Plan inside a workspace-scoped Graph Store, instead of the session-only native task dictionary.
+
+- Enabling LKB does **not** force the model to create a task plan. The agent must still call the Task tools.
+- Interactive REPL/TUI sessions expose Task-v2 by default. Headless/SDK sessions normally use `TodoWrite`; enabling `LKB_PLAN_GRAPH` also enables the Task-v2 tool surface in headless sessions, so headless LKB only needs this one flag. `CLAUDE_CODE_ENABLE_TASKS=1` can still force-enable Task-v2 independently. `TodoWrite` itself does not use the persistent Plan Graph.
+- Background Agents can use `TaskCreate`, `TaskGet`, `TaskList`, `TaskUpdate`, and `Lkb` when those tools are available to the parent runtime. The query executor also enforces each Agent's filtered tool set before dispatching through the shared registry.
+- The Textual TUI keeps a task-progress panel mounted above the status line and refreshes it after Task, Agent, and Lkb results. While a conversation is active it also periodically reloads the current Plan projection from the Graph Store, so progress completed in child Agent contexts appears in the fixed panel.
+
+**Enable LKB:**
+
+In an interactive session, run bare `/lkb` to open an interactive on/off picker (similar to `/effort`) that shows the current state. Press Enter to toggle the flag and persist the selection.
+
+For persistent, user-level enablement:
+
+```bash
+clawcodex-dev feature set LKB_PLAN_GRAPH --on
+clawcodex-dev feature get LKB_PLAN_GRAPH
+```
+
+- The value is saved in `~/.clawcodex/features.json`. Start a new ClawCodex process after changing it.
+
+For a headless Task-v2 run, the single flag is enough — it also enables the Task-v2 tool surface:
+
+```bash
+CLAWCODEX_FEATURE_LKB_PLAN_GRAPH=1 \
+clawcodex-dev -p "Use LKB to plan and implement this change: ..."
+```
+
+Feature-state precedence is runtime CLI override, environment variable, persisted feature config, then the registered default.
+
+**Interactive REPL/TUI sessions provide these local commands:**
+
+```text
+/lkb                       # Open the interactive on/off picker (shows state; Enter toggles and persists)
+/lkb board                 # Show the Logical Kanban Board panel
+/lkb board --compact       # Show the compact Board
+/lkb status                # Show derived status; equivalent to compact Board in Plan Graph mode
+/lkb explain <task_id>     # Explain blockers, invalidation, and latest validation
+/lkb audit <task_id>       # Show recent Audit Events for one task
+/lkb revalidate <task_id>  # Revalidate one needs_recheck task
+/lkb plan current          # Show this session's current Plan
+/lkb plan list             # List Plans in the workspace Board
+/lkb plan new [title]      # Create and bind a new Plan
+/lkb plan use <plan_id>    # Explicitly bind an existing Plan
+/lkb plan suspend          # Suspend the current Plan and release its claims
+/lkb plan complete         # Complete the current Plan
+/lkb plan abandon          # Abandon the current Plan
+/lkb plan archive          # Archive the current Plan
+/lkb plan reopen <plan_id> # Reopen and bind a stopped Plan
+```
+
+---
+
 ## Architecture (this fork only)
 
 ```text
@@ -478,9 +534,7 @@ clawcodex-dev coordinator team delete --name build-team
        └─────────────────────────────────────┘
 ```
 
-`MessageGateway` is the shared IM boundary for this fork: CLI/REPL and
-Orchestrator opt in through gateway IPC, while provider delivery stays behind
-the WeChat adapter.
+`MessageGateway` is the shared IM boundary for this fork: CLI/REPL and Orchestrator opt in through gateway IPC, while provider delivery stays behind the WeChat adapter.
 
 ---
 

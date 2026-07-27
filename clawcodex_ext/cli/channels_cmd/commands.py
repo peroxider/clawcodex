@@ -784,42 +784,6 @@ def _feishu_manual_login(channel: ChannelConfig, ui: InteractiveInput) -> Channe
     )
 
 
-def _is_feishu_websocket_channel(channel: ChannelConfig) -> bool:
-    extra = dict(channel.extra or {})
-    return (
-        channel.type is ChannelType.FEISHU
-        and str(extra.get("connection_mode") or "").lower() != "webhook"
-    )
-
-
-def _is_v1_inbound_app_channel(channel: ChannelConfig) -> bool:
-    if channel.type is ChannelType.WECHAT:
-        return True
-    return _is_feishu_websocket_channel(channel)
-
-
-def _disable_other_inbound_app_channels(cfg, *, active_name: str) -> list[str]:
-    disabled: list[str] = []
-    for existing in list(cfg.channels):
-        if existing.name == active_name or not existing.enabled:
-            continue
-        if not _is_v1_inbound_app_channel(existing):
-            continue
-        cfg.replace_channel(
-            ChannelConfig(
-                type=existing.type,
-                webhook_url=existing.webhook_url,
-                name=existing.name,
-                enabled=False,
-                extra=existing.extra,
-            )
-        )
-        disabled.append(existing.name)
-    if disabled:
-        print("V1 双向入站通道当前按单活运行，已停用：" + ", ".join(disabled))
-    return disabled
-
-
 def _wizard_add_feishu(cfg, path, ui: InteractiveInput) -> None:
     """First-time Feishu channel creation: dep check → connection mode → scan login."""
     if not _feishu_dep_check():
@@ -850,10 +814,8 @@ def _wizard_add_feishu(cfg, path, ui: InteractiveInput) -> None:
 
     channel = build_channel_from_inputs("feishu", name, inputs)
     cfg.replace_channel(channel)
-    if channel.enabled and _is_feishu_websocket_channel(channel):
-        _disable_other_inbound_app_channels(cfg, active_name=channel.name)
     save_config(cfg, path)
-    print(f"已保存渠道 {name!r}。请执行 `clawcodex-dev gateway restart` 重启 Gateway 后生效。")
+    print(f"已保存渠道 {name!r}。退出 setup 后 Gateway 将自动重启生效。")
 
 
 def _wizard_edit_feishu(cfg, path, channel: ChannelConfig, ui: InteractiveInput) -> None:
@@ -905,16 +867,12 @@ def _wizard_edit_feishu(cfg, path, channel: ChannelConfig, ui: InteractiveInput)
                     extra=extra or None,
                 )
                 cfg.replace_channel(channel)
-                if channel.enabled and _is_feishu_websocket_channel(channel):
-                    _disable_other_inbound_app_channels(cfg, active_name=channel.name)
                 save_config(cfg, path)
                 # A re-scan may switch the app or operator. Do not let a
                 # persisted chat_id from the previous login override the new
                 # scanner open_id in ``last_known_sender``.
                 _cleanup_feishu_state(_state_dir_for_config_path(path), channel.name)
-                print(
-                    "登录配置已更新。请执行 `clawcodex-dev gateway restart` 重启 Gateway 后生效。"
-                )
+                print("登录配置已更新。退出 setup 后 Gateway 将自动重启生效。")
             elif sub == 1:
                 updated = _feishu_manual_login(channel, ui)
                 if updated is None:  # ESC 中断：保留原 channel，回 feishu 编辑菜单
@@ -932,8 +890,6 @@ def _wizard_edit_feishu(cfg, path, channel: ChannelConfig, ui: InteractiveInput)
                 extra=channel.extra,
             )
             cfg.replace_channel(channel)
-            if channel.enabled and _is_feishu_websocket_channel(channel):
-                _disable_other_inbound_app_channels(cfg, active_name=channel.name)
             save_config(cfg, path)
             print(f"{channel.name} → {'enabled' if channel.enabled else 'disabled'}")
         elif idx == 2:

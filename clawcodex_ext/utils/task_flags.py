@@ -8,6 +8,9 @@ This mirrors a small slice of ``typescript/src/utils/tasks.ts`` — specifically
 * Non-interactive headless / SDK sessions expose ``TodoWrite`` and hide the
   TaskV2 tools (unless ``CLAUDE_CODE_ENABLE_TASKS`` is set, mirroring the
   env-based opt-in in the TypeScript reference).
+* Enabling LKB (the merged ``LKB_PLAN_GRAPH`` feature flag) also exposes the
+  TaskV2 tools in headless sessions: the Plan Graph is the persistent
+  authority behind the TaskV2 tools, so the flag turns on both together.
 """
 
 from __future__ import annotations
@@ -33,15 +36,34 @@ def _env_truthy(name: str) -> bool:
     return raw.strip().lower() in _TRUTHY
 
 
+def _lkb_enabled() -> bool:
+    """True when the merged LKB flag (``LKB_PLAN_GRAPH``) is on.
+
+    Imported lazily so this module stays usable before the optional LKB
+    package / feature-gate stack is importable.
+    """
+    try:
+        from lkb.flags import is_plan_graph_enabled
+
+        return is_plan_graph_enabled()
+    except Exception:
+        return False
+
+
 def is_todo_v2_enabled() -> bool:
     """Port of ``isTodoV2Enabled`` from the TypeScript implementation.
 
     * Force-enabled when ``CLAUDE_CODE_ENABLE_TASKS`` is truthy (e.g. SDK users
       who prefer the TaskV2 tools).
+    * Force-enabled when LKB (``LKB_PLAN_GRAPH``) is on — the Plan Graph backs
+      the TaskV2 tools, so a single flag turns on Task V2 + LKB together,
+      including in headless sessions.
     * Otherwise enabled only for interactive sessions (the default for
       ``clawcodex`` REPL and TUI).
     """
     if _env_truthy("CLAUDE_CODE_ENABLE_TASKS"):
+        return True
+    if _lkb_enabled():
         return True
     return not get_is_non_interactive_session()
 

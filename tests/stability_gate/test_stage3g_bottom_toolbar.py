@@ -132,6 +132,7 @@ class TestStage3gBottomToolbarRuntime:
                 "workspace_root": cwd,
                 "advisor_input_tokens": advisor_in,
                 "advisor_output_tokens": advisor_out,
+                "tasks": {},
             },
         )()
         stub._permission_mode = "default"
@@ -145,6 +146,7 @@ class TestStage3gBottomToolbarRuntime:
         stub._goal_footer_status = lambda: None
         stub._goal_footer_id = None
         stub._goal_footer_started_at = None
+        stub._task_toolbar_part = lambda: ""
         return stub
 
     def test_renders_non_empty_string(self, _heavy_runtime):
@@ -238,3 +240,26 @@ class TestStage3gBottomToolbarRuntime:
         result = ClawcodexREPL._bottom_toolbar(stub)
         assert result, f"expected non-empty result for unknown model, got {result!r}"
         assert "anthropic" in result
+
+    def test_task_progress_is_persistent_in_toolbar(self, _heavy_runtime):
+        """Task progress remains visible without requiring another TaskList call."""
+
+        ClawcodexREPL = _heavy_runtime
+        stub = self._make_stub()
+        stub.tool_context.tasks = {
+            "T-1": {"id": "T-1", "status": "completed", "metadata": {}},
+            "T-2": {"id": "T-2", "status": "in_progress", "metadata": {}},
+            "T-3": {
+                "id": "T-3",
+                "status": "pending",
+                "metadata": {},
+                "lkb": {"derivedStatus": "blocked"},
+            },
+        }
+        stub._task_toolbar_part = lambda: ClawcodexREPL._task_toolbar_part(stub)
+
+        result = ClawcodexREPL._bottom_toolbar(stub)
+
+        assert "tasks: 1/3" in result
+        assert "1 running" in result
+        assert "1 blocked" in result

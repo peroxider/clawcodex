@@ -1,1 +1,0 @@
-"""lkb MCP — decompose_task tool."""

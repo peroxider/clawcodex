@@ -281,6 +281,7 @@ class ClawCodexTUI(App):
         # Double-press exit guard: Ctrl+C first press clears draft /
         # arms exit; second press within 0.8s actually quits.
         self._last_ctrl_c: float = 0.0
+        self._managed_tasks_shutdown = False
         if self.runtime_context is not None:
             from clawcodex_ext.frontend.tui_extensions import install_tui_extensions
 
@@ -366,6 +367,7 @@ class ClawCodexTUI(App):
             self._show_resume_browser()
 
     def on_unmount(self) -> None:
+        self._shutdown_managed_tasks()
         if self._away_summary_controller is not None:
             self._away_summary_controller.close()
         if self._intent_forecast_controller is not None:
@@ -395,6 +397,21 @@ class ClawCodexTUI(App):
         self._enqueue_summary_sidecar_job()
 
     # ---- exit / snapshot ----------------------------------------------
+    def _shutdown_managed_tasks(self) -> None:
+        """Converge foreground and background workers once on TUI exit."""
+
+        if self._managed_tasks_shutdown:
+            return
+        self._managed_tasks_shutdown = True
+        try:
+            self._agent_bridge.shutdown(timeout=2.0)
+        except Exception:
+            pass
+        try:
+            self.tool_context.task_manager.shutdown(timeout=2.0)
+        except Exception:
+            pass
+
     def _capture_exit_snapshot(self) -> None:
         """Collect the transcript's renderables into :attr:`exit_snapshot`.
 
@@ -430,6 +447,7 @@ class ClawCodexTUI(App):
         which exit path fires (``/exit``, Ctrl+D, exit-flow dialog).
         """
 
+        self._shutdown_managed_tasks()
         self._capture_exit_snapshot()
         if self._away_summary_controller is not None:
             self._away_summary_controller.close()
@@ -485,13 +503,23 @@ class ClawCodexTUI(App):
     # ---- bindings ----
     def action_cancel_or_quit(self) -> None:
         # First press: try to cancel an in-flight agent run.
+        now = time.monotonic()
         if self._agent_bridge.cancel():
-            self.announcer.announce("Cancelling…", level="assertive", notify=False)
-            self._last_ctrl_c = 0.0  # reset double-press timer on cancel
+            if now - self._last_ctrl_c < 0.8:
+                # A cooperative cancel can be delayed by a provider or
+                # subprocess. The second strike is an explicit request to
+                # leave the session; exit() shuts down managed agents.
+                self.exit(return_code=130)
+                return
+            self._last_ctrl_c = now
+            self.announcer.announce(
+                "Cancelling… Press Ctrl+C again to force exit",
+                level="assertive",
+                notify=False,
+            )
             return
         # Double-press guard: first Ctrl+C while idle arms exit;
         # second press within 0.8s actually quits.
-        now = time.monotonic()
         if now - self._last_ctrl_c < 0.8:
             self.exit()
         else:
@@ -1518,12 +1546,20 @@ class ClawCodexTUI(App):
             from clawcodex_ext.cli.runtime_commands import register_runtime_commands
 
             register_runtime_commands(None)
+            # Wire the Textual-backed UIHost so interactive commands
+            # (/lkb toggle, /permissions, …) can open modal selects instead
+            # of falling back to the non-interactive NullUIHost. Lazy import:
+            # keeps the interactive-command subsystem out of the import graph
+            # for non-TUI consumers.
+            from clawcodex_ext.tui.ui_host import TextualUIHost
+
             self._command_context = create_command_context(
                 workspace_root=self.workspace_root,
                 conversation=self.session.conversation,
                 cost_tracker=CostTracker(),
                 history=HistoryLog(),
                 provider=self.provider,
+                ui=TextualUIHost(self),
                 tool_registry=self.tool_registry,
                 tool_context=self.tool_context,
                 runtime_context=self.runtime_context,

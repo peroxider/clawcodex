@@ -123,50 +123,6 @@ chrome = [
     "playwright>=1.40",
     "Pillow>=10.0",
 ]
-# F-138 Layer-4 SMT solver. Installing this extra enables the
-# Z3-backed Logical Kanban adapter (``smt-z3``) that derives pass/fail
-# decisions from satisfiability of the proposal under the encoded
-# Layer-1 invariants. Without ``z3-solver`` the adapter reports itself
-# as unavailable and the pipeline falls back to Layer 1.
-lkb-smt = [
-    "z3-solver>=4.12",
-]
-# F-138 Layer-3 ASP solver. Installing this extra enables the
-# clingo-backed Logical Kanban adapter (``asp-clingo``) that derives
-# pass/fail decisions from satisfiability of integrity-constraint-encoded
-# proposals against the snapshot. Without ``clingo`` the adapter reports
-# itself as unavailable and the pipeline falls back to Layer 1.
-lkb-asp = [
-    "clingo>=5.8",
-]
-# F-138 Layer-5 ATP/TPTP solver. The adapter is always available
-# because the refutation prover lives in-process at
-# ``clawcodex_ext/logical_kanban/solver_atp.py``. The extra is kept
-# for symmetry with ``lkb-smt`` / ``lkb-asp`` so ``pip install -e
-# ".[lkb-atp]"`` is a meaningful command-line target — the adapter is
-# exposed regardless of whether the extra is installed, but listing it
-# in ``pip install`` documents the intent of pulling in the F-138
-# Layer-5 backend explicitly. Future swaps to a subprocess ATP
-# (``vampire``, ``eprover``) can populate this list.
-lkb-atp = [
-]
-# F-154 optional full Turtle/RDF parser.  Without this extra the external
-# ontology importer uses a small safe Turtle subset parser for owl:Class,
-# owl:ObjectProperty, rdfs:domain, and rdfs:range declarations.
-lkb-rdf = [
-    "rdflib>=7.0.0",
-]
-# F-152 (Bounded Scheduling Solver). Installing this extra enables the
-# OR-Tools CP-SAT backed ``SchedulingSolver`` in
-# ``clawcodex_ext/logical_kanban/scheduling_solver.py``.  The extra is
-# optional because OR-Tools is a heavy meta-package (~25 MB) and only the
-# ``ortools.sat.python.cp_model`` sub-module is allowed; the rest is
-# banned by the ``[tool.ruff.lint.flake8-tidy-imports.banned-api]`` rules
-# below.  Without this extra the solver raises ``SchedulingUnavailable``
-# and the rest of the LKB pipeline keeps working.
-scheduling = [
-    "ortools>=9.8",
-]
 feishu = [
     "lark-oapi==1.7.0",
     "qrcode==7.4.2",
@@ -189,15 +145,6 @@ all = [
     "import-linter>=2.0",
     "lark-oapi==1.7.0",
     "qrcode==7.4.2",
-    # F-138 Layer-4 SMT solver; kept in ``all`` so the one-click installer
-    # surfaces the full solver pipeline.
-    "z3-solver>=4.12",
-    # F-138 Layer-3 ASP solver; kept in ``all`` so the one-click installer
-    # surfaces the full solver pipeline alongside the SMT extra.
-    "clingo>=5.8",
-    # F-152 (Bounded Scheduling Solver).  Kept in ``all`` so the one-click
-    # installer surfaces the full CP-SAT scheduling solver too.
-    "ortools>=9.8",
 ]
 
 [project.scripts]
@@ -212,7 +159,9 @@ Documentation = "https://github.com/agentforce314/clawcodex#readme"
 asyncio_mode = "auto"
 # Prepend the project root so pytest imports the worktree's ``src/`` rather
 # than the parent repo's editable-install mapping.
-pythonpath = ["."]
+# Include the Plan Graph extension source tree without requiring a second
+# editable install during host integration tests.
+pythonpath = [".", "extensions/lkb/src"]
 markers = [
     "integration: marks tests as integration (deselect with '-m \"not integration\"')",
     "linux_only: marks tests that require Linux (auto-skipped on macOS/Windows)",
@@ -251,32 +200,7 @@ quote-style = "double"
 # Start with correctness-oriented rules that can be blocking without forcing
 # a repo-wide style cleanup. Formatting is still checked on changed files in CI.
 #
-# F-152 (Bounded Scheduling Solver) adds TID251 (``flake8-tidy-imports``) so
-# the ``banned-api`` block below (ortools routing/linear_solver/...) is
-# actually enforced.  TID rules are off by default in ruff, so the rule code
-# must appear in ``select`` to take effect.  Other TID codes (TID252 etc.) are
-# left to ``flake8-tidy-imports``'s own presets.
-select = ["E9", "F63", "F7", "F82", "TID251"]
-
-# F-152 (Bounded Scheduling Solver) — OR-Tools meta-package 安全守门。
-# OR-Tools wheel 打包了 6 个污染 LKB 的子模块（routing / linear_solver /
-# constraint_solver / algorithms / graph / ml），其中 ml/routing 含启发式 +
-# ML 黑盒，违反项目"不引入额外模型"红线。LKB 只允许引入
-# ortools.sat.python.cp_model 一个子模块做 CP-SAT 约束规划。
-#
-# 此规则在 CI lint job（.github/workflows/ci.yml:30-47）自动运行，违规导入
-# 会被 ruff 拒绝。详见 docs/feature_plan/09-logical-kanban/f-152-bounded-scheduling-solver.md
-# Phase 1（方案 A — lint 守门）。
-[tool.ruff.lint.flake8-tidy-imports]
-ban-relative-imports = "parents"
-
-[tool.ruff.lint.flake8-tidy-imports.banned-api]
-"ortools.routing".msg = "F-152: Only ortools.sat.python.cp_model is allowed (OR-Tools routing 含 ML 启发式)."
-"ortools.linear_solver".msg = "F-152: Only ortools.sat.python.cp_model is allowed."
-"ortools.constraint_solver".msg = "F-152: Only ortools.sat.python.cp_model is allowed (constraint_solver 是 VRP)."
-"ortools.algorithms".msg = "F-152: Only ortools.sat.python.cp_model is allowed."
-"ortools.graph".msg = "F-152: Only ortools.sat.python.cp_model is allowed (graph 用 NetworkX 已覆盖)."
-"ortools.ml".msg = "F-152: 违反项目'不引入额外 ML 模型'红线."
+select = ["E9", "F63", "F7", "F82"]
 
 [tool.ruff.lint.per-file-ignores]
 # These ``src`` modules are intentional lazy facades for implementations that
@@ -369,8 +293,7 @@ module = [
 ignore_errors = true
 
 [tool.setuptools.packages.find]
-# ``lkb`` is a standalone ``src`` package which is also required by the
-# backward-compatible ``clawcodex_ext.logical_kanban`` facade at runtime.
+# ``lkb`` is a standalone ``src`` package required at runtime.
 # Include its source root in the main distribution; otherwise an editable or
 # wheel install of ClawCodex fails during CLI bootstrap with
 # ``ModuleNotFoundError: No module named 'lkb'``.
@@ -378,9 +301,13 @@ where = [".", "extensions/lkb/src"]
 # TODO: 正式发布前将 "telemetry*" 从 include 中去除，
 #       使 telemetry 包外置为独立可选的 pip install 依赖，
 #       不作为 clawcodex 主包的强制组成部分。
-include = ["src*", "clawcodex_ext*", "extensions*", "lkb*", "telemetry*"]
+include = ["src*", "clawcodex_ext*", "extensions*", "telemetry*", "lkb*"]
 exclude = [
     "src/upstream*",
+    # ``extensions/lkb/src`` is also a package-discovery root. Exclude
+    # its accidental namespace spelling so the same sources are shipped
+    # only as the intended top-level ``lkb`` package.
+    "extensions.lkb.src.lkb*",
 ]
 
 [tool.setuptools.package-data]

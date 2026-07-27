@@ -36,6 +36,59 @@ class StopHookResult:
     prevent_continuation: bool = False
 
 
+def _owned_in_progress_tasks(
+    tool_use_context: Any,
+    *,
+    agent_id: str | None,
+    teammate_name: str | None,
+) -> list[dict[str, Any]]:
+    """Return active Task-v2 work owned by the stopping subagent.
+
+    LKB hydrates its Store projection into ``context.tasks`` after every
+    Task-v2 operation, so this check covers both native Task-v2 and LKB-backed
+    tasks without importing LKB internals into the query loop.
+    """
+
+    if not agent_id:
+        return []
+    identities = {
+        identity for identity in (agent_id, teammate_name) if isinstance(identity, str) and identity
+    }
+    try:
+        task_map = getattr(tool_use_context, "tasks", {}) or {}
+        return [
+            task
+            for task in list(task_map.values())
+            if isinstance(task, dict)
+            and task.get("status") == "in_progress"
+            and task.get("owner") in identities
+        ]
+    except Exception:  # noqa: BLE001 - exit review must never crash the loop
+        logger.debug("failed to inspect subagent-owned tasks at stop", exc_info=True)
+        return []
+
+
+def _owner_exit_review_message(tasks: list[dict[str, Any]]) -> str:
+    shown = tasks[:10]
+    task_lines = [
+        f"- {task.get('id', '<unknown>')}: {task.get('subject') or '<untitled>'}" for task in shown
+    ]
+    if len(tasks) > len(shown):
+        task_lines.append(f"- ... and {len(tasks) - len(shown)} more")
+    return "\n".join(
+        [
+            "You are about to exit while still owning in-progress tasks:",
+            *task_lines,
+            "",
+            "Review each task with TaskGet before ending this agent loop. "
+            "If the work is complete, mark it completed with TaskUpdate. "
+            "If it is incomplete or must be handed back, atomically return it "
+            'to the queue with TaskUpdate status="pending", owner="", and a '
+            "reason. Do not leave a task RUNNING under an agent that is exiting.",
+        ]
+    )
+
+
 async def handle_stop_hooks(
     messages_for_query: list[Message],
     assistant_messages: list[AssistantMessage],
@@ -109,9 +162,7 @@ async def _handle_stop_hooks_generator(
         # Gate on the SAME event the executor will dispatch (SubagentStop
         # when agent_id is set, hook_executor.py:561) — gating on "Stop"
         # alone silently disables SubagentStop-only configurations.
-        core_gate = has_hook_for_event(
-            "SubagentStop" if agent_id else "Stop", tool_use_context
-        )
+        core_gate = has_hook_for_event("SubagentStop" if agent_id else "Stop", tool_use_context)
         # QUERY-1 — teammate identity gate (stopHooks.ts:335): both fields
         # required (teammate.ts:125-131). The teammate block must run even
         # when NO Stop/SubagentStop hooks are configured, so the early
@@ -123,7 +174,19 @@ async def _handle_stop_hooks_generator(
             has_hook_for_event("TaskCompleted", tool_use_context)
             or has_hook_for_event("TeammateIdle", tool_use_context)
         )
-        if not core_gate and not teammate_gate:
+        # ``agent_id`` is also used by some long-lived/main AgentLoop
+        # integrations. Only Agent-tool child loops use the ``agent:*``
+        # query-source namespace and become unreachable when this query
+        # returns.
+        is_subagent_query = query_source.startswith("agent:")
+        owner_exit_gate = is_subagent_query and bool(
+            _owned_in_progress_tasks(
+                tool_use_context,
+                agent_id=agent_id,
+                teammate_name=teammate_name,
+            )
+        )
+        if not core_gate and not teammate_gate and not owner_exit_gate:
             return
 
         blocking_errors: list[Message] = []
@@ -157,10 +220,12 @@ async def _handle_stop_hooks_generator(
                             hook_count += 1
                         progress_data = getattr(msg, "data", None)
                         if isinstance(progress_data, dict) and progress_data.get("command"):
-                            hook_infos.append(StopHookInfo(
-                                command=progress_data["command"],
-                                prompt_text=progress_data.get("prompt_text"),
-                            ))
+                            hook_infos.append(
+                                StopHookInfo(
+                                    command=progress_data["command"],
+                                    prompt_text=progress_data.get("prompt_text"),
+                                )
+                            )
 
                     if hasattr(msg, "type") and msg.type == "attachment":
                         attachments = getattr(msg, "attachments", [])
@@ -170,17 +235,17 @@ async def _handle_stop_hooks_generator(
                                 att_type = attachment.get("type", "")
                                 if att_type == "hook_non_blocking_error":
                                     hook_errors.append(
-                                        attachment.get("stderr") or f"Exit code {attachment.get('exit_code')}"
+                                        attachment.get("stderr")
+                                        or f"Exit code {attachment.get('exit_code')}"
                                     )
                                     has_output = True
                                 elif att_type == "hook_error_during_execution":
                                     hook_errors.append(attachment.get("content", ""))
                                     has_output = True
                                 elif att_type == "hook_success":
-                                    if (
-                                        (attachment.get("stdout") or "").strip()
-                                        or (attachment.get("stderr") or "").strip()
-                                    ):
+                                    if (attachment.get("stdout") or "").strip() or (
+                                        attachment.get("stderr") or ""
+                                    ).strip():
                                         has_output = True
 
                 if hook_result.get("blocking_error"):
@@ -201,14 +266,18 @@ async def _handle_stop_hooks_generator(
 
                 if hook_result.get("prevent_continuation"):
                     prevented_continuation = True
-                    stop_reason = hook_result.get("stop_reason") or "Stop hook prevented continuation"
-                    yield create_attachment_message({
-                        "type": "hook_stopped_continuation",
-                        "message": stop_reason,
-                        "hook_name": "Stop",
-                        "tool_use_id": stop_hook_tool_use_id,
-                        "hook_event": "Stop",
-                    })
+                    stop_reason = (
+                        hook_result.get("stop_reason") or "Stop hook prevented continuation"
+                    )
+                    yield create_attachment_message(
+                        {
+                            "type": "hook_stopped_continuation",
+                            "message": stop_reason,
+                            "hook_name": "Stop",
+                            "tool_use_id": stop_hook_tool_use_id,
+                            "hook_event": "Stop",
+                        }
+                    )
 
                 if abort_ctrl and abort_ctrl.signal.aborted:
                     yield create_user_interruption_message(tool_use=False)
@@ -220,7 +289,11 @@ async def _handle_stop_hooks_generator(
                 yield create_stop_hook_summary_message(
                     hook_count=hook_count,
                     hook_infos=[
-                        {"command": h.command, "prompt_text": h.prompt_text, "duration_ms": h.duration_ms}
+                        {
+                            "command": h.command,
+                            "prompt_text": h.prompt_text,
+                            "duration_ms": h.duration_ms,
+                        }
                         for h in hook_infos
                     ],
                     hook_errors=hook_errors,
@@ -279,16 +352,17 @@ async def _handle_stop_hooks_generator(
                     if result.get("prevent_continuation"):
                         teammate_prevented = True
                         teammate_stop_reason = (
-                            result.get("stop_reason")
-                            or f"{event_name} hook prevented continuation"
+                            result.get("stop_reason") or f"{event_name} hook prevented continuation"
                         )
-                        yield create_attachment_message({
-                            "type": "hook_stopped_continuation",
-                            "message": teammate_stop_reason,
-                            "hook_name": event_name,
-                            "tool_use_id": teammate_tool_use_id,
-                            "hook_event": event_name,
-                        })
+                        yield create_attachment_message(
+                            {
+                                "type": "hook_stopped_continuation",
+                                "message": teammate_stop_reason,
+                                "hook_name": event_name,
+                                "tool_use_id": teammate_tool_use_id,
+                                "hook_event": event_name,
+                            }
+                        )
                     if abort_ctrl and abort_ctrl.signal.aborted:
                         result_out.blocking_errors = []
                         result_out.prevent_continuation = True
@@ -309,7 +383,8 @@ async def _handle_stop_hooks_generator(
                     # the sync-only invariant for teammate boards is
                     # documented at the sharing site (subagent_context).
                     owned = [
-                        t for t in list(task_map.values())
+                        t
+                        for t in list(task_map.values())
                         if isinstance(t, dict)
                         and t.get("status") == "in_progress"
                         and t.get("owner") == teammate_name
@@ -338,7 +413,9 @@ async def _handle_stop_hooks_generator(
             if has_hook_for_event("TeammateIdle", tool_use_context):
                 async for msg in _drive(
                     execute_teammate_idle_hooks(
-                        teammate_name, team_name, tool_use_context,
+                        teammate_name,
+                        team_name,
+                        tool_use_context,
                         permission_mode=permission_mode,
                     ),
                     "TeammateIdle",
@@ -356,6 +433,32 @@ async def _handle_stop_hooks_generator(
                 result_out.blocking_errors = teammate_blocking_errors
                 result_out.prevent_continuation = False
                 return
+
+        # A plain Agent spawn is not a Claude Code "teammate", so it does
+        # not enter the TaskCompleted/TeammateIdle hook branch above. Still,
+        # Task-v2/LKB permits that subagent to claim work. A natural exit
+        # with an active claim would strand the task under an identity whose
+        # loop is gone. Re-read the local projection after configured hooks
+        # and inject blocking feedback until the owner explicitly completes
+        # or returns every active task.
+        owned_in_progress = (
+            _owned_in_progress_tasks(
+                tool_use_context,
+                agent_id=agent_id,
+                teammate_name=teammate_name,
+            )
+            if is_subagent_query
+            else []
+        )
+        if owned_in_progress:
+            review_message = create_user_message(
+                content=_owner_exit_review_message(owned_in_progress),
+                isMeta=True,
+            )
+            result_out.blocking_errors = [review_message]
+            result_out.prevent_continuation = False
+            yield review_message
+            return
 
     except Exception as error:
         duration_ms = int((time.time() - hook_start_time) * 1000)

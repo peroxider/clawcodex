@@ -113,6 +113,8 @@ class AgentBridge:
         self._goal_active_since: float | None = None
         self._busy_lock = threading.Lock()
         self._busy = False
+        self._idle = threading.Event()
+        self._idle.set()
         # Runtime permission controller — the unified chokepoint for
         # Shift+Tab cycles. Stored on the bridge so ``replace_runtime``
         # can rewire it if the tool context is swapped mid-session.
@@ -451,6 +453,7 @@ class AgentBridge:
                 return False
             self._busy = True
             self._set_in_agent_loop(True)
+            self._idle.clear()
             self._abort_controller = AbortController()
             ## _log(f'[agent_bridge] acquired busy lock')
             # Plumb the controller onto the tool context BEFORE we spawn
@@ -566,6 +569,12 @@ class AgentBridge:
             return False
         controller.abort(reason)
         return True
+
+    def shutdown(self, *, timeout: float = 2.0) -> bool:
+        """Cancel the foreground run and wait briefly for its worker."""
+
+        self.cancel("session_exit")
+        return self._idle.wait(max(0.0, timeout))
 
     # ---- worker implementation ----
     def _run_agent_in_thread(self) -> None:
@@ -846,6 +855,7 @@ class AgentBridge:
             # reading the context field, so replacing here doesn't
             # orphan them either.
             self._tool_context.abort_controller = AbortController()
+            self._idle.set()
         # Signal the UI to drain any queued prompts.  The check is a
         # best-effort filter — the UI handler re-verifies on the UI
         # thread, so a spurious post (e.g. the queue was cleared by

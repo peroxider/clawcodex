@@ -517,8 +517,8 @@ async def _run_query_as_agent_loop_impl(
     # ch05 round-4 GAP B — the '+500k' auto-continue budget parsed from
     # the user's prompt (query/token_budget.parse_token_budget).
     token_budget: int | None = None,
-    # Plan-mode port — persistence hook for injected conversation
-    # attachments (plan_mode / plan_mode_exit system reminders). Unlike
+    # Persistence hook for injected conversation attachments (plan_mode /
+    # plan_mode_exit / task-reminder system reminders). Unlike
     # ``on_message`` (which persists AND emits an SDK envelope — rendering
     # the attachment as user text in the TUI), this callback must persist
     # ONLY (agent-server: session.conversation.add_message; headless: its
@@ -696,6 +696,8 @@ async def _run_query_as_agent_loop_impl(
             # callback raising AbortError from inside the SDK stream.
             on_text_chunk=on_text_chunk,
             on_thinking_chunk=on_thinking_chunk,
+            on_attachment=on_attachment,
+            task_reminder_enabled=memory_recall_enabled,
         )
 
     response_text_parts: list[str] = []

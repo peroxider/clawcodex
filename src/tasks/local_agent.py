@@ -18,6 +18,7 @@ treats ``runtime_tasks.update`` as the single atomic-mutation
 primitive — the A6/C5 contract (mutator must be sync; never await
 under the registry lock) is honored throughout.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -243,6 +244,7 @@ def update_agent_progress(
     if a background-summarization service has set one — the per-message
     progress update should not clobber the summary text.
     """
+
     def _set(prev: TaskStateBase) -> TaskStateBase:
         if not isinstance(prev, LocalAgentTaskState):
             return prev
@@ -298,6 +300,7 @@ def complete_agent_task(
     registry: "RuntimeTaskRegistry",
 ) -> None:
     """Flip status to ``completed``, stash the final text, schedule eviction."""
+
     def _complete(prev: TaskStateBase) -> TaskStateBase:
         if not isinstance(prev, LocalAgentTaskState):
             return prev
@@ -315,6 +318,7 @@ def fail_agent_task(
     registry: "RuntimeTaskRegistry",
 ) -> None:
     """Flip status to ``failed``, record error, schedule eviction."""
+
     def _fail(prev: TaskStateBase) -> TaskStateBase:
         if not isinstance(prev, LocalAgentTaskState):
             return prev
@@ -384,6 +388,7 @@ def kill_async_agent(
             aborted_controller.abort("killed by user")
         except Exception:
             import logging
+
             logging.getLogger(__name__).exception(
                 "failed to abort run for killed agent %s", task_id
             )
@@ -394,6 +399,7 @@ def kill_async_agent(
             aborted_event.set()
         except Exception:
             import logging
+
             logging.getLogger(__name__).exception(
                 "failed to set abort event for killed agent %s", task_id
             )
@@ -432,9 +438,7 @@ class LocalAgentTask:
     name: str = "LocalAgentTask"
     type: Literal["local_agent"] = "local_agent"
 
-    async def kill(
-        self, task_id: str, registry: "RuntimeTaskRegistry"
-    ) -> None:
+    async def kill(self, task_id: str, registry: "RuntimeTaskRegistry") -> None:
         kill_async_agent(task_id, registry)
 
 

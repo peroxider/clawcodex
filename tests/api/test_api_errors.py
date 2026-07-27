@@ -14,6 +14,7 @@ from clawcodex_ext.services.api.errors import (
     PromptTooLongError,
     RateLimitError,
     categorize_retryable_api_error,
+    is_api_timeout_error,
     is_image_unsupported_error,
     is_invalid_api_key,
     is_media_size_error,
@@ -235,6 +236,23 @@ class TestCategorizeRetryableApiError(unittest.TestCase):
         result = categorize_retryable_api_error(ConnectionError("reset"))
         self.assertTrue(result.retryable)
         self.assertEqual(result.error_type, "connection_error")
+
+    def test_local_api_timeout_retryable(self) -> None:
+        result = categorize_retryable_api_error(APITimeoutError())
+        self.assertTrue(result.retryable)
+        self.assertEqual(result.error_type, "timeout")
+
+    def test_openai_sdk_timeout_retryable(self) -> None:
+        # The OpenAI SDK wrapper does not inherit built-in TimeoutError.
+        # Keep this test independent of the installed SDK version while
+        # preserving the provider exception's runtime class name.
+        sdk_timeout_type = type("APITimeoutError", (Exception,), {})
+        error = sdk_timeout_type("Request timed out.")
+        self.assertTrue(is_api_timeout_error(error))
+
+        result = categorize_retryable_api_error(error)
+        self.assertTrue(result.retryable)
+        self.assertEqual(result.error_type, "timeout")
 
     def test_unknown_error_not_retryable(self) -> None:
         result = categorize_retryable_api_error(ValueError("bad value"))

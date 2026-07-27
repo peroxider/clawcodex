@@ -14,11 +14,13 @@ from .bash import BashTool
 from .brief import BriefTool
 from .config import ConfigTool
 from .cron import CronCreateTool, CronDeleteTool, CronListTool
+
 # F-120 Agent Dashboard — read-only observability tools.
 from extensions.agent_dashboard.tools import (
     DashboardGetTool,
     DashboardListTool,
 )
+from lkb.clawcodex_tool import LkbTool
 from .edit import EditTool
 from .execute import ExecuteTool
 from .glob import GlobTool
@@ -49,7 +51,6 @@ from .tasks_v2 import (
     TaskOutputTool,
     TaskUpdateTool,
 )
-from .task_decompose import TaskDecomposeTool
 from .team import TeamCreateTool, TeamDeleteTool
 from .team_memory import TeamMemoryTool
 from .todo_write import TodoWriteTool
@@ -82,6 +83,7 @@ ALL_STATIC_TOOLS: list[Tool] = [
     GlobTool,
     GrepTool,
     LSPTool,
+    LkbTool,
     ListMcpResourcesTool,
     MCPTool,
     MonitorTool,
@@ -106,7 +108,6 @@ ALL_STATIC_TOOLS: list[Tool] = [
     # unvalidated one exposed interactively was a footgun — its output
     # dead-ends in outbox with no consumer (tools-round critic, C6).
     TaskCreateTool,
-    TaskDecomposeTool,
     TaskGetTool,
     TaskListTool,
     TaskOutputTool,
@@ -145,6 +146,7 @@ __all__ = [
     "GlobTool",
     "GrepTool",
     "LSPTool",
+    "LkbTool",
     "ListMcpResourcesTool",
     "MCPTool",
     "MonitorTool",
@@ -164,7 +166,6 @@ __all__ = [
     "MonitorTool",
     "StructuredOutputTool",
     "TaskCreateTool",
-    "TaskDecomposeTool",
     "TaskGetTool",
     "TaskListTool",
     "TaskOutputTool",

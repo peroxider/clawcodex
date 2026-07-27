@@ -123,7 +123,19 @@ class TestFilterToolsForAgent:
 
     def test_async_whitelist_only(self):
         """Async agents only get ASYNC_AGENT_ALLOWED_TOOLS."""
-        tools = _make_tools("Read", "Write", "Grep", "Bash", "Config", "Sleep")
+        tools = _make_tools(
+            "Read",
+            "Write",
+            "Grep",
+            "Bash",
+            "TaskCreate",
+            "TaskGet",
+            "TaskList",
+            "TaskUpdate",
+            "Lkb",
+            "Config",
+            "Sleep",
+        )
 
         result = filter_tools_for_agent(
             tools=tools,
@@ -134,6 +146,14 @@ class TestFilterToolsForAgent:
         names = {t.name for t in result}
         for name in names:
             assert name in ASYNC_AGENT_ALLOWED_TOOLS, f"{name} should not be in async whitelist"
+        assert {
+            "TaskCreate",
+            "TaskGet",
+            "TaskList",
+            "TaskUpdate",
+            "Lkb",
+        } <= names
+        assert {"Config", "Sleep"}.isdisjoint(names)
 
     def test_async_mcp_still_allowed(self):
         """MCP tools pass even for async agents."""

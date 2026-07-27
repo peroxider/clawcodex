@@ -499,6 +499,42 @@ async def test_adapter_send_throttles_consecutive_sendmessage_calls(tmp_path, mo
 
 
 @pytest.mark.asyncio
+async def test_adapter_reply_after_inbound_uses_monotonic_delay(tmp_path, monkeypatch) -> None:
+    adapter, _, transport = _make_adapter(tmp_path)
+    sleeps: list[float] = []
+    clock = {"monotonic": 100.0, "wall": 1_800_000_000.0}
+
+    def _monotonic() -> float:
+        return clock["monotonic"]
+
+    async def _sleep(delay: float) -> None:
+        sleeps.append(delay)
+        clock["monotonic"] += delay
+
+    monkeypatch.setattr(wechat_module.time, "monotonic", _monotonic)
+    monkeypatch.setattr(wechat_module.time, "time", lambda: clock["wall"])
+    monkeypatch.setattr(wechat_module.asyncio, "sleep", _sleep)
+    transport.inbound_queue = [
+        {
+            "msg_id": "m1",
+            "from_user_id": "u1",
+            "to_user_id": "bot",
+            "msg_type": "TEXT",
+            "text": "hello",
+        }
+    ]
+    adapter.set_inbound_handler(lambda _message: _noop())
+
+    await adapter._poll_once()
+    result = await adapter.send(ChannelMessage(text="reply"), target="u1")
+
+    assert result.ok is True
+    assert sleeps == [1.0]
+    assert adapter._last_inbound_at == clock["wall"]
+    assert len(transport.sent) == 1
+
+
+@pytest.mark.asyncio
 async def test_adapter_long_text_chunks_are_throttled_between_sendmessage_calls(
     tmp_path, monkeypatch
 ) -> None:
@@ -648,10 +684,8 @@ async def test_adapter_send_requires_target(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_adapter_send_session_expired_marks_session_expired_without_tokenless_retry(
-    tmp_path,
-) -> None:
-    """When iLink reports session expiry, mark as session_expired and return AUTH error."""
+async def test_adapter_send_session_expired_retries_without_context_token(tmp_path) -> None:
+    """A stale peer context is evicted and retried once without invalidating bot auth."""
     transport = FakeIlinkTransport()
     _call_count = {"n": 0}
     _original_post = transport.post
@@ -673,19 +707,20 @@ async def test_adapter_send_session_expired_marks_session_expired_without_tokenl
     transport.post = _sequential_post  # type: ignore[assignment]
 
     adapter, store, _ = _make_adapter(tmp_path, transport=transport)
+    adapter._send_min_interval_seconds = 0
     # Store a context_token for the target user
     store.set_context_token("default", "u1", "stale_token_abc")
 
     result = await adapter.send(ChannelMessage(text="hello"), target="u1")
     second = await adapter.send(ChannelMessage(text="again"), target="u1")
 
-    assert result.ok is False
-    assert result.error_category is ErrorCategory.AUTH
-    assert adapter._account_status == "session_expired"
-    assert second.ok is False
-    assert second.error_category is ErrorCategory.AUTH
-    assert len(sent_payloads) == 1
+    assert result.ok is True
+    assert adapter._account_status == "logged_in"
+    assert second.ok is True
+    assert len(sent_payloads) == 3
     assert sent_payloads[0].get("context_token") == "stale_token_abc"
+    assert "context_token" not in sent_payloads[1]
+    assert "context_token" not in sent_payloads[2]
     assert store.get_context_token("default", "u1") is None
 
 
@@ -1075,7 +1110,7 @@ async def test_getupdates_generic_platform_error_records_failure(tmp_path) -> No
 @pytest.mark.asyncio
 async def test_sendmessage_session_expired_raises_for_adapter_retry(tmp_path) -> None:
     """Session-expired errors are re-raised (not returned) so the adapter
-    can evict the stale context_token and enter cooldown without tokenless retry."""
+    can evict the stale context_token and perform the tokenless retry."""
     from clawcodex_ext.services.channels.wechat_ilink import _IlinkPlatformError
 
     transport = FakeIlinkTransport()

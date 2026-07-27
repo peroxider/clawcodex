@@ -527,7 +527,7 @@ class WeChatIlinkClient:
             )
         except _IlinkPlatformError as exc:
             # Session-expired errors are re-raised so the adapter can evict
-            # stale context and enter cooldown without tokenless retry.
+            # stale per-recipient context and retry once without the token.
             if exc.is_session_expired:
                 raise
             # Rate-limit is retryable; anything else is a terminal platform error.
@@ -721,6 +721,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         self._last_error: str | None = None
         self._last_poll_at: float | None = None
         self._last_inbound_at: float | None = None
+        self._last_inbound_monotonic: float | None = None
         self._last_outbound_at: float | None = None
         self._send_lock = asyncio.Lock()
         self._last_sendmessage_at: float | None = None
@@ -728,7 +729,6 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         self._send_window_seconds = WECHAT_SEND_WINDOW_SECONDS
         self._send_window_max_messages = WECHAT_SEND_WINDOW_MAX_MESSAGES
         self._send_window_attempts: deque[float] = deque()
-        self._last_inbound_at: float | None = None
         self._send_rate_limit_retries = 0
         # Send-side circuit breaker (hermes _rate_limit_events / _rate_limit_circuit_until).
         self._send_rate_limit_events: list[float] = []
@@ -1257,7 +1257,11 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         # Track the most recent real sender for wildcard OUTBOUND resolution.
         if msg.from_user_id:
             self._last_from_user_id = msg.from_user_id
-        self._last_inbound_at = time.monotonic()
+        # Keep wall-clock time for health/diagnostics and monotonic time for
+        # elapsed-time throttling. Mixing the two makes the post-inbound delay
+        # look decades long and leaves replies pending indefinitely.
+        self._last_inbound_at = time.time()
+        self._last_inbound_monotonic = time.monotonic()
         # persist context_token
         if msg.context_token:
             self._store.set_context_token(self._account_id, msg.from_user_id, msg.context_token)
@@ -1282,7 +1286,6 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
             # inbound via asyncio.create_task so send latency never gates poll.
             asyncio.create_task(self._reply_unsupported(msg))
             return
-        self._last_inbound_at = time.time()
         logger.info(
             "wechat inbound → dispatcher: from=%s msg_id=%s",
             _safe_id(msg.from_user_id),
@@ -1347,8 +1350,8 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
                     await asyncio.sleep(window_retry_after)
                 # Delay after a recent inbound to avoid instant auto-reply that
                 # triggers WeChat's anti-spam heuristics.
-                if self._last_inbound_at is not None:
-                    since_inbound = time.monotonic() - self._last_inbound_at
+                if self._last_inbound_monotonic is not None:
+                    since_inbound = time.monotonic() - self._last_inbound_monotonic
                     inbound_delay = WECHAT_INBOUND_TO_OUTBOUND_DELAY_SECONDS - since_inbound
                     if inbound_delay > 0:
                         await asyncio.sleep(inbound_delay)
@@ -1443,8 +1446,8 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
             ""
         ]
         last: ChannelSendResult | None = None
+        retried_without_context = False
         for chunk in chunks:
-            # Session-expired sends enter cooldown; no tokenless retry.
             while True:
                 try:
                     result = await self._sendmessage_throttled(
@@ -1476,14 +1479,21 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
                     break
                 except (_IlinkPlatformError, TransportError) as exc:
                     if isinstance(exc, _IlinkPlatformError) and exc.is_session_expired:
-                        self._store.set_context_token(self._account_id, target, None)
-                        self._mark_session_expired(
-                            "wechat session expired during sendmessage; re-scan required",
-                            reason="session_expired",
-                        )
+                        if context_token and not retried_without_context:
+                            retried_without_context = True
+                            context_token = None
+                            self._store.set_context_token(self._account_id, target, None)
+                            logger.warning(
+                                "wechat send context expired for %s; retrying without context_token",
+                                _safe_id(target),
+                            )
+                            continue
+                        # A send context is scoped to the peer and does not
+                        # invalidate the bot login. Polling remains active and
+                        # can obtain a fresh context token on the next inbound.
                         last = ChannelSendResult.nonretryable_error(
                             self.channel_id,
-                            message="wechat session expired; re-scan required",
+                            message="wechat message context expired",
                             category=ErrorCategory.AUTH,
                         )
                     else:

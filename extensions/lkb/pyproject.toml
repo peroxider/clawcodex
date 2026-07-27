@@ -4,30 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lkb"
-version = "0.1.0"
-description = "Logical Kanban Boards — formal task decomposition with rule engines and ATP solvers"
+version = "0.2.0"
+description = "Persistent Plan Graph runtime for ClawCodex TaskV2"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 authors = [
     {name = "Claw Codex Team"},
 ]
-keywords = ["task-decomposition", "rule-engine", "atp-solver", "task-kanban"]
+keywords = ["plan-graph", "task-management", "kanban"]
+dependencies = []
 
-dependencies = [
-    # 核心算法无外部依赖（仅 stdlib）
-]
-
-[project.optional-dependencies]
-# 可选 ATP 求解器后端（F-142）
-prover9 = ["prover9-py>=0.0.5"]
-z3 = ["z3-solver>=4.12"]
-clingo = ["clingo>=5.6"]
-# 可选 clawcodex 集成（feature_gate / ToolContext）
-clawcodex = []
-
-[project.scripts]
-lkb = "lkb.cli.main:main"
-
-[project.entry-points.mcp_servers]
-lkb = "lkb.mcp.server:create_server"
+[tool.setuptools.packages.find]
+where = ["src"]

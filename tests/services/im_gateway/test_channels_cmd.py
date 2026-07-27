@@ -883,9 +883,8 @@ def test_wizard_add_feishu_websocket_defaults_to_scan_and_skips_webhook_fields(
     assert "allowed user" not in text
     assert "ws reconnect" not in text
     assert "渠道名称" not in text
-    assert "clawcodex-dev gateway restart" in text
-    assert text.count("clawcodex-dev gateway restart") == 1
-    assert "clawcodex-dev gateway restart feishu" not in text
+    assert "gateway 将自动重启" in text
+    assert text.count("gateway 将自动重启") == 1
 
 
 def test_wizard_add_feishu_webhook_mode_prompts_webhook_url(tmp_path, monkeypatch) -> None:
@@ -930,9 +929,7 @@ def test_wizard_edit_feishu_toggle_enabled(tmp_path, monkeypatch) -> None:
     assert listed[0]["enabled"] is False
 
 
-def test_wizard_add_feishu_websocket_enforces_v1_single_active_inbound(
-    tmp_path, monkeypatch, capsys
-) -> None:
+def test_wizard_add_feishu_websocket_keeps_wechat_enabled(tmp_path, monkeypatch) -> None:
     p = tmp_path / "channels.yaml"
     ch.add_channel(str(p), ch.build_default_channel("wechat"))
     monkeypatch.setattr(ch, "_feishu_dependencies_available", lambda: True)
@@ -953,9 +950,8 @@ def test_wizard_add_feishu_websocket_enforces_v1_single_active_inbound(
     from clawcodex_ext.services.im_gateway.config import load_config
 
     cfg = load_config(str(p))
-    assert cfg.get_channel("wechat").enabled is False
+    assert cfg.get_channel("wechat").enabled is True
     assert cfg.get_channel("feishu").enabled is True
-    assert "单活" in capsys.readouterr().out
 
 
 def test_format_status_feishu_reports_runtime_health_and_approval_support(
@@ -1124,7 +1120,7 @@ def test_wizard_edit_feishu_scan_login_updates_allowed_user(tmp_path, monkeypatc
     assert "bot_open_id" not in channel.extra
     assert not sender_state.exists()
     output = capsys.readouterr().out
-    assert output.count("clawcodex-dev gateway restart") == 1
+    assert output.count("Gateway 将自动重启") == 1
 
 
 # -- new arrow-key wizard flow (plan: gateway-setup-arrow-key-menu) ---------

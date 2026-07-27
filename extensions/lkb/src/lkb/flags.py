@@ -1,4 +1,4 @@
-"""LKB feature flags with graceful fallback to clawcodex_ext.feature_gate."""
+"""The single LKB feature flag with a host-optional fallback."""
 
 from __future__ import annotations
 
@@ -8,9 +8,8 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-FEATURE_NAME = "logical_kanban"
-CAUSAL_FEATURE_NAME = "LKB_CAUSAL"
-LLM_FACTS_FEATURE_NAME = "LKB_LLM_FACTS"
+PLAN_GRAPH_FEATURE_NAME = "LKB_PLAN_GRAPH"
+
 
 # LKB 内置简化版 FeatureRegistry — 仅支持 env 变量 + 默认值。
 # 不支持 deps/mutex/config persistence（lkb 用不到），保持最小实现。
@@ -38,11 +37,7 @@ class _LkbRegistry:
 
 
 _LKB_REGISTRY = _LkbRegistry()
-for _flag in (
-    _LkbFeatureFlag(FEATURE_NAME, default=True),
-    _LkbFeatureFlag(CAUSAL_FEATURE_NAME, default=False),
-    _LkbFeatureFlag(LLM_FACTS_FEATURE_NAME, default=False),
-):
+for _flag in (_LkbFeatureFlag(PLAN_GRAPH_FEATURE_NAME, default=False),):
     _LKB_REGISTRY.register(_flag)
 
 
@@ -57,26 +52,12 @@ def _try_clawcodex_feature_gate():
         return None
 
 
-def is_logical_kanban_enabled() -> bool:
+def is_plan_graph_enabled() -> bool:
+    """Return whether the persistent Plan Graph owns Task-v2 state."""
     claw_reg = _try_clawcodex_feature_gate()
     if claw_reg is not None:
-        return claw_reg.is_enabled(FEATURE_NAME)
-    return _LKB_REGISTRY.is_enabled(FEATURE_NAME)
+        return claw_reg.is_enabled(PLAN_GRAPH_FEATURE_NAME)
+    return _LKB_REGISTRY.is_enabled(PLAN_GRAPH_FEATURE_NAME)
 
 
-def is_causal_verification_enabled() -> bool:
-    if not is_logical_kanban_enabled():
-        return False
-    claw_reg = _try_clawcodex_feature_gate()
-    if claw_reg is not None:
-        return claw_reg.is_enabled(CAUSAL_FEATURE_NAME)
-    return _LKB_REGISTRY.is_enabled(CAUSAL_FEATURE_NAME)
-
-
-def is_llm_facts_enabled() -> bool:
-    if not is_logical_kanban_enabled():
-        return False
-    claw_reg = _try_clawcodex_feature_gate()
-    if claw_reg is not None:
-        return claw_reg.is_enabled(LLM_FACTS_FEATURE_NAME)
-    return _LKB_REGISTRY.is_enabled(LLM_FACTS_FEATURE_NAME)
+__all__ = ["PLAN_GRAPH_FEATURE_NAME", "is_plan_graph_enabled"]

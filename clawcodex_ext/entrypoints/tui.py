@@ -126,6 +126,7 @@ def run_tui(options: TUIOptions) -> int:
     # can defer fires during model responses.
     class _InAgentLoopFlag:
         value: bool = False
+
     tool_context._in_agent_loop = _InAgentLoopFlag()  # type: ignore[attr-defined]
     _attach_cron_to_tui(tool_context)
 
@@ -154,6 +155,10 @@ def run_tui(options: TUIOptions) -> int:
         app.run(inline=True, inline_no_clear=True, mouse=False)
     except KeyboardInterrupt:
         return 130
+    finally:
+        # Textual normally reaches ``on_unmount``. Keep a final
+        # idempotent fallback for mount failures and host interrupts.
+        app._shutdown_managed_tasks()
 
     # Print resume hint after TUI exits (S-R1).
     _print_resume_hint_after_tui(app)
@@ -264,6 +269,7 @@ def _filter_registry(registry, *, keep: Callable[[str], bool]) -> None:
 
 
 # ---- F-22-G-1: TUI cron integration ----
+
 
 def _attach_cron_to_tui(tool_context) -> None:
     """Wire cron scheduler + replace cron tools for the TUI entrypoint."""

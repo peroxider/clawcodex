@@ -20,15 +20,25 @@ container wrapper.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, Literal
+from typing import Any, Iterable, Literal, Mapping, cast
 
 from rich.text import Text
 from textual.widgets import Static
 
-from clawcodex_ext.logical_kanban.types import LkbStatus
-
-
 TaskStatus = Literal["pending", "in_progress", "completed", "cancelled", "failed"]
+
+
+@dataclass(frozen=True, slots=True)
+class LkbStatus:
+    """Minimal Plan Graph projection needed by the shared task widget."""
+
+    derived_status: str = "ready"
+    validation_result: str | None = None
+    blocked_by: tuple[str, ...] = ()
+
+    @property
+    def is_blocked(self) -> bool:
+        return self.derived_status == "blocked" or bool(self.blocked_by)
 
 
 @dataclass
@@ -63,8 +73,6 @@ _STATUS_STYLES: dict[TaskStatus, tuple[str, str, str]] = {
 _LKB_BADGE_STYLES: dict[str, tuple[str, str, str, str]] = {
     "fail": ("✗", "验证未通过", "Validation failed", "bold red"),
     "blocked": ("▣", "被阻塞", "Blocked", "bold yellow"),
-    "needs_clarify": ("?", "待澄清", "Needs clarification", "bold cyan"),
-    "stale": ("△", "假设已失效", "Stale assumption", "bold #d4943a"),
     "verified": ("✓", "已验证", "Verified", "bold green"),
     "needs_recheck": ("◎", "需复查", "Needs recheck", "dim yellow"),
 }
@@ -80,10 +88,6 @@ def _lkb_badge(lkb: LkbStatus | None) -> Text | None:
         key = "fail"
     elif lkb.is_blocked:
         key = "blocked"
-    elif lkb.has_pending_clarification:
-        key = "needs_clarify"
-    elif lkb.stale_assumptions:
-        key = "stale"
     elif lkb.validation_result == "pass":
         key = "verified"
     elif lkb.derived_status == "needs_recheck":
@@ -174,6 +178,94 @@ class TaskListWidget(Static):
             return done, total
 
         return _count(self._tasks)
+
+
+def task_from_mapping(raw: Mapping[str, Any]) -> Task:
+    """Convert a Task-v2/LKB projection into the shared TUI row model."""
+
+    task_id = str(raw.get("id") or "")
+    status_raw = str(raw.get("status") or "pending")
+    if status_raw == "deleted":
+        status_raw = "cancelled"
+    if status_raw not in _STATUS_STYLES:
+        status_raw = "pending"
+
+    lkb_raw = raw.get("lkb")
+    lkb_status: LkbStatus | None = None
+    detail_parts: list[str] = []
+    owner = raw.get("owner")
+    if isinstance(owner, str) and owner:
+        detail_parts.append(f"owner: {owner}")
+    if isinstance(lkb_raw, Mapping):
+        derived_raw = str(lkb_raw.get("derivedStatus") or "ready")
+        if derived_raw in ("blocked", "needs_recheck", "needs_review"):
+            derived = derived_raw
+        else:
+            derived = "ready"
+        validation = lkb_raw.get("validation")
+        validation_result = None
+        if derived_raw == "verified":
+            validation_result = "pass"
+        elif isinstance(validation, Mapping):
+            raw_result = validation.get("result")
+            if raw_result in ("pass", "fail", "unknown"):
+                validation_result = raw_result
+        active_blockers = lkb_raw.get("activeBlockers")
+        blockers = (
+            tuple(str(item) for item in active_blockers)
+            if isinstance(active_blockers, list)
+            else ()
+        )
+        lkb_status = LkbStatus(
+            derived_status=cast(Any, derived),
+            validation_result=cast(Any, validation_result),
+            blocked_by=blockers,
+        )
+        if derived_raw not in ("ready", "verified"):
+            detail_parts.append(f"LKB: {derived_raw}")
+
+    return Task(
+        id=task_id,
+        title=f"{task_id}  {str(raw.get('subject') or task_id)}".strip(),
+        status=cast(TaskStatus, status_raw),
+        detail=" · ".join(detail_parts),
+        lkb=lkb_status,
+    )
+
+
+class TaskProgressPanel(TaskListWidget):
+    """Persistent Task-v2 progress panel mounted above the TUI status line."""
+
+    can_focus = True
+
+    DEFAULT_CSS = """
+    TaskProgressPanel {
+        display: none;
+        padding: 0 1;
+        height: auto;
+        max-height: 10;
+        overflow-y: auto;
+        border-top: solid $panel;
+    }
+    TaskProgressPanel.-active {
+        display: block;
+    }
+    TaskProgressPanel:focus {
+        border-top: solid $accent;
+    }
+    """
+
+    def __init__(self) -> None:
+        super().__init__(tasks=[])
+
+    def set_tasks(self, tasks: Iterable[Task]) -> None:
+        super().set_tasks(tasks)
+        done, total = self.progress()
+        content = Text()
+        content.append(f"Tasks  {done}/{total}\n", style="bold")
+        content.append_text(render_task_tree(self._tasks))
+        self.update(content)
+        self.set_class(bool(self._tasks), "-active")
 
 
 class BackgroundTaskRow(Static):
@@ -308,6 +400,8 @@ __all__ = [
     "BackgroundTaskRow",
     "Task",
     "TaskListWidget",
+    "TaskProgressPanel",
     "TaskStatus",
+    "task_from_mapping",
     "render_task_tree",
 ]

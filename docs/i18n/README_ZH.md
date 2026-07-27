@@ -146,6 +146,7 @@
 - 🩹 **PR 检视意见自动修复（F-37）** —— 读取评审意见 + CI 日志，在同一分支上迭代修复
 - ✅ **验证门（F-38）** —— pre-commit / pre-push / post-sync 的 `pytest` 门禁，附 Markdown + JSON 报告
 - 🔁 **Issue 重跑（F-39）** —— `agent:retry`/`agent:follow-up`/`agent:blocked` 三个标签驱动重跑
+- 🧭 **逻辑看板（LKB）** —— 可选开启、按工作区隔离，并在现有 Task-v2 工具背后提供持久化任务图
 
 上游的 REPL、TUI、工具系统、MCP、hooks、记忆、权限、provider 层都原样保留 —— 本 fork 是接在它们之上，不替换它们。
 
@@ -335,11 +336,10 @@ clawcodex-dev orchestrator dashboard [--port 8080]
 
 ```bash
 clawcodex-dev gateway start|stop|status|restart # IM 消息网关生命周期控制
-clawcodex-dev gateway setup # IM 消息网关快速配置
+clawcodex-dev gateway setup # IM 消息网关快速配置；完成后自动重启守护进程
 
 # 飞书配置（推荐）
 uv sync --locked --extra feishu # 安装 Feishu App SDK 与终端二维码依赖；开发环境 --extra dev 已包含
-clawcodex-dev gateway restart # 首次 Feishu setup 后重启整个 gateway 守护进程
 clawcodex-dev gateway status feishu # 查看 Feishu 连接模式、健康状态和审批卡片支持
 
 # 微信配置（暂不推荐，存在主动发送消息限制）
@@ -347,7 +347,7 @@ clawcodex-dev gateway restart wechat # 重启 WeChat IM 渠道
 clawcodex-dev gateway status wechat # 查看 WeChat 登录健康状态和 REPL/orchestrator 连接状态
 ```
 
-gateway 守护进程运行且某个双向 app 渠道登录后，先正常启动 REPL 或 orchestrator，再把该运行时接入 IM 渠道。WeChat direct/private 私信或 Feishu p2p 私聊都可以驱动 agent，回复会回流到实际发送者。Feishu setup 优先使用二维码 scan-to-create 注册；扫码拒绝、过期或无法完成时，会回退到手动填写应用凭证。首次配置 Feishu 后，请重启整个 gateway 守护进程，让 Feishu SDK 在新进程中加载。
+gateway 守护进程运行且某个双向 app 渠道登录后，先正常启动 REPL 或 orchestrator，再把该运行时接入 IM 渠道。WeChat direct/private 私信或 Feishu p2p 私聊都可以驱动 agent，回复会回流到实际发送者。Feishu setup 优先使用二维码 scan-to-create 注册；扫码拒绝、过期或无法完成时，会回退到手动填写应用凭证。setup 向导正常退出后会自动重启整个 gateway 守护进程，让所有渠道变更在新进程中加载。
 
 处理飞书消息期间，ClawCodex 会在原消息上添加 `Typing` 表情回应；成功或取消时删除，失败时替换为 `CrossMark`。可设置 `FEISHU_REACTIONS=false`，或把飞书 channel 的 `extra.reactions` 设为 `false` 来关闭。手动创建的飞书应用需要授予“发送、删除消息表情回复”权限（`im:message.reactions:write_only`）。
 
@@ -373,7 +373,7 @@ clawcodex-dev orchestrator server connect-gateway
 clawcodex-dev orchestrator server disconnect-gateway
 ```
 
-启动时的 `--gateway` 与运行期连接都会默认绑定当前活跃双向 IM app 渠道下的所有 direct/private 发送者。同一时间只有一个运行域能拥有该渠道：连接 REPL 会断开 orchestrator 绑定，连接 orchestrator 会断开 REPL 绑定。V1 只支持一个活跃双向 app 渠道（`wechat` 或 Feishu WebSocket）；启用 Feishu WebSocket 时，`gateway setup` 会停用其它 inbound app 渠道。Legacy Feishu/Slack/Discord webhook 仍是 outbound-only。`CLAWCODEX_GATEWAY_SOCK` 可覆盖 daemon socket；特定 origin 绑定仅保留给定向调试或未来多 origin 自动化。
+启动时的 `--gateway` 与运行期连接都会默认绑定所有已启用双向 IM app 渠道下的 direct/private 发送者，WeChat 与 Feishu WebSocket 可以同时运行。同一时间只有一个运行域能拥有这组共享绑定：连接 REPL 会断开 orchestrator 绑定，连接 orchestrator 会断开 REPL 绑定。Legacy Feishu/Slack/Discord webhook 仍是 outbound-only。`CLAWCODEX_GATEWAY_SOCK` 可覆盖 daemon socket；特定 origin 绑定仅保留给定向调试或未来多 origin 自动化。
 
 **命令控制：**
 
@@ -428,6 +428,62 @@ clawcodex-dev coordinator team delete --name build-team
 
 ---
 
+### 逻辑看板（LKB）
+
+> **当前状态：**实验性功能，需要显式开启；所需的 Feature Flag 默认处于关闭状态。
+
+LKB 保留模型原本看到的 Task-v2 工具名称。持久化 Plan Graph 模式生效后，宿主适配器会把受支持的 Task-v2 调用路由到工作区 Graph Store 内“当前会话绑定的 Plan”，而不再把会话内的原生任务字典作为权威存储。
+
+- 开启 LKB **不会**强制模型创建任务计划，Agent 仍然需要主动调用 Task 工具。
+- 交互式 REPL/TUI 默认提供 Task-v2。Headless/SDK 会话默认改用`TodoWrite`；开启 `LKB_PLAN_GRAPH` 会在 headless 会话中自动同时启用 Task-v2 工具面，因此 headless 下使用 LKB 只需这一个开关，不再需要设置`CLAUDE_CODE_ENABLE_TASKS=1`（但它仍可以单独强制启用 Task-v2）。`TodoWrite` 本身不使用持久化 Plan Graph。
+- 后台 Agent 会在父运行时具备对应工具时获得 `TaskCreate`、`TaskGet`、`TaskList`、`TaskUpdate` 和 `Lkb`。查询执行器还会在调用共享 Registry 前再次校验每个 Agent 经过过滤的工具集。
+- Textual TUI 会在状态栏上方固定挂载任务进度面板，并在 Task、Agent 和 Lkb 返回后刷新。会话进行期间，它还会周期性从 Graph Store 重新加载当前 Plan 投影，因此子 Agent 在独立上下文中完成的进度也会显示在固定面板中。
+
+**开启 LKB：**
+
+在交互式会话中，也可以直接运行不带参数的 `/lkb`：它会打开一个交互式 on/off 选择菜单（类似 `/effort`），显示当前状态；按 Enter 切换开关并持久化选择结果。
+
+如需持久化到用户配置：
+
+```bash
+clawcodex-dev feature set LKB_PLAN_GRAPH --on
+clawcodex-dev feature get LKB_PLAN_GRAPH
+```
+
+- 配置保存在 `~/.clawcodex/features.json`。修改后应启动一个新的ClawCodex 进程。
+
+Headless Task-v2 示例（只需这一个开关，它会同时启用 Task-v2 工具面）：
+
+```bash
+CLAWCODEX_FEATURE_LKB_PLAN_GRAPH=1 \
+clawcodex-dev -p "请使用 LKB 规划并实现这个需求：……"
+```
+
+Feature 状态的优先级依次为：本次启动的 CLI override、环境变量、持久化 Feature 配置、代码注册的默认值。
+
+**交互式 REPL/TUI 会话提供以下本地命令：**
+
+```text
+/lkb                       # 打开交互式 on/off 开关菜单（显示当前状态；按 Enter 切换并持久化）
+/lkb board                 # 查看逻辑看板的 Board 面板
+/lkb board --compact       # 查看紧凑 Board
+/lkb status                # 查看派生状态；Plan Graph 模式下等价于紧凑 Board
+/lkb explain <task_id>     # 解释 blocker、失效传播和最近一次验证
+/lkb audit <task_id>       # 查看某个任务最近的 Audit Event
+/lkb revalidate <task_id>  # 重新验证一个 needs_recheck 任务
+/lkb plan current          # 查看当前会话绑定的 Plan
+/lkb plan list             # 列出工作区 Board 中的 Plan
+/lkb plan new [title]      # 创建并绑定一个新 Plan
+/lkb plan use <plan_id>    # 显式绑定已有 Plan
+/lkb plan suspend          # 挂起当前 Plan 并释放 Claim
+/lkb plan complete         # 完成当前 Plan
+/lkb plan abandon          # 放弃当前 Plan
+/lkb plan archive          # 归档当前 Plan
+/lkb plan reopen <plan_id> # 重新打开并绑定已停止的 Plan
+```
+
+---
+
 ## 架构（仅本 fork）
 
 ```text
@@ -474,8 +530,7 @@ clawcodex-dev coordinator team delete --name build-team
        └─────────────────────────────────────┘
 ```
 
-`MessageGateway` 是本 fork 共享的 IM 边界：CLI/REPL 和编排器通过 gateway
-IPC 显式接入；平台相关投递细节收敛在 WeChat adapter 后面。
+`MessageGateway` 是本 fork 共享的 IM 边界：CLI/REPL 和编排器通过 gateway IPC 显式接入；平台相关投递细节收敛在 WeChat adapter 后面。
 
 ---
 
