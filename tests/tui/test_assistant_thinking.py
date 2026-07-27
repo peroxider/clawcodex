@@ -45,6 +45,14 @@ async def test_redacted_variant_marks_class() -> None:
     async with _Harness(row).run_test() as pilot:
         await pilot.pause()
         assert row.has_class("-redacted")
+        assert "∴ Thinking… (redacted)" in row._header_label()
+
+
+def test_header_uses_muted_thinking_marker_and_keeps_collapse_affordance() -> None:
+    row = AssistantThinkingMessage()
+    assert row._header_label() == "▾ ∴ Thinking…"
+    row.expanded = False
+    assert row._header_label() == "▸ ∴ Thinking…"
 
 
 @pytest.mark.asyncio

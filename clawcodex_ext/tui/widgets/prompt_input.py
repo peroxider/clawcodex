@@ -31,7 +31,7 @@ from typing import Any, Callable
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
@@ -282,9 +282,40 @@ class PromptInput(Vertical):
         height: auto;
         padding: 0 0;
     }
-    PromptInput > Input {
-        border: round $primary-darken-2;
+    PromptInput > #composer-frame {
+        height: auto;
+        width: 1fr;
+        min-height: 3;
+        border-top: round $primary;
+        border-bottom: round $primary;
+        border-left: none;
+        border-right: none;
         padding: 0 1;
+        background: transparent;
+    }
+    PromptInput > #composer-frame.-bash {
+        border-top: round #FD5DB1;
+        border-bottom: round #FD5DB1;
+    }
+    PromptInput #prompt-prefix {
+        width: 2;
+        height: 1;
+        color: $text;
+        text-style: bold;
+        background: transparent;
+    }
+    PromptInput > #composer-frame.-bash > #prompt-prefix {
+        color: #FD5DB1;
+    }
+    PromptInput > #composer-frame > Input {
+        width: 1fr;
+        height: 1;
+        border: none;
+        padding: 0;
+        background: transparent;
+    }
+    PromptInput > #composer-frame > Input:focus {
+        border: none;
     }
     PromptInput > #ghost-suggestion {
         height: auto;
@@ -333,6 +364,16 @@ class PromptInput(Vertical):
         self._history: list[str] = list(initial_history or [])
         self._history_pos: int | None = None
         self._input = _PasteAwareInput(placeholder="Type a prompt, or / for commands")
+        # The current ClawCodex composer is a bare prompt glyph inside a
+        # top/bottom-only rounded rule.  Keep the real ``Input`` unchanged
+        # and wrap it in a purely visual row so paste, history, completions,
+        # vim handling, and submission continue to use the exact same widget.
+        self._prompt_prefix = Static("❯", id="prompt-prefix", markup=False)
+        self._composer_frame = Horizontal(
+            self._prompt_prefix,
+            self._input,
+            id="composer-frame",
+        )
         self._suggestions = _SlashSuggestions(classes="-hidden")
         self._message_suggestions = _MessageSuggestions(classes="-hidden")
         self._at_file_suggestions = _AtFileSuggestions(classes="-hidden")
@@ -372,7 +413,7 @@ class PromptInput(Vertical):
 
     def compose(self) -> ComposeResult:
         yield self._mode_indicator
-        yield self._input
+        yield self._composer_frame
         yield self._ultraplan_trigger_preview
         yield self._ghost_suggestion
         yield self._suggestions
@@ -539,6 +580,16 @@ class PromptInput(Vertical):
 
     # ---- input events ----
     def on_input_changed(self, event: Input.Changed) -> None:
+        # Shell mode is presentation-only: the submitted draft still starts
+        # with ``!`` and therefore follows the existing bash dispatch path.
+        # Mirroring the Ink composer here changes only its glyph/rule/footer.
+        bash_mode = (event.value or "").startswith("!")
+        if bash_mode:
+            self._composer_frame.add_class("-bash")
+        else:
+            self._composer_frame.remove_class("-bash")
+        self._prompt_prefix.update("$" if bash_mode else "❯")
+        self._footer.set_bash_mode(bash_mode)
         self.post_message(PromptDraftChanged(text=event.value or ""))
         self._refresh_ultraplan_trigger_preview(event.value or "")
         # When the user is navigating the in-session history with

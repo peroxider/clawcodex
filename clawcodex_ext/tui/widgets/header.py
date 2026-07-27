@@ -62,7 +62,7 @@ class StartupHeader(Static):
         model: str,
         provider: str,
         workspace_root: Path,
-        slash_hints: str = "/help  •  /tools  •  /stream  •  /render-last  •  /exit",
+        slash_hints: str = "/help for commands  ·  /tools  ·  /stream  ·  /render-last  ·  /exit",
         width_hint: int | None = None,
     ) -> None:
         self._version = version
@@ -91,18 +91,12 @@ class StartupHeader(Static):
             muted = palette.text_muted
             text = palette.text
             primary = palette.primary
-            secondary = palette.secondary
-            success = palette.success
-            info = palette.info
             border = palette.border
         except Exception:
-            muted = "#9a9a9a"
-            text = "#e6e6e6"
-            primary = "#8ab4f8"
-            secondary = "#c58af9"
-            success = "#7ee787"
-            info = "#79c0ff"
-            border = "#2a2a33"
+            muted = "#999999"
+            text = "#ffffff"
+            primary = "#d77757"
+            border = "#505050"
         table = Table.grid(padding=(0, 1))
         table.add_column(style=muted, justify="right", no_wrap=True)
         table.add_column(style=text, ratio=1)
@@ -111,17 +105,17 @@ class StartupHeader(Static):
             Text.assemble(
                 ("ClawCodex", f"bold {text}"),
                 ("  ", ""),
-                (f"v{self._version}", f"bold {info}"),
+                (f"v{self._version}", muted),
             ),
         )
-        table.add_row("Model", Text(self._model or "unknown", style=f"bold {secondary}"))
+        table.add_row("Model", Text(self._model or "unknown", style=f"bold {text}"))
         table.add_row(
             "Provider",
-            Text(f"{self._provider.upper()} Provider", style=f"bold {success}"),
+            Text(f"{self._provider.upper()} Provider", style=muted),
         )
         table.add_row(
             "Workspace",
-            Text(_truncate_middle(display_path, content_width - 12), style=f"bold {primary}"),
+            Text(_truncate_middle(display_path, content_width - 12), style=muted),
         )
 
         footer = Text(self._slash_hints, style="dim")
@@ -156,7 +150,7 @@ class StartupHeader(Static):
         return Panel(
             body,
             border_style=border,
-            title=f"[bold {primary}] CLAWCODEX [/bold {primary}]",
-            subtitle="[dim]interactive terminal[/dim]",
+            title=f"[bold {primary}] ✦ clawcodex [/bold {primary}]",
+            subtitle="[dim]a coding agent in your terminal[/dim]",
             padding=(0, 2),
         )

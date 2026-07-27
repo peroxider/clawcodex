@@ -54,8 +54,10 @@ def test_assistant_streaming_snapshot_falls_back_to_plain():
     # Streaming (non-finalised) snapshots return the raw text so we
     # don't try to parse a half-formed Markdown stream.
     rendered = _flatten([snap] if not isinstance(snap, tuple) else list(snap))
-    assert "assistant" in rendered
+    assert "⏺" in rendered
     assert "partial reply" in rendered
+    first_line = next(line for line in rendered.splitlines() if line.strip())
+    assert "⏺" in first_line and "partial reply" in first_line
 
 
 def test_assistant_finalised_snapshot_uses_markdown():
@@ -66,7 +68,7 @@ def test_assistant_finalised_snapshot_uses_markdown():
     # Markdown rendering bolds the text but the literal word should
     # still appear — we just don't expect the ** markers.
     assert "done" in rendered
-    assert "assistant" in rendered
+    assert "⏺" in rendered
 
 
 def test_tool_use_snapshot_reports_status():
@@ -76,10 +78,11 @@ def test_tool_use_snapshot_reports_status():
         tool_input={"command": "ls"},
     )
     before = str(row.snapshot())
-    assert "Bash" in before
+    assert before == "⏺ Bash(ls)"
+    assert row.tool_use_id == "t1"
     row.status = "done"
     after = str(row.snapshot())
-    assert "Bash" in after
+    assert after == "⏺ Bash(ls)"
 
 
 def test_tool_result_snapshot_includes_body():

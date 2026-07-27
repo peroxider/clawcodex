@@ -44,14 +44,18 @@ class Task:
     lkb: LkbStatus | None = None
 
 
-# Mapping from status → (icon, colour). Mirrors the glyph palette
-# used by ``TaskListV2.tsx``.
-_STATUS_STYLES: dict[TaskStatus, tuple[str, str]] = {
-    "pending": ("○", "dim"),
-    "in_progress": ("◐", "bold cyan"),
-    "completed": ("✔", "bold green"),
-    "cancelled": ("⊘", "dim yellow"),
-    "failed": ("✖", "bold red"),
+# Mapping from status → (icon, icon style, title style).  The first four
+# entries mirror the current Ink ``TaskListV2`` rendering: completed uses a
+# green check, in-progress a warm-orange filled square, and both pending and
+# cancelled use an empty square (cancelled is dim/struck).  ``failed`` is a
+# downstream state, so retain its explicit red cross instead of collapsing it
+# into one of the upstream states.
+_STATUS_STYLES: dict[TaskStatus, tuple[str, str, str]] = {
+    "pending": ("◻", "", ""),
+    "in_progress": ("◼", "bold #D77757", "bold"),
+    "completed": ("✔", "#4EBA65", "dim strike"),
+    "cancelled": ("◻", "dim", "dim strike"),
+    "failed": ("✖", "bold #FF6B80", "bold #FF6B80"),
 }
 
 # ── LKB derived-status badge table ──────────────────────────────────────
@@ -102,14 +106,17 @@ def render_task_tree(tasks: Iterable[Task], *, indent: int = 0) -> Text:
     out = Text()
     tasks = list(tasks)
     for idx, task in enumerate(tasks):
-        icon, style = _STATUS_STYLES.get(task.status, ("•", ""))
+        icon, icon_style, title_style = _STATUS_STYLES.get(
+            task.status,
+            ("◻", "", ""),
+        )
         is_last = idx == len(tasks) - 1
         connector = ""
         if indent:
             connector = "    " * (indent - 1) + ("└── " if is_last else "├── ")
         out.append(connector, style="dim")
-        out.append(f"{icon} ", style=style)
-        out.append(task.title, style=style)
+        out.append(f"{icon} ", style=icon_style)
+        out.append(task.title, style=title_style)
         # LKB derived-status badge
         badge = _lkb_badge(task.lkb)
         if badge is not None:
@@ -129,6 +136,8 @@ class TaskListWidget(Static):
     TaskListWidget {
         padding: 0 1;
         height: auto;
+        color: $text;
+        background: transparent;
     }
     """
 
@@ -174,6 +183,8 @@ class BackgroundTaskRow(Static):
     BackgroundTaskRow {
         padding: 0 1;
         height: auto;
+        color: $text;
+        background: transparent;
     }
     """
 
@@ -206,9 +217,12 @@ class BackgroundTaskRow(Static):
         return self._task_id
 
     def _build_text(self) -> Text:
-        icon, style = _STATUS_STYLES.get(self._status, ("•", ""))
-        out = Text(f"{icon} ", style=style)
-        out.append(self._title, style="bold")
+        icon, icon_style, title_style = _STATUS_STYLES.get(
+            self._status,
+            ("◻", "", ""),
+        )
+        out = Text(f"{icon} ", style=icon_style)
+        out.append(self._title, style=title_style or "bold")
         if self._detail:
             out.append(f"  {self._detail}", style="dim")
         return out
@@ -228,6 +242,8 @@ class AgentProgressLine(Static):
     AgentProgressLine {
         padding: 0 1;
         height: auto;
+        color: $text;
+        background: transparent;
     }
     """
 
@@ -270,14 +286,17 @@ class AgentProgressLine(Static):
 
     def _build_text(self) -> Text:
         out = Text()
-        out.append(f"{self._header}\n", style="bold magenta")
+        out.append(f"{self._header}\n", style="bold #D77757")
         for idx, (label, status, detail) in enumerate(self._steps):
-            icon, style = _STATUS_STYLES.get(status, ("•", ""))
+            icon, icon_style, title_style = _STATUS_STYLES.get(
+                status,
+                ("◻", "", ""),
+            )
             is_last = idx == len(self._steps) - 1
             connector = "└── " if is_last else "├── "
             out.append(connector, style="dim")
-            out.append(f"{icon} ", style=style)
-            out.append(label, style=style)
+            out.append(f"{icon} ", style=icon_style)
+            out.append(label, style=title_style)
             if detail:
                 out.append(f"  {detail}", style="dim")
             out.append("\n")

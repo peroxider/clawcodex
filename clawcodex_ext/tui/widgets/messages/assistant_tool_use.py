@@ -11,8 +11,8 @@ Key behavioural parity points:
 
 * The row is mounted **once** per tool-use id; subsequent events update
   the existing body instead of appending a new row.
-* The header swaps color / glyph based on the current status so the
-  user can scan the transcript and spot in-flight / failed steps.
+* The flat ``⏺ Tool(args)`` call stays stable across lifecycle updates;
+  status is carried by the bullet color while result rows sit under ``⎿``.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from __future__ import annotations
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.reactive import reactive
-from textual.widget import Widget
 
 from .base import BaseRow, RowHeader
 from ..lkb_proof import LKBProofWidget, extract_lkb_denial
@@ -92,31 +91,30 @@ class AssistantToolUseMessage(BaseRow):
         header.update(self._header_text())
 
     def _header_text(self) -> Text:
-        glyph = {
-            "requested": "○",
-            "running": "◐",
-            "done": "✓",
-            "error": "✗",
-        }.get(self.status, "•")
+        try:
+            palette = self.app.palette
+            text_color = palette.text
+            bullet_color = {
+                "done": palette.tool_success,
+                "error": palette.tool_error,
+            }.get(self.status, palette.tool_running)
+        except Exception:
+            text_color = "#FFFFFF"
+            bullet_color = {
+                "done": "#4EBA65",
+                "error": "#FF6B80",
+            }.get(self.status, "#999999")
+
         summary = _summarise_input(self.tool_name, self.tool_input)
-        tail = f" · {summary}" if summary else ""
-        return Text(f"{glyph} {self.tool_name}{tail}")
+        header = Text("⏺ ", style=bullet_color)
+        header.append(self.tool_name, style=f"bold {text_color}")
+        if summary:
+            header.append(f"({summary})", style=text_color)
+        return header
 
     def snapshot(self) -> Text:
         """Return a Rich :class:`Text` for post-exit scrollback dump."""
-        try:
-            tool_color = self.app.palette.tool
-            success_color = self.app.palette.success
-            error_color = self.app.palette.error
-        except Exception:
-            tool_color = "#f5c451"
-            success_color = "#7ee787"
-            error_color = "#ff7b72"
-        glyph_color = {
-            "done": f"bold {success_color}",
-            "error": f"bold {error_color}",
-        }.get(self.status, f"bold {tool_color}")
-        return Text(str(self._header_text()), style=glyph_color)
+        return self._header_text()
 
     def _header_widget(self) -> RowHeader | None:
         try:
@@ -139,7 +137,7 @@ class AssistantToolUseMessage(BaseRow):
 
 
 def _summarise_input(tool_name: str, tool_input: dict) -> str:
-    """One-line summary for the tool-use header, e.g. ``Bash · ls``.
+    """One-line summary for the tool-use header, e.g. ``Bash(ls)``.
 
     Delegates to :mod:`src.tool_system.renderers.summarize_tool_use` when
     available so the TUI, the legacy REPL, and the headless NDJSON path

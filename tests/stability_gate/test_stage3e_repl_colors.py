@@ -13,12 +13,13 @@
 from __future__ import annotations
 
 import io
+import inspect
 
 import pytest
 from rich.console import Console
 from rich.theme import Theme
 
-from clawcodex_ext.repl.color_scheme import DARK, build_rich_theme
+from clawcodex_ext.repl.color_scheme import DARK, REPLPalette, build_rich_theme
 
 
 # ── 共享 Theme 和 Console ──────────────────────────────────────────────
@@ -50,6 +51,7 @@ _SEMANTIC_NAMES = [
     "call",
     "result",
     "spinner",
+    "spinner_highlight",
     "user_bg",
     "diff_add",
     "diff_remove",
@@ -58,6 +60,19 @@ _SEMANTIC_NAMES = [
 
 class TestStage3eReplColors:
     """REPL 配色渲染 — 各类 semantic 标签不抛 MarkupError。"""
+
+    def test_official_398_brand_and_neutral_tokens(self) -> None:
+        assert DARK.primary == "#d77757"
+        assert DARK.text == "#ffffff"
+        assert DARK.text_muted == "#999999"
+        assert DARK.border == "#505050"
+        assert DARK.spinner_highlight == "#eb9f7f"
+        assert DARK.diff_add == "#225c2b"
+        assert DARK.diff_remove == "#7a2936"
+
+    def test_spinner_highlight_keeps_old_palette_constructor_compatible(self) -> None:
+        parameter = inspect.signature(REPLPalette).parameters["spinner_highlight"]
+        assert parameter.default == "#eb9f7f"
 
     # ── 独立标签 ──────────────────────────────────────────────────────
 
@@ -93,9 +108,9 @@ class TestStage3eReplColors:
         c.print("[bold][info]Info label[/info][/bold]")
 
     def test_tool_call_line(self) -> None:
-        """模拟工具调用行 ``● ToolName(args)``。"""
+        """模拟官方工具调用行 ``⏺ ToolName(args)``。"""
         c = _console()
-        c.print("[success]●[/success] [bold][info]Read[/info][/bold] [call](file.txt)[/call]")
+        c.print("[success]⏺[/success] [bold][tool]Read[/tool][/bold] [call](file.txt)[/call]")
 
     def test_tool_result_preview(self) -> None:
         c = _console()
@@ -174,6 +189,7 @@ _OKLCH_SEMANTIC_TAGS = [
     "call",
     "result",
     "spinner",
+    "spinner_highlight",
     "diff_add",
     "diff_remove",
 ]

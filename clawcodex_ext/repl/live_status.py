@@ -66,25 +66,29 @@ except ModuleNotFoundError:  # pragma: no cover - guarded by REPL bootstrap
     _HAS_PROMPT_TOOLKIT = False
 
 
-# Braille spinner frames matching ``rich``'s ``dots`` spinner. Hard-coding
-# avoids pulling rich's spinner internals across a process boundary and
-# keeps the live region self-contained.
+# Official busy-line ping-pong star from ``ui-tui/src/components/busyLine``.
+# It reads more like a quiet activity pulse than a generic CLI spinner and
+# keeps the legacy prompt_toolkit surface visually aligned with the Ink UI.
 _SPINNER_FRAMES: tuple[str, ...] = (
-    "⠋",
-    "⠙",
-    "⠹",
-    "⠸",
-    "⠼",
-    "⠴",
-    "⠦",
-    "⠧",
-    "⠇",
-    "⠏",
+    "·",
+    "✢",
+    "✳",
+    "✶",
+    "✻",
+    "✽",
+    "✽",
+    "✻",
+    "✶",
+    "✳",
+    "✢",
+    "·",
 )
-_FRAME_INTERVAL = 0.08
+_FRAME_INTERVAL = 0.12
+_SHIMMER_INTERVAL = 0.20
+_SHIMMER_BAND = 3
 # Mirrors ``SHOW_TOKENS_AFTER_MS`` in
 # ``typescript/src/components/Spinner/SpinnerAnimationRow.tsx``.
-_SHOW_TIMER_AFTER_MS = 0
+_SHOW_TIMER_AFTER_MS = 30_000
 
 
 class LiveStatus:
@@ -549,6 +553,9 @@ class LiveStatus:
             focused_element=input_control,
         )
 
+        from clawcodex_ext.repl.color_scheme import get_repl_palette
+
+        palette = get_repl_palette()
         style = Style.from_dict(
             {
                 # ``input-row`` is the dim slab behind the prompt
@@ -556,15 +563,16 @@ class LiveStatus:
                 # ``prompt`` keeps the ``❯`` arrow tonally consistent
                 # with its row instead of looking like a floating
                 # foreground glyph.
-                "input-row": "bg:#262626",
-                "prompt": "bold fg:ansiblue bg:#262626",
-                "spinner": "fg:ansicyan",
-                "status": "",
-                "hint": "fg:#888888",
+                "input-row": f"bg:{palette.prompt_bg}",
+                "prompt": f"bold fg:{palette.prompt_fg} bg:{palette.prompt_bg}",
+                "spinner": f"fg:{palette.spinner}",
+                "status": f"fg:{palette.primary}",
+                "shimmer": f"fg:{palette.spinner_highlight}",
+                "hint": f"fg:{palette.text_muted}",
                 # Bottom status bar — mirrors the idle PromptSession's
                 # ``bottom_toolbar``. Muted foreground so it stays
                 # visually subordinate to the spinner + input rows.
-                "status-bar": "fg:#888888",
+                "status-bar": f"fg:{palette.toolbar}",
             }
         )
 
@@ -694,7 +702,8 @@ class LiveStatus:
             started_at = self._started_at
             tokens = self._tokens
             verbose = self._verbose
-        frame = _SPINNER_FRAMES[self._frame_index % len(_SPINNER_FRAMES)]
+        frame_index = self._frame_index
+        frame = _SPINNER_FRAMES[frame_index % len(_SPINNER_FRAMES)]
         self._frame_index += 1
 
         # Spinner suffix layout:
@@ -717,6 +726,8 @@ class LiveStatus:
         # Parse Rich-style markup so ``[yellow]Cancelling…[/yellow]`` is
         # rendered as yellow text instead of leaking the tag source.
         status_parts = self._parse_rich_markup(message, "class:status")
+        shimmer_tick = int((frame_index * _FRAME_INTERVAL) / _SHIMMER_INTERVAL)
+        status_parts = self._apply_status_shimmer(status_parts, shimmer_tick)
 
         return FormattedText(
             [
@@ -726,6 +737,52 @@ class LiveStatus:
                 ("class:hint", suffix),
             ]
         )
+
+    @staticmethod
+    def _apply_status_shimmer(
+        parts: list[tuple[str, str]],
+        tick: int,
+    ) -> list[tuple[str, str]]:
+        """Sweep a three-cell highlight right-to-left across plain status text.
+
+        Explicit Rich markup (for example the warning color used by
+        ``Cancelling…``) is preserved and never overwritten.  Adjacent cells
+        with the same style are coalesced so prompt_toolkit receives a compact
+        ``FormattedText`` payload on every animation frame.
+        """
+
+        plain_length = sum(len(text) for style, text in parts if style == "class:status")
+        if plain_length == 0:
+            return parts
+
+        period = plain_length + _SHIMMER_BAND
+        head = period - 1 - (tick % period)
+        offset = 0
+        rendered: list[tuple[str, str]] = []
+
+        def _append(style: str, text: str) -> None:
+            if not text:
+                return
+            if rendered and rendered[-1][0] == style:
+                previous_style, previous_text = rendered[-1]
+                rendered[-1] = (previous_style, previous_text + text)
+            else:
+                rendered.append((style, text))
+
+        for style, text in parts:
+            if style != "class:status":
+                _append(style, text)
+                continue
+            for char in text:
+                char_style = (
+                    "class:shimmer"
+                    if head <= offset < head + _SHIMMER_BAND
+                    else "class:status"
+                )
+                _append(char_style, char)
+                offset += 1
+
+        return rendered
 
     def _invalidate(self) -> None:
         app = self._app

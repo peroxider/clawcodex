@@ -12,7 +12,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from rich.panel import Panel
+from rich.console import Group
+from rich.padding import Padding
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.widget import Widget
@@ -31,7 +32,7 @@ class ToolActivity(Widget):
     ToolActivity {
         layout: vertical;
         height: auto;
-        padding: 0 1;
+        padding: 0;
     }
     ToolActivity > Static.-inflight {
         color: $text-muted;
@@ -45,7 +46,11 @@ class ToolActivity(Widget):
         self._result_static: Static | None = None
 
     def compose(self) -> ComposeResult:
-        yield Static(self.inflight_text(), markup=False, classes="-inflight")
+        yield Static(
+            _with_trail_connector(self.inflight_text()),
+            markup=False,
+            classes="-inflight",
+        )
 
     # ---- subclass hooks ----
     def inflight_text(self) -> Text:
@@ -75,10 +80,10 @@ class ToolActivity(Widget):
             pass
         body = self.result_body(output, is_error=is_error)
         if is_error and body is None and error:
-            body = Panel(Text(error, style="red"), border_style="red", padding=(0, 1))
+            body = Text(error, style="red")
         if body is None:
             return
-        result_widget = Static(body, markup=False)
+        result_widget = Static(_with_trail_connector(body), markup=False)
         self._result_static = result_widget
         try:
             self.mount(result_widget)
@@ -111,14 +116,38 @@ def truncate_body(text: str) -> tuple[str, bool]:
     return s, truncated
 
 
-def truncated_panel(text: str, *, style: str = "green") -> Panel:
-    """Render ``text`` in a bordered panel with stable truncation limits.
+def truncated_panel(text: str, *, style: str = "green") -> Text:
+    """Render ``text`` as a flat, truncated tool-detail block.
 
-    Extracted from ``src.tui.widgets.transcript._truncated_panel`` so
-    individual tool-activity widgets render output consistently.
+    The historical function name stays in place for renderer compatibility,
+    but 398b44f's tool trail deliberately drops bordered panels. Successful
+    details recede as dim neutral text; failures retain their red signal.
     """
 
     s, truncated = truncate_body(text)
     if truncated:
         s = f"{s}\n… (truncated)"
-    return Panel(Text(s), border_style=style, padding=(0, 1))
+    tone = "red" if style.lower() == "red" else "dim"
+    return Text(s, style=tone)
+
+
+def _with_trail_connector(renderable: Any) -> Any:
+    """Place a tool detail beneath its call using the flat ``⎿`` gutter.
+
+    Text results keep their spans and share the connector's first line. More
+    complex Rich renderables (structured diffs, LKB panels, groups) retain
+    their original object and are introduced by a connector line. No tool
+    metadata is discarded or rewritten.
+    """
+
+    connector = Text("  ⎿  ", style="dim")
+    if isinstance(renderable, Text):
+        lines = renderable.split("\n", allow_blank=True)
+        out = Text()
+        for index, line in enumerate(lines):
+            out.append_text(connector.copy() if index == 0 else Text("     "))
+            out.append_text(line)
+            if index < len(lines) - 1:
+                out.append("\n")
+        return out
+    return Group(Text("  ⎿", style="dim"), Padding(renderable, (0, 0, 0, 5)))

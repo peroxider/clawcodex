@@ -41,8 +41,9 @@ class ThinkingToggled(Message):
 class AssistantThinkingMessage(BaseRow):
     """Live-updating thinking block — italic dim text under a 'thinking' header.
 
-    Supports expand/collapse via click on the header. The header shows
-    ``[-] thinking`` when expanded and ``[+] thinking`` when collapsed.
+    Supports expand/collapse via click on the header. A muted ``∴`` marker
+    follows the official 398b44f thinking treatment; the leading chevron
+    keeps the existing expand/collapse affordance intact.
     """
 
     DEFAULT_CSS = """
@@ -50,7 +51,7 @@ class AssistantThinkingMessage(BaseRow):
         height: auto;
     }
     AssistantThinkingMessage > RowHeader.-thinking {
-        text-style: bold;
+        text-style: italic dim;
         color: $text-muted;
     }
     AssistantThinkingMessage > RowHeader.-thinking.-clickable {
@@ -59,7 +60,7 @@ class AssistantThinkingMessage(BaseRow):
         color: $text;
     }
     AssistantThinkingMessage > Static.-body {
-        padding: 0 1;
+        padding: 0 0 0 2;
         color: $text-muted;
         text-style: italic;
     }
@@ -83,7 +84,7 @@ class AssistantThinkingMessage(BaseRow):
 
     def compose(self) -> ComposeResult:
         label = self._header_label()
-        header = RowHeader(Text(label, style="bold dim"), markup=False)
+        header = RowHeader(Text(label, style="italic dim"), markup=False)
         header.add_class("-thinking", "-clickable")
         yield header
         body = Static(Text(""), markup=False, classes="-body")
@@ -91,14 +92,14 @@ class AssistantThinkingMessage(BaseRow):
         yield body
 
     def _header_label(self) -> str:
-        indicator = "[-]" if self.expanded else "[+]"
-        label = "thinking (redacted)" if self._redacted else "thinking"
-        return f"{indicator} {label}"
+        indicator = "▾" if self.expanded else "▸"
+        suffix = " (redacted)" if self._redacted else ""
+        return f"{indicator} ∴ Thinking…{suffix}"
 
     def _update_header(self) -> None:
         try:
             header = self.query_one(RowHeader)
-            header.update(Text(self._header_label(), style="bold dim"))
+            header.update(Text(self._header_label(), style="italic dim"))
         except Exception:
             pass
 
@@ -176,10 +177,11 @@ class AssistantThinkingMessage(BaseRow):
         text = self._final_text if self._finalised else self.streaming_text
         if not (text or "").strip():
             return None
-        indicator = "[-]" if self.expanded else "[+]"
+        indicator = "▾" if self.expanded else "▸"
+        suffix = " (redacted)" if self._redacted else ""
         header = Text(
-            f"{indicator} thinking (redacted)\n" if self._redacted else f"{indicator} thinking\n",
-            style="bold dim",
+            f"{indicator} ∴ Thinking…{suffix}\n",
+            style="italic dim",
         )
         body = Text(text, style="italic dim")
         return Group(header, body)

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import sys
+import json
 import os
+import sys
 from types import SimpleNamespace
 
 
@@ -178,6 +179,38 @@ def test_run_cli_print_goal_summary_skips_runtime_provider(
     assert "/goal <condition> to set one" in captured.out
     assert "No goal set" in captured.out
     assert "runtime provider should not be built" not in captured.err
+
+
+def test_run_cli_json_keeps_provider_diagnostic_off_stdout(
+    monkeypatch,
+    tmp_path,
+    capsys,
+):
+    """Structured output remains directly parseable by JSON consumers."""
+    from clawcodex_ext.cli.dispatch import run_cli
+
+    monkeypatch.setenv("CLAWCODEX_HOME", str(tmp_path / "clawcodex-home"))
+    monkeypatch.setattr("src.init.run_pre_action", lambda args: None)
+
+    rc = run_cli(
+        [
+            "clawcodex",
+            "-p",
+            "/goal",
+            "--output-format",
+            "json",
+            "--provider",
+            "deepseek",
+            "--model",
+            "deepseek-v4-flash",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert rc == 0
+    assert payload["type"] == "result"
+    assert "Provider: deepseek, Model: deepseek-v4-flash" in captured.err
 
 
 def test_run_cli_print_goal_clear_skips_runtime_provider(monkeypatch, tmp_path, capsys):

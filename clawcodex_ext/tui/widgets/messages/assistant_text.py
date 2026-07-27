@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import re
 
+from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.reactive import reactive
@@ -115,10 +116,18 @@ class AssistantTextMessage(BaseRow):
 
     DEFAULT_CSS = """
     AssistantTextMessage {
+        layout: horizontal;
         height: auto;
     }
+    AssistantTextMessage > RowHeader.-assistant {
+        width: auto;
+        height: auto;
+        padding: 0;
+    }
     AssistantTextMessage > Static.-body {
-        padding: 0 1;
+        width: 1fr;
+        height: auto;
+        padding: 0;
     }
     AssistantTextMessage.-streaming > Static.-body {
         color: $text;
@@ -141,7 +150,12 @@ class AssistantTextMessage(BaseRow):
 
     # ---- composition ----
     def compose(self) -> ComposeResult:
-        header = RowHeader(Text(self._agent_name or "assistant", style="bold"), markup=False)
+        try:
+            color = self.app.palette.assistant
+        except Exception:
+            color = "#FFFFFF"
+        label = f"⏺ {self._agent_name}: " if self._agent_name else "⏺ "
+        header = RowHeader(Text(label, style=color), markup=False)
         header.add_class("-assistant")
         yield header
         yield Static(Text(""), markup=False, classes="-body")
@@ -238,13 +252,17 @@ class AssistantTextMessage(BaseRow):
         try:
             color = self.app.palette.assistant
         except Exception:
-            color = "#c58af9"
-        header = Text((self._agent_name or "assistant") + "\n", style=f"bold {color}")
+            color = "#FFFFFF"
+        label = f"⏺ {self._agent_name}: " if self._agent_name else "⏺ "
+        header = Text(label, style=color)
         if not (text or "").strip():
             return header
         cache = get_markdown_cache()
         rendered = cache.get_or_render(text)
-        try:
-            return (header, rendered)
-        except Exception:
-            return header + Text(text)
+        # Keep post-exit scrollback aligned with the live horizontal row:
+        # wrapped Markdown remains indented beneath the assistant body.
+        row = Table.grid(padding=(0, 0))
+        row.add_column(no_wrap=True)
+        row.add_column()
+        row.add_row(header, rendered)
+        return row

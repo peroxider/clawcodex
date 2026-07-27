@@ -8,6 +8,7 @@ registry-backed commands go through ``dispatch_registry_command``.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -75,6 +76,7 @@ _KNOWN_HANDLED_COMMANDS: set[str] = {
     "/rewind",
     "/resume",
     "/permission",
+    "/plan",
     "/forecast",
     # Handled by dispatch_registry_command (NOT by dispatch_local_command)
     "/init",
@@ -680,6 +682,78 @@ def test_dispatch_unknown_returns_not_handled(mock_session, tmp_path, tool_regis
     assert result.handled is False
 
 
+def test_dispatch_plan_enables_mode_and_forwards_description(
+    mock_session, tmp_path, tool_registry
+):
+    result = dispatch_local_command(
+        "/plan design the migration",
+        session=mock_session,
+        workspace_root=tmp_path,
+        tool_registry=tool_registry,
+    )
+
+    assert result.handled is True
+    assert result.system_text == "__plan__"
+    assert result.prompt_text == "design the migration"
+
+
+def test_dispatch_plan_open_does_not_forward_prompt(mock_session, tmp_path, tool_registry):
+    result = dispatch_local_command(
+        "/plan open",
+        session=mock_session,
+        workspace_root=tmp_path,
+        tool_registry=tool_registry,
+    )
+
+    assert result.handled is True
+    assert result.system_text == "__plan__"
+    assert result.prompt_text is None
+
+
+def test_tui_plan_command_enters_plan_mode_and_submits_description():
+    from src.tui.app import ClawCodexTUI
+
+    controller = MagicMock()
+    transcript = MagicMock()
+    app = SimpleNamespace(
+        tool_context=SimpleNamespace(
+            permission_context=SimpleNamespace(mode="default")
+        ),
+        _runtime_permission_controller=controller,
+        submit_to_agent=MagicMock(),
+    )
+
+    ClawCodexTUI._handle_plan_command(app, "design the migration", transcript)
+
+    controller.set_mode.assert_called_once_with("plan")
+    app.submit_to_agent.assert_called_once_with("design the migration")
+    transcript.append_system.assert_called_once_with(
+        "Enabled plan mode.", style="muted"
+    )
+
+
+def test_tui_plan_command_shows_existing_plan(monkeypatch, tmp_path):
+    from src.tui.app import ClawCodexTUI
+    from src.utils import plans
+
+    plan_path = tmp_path / "plans" / "migration.md"
+    monkeypatch.setattr(plans, "get_plan", lambda: "# Migration\n\nKeep parity.")
+    monkeypatch.setattr(plans, "get_plan_file_path", lambda: plan_path)
+
+    transcript = MagicMock()
+    app = SimpleNamespace(
+        tool_context=SimpleNamespace(permission_context=SimpleNamespace(mode="plan")),
+    )
+
+    ClawCodexTUI._handle_plan_command(app, None, transcript)
+
+    transcript.append_system.assert_called_once_with(
+        f"Current Plan\n{plan_path}\n\n# Migration\n\nKeep parity.",
+        style="muted",
+        render="markdown",
+    )
+
+
 # ---------------------------------------------------------------------------
 # build_command_words consistency
 # ---------------------------------------------------------------------------
@@ -703,3 +777,11 @@ def test_build_command_suggestions_includes_local_builtins(tmp_path: Path):
         assert cmd.lower() in sugg_names, (
             f"{cmd} is in LOCAL_BUILTINS but missing from build_command_suggestions"
         )
+
+
+def test_plan_suggestion_accepts_description(tmp_path: Path):
+    suggestions = build_command_suggestions(tmp_path)
+    plan = next(item for item in suggestions if item.slash == "/plan")
+
+    assert plan.takes_args is True
+    assert "plan mode" in plan.description.lower()

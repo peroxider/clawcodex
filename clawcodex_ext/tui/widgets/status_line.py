@@ -42,8 +42,8 @@ class StatusLine(Static):
     DEFAULT_CSS = """
     StatusLine {
         height: 1;
-        background: $surface;
-        color: $text;
+        background: transparent;
+        color: $text-muted;
         padding: 0 1;
     }
     """
@@ -143,6 +143,8 @@ class StatusLine(Static):
         # Push the current state immediately so the footer is in sync
         # even if ``is_thinking`` hasn't changed yet.
         footer.set_loading(self.is_thinking)
+        if hasattr(footer, "set_permission_mode"):
+            footer.set_permission_mode(self.permission_mode)
 
     def watch_is_thinking(self, value: bool) -> None:
         if hasattr(self, "_footer_ref"):
@@ -156,6 +158,11 @@ class StatusLine(Static):
         self._redraw()
 
     def watch_permission_mode(self, _: str) -> None:
+        if hasattr(self, "_footer_ref") and hasattr(
+            self._footer_ref,
+            "set_permission_mode",
+        ):
+            self._footer_ref.set_permission_mode(self.permission_mode)
         self._redraw()
 
     def watch_goal(self, _: dict | None) -> None:
@@ -182,9 +189,9 @@ class StatusLine(Static):
                 elapsed = f" {secs}s"
 
         left_parts = [f"{self._provider} · {self._model}"]
-        # Permission mode segment — reflects the active permission mode.
-        if self.permission_mode:
-            left_parts.append(f"mode: {self.permission_mode}")
+        # Permission mode moved to the composer's right-aligned badge.  Keep
+        # this row devoted to neutral session/status information so the mode
+        # signal is visible without being duplicated in two adjacent rows.
         # Optional advisor segment — appears next to provider/model
         # when ``/advisor`` is configured. Mode label reflects what
         # the NEXT request will actually do (server/client/inactive)
@@ -271,7 +278,7 @@ class StatusLine(Static):
 
             proactive_status = format_proactive_status()
             if proactive_status:
-                proactive_text = f" 路 {proactive_status}"
+                proactive_text = f" · {proactive_status}"
         except Exception:
             proactive_text = ""
         return Text(f"{left}    {middle}    {cwd}    {right}{proactive_text}")
