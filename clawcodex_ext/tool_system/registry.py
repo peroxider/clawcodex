@@ -325,7 +325,9 @@ class ToolRegistry:
         return any(tool_name.startswith(f"mcp__{s}__") for s in self.disabled_servers)
 
     def dispatch(self, call: ToolCall, context: ToolContext) -> ToolResult:
-        tool = self._by_name.get(call.name.lower())
+        from extensions.sop_converter.runtime.macros.resolve_tool import resolve_tool_for_context
+
+        tool = resolve_tool_for_context(context, call.name, base_registry=self)
         if tool is None:
             return ToolResult(
                 name=call.name,

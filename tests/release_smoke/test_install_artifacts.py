@@ -136,6 +136,46 @@ class TestWheelConsoleScripts:
             )
 
 
+class TestInstalledSopConvert:
+    """The installed console script must work without the repository on sys.path."""
+
+    def test_sop_convert_from_external_cwd(self, wheel_path: Path) -> None:
+        import tempfile
+
+        fixture = REPO_ROOT / "tests" / "fixtures" / "fixture_arc_project"
+        with tempfile_venv() as venv_python, tempfile.TemporaryDirectory(
+            prefix="cx-sop-convert-"
+        ) as temp_dir:
+            _pip_install(venv_python, str(wheel_path))
+            work_dir = Path(temp_dir)
+            command = _console_script(venv_python, "clawcodex-dev")
+            result = subprocess.run(
+                [
+                    str(command),
+                    "sop",
+                    "convert",
+                    str(fixture),
+                    "--strategy",
+                    "keyword",
+                    "--out",
+                    str(work_dir / "bundle"),
+                    "--skills",
+                    str(work_dir / "skills"),
+                ],
+                cwd=work_dir,
+                env={
+                    key: value
+                    for key, value in os.environ.items()
+                    if key not in {"PYTHONPATH", "PYTHONHOME"}
+                },
+                capture_output=True,
+                text=True,
+            )
+
+            assert result.returncode == 0, result.stdout + result.stderr
+            assert (work_dir / "bundle").is_dir()
+
+
 class TestReleaseTagFreeze:
     """``RELEASE_TAG`` env var must correctly freeze ``__version__``.
 
@@ -238,3 +278,15 @@ def _pip_install(python: Path, *args: str) -> None:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+
+
+def _console_script(python: Path, name: str) -> Path:
+    candidates = (
+        python.parent / name,
+        python.parent / f"{name}.exe",
+        python.parent / f"{name}-script.py",
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise AssertionError(f"console script {name!r} not found beside {python}")

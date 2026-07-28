@@ -47,7 +47,13 @@ class TestCompositeTools(unittest.TestCase):
         names = {spec.name for spec in builtin_composite_tools()}
         self.assertEqual(
             names,
-            {"agent_teams", "pipeline_execute", "code_review", "invoke_existing_agent"},
+            {
+                "agent_teams",
+                "pipeline_execute",
+                "code_review",
+                "invoke_existing_agent",
+                "resume_resource",
+            },
         )
         invoke = next(s for s in builtin_composite_tools() if s.name == "invoke_existing_agent")
         self.assertIsNotNone(invoke.call_impl)
@@ -108,23 +114,29 @@ class TestCompositeTools(unittest.TestCase):
             )
 
     def test_register_skips_placeholders_but_keeps_executable_macros(self) -> None:
-        with patch("extensions.sop_converter.composite_tools.save_spec") as save_spec:
+        with patch(
+            "extensions.sop_converter.runtime.composite_tools.save_spec"
+        ) as save_spec:
             registered = register_composite_tools(persist=True)
         self.assertIn("invoke_existing_agent", registered)
         self.assertEqual(registered["invoke_existing_agent"], "invoke-existing-agent")
+        self.assertIn("resume_resource", registered)
+        self.assertEqual(registered["resume_resource"], "resume-resource")
         saved_names = {call.args[0].name for call in save_spec.call_args_list}
-        self.assertEqual(saved_names, {"invoke-existing-agent"})
+        self.assertEqual(
+            saved_names,
+            {"invoke-existing-agent", "resume-resource"},
+        )
 
     def test_register_executable_builtin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "demo_bundle"
             bundle.mkdir()
-            with patch.object(
-                composite_tools,
-                "_SKIP_PLACEHOLDER_COMPOSITE_TOOLS",
+            with patch(
+                "extensions.sop_converter.runtime.composite_tools._SKIP_PLACEHOLDER_COMPOSITE_TOOLS",
                 False,
             ), patch(
-                "extensions.sop_converter.composite_tools.save_spec"
+                "extensions.sop_converter.runtime.composite_tools.save_spec"
             ) as save_spec:
                 registered = register_composite_tools(
                     persist=True,
@@ -173,9 +185,15 @@ class TestCompositeTools(unittest.TestCase):
         promoted = lifecycle_tools_for_skill(
             ["openjiuwen-core-application-llm-agent-create-llm-agent", "openjiuwen-core-application-llm-agent-llmagent-invoke"],
             None,
-            {"invoke_existing_agent": "invoke-existing-agent"},
+            {
+                "invoke_existing_agent": "invoke-existing-agent",
+                "resume_resource": "resume-resource",
+            },
         )
-        self.assertEqual(promoted, ["invoke-existing-agent"])
+        self.assertEqual(
+            promoted,
+            ["invoke-existing-agent", "resume-resource"],
+        )
 
     def test_emit_workflow_yaml(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

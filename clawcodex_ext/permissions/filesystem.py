@@ -362,6 +362,61 @@ def _readable_internal_dirs(context: Any) -> list[Path]:
     return dirs
 
 
+def check_readable_catalog_path(file_path: str, context: Any = None) -> bool:
+    """True when ``file_path`` is an F-56 catalog JSON under known roots.
+
+    Basename must be one of ``sop-resources.json``, ``catalog.json``,
+    ``resource-catalog.json``, and the resolved path must sit under
+    ``$CLAWCODEX_HOME/sop-resources/``, ``$CLAWCODEX_HOME/sessions/``, or
+    ``<bundle>/.clawcodex/``. Transcripts and config under home are excluded.
+    """
+    if not file_path:
+        return False
+    try:
+        target = Path(resolve_path(file_path))
+    except Exception:
+        return False
+    if target.name not in {
+        "sop-resources.json",
+        "catalog.json",
+        "resource-catalog.json",
+    }:
+        return False
+
+    roots: list[Path] = []
+    try:
+        from extensions.sop_converter.core.resource_catalog import _clawcodex_home
+
+        home = Path(_clawcodex_home())
+        roots.append(home / "sop-resources")
+        roots.append(home / "sessions")
+    except Exception:
+        pass
+
+    try:
+        bundle = getattr(context, "bundle_context", None) if context is not None else None
+        if bundle is None:
+            try:
+                from extensions.sop_converter.bundle_context import get_active_bundle
+
+                bundle = get_active_bundle()
+            except Exception:
+                bundle = None
+        bp = getattr(bundle, "bundle_path", None) if bundle is not None else None
+        if bp is not None:
+            roots.append(Path(bp).expanduser().resolve() / ".clawcodex")
+    except Exception:
+        pass
+
+    for root in roots:
+        try:
+            if _is_within(target, Path(resolve_path(str(root)))):
+                return True
+        except Exception:
+            continue
+    return False
+
+
 def check_readable_internal_path(file_path: str, context: Any) -> bool:
     """True when ``file_path`` resolves inside a harness-internal readable dir.
 
@@ -453,6 +508,15 @@ def check_read_permission_for_tool(file_path: str, context: Any) -> PermissionRe
             behavior="allow",
             decision_reason=OtherDecisionReason(
                 reason="Read of a harness-internal path",
+            ),
+        )
+
+    # F-56 catalog JSON under CLAWCODEX_HOME / bundle .clawcodex.
+    if check_readable_catalog_path(abs_path, context):
+        return PermissionAllowDecision(
+            behavior="allow",
+            decision_reason=OtherDecisionReason(
+                reason="Read of an F-56 resource catalog file",
             ),
         )
 

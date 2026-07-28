@@ -98,6 +98,9 @@ def test_extended_repl_overwrites_injected_context(monkeypatch, tmp_path) -> Non
     assert context.tool_registry is registry
     assert context.session_id == "extended-session"
     assert context._active_provider is provider
+    assert context.allow_session_macro_registration is True
+    assert context.confirm_session_macro_plan is not None
+    assert callable(context.confirm_session_macro_plan)
 
 
 def test_headless_entrypoint_binds_query_tool_context(monkeypatch, tmp_path) -> None:

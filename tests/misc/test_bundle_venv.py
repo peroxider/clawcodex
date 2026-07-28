@@ -34,6 +34,33 @@ def test_bundle_venv_dir_normalizes_wsl_path_on_windows() -> None:
     assert str(path) == "D:\\projects\\clawcodex\\bundle\\.venv"
 
 
+def test_bundle_venv_dir_wsl_includes_bundle_name(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(bundle_venv, "is_wsl_runtime", lambda: True)
+    monkeypatch.setattr(bundle_venv.Path, "home", staticmethod(lambda: tmp_path))
+    bundle_dir = Path("/mnt/d/projects/clawcodex/JiuwenAgent_v7.18")
+
+    path = bundle_venv.bundle_venv_dir(bundle_dir)
+
+    assert path.parent == tmp_path / ".cache" / "clawcodex" / "bundle-venvs"
+    assert path.name.startswith("JiuwenAgent_v7.18-")
+    assert len(path.name.rsplit("-", 1)[-1]) == 16
+
+
+def test_bundle_venv_dir_wsl_reuses_legacy_hash_dir(tmp_path: Path, monkeypatch) -> None:
+    from extensions.sop_converter.runtime_paths import normalize_runtime_path
+
+    monkeypatch.setattr(bundle_venv, "is_wsl_runtime", lambda: True)
+    monkeypatch.setattr(bundle_venv.Path, "home", staticmethod(lambda: tmp_path))
+    bundle_dir = Path("/mnt/d/projects/clawcodex/MyBundle")
+    _, legacy_hash = bundle_venv._wsl_bundle_venv_slug(normalize_runtime_path(bundle_dir))
+    legacy = tmp_path / ".cache" / "clawcodex" / "bundle-venvs" / legacy_hash
+    legacy.mkdir(parents=True)
+
+    path = bundle_venv.bundle_venv_dir(bundle_dir)
+
+    assert path == legacy
+
+
 def test_bundle_venv_site_packages_uses_current_platform(tmp_path: Path) -> None:
     bundle_dir = tmp_path / "bundle"
 

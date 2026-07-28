@@ -14,6 +14,11 @@ from clawcodex_ext.tool_system.tools.lodestone import LodestoneTool
 from clawcodex_ext.tool_system.tools.progress_report import ProgressReportTool
 from clawcodex_ext.tool_system.tools.task_directives import TaskDirectivesTool
 from clawcodex_ext.tool_system.tools.task_inspect import TaskInspectTool
+from extensions.sop_converter.runtime.macros.register_tool import (
+    PromoteMacroWorkflowTool,
+    RegisterMacroFromTraceTool,
+    RegisterMacroWorkflowTool,
+)
 
 EXTENSION_TOOLS: list[Tool] = [
     *make_goal_model_tools(),
@@ -29,6 +34,11 @@ EXTENSION_TOOLS: list[Tool] = [
     # Self-gates on ``LODESTONE=off`` (renderer falls back to plain
     # text), so unconditional registration is safe.
     LodestoneTool,
+    # F-57 Phase 5/B — session macro register / from-trace / promote
+    # (capability-gated; confirm wired by TUI/REPL).
+    RegisterMacroWorkflowTool,
+    RegisterMacroFromTraceTool,
+    PromoteMacroWorkflowTool,
 ]
 
 # F-62 Chrome browser automation — seven ``chrome_*`` tools

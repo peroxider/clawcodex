@@ -26,7 +26,40 @@ from .routing import (
     resolve_macro_route,
     resolve_macro_route_details,
 )
+from .compiler import MacroDraft, compile_macro_definition
+from .promote import promote_session_macro_to_bundle
+from .register_tool import (
+    PROMOTE_MACRO_WORKFLOW_TOOL_NAME,
+    REGISTER_MACRO_FROM_TRACE_TOOL_NAME,
+    REGISTER_MACRO_WORKFLOW_TOOL_NAME,
+    PromoteMacroWorkflowTool,
+    RegisterMacroFromTraceTool,
+    RegisterMacroWorkflowTool,
+    build_session_macro_tool_index,
+    collect_protected_builtin_exclusive_targets,
+    collect_workflow_tool_names,
+    format_session_macro_plan_for_ui,
+)
+from .resolve_tool import resolve_tool_for_context
+from .session import (
+    SessionMacroOverlay,
+    SessionMacroPlan,
+    SessionMacroPlanStep,
+    SessionMacroSnapshot,
+    clear_session_macros_for_context,
+    is_session_macro_tool,
+    iter_effective_tools,
+    mark_session_macro_tool,
+    register_session_macro,
+    sync_effective_tools,
+)
+from .session_parse import parse_session_macro_definition, parse_session_macro_route
 from .templates import HANDWRITTEN_MACRO_TEMPLATE, TEMPLATES_DIR
+from .trace import (
+    TraceToolStep,
+    extract_successful_tool_steps,
+    trace_steps_to_definition_dict,
+)
 from ...core.tool_retrieval import (
     MacroCoverage,
     ToolRetrievalIndex,
@@ -67,4 +100,33 @@ __all__ = [
     "write_tool_retrieval_index",
     "HANDWRITTEN_MACRO_TEMPLATE",
     "TEMPLATES_DIR",
+    "MacroDraft",
+    "compile_macro_definition",
+    "promote_session_macro_to_bundle",
+    "REGISTER_MACRO_WORKFLOW_TOOL_NAME",
+    "REGISTER_MACRO_FROM_TRACE_TOOL_NAME",
+    "PROMOTE_MACRO_WORKFLOW_TOOL_NAME",
+    "RegisterMacroWorkflowTool",
+    "RegisterMacroFromTraceTool",
+    "PromoteMacroWorkflowTool",
+    "build_session_macro_tool_index",
+    "collect_protected_builtin_exclusive_targets",
+    "collect_workflow_tool_names",
+    "format_session_macro_plan_for_ui",
+    "resolve_tool_for_context",
+    "SessionMacroOverlay",
+    "SessionMacroPlan",
+    "SessionMacroPlanStep",
+    "SessionMacroSnapshot",
+    "clear_session_macros_for_context",
+    "is_session_macro_tool",
+    "iter_effective_tools",
+    "mark_session_macro_tool",
+    "register_session_macro",
+    "sync_effective_tools",
+    "parse_session_macro_definition",
+    "parse_session_macro_route",
+    "TraceToolStep",
+    "extract_successful_tool_steps",
+    "trace_steps_to_definition_dict",
 ]

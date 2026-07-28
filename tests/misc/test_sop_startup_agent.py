@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 from clawcodex_ext.agent.agent_definitions import AgentDefinition
 from clawcodex_ext.agent.agent_tool_utils import filter_tools_for_startup_agent
-from clawcodex_ext.agent.constants import POS_PROXY_BASE_TOOLS
+from extensions.capabilities.agent_definition_protocol import AgentToolConstants
 from clawcodex_ext.goal.tools import (
     CREATE_GOAL_TOOL_NAME,
     GET_GOAL_TOOL_NAME,
@@ -40,7 +40,11 @@ class TestBundleOverviewAgentDefinition(unittest.TestCase):
         )
         self.assertIsInstance(agent, AgentDefinition)
         self.assertEqual(agent.agent_type, "clawcodex-overview")
-        self.assertEqual(set(agent.tools or []), set(POS_PROXY_BASE_TOOLS))
+        self.assertEqual(
+            set(agent.tools or []),
+            set(AgentToolConstants.registered_proxy_base_tools()),
+        )
+        self.assertIn("StructuredOutput", agent.tools or [])
         self.assertEqual(agent.skills, ["core_merged-skill", "harness_merged-skill"])
         self.assertEqual(agent.base_dir, str(bundle.resolve()))
 
@@ -58,84 +62,96 @@ class TestApplySopStartupRegistersBundleAgents(unittest.TestCase):
 
         clear_agent_definitions_cache()
 
-        with tempfile.TemporaryDirectory() as tmp:
-            ws = Path(tmp)
-            bundle = ws / "JiuwenAgent_tool_test"
-            skill_dir = ws / "skills" / "JiuwenAgent_tool_test"
-            agents_dir = bundle / ".claude" / "agents"
-            skill_dir.mkdir(parents=True)
-            agents_dir.mkdir(parents=True)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                ws = Path(tmp)
+                bundle = ws / "JiuwenAgent_tool_test"
+                skill_dir = ws / "skills" / "JiuwenAgent_tool_test"
+                agents_dir = bundle / ".claude" / "agents"
+                skill_dir.mkdir(parents=True)
+                agents_dir.mkdir(parents=True)
 
-            (skill_dir / "core_merged-skill.md").write_text(
-                "---\n"
-                "name: core_merged-skill\n"
-                "description: core domain\n"
-                "user-invocable: true\n"
-                "---\n\n"
-                "# core\n",
-                encoding="utf-8",
-            )
-            (agents_dir / "core_merged-agent.md").write_text(
-                "---\n"
-                "name: core_merged-agent\n"
-                "description: Core domain agent\n"
-                "tools:\n"
-                "  - Skill\n"
-                "  - ToolSearch\n"
-                "---\n\n"
-                "Run core SDK tasks.\n",
-                encoding="utf-8",
-            )
+                (skill_dir / "core_merged-skill.md").write_text(
+                    "---\n"
+                    "name: core_merged-skill\n"
+                    "description: core domain\n"
+                    "user-invocable: true\n"
+                    "---\n\n"
+                    "# core\n",
+                    encoding="utf-8",
+                )
+                (agents_dir / "core_merged-agent.md").write_text(
+                    "---\n"
+                    "name: core_merged-agent\n"
+                    "description: Core domain agent\n"
+                    "tools:\n"
+                    "  - Skill\n"
+                    "  - ToolSearch\n"
+                    "---\n\n"
+                    "Run core SDK tasks.\n",
+                    encoding="utf-8",
+                )
 
-            ctx = MagicMock()
-            ctx.tool_registry = MagicMock()
-            ctx.options = MagicMock()
-            ctx.tool_context = MagicMock()
-            ctx.tool_context.bundle_context = None
+                ctx = MagicMock()
+                ctx.tool_registry = MagicMock()
+                ctx.options = MagicMock()
+                ctx.tool_context = MagicMock()
+                ctx.tool_context.bundle_context = None
 
-            overview = {
-                "name": "clawcodex-overview",
-                "description": "Overview",
-                "skills": ["core_merged-skill"],
-                "system_prompt_body": "",
-            }
+                overview = {
+                    "name": "clawcodex-overview",
+                    "description": "Overview",
+                    "skills": ["core_merged-skill"],
+                    "system_prompt_body": "",
+                }
 
-            _apply_sop_startup(
-                ctx,
-                overview,
-                bundle_path=bundle,
-                workspace=ws,
-                force_bundle=True,
-            )
+                _apply_sop_startup(
+                    ctx,
+                    overview,
+                    bundle_path=bundle,
+                    workspace=ws,
+                    force_bundle=True,
+                )
 
-            self.assertEqual(ctx.options.agent_dir_override, bundle.resolve())
-            self.assertEqual(ctx.tool_context._agent_dir_override, bundle.resolve())
+                self.assertEqual(ctx.options.agent_dir_override, bundle.resolve())
+                self.assertEqual(ctx.tool_context._agent_dir_override, bundle.resolve())
 
-            agent_types = {
-                a.agent_type
-                for a in get_agent_definitions_with_overrides(str(bundle.resolve()))
-            }
-            self.assertIn("core_merged-agent", agent_types)
+                agent_types = {
+                    a.agent_type
+                    for a in get_agent_definitions_with_overrides(str(bundle.resolve()))
+                }
+                self.assertIn("core_merged-agent", agent_types)
 
-            get_all_skills(project_root=ws)
-            self.assertIsNotNone(get_registered_skill("core_merged-skill"))
+                get_all_skills(project_root=ws)
+                self.assertIsNotNone(get_registered_skill("core_merged-skill"))
+        finally:
+            from extensions.sop_converter.bundle_context import set_active_bundle
+
+            set_active_bundle(None)
+            clear_agent_definitions_cache()
 
 
 class TestStartupAgentToolFilter(unittest.TestCase):
     def setUp(self) -> None:
+        from extensions.sop_converter.bundle_context import set_active_bundle
+
+        # Prior SOP-startup tests may leave a process-global active bundle.
+        set_active_bundle(None)
         self.all_tools = [
             _make_tool("Read"),
             _make_tool("Write"),
             _make_tool("Skill"),
             _make_tool("ToolSearch"),
             _make_tool("Agent"),
+            _make_tool("TodoWrite"),
+            _make_tool("StructuredOutput"),
             _make_tool("Config"),
             _make_tool("openjiuwen-agent-teams-cli-main"),
         ]
         self.startup_agent = AgentDefinition(
             agent_type="clawcodex-overview",
             when_to_use="overview",
-            tools=sorted(POS_PROXY_BASE_TOOLS),
+            tools=AgentToolConstants.registered_proxy_base_tools(),
             source="dynamic",
             base_dir="dynamic",
         )
@@ -147,6 +163,7 @@ class TestStartupAgentToolFilter(unittest.TestCase):
         self.assertIn("ToolSearch", names)
         self.assertIn("Agent", names)
         self.assertIn("Read", names)
+        self.assertIn("StructuredOutput", names)
         self.assertNotIn("Write", names)
         self.assertNotIn("Config", names)
         self.assertNotIn("openjiuwen-agent-teams-cli-main", names)
@@ -170,7 +187,7 @@ class TestStartupAgentToolFilter(unittest.TestCase):
         agent = AgentDefinition(
             agent_type="clawcodex-overview",
             when_to_use="overview",
-            tools=sorted(POS_PROXY_BASE_TOOLS),
+            tools=AgentToolConstants.registered_proxy_base_tools(),
             disallowed_tools=[UPDATE_GOAL_TOOL_NAME],
             source="dynamic",
             base_dir="dynamic",

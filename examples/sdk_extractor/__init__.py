@@ -1,10 +1,8 @@
-"""SDK Extractor — 参考设计示例：自定义 Pipeline 提取器。
+"""Compatibility namespace for the production SDK pattern extractor.
 
-此包是 *参考设计示例*，不是项目核心代码。
-它演示了如何为任意 SDK/项目编写一个自定义的 WorkflowExtractor，
-
-将项目中的 pipeline 定义（阶段枚举、状态转移、关卡、决策、契约）
-解析为 WorkflowGraph IR。
+The implementation lives in
+``extensions.sop_converter.workflow_mode.extractors.pattern``. This import
+path remains available for users of the original reference example.
 
 用法:
     from examples.sdk_extractor.pattern_extractor import PatternExtractor, PipelineConfig

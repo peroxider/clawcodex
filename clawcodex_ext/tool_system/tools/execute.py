@@ -28,7 +28,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ..build_tool import Tool, build_tool, find_tool_by_name
+from ..build_tool import Tool, build_tool
 from ..context import ToolContext
 from ..errors import ToolInputError
 from ..protocol import ToolCall, ToolResult
@@ -36,18 +36,10 @@ from ..schema_validation import coerce_tool_input, validate_json_schema
 
 
 def _resolve_target(name: str, context: ToolContext) -> Tool | None:
+    from extensions.sop_converter.runtime.macros.resolve_tool import resolve_tool_for_context
+
     registry = getattr(context, "tool_registry", None)
-    if registry is not None:
-        get_fn = getattr(registry, "get", None)
-        if callable(get_fn):
-            tool = get_fn(name)
-            if tool is not None:
-                return tool
-            # ``registry.get`` matches by canonical name + aliases already,
-            # so a miss here is a real miss — fall through to the pool only
-            # when the registry exposes no ``get`` (legacy shapes).
-    pool = getattr(getattr(context, "options", None), "tools", None) or []
-    return find_tool_by_name(list(pool), name)
+    return resolve_tool_for_context(context, name, base_registry=registry)
 
 
 def _wrap_user_message(text: str) -> dict[str, Any]:

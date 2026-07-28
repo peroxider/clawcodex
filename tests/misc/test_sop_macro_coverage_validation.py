@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import unittest
 
-from extensions.sop_converter.macros.errors import MacroConvertError
-from extensions.sop_converter.macros.models import MacroDefinition, MacroRoute
-from extensions.sop_converter.macros.validation import validate_macro_definition
+from extensions.sop_converter.runtime.macros.errors import MacroConvertError
+from extensions.sop_converter.runtime.macros.models import MacroDefinition, MacroRoute
+from extensions.sop_converter.runtime.macros.validation import validate_macro_definition
 
 
 def _macro(route: MacroRoute) -> MacroDefinition:

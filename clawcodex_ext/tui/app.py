@@ -1685,6 +1685,9 @@ class ClawCodexTUI(App):
             return
         try:
             from clawcodex_ext.agent.session_ext import resume_session_with_tail
+            from extensions.sop_converter.runtime.macros.session import (
+                clear_session_macros_for_context,
+            )
 
             resumed, tail = resume_session_with_tail(session_id)
             if resumed is None:
@@ -1697,6 +1700,11 @@ class ClawCodexTUI(App):
                 self.announcer.announce(_RESUME_BUSY_MESSAGE)
                 return
             self.session = resumed
+            self._agent_bridge._session = resumed
+            # F-57 Phase 5: drop previous session's overlay macros after swap.
+            if getattr(self, "tool_context", None) is not None:
+                self.tool_context.session_id = getattr(resumed, "session_id", None) or session_id
+                clear_session_macros_for_context(self.tool_context)
             if self._command_context is not None:
                 self._command_context.session = resumed
                 self._command_context.conversation = resumed.conversation

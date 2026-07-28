@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 
 from extensions.sop_converter.agent_md_writer import AgentComponentInfo
-from extensions.sop_converter.macros.models import MacroDefinition, MacroRoute
-from extensions.sop_converter.macros.overview_intent import (
+from extensions.sop_converter.runtime.macros.models import MacroDefinition, MacroRoute
+from extensions.sop_converter.runtime.macros.overview_intent import (
     assign_macros_to_owner_skills,
     format_overview_macro_intent_block,
     pick_owner_skill,

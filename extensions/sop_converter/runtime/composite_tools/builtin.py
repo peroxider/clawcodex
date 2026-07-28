@@ -17,7 +17,10 @@ from pathlib import Path
 from typing import Any
 
 from .models import CompositeStage, CompositeToolSpec
-from ..composite_workflows import invoke_existing_agent_workflow
+from ..composite_workflows import (
+    invoke_existing_agent_workflow,
+    resume_resource_workflow,
+)
 
 
 def builtin_composite_tools(*, bundle_dir: Path | None = None) -> list[CompositeToolSpec]:
@@ -31,6 +34,7 @@ def builtin_composite_tools(*, bundle_dir: Path | None = None) -> list[Composite
         _pipeline_execute(),
         _code_review(),
         _invoke_existing_agent(bundle_dir=bundle_dir),
+        _resume_resource(bundle_dir=bundle_dir),
     ]
 
 
@@ -243,7 +247,9 @@ def lifecycle_tools_for_skill(
         return []
 
     recovery_map: dict[str, list[str]] = {
-        "agent_lifecycle": ["invoke_existing_agent"],
+        # Agent product facade + generic resume for non-agent / typed recovery.
+        # Keys must match CompositeToolSpec.name / register_composite_tools name_map.
+        "agent_lifecycle": ["invoke_existing_agent", "resume_resource"],
     }
     result: list[str] = []
     for spec_name in recovery_map.get(intent_group_name, []):
@@ -329,4 +335,89 @@ def _invoke_existing_agent(*, bundle_dir: Path | None = None) -> CompositeToolSp
         },
         query_arg="query",
         workflow_spec=invoke_existing_agent_workflow(),
+    )
+
+
+def _resume_resource(*, bundle_dir: Path | None = None) -> CompositeToolSpec:
+    """Resume any registered F-56 catalog resource by type and ref."""
+    del bundle_dir
+    return CompositeToolSpec(
+        name="resume_resource",
+        description=(
+            "Resume a previously persisted F-56 catalog resource by resource_type "
+            "and resource_ref. Looks up the ResourceHandler registry, materializes "
+            "the opaque handle in a trusted private lane, invokes it, and returns "
+            "JSON-safe output."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "resource_type": {
+                    "type": "string",
+                    "description": "Registered F-56 resource_type (e.g. agent, DemoHandle).",
+                },
+                "resource_ref": {
+                    "type": "string",
+                    "description": "Stable resource id / handle from a prior create tool.",
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Primary query / instruction passed to the resource.",
+                },
+                "inputs": {
+                    "type": "object",
+                    "description": "Optional additional inputs merged into the invoke call.",
+                },
+            },
+            "required": ["resource_type", "resource_ref"],
+        },
+        stages=[
+            CompositeStage(
+                name="resolve-catalog",
+                description="Resolve the F-56 resource record by type and resource_ref.",
+            ),
+            CompositeStage(
+                name="materialize",
+                description="Materialize the opaque handle via ResourceHandler.",
+            ),
+            CompositeStage(
+                name="invoke",
+                description="Invoke the resource and project JSON-safe public output.",
+            ),
+        ],
+        tags=(
+            "composite",
+            "macro",
+            "resource-lifecycle",
+            "resource",
+            "resume",
+            "catalog",
+            "call-by-reference",
+        ),
+        aliases=("resume-catalog-resource", "invoke-resource-by-ref"),
+        call_type="workflow",
+        call_impl={"catalog_id": "builtin:resume-resource"},
+        output_schema={
+            "type": "object",
+            "properties": {
+                "resource_type": {"type": "string"},
+                "resource_ref": {"type": "string"},
+                "resource_id": {"type": "string"},
+                "output": {},
+                "raw": {},
+                "text": {"type": "string"},
+                "trace": {"type": "array"},
+            },
+            "required": [
+                "resource_type",
+                "resource_ref",
+                "resource_id",
+                "output",
+                "raw",
+                "text",
+                "trace",
+            ],
+        },
+        query_arg="query",
+        workflow_spec=resume_resource_workflow(),
     )

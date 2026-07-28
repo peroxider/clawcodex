@@ -29,7 +29,7 @@ from .bundle_context import (
 from .bundle_skills import register_bundle_skills, BundleSkillLoadResult, resolve_bundle_skill_workspace
 from .bundle_discovery import overview_has_sop_skills, list_workspace_bundle_candidates, discover_workspace_bundle
 from .composite_runtime import CompositeWorkflowSpec, CompositeWorkflowStep, CompositeWorkflowRunner, CompositeWorkflowError, StepTrace, CompositeResult, normalize_workflow_output
-from .composite_workflows import invoke_existing_agent_workflow
+from .composite_workflows import invoke_existing_agent_workflow, resume_resource_workflow
 from .cross_domain_orchestration import (
     OrchestrationStep,
     OrchestrationRoute,
@@ -105,6 +105,7 @@ __all__ = [
     "CompositeResult",
     "normalize_workflow_output",
     "invoke_existing_agent_workflow",
+    "resume_resource_workflow",
     "OrchestrationStep",
     "OrchestrationRoute",
     "skill_name_to_agent",

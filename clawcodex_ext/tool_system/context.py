@@ -315,6 +315,12 @@ class ToolContext:
     goal_service: Any | None = None
     goal_runtime: Any | None = None
 
+    # F-57 Phase 5 session macros — overlay snapshot + registration gates.
+    # Declared early (slots=True) so later tasks can construct real contexts.
+    session_macro_overlay: Any | None = None
+    confirm_session_macro_plan: Callable | None = None
+    allow_session_macro_registration: bool = False
+
     # Request-scoped overrides installed by the canonical Skill runtime.
     skill_model_override: str | None = None
     skill_effort_override: str | int | None = None
@@ -511,11 +517,18 @@ class ToolContext:
             raise ToolPermissionError(f"tool is blocked by permission context: {tool_name}")
 
     def restore_retrieval_tools(self) -> None:
-        """Clear the active retrieval plan and restore hidden tool objects."""
+        """Clear the active retrieval plan and restore hidden tool objects.
+
+        Session-macro provenance tools are never revived here — they belong
+        only to the overlay and are synced via ``sync_effective_tools``.
+        """
 
         current = list(self.options.tools or [])
         present = {getattr(tool, "name", "") for tool in current}
         for tool in self.retrieval_hidden_tools:
+            # Do not revive foreign/stale session macros into options.tools.
+            if getattr(tool, "_session_macro", False):
+                continue
             name = str(getattr(tool, "name", "") or "")
             if name and name not in present:
                 current.append(tool)

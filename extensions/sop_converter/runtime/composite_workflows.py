@@ -20,7 +20,7 @@ def invoke_existing_agent_workflow() -> CompositeWorkflowSpec:
             CompositeWorkflowStep(
                 id="load_agent_record",
                 kind="catalog",
-                callable_ref="extensions.sop_converter.resource_catalog:get_agent_record",
+                callable_ref="extensions.sop_converter.resource_catalog:resolve_agent_record",
                 args={
                     "agent_ref": "$input.agent_ref",
                     "agent_id": "$input.agent_id",
@@ -32,7 +32,10 @@ def invoke_existing_agent_workflow() -> CompositeWorkflowSpec:
                 id="materialize_agent",
                 kind="python",
                 callable_ref="extensions.sop_converter.agent_runtime:materialize_agent",
-                args={"record": "$private.load_agent_record.output"},
+                args={
+                    "record": "$private.load_agent_record.output.record",
+                    "catalog_dir": "$private.load_agent_record.output.location.path.parent",
+                },
                 visibility="private",
             ),
             CompositeWorkflowStep(
@@ -41,7 +44,7 @@ def invoke_existing_agent_workflow() -> CompositeWorkflowSpec:
                 callable_ref="extensions.sop_converter.agent_runtime:invoke_agent",
                 args={
                     "agent": "$private.materialize_agent.output.agent",
-                    "record": "$private.load_agent_record.output",
+                    "record": "$private.load_agent_record.output.record",
                     "query": "$input.query",
                     "inputs": "$input.inputs",
                 },
@@ -69,4 +72,84 @@ def invoke_existing_agent_workflow() -> CompositeWorkflowSpec:
     )
 
 
-__all__ = ["invoke_existing_agent_workflow"]
+def resume_resource_workflow() -> CompositeWorkflowSpec:
+    """Return the F-57 generic resume workflow over F-56 ResourceHandler rows."""
+    return CompositeWorkflowSpec(
+        name="resume-resource",
+        description=(
+            "Resume any registered F-56 catalog resource by resource_type and "
+            "resource_ref, then invoke it through its ResourceHandler."
+        ),
+        inputs={
+            "resource_type": {"type": "string", "required": True},
+            "resource_ref": {"type": "string", "required": True},
+            "query": {"type": "string", "required": False},
+            "inputs": {"type": "object", "required": False},
+        },
+        steps=(
+            CompositeWorkflowStep(
+                id="load_resource_record",
+                kind="catalog",
+                callable_ref="extensions.sop_converter.resource_catalog:resolve_record",
+                args={
+                    "resource_ref": "$input.resource_ref",
+                    "resource_type": "$input.resource_type",
+                    "catalog_context": "$resources.catalog",
+                },
+                visibility="private",
+            ),
+            CompositeWorkflowStep(
+                id="materialize_resource",
+                kind="python",
+                callable_ref="extensions.sop_converter.resource_runtime:materialize_resource",
+                args={
+                    "record": "$private.load_resource_record.output.record",
+                    "resource_type": "$input.resource_type",
+                    "catalog_dir": "$private.load_resource_record.output.location.path.parent",
+                },
+                visibility="private",
+            ),
+            CompositeWorkflowStep(
+                id="invoke_resource",
+                kind="python",
+                callable_ref="extensions.sop_converter.resource_runtime:invoke_resource",
+                args={
+                    "record": "$private.load_resource_record.output.record",
+                    "resource_type": "$input.resource_type",
+                    "query": "$input.query",
+                    "inputs": "$input.inputs",
+                },
+                output_schema={
+                    "type": "object",
+                    "properties": {
+                        "resource_type": {"type": "string"},
+                        "resource_ref": {"type": "string"},
+                        "resource_id": {"type": "string"},
+                        "text": {"type": "string"},
+                        "raw": {},
+                        "output": {},
+                    },
+                    "required": [
+                        "resource_type",
+                        "resource_ref",
+                        "resource_id",
+                        "text",
+                        "raw",
+                        "output",
+                    ],
+                },
+            ),
+        ),
+        outputs={
+            "resource_type": "$steps.invoke_resource.output.resource_type",
+            "resource_ref": "$steps.invoke_resource.output.resource_ref",
+            "resource_id": "$steps.invoke_resource.output.resource_id",
+            "output": "$steps.invoke_resource.output.output",
+            "raw": "$steps.invoke_resource.output.raw",
+            "text": "$steps.invoke_resource.output.text",
+        },
+        trusted=True,
+    )
+
+
+__all__ = ["invoke_existing_agent_workflow", "resume_resource_workflow"]

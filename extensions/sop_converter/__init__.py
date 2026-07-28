@@ -61,6 +61,9 @@ from .core import (
     load_tool_retrieval_index,
 )
 
+# F-56 catalog write facade (canonical implementation lives in core/).
+from .resource_catalog import build_resource_record_from_create
+
 # ── Runtime (agent runtime integration layer) ────────────────────────────────
 from .runtime import (
     SkillGrouper,
@@ -129,6 +132,7 @@ __all__ = [
     "register_http_tools",
     "ResourceCatalog",
     "ResourceRecord",
+    "build_resource_record_from_create",
     "get_resource_record",
     "resolve_resource_catalog_path",
     "ResourceHandler",

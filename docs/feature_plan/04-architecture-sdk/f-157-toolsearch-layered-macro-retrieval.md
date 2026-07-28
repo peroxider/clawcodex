@@ -393,14 +393,14 @@ discard exclusive plan
 
 F-56 可为检索提供只读、无 secret 的结构证据，但不负责意图分类：
 
-| 信号 | P0 行为 |
-|------|---------|
-| `resource_type=agent` | 用于校验宏 intent 与恢复链类型一致 |
-| query 中出现唯一 catalog `resource_id` / alias | 可把对应宏提升到 `prefer` |
+| 信号 | 行为 |
+|------|------|
+| `resource_type=agent` | 用于校验宏 intent 与恢复链类型一致（若接线） |
+| query 中出现唯一 catalog `resource_id` / alias | **明确不做**自动 prefer 提升；靠 MacroRoute phrase / `select:<macro>` 即可 |
 | 仅命中资源名、没有动作边界 | 不得单独触发 exclusive |
 | catalog payload / secret | ToolSearch 禁止读取或进入 trace |
 
-因此“verify-bot”可以作为已有资源证据减少语料负担，但 exclusive 仍需 verified route 的动作边界或显式 `select:<macro>`。
+因此 exclusive 仍需 verified route 的动作边界或显式 `select:<macro>`；不把「扫 catalog 抬权」列入本 Feature 关闭条件。
 
 ---
 
@@ -552,11 +552,11 @@ tests/misc/test_sop_converter_invoke_existing_agent.py
 | P157-B | RetrievalPlan + 分层普通评分 | prefer 与同 tier macro bias 生效 |
 | P157-C | verified exclusive preflight + 搜索结果 suppression | route 命中后原子不进入 matches |
 | P157-D | active exposure mask + shadow guard + 原子恢复 | 已加载原子不可抢戏，宏不可用可回滚 |
-| P157-E | Task Guide 消歧 + F-60 指标 + E2E corpus | verify-bot/ping 场景稳定通过 |
+| P157-E | Task Guide 消歧 + turn-local 指标 + 手工 NL E2E | verify-bot/ping 场景手工验收通过（见 guide）；**不**要求单独 F-60 平台指标管道 |
 
 第一期优先级为 **A → C → D → B → E**：先做实覆盖关系与 exclusive 隐藏，再补普通评分偏置；phrase 只补最小回归集。
 
-当前实现状态：P157-A/B/C/D 已接线；P157-E 的 Task Guide 消歧、turn-local 指标与自动化用例已提交，完整命令和自然语言 E2E 步骤见 `docs/guide/f157-layered-toolsearch-manual-acceptance.md`，由开发者手工执行后再更新为完成。
+当前实现状态：P157-A/B/C/D 已接线；P157-E 中 Task Guide 消歧、turn-local `retrieval_metrics` 与自动化用例已提交。**本 Feature 关闭所余唯一必做项**：按 `docs/guide/f157-layered-toolsearch-manual-acceptance.md` 完成手工自然语言 E2E 并签字。完整 F-60 产品遥测管道、catalog 名自动 prefer **明确不做**（非关闭条件）。
 
 ---
 

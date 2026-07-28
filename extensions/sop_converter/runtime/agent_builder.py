@@ -89,7 +89,7 @@ class AgentBuilder:
         domain_tools = self._tools or self._collect_tools()
         domain_tools.sort()
         if len(domain_tools) > AgentToolConstants.MAX_INLINE_TOOL_DISPLAY:
-            allowed_tools = sorted(AgentToolConstants.POS_PROXY_BASE_TOOLS)
+            allowed_tools = AgentToolConstants.registered_proxy_base_tools()
         else:
             allowed_tools = domain_tools
 
@@ -188,7 +188,10 @@ class AgentBuilder:
                     extras = lifecycle_tools_for_skill(
                         allowed_tools,
                         lifecycle_graph,
-                        {"invoke_existing_agent": "invoke-existing-agent"},
+                        {
+                            "invoke_existing_agent": "invoke-existing-agent",
+                            "resume_resource": "resume-resource",
+                        },
                     )
                     for tool_name in extras:
                         if tool_name not in allowed_tools:

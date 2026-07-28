@@ -1,8 +1,8 @@
 """Register composite tools and optional workflow.yaml sidecars.
 
 This module historically forced ``call_type=\"bash\"`` plus a copied wrapper
-script. Registration now delegates to
-:mod:`extensions.sop_converter.composite_tools`, which respects
+script. Registration now shares converters with
+:mod:`extensions.sop_converter.runtime.composite_tools`, which respects
 ``CompositeToolSpec.call_type`` / ``call_impl`` (including ``workflow`` +
 builtin catalog ids) and registers F-57 workflow specs.
 """

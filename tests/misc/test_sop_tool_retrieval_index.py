@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from clawcodex_ext.agent.tool_authoring.spec import AgentToolSpec
-from extensions.sop_converter.macros.models import MacroRoute
+from extensions.sop_converter.runtime.macros.models import MacroRoute
 from extensions.sop_converter.tool_retrieval import (
     ToolRetrievalIndex,
     index_from_routes,

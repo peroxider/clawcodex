@@ -10,7 +10,13 @@ import unittest
 from pathlib import Path
 
 from extensions.sop_converter.agent_runtime import AgentRuntimeError, materialize_agent
-from extensions.sop_converter.resource_catalog import ResourceRecord
+from extensions.sop_converter.resource_catalog import (
+    RESOURCE_PAYLOAD_REF_MISSING,
+    ResourceCatalogError,
+    ResourceRecord,
+    spill_payload_if_needed,
+)
+from extensions.sop_converter.resource_runtime import materialize_resource
 from extensions.sop_converter.sdk_serialization import resolve_env_references
 
 
@@ -193,6 +199,150 @@ class TestAgentMaterialization(unittest.TestCase):
         self.assertEqual(agent.workflows, [])
         self.assertEqual(agent.tools, [])
         self.assertIsNone(agent.note)
+
+    def test_materialize_agent_requires_catalog_dir_for_payload_ref(self) -> None:
+        record = ResourceRecord(
+            resource_type="agent",
+            resource_id="spilled-bot",
+            source_tool="create-agent",
+            materializer={
+                "kind": "python_function",
+                "module": "typed_sdk.factory",
+                "name": "create_agent",
+            },
+            invoker={"kind": "python_method", "method": "invoke"},
+            payload={
+                "kind": "payload_ref",
+                "ref": "payloads/spilled-bot.json",
+                "init_kwargs": {"agent_config": {"id": "spilled-bot"}},
+            },
+        )
+        with self.assertRaises(ResourceCatalogError) as raised:
+            materialize_agent(record)
+        self.assertEqual(raised.exception.error_code, RESOURCE_PAYLOAD_REF_MISSING)
+
+    def test_materialize_agent_resolves_spilled_payload_with_catalog_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_text:
+            tmp = Path(tmp_text)
+            package = tmp / "payload_ref_sdk"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "factory.py").write_text(
+                textwrap.dedent(
+                    """
+                    from dataclasses import dataclass
+
+
+                    @dataclass
+                    class AgentConfig:
+                        id: str
+                        note: str
+
+
+                    class Agent:
+                        def __init__(self, config: AgentConfig):
+                            self.config = config
+
+
+                    def create_agent(agent_config: AgentConfig) -> Agent:
+                        return Agent(agent_config)
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            record = ResourceRecord(
+                resource_type="agent",
+                resource_id="spilled-bot",
+                source_tool="create-agent",
+                materializer={
+                    "kind": "python_function",
+                    "module": "payload_ref_sdk.factory",
+                    "name": "create_agent",
+                },
+                invoker={"kind": "python_method", "method": "invoke"},
+                payload={
+                    "init_kwargs": {
+                        "agent_config": {
+                            "id": "spilled-bot",
+                            "note": "from-spilled-payload",
+                        }
+                    },
+                    "dsl": {"name": "spilled-bot", "blob": "x" * 70000},
+                },
+                sdk={"source_dir": str(tmp)},
+            )
+            catalog_dir = tmp / "catalog"
+            catalog_dir.mkdir()
+            spilled = spill_payload_if_needed(record, catalog_dir, force_ref=True)
+            self.assertEqual(spilled.payload["kind"], "payload_ref")
+            try:
+                materialized = materialize_agent(spilled, catalog_dir=catalog_dir)
+            finally:
+                sys.modules.pop("payload_ref_sdk.factory", None)
+                sys.modules.pop("payload_ref_sdk", None)
+
+        agent = materialized["agent"]
+        self.assertEqual(agent.config.id, "spilled-bot")
+        self.assertEqual(agent.config.note, "from-spilled-payload")
+
+    def test_materialize_resource_resolves_spilled_payload_with_catalog_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_text:
+            tmp = Path(tmp_text)
+            package = tmp / "payload_ref_sdk"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "factory.py").write_text(
+                textwrap.dedent(
+                    """
+                    from dataclasses import dataclass
+
+
+                    @dataclass
+                    class AgentConfig:
+                        id: str
+
+
+                    class Agent:
+                        def __init__(self, config: AgentConfig):
+                            self.config = config
+
+
+                    def create_agent(agent_config: AgentConfig) -> Agent:
+                        return Agent(agent_config)
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            record = ResourceRecord(
+                resource_type="agent",
+                resource_id="spilled-bot",
+                source_tool="create-agent",
+                materializer={
+                    "kind": "python_function",
+                    "module": "payload_ref_sdk.factory",
+                    "name": "create_agent",
+                },
+                invoker={"kind": "python_method", "method": "invoke"},
+                payload={
+                    "init_kwargs": {"agent_config": {"id": "spilled-bot"}},
+                    "dsl": {"name": "spilled-bot", "blob": "x" * 70000},
+                },
+                sdk={"source_dir": str(tmp)},
+            )
+            catalog_dir = tmp / "catalog"
+            catalog_dir.mkdir()
+            spilled = spill_payload_if_needed(record, catalog_dir, force_ref=True)
+            try:
+                materialized = materialize_resource(
+                    spilled,
+                    resource_type="agent",
+                    catalog_dir=catalog_dir,
+                )
+            finally:
+                sys.modules.pop("payload_ref_sdk.factory", None)
+                sys.modules.pop("payload_ref_sdk", None)
+
+        self.assertEqual(materialized["agent"].config.id, "spilled-bot")
 
 
 if __name__ == "__main__":

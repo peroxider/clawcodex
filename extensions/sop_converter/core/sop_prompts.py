@@ -108,6 +108,11 @@ SOP_OVERVIEW_ROUTING = f"""\
 4. 子代理内部顺序固定：**Skill → ToolSearch → SDK 工具**；工具失败后才可进入有限诊断（见源码探索策略）
 5. 用户已给出工作流或任务指南中的示例参数时，**直接执行**，不要反复向用户确认
 
+### Skill 正文（阻塞）
+
+- Overview **禁止**臆造 skill 路径并用 Read/Glob 查阅（例如 ``skills/annotated/``）
+- **委派** ``Agent(subagent_type="…-agent")`` 后，由**子代理**调用 ``Skill`` 加载任务指南，再 ToolSearch → 工具
+
 ### 宏工具意图（阻塞 — 高于源码探索）
 
 若用户话术命中下方 **「宏工具意图」** 表（例如「用手写宏处理文本数据」）：
@@ -317,6 +322,17 @@ def domain_agent_sop_body(
     sdk_section = f"\n\n{sdk_block}" if sdk_block else ""
     lifecycle_block = _lifecycle_prompt_block(bundle)
     lifecycle_section = f"\n\n{lifecycle_block}" if lifecycle_block else ""
+    catalog_section = ""
+    try:
+        from extensions.sop_converter.resource_catalog import (
+            format_resource_catalog_locations_block,
+        )
+
+        catalog_block = format_resource_catalog_locations_block(bundle)
+        if catalog_block.strip():
+            catalog_section = f"\n\n{catalog_block.strip()}"
+    except Exception:
+        pass
     return f"""\
 # Agent: {agent_type}
 
@@ -342,6 +358,7 @@ def domain_agent_sop_body(
 {SOP_INTERACTIVE_TERMINAL_STOP_LOSS}
 {sdk_section}
 {lifecycle_section}
+{catalog_section}
 
 ## 禁止
 
@@ -525,4 +542,16 @@ def append_sop_overview_routing(
     sdk_block = format_sdk_source_dir_block(sdk_source_dir)
     if sdk_block and sdk_block.strip() not in body:
         parts.append(sdk_block.strip())
+    try:
+        from extensions.sop_converter.resource_catalog import (
+            format_resource_catalog_locations_block,
+        )
+
+        catalog_block = format_resource_catalog_locations_block(
+            Path(bundle_path) if bundle_path is not None else None,
+        )
+        if catalog_block and catalog_block.strip() not in body:
+            parts.append(catalog_block.strip())
+    except Exception:
+        pass
     return "\n\n".join(parts).strip() if parts else SOP_OVERVIEW_ROUTING.strip()

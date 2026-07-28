@@ -9,9 +9,16 @@ import inspect
 import os
 import sys
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any, get_type_hints
 
-from .resource_catalog import RESOURCE_SECRET_MISSING, ResourceRecord
+from .resource_catalog import (
+    RESOURCE_PAYLOAD_REF_MISSING,
+    RESOURCE_SECRET_MISSING,
+    ResourceCatalogError,
+    ResourceRecord,
+    resolve_payload,
+)
 from .sdk_serialization import coerce_sdk_type
 
 
@@ -138,10 +145,24 @@ def _coerce_factory_kwargs(factory: Any, init_kwargs: dict[str, Any]) -> dict[st
     return coerced
 
 
-def materialize_agent(record: ResourceRecord) -> dict[str, Any]:
+def materialize_agent(
+    record: ResourceRecord,
+    *,
+    catalog_dir: Path | str | None = None,
+) -> dict[str, Any]:
     """Materialize an agent using the factory or class stored in a record."""
     if not isinstance(record, ResourceRecord):
         raise AgentRuntimeError("resource_payload_invalid", "agent record is invalid")
+    if catalog_dir is not None:
+        catalog_dir = Path(catalog_dir)
+    payload = record.payload if isinstance(record.payload, dict) else {}
+    if payload.get("kind") == "payload_ref":
+        if catalog_dir is None:
+            raise ResourceCatalogError(
+                RESOURCE_PAYLOAD_REF_MISSING,
+                "catalog_dir is required to resolve payload_ref",
+            )
+        record = resolve_payload(record, catalog_dir)
     _validate_record_secrets(record)
     sdk_dir = str((record.sdk or {}).get("source_dir") or "")
     if sdk_dir and sdk_dir not in sys.path:

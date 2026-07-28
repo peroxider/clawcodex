@@ -968,6 +968,14 @@ def _apply_sop_startup(
         ctx.tool_context.agent_type = startup_def.agent_type
         if bundle_ctx is not None:
             ctx.tool_context.bundle_context = bundle_ctx
+        try:
+            from extensions.sop_converter.runtime.catalog_tools import (
+                register_resource_catalog_tool,
+            )
+
+            register_resource_catalog_tool(getattr(ctx, "tool_registry", None))
+        except Exception:
+            pass
 
     body = (agent.get("system_prompt_body") or "").strip()
     sdk_source_dir = bundle_ctx.sdk_source_dir if bundle_ctx is not None else None

@@ -6,8 +6,10 @@ import ast
 from pathlib import Path
 
 from extensions.sop_converter.workflow_mode.ast_helpers import parse_contracts_dict
-from examples.sdk_extractor import PatternExtractor
-from examples.sdk_extractor.pattern_extractor import ARC_COMPAT_CONFIG
+from extensions.sop_converter.workflow_mode.extractors.pattern import (
+    ARC_COMPAT_CONFIG,
+    PatternExtractor,
+)
 from extensions.sop_converter.workflow_mode.generator.artifact_semantics import (
     ARTIFACT_SEMANTICS,
     describe_output_file,

@@ -176,6 +176,7 @@ NO_PERMISSION_TOOLS: frozenset[str] = frozenset(
         "TaskList",
         "TaskUpdate",
         "TaskOutput",
+        "resource-catalog",
         "TaskStop",
         # Orchestration / coordination — every sub-action they spawn is itself
         # permission-checked, so the spawn is not the gate.

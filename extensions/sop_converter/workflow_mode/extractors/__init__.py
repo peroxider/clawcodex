@@ -10,6 +10,7 @@ from .models import (
     WorkflowGraph,
 )
 from .preview import format_workflow_preview
+from .pattern import PatternExtractor, PipelineConfig
 from .registry import ExtractorRegistry
 
 __all__ = [
@@ -20,6 +21,8 @@ __all__ = [
     "DecisionSpec",
     "OutcomeSpec",
     "StageContract",
+    "PatternExtractor",
+    "PipelineConfig",
     "ExtractorRegistry",
     "format_workflow_preview",
 ]

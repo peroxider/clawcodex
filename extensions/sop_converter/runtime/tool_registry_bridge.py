@@ -149,7 +149,9 @@ def _bridge_progress(message: str, *, end: str = "\n") -> None:
 # ---------------------------------------------------------------------------
 
 # Legacy global script dir (used when no bundle_dir is supplied).
-SCRIPTS_DIR = DEFAULTS.tool_authoring.TOOL_DIR / "scripts"
+# Backward-compatible aliases — tests patch these on the package-root module.
+TOOL_DIR = DEFAULTS.tool_authoring.TOOL_DIR
+SCRIPTS_DIR = TOOL_DIR / "scripts"
 SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -1397,9 +1399,7 @@ def _try_catalog_fallback(catalog_fallback, args, original_error=None):
     if not catalog_fallback:
         return None
     resource_type = str(catalog_fallback.get("resource_type") or "")
-    from extensions.sop_converter.tool_registry_bridge import (
-        resolve_catalog_handle_from_args,
-    )
+    # Same-module helper — do not import via package-root stub (circular).
     agent_id = resolve_catalog_handle_from_args(args, catalog_fallback)
     if not agent_id and not resource_type:
         return None
@@ -1587,9 +1587,9 @@ if __name__ == "__main__":
             from extensions.sop_converter.agent_catalog import AgentCatalog, AgentCatalogEntry
             from extensions.sop_converter.agent_catalog_resolver import resolve_catalog_path
             from extensions.sop_converter.resource_catalog import (
-                ResourceCatalog,
                 agent_entry_to_resource_record,
-                resolve_resource_catalog_path,
+                context_from_env,
+                write_record,
             )
 
             def _stable_resource_handle(_value):
@@ -1631,8 +1631,15 @@ if __name__ == "__main__":
                             _handle = _extract_resource_handle(_nested, _meta)
                             if _handle:
                                 return _handle
+                    # Already a mapping — do not re-_to_jsonable (a fresh dict
+                    # is never identity-equal to the input, which used to
+                    # recurse forever on empty dicts).
+                    return _stable_resource_handle(
+                        _meta.get("agent_id") or _meta.get("resource_id")
+                    )
+                # Non-dict SDK objects may serialize into a handle-bearing dict.
                 _jsonable = _to_jsonable(_payload)
-                if isinstance(_jsonable, dict) and _jsonable is not _payload:
+                if isinstance(_jsonable, dict):
                     return _extract_resource_handle(_jsonable, _meta)
                 return _stable_resource_handle(_meta.get("agent_id") or _meta.get("resource_id"))
 
@@ -1719,27 +1726,36 @@ if __name__ == "__main__":
                 _cat.save(_loc.path)
                 _resource_catalog_path = ""
                 _resource_catalog_error = ""
+                _written_layers = []
+                _catalog_paths = {{}}
                 try:
-                    _resource_loc = resolve_resource_catalog_path(
-                        _bundle_path,
-                        bundle_id=str(catalog_meta.get("bundle_id") or "")
-                        or (os.path.basename(_bundle_path) if _bundle_path else None),
+                    _bundle_id = str(catalog_meta.get("bundle_id") or "") or (
+                        os.path.basename(_bundle_path) if _bundle_path else ""
                     )
-                    _resource_loc.ensure_parent()
-                    _resource_cat = ResourceCatalog.load(_resource_loc.path)
-                    _resource_cat.upsert(
+                    _ctx = context_from_env(
+                        bundle_path=_bundle_path,
+                        bundle_id=_bundle_id,
+                    )
+                    _write = write_record(
                         agent_entry_to_resource_record(
                             _entry,
-                            bundle_id=str(catalog_meta.get("bundle_id") or "")
-                            or (os.path.basename(_bundle_path) if _bundle_path else None),
+                            bundle_id=_bundle_id or None,
                             source_tool=str(catalog_meta.get("source_tool") or ""),
-                        )
+                        ),
+                        _ctx,
                     )
-                    _resource_cat.save(_resource_loc.path)
-                    _resource_catalog_path = str(_resource_loc.path)
+                    if not _write.written_layers:
+                        raise RuntimeError(_write.error or "resource_catalog_write_failed")
+                    _written_layers = list(_write.written_layers)
+                    _catalog_paths = dict(_write.catalog_paths)
+                    _resource_catalog_path = _write.resource_catalog_path or next(
+                        iter(_catalog_paths.values()), ""
+                    )
+                    if _write.error:
+                        _resource_catalog_error = str(_write.error)
                 except Exception as _resource_exc:
                     _resource_catalog_error = f"resource_catalog_write_failed: {{_resource_exc}}"
-                if _resource_catalog_error:
+                if not _written_layers:
                     _payload = _augment_create_payload(
                         _jsonable_result,
                         persisted=False,
@@ -1748,9 +1764,9 @@ if __name__ == "__main__":
                         catalog_path=str(_loc.path),
                         catalog_reason=str(_loc.reason),
                         error_code="resource_catalog_write_failed",
-                        error=_resource_catalog_error,
+                        error=_resource_catalog_error or "resource_catalog_write_failed",
                     )
-                    _payload["resource_catalog_error"] = _resource_catalog_error
+                    _payload["resource_catalog_error"] = _resource_catalog_error or "resource_catalog_write_failed"
                     print(_dumps_sdk_result(_payload), file=sys.stderr)
                     sys.exit(1)
                 _payload = _augment_create_payload(
@@ -1761,6 +1777,8 @@ if __name__ == "__main__":
                     catalog_path=str(_loc.path),
                     catalog_reason=str(_loc.reason),
                 )
+                _payload["written_layers"] = _written_layers
+                _payload["catalog_paths"] = _catalog_paths
                 if _resource_catalog_path:
                     _payload["resource_catalog_path"] = _resource_catalog_path
                     _payload["resource_catalog_reason"] = "f56_resource_catalog"

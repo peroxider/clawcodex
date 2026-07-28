@@ -8,8 +8,8 @@ from clawcodex_ext.tool_system.build_tool import build_tool
 from clawcodex_ext.tool_system.registry import ToolRegistry
 from clawcodex_ext.tool_system.tools.tool_search import make_tool_search_tool
 from clawcodex_ext.tool_system.tools.tool_search_matching import rank_tool_matches
-from extensions.sop_converter.macros.models import MacroRoute
-from extensions.sop_converter.macros.routing import (
+from extensions.sop_converter.runtime.macros.models import MacroRoute
+from extensions.sop_converter.runtime.macros.routing import (
     DEFAULT_MACRO_ROUTE_CATALOG,
     MacroRouteCatalog,
     ensure_builtin_routes,
@@ -196,23 +196,27 @@ class TestBuiltinRoutes(unittest.TestCase):
     def test_ensure_builtin_routes_registers_invoke_existing_agent(self) -> None:
         catalog = MacroRouteCatalog()
         ensure_builtin_routes(catalog)
-        routes = catalog.get_routes()
-        self.assertEqual(len(routes), 1)
-        self.assertEqual(routes[0].target_tool, "invoke-existing-agent")
-        self.assertTrue(routes[0].verified)
-        self.assertEqual(routes[0].selection, "exclusive")
-        self.assertEqual(routes[0].keywords, ["agent", "回复"])
-        self.assertEqual(routes[0].negative_keywords, ["创建", "配置", "删除", "列出"])
-        self.assertEqual(routes[0].intent_key, "agent.invoke_existing")
-        self.assertEqual(routes[0].covered_tools, ["llmagent-invoke", "send-to-agent"])
-        self.assertIn("用已创建的 agent 回复", routes[0].phrases)
+        routes = {route.target_tool: route for route in catalog.get_routes()}
+        self.assertIn("invoke-existing-agent", routes)
+        self.assertIn("resume-resource", routes)
+        route = routes["invoke-existing-agent"]
+        self.assertTrue(route.verified)
+        self.assertEqual(route.selection, "exclusive")
+        self.assertEqual(route.keywords, ["agent", "回复"])
+        self.assertEqual(route.negative_keywords, ["创建", "配置", "删除", "列出"])
+        self.assertEqual(route.intent_key, "agent.invoke_existing")
+        self.assertEqual(route.covered_tools, ["llmagent-invoke", "send-to-agent"])
+        self.assertIn("用已创建的 agent 回复", route.phrases)
 
     def test_ensure_builtin_routes_idempotent(self) -> None:
         catalog = MacroRouteCatalog()
         ensure_builtin_routes(catalog)
         ensure_builtin_routes(catalog)
         routes = catalog.get_routes()
-        self.assertEqual(len(routes), 1)
+        self.assertEqual(
+            {route.target_tool for route in routes},
+            {"invoke-existing-agent", "resume-resource"},
+        )
 
     def test_builtin_matches_canonical_and_regression_phrases(self) -> None:
         catalog = MacroRouteCatalog()
@@ -228,6 +232,37 @@ class TestBuiltinRoutes(unittest.TestCase):
                 self.assertEqual(len(matches), 1, query)
                 self.assertEqual(matches[0].route.target_tool, "invoke-existing-agent")
                 self.assertTrue(matches[0].is_exact_phrase, query)
+
+    def test_builtin_matches_resume_resource_chinese_queries(self) -> None:
+        catalog = MacroRouteCatalog()
+        ensure_builtin_routes(catalog)
+        for query in (
+            "恢复资源",
+            "请帮我恢复资源",
+            "恢复一下资源",
+            "把资源恢复一下",
+            "资源恢复",
+            "恢复 verify-bot 资源",
+            "按 resource_ref 恢复",
+            "resume-resource",
+            "resume resource",
+        ):
+            with self.subTest(query=query):
+                matches = match_macro_routes(query, catalog=catalog)
+                self.assertEqual(
+                    [m.route.target_tool for m in matches],
+                    ["resume-resource"],
+                    query,
+                )
+
+        for query in ("创建资源", "删除资源", "列出资源", "只要资源不要恢复"):
+            with self.subTest(query=query):
+                matches = match_macro_routes(query, catalog=catalog)
+                self.assertNotIn(
+                    "resume-resource",
+                    [m.route.target_tool for m in matches],
+                    query,
+                )
 
 
 class TestToolSearchMacroRouteIntegration(unittest.TestCase):

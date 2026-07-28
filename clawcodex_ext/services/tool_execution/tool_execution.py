@@ -51,13 +51,18 @@ async def run_tool_use(
     can_use_tool: Any,
     tool_use_context: ToolContext,
 ) -> AsyncGenerator[MessageUpdateLazy, None]:
-    from src.tool_system.build_tool import find_tool_by_name
+    from extensions.sop_converter.runtime.macros.resolve_tool import resolve_tool_for_context
 
     tool_name = tool_use.name
-    tool = find_tool_by_name(tool_use_context.options.tools, tool_name)
+    tool = resolve_tool_for_context(
+        tool_use_context,
+        tool_name,
+        base_registry=getattr(tool_use_context, "tool_registry", None),
+    )
 
     if tool is None:
         try:
+            from src.tool_system.build_tool import find_tool_by_name
             from src.tool_system.defaults import build_default_registry
 
             tool = find_tool_by_name(

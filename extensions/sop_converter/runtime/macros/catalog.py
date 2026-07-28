@@ -72,11 +72,17 @@ DEFAULT_MACRO_CATALOG = MacroCatalog()
 
 def ensure_builtin_macros(catalog: MacroCatalog | None = None) -> MacroCatalog:
     target = catalog or DEFAULT_MACRO_CATALOG
-    catalog_id = "builtin:invoke-existing-agent"
-    if target.get(catalog_id) is None:
-        from ..composite_workflows import invoke_existing_agent_workflow
+    builtins = {
+        "builtin:invoke-existing-agent": "invoke_existing_agent_workflow",
+        "builtin:resume-resource": "resume_resource_workflow",
+    }
+    missing = [catalog_id for catalog_id in builtins if target.get(catalog_id) is None]
+    if missing:
+        from .. import composite_workflows
 
-        target.register(catalog_id, invoke_existing_agent_workflow())
+        for catalog_id in missing:
+            factory = getattr(composite_workflows, builtins[catalog_id])
+            target.register(catalog_id, factory())
     return target
 
 
@@ -95,13 +101,32 @@ def resolve_macro(
     *,
     catalog: MacroCatalog | None = None,
     bundle_path: Any | None = None,
+    session_overlay: Any | None = None,
+    owner_session_id: str | None = None,
 ) -> CompositeWorkflowSpec:
     catalog_id = str(call_impl.get("catalog_id") or "")
     manifest = str(call_impl.get("manifest") or "").strip()
     target = catalog or DEFAULT_MACRO_CATALOG
 
+    if catalog_id.startswith("session:"):
+        if session_overlay is None or not hasattr(session_overlay, "read"):
+            raise KeyError(f"session macro requires overlay: {catalog_id}")
+        snapshot = session_overlay.read()
+        if snapshot is None:
+            raise KeyError(f"session macro overlay empty: {catalog_id}")
+        spec = snapshot.specs.get(catalog_id.lower())
+        if spec is None:
+            raise KeyError(f"session macro not in snapshot: {catalog_id}")
+        session_id = str(owner_session_id or "").strip()
+        if not session_id or session_id != snapshot.owner_session_id:
+            raise KeyError(f"session macro owner mismatch: {catalog_id}")
+        return spec
+
     if catalog_id:
-        if catalog_id == "builtin:invoke-existing-agent":
+        if catalog_id in {
+            "builtin:invoke-existing-agent",
+            "builtin:resume-resource",
+        }:
             ensure_builtin_macros(target)
         try:
             return target.require(catalog_id)

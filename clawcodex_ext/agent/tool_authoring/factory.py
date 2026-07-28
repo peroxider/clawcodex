@@ -45,7 +45,7 @@ def _workflow_trace_payload(trace: list[Any]) -> list[dict[str, Any]]:
 
 
 def _catalog_execution_context(spec: AgentToolSpec, context: ToolContext) -> Any:
-    from extensions.sop_converter.resource_catalog import CatalogExecutionContext
+    from extensions.sop_converter.resource_catalog import context_from_env
 
     bundle = context.bundle_context
     if bundle is None:
@@ -66,9 +66,11 @@ def _catalog_execution_context(spec: AgentToolSpec, context: ToolContext) -> Any
         from extensions.sop_converter.bundle_venv import activate_bundle_venv_imports
 
         activate_bundle_venv_imports(bundle_path)
-    return CatalogExecutionContext(
+    session_id = getattr(context, "session_id", None) or None
+    return context_from_env(
         bundle_path=bundle_path,
         bundle_id=bundle_id,
+        session_id=session_id,
     )
 
 
@@ -81,7 +83,7 @@ def _run_workflow_tool(
         CompositeWorkflowError,
         CompositeWorkflowRunner,
     )
-    from extensions.sop_converter.macros import resolve_macro
+    from extensions.sop_converter.runtime.macros import resolve_macro
 
     if context.tool_registry is None:
         return ToolResult(
@@ -116,6 +118,8 @@ def _run_workflow_tool(
         workflow = resolve_macro(
             dict(spec.call_impl),
             bundle_path=catalog_context.bundle_path,
+            session_overlay=getattr(context, "session_macro_overlay", None),
+            owner_session_id=getattr(context, "session_id", None),
         )
     except Exception as exc:
         return ToolResult(

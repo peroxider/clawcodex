@@ -25,7 +25,17 @@ class TestSdkSerialization(unittest.TestCase):
         parsed = json.loads(raw)
         self.assertEqual(parsed["name"], "x")
 
-    def test_pydantic_model_dump_when_available(self) -> None:
+    def test_to_jsonable_nested_function_does_not_recurse(self) -> None:
+        def factory(config):
+            def loader():
+                return config
+
+            return loader
+
+        payload = to_jsonable(factory({}))
+        self.assertIsInstance(payload, str)
+        self.assertIn("loader", payload)
+
         try:
             from pydantic import BaseModel
         except ImportError:

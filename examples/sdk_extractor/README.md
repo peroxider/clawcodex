@@ -1,8 +1,8 @@
-# SDK Extractor — 自定义 Pipeline 提取器参考设计
+# SDK Extractor — PatternExtractor 兼容示例
 
 ## 目的
 
-本文档和配套代码是 **将任意 SDK/项目编译为多智能体工作流（Multi-Agent Workflow）** 的参考设计示例。
+本文档是 **将任意 SDK/项目编译为多智能体工作流（Multi-Agent Workflow）** 的参考设计示例。正式实现位于 `extensions.sop_converter.workflow_mode.extractors.pattern`，本目录只保留兼容导入入口。
 
 当你有一个新的 SDK、框架或项目需要转换为 SOP 工作流时，可以参照此示例编写一个**自定义提取器（Custom Extractor）**，将项目中的 pipeline 定义（阶段枚举、状态转移、关卡、决策、契约）解析为 `WorkflowGraph` IR。
 
@@ -66,7 +66,7 @@ WorkflowExtractorBase (抽象基类)
 ### 步骤 2：创建 PipelineConfig
 
 ```python
-from examples.sdk_extractor.pattern_config import PipelineConfig
+from extensions.sop_converter.workflow_mode.extractors.pattern import PipelineConfig
 
 my_sdk_config = PipelineConfig(
     name="my-sdk",
@@ -90,7 +90,7 @@ my_sdk_config = PipelineConfig(
 ### 步骤 3：实例化提取器
 
 ```python
-from examples.sdk_extractor.pattern_extractor import PatternExtractor
+from extensions.sop_converter.workflow_mode.extractors.pattern import PatternExtractor
 
 extractor = PatternExtractor(config=my_sdk_config, mode="fwa")
 graph = extractor.extract("/path/to/my-sdk-project")
@@ -98,7 +98,7 @@ graph = extractor.extract("/path/to/my-sdk-project")
 
 ## 示例代码说明
 
-`pattern_extractor.py` 包含一个完整的、可工作的自定义提取器实现，它演示了：
+正式模块 `workflow_mode/extractors/pattern.py` 包含完整实现；本目录的 `pattern_extractor.py` 仅转发旧导入路径。实现提供：
 
 1. ✅ **配置驱动** — 所有 SDK 约定通过 `PipelineConfig` 传入
 2. ✅ **SourceScanContext 复用** — 通过 `_ensure_scan()` 懒加载并缓存 AST

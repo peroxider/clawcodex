@@ -165,6 +165,26 @@ class TestPosProxyBaseTools(unittest.TestCase):
         self.assertIn("Skill", POS_PROXY_BASE_TOOLS)
         self.assertIn("ToolSearch", POS_PROXY_BASE_TOOLS)
 
+    def test_proxy_tools_include_session_macro_register_tools(self) -> None:
+        for name in (
+            "register-macro-workflow",
+            "register-macro-from-trace",
+            "promote-macro-workflow",
+        ):
+            self.assertIn(name, POS_PROXY_BASE_TOOLS)
+
+    def test_agent_tool_constants_match_proxy_macro_allowlist(self) -> None:
+        from extensions.capabilities.agent_definition_protocol import AgentToolConstants
+
+        for name in (
+            "register-macro-workflow",
+            "register-macro-from-trace",
+            "promote-macro-workflow",
+        ):
+            self.assertIn(name, AgentToolConstants.POS_PROXY_BASE_TOOLS)
+            self.assertIn(name, AgentToolConstants.POS_SOP_DOMAIN_AGENT_TOOLS)
+            self.assertIn(name, AgentToolConstants.registered_proxy_base_tools())
+
     def test_skill_base_tools_include_skill_and_toolsearch(self) -> None:
         self.assertIn("skill", SKILL_CONTEXT_BASE_TOOLS)
         self.assertIn("toolsearch", SKILL_CONTEXT_BASE_TOOLS)
