@@ -72,8 +72,13 @@ class CompositeWorkflowRunner:
     _DEFAULT_PYTHON_CALLABLES = frozenset(
         {
             "extensions.sop_converter.resource_catalog:get_agent_record",
+            "extensions.sop_converter.resource_catalog:get_resource_record",
+            "extensions.sop_converter.resource_catalog:resolve_agent_record",
+            "extensions.sop_converter.resource_catalog:resolve_record",
             "extensions.sop_converter.agent_runtime:materialize_agent",
             "extensions.sop_converter.agent_runtime:invoke_agent",
+            "extensions.sop_converter.resource_runtime:materialize_resource",
+            "extensions.sop_converter.resource_runtime:invoke_resource",
         }
     )
 

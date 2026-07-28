@@ -314,6 +314,20 @@ def execute_bash(
                 env = dict(os.environ)
                 env["CLAWCODEX_BUNDLE_PATH"] = str(bundle_path)
 
+    for key in ("CLAWCODEX_SESSION_ID", "CLAWCODEX_CATALOG_DUAL_WRITE"):
+        value = os.environ.get(key)
+        if value:
+            if env is None:
+                env = dict(os.environ)
+            env[key] = value
+
+    if context is not None:
+        session_id = getattr(context, "session_id", None)
+        if session_id:
+            if env is None:
+                env = dict(os.environ)
+            env["CLAWCODEX_SESSION_ID"] = str(session_id)
+
     # ponytail: feed __interactive_inputs through stdin pipe so tools
     # that call input()/getpass()/sys.stdin.read() in non-TTY subprocesses
     # receive pre-collected answers instead of blocking on inherited stdin.

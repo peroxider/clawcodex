@@ -24,7 +24,7 @@ from extensions.sop_converter.composite_runtime import (
 )
 from extensions.sop_converter.composite_tools import _composite_to_agent_tool_spec
 from extensions.sop_converter.composite_tools.builtin import builtin_composite_tools
-from extensions.sop_converter.macros import register_macro
+from extensions.sop_converter.runtime.macros import register_macro
 from extensions.sop_converter.resource_catalog import (
     ResourceCatalog,
     agent_entry_to_resource_record,

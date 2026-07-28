@@ -11,9 +11,10 @@ from extensions.sop_converter.workflow_mode.extractors.adapters.generic import G
 from extensions.sop_converter.workflow_mode.extractors.registry import ExtractorRegistry
 from extensions.sop_converter.workflow_mode.scan_context import SourceScanContext
 
-from examples.sdk_extractor import PatternExtractor, PipelineConfig
-from examples.sdk_extractor.pattern_extractor import (
+from extensions.sop_converter.workflow_mode.extractors.pattern import (
     ARC_COMPAT_CONFIG,
+    PatternExtractor,
+    PipelineConfig,
     _resolve_pipeline_dir,
 )
 

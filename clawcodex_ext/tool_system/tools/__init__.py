@@ -100,13 +100,10 @@ ALL_STATIC_TOOLS: list[Tool] = [
     SleepTool,
     SnipTool,
     StatusTool,
-    # StructuredOutputTool is deliberately NOT registered: it is a
-    # "special" tool (TS tools.ts:293-299 specialTools excludes
-    # SyntheticOutputTool from getAllBaseTools). The genuine schema
-    # path injects a per-call VALIDATING instance
-    # (workflow/structured.py make_structured_output_tool); the static
-    # unvalidated one exposed interactively was a footgun — its output
-    # dead-ends in outbox with no consumer (tools-round critic, C6).
+    # Restored for SOP Overview / domain allowlists (early clawcodex_ext
+    # behavior). Workflow schema runs may still inject a validating
+    # per-call instance via make_structured_output_tool that shadows this.
+    StructuredOutputTool,
     TaskCreateTool,
     TaskGetTool,
     TaskListTool,

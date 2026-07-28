@@ -204,6 +204,67 @@ def _coerce_mapping_value(value):
     )
 
 
+def _promote_flat_llm_agent_config(value):
+    """Lift natural-language create payloads into nested ModelConfig shape.
+
+    Agents often pass::
+
+        {"id": "...", "provider": "deepseek", "model": "deepseek-v4-flash",
+         "api_key": "env:...", "api_base": "https://..."}
+
+    while LegacyReActAgentConfig expects::
+
+        {"id": "...", "model": {"model_provider": "deepseek",
+         "model_info": {"model": "...", "api_key": "...", "api_base": "..."}}}
+
+    Leaf ``model_info`` dicts (string ``model`` + api_key/api_base, no agent
+    identity fields) must not be rewritten.
+    """
+    if not isinstance(value, dict):
+        return value
+    # Agent-config markers — BaseModelInfo / model_info payloads lack these.
+    if not any(
+        key in value
+        for key in ("provider", "id", "prompt_template", "controller_type")
+    ):
+        return value
+    model = value.get("model")
+    flat_keys = ("provider", "api_key", "api_base", "model_name", "model_provider")
+    has_flat = any(key in value for key in flat_keys)
+    if isinstance(model, dict) and not has_flat:
+        return value
+    if model is not None and not isinstance(model, str) and not has_flat:
+        return value
+    if isinstance(model, dict):
+        model_obj = dict(model)
+        raw_info = model_obj.get("model_info")
+        info = dict(raw_info) if isinstance(raw_info, dict) else {}
+    else:
+        model_obj = {}
+        info = {}
+    provider = (
+        model_obj.get("model_provider")
+        or value.get("provider")
+        or value.get("model_provider")
+        or ""
+    )
+    if isinstance(model, str) and model.strip():
+        info.setdefault("model", model.strip())
+    model_name = value.get("model_name")
+    if isinstance(model_name, str) and model_name.strip() and "model" not in info:
+        info["model"] = model_name.strip()
+    for src, dest in (("api_key", "api_key"), ("api_base", "api_base")):
+        if src in value and dest not in info:
+            info[dest] = value[src]
+    if not provider and not info:
+        return value
+    promoted = dict(value)
+    promoted["model"] = {"model_provider": provider, "model_info": info}
+    for key in flat_keys:
+        promoted.pop(key, None)
+    return promoted
+
+
 def _coerce_sdk_type(cls, value):
     """Coerce a JSON-decoded value into *cls* (Pydantic model, dataclass, or constructor)."""
     import dataclasses
@@ -246,6 +307,20 @@ def _coerce_sdk_type(cls, value):
         return value
 
     if not isinstance(value, dict):
+        if (
+            dataclasses.is_dataclass(cls)
+            and isinstance(cls, type)
+            and isinstance(value, str)
+        ):
+            field_names = {field.name for field in dataclasses.fields(cls)}
+            if "model_provider" in field_names and "model_info" in field_names:
+                return _coerce_sdk_type(
+                    cls,
+                    {
+                        "model_provider": "",
+                        "model_info": {"model": value},
+                    },
+                )
         return cls(value)
 
     if dataclasses.is_dataclass(cls) and isinstance(cls, type):
@@ -267,6 +342,8 @@ def _coerce_sdk_type(cls, value):
         return cls(**kwargs)
 
     if hasattr(cls, "model_validate"):
+        if isinstance(value, dict):
+            value = _promote_flat_llm_agent_config(value)
         return cls.model_validate(value)
 
     return cls(**value)
@@ -428,6 +505,59 @@ def resolve_env_references(value: Any, *, environ: dict[str, str] | None = None)
     return value
 
 
+def promote_flat_llm_agent_config(value: Any) -> Any:
+    """Lift flat create payloads into nested ``ModelConfig`` shape.
+
+    Mirrors the helper embedded in generated SDK wrappers so runtime factory
+    calls (F-57) accept the same natural-language ``agent_config`` form.
+
+    Leaf ``model_info`` dicts (string ``model`` + credentials, no agent
+    identity fields) must not be rewritten.
+    """
+    if not isinstance(value, dict):
+        return value
+    if not any(
+        key in value
+        for key in ("provider", "id", "prompt_template", "controller_type")
+    ):
+        return value
+    model = value.get("model")
+    flat_keys = ("provider", "api_key", "api_base", "model_name", "model_provider")
+    has_flat = any(key in value for key in flat_keys)
+    if isinstance(model, dict) and not has_flat:
+        return value
+    if model is not None and not isinstance(model, str) and not has_flat:
+        return value
+    if isinstance(model, dict):
+        model_obj = dict(model)
+        raw_info = model_obj.get("model_info")
+        info = dict(raw_info) if isinstance(raw_info, dict) else {}
+    else:
+        model_obj = {}
+        info = {}
+    provider = (
+        model_obj.get("model_provider")
+        or value.get("provider")
+        or value.get("model_provider")
+        or ""
+    )
+    if isinstance(model, str) and model.strip():
+        info.setdefault("model", model.strip())
+    model_name = value.get("model_name")
+    if isinstance(model_name, str) and model_name.strip() and "model" not in info:
+        info["model"] = model_name.strip()
+    for src, dest in (("api_key", "api_key"), ("api_base", "api_base")):
+        if src in value and dest not in info:
+            info[dest] = value[src]
+    if not provider and not info:
+        return value
+    promoted = dict(value)
+    promoted["model"] = {"model_provider": provider, "model_info": info}
+    for key in flat_keys:
+        promoted.pop(key, None)
+    return promoted
+
+
 def coerce_sdk_type(cls: Any, value: Any) -> Any:
     """Convert JSON-compatible *value* to an SDK annotation type.
 
@@ -445,7 +575,7 @@ def coerce_sdk_type(cls: Any, value: Any) -> Any:
         if isinstance(value, cls):
             return value
     except TypeError:
-        return value
+        pass
 
     origin = get_origin(cls)
     args = get_args(cls)
@@ -472,6 +602,20 @@ def coerce_sdk_type(cls: Any, value: Any) -> Any:
     if origin is dict or cls is dict:
         return value
     if not isinstance(value, dict):
+        if (
+            dataclasses.is_dataclass(cls)
+            and isinstance(cls, type)
+            and isinstance(value, str)
+        ):
+            field_names = {field.name for field in dataclasses.fields(cls)}
+            if "model_provider" in field_names and "model_info" in field_names:
+                return coerce_sdk_type(
+                    cls,
+                    {
+                        "model_provider": "",
+                        "model_info": {"model": value},
+                    },
+                )
         return cls(value)
     if dataclasses.is_dataclass(cls) and isinstance(cls, type):
         try:
@@ -490,6 +634,8 @@ def coerce_sdk_type(cls: Any, value: Any) -> Any:
             )
         return cls(**kwargs)
     if hasattr(cls, "model_validate"):
+        if isinstance(value, dict):
+            value = promote_flat_llm_agent_config(value)
         return cls.model_validate(value)
     return cls(**value)
 

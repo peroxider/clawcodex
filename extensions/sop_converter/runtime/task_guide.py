@@ -363,8 +363,10 @@ def _composite_task_guide_rows(skill: SkillSpec) -> list[tuple[str, str, str, st
                 "创建 DeepSeek LLM Agent（例如 verify-bot）",
                 create_tool,
                 f"select:{create_tool}",
-                "直接传入 agent_config；agent_config.id 是稳定 agent_id。API Key 只能写 "
-                "env:DEEPSEEK_API_KEY（运行时解析，绝不通过 Bash 读取或回显），"
+                "直接传入 agent_config；agent_config.id 是稳定 agent_id。"
+                "model 必须是对象 ModelConfig（可用扁平写法：provider/model/api_key/api_base，"
+                "运行时会提升为 model.model_provider + model.model_info）。"
+                "API Key 只能写 env:DEEPSEEK_API_KEY（运行时解析，绝不通过 Bash 读取或回显），"
                 "DeepSeek 的 api_base 使用 https://api.deepseek.com。创建成功必须返回 "
                 "created_persisted: true 和 resource_catalog_path。",
             )

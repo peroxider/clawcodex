@@ -10,8 +10,8 @@ from clawcodex_ext.tool_system.protocol import ToolCall, ToolResult
 from clawcodex_ext.tool_system.registry import ToolRegistry
 from clawcodex_ext.tool_system.tools.tool_search import make_tool_search_tool
 from clawcodex_ext.tool_system.tools.tool_search_matching import rank_tool_matches
-from extensions.sop_converter.macros.models import MacroRoute
-from extensions.sop_converter.macros.routing import MacroRouteCatalog
+from extensions.sop_converter.runtime.macros.models import MacroRoute
+from extensions.sop_converter.runtime.macros.routing import MacroRouteCatalog
 from extensions.sop_converter.tool_retrieval import index_from_routes
 
 

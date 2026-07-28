@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 _active_bundle: BundleContext | None = None
 
 # Base tools always visible in bundle mode (matches startup overview allowlist).
-_BUNDLE_BASE_TOOL_NAMES: frozenset[str] = frozenset(AgentToolConstants.POS_PROXY_BASE_TOOLS)
+_BUNDLE_BASE_TOOL_NAMES: frozenset[str] = frozenset(
+    AgentToolConstants.registered_proxy_base_tools()
+)
 
 # ``pos convert`` wrote ``pos-converter``; ``sop convert`` writes ``sop-converter``.
 SOP_CONVERTER_SPEC_SOURCES = frozenset({"pos-converter", "sop-converter"})
@@ -152,8 +154,12 @@ def _tool_in_bundle_allowlist(tool: Any, bundle: BundleContext) -> bool:
 
 
 def filter_tools_for_bundle(tools: list[Any], bundle: BundleContext | None = None) -> list[Any]:
-    """Keep base tools + deferred SDK tools that belong to the active bundle."""
-    from clawcodex_ext.tool_system.build_tool import tool_matches_name  
+    """Keep base tools + deferred SDK tools that belong to the active bundle.
+
+    Session-macro provenance tools are re-appended after the allowlist filter
+    so overlay tools remain visible even when not listed on the bundle.
+    """
+    from clawcodex_ext.tool_system.build_tool import tool_matches_name
 
     bundle = bundle or get_active_bundle()
     if bundle is None:
@@ -174,6 +180,21 @@ def filter_tools_for_bundle(tools: list[Any], bundle: BundleContext | None = Non
         # Non-deferred agent-created tools: keep only if listed on the bundle.
         if any(tool_matches_name(tool, name) for name in bundle.tool_names):
             filtered.append(tool)
+
+    # Re-append session macros dropped by the allowlist filter.
+    try:
+        from .macros.session import is_session_macro_tool
+    except ImportError:
+        return filtered
+
+    present_ids = {id(tool) for tool in filtered}
+    for tool in tools:
+        if not is_session_macro_tool(tool):
+            continue
+        if id(tool) in present_ids:
+            continue
+        filtered.append(tool)
+        present_ids.add(id(tool))
     return filtered
 
 

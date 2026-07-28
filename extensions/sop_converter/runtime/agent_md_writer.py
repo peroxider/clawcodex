@@ -344,11 +344,19 @@ class AgentMarkdownWriter:
         use_lazy = len(raw_tools) > AgentToolConstants.MAX_INLINE_TOOL_DISPLAY
 
         if is_domain_agent:
-            render_tools = sorted(AgentToolConstants.POS_SOP_DOMAIN_AGENT_TOOLS)
+            render_tools = AgentToolConstants.registered_domain_agent_tools()
             skill_name = agent_type_to_skill_name(name)
             skills_list = agent_def.get("skills") or [skill_name]
         else:
-            render_tools = sorted(AgentToolConstants.POS_PROXY_BASE_TOOLS) if use_lazy else raw_tools
+            render_tools = (
+                AgentToolConstants.registered_proxy_base_tools()
+                if use_lazy
+                else [
+                    t
+                    for t in raw_tools
+                    if t not in AgentToolConstants.UNREGISTERED_SPECIAL_TOOLS
+                ]
+            )
             skills_list = agent_def.get("skills", [])
 
         tmpl = self._get_template("agent_md", _AGENT_MD_TEMPLATE_SRC)
@@ -535,7 +543,7 @@ class AgentMarkdownWriter:
             description=description,
             model=model,
             all_skills=all_skills,
-            proxy_tools=sorted(AgentToolConstants.POS_PROXY_BASE_TOOLS),
+            proxy_tools=AgentToolConstants.registered_proxy_base_tools(),
             component_agents=component_agents,
             workflow_stages=workflow_stages,
         )

@@ -1,9 +1,36 @@
 # F-57 SOP Executable Composite Workflows — 从描述型宏工具到可执行工作流
 
-> **状态**: 🔧 Phase 2–4 MVP 已接线；F-157 结构化 suppression 已实现，待开发者按手工清单复验宏选择效果
+> **状态**: ✅ Phase 2–4 + `resume-resource` 已接线（**F-57 关闭条件已满足**）。✅ Phase 5 MVP + **Phase B**（Compiler 校验层 / `register-macro-from-trace` / `promote-macro-workflow`）已在分支 `feature/f57-phase5-session-macro` 实现；AST 自动挖宏 / Phase 6 仍出范围。F-157 手工 NL 验收另计。
 > **领域**: 04-architecture-sdk (SOP Converter / Workflow Runtime)
-> **最后更新**: 2026-07-18
+> **最后更新**: 2026-07-23（Phase B：Compiler + trace-to-macro + promote）
 > **关联 Feature**: F-50, F-55, F-56, F-58, F-59, F-110, F-157
+
+---
+
+## §0 实现现状（相对原文方案）
+
+> **阅读约定**：§1 起保留设计正文（含 §7 会话宏、§8 路由等原方案）。与代码冲突时，以本表与文末 **§17 当前实现对照** 为准。
+
+| 能力 | 原文 / 设计方案 | 当前代码 |
+|------|----------------|----------|
+| **执行 IR** | `CompositeWorkflowSpec` 线性 steps | ✅ `composite_runtime.CompositeWorkflowRunner` |
+| **call_type** | `workflow` + 主进程调度 | ✅ `ToolRegistry.dispatch` → `_run_workflow_tool` |
+| **Step kinds** | tool / python / catalog（+ 设计中的 condition/parallel） | ✅ tool（portable）；python/catalog 仅 trusted builtin；❌ condition/parallel |
+| **绑定** | `$input` / `$steps` / `$resources` / `$private` | ✅ 已实现；非 trusted 拒绝 private/python/catalog |
+| **Builtin 宏** | `invoke-existing-agent` | ✅ + 通用 `resume-resource`；占位 `agent-teams`/`pipeline-execute`/`code-review` 默认跳过 |
+| **恢复链** | catalog → materialize → invoke | ✅ 经 F-56 `get_*` + `resource_runtime`（非直接散落 `agent_runtime` step） |
+| **手写宏 convert** | `sop-macros/` + manifest | ✅ `macros/convert.py` → `.clawcodex/macros/` + `call_type=workflow` |
+| **MacroRoute** | 独立于 F-55 PriorityRoute | ✅ `macros/routing.py`；ToolSearch direct recall |
+| **F-157 分层** | exclusive 隐藏 covered atomics | ✅ RetrievalPlan / active-tool 隐藏 / preflight 回滚已接线（详见 F-157）；手工 NL 另计 |
+| **Session 宏注册（Phase 5 MVP）** | §7 register + 安全门闩 | ✅ `register-macro-workflow` + confirm + 内存 `SessionMacroOverlay`（**不**写共享 `ToolRegistry`） |
+| **Phase B Compiler / trace / promote** | §7.3–§7.5 | ✅ `compiler.py`（校验层，无二次 LLM）；✅ `register-macro-from-trace`；✅ `promote-macro-workflow` → `.clawcodex/macros/` |
+| **AST / MacroDraft LLM 编译** | 二次模型挖宏 | ❌ 明确非目标 / 出范围 |
+| **BundleWorker** | 曾设想长驻子进程 | ❌ 废弃；原子工具仍 bash/in-process + `bundle_venv` |
+| **双执行通道** | — | ✅ 主进程 `call_type=workflow`；兼容路径：`invoke_existing_agent_wrapper.py` 直接跑 runner |
+
+**已通主路径：** portable 宏多步 tool 链；trusted builtin 恢复宏；手写宏装载；MacroRoute 直达召回；会话宏 MVP + Phase B（NL 校验注册 / trace 固化 / promote 落盘）。  
+**非关闭项 / 仍出范围：** AST 自动挖宏、条件/重试（Phase 6）。  
+**检出说明：** Phase 2–4 + `resume-resource` 在主仓；Phase 5/B 代码在 feature worktree，合并前主检出可能尚无 `macros/session.py` / `trace.py` / `promote.py`。
 
 ---
 
@@ -37,7 +64,7 @@ invoke-existing-agent(agent_id, query)
 
 ### 1.2 当前缺口（摘要）
 
-Phase 2–4 已打通 portable tool 链、trusted F-56 恢复链、direct route 和手写 bundle 宏装载。验收后的主要缺口已从“宏能否执行/召回”转为“宏与语义重合的 SDK 原子工具如何分层”：当前 route 未命中时仍回到普通文本评分，且 exclusive 只截断当次结果，没有结构化覆盖关系、active tool 隐藏和宏不可用回滚。该缺口由 F-157 负责；见 §8.5。
+Phase 2–4 已打通 portable tool 链、trusted F-56 恢复链、direct route 和手写 bundle 宏装载。宏与语义重合原子工具的分层检索契约见 **§8.5 / F-157**：代码侧 RetrievalPlan、covered-atomic 隐藏与 preflight 回滚已接线；route 未命中时仍回落普通文本评分。手工自然语言 E2E 另计。
 
 ### 1.3 实现与未接线清单（相对本设计）
 
@@ -51,27 +78,28 @@ Phase 2–4 已打通 portable tool 链、trusted F-56 恢复链、direct route 
 | `workflow_stack` / 递归与深度限制（§5.4） | ✅ 已接 `ToolContext` | Phase 2 |
 | 按宏依赖的 deferred tool 激活（§5.3） | ✅ 已实现 | Phase 2 |
 | `MacroDefinition` / `extensions/sop_converter/macros/` | ✅ 最小执行模型与 bundle manifest 编译已实现 | Phase 2 / 4 |
-| MacroCatalog（bundle/session/builtin） | ✅ 最小 builtin/bundle/session catalog 已实现；session 注册 API 待 Phase 5 | Phase 2 / 5 |
+| MacroCatalog（bundle/session/builtin） | ✅ 最小 builtin/bundle catalog 已实现；✅ Phase 5 MVP：session overlay 注册/解析（`SessionMacroOverlay` / `resolve_macro(session:*)`） | Phase 2 / 5 |
 | 独立 `MacroRoute`（与 F-55 `PriorityRoute` 分离） | ✅ 已实现 | Phase 3 |
-| ToolSearch direct route 主动召回 | ✅ 已实现；但未命中时宏仍与原子工具普通竞争 | Phase 3 / F-157 |
+| ToolSearch direct route 主动召回 | ✅ 已实现；分层 suppression 见 F-157 | Phase 3 / F-157 |
 | `invoke-existing-agent` 数据化迁移（§9.2） | ✅ 执行体与 route 均已数据化 | Phase 2 / 3 |
-| 默认 `prefer` / `verified` exclusive 策略 | ✅ route 策略已实现；结构化 covered-atomic suppression 待 F-157 | Phase 3 / F-157 |
+| 默认 `prefer` / `verified` exclusive 策略 | ✅ route 策略已实现；F-157 covered-atomic / active-tool suppression 已接线 | Phase 3 / F-157 |
 | 手写/模板宏 + convert 装载校验（§6） | ✅ MVP：`sop-macros/` + `--macro-manifest` 校验/原子写入/注册 | Phase 4 |
-| `AgentToolSpec.output_schema` 与 step `output_schema` | ✅ 已实现；bundle manifest 静态校验待 Phase 4 | Phase 2 / 4 |
+| `AgentToolSpec.output_schema` 与 step `output_schema` | ✅ 已实现；bundle manifest 静态校验随 Phase 4 MVP | Phase 2 / 4 |
 | F-56 trusted private lane（opaque Agent 不进入 public output） | ✅ 已实现；bundle/session 宏禁止 private/python/catalog | Phase 2 |
 | F-56 `CatalogExecutionContext` 注入 | ✅ 从 active bundle 注入，不要求模型传路径 | Phase 2 |
 | F-56 create/invoke 宏向 output schema | ✅ create 正式 schema；invoke 使用 JSON-safe projection | Phase 2 |
 | `resource_secret_missing` / `resource_version_unsupported` 发射 | ✅ 已发射并穿过 workflow | Phase 2 对齐门禁 |
-| F-56 `resource_type` 注册表消费（通用 `resume-resource`） | ❌ 宏未实现；✅ F-56 注册表 + E1–E5 已就绪（§9.3） | 后续（F-56 §14.7 第 5 步） |
-| Skill / Task Guide 从宏 catalog 通用生成 | ⚠️ 已有 `select:<macro>` 最小行；与 lifecycle 原子行的系统消歧待 F-157 | Phase 4 / F-157 |
-| `RegisterMacroWorkflow` + 安全门闩（§7.2） | 未实现 | Phase 5（可选） |
-| Session 宏 / trace-to-macro / promote | 未实现 | Phase 5（可选） |
-| `condition` / retry / optional step | 未实现 | Phase 6 |
+| F-56 `resource_type` 注册表消费（通用 `resume-resource`） | ✅ 已实现；`invoke-existing-agent` 为 agent 门面（执行链走 `resource_runtime` / ResourceHandler） | §9.3 |
+| Skill / Task Guide 从宏 catalog 通用生成 | ✅ 最小 `select:<macro>`；深度消歧归属 F-157，F-57 **不再追**更深生成 | Phase 4 / F-157 |
+| `RegisterMacroWorkflow` + 安全门闩（§7.2） | ✅ Phase 5 MVP：`register-macro-workflow` + 专用 confirm + TOCTOU overlay（**非** F-57 关闭条件） | Phase 5 MVP |
+| Session 宏 / trace-to-macro / promote | ⚠️ Phase 5 MVP：会话 overlay 注册已完成；❌ trace-to-macro / promote / 落盘仍出范围 | Phase 5 |
+| `condition` / retry / optional step | **未实现**；保留设计，另排期 | Phase 6（可选） |
+| 将 `invoke-existing-agent` 薄封装为 handler/`resume-resource` 执行链 | ✅ 已汇合（保留产品名与 agent schema） | — |
 | AST/WorkflowGraph 自动挖宏 | **明确非目标**（§2.3 / §6.5） | 独立 Feature（若重评） |
 
 **已通主路径：** portable 宏可在主进程 dispatch 多步 tool 链；`invoke-existing-agent` 以 builtin workflow 执行 F-56 get → materialize → invoke，opaque 状态留在 private lane；ToolSearch 已接 MacroRoute direct recall。
 
-**验收后新增边界：** F-57 保留宏定义、路由意图与执行；“宏覆盖哪些原子工具、何时隐藏、何时恢复、如何从 active tools 移除”统一交由 F-157。session 注册仍是可选 Phase 5。
+**验收后新增边界：** F-57 保留宏定义、路由意图与执行；“宏覆盖哪些原子工具、何时隐藏、何时恢复、如何从 active tools 移除”统一交由 F-157。Phase 5 会话宏 MVP（register/confirm/overlay）已完成；compiler / promote / trace-to-macro 仍出范围。
 
 ---
 
@@ -95,16 +123,16 @@ Phase 2–4 已打通 portable tool 链、trusted F-56 恢复链、direct route 
 | Composite workflow spec | ✅ | 定义 steps、inputs、outputs、resource bindings |
 | 线性执行器 | ✅ | 支持顺序执行 Python/catalog/tool step |
 | 参数绑定 | ✅ | 支持 `$input.x`、`$steps.name.output.y`、`$resources.x` |
-| 标准宏工具 | ✅ | `invoke-existing-agent`（主进程 workflow + 暂时硬编码路由） |
+| 标准宏工具 | ✅ | `invoke-existing-agent` + `resume-resource`（主进程 workflow + MacroRoute） |
 | 结果聚合 | ✅ | 返回最终 output 原文和 trace |
 | `call_type=workflow` + 主进程调度 | ✅ | 经 `ToolRegistry.dispatch`；见 §5.2、§1.3 |
 | Output 归一化与 output_schema | ✅ | §5.6；字段 binding 契约 |
 | `workflow_stack` / 递归限制 | ✅ | §5.4 |
 | 宏依赖 deferred 激活 | ✅ | §5.3 |
-| 最小 MacroCatalog | ✅ | builtin/bundle/session 分层；外部装载/注册分别待 Phase 4/5 |
+| 最小 MacroCatalog | ✅ | builtin/bundle；session 经 Phase 5 overlay |
 | 独立 MacroRoute + 去硬编码 | ✅ | §8；Phase 3 |
 | 显式宏 convert 校验与持久化 | ✅ MVP | §6；手写/模板，不发明编排 |
-| session 宏注册 | 待实施（可选） | §7；Phase 5 |
+| session 宏注册 | ✅ Phase 5 MVP | §7；内存 overlay + confirm；compiler/promote/trace 出范围 |
 | ToolSearch 直达路由 | ✅ | 主动召回 `target_tool`；宏/原子分层见 F-157 |
 
 ### 2.3 非目标
@@ -114,7 +142,7 @@ Phase 2–4 已打通 portable tool 链、trusted F-56 恢复链、direct route 
 - F-57 不从 AST、`WorkflowGraph` 或 F-55 dependency graph 自动生成宏。
 - convert 不推测业务编排，只验证显式 manifest 中已经声明的 step 和 binding。
 - 不要求把 F-56 恢复 API 全部暴露成普通工具；builtin trusted workflow 可使用受限 private lane。
-- 当前阶段仍以 `invoke-existing-agent` 为生产恢复宏；通用 `resume-resource` 见 §9.3（F-56 注册表与 E1–E5 已就绪，但宏本身尚未实现）。
+- 当前阶段生产恢复宏为 `invoke-existing-agent`（Agent）与通用 `resume-resource`（任意已注册 `resource_type`）；见 §9.3。
 - 不用宏工作流替代 F-110 的长流程编排、人工 gate、checkpoint 和跨 stage 恢复。
 - 不让 LLM 直接决定未经 schema 校验的参数绑定或执行链。
 
@@ -156,16 +184,23 @@ User workflow request / successful session trace              │
                               ToolRegistry + deterministic ToolSearch
 ```
 
-建议新增模块：
+设计建议模块布局（**相对实现**：见 §0 / §17）：
 
 ```text
 extensions/sop_converter/macros/
-├── models.py          # MacroDefinition / MacroDraft / MacroRoute
-├── compiler.py        # session/trace draft → workflow spec
-├── validation.py      # schema、binding、DAG、安全校验
-├── catalog.py         # bundle/session 持久化与合并
-├── registry.py        # workflow AgentToolSpec 注册
-└── routing.py         # direct route 匹配与冲突处理
+├── models.py          # ✅ MacroDefinition / MacroRoute 等
+├── compiler.py        # ✅ Phase B：校验/规范化（无二次 LLM）+ MacroDraft
+├── validation.py      # ✅ convert + ValidatedSessionMacro
+├── catalog.py         # ✅ builtin/bundle + resolve_macro(session:*)
+├── session.py         # ✅ SessionMacroOverlay / register / cleanup
+├── session_parse.py   # ✅ 严格 session parse
+├── resolve_tool.py    # ✅ resolve_tool_for_context
+├── register_tool.py   # ✅ register / from-trace / promote 工具
+├── trace.py           # ✅ Phase B：会话成功 tool trace → definition
+├── promote.py         # ✅ Phase B：session → bundle 落盘
+├── convert.py         # ✅ 手写宏装载
+├── routing.py         # ✅ MacroRoute
+└── templates/         # ✅ macro.definition.yaml.template
 ```
 
 ---
@@ -572,9 +607,205 @@ F-57 不包含 AST/WorkflowGraph 自动生成宏，也不预留 `--infer-macros`
 
 ---
 
-## §5 标准宏工具
+## §7 会话级自定义宏
 
-### 5.1 `invoke-existing-agent`
+> **状态：✅ Phase 5 MVP + Phase B 已完成**（register / from-trace / promote / Compiler 校验层 / overlay / TUI+REPL confirm）。  
+> **仍出范围：** AST/二次 LLM 挖宏、session `exclusive`、Phase 6 condition/retry。  
+> **实现偏离原文 §7.5「写入 tool_registry」：** MVP **禁止** `ToolRegistry.register` session 宏；权威源为 `ToolContext.session_macro_overlay`。  
+> **代码位置：** 分支 `feature/f57-phase5-session-macro`（worktree `.worktrees/f57-phase5-session-macro`）。
+
+### 7.1 注册入口
+
+三个工具（均能力门禁 + 专用 confirm）：
+
+```text
+register-macro-workflow      # 主 Agent 填写 definition → session overlay
+register-macro-from-trace    # 本会话成功 tool trace → session overlay
+promote-macro-workflow       # session 宏 → bundle .clawcodex/macros/（再确认一次）
+```
+
+`register-macro-workflow` 接收完整 MacroDefinition（`definition` + 可选 `replace`），经 `compile_macro_definition`（parse/validate）与专用 confirm 后写入会话 overlay。
+
+主 Agent 仅在用户有明确持久化意图时调用，例如：
+
+- “以后我说发布时，先 build，再 test，最后 upload。”
+- “把刚才成功的创建并调用 Agent 流程记成一个宏。”（优先 `register-macro-from-trace`）
+- “在本次会话里把 verify 流程注册为 `verify-release`。”
+- “把这个宏保存到项目里。”（`promote-macro-workflow`）
+
+普通一次性多工具任务不得自动注册宏。
+
+### 7.2 强制安全门闩
+
+`register-macro-workflow` 是高权限状态变更入口，不能只依赖主 Agent 判断用户意图。运行时必须执行以下门闩（**Phase 5 MVP 已接线**）：
+
+- 每次 create/replace 前触发**专用** confirm（展示 action、name、steps/args、route）；普通工具权限的 "don't ask again" / bypass **不得**跳过这次宏计划确认。
+- `allow_session_macro_registration` 为通用能力门禁；主 TUI/REPL 显式 True；子 Agent / headless 默认 False。
+- 非交互/headless 模式默认拒绝 session 宏注册。
+- 单个宏默认最多 16 个直接 step；每个 session 最多 32 个 active 宏；默认每 10 分钟最多成功注册 5 个。
+- step 只能引用当前 bundle/session allowlist ∪ 显式基础工具 ∪ 当前 `options.tools` 中非 session 名；不得用全局 registry 全集当 index。
+- `register-macro-workflow` 与其它 workflow/session 宏禁止作为 step（禁嵌套）。
+- 校验、确认或注册任一步失败时不得留下 overlay / options 的部分状态（TOCTOU + create_tool 失败零 commit）。
+- session 宏拒绝 `selection=exclusive`（`macro_selection_forbidden`），不静默降级。
+
+> MVP 未强制实现设计稿中的 `originating_user_turn_id` 绑定；交互路径依赖专用 confirm UI。
+
+### 7.3 从自然语言定义
+
+主 Agent 可以把用户要求转换为 MacroDefinition 草稿，但运行时必须重新验证（**MVP：由 `register-macro-workflow` 严格 parse/validate 承担**）：
+
+- 所有 step 工具已在 allowlist 中；
+- 参数名和 required schema 正确；
+- step output binding 可解析；
+- 不包含任意 Python/Bash；
+- 不存在宏递归或越权工具；
+- route 不得 `exclusive`；name 必须 kebab 且 `target_tool == name`。
+
+存在工具映射或参数歧义时，返回 diagnostics，由 Agent 向用户确认，不得猜测后注册。
+
+### 7.4 从已执行 trace 固化
+
+> **状态：✅ 已实现**（`register-macro-from-trace` + `macros/trace.py`）
+
+支持“把刚才的操作注册成宏”时，优先使用本会话的实际 tool trace：
+
+1. 从 `ToolContext.messages` 提取成功 `ToolUse`/`ToolResult` 序列（跳过 register/promote 自身）。
+2. 取最近一段连续成功后缀，最多 16 步。
+3. 后一步 input 整值等于前一步 output 时绑定 `$steps.<id>.output`；首步参数提升为 `$input.*`。
+4. `provenance.kind=session_trace`，再走 `compile` → confirm → overlay。
+
+工具：`register-macro-from-trace`（name 必填；可选 description/phrases/max_steps/replace）。
+
+### 7.5 注册与提升
+
+session 宏注册成功后（**MVP 已实现前三项语义；权威源为 overlay，而非 shared registry**）：
+
+- **不**调用 `ToolRegistry.register`；写入 `session_macro_overlay` 不可变 snapshot。
+- 经 `sync_effective_tools` / `iter_effective_tools` 进入当前会话可用工具池。
+- 增加 session direct route（overlay routes → ToolSearch）。
+- 默认不修改 bundle 文件和 Skill markdown。
+- 会话切换 / `/load` / `/resume` 调用 `clear_session_macros_for_context`（按 provenance 清理并恢复 covered base）。
+
+只有用户明确要求“保存到项目/bundle”时，才执行 promote（**✅ 已实现**：`promote-macro-workflow`）：
+
+```text
+session macro
+  → revalidate as scope=bundle
+  → dedicated confirm (action=promote)
+  → write <bundle>/.clawcodex/macros/<name>.yaml
+  → register_macro(bundle:…) + route + save_spec
+  → keep session overlay entry for current conversation
+```
+
+session 宏执行 create 工具时，资源仍按 F-56 规则写入 bundle-local 或 user-local ResourceCatalog。session 结束或删除宏不会删除这些资源；宏的会话作用域不提供资源隔离或自动回收。
+
+---
+
+## §8 确定性 ToolSearch 路由
+
+> **状态：✅ MacroRoute / direct recall 已实现；F-157 结构化隐藏 / active-tool suppression / preflight 回滚已在代码接线（见 §0 / F-157）；手工 NL E2E 另计。**
+
+`MacroRoute` 与 F-55 `PriorityRoute` 是两套独立模型：
+
+- `PriorityRoute` 保持现有 lifecycle intent-group 重排语义，不增加 `target_tool`、`selection` 等宏字段。
+- `MacroRoute` 负责主动召回一个具体宏，随 MacroDefinition 存储，或编译成独立的 bundle/session route index。
+- MacroRoute 不写入 `.clawcodex/tool-dependencies.yaml`；ToolSearch 分别加载两类元数据，并按 §8.3 串联。
+
+不得通过扩展 F-55 `PriorityRoute` 来实现宏直达，否则生命周期依赖层和可执行宏层会再次耦合。F-157 同样使用独立的窄粒度 `intent_key`，不把 F-55 宽粒度 lifecycle group 直接当成隐藏边界。
+
+### 8.1 当前问题
+
+当前 F-55 `priority_routes` 的行为是：
+
+1. 普通 ToolSearch 先根据 name、alias、tag、description 产生候选。
+2. lifecycle route 只对已有候选重排。
+
+因此，如果宏没有被普通文本评分选中，route 无法把它加入结果。F-57 已用通用 MacroRoute 替代 existing-agent 专用短路，但验收表明：route 未命中时仍会回到普通评分，且系统尚不知道宏覆盖哪些原子工具。后一个问题不是继续添加 phrase 可以完整解决的，覆盖关系与分层规划见 F-157。
+
+### 8.2 独立 MacroRoute 模型
+
+新增 direct route 元数据。以下 `invoke-existing-agent` 是已经过回归验证、允许 exclusive 的 builtin 示例：
+
+```yaml
+phrases:
+  - 用已创建的 agent 回复
+keywords:
+  - agent
+  - 回复
+negative_keywords:
+  - 创建
+target_tool: invoke-existing-agent
+intent_key: agent.invoke_existing       # F-157 扩展
+covered_tools:                          # F-157 扩展
+  - llmagent-invoke
+  - send-to-agent
+match_mode: all
+selection: exclusive
+priority: 100
+verified: true
+```
+
+| 字段 | 说明 |
+|------|------|
+| `target_tool` | route 直接召回的宏工具 |
+| `intent_key` | F-157 的窄粒度检索意图；不得直接复用宽粒度 lifecycle group |
+| `covered_tools` | F-157 中 exclusive 命中后可隐藏、宏不可用时可恢复的原子工具 |
+| `selection=exclusive` | 唯一高置信命中时只返回目标宏 |
+| `selection=prefer` | 将宏置顶，同时保留下层候选 |
+| `match_mode` | `exact`、`all`、`any` |
+| `priority` | 多 route 命中时的稳定排序 |
+| `negative_keywords` | 排除创建、配置等相邻意图 |
+| `verified` | 是否已通过 route corpus、权限和失败行为验证 |
+
+默认策略必须保守：
+
+- 新建 session 宏和 convert 装载的 bundle 宏默认 `selection=prefer`。
+- `exclusive` 只允许 builtin 或 `verified=true` 的 bundle 宏，并要求存在正向、负向和冲突 route 测试语料。
+- session 宏即使由用户创建，也必须先以 `prefer` 运行；只有显式 promote/verify 后才可变为 `exclusive`。
+
+### 8.3 ToolSearch 顺序
+
+```text
+select:<exact-tool>
+  → session direct route
+  → bundle direct route
+  → builtin direct route
+  → lifecycle-chain route
+  → normal ToolSearch scoring
+  → lifecycle reorder
+```
+
+直达路由必须能把 `target_tool` 主动加入候选，而不是只重排已有候选。
+
+F-157 在 direct route 与普通评分之间增加 `RetrievalPlan → macro preflight → suppression commit/rollback`。F-57 的 `exclusive=True → 直接返回宏` 只能视为兼容实现，不再是最终架构。
+
+### 8.4 冲突处理
+
+- exact phrase 优先于 keyword route。
+- session route 优先于 bundle route，但不得静默覆盖 builtin 安全路由。
+- priority 更高者优先；priority 相同时选择匹配 token 更多者。
+- 两条 `exclusive` route 仍然同分时，不直接执行；返回两个候选或退回普通 ToolSearch。
+- route 指向不存在、未 allowlist、无法激活或校验失败的工具时忽略该 exclusive route，降级到 `prefer`/普通 ToolSearch，并记录诊断。
+- 如果宏已经开始执行后失败，不得自动改调底层原子工具，因为前序 step 可能已有 side effect；应返回 trace、失败 step 和可供用户选择的恢复候选。
+
+### 8.5 Skill、Task Guide 与 F-157 分层检索
+
+convert 注册 bundle 宏后：
+
+- 如果 Skill 的 `allowed_tools` 覆盖宏的所有底层工具，优先把宏加入该 Skill。
+- Task Guide 自动生成 `select:<macro-name>` 行。
+- 只有 `selection=exclusive`、`verified=true`、存在窄粒度 `intent_key` / `covered_tools` 且目标宏通过无副作用 preflight 时，才可隐藏对应底层原子工具。
+- 隐藏必须同时影响 ToolSearch `matches` 与当前 turn 已暴露的 active tools；只把宏截断为第一名不算完成。
+- exclusive 目标在执行前不可用时，由 F-157 在同一次搜索中恢复原子工具候选；执行开始后的失败按 §8.4 返回 trace，不自动重放底层工具。
+- 普通评分阶段由 F-157 使用 `source=composite-tool`、`call_type=workflow`、macro tags 的编译结果做结构 tie-break；这些信号不得继续只停留在 ToolSpec。
+
+Task Guide 只是解释层；MacroRoute 负责意图召回，F-157 RetrievalPlan 负责候选分层、隐藏与回滚，runtime validation 才是确定性来源。完整契约、迁移和验收见 F-157。
+
+---
+
+## §9 标准宏迁移
+
+### 9.1 `invoke-existing-agent`
 
 输入：
 
@@ -627,12 +858,12 @@ F-57 不包含 AST/WorkflowGraph 自动生成宏，也不预留 `--infer-macros`
 
 迁移已经删除 existing-agent 专用判断并由通用 route 覆盖原回归用例；自然语言验收暴露出的 route 漂移、active atomic 暴露和可回滚 suppression 不再在本节追加专用判断，统一由 F-157 处理。
 
-### 9.3 下一步：通用 `resume-resource`
+### 9.3 通用 `resume-resource`
 
-> **状态**：❌ 宏尚未实现；✅ F-56 侧前置门禁已满足（注册表 + E1–E5 / `DemoHandle`）。
+> **状态**：✅ 宏已实现（trusted builtin workflow + composite tool + MacroRoute）；✅ F-56 注册表消费。
 > **归属**：本 Feature（F-56 §14.7 第 5 步交出）。
 
-目标形态（未接线）：
+目标形态：
 
 ```json
 {
@@ -642,25 +873,29 @@ F-57 不包含 AST/WorkflowGraph 自动生成宏，也不预留 `--infer-macros`
 }
 ```
 
-相对今日 `invoke-existing-agent` 的差异：
+相对 `invoke-existing-agent` 的差异：
 
-| 项 | `invoke-existing-agent`（已实现） | `resume-resource`（待实现） |
+| 项 | `invoke-existing-agent`（已实现） | `resume-resource`（已实现） |
 |----|-----------------------------------|------------------------------|
 | 类型范围 | 仅 Agent 族 | 任意已注册 `resource_type` |
 | 句柄入参 | `agent_ref` / `agent_id`（兼容） | 稳定 `resource_ref` + `resource_type` |
 | 恢复路径 | 硬编码 get → materialize → invoke | `require_resource_handler(type)` → materialize → invoke |
 | 未注册类型 | N/A（隐含 agent） | 透传 `resource_type_unregistered`，不得 silently 走 agent |
 
-实现约束（验收前必须遵守）：
+实现约束（已遵守）：
 
 1. **只经 F-56 `ResourceHandler` 注册表**消费资源；禁止再复制一套 agent 专用 if / 新增 `invoke-existing-*` 作为扩展手段。
 2. 继续使用 §5.7 trusted private lane：opaque 对象不得进入 public `$steps` / ToolResult。
 3. public output 必须 JSON-safe，并验证 handler 的 `public_output_schema`。
 4. 错误码原样透传 F-56（含 `resource_type_unregistered`、secret/version/missing/ambiguous）。
-5. `invoke-existing-agent` 在通用宏落地前保持兼容；落地后可薄封装为对 `resume-resource(resource_type=agent, ...)` 的调用，或并存一段时间。
-6. 真实第二产品 SDK（Team/Pipeline 等）仍属产品需求；`DemoHandle` 只证明机制，不阻塞本宏的**机制验收**，但产品宣称「支持某 SDK 种类」仍需该种类已注册。
+5. `invoke-existing-agent` 保留为 Agent 产品门面（入参/出参兼容）；**执行链**已汇合到 `get_agent_record` + `resource_runtime`（与 `resume-resource` 同套 ResourceHandler）。
+6. 真实第二产品 SDK（Team/Pipeline 等）仍属产品需求；`DemoHandle` 只证明机制，产品宣称「支持某 SDK 种类」仍需该种类已注册。
 
-未实现前：若只需 Agent 诊断，继续用明确命名的 `invoke-existing-agent`，不要提前占用通用名称却只接 agent。
+入口：
+
+- workflow：`builtin:resume-resource`（`resume_resource_workflow()`）
+- composite tool：`resume_resource` → kebab `resume-resource`
+- 运行时 helper：`resource_runtime.materialize_resource` / `invoke_resource`
 
 ### 9.4 F-56 对齐门禁
 
@@ -732,7 +967,9 @@ Phase 2 已按以下门禁完成并通过回归测试；`resource_type` 可扩�
 | `extensions/sop_converter/composite_runtime.py` | tool result 规范化、trusted private context、递归保护、schema/binding 增强 |
 | `extensions/sop_converter/composite_tools/models.py` | 与通用 MacroDefinition 对接，逐步移除 script-name 强依赖 |
 | `extensions/sop_converter/composite_tools/__init__.py` | 支持 manifest/workflow 注册，不再要求每个宏有专用 wrapper |
-| `extensions/sop_converter/macros/*` | 新增 definition/draft、会话编译、校验、catalog、注册和路由模块 |
+| `extensions/sop_converter/macros/*` | ✅ models/catalog/routing/convert/templates；✅ Phase 5 `session.py` / `session_parse.py` / `resolve_tool.py` / `register_tool.py`；❌ `compiler.py` / promote / trace |
+| `extensions/sop_converter/composite_workflows.py` | ✅ `invoke_existing_agent_workflow` / `resume_resource_workflow` |
+| `extensions/sop_converter/resource_runtime.py` | ✅ 恢复链统一经 ResourceHandler |
 | `clawcodex_ext/agent/tool_authoring/spec.py` | 增加 `call_type="workflow"` 和可选 `output_schema` |
 | `clawcodex_ext/agent/tool_authoring/validators.py` | 校验 workflow manifest、可引用路径和可选 output schema |
 | `clawcodex_ext/agent/tool_authoring/persistence.py` | 序列化 workflow call type、manifest 引用和 output schema |
@@ -750,23 +987,22 @@ Phase 2 已按以下门禁完成并通过回归测试；`resource_type` 可扩�
 
 ## §13 测试计划
 
-建议新增：
-
-```text
-tests/misc/test_sop_macro_models.py
-tests/misc/test_sop_macro_validation.py
-tests/misc/test_sop_macro_catalog.py
-tests/misc/test_sop_macro_registry.py
-tests/misc/test_sop_session_macros.py
-tests/tool/test_tool_search_macro_routes.py
-```
-
-保留并扩展：
+**当前仓库已有（对照原「建议新增」）：**
 
 ```text
 tests/misc/test_sop_composite_runtime.py
-tests/misc/test_sop_invoke_existing_agent.py
+tests/misc/test_composite_tools.py
+tests/misc/test_sop_converter_invoke_existing_agent.py
+tests/misc/test_resume_resource.py
+tests/misc/test_workflow_tool_authoring.py
+tests/misc/test_sop_macro_convert_phase4.py
+tests/misc/test_sop_macro_coverage_validation.py
+tests/misc/test_sop_tool_retrieval_index.py
+tests/tool/test_tool_search_macro_routes.py
+tests/tool/test_tool_search_layered_retrieval.py   # F-157
 ```
+
+**Phase 5 已建（feature 分支）：** `tests/misc/test_sop_session_macros.py`（worktree `.worktrees/f57-phase5-session-macro`）。
 
 必须覆盖：
 
@@ -808,8 +1044,8 @@ tests/misc/test_sop_invoke_existing_agent.py
 | 8 | 路由结果确定 | 相同 query/catalog 多次搜索返回相同宏顺序 |
 | 9 | 最终返回原文 | verify-bot 回复 `ping` 时宏 output 保留 `ping` |
 | 10 | step output 契约稳定 | 文本、JSON、dict 和 scalar 工具均产生规定的 object 形状 |
-| 11 | 可选 session 宏可安全注册 | 用户明确确认后可注册；未确认、超限、未 allowlist、headless 默认场景均拒绝 |
-| 12 | 可选 trace 固化正确 | trace-to-macro 生成正确 step binding，并可显式 promote |
+| 11 | 可选 session 宏可安全注册 | ✅ Phase 5 MVP：确认后可注册；未确认、超限、未 allowlist、headless 默认场景均拒绝 |
+| 12 | 可选 trace 固化正确 | ✅ Phase B：`register-macro-from-trace` + `promote-macro-workflow` |
 | 13 | 新建宏不激进截断候选 | session/convert 宏初始 route 均为 `prefer` |
 | 14 | F-56 opaque 状态不泄漏 | materialized Agent 只存在 private context，ToolResult/trace 可 JSON 序列化 |
 | 15 | catalog identity 对齐 | create dispatch 后同宏 get 无需用户传 bundle_path 即命中同一 record |
@@ -824,15 +1060,15 @@ tests/misc/test_sop_invoke_existing_agent.py
 |------|------|----------|
 | Phase 1 | 现有 CompositeWorkflowSpec、runner、`invoke-existing-agent` | ✅ 已完成 |
 | Phase 2 | `workflow` call type、主进程 ToolRegistry runner、output 归一化、trusted private lane、CatalogExecutionContext、F-56 错误码、`workflow_stack`、deferred 激活、MacroCatalog | ✅ 已完成；portable tool 宏可执行，builtin F-56 链不泄漏 opaque 状态且 catalog identity 一致 |
-| Phase 3 | 独立 MacroRoute、route overlay、硬编码数据化、`prefer`/`verified` 策略 | ⚠️ direct recall 已完成；宏/原子 structural suppression 与 active exposure 转交 F-157 |
-| Phase 4 | 手写/模板宏接入、convert 校验/规范化/持久化、Skill/Task Guide | ✅ MVP：YAML+convert 装载/校验/原子写入/注册 workflow+route；Task Guide 深度生成可继续增强 |
-| Phase 5（可选） | `RegisterMacroWorkflow`、安全门闩、trace-to-macro、session promote | 用户可在会话中安全定义并提升宏 |
-| Phase 6 | condition、retry/backoff、optional step、F-110 互通 | 支持受控分支和长流程编排 |
-| 后续 | 通用 `resume-resource`（§9.3） | 经 F-56 `ResourceHandler` 按 `resource_type` 恢复；`invoke-existing-agent` 保持兼容或薄封装 |
+| Phase 3 | 独立 MacroRoute、route overlay、硬编码数据化、`prefer`/`verified` 策略 | ✅ direct recall 已完成；F-157 structural suppression / active exposure 已接线（手工 NL 另计） |
+| Phase 4 | 手写/模板宏接入、convert 校验/规范化/持久化、Skill/Task Guide | ✅ MVP：YAML+convert 装载/校验/原子写入/注册 workflow+route；Task Guide 以最小 `select:<macro>` 为止，不再追深度生成 |
+| Phase 5（可选，非关闭条件） | register / from-trace / promote / Compiler 校验层 | ✅ MVP + Phase B 已完成；不阻塞 F-57 关闭 |
+| Phase 6（可选，非关闭条件） | condition、retry/backoff、optional step、F-110 互通 | ❌ 未实现；另排期；不阻塞 F-57 关闭 |
+| §9.3 | 通用 `resume-resource` | ✅ 已实现；`invoke-existing-agent` 为 agent 门面（执行链已汇合） |
 
-实现项、未接线项与 F-157 接续边界的完整对照见 §1.3。
+实现项与 F-157 接续边界的完整对照见 §1.3。
 
-F-57 的执行与声明式交付核心路径为 Phase 2 → Phase 3 → Phase 4；宏/原子检索稳定性的当前关键路径为 F-157 P157-A → C → D。Phase 5 会话宏是产品增强，不作为手写宏可用性或 F-157 分层检索的前置条件。通用 `resume-resource` 在 F-56 注册表就绪后作为独立后续项，不阻塞 Phase 2–4 验收。AST/WorkflowGraph 自动推导不在阶段表中，若未来满足 §6.5 条件，应新建独立 Feature 评估。
+F-57 **关闭条件**为 Phase 2–4 + §9.3（**已满足**）。Phase 5 MVP 已完成但不纳入关闭条件；Phase 6 与 AST 自动挖宏仍非关闭项；宏/原子检索稳定性的验收见 F-157（含手工 E2E）。
 
 ---
 
@@ -844,3 +1080,46 @@ F-57 的执行与声明式交付核心路径为 Phase 2 → Phase 3 → Phase 4�
 - session 宏不要求重新执行 `sop convert`。
 - 要加入手写/模板 bundle 宏，现有 bundle 需要带 manifest 重新 convert 一次。
 - 新 convert 产物必须记录 macro schema version；遇到更高版本时拒绝执行并给出升级提示，不得猜测解析。
+
+---
+
+## §17 当前实现对照（相对原方案的补充）
+
+本节只记录相对 §1–§16 设计正文的**代码落点差异**，不改写上文原方案。
+
+### 17.1 已落地且与设计一致
+
+| 设计节 | 代码落点 |
+|--------|----------|
+| §5 Runtime / `call_type=workflow` | `composite_runtime.py` + `factory._run_workflow_tool` |
+| §6 手写宏 convert | `macros/convert.py`、`macros/templates/`、`sop convert --macro-manifest` |
+| §7 会话宏 MVP | `macros/session.py`、`register_tool.py`、`resolve_tool.py`、TUI/REPL confirm（feature 分支） |
+| §8 MacroRoute + direct recall | `macros/routing.py`、`tool_search.py` / `tool_search_matching.py` |
+| §9.1–§9.3 恢复宏 | `composite_workflows.py`、`composite_tools/builtin.py`、`resource_runtime.py` |
+| F-56 对齐 | `CatalogExecutionContext`、trusted private lane、错误码透传 |
+
+### 17.2 相对原方案的修改 / 汇合
+
+| 原方案表述 | 当前实现 |
+|------------|----------|
+| 恢复 step 直接调 `agent_runtime.*` | trusted workflow 经 **`resource_runtime`** + `ResourceHandler`；`agent_runtime` 仍为 agent 行委托实现 |
+| 仅 `invoke-existing-agent` | 增加通用 **`resume-resource`**；agent 宏保留产品门面 |
+| exclusive「只截断搜索结果」 | F-157 已扩展为 **active tools 隐藏 + preflight 回滚**（见 F-157 / `test_tool_search_layered_retrieval.py`） |
+| 五个 builtin composite 均可执行 | 仅 invoke/resume 可执行；`agent_teams` / `pipeline_execute` / `code_review` 为占位并默认 skip |
+| 单一执行入口 | **双通道**：主进程 workflow + 兼容 wrapper 脚本直跑 runner |
+
+### 17.3 仍为设计、未接线 / 部分完成
+
+| 设计节 | 状态 |
+|--------|------|
+| §3 AST / 二次 LLM MacroCompiler | ❌ 非目标 |
+| §7 会话宏 register/confirm/overlay | ✅ Phase 5 MVP（feature 分支） |
+| §7 Compiler 校验层 / trace-to-macro / promote | ✅ Phase B（`compiler.py` / `trace.py` / `promote.py`） |
+| §5.1 `condition` / `parallel` / retry | ❌ |
+| AST / WorkflowGraph 自动挖宏 | ❌ 明确非目标（§6.5） |
+| `emit_composite_workflow_yaml` 舞台 YAML | 与可执行 IR **正交**（orchestrator 侧车，不是 `CompositeWorkflowSpec`） |
+
+### 17.4 模块杂记
+
+- `composite_tools/registry.py` 与 `__init__.py` 能力重复，**当前 convert 走 `__init__.py`**。
+- 仓库根目录通常无示例 `sop-macros/`；以测试夹具与模板为准。

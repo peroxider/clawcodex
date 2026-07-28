@@ -112,17 +112,29 @@ POS_PROXY_BASE_TOOLS: frozenset[str] = frozenset(
         "Read",
         "TodoWrite",
         "StructuredOutput",
+        "resource-catalog",
+        # F-57 session-macro register / promote (not in convert bundles).
+        "register-macro-workflow",
+        "register-macro-from-trace",
+        "promote-macro-workflow",
     ]
 )
 
 # Domain sub-agents: no codebase exploration — SDK via Skill + ToolSearch only.
+# Read + resource-catalog allow F-56 catalog inspect without workspace Grep.
+# Macro tools stay visible so subagents hit capability gate (not missing-tool).
 POS_SOP_DOMAIN_AGENT_TOOLS: frozenset[str] = frozenset(
     [
         "Skill",
         "ToolSearch",
         "Bash",
+        "Read",
         "TodoWrite",
         "StructuredOutput",
+        "resource-catalog",
+        "register-macro-workflow",
+        "register-macro-from-trace",
+        "promote-macro-workflow",
     ]
 )
 

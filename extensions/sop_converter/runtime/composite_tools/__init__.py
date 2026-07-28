@@ -22,6 +22,10 @@ from .models import CompositeStage, CompositeToolSpec
 
 logger = logging.getLogger(__name__)
 
+# Patch/test alias — register_composite_tools calls this name so unit tests can
+# ``patch("extensions.sop_converter.composite_tools.save_spec")``.
+save_spec = DEFAULTS.tool_authoring.save_spec
+
 
 def persist_builtin_retrieval_index(bundle_dir: Path) -> Path | None:
     """Compile F-157 metadata for persisted builtin composite macros."""
@@ -118,7 +122,7 @@ def register_composite_tools(
         tool_spec = _composite_to_agent_tool_spec(spec, bundle_dir=bundle_dir)
         if persist:
             try:
-                DEFAULTS.tool_authoring.save_spec(tool_spec, tool_dir=tool_dir)
+                save_spec(tool_spec, tool_dir=tool_dir)
             except Exception as exc:
                 logger.warning("Failed to persist composite tool %s: %s", spec.name, exc)
                 continue
@@ -271,4 +275,5 @@ __all__ = [
     "persist_builtin_retrieval_index",
     "emit_composite_workflow_yaml",
     "to_kebab_case",
+    "save_spec",
 ]

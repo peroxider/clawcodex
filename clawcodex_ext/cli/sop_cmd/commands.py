@@ -85,7 +85,7 @@ class ConvertOptions:
 def run_sop_command(args: list[str]) -> int:
     """Dispatch ``sop`` sub-subcommands (currently only ``convert``)."""
     if not args:
-        print("usage: clawcodex sop convert <sdk_spec> [options]", file=sys.stderr)
+        print("usage: clawcodex sop convert|catalog …", file=sys.stderr)
         return 2
 
     command = args[0]
@@ -94,8 +94,13 @@ def run_sop_command(args: list[str]) -> int:
     if command == "convert":
         return _handle_convert(rest)
 
+    if command == "catalog":
+        from extensions.sop_converter.catalog_cli import run_catalog_command
+
+        return run_catalog_command(rest)
+
     print(f"Unknown sop command: {command}", file=sys.stderr)
-    print("usage: clawcodex sop convert <sdk_spec> [options]", file=sys.stderr)
+    print("usage: clawcodex sop convert|catalog …", file=sys.stderr)
     return 2
 
 
@@ -456,19 +461,15 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
     agent_map = None
     bridge_script_path: Path | None = None
     if workflow_graph:
-        from extensions.sop_converter.workflow_mode.capability import StageCapabilityMapper
-        from extensions.sop_converter.workflow_mode.capability.arc_mapper import (
-            ensure_arc_stage_skills,
-        )
-        from extensions.sop_converter.workflow_mode.extractors.adapters.arc import (
-            resolve_arc_pipeline_dir,
+        from extensions.sop_converter.workflow_mode.capability import (
+            StageCapabilityMapper,
+            ensure_stage_skills,
         )
 
-        if resolve_arc_pipeline_dir(sdk_path) is not None:
-            grouped_skills = ensure_arc_stage_skills(
-                workflow_graph, components, grouped_skills, sdk_path,
-            )
-            skill_agent_map = {s.name: f"{s.name}-agent" for s in grouped_skills}
+        grouped_skills = ensure_stage_skills(
+            workflow_graph, components, grouped_skills, sdk_path,
+        )
+        skill_agent_map = {s.name: f"{s.name}-agent" for s in grouped_skills}
 
         agent_map = StageCapabilityMapper().map(workflow_graph, components, grouped_skills)
 
@@ -494,7 +495,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
     # F-57 Phase 4: preview / validate handwritten macros without writing
     if opts.preview or opts.validate_only:
         try:
-            from extensions.sop_converter.macros import (
+            from extensions.sop_converter.runtime.macros import (
                 MacroConvertError,
                 convert_handwritten_macros,
             )
@@ -544,11 +545,11 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 print(f"   Registered tools: {len(set(registered.values()))}")
             composite_registered: dict[str, str] = {}
             try:
-                from extensions.sop_converter.composite_tools import (
+                from extensions.sop_converter.runtime.composite_tools import (
                     emit_composite_workflow_yaml,
                     register_composite_tools,
                 )
-                from extensions.sop_converter.composite_tools.builtin import (
+                from extensions.sop_converter.runtime.composite_tools.builtin import (
                     builtin_composite_tools,
                 )
 
@@ -562,10 +563,10 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 # F-55: auto-promote lifecycle recovery composite tools into
                 # skills whose allowed_tools intersect the agent_lifecycle group.
                 try:
-                    from extensions.sop_converter.composite_tools.builtin import (
+                    from extensions.sop_converter.runtime.composite_tools.builtin import (
                         lifecycle_tools_for_skill,
                     )
-                    from extensions.sop_converter.dependency.models import (
+                    from extensions.sop_converter.core.dependency.models import (
                         ToolDependencyGraph,
                     )
 
@@ -586,7 +587,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                     )
                 for skill in grouped_skills:
                     if skill.name in ("agent_teams-skill", "agent_teams"):
-                        for tool_name in composite_registered:
+                        for tool_name in composite_registered.values():
                             if tool_name not in skill.allowed_tools:
                                 skill.allowed_tools.insert(0, tool_name)
                 if opts.output_dir:
@@ -608,7 +609,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
 
             # F-57 Phase 4: handwritten / template macros (sop-macros/ + --macro-manifest)
             try:
-                from extensions.sop_converter.macros import (
+                from extensions.sop_converter.runtime.macros import (
                     MacroConvertError,
                     convert_handwritten_macros,
                 )
@@ -630,7 +631,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                         f"   Registered handwritten macros: {len(macro_result.registered_tools)}"
                     )
                     # One owner skill per macro — never broadcast onto every domain.
-                    from extensions.sop_converter.macros.overview_intent import (
+                    from extensions.sop_converter.runtime.macros.overview_intent import (
                         assign_macros_to_owner_skills,
                     )
 

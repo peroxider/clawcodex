@@ -427,7 +427,7 @@ def _direct_macro_route_names(
 
     if macro_route_catalog is None:
         try:
-            from extensions.sop_converter.macros.routing import (
+            from extensions.sop_converter.runtime.macros.routing import (
                 DEFAULT_MACRO_ROUTE_CATALOG,
                 ensure_builtin_routes,
                 resolve_macro_route,
@@ -445,7 +445,7 @@ def _direct_macro_route_names(
             pass
     else:
         try:
-            from extensions.sop_converter.macros.routing import (
+            from extensions.sop_converter.runtime.macros.routing import (
                 resolve_macro_route,
                 get_negative_keyword_exclusions,
             )

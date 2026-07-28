@@ -40,6 +40,7 @@ from .resource_catalog import (
     resource_error,
     normalize_resource_type as normalize_resource_type_catalog,
     agent_entry_to_resource_record,
+    build_resource_record_from_create,
     iter_resource_catalog_locations,
 )
 from .resource_handlers import (
@@ -142,6 +143,7 @@ __all__ = [
     "get_agent_record",
     "resource_error",
     "agent_entry_to_resource_record",
+    "build_resource_record_from_create",
     "iter_resource_catalog_locations",
     "ResourceHandler",
     "ResourceHandlerError",

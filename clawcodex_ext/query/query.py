@@ -2076,6 +2076,12 @@ def _resolve_effective_tools(
         tool_use_context.options.tools = list(params.tools)
 
     base_tools = tool_use_context.options.tools or params.tools
+    try:
+        from extensions.sop_converter.runtime.macros.session import iter_effective_tools
+
+        base_tools = iter_effective_tools(tool_use_context, list(base_tools or []))
+    except ImportError:
+        pass
     model = tool_use_context.options.main_loop_model or getattr(params.provider, "model", "") or ""
 
     filtered = filter_tools_for_request(base_tools, model, messages)
@@ -2084,6 +2090,13 @@ def _resolve_effective_tools(
 
         filtered = filter_goal_model_tools_for_context(filtered, tool_use_context)
     except Exception:
+        pass
+    # Re-merge after filters so session overlay tools are not dropped.
+    try:
+        from extensions.sop_converter.runtime.macros.session import iter_effective_tools
+
+        filtered = iter_effective_tools(tool_use_context, list(filtered or []))
+    except ImportError:
         pass
     return filtered
 

@@ -1,6 +1,6 @@
 # F-55 工具生命周期依赖 — SOP Bundle 编排断裂修复
 
-> **状态**: ✅ L1（catalog 恢复）+ L2（`tool-dependencies.yaml`）+ L3（Task Guide / ToolSearch）已实现；§8 类型契约已接线（可扩展性见 F-56 §14）。旧「Bundle Venv 长驻子进程」方案见附录 A（已废弃）。  
+> **状态**: ✅ L1（catalog 恢复）+ L2（`tool-dependencies.yaml`）+ L3（Task Guide / ToolSearch）已实现；§7 类型契约已接线（可扩展性见 F-56 §14）。旧「Bundle Venv 长驻子进程」方案见附录 B（已废弃）。  
 > **领域**: 04-architecture-sdk (SOP Converter / SDK Tooling)  
 > **最后更新**: 2026-07-18  
 > **关联 Feature**: F-50 (SOP Converter), F-52 (SDK→Tool 注册), F-18 (CreateAgentTool), F-56, F-57
@@ -11,15 +11,15 @@
 
 | 层 | 文档原方案 | 当前代码 |
 |----|-----------|----------|
-| **L1** | create 持久化 + invoke 时 materialize | ✅ create 经 `--catalog-metadata` 双写 F-56 `ResourceCatalog` + legacy `AgentCatalog`；调用经 `invoke-existing-agent`（F-57）或 `--catalog-fallback` |
+| **L1** | create 持久化 + invoke 时 materialize | ✅ create 经 `--catalog-metadata` 写入 F-56 `ResourceCatalog`；调用经 `invoke-existing-agent`（F-57）或 `--catalog-fallback` |
 | **L2** | 生成 `tool-dependencies.yaml` | ✅ `extensions/sop_converter/dependency/` + convert 时写出 `.clawcodex/tool-dependencies.yaml` |
 | **L3** | Task Guide / system prompt / Skill frontmatter | ✅ `sop_prompts._lifecycle_prompt_block`、`task_guide` 依赖行、`lifecycle-deps:` frontmatter |
 | **ToolSearch** | `priority_routes` / `rank_tools_by_lifecycle` | ✅ `tool_search_matching.rank_tools_by_lifecycle`；支持 `lifecycle-chain:` query |
-| **§8 类型契约** | `resource_type` 匹配 + `resource_ref` 注入 | ✅ `heuristics/lifecycle.py`；参数名 `*_id` 仅兜底 |
-| **依赖隔离** | 曾设计长驻 BundleWorker | ❌ 废弃（见附录 A）；现用 `bundle_venv` 激活 / bash 注入 site-packages + in-process wrapper |
-| **search_tags ← resource_type** | §8.3 Layer 3 设想自动共享类型关键词 | ❌ **未实现**；`generate_search_tags` 仍从 name/description/param 派生；宏 tags 手写 |
+| **§7 类型契约** | `resource_type` 匹配 + `resource_ref` 注入 | ✅ `heuristics/lifecycle.py`；参数名 `*_id` 仅兜底 |
+| **依赖隔离** | 曾设计长驻 BundleWorker | ❌ 废弃（见附录 B）；现用 `bundle_venv` 激活 / bash 注入 site-packages + in-process wrapper |
+| **search_tags ← resource_type** | §7.3 Layer 3 设想自动共享类型关键词 | ❌ **未实现**；`generate_search_tags` 仍从 name/description/param 派生；宏 tags 手写 |
 
-§1–§2 保留为**问题复现与根因**（修复前状态）。§3 起为原设计；实施结果以本表与 §8 / F-56 为准。
+§1–§2 保留为**问题复现与根因**（修复前状态）。§3 起为原设计；实施结果以本表与 §7 / F-56 为准。
 
 ---
 
@@ -97,7 +97,7 @@
 仅靠签名分析仍推不出「必须先 persist catalog 再 materialize」——这是**生命周期依赖**，不是普通类型传递。现通过：
 
 1. convert 时写出 `tool-dependencies.yaml`（显式依赖图）
-2. §8 类型契约：`produces` / `consumes` 同 `resource_type` 即配对
+2. §7 类型契约：`produces` / `consumes` 同 `resource_type` 即配对
 3. ToolSearch 消费 `priority_routes` / `lifecycle-chain:`（不靠猜参数名）
 
 ### 2.4 ToolSearch 语义撞车（缓解中）
@@ -108,7 +108,7 @@
 - Skill `lifecycle-deps` + system prompt 生命周期块
 - `rank_tools_by_lifecycle` 按 intent group 排序
 
-> 注意：§8.3 设想的「search_tags 自动注入 `resource_type`」**尚未实现**；召回仍主要依赖依赖图与手写/启发式 tags。
+> 注意：§7.3 设想的「search_tags 自动注入 `resource_type`」**尚未实现**；召回仍主要依赖依赖图与手写/启发式 tags。
 
 ---
 
@@ -124,7 +124,7 @@
 | **L2** | Bundle 依赖元数据 | `tool-dependencies.yaml` + SOP converter 生成逻辑 | P1 | ✅ |
 | **L3** | Task Guide 增强 + ToolSearch 排序 | `task_guide.py` + `sop_prompts.py` + `tool_search_matching.py` | P1 | ✅ |
 
-> 主路径句柄契约以 §8（`resource_type` / `resource_ref`）为准；§3.2.3 原文以 `*_id` 为中心的描述仅作历史兜底路径。
+> 主路径句柄契约以 §7（`resource_type` / `resource_ref`）为准；§3.2.3 原文以 `*_id` 为中心的描述仅作历史兜底路径。
 
 ---
 
@@ -277,7 +277,7 @@ priority_routes:
        ↓
 依赖推理引擎 (detect_lifecycle_patterns)
        │
-       ├─ 识别 build_* / create_* ↔ run_* / invoke_* 配对（含 §8 类型匹配）
+       ├─ 识别 build_* / create_* ↔ run_* / invoke_* 配对（含 §7 类型匹配）
        ├─ 提取共享参数名
        ├─ 识别已知隐藏步骤模板
        └─ 分组 intent_groups
@@ -407,107 +407,12 @@ L3 (prompt 增强) ──── P1，依赖 L2 格式定型
 
 ---
 
-## §7 附录
-
-### 7.1 ToolDependencyGraph 数据结构（已实现）
-
-实现位于 `extensions/sop_converter/dependency/models.py`（字段名：`from_tool` / `to_tool`；YAML 序列化为 `from` / `to`）。
-
-```python
-@dataclass
-class HiddenStep:
-    action: str              # persist_agent_catalog / materialize_on_invoke / invoke_same_runtime
-    description: str
-
-@dataclass
-class ToolDependency:
-    from_tool: str
-    to_tool: str
-    shared_params: list[str]
-    hidden_steps: list[HiddenStep] = field(default_factory=list)
-    lifecycle: str = ""
-
-@dataclass
-class IntentGroup:
-    name: str
-    description: str
-    tools: list[str]
-    primary_entry: str | None = None
-
-@dataclass
-class PriorityRoute:
-    keywords: list[str]
-    intent_group: str
-    entry_first: bool = True
-
-@dataclass
-class ToolDependencyGraph:
-    version: int = 1
-    dependencies: list[ToolDependency] = field(default_factory=list)
-    intent_groups: list[IntentGroup] = field(default_factory=list)
-    priority_routes: list[PriorityRoute] = field(default_factory=list)
-```
-
-### 7.2 依赖推断引擎（已实现）
-
-```
-extensions/sop_converter/dependency/
-├── __init__.py
-├── models.py            # ToolDependencyGraph 数据模型
-├── detector.py          # detect_lifecycle_patterns() 主入口
-├── heuristics.py        # 配对启发式规则
-├── writer.py            # YAML 写入
-└── reader.py            # YAML 读取（运行时消费方用）
-```
-
-system prompt 块在 `sop_prompts.py`（非 `dependency/prompts.py`）。
-
-### 7.3 与本方案相关的现有代码
-
-| 文件 | 与本方案关系 |
-|------|-------------|
-| `extensions/sop_converter/sop_prompts.py` | ✅ L3：`domain_agent_sop_body()` / `_lifecycle_prompt_block` |
-| `extensions/sop_converter/task_guide.py` | ✅ L3：依赖链行 |
-| `extensions/sop_converter/bundle_context.py` | L2 消费上下文 |
-| `extensions/sop_converter/search_tags.py` | 仍为 name/description 启发式；**未**从 `resource_type` 派生 tags |
-| `clawcodex_ext/agent/tool_authoring/factory.py` | 工具执行 / workflow 宏 |
-| `clawcodex_ext/tool_system/tools/tool_search_matching.py` | ✅ `rank_tools_by_lifecycle` |
-| `extensions/sop_converter/bundle_venv.py` | 依赖隔离（替代废弃的 BundleWorker 方案） |
-
----
-
-## 附录 A：Bundle Venv 长驻子进程方案（历史设计，已废弃）
-
-> **状态**: ❌ **已废弃，不要实施**  
-> **替代实现**: `extensions/sop_converter/bundle_venv.py` — convert 时准备 bundle venv；运行时 `activate_bundle_venv_imports` / bash 注入 site-packages；SDK wrapper 仍以 `execute_sdk_wrapper_in_process` 为主（辅以 `in_process_bundle_venv_reexec` 防护）。  
-> **下文保留原因**: 仅作设计考古，避免重复提出同一方案。
-
-以下 A.1–A.3 为废弃草案摘要，**不代表当前架构**。原详尽伪代码已压缩；完整历史草案见 git 历史。
-
-### A.1 问题背景（历史）
-
-撰写时 in-process wrapper 跑在 clawcodex 主 venv，可能缺 SDK 第三方依赖；wrapper 顶部 `os.execv` 切换 venv 会毁掉 agent runtime。`sop convert` 已建 bundle venv，但当时运行时消费不稳。
-
-### A.2 曾选型（未落地）
-
-曾选型「长驻子进程 + stdin/stdout JSON」（`BundleWorkerPool` / `bundle_worker.py`）。该设计**未落地**，仓库中无对应实现文件。勿实施：
-
-- `clawcodex_ext/.../bundle_worker_pool.py` — 不存在
-- `clawcodex_ext/.../bundle_worker.py` — 不存在
-- 将 `execute_sdk_wrapper_in_process` 改为 worker pool — **未做**
-
-### A.3 当前替代
-
-依赖隔离请以 `bundle_venv.py` + 现有 in-process / bash handler 为准。
-
----
-
-## §8 设计补丁：从参数名启发式升级为类型契约驱动
+## §7 设计补丁：从参数名启发式升级为类型契约驱动
 
 > **状态**: ✅ 类型匹配、`resource_ref` schema 注入、动态句柄与 F-56 注册表接线已实现；E1–E5 矩阵已绿（见 F-56 §14）。
 > **触发场景**: JiuwenAgent SDK 的 `llmagent-invoke` 工具因参数名为 `agent_config`（而非 `agent_id`）被误判为 `lifecycle="none"`，导致 catalog fallback 与 schema 注入双双失效；agent 被迫绕过 SOP 直接调用 SDK 才能完成任务（详见 §1.1 与 7 月 15 日回归分析）。
 
-### 8.1 为什么原方案不通用
+### 7.1 为什么原方案不通用
 
 §3.2.3 的 `infer_lifecycle_kind` 判定 invoke 类工具的唯一硬条件是：
 
@@ -526,7 +431,7 @@ system prompt 块在 `sop_prompts.py`（非 `dependency/prompts.py`）。
 
 补 `agent_config` / `instance` / `handle` 都是治标——下一个 SDK 又要加一条。真正的不变量不是**参数名**，而是**资源类型**：create-X 产出的资源有类型，invoke-X 消费的资源有类型，两者类型一致即构成生命周期对。
 
-### 8.2 核心思想：resource_type 作为一等公民
+### 7.2 核心思想：resource_type 作为一等公民
 
 [SourceOperation](file:///d:/projects/clawcodex/extensions/sop_converter/source_parser.py#L175-L191) 已携带 `return_type: str` 与 [ParamSpec.type_hint](file:///d:/projects/clawcodex/extensions/sop_converter/source_parser.py#L109-L116)；类型信息已经在，无需 SDK 作者额外声明。缺的只是把它们用作依赖线索。
 
@@ -543,7 +448,7 @@ invoke         param agent_config: AgentConfig → consumes: AgentConfig
 - create-X 的 wrapper 在 catalog 写入时记录"哪个返回字段是句柄"（动态发现，不靠猜）
 - invoke-X 的 fallback 按 `resource_type` 从 catalog 取最近一条记录，按记录里的 `handle_field` 取句柄
 
-### 8.3 三层修复（替代 §3.2.3 的实现要点）
+### 7.3 三层修复（替代 §3.2.3 的实现要点）
 
 #### Layer 1 — 事前：schema 自然暴露句柄（治本）
 
@@ -586,7 +491,7 @@ fallback payload 不再存 `id_arg`（参数名），而存 `resource_type`（�
 
 因此「create 与 invoke 同搜可见」主要靠依赖图 / 宏路由，而非共享类型 tags。若未来要补 Layer 3 原设想，应改 `search_tags.py`，而不是假定已完成。
 
-### 8.4 与 F-56 的关系
+### 7.4 与 F-56 的关系
 
 F-56（SOP 资源目录）解决**持久化层**——catalog 怎么存、存哪。本补丁是 F-56 之上的**查询/匹配层**——catalog 怎么查、怎么自动注入。两者正交，组合起来才是完整解：
 
@@ -595,7 +500,7 @@ F-56（SOP 资源目录）解决**持久化层**——catalog 怎么存、存哪
 
 **JiuwenAgent / `agent_config` 是触发语料，不是设计上限。** 扩展点必须是 `resource_type`（及 F-56 §14 注册表），禁止把本补丁收成「只修 llmagent-invoke」的专用分支。可扩展性契约、统一 `resource_ref`、第二资源种类门禁见 **F-56 §14**。
 
-### 8.5 改动位置（对照代码）
+### 7.5 改动位置（对照代码）
 
 | 文件 | 状态 | 说明 |
 |------|------|------|
@@ -606,13 +511,13 @@ F-56（SOP 资源目录）解决**持久化层**——catalog 怎么存、存哪
 | `search_tags.py` | ❌ | **未**按 `resource_type` 派生 tags |
 | `tool_search_matching.py` | ✅ | `rank_tools_by_lifecycle` **已接线**（不是 dead code）；排序键来自依赖图 intent group，非直接扫 `resource_type` tag |
 
-### 8.6 兼容性与回退
+### 7.6 兼容性与回退
 
 - 原参数名启发式作为**兜底**保留：当类型信息缺失（return_type 为 None、type_hint 为 None）时，回退到 `*_id` 规则。保证旧 bundle 不破坏。
 - `resource_type` 提取失败的 create-X 仍按原逻辑写 catalog，只是不参与类型匹配；invoke-X 仍可走旧的 `id_arg` 路径（如果参数名恰好命中）。
 - catalog 记录新增 `resource_type` / `handle_field` 字段，旧记录缺失时按 `agent_id` 兜底读取。
 
-### 8.7 验收补充
+### 7.7 验收补充
 
 在 §4 验收标准基础上追加：
 
@@ -625,12 +530,107 @@ F-56（SOP 资源目录）解决**持久化层**——catalog 怎么存、存哪
 | L3-4 | ToolSearch 按生命周期排序 / `lifecycle-chain:` | 依赖图路径已测；**不**要求 tags 含 `resource_type`（该设想未实现） |
 | E4 | 第二资源种类（非 Agent）经同一类型契约完成 create→catalog→invoke | **可扩展硬门禁**；详见 F-56 §14.6 |
 
-### 8.8 可扩展性（不得做成 Agent 特判）
+### 7.8 可扩展性（不得做成 Agent 特判）
 
 后续实现与评审必须遵守：
 
 1. **扩展点是 `resource_type`**，不是参数名列表，也不是再复制一个 `invoke-existing-*`。
 2. **Layer 1 schema 注入**应对任意 `consumes == produces` 的类型对生效；稳定字段优先用 `resource_ref`（见 F-56 §14.5）。
-3. **参数名启发式仅兜底**（§8.6）；新 SDK 不得靠「再加一个特殊参数名」进入主路径。
+3. **参数名启发式仅兜底**（§7.6）；新 SDK 不得靠「再加一个特殊参数名」进入主路径。
 4. **未在 F-56 注册表登记的种类**不得 silently 走 agent materialize；可描述、不可假执行。
 5. 详细注册表、sidecar、验收矩阵与实施优先级以 **F-56 §14** 为准；本文件只约束 convert / schema / fallback 匹配侧。
+
+---
+
+## 附录 A：数据结构与代码索引
+
+### A.1 ToolDependencyGraph 数据结构（已实现）
+
+实现位于 `extensions/sop_converter/dependency/models.py`（字段名：`from_tool` / `to_tool`；YAML 序列化为 `from` / `to`）。
+
+```python
+@dataclass
+class HiddenStep:
+    action: str              # persist_agent_catalog / materialize_on_invoke / invoke_same_runtime
+    description: str
+
+@dataclass
+class ToolDependency:
+    from_tool: str
+    to_tool: str
+    shared_params: list[str]
+    hidden_steps: list[HiddenStep] = field(default_factory=list)
+    lifecycle: str = ""
+
+@dataclass
+class IntentGroup:
+    name: str
+    description: str
+    tools: list[str]
+    primary_entry: str | None = None
+
+@dataclass
+class PriorityRoute:
+    keywords: list[str]
+    intent_group: str
+    entry_first: bool = True
+
+@dataclass
+class ToolDependencyGraph:
+    version: int = 1
+    dependencies: list[ToolDependency] = field(default_factory=list)
+    intent_groups: list[IntentGroup] = field(default_factory=list)
+    priority_routes: list[PriorityRoute] = field(default_factory=list)
+```
+
+### A.2 依赖推断引擎（已实现）
+
+```
+extensions/sop_converter/dependency/
+├── __init__.py
+├── models.py            # ToolDependencyGraph 数据模型
+├── detector.py          # detect_lifecycle_patterns() 主入口
+├── heuristics.py        # 配对启发式规则
+├── writer.py            # YAML 写入
+└── reader.py            # YAML 读取（运行时消费方用）
+```
+
+system prompt 块在 `sop_prompts.py`（非 `dependency/prompts.py`）。
+
+### A.3 与本方案相关的现有代码
+
+| 文件 | 与本方案关系 |
+|------|-------------|
+| `extensions/sop_converter/sop_prompts.py` | ✅ L3：`domain_agent_sop_body()` / `_lifecycle_prompt_block` |
+| `extensions/sop_converter/task_guide.py` | ✅ L3：依赖链行 |
+| `extensions/sop_converter/bundle_context.py` | L2 消费上下文 |
+| `extensions/sop_converter/search_tags.py` | 仍为 name/description 启发式；**未**从 `resource_type` 派生 tags |
+| `clawcodex_ext/agent/tool_authoring/factory.py` | 工具执行 / workflow 宏 |
+| `clawcodex_ext/tool_system/tools/tool_search_matching.py` | ✅ `rank_tools_by_lifecycle` |
+| `extensions/sop_converter/bundle_venv.py` | 依赖隔离（替代废弃的 BundleWorker 方案） |
+
+---
+
+## 附录 B：Bundle Venv 长驻子进程方案（历史设计，已废弃）
+
+> **状态**: ❌ **已废弃，不要实施**  
+> **替代实现**: `extensions/sop_converter/bundle_venv.py` — convert 时准备 bundle venv；运行时 `activate_bundle_venv_imports` / bash 注入 site-packages；SDK wrapper 仍以 `execute_sdk_wrapper_in_process` 为主（辅以 `in_process_bundle_venv_reexec` 防护）。  
+> **下文保留原因**: 仅作设计考古，避免重复提出同一方案。
+
+以下 B.1–B.3 为废弃草案摘要，**不代表当前架构**。原详尽伪代码已压缩；完整历史草案见 git 历史。
+
+### B.1 问题背景（历史）
+
+撰写时 in-process wrapper 跑在 clawcodex 主 venv，可能缺 SDK 第三方依赖；wrapper 顶部 `os.execv` 切换 venv 会毁掉 agent runtime。`sop convert` 已建 bundle venv，但当时运行时消费不稳。
+
+### B.2 曾选型（未落地）
+
+曾选型「长驻子进程 + stdin/stdout JSON」（`BundleWorkerPool` / `bundle_worker.py`）。该设计**未落地**，仓库中无对应实现文件。勿实施：
+
+- `clawcodex_ext/.../bundle_worker_pool.py` — 不存在
+- `clawcodex_ext/.../bundle_worker.py` — 不存在
+- 将 `execute_sdk_wrapper_in_process` 改为 worker pool — **未做**
+
+### B.3 当前替代
+
+依赖隔离请以 `bundle_venv.py` + 现有 in-process / bash handler 为准。

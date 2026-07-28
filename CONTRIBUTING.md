@@ -18,6 +18,18 @@ This project follows the [Contributor Covenant Code of Conduct](https://www.cont
 
 ## Development Setup
 
+### Existing Workspace Environment Protection
+
+The checked-out `.venv` is an externally managed, read-only environment.
+Development tools and automation must not modify, repair, recreate, synchronize,
+clean, or delete `.venv` or anything inside it. Do not run `uv run` in this
+repository because it may mutate or repair `.venv` as a side effect. If the
+existing environment is unusable, report the problem instead of changing it.
+
+The setup commands below are intended only for a new, separately managed
+development environment, not for replacing or repairing this checkout's
+existing `.venv`.
+
 ### Prerequisites
 
 - Python 3.10 or higher (3.11 recommended for local development)

@@ -92,7 +92,7 @@ def _load_lifecycle_graph(context: ToolContext) -> Any | None:
 def _load_macro_route_catalog(context: ToolContext) -> Any | None:
     """Load macro route catalog from session, bundle, and builtin scopes."""
     try:
-        from extensions.sop_converter.macros.routing import (
+        from extensions.sop_converter.runtime.macros.routing import (
             DEFAULT_MACRO_ROUTE_CATALOG,
             ensure_builtin_routes,
             MacroRouteCatalog,
@@ -126,7 +126,16 @@ def _load_macro_route_catalog(context: ToolContext) -> Any | None:
                 route.scope = "bundle"
                 catalog.register_route(route, replace=True)
 
-        session_routes = getattr(context, "session_macro_routes", None)
+        session_routes = None
+        overlay = getattr(context, "session_macro_overlay", None)
+        if overlay is not None:
+            snapshot = overlay.read()
+            if (
+                snapshot is not None
+                and getattr(context, "session_id", None)
+                and context.session_id == snapshot.owner_session_id
+            ):
+                session_routes = snapshot.routes
         if session_routes is not None:
             for route in session_routes:
                 if route.target_tool in protected_builtin_targets:
@@ -207,9 +216,10 @@ def _preflight_macro(
     target_tool: str,
 ) -> tuple[bool, str]:
     """Verify that a macro can be activated without executing its workflow."""
+    from extensions.sop_converter.runtime.macros.resolve_tool import resolve_tool_for_context
 
     _activate_toolsearch_matches(registry, context, [target_tool])
-    tool = registry.get(target_tool)
+    tool = resolve_tool_for_context(context, target_tool, base_registry=registry)
     if tool is None:
         return False, "macro_tool_missing"
     try:
@@ -226,9 +236,14 @@ def _preflight_macro(
         # persisted spec.  Presence + enabled state is enough for preflight.
         return True, "macro_ready"
     try:
-        from extensions.sop_converter.macros import resolve_macro
+        from extensions.sop_converter.runtime.macros import resolve_macro
 
-        workflow = resolve_macro(dict(spec.call_impl), bundle_path=bundle_path)
+        workflow = resolve_macro(
+            dict(spec.call_impl),
+            bundle_path=bundle_path,
+            session_overlay=getattr(context, "session_macro_overlay", None),
+            owner_session_id=getattr(context, "session_id", None),
+        )
     except Exception:
         return False, "macro_workflow_unresolved"
 
@@ -239,7 +254,10 @@ def _preflight_macro(
         ref = str(getattr(step, "callable_ref", "") or "")
         if not ref:
             return False, "macro_step_unresolved"
-        if registry.get(ref) is None and ref not in allowlisted:
+        if (
+            resolve_tool_for_context(context, ref, base_registry=registry) is None
+            and ref not in allowlisted
+        ):
             return False, "macro_step_unresolved"
     return True, "macro_ready"
 
@@ -274,27 +292,53 @@ def _activate_toolsearch_matches(
     context: ToolContext,
     matches: list[str],
 ) -> None:
-    """Register persisted bundle tools and expose them on the next API turn."""
+    """Expose matched tools on the next API turn.
+
+    Session overlay macros are synced into ``options.tools`` without
+    ``registry.register``. Bundle/persisted tools still use the registry.
+    """
     if not matches:
         return
+    from extensions.sop_converter.runtime.macros.resolve_tool import resolve_tool_for_context
+    from extensions.sop_converter.runtime.macros.session import (
+        is_session_macro_tool,
+        sync_effective_tools,
+    )
+
     try:
         from extensions.sop_converter.bundle_context import (
             ensure_bundle_tools_registered,
             get_active_bundle,
         )
     except ImportError:
-        return
+        ensure_bundle_tools_registered = None  # type: ignore[assignment]
+        get_active_bundle = None  # type: ignore[assignment]
 
-    bundle = _resolve_bundle_context(context) or get_active_bundle()
-    bundle_path = bundle.bundle_path if bundle is not None else None
-    ensure_bundle_tools_registered(registry, matches, bundle_path=bundle_path)
+    session_names: list[str] = []
+    pending: list[str] = []
+    for name in matches:
+        resolved = resolve_tool_for_context(context, name, base_registry=registry)
+        if resolved is not None and is_session_macro_tool(resolved):
+            session_names.append(name)
+        else:
+            pending.append(name)
+
+    if session_names:
+        sync_effective_tools(context)
+
+    if pending and ensure_bundle_tools_registered is not None:
+        bundle = _resolve_bundle_context(context) or (
+            get_active_bundle() if get_active_bundle is not None else None
+        )
+        bundle_path = bundle.bundle_path if bundle is not None else None
+        ensure_bundle_tools_registered(registry, pending, bundle_path=bundle_path)
 
     current = list(context.options.tools or [])
     present = {tool.name for tool in current}
     for name in matches:
         if name in present:
             continue
-        tool = registry.get(name)
+        tool = resolve_tool_for_context(context, name, base_registry=registry)
         if tool is not None:
             current.append(tool)
             present.add(name)
@@ -416,7 +460,7 @@ def make_tool_search_tool(registry: ToolRegistry) -> Tool:
         )
         route_resolution = None
         try:
-            from extensions.sop_converter.macros.routing import (
+            from extensions.sop_converter.runtime.macros.routing import (
                 resolve_macro_route_details,
             )
 

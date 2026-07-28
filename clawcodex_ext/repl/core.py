@@ -828,6 +828,11 @@ class ClawcodexREPL:
         else:
             self.tool_context.permission_handler = self._handle_permission_ask_request
 
+        # F-57 Phase 5 — main REPL may register session macros. Confirm
+        # uses a dedicated y/n prompt (NOT permission don't-ask-again).
+        self.tool_context.allow_session_macro_registration = True
+        self.tool_context.confirm_session_macro_plan = self._confirm_session_macro_plan
+
         # Runtime permission controller — the single chokepoint for
         # Shift+Tab cycles and ``/permissions`` picks. The controller
         # owns the threading.Lock that serializes the multi-field swap
@@ -1575,6 +1580,29 @@ class ClawcodexREPL:
             allow_other=allow_other,
             multi_select=multi_select,
         )
+
+    def _confirm_session_macro_plan(self, plan: Any) -> bool:
+        """REPL confirm for session macro registration (not permission rules)."""
+        from extensions.sop_converter.runtime.macros.register_tool import (
+            format_session_macro_plan_for_ui,
+        )
+
+        if self._current_status is not None:
+            try:
+                self._current_status.stop()
+            except Exception:
+                pass
+
+        body = format_session_macro_plan_for_ui(plan)
+        self.console.print("")
+        self.console.print(
+            f"[bold]Register session macro `{getattr(plan, 'name', '')}` "
+            f"({getattr(plan, 'action', 'create')})?[/bold]"
+        )
+        self.console.print(body)
+        self.console.print("")
+        choice = self._safe_input("Register this session macro? [y/N]: ").strip().lower()
+        return choice in ("y", "yes")
 
     def _ask_user_questions(self, questions: list[dict]) -> dict[str, str]:
         # Stop the Rich status spinner if running, so we can get clean input
@@ -7232,6 +7260,18 @@ class ClawcodexREPL:
             command_context.session = loaded_session
             command_context.conversation = loaded_session.conversation
             command_context.tool_context = self.tool_context
+        # F-57 Phase 5: drop previous session overlay macros after swap.
+        if getattr(self, "tool_context", None) is not None:
+            from clawcodex_ext.runtime.tool_context_binding import bind_tool_context_runtime
+            from extensions.sop_converter.runtime.macros.session import clear_session_macros_for_context
+
+            bind_tool_context_runtime(
+                self.tool_context,
+                tool_registry=self.tool_registry,
+                session=self.session,
+                provider=self.provider,
+            )
+            clear_session_macros_for_context(self.tool_context)
         # Populate _engine_messages from the restored conversation so the
         # next chat() call's QueryEngine sees the full history rather than
         # starting with an empty mutable-message list (which would cause

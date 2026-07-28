@@ -379,6 +379,11 @@ class ClawCodexExtREPL(ClawcodexREPL):
         else:
             self.tool_context.permission_handler = self._handle_permission_ask_request
 
+        # F-57 Phase 5 — main REPL may register session macros. Confirm
+        # uses a dedicated y/n prompt (NOT permission don't-ask-again).
+        self.tool_context.allow_session_macro_registration = True
+        self.tool_context.confirm_session_macro_plan = self._confirm_session_macro_plan
+
         # ---- Runtime permission controller (downstream subclass) ----
         # The upstream ``ClawcodexREPL.__init__`` instantiates its own
         # controller, but this subclass overrides ``__init__`` without

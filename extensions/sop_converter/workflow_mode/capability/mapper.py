@@ -8,22 +8,59 @@ from pathlib import Path
 from extensions.sop_converter.skill_grouper import SkillSpec
 from extensions.sop_converter.source_parser import SourceComponent
 
-from ..extractors.adapters.arc import resolve_arc_pipeline_dir
 from ..extractors.models import ExtractedStage, WorkflowGraph
 from ..scan_context import SourceScanContext
 from .analyzer import analyze_stage_sources
-from .arc_mapper import (
-    arc_stage_impl_rel_path,
-    is_executor_module_path,
-    resolve_arc_stage_impl_path,
-)
 from .models import StageAgentMap, StageCapabilityProfile
 
 logger = logging.getLogger(__name__)
 
 
+def _looks_like_arc_layout(source_dir: Path) -> bool:
+    """Cheaply identify layouts that may need optional ARC-specific helpers."""
+    candidates = (
+        source_dir,
+        source_dir / "researchclaw" / "pipeline",
+        source_dir / "pipeline",
+    )
+    return any(
+        (candidate / "stages.py").is_file()
+        and (candidate / "contracts.py").is_file()
+        for candidate in candidates
+    )
+
+
+def _resolve_arc_pipeline_dir(source_dir: Path) -> Path | None:
+    if not _looks_like_arc_layout(source_dir):
+        return None
+    from ..extractors.adapters.arc import resolve_arc_pipeline_dir
+
+    return resolve_arc_pipeline_dir(source_dir)
+
+
+def ensure_stage_skills(
+    graph: WorkflowGraph,
+    components: list[SourceComponent],
+    skills: list[SkillSpec],
+    source_dir: Path,
+) -> list[SkillSpec]:
+    """Apply project-specific skill enrichment without loading it for generic SDKs."""
+    if not _looks_like_arc_layout(source_dir):
+        return skills
+
+    from .arc_mapper import ensure_arc_stage_skills
+
+    return ensure_arc_stage_skills(graph, components, skills, source_dir)
+
+
 def _to_kebab(name: str) -> str:
     return name.replace("_", "-").lower()
+
+
+def _is_executor_module_path(file_path: str | None) -> bool:
+    if not file_path:
+        return False
+    return Path(file_path.replace("\\", "/")).name in {"executor.py", "executor"}
 
 
 def _stage_impl_path(
@@ -32,7 +69,7 @@ def _stage_impl_path(
     *,
     skip_executor: bool = False,
 ) -> Path | None:
-    if stage.file_path and not (skip_executor and is_executor_module_path(stage.file_path)):
+    if stage.file_path and not (skip_executor and _is_executor_module_path(stage.file_path)):
         p = source_dir / stage.file_path
         if p.is_file():
             return p
@@ -156,8 +193,13 @@ class StageCapabilityMapper:
         scan: SourceScanContext | None = None,
     ) -> StageAgentMap:
         source_dir = Path(graph.source_dir)
-        pipeline_dir = resolve_arc_pipeline_dir(source_dir)
+        pipeline_dir = _resolve_arc_pipeline_dir(source_dir)
         is_arc = pipeline_dir is not None
+        if is_arc:
+            from .arc_mapper import (
+                arc_stage_impl_rel_path,
+                resolve_arc_stage_impl_path,
+            )
         by_stage_id: dict[int, StageCapabilityProfile] = {}
         skill_to_agent: dict[str, str] = {}
 

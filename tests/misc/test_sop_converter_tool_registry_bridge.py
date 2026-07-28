@@ -18,6 +18,7 @@ executable agent tools with bash-callable wrapper scripts.
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import tempfile
 import textwrap
@@ -27,7 +28,13 @@ from unittest.mock import patch
 
 from clawcodex_ext.agent.tool_authoring.call_handlers.bash import execute_bash
 from extensions.sop_converter import tool_registry_bridge as trb
-from extensions.sop_converter.resource_catalog import ResourceCatalog
+from extensions.sop_converter.agent_catalog_resolver import HOME_ROOT_ENV
+from extensions.sop_converter.resource_catalog import (
+    DUAL_WRITE_ENV,
+    PAYLOAD_REF_ENV,
+    SESSION_ID_ENV,
+    ResourceCatalog,
+)
 from extensions.sop_converter.source_parser import (
     ParamSpec,
     SourceComponent,
@@ -492,7 +499,7 @@ class TestGenerateWrapperScript(unittest.TestCase):
                 source_dir=str(source_dir),
             )
         self.assertTrue(script_path.exists())
-        content = script_path.read_text()
+        content = script_path.read_text(encoding="utf-8")
         self.assertIn("Calc (proj.calc)", content)
         # The method name is wired in.
         self.assertIn("def compute", content)
@@ -538,7 +545,7 @@ class TestGenerateWrapperScript(unittest.TestCase):
                 file_stem="helpers",
                 source_dir=str(source_dir),
             )
-        content = script_path.read_text()
+        content = script_path.read_text(encoding="utf-8")
         self.assertNotIn("openjiuwen", content)
         self.assertNotIn("_suppress_sdk_logging", content)
         # No _get_instance helper for standalone functions.
@@ -1423,6 +1430,264 @@ class TestRegisterComponentTools(unittest.TestCase):
             self.assertEqual(records[0].resource_id, "verify-bot")
             self.assertEqual(records[0].payload["handle_field"], "name")
 
+    def test_create_catalog_callable_without_handle_is_resource_handle_missing(
+        self,
+    ) -> None:
+        """Opaque callables with empty config must not recurse or catalog_write_failed.
+
+        Regression: ``config: {}`` made ``_to_jsonable({}) is not {}`` always true,
+        so ``_extract_resource_handle`` looped until max recursion instead of
+        returning ``resource_handle_missing``.
+        """
+        from clawcodex_ext.agent.tool_authoring.call_handlers.bash import BashCallError
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "proj"
+            sdk_dir = source_dir / "callable_sdk"
+            sdk_dir.mkdir(parents=True)
+            (sdk_dir / "__init__.py").write_text("", encoding="utf-8")
+            (sdk_dir / "factory.py").write_text(
+                textwrap.dedent(
+                    """
+                    from typing import Any, Callable, Dict
+
+                    def create_opaque_loader(config: Dict[str, Any]) -> Callable:
+                        \"\"\"Return a nested loader function with no stable id.\"\"\"
+                        def loader():
+                            return config.get("data_paths", [])
+                        return loader
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            bundle_dir = root / "bundle"
+            bundle_dir.mkdir()
+
+            parser = SourceCodeParser(str(source_dir), extern_only=True)
+            name_map = register_component_tools(
+                parser.parse(),
+                str(source_dir),
+                persist=True,
+                bundle_dir=bundle_dir,
+                bundle_id="callable-bundle",
+            )
+            create_tool = name_map["callable_sdk.create_opaque_loader"]
+            create_spec = json.loads(
+                (bundle_dir / "agent-tools" / f"{create_tool}.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            with self.assertRaises(BashCallError) as raised:
+                execute_bash(
+                    create_spec["call_impl"],
+                    {"json_args": json.dumps({"config": {}})},
+                )
+            blob = (raised.exception.stderr or "") + (raised.exception.stdout or "")
+            payload = None
+            for line in reversed(blob.splitlines()):
+                line = line.strip()
+                if not line.startswith("{"):
+                    continue
+                try:
+                    payload = json.loads(line)
+                    break
+                except json.JSONDecodeError:
+                    continue
+            self.assertIsNotNone(payload, f"no JSON payload in output: {blob[-2000:]}")
+            assert payload is not None
+            self.assertEqual(payload.get("error_code"), "resource_handle_missing")
+            self.assertIs(payload.get("created_persisted"), False)
+            self.assertNotIn(
+                "maximum recursion depth exceeded",
+                str(payload.get("error", "")),
+            )
+            self.assertNotEqual(payload.get("error_code"), "catalog_write_failed")
+            catalog_path = bundle_dir / ".clawcodex" / "resource-catalog.json"
+            self.assertFalse(
+                catalog_path.exists(),
+                "opaque callable must not write a catalog record",
+            )
+
+    def test_create_catalog_dual_write_writes_bundle_and_user(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "proj"
+            sdk_dir = source_dir / "generic_sdk"
+            sdk_dir.mkdir(parents=True)
+            (sdk_dir / "__init__.py").write_text("", encoding="utf-8")
+            (sdk_dir / "factory.py").write_text(
+                textwrap.dedent(
+                    """
+                    def create_widget(name: str) -> dict:
+                        \"\"\"Create a reusable widget by name.\"\"\"
+                        return {"name": name, "status": "created"}
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            bundle_dir = root / "bundle"
+            bundle_dir.mkdir()
+            home = root / "clawcodex-home"
+            home.mkdir()
+
+            parser = SourceCodeParser(str(source_dir), extern_only=True)
+            name_map = register_component_tools(
+                parser.parse(),
+                str(source_dir),
+                persist=True,
+                bundle_dir=bundle_dir,
+                bundle_id="generic-bundle",
+            )
+            create_tool = name_map["generic_sdk.create_widget"]
+            create_spec = json.loads(
+                (bundle_dir / "agent-tools" / f"{create_tool}.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            with patch.dict(
+                os.environ,
+                {DUAL_WRITE_ENV: "1", HOME_ROOT_ENV: str(home)},
+            ):
+                stdout = execute_bash(
+                    create_spec["call_impl"],
+                    {"json_args": json.dumps({"name": "dual-bot"})},
+                )
+            created = json.loads(stdout.strip().splitlines()[-1])
+            self.assertTrue(created["created_persisted"])
+            self.assertEqual(sorted(created["written_layers"]), ["bundle", "user"])
+            self.assertIn("bundle", created["catalog_paths"])
+            self.assertIn("user", created["catalog_paths"])
+            bundle_catalog = Path(created["catalog_paths"]["bundle"])
+            user_catalog = Path(created["catalog_paths"]["user"])
+            self.assertTrue(bundle_catalog.is_file())
+            self.assertTrue(user_catalog.is_file())
+            self.assertEqual(
+                created["resource_catalog_path"],
+                str(bundle_catalog),
+            )
+            self.assertTrue(
+                ResourceCatalog.load(bundle_catalog).find_by_resource_id("dual-bot")
+            )
+            self.assertTrue(
+                ResourceCatalog.load(user_catalog).find_by_resource_id("dual-bot")
+            )
+
+    def test_create_catalog_payload_ref_env_spills_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "proj"
+            sdk_dir = source_dir / "generic_sdk"
+            sdk_dir.mkdir(parents=True)
+            (sdk_dir / "__init__.py").write_text("", encoding="utf-8")
+            (sdk_dir / "factory.py").write_text(
+                textwrap.dedent(
+                    """
+                    def create_widget(name: str) -> dict:
+                        \"\"\"Create a reusable widget by name.\"\"\"
+                        return {"name": name, "status": "created", "blob": "x" * 100}
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            bundle_dir = root / "bundle"
+            bundle_dir.mkdir()
+
+            parser = SourceCodeParser(str(source_dir), extern_only=True)
+            name_map = register_component_tools(
+                parser.parse(),
+                str(source_dir),
+                persist=True,
+                bundle_dir=bundle_dir,
+                bundle_id="generic-bundle",
+            )
+            create_tool = name_map["generic_sdk.create_widget"]
+            create_spec = json.loads(
+                (bundle_dir / "agent-tools" / f"{create_tool}.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            with patch.dict(os.environ, {PAYLOAD_REF_ENV: "1"}, clear=False):
+                stdout = execute_bash(
+                    create_spec["call_impl"],
+                    {"json_args": json.dumps({"name": "spill-bot"})},
+                )
+            created = json.loads(stdout.strip().splitlines()[-1])
+            self.assertTrue(created["created_persisted"])
+            catalog_path = Path(created["resource_catalog_path"])
+            matches = ResourceCatalog.load(catalog_path).find_by_resource_id("spill-bot")
+            self.assertTrue(matches)
+            stored = ResourceCatalog.load(catalog_path).get_stored(
+                matches[0].resource_type, "spill-bot"
+            )
+            self.assertIsNotNone(stored)
+            assert stored is not None
+            self.assertEqual(stored.payload["kind"], "payload_ref")
+            self.assertTrue(stored.payload.get("ref") or stored.payload.get("path"))
+
+    def test_create_catalog_session_id_writes_session_catalog(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "proj"
+            sdk_dir = source_dir / "generic_sdk"
+            sdk_dir.mkdir(parents=True)
+            (sdk_dir / "__init__.py").write_text("", encoding="utf-8")
+            (sdk_dir / "factory.py").write_text(
+                textwrap.dedent(
+                    """
+                    def create_widget(name: str) -> dict:
+                        \"\"\"Create a reusable widget by name.\"\"\"
+                        return {"name": name, "status": "created"}
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            bundle_dir = root / "bundle"
+            bundle_dir.mkdir()
+            home = root / "clawcodex-home"
+            home.mkdir()
+
+            parser = SourceCodeParser(str(source_dir), extern_only=True)
+            name_map = register_component_tools(
+                parser.parse(),
+                str(source_dir),
+                persist=True,
+                bundle_dir=bundle_dir,
+                bundle_id="generic-bundle",
+            )
+            create_tool = name_map["generic_sdk.create_widget"]
+            create_spec = json.loads(
+                (bundle_dir / "agent-tools" / f"{create_tool}.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            with patch.dict(
+                os.environ,
+                {SESSION_ID_ENV: "sess-create-1", HOME_ROOT_ENV: str(home)},
+            ):
+                stdout = execute_bash(
+                    create_spec["call_impl"],
+                    {"json_args": json.dumps({"name": "session-bot"})},
+                )
+            created = json.loads(stdout.strip().splitlines()[-1])
+            self.assertTrue(created["created_persisted"])
+            self.assertIn("session", created["written_layers"])
+            self.assertIn("session", created["catalog_paths"])
+            session_catalog = Path(created["catalog_paths"]["session"])
+            self.assertTrue(session_catalog.is_file())
+            self.assertEqual(
+                session_catalog,
+                home / "sessions" / "sess-create-1" / "sop-resources.json",
+            )
+            self.assertTrue(
+                ResourceCatalog.load(session_catalog).find_by_resource_id("session-bot")
+            )
+            # Session is additive; default base layer (bundle) is also written.
+            self.assertIn("bundle", created["written_layers"])
+            self.assertTrue(
+                (bundle_dir / ".clawcodex" / "resource-catalog.json").is_file()
+            )
+
     def test_empty_components_returns_empty_map(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             source_dir = Path(tmp) / "proj"
@@ -2184,6 +2449,72 @@ class TestWrapperHelpersCompile(unittest.TestCase):
             coerce('{"subject": "hi", "body": "there"}'),
             {"subject": "hi", "body": "there"},
         )
+
+    def test_promote_flat_llm_agent_config_in_embedded_helpers(self) -> None:
+        from extensions.sop_converter.sdk_serialization import WRAPPER_COERCION_HELPERS
+
+        namespace: dict = {}
+        exec(WRAPPER_COERCION_HELPERS, namespace)
+        promote = namespace["_promote_flat_llm_agent_config"]
+        flat = {
+            "id": "verify-bot-2",
+            "provider": "deepseek",
+            "api_key": "env:DEEPSEEK_API_KEY",
+            "model": "deepseek-v4-flash",
+            "api_base": "https://api.deepseek.com",
+        }
+        promoted = promote(flat)
+        self.assertEqual(promoted["id"], "verify-bot-2")
+        self.assertNotIn("provider", promoted)
+        self.assertNotIn("api_key", promoted)
+        self.assertEqual(
+            promoted["model"],
+            {
+                "model_provider": "deepseek",
+                "model_info": {
+                    "model": "deepseek-v4-flash",
+                    "api_key": "env:DEEPSEEK_API_KEY",
+                    "api_base": "https://api.deepseek.com",
+                },
+            },
+        )
+
+    def test_runtime_coerce_accepts_flat_create_payload(self) -> None:
+        from dataclasses import dataclass, field
+
+        from pydantic import BaseModel, Field
+
+        from extensions.sop_converter.sdk_serialization import coerce_sdk_type
+
+        class EndpointInfo(BaseModel):
+            api_key: str = Field(default="")
+            api_base: str = Field(min_length=1)
+            model_name: str = Field(default="", alias="model")
+
+        @dataclass
+        class ModelConfig:
+            model_provider: str
+            model_info: EndpointInfo = field(default_factory=EndpointInfo)
+
+        class AgentConfig(BaseModel):
+            id: str = ""
+            model: ModelConfig | None = None
+
+        cfg = coerce_sdk_type(
+            AgentConfig,
+            {
+                "id": "verify-bot-2",
+                "provider": "deepseek",
+                "api_key": "secret",
+                "model": "deepseek-v4-flash",
+                "api_base": "https://api.deepseek.com",
+            },
+        )
+        self.assertEqual(cfg.id, "verify-bot-2")
+        self.assertEqual(cfg.model.model_provider, "deepseek")
+        self.assertEqual(cfg.model.model_info.model_name, "deepseek-v4-flash")
+        self.assertEqual(cfg.model.model_info.api_base, "https://api.deepseek.com")
+        self.assertEqual(cfg.model.model_info.api_key, "secret")
 
     def test_list_dict_elements_not_coerced(self) -> None:
         expr, imports = _coerce_param_expression(

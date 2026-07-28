@@ -1,17 +1,14 @@
-"""E2E unit tests for F-55 L1 — :mod:`extensions.sop_converter.composite_tools`.
+"""E2E unit tests for F-55 L1 — invoke-existing-agent via F-56 ResourceCatalog.
 
-Covers the four scenarios from F-55 §4.4:
+Covers:
 
-1. 创建 → 立即按 ID 调用 (single-process happy path)
-2. 创建 → wrapper 子进程退出 → 新进程按 ID 调用 (cross-process recovery)
-3. 创建 → 关闭会话 → 新会话按 ID 调用, catalog 在 home 目录 (跨会话)
-4. 已有 agent_id 但 catalog 无记录 (graceful ``agent_catalog_missing`` error)
+1. Persist → invoke by id (happy path)
+2. Persist in subprocess → invoke in another process
+3. Home-only resource catalog recovery
+4. Missing catalog / missing id → structured error
+5. Materialize failures
 
-The tests drive the wrapper script directly via ``subprocess.run`` so they
-exercise the same code path the Agent tool uses (call_handlers/bash.py →
-subprocess → wrapper → JSON stdout).  A tiny fake SDK module is written to
-a temp dir and its absolute path is stuffed into ``sys.path`` so the
-wrapper's importlib call lands on the fake class.
+Legacy ``agent-catalog.json`` is no longer consulted (F-56 Phase D).
 """
 
 from __future__ import annotations
@@ -25,14 +22,10 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from extensions.sop_converter.agent_catalog import (
-    AgentCatalog,
-    AgentCatalogEntry,
-)
+from extensions.sop_converter.agent_catalog import AgentCatalogEntry
 from extensions.sop_converter.agent_catalog_resolver import (
     HOME_ONLY_ENV,
     HOME_ROOT_ENV,
-    resolve_catalog_path,
 )
 from extensions.sop_converter.resource_catalog import (
     ResourceCatalog,
@@ -50,6 +43,21 @@ WRAPPER_PATH = (
     / "scripts"
     / "invoke_existing_agent_wrapper.py"
 )
+
+
+def _persist_entry(
+    bundle: Path,
+    entry: AgentCatalogEntry,
+    *,
+    bundle_id: str = "bundle",
+) -> Path:
+    """Write an agent fixture into the F-56 resource catalog."""
+    loc = resolve_resource_catalog_path(bundle, bundle_id=bundle_id)
+    loc.ensure_parent()
+    cat = ResourceCatalog()
+    cat.upsert(agent_entry_to_resource_record(entry, bundle_id=bundle_id))
+    cat.save(loc.path)
+    return loc.path
 
 
 def _run_wrapper(
@@ -126,9 +134,6 @@ class TestInvokeExistingAgentHappyPath(unittest.TestCase):
                 os.environ[k] = v
 
     def test_create_then_invoke_round_trip(self) -> None:
-        # 1. Pretend a create tool wrote the catalog.  ``sdk_source_dir`` is
-        # the parent of the importable package (matches the convention in
-        # ``lifecycle_metadata_payload`` / ``register_component_tools``).
         entry = AgentCatalogEntry(
             agent_id="agent-1",
             sdk_source_dir=str(self.tmp),
@@ -139,18 +144,10 @@ class TestInvokeExistingAgentHappyPath(unittest.TestCase):
             module_name="fake_sdk.agent",
             init_kwargs={"temperature": 0.7, "model": "gpt-4o-mini"},
         )
-        cat_path = self.bundle / ".clawcodex" / "agent-catalog.json"
-        AgentCatalog().upsert(entry, bundle_id="bundle").__class__  # silence linter
-        cat = AgentCatalog()
-        cat.upsert(entry, bundle_id="bundle")
-        cat.save(cat_path)
-
-        # 2. Verify path resolver points at the bundle-local file.
-        loc = resolve_catalog_path(self.bundle)
-        self.assertEqual(loc.path, cat_path)
+        cat_path = _persist_entry(self.bundle, entry)
         self.assertTrue(cat_path.exists())
+        self.assertEqual(cat_path.name, "resource-catalog.json")
 
-        # 3. Drive the wrapper.
         out = _run_wrapper(
             {"agent_id": "agent-1", "query": "ping"},
             bundle_path=str(self.bundle),
@@ -182,14 +179,18 @@ class TestInvokeExistingAgentCrossProcess(unittest.TestCase):
                 os.environ[k] = v
 
     def test_catalog_written_in_subprocess_readable_in_subprocess(self) -> None:
-        cat_path = self.bundle / ".clawcodex" / "agent-catalog.json"
+        cat_path = self.bundle / ".clawcodex" / "resource-catalog.json"
         write_script = textwrap.dedent(
             f"""
-            import json
             from pathlib import Path
-            from extensions.sop_converter.agent_catalog import AgentCatalog, AgentCatalogEntry
+            from extensions.sop_converter.agent_catalog import AgentCatalogEntry
+            from extensions.sop_converter.resource_catalog import (
+                ResourceCatalog,
+                agent_entry_to_resource_record,
+                resolve_resource_catalog_path,
+            )
 
-            cat = AgentCatalog()
+            bundle = Path({str(self.bundle)!r})
             entry = AgentCatalogEntry(
                 agent_id="agent-2",
                 sdk_source_dir={str(self.tmp)!r},
@@ -200,8 +201,11 @@ class TestInvokeExistingAgentCrossProcess(unittest.TestCase):
                 module_name="fake_sdk.agent",
                 init_kwargs={{}},
             )
-            cat.upsert(entry, bundle_id="bundle")
-            cat.save(Path({str(cat_path)!r}))
+            loc = resolve_resource_catalog_path(bundle, bundle_id="bundle")
+            loc.ensure_parent()
+            cat = ResourceCatalog()
+            cat.upsert(agent_entry_to_resource_record(entry, bundle_id="bundle"))
+            cat.save(loc.path)
             print("OK")
             """
         )
@@ -216,7 +220,6 @@ class TestInvokeExistingAgentCrossProcess(unittest.TestCase):
         self.assertIn("OK", proc.stdout)
         self.assertTrue(cat_path.exists())
 
-        # Now a second process drives the wrapper.
         out = _run_wrapper(
             {"agent_id": "agent-2", "query": "ping"},
             bundle_path=str(self.bundle),
@@ -332,7 +335,6 @@ class TestInvokeExistingAgentHomeOnly(unittest.TestCase):
                 os.environ.pop(k, None)
 
     def test_home_only_writes_to_clawcodex_home(self) -> None:
-        cat_path = self.tmp / "sop-agents" / "bundle" / "agents.json"
         entry = AgentCatalogEntry(
             agent_id="agent-3",
             sdk_source_dir=str(self.tmp),
@@ -343,9 +345,12 @@ class TestInvokeExistingAgentHomeOnly(unittest.TestCase):
             module_name="fake_sdk.agent",
             init_kwargs={},
         )
-        cat = AgentCatalog()
-        cat.upsert(entry, bundle_id="bundle")
-        cat.save(cat_path)
+        loc = resolve_resource_catalog_path(self.bundle, bundle_id="bundle")
+        loc.ensure_parent()
+        cat = ResourceCatalog()
+        cat.upsert(agent_entry_to_resource_record(entry, bundle_id="bundle"))
+        cat.save(loc.path)
+        self.assertIn("sop-resources", str(loc.path))
 
         out = _run_wrapper(
             {"agent_id": "agent-3", "query": "hello"},
@@ -388,16 +393,13 @@ class TestInvokeExistingAgentMissingCatalog(unittest.TestCase):
         self.assertEqual(out["trace"][-1]["status"], "error")
 
     def test_agent_id_absent_from_existing_catalog(self) -> None:
-        cat = AgentCatalog()
-        cat.upsert(
-            AgentCatalogEntry(
-                agent_id="present",
-                sdk_source_dir="/tmp",
-                class_name="X",
-                module_name="y",
-            )
+        entry = AgentCatalogEntry(
+            agent_id="present",
+            sdk_source_dir="/tmp",
+            class_name="X",
+            module_name="y",
         )
-        cat.save(self.bundle / ".clawcodex" / "agent-catalog.json")
+        _persist_entry(self.bundle, entry)
         out = _run_wrapper(
             {"agent_id": "missing", "query": "ping"},
             bundle_path=str(self.bundle),
@@ -428,16 +430,13 @@ class TestInvokeExistingAgentMaterializeFailures(unittest.TestCase):
                 os.environ.pop(k, None)
 
     def test_module_not_found(self) -> None:
-        cat = AgentCatalog()
-        cat.upsert(
-            AgentCatalogEntry(
-                agent_id="unloadable",
-                sdk_source_dir=str(self.tmp),
-                class_name="Nope",
-                module_name="does.not.exist",
-            )
+        entry = AgentCatalogEntry(
+            agent_id="unloadable",
+            sdk_source_dir=str(self.tmp),
+            class_name="Nope",
+            module_name="does.not.exist",
         )
-        cat.save(self.bundle / ".clawcodex" / "agent-catalog.json")
+        _persist_entry(self.bundle, entry)
         out = _run_wrapper(
             {"agent_id": "unloadable", "query": "x"},
             bundle_path=str(self.bundle),
@@ -445,18 +444,15 @@ class TestInvokeExistingAgentMaterializeFailures(unittest.TestCase):
         self.assertEqual(out["error_code"], "resource_materialize_failed")
 
     def test_invoke_falls_back_to_run_method(self) -> None:
-        sdk = _write_fake_sdk(self.tmp, method="run")
-        cat = AgentCatalog()
-        cat.upsert(
-            AgentCatalogEntry(
-                agent_id="run-agent",
-                sdk_source_dir=str(self.tmp),
-                class_name="DemoAgent",
-                module_name="fake_sdk.agent",
-                invoke_method="run",
-            )
+        _write_fake_sdk(self.tmp, method="run")
+        entry = AgentCatalogEntry(
+            agent_id="run-agent",
+            sdk_source_dir=str(self.tmp),
+            class_name="DemoAgent",
+            module_name="fake_sdk.agent",
+            invoke_method="run",
         )
-        cat.save(self.bundle / ".clawcodex" / "agent-catalog.json")
+        _persist_entry(self.bundle, entry)
         out = _run_wrapper(
             {"agent_id": "run-agent", "query": "ping"},
             bundle_path=str(self.bundle),

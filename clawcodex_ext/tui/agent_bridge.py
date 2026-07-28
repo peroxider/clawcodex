@@ -146,6 +146,11 @@ class AgentBridge:
         # empty ``{}`` (or nothing at all) and the agent loop would
         # never see the user's choices.
         tool_context.ask_user = self._ask_user_handler
+        # F-57 Phase 5 — main TUI may register session macros. Confirm
+        # uses AskUserQuestion modal (NOT the permission don't-ask-again
+        # path); capability stays False on subagent/headless defaults.
+        tool_context.allow_session_macro_registration = True
+        tool_context.confirm_session_macro_plan = self._confirm_session_macro_plan
         self._bind_goal_state(
             reset_baseline=True,
             reset_progress=reset_goal_progress,
@@ -188,6 +193,8 @@ class AgentBridge:
         if tool_context.default_permission_handler is None:
             tool_context.default_permission_handler = self._permission_handler
         tool_context.ask_user = self._ask_user_handler
+        tool_context.allow_session_macro_registration = True
+        tool_context.confirm_session_macro_plan = self._confirm_session_macro_plan
         self._bind_goal_state(reset_baseline=False, reset_progress=False)
 
     def replace_session(self, session: Session | None) -> bool:
@@ -1108,6 +1115,44 @@ class AgentBridge:
         # dismissed itself and emitted ``PermissionResolved``.
         self._state.resolve_permission(pending.request_id)
         return outcome["allowed"], outcome["enable"]
+
+    # ---- session macro confirm (NOT permission don't-ask-again) ----
+    def _confirm_session_macro_plan(self, plan: Any) -> bool:
+        """Interactive approve/deny for session macro registration.
+
+        Reuses the AskUserQuestion modal so we never touch permission
+        rules / don't-ask-again. Esc / empty answers → deny.
+        """
+        from extensions.sop_converter.runtime.macros.register_tool import (
+            format_session_macro_plan_for_ui,
+        )
+
+        body = format_session_macro_plan_for_ui(plan)
+        question = (
+            f"Register session macro `{getattr(plan, 'name', '')}` "
+            f"({getattr(plan, 'action', 'create')})?\n\n{body}"
+        )
+        answers = self._ask_user_handler(
+            [
+                {
+                    "question": question,
+                    "header": "Session macro",
+                    "options": [
+                        {
+                            "label": "No",
+                            "description": "Cancel registration",
+                        },
+                        {
+                            "label": "Yes",
+                            "description": "Register this session macro",
+                        },
+                    ],
+                    "multiSelect": False,
+                }
+            ]
+        )
+        chosen = (answers.get(question) or "").strip().lower()
+        return chosen in ("yes", "y")
 
     # ---- ask_user bridge ----
     def _ask_user_handler(self, questions: list[dict[str, Any]]) -> dict[str, str]:

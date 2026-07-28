@@ -6,13 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from extensions.sop_converter.macros import (
+from extensions.sop_converter.runtime.macros import (
     MacroConvertError,
     convert_handwritten_macros,
     load_macro_yaml,
 )
-from extensions.sop_converter.macros.catalog import resolve_macro
-from extensions.sop_converter.macros.validation import validate_macro_definition
+from extensions.sop_converter.runtime.macros.catalog import resolve_macro
+from extensions.sop_converter.runtime.macros.validation import validate_macro_definition
 from extensions.sop_converter.tool_retrieval import load_tool_retrieval_index
 
 

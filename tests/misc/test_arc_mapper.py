@@ -12,9 +12,9 @@ from extensions.sop_converter.workflow_mode.capability.arc_mapper import (
     arc_stage_impl_rel_path,
     resolve_arc_stage_impl_path,
 )
-from examples.sdk_extractor import PatternExtractor
-from examples.sdk_extractor.pattern_extractor import (
+from extensions.sop_converter.workflow_mode.extractors.pattern import (
     ARC_COMPAT_CONFIG,
+    PatternExtractor,
     _resolve_pipeline_dir,
 )
 

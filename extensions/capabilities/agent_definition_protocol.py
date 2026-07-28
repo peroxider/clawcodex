@@ -90,13 +90,20 @@ class AgentDefinitionProtocol(Protocol):
 class AgentToolConstants:
     """SOP tool-name and toolset constants (Layer-2 surface).
 
-    Concrete values are pinned to the matching names in
-    ``clawcodex_ext.agent.constants`` (2026-07-23 snapshot). Updating
-    the upstream list requires updating both; the Protocol layer adds
-    a single source of truth for downstream consumers.
+    Aligned with early SOP Overview behavior and
+    ``clawcodex_ext.agent.constants.POS_PROXY_BASE_TOOLS``: includes
+    ``StructuredOutput``, which is registered again in
+    ``ALL_STATIC_TOOLS``.
+
+    ``UNREGISTERED_SPECIAL_TOOLS`` remains for names that appear in
+    allowlists but are absent from the live registry; keep it empty when
+    every listed tool resolves.
     """
 
     MAX_INLINE_TOOL_DISPLAY: int = 20
+
+    # Names to strip from SOP allowlists when absent from ALL_STATIC_TOOLS.
+    UNREGISTERED_SPECIAL_TOOLS: frozenset[str] = frozenset()
 
     POS_PROXY_BASE_TOOLS: frozenset[str] = frozenset(
         (
@@ -106,6 +113,11 @@ class AgentToolConstants:
             "Read",
             "TodoWrite",
             "StructuredOutput",
+            "resource-catalog",
+            # F-57 session-macro register / promote (not in convert bundles).
+            "register-macro-workflow",
+            "register-macro-from-trace",
+            "promote-macro-workflow",
         )
     )
 
@@ -114,7 +126,22 @@ class AgentToolConstants:
             "Skill",
             "ToolSearch",
             "Bash",
+            "Read",
             "TodoWrite",
             "StructuredOutput",
+            "resource-catalog",
+            "register-macro-workflow",
+            "register-macro-from-trace",
+            "promote-macro-workflow",
         )
     )
+
+    @classmethod
+    def registered_proxy_base_tools(cls) -> list[str]:
+        """Sorted proxy allowlist excluding unregistered special tools."""
+        return sorted(cls.POS_PROXY_BASE_TOOLS - cls.UNREGISTERED_SPECIAL_TOOLS)
+
+    @classmethod
+    def registered_domain_agent_tools(cls) -> list[str]:
+        """Sorted domain-agent allowlist excluding unregistered special tools."""
+        return sorted(cls.POS_SOP_DOMAIN_AGENT_TOOLS - cls.UNREGISTERED_SPECIAL_TOOLS)

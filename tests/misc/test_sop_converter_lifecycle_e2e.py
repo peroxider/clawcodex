@@ -7,9 +7,9 @@ This test exercises the full L1 chain that the plan describes:
 2. ``register_component_tools`` emits a wrapper for ``build_agent`` with the
    ``--catalog-metadata`` flag and writes the spec to the bundle-local tool dir.
 3. Running the create wrapper writes ``agent_id`` into
-   ``<bundle>/.clawcodex/agent-catalog.json``.
-4. The ``invoke-existing-agent`` composite macro wrapper reads the catalog,
-   materializes the SDK class, and calls ``run_agent`` with the query.
+   ``<bundle>/.clawcodex/resource-catalog.json`` (F-56 only).
+4. The ``invoke-existing-agent`` composite macro wrapper reads the resource
+   catalog via ResourceHandler, materializes the SDK class, and invokes.
 
 The test drives the wrapper scripts via ``subprocess.run`` exactly as the
 Agent tool's bash call handler does.
@@ -30,7 +30,6 @@ from clawcodex_ext.agent.tool_authoring.call_handlers.bash import execute_bash
 from clawcodex_ext.agent.tool_authoring.factory import build_tool_from_spec
 from clawcodex_ext.agent.tool_authoring.persistence import bundle_tool_dir, load_spec
 from clawcodex_ext.tool_system.context import ToolContext
-from extensions.sop_converter.agent_catalog import AgentCatalog
 from extensions.sop_converter.agent_catalog_resolver import (
     HOME_ONLY_ENV,
     HOME_ROOT_ENV,
@@ -222,6 +221,10 @@ class TestCreateToInvokeLifecycleE2E(unittest.TestCase):
         self.assertEqual(create_result.get("agent_id_call_contract"), "catalog_persisted")
         self.assertIn("catalog_path", create_result)
         self.assertIn("resource_catalog_path", create_result)
+        self.assertEqual(
+            create_result.get("catalog_reason"),
+            "f56_resource_catalog",
+        )
 
         quoted_stdout = execute_bash(
             call_impl,
@@ -231,22 +234,20 @@ class TestCreateToInvokeLifecycleE2E(unittest.TestCase):
         self.assertEqual(quoted_result.get("agent_id"), "agent-1")
         self.assertEqual(quoted_result.get("query"), "it's fine")
 
-        # Catalog should now exist and contain the agent.
+        # Canonical catalog is F-56 resource-catalog.json only.
         catalog_path = self.bundle / ".clawcodex" / "agent-catalog.json"
-        self.assertTrue(catalog_path.exists(), "agent catalog was not written")
-        catalog = AgentCatalog.load(catalog_path)
-        self.assertIn("agent-1", catalog.list_ids())
-        entry = catalog.get("agent-1")
-        self.assertIsNotNone(entry)
-        assert entry is not None
-        self.assertEqual(entry.class_name, "DemoAgent")
-        self.assertEqual(entry.module_name, "fake_sdk.agent")
+        self.assertFalse(
+            catalog_path.exists(),
+            "legacy agent-catalog.json must not be written",
+        )
         resource_catalog_path = self.bundle / ".clawcodex" / "resource-catalog.json"
         self.assertTrue(resource_catalog_path.exists(), "resource catalog was not written")
         resource_catalog = ResourceCatalog.load(resource_catalog_path)
         resource_record = resource_catalog.find_by_resource_id("agent-1")[0]
-        self.assertEqual(resource_record.payload["agent_catalog_entry"]["agent_id"], "agent-1")
+        self.assertEqual(resource_record.resource_id, "agent-1")
+        self.assertEqual(resource_record.payload.get("handle_field"), "agent_id")
         self.assertEqual(resource_record.materializer["class_name"], "DemoAgent")
+        self.assertNotIn("agent_catalog_entry", resource_record.payload)
 
         # The native run_agent tool itself should carry catalog fallback metadata.
         run_tool_name: str | None = None
@@ -374,22 +375,20 @@ class TestFactoryResultCatalogE2E(unittest.TestCase):
         self.assertEqual(create_result["agent_id"], "verify-bot")
         self.assertTrue(create_result["created_persisted"])
 
-        catalog = AgentCatalog.load(self.bundle / ".clawcodex" / "agent-catalog.json")
-        entry = catalog.get("verify-bot")
-        self.assertIsNotNone(entry)
-        assert entry is not None
-        self.assertEqual(entry.model, "deepseek-v4-flash")
-        self.assertEqual(entry.provider, "deepseek")
-        self.assertEqual(entry.class_name, "FactoryAgent")
-        self.assertEqual(entry.metadata["factory"]["name"], "create_llm_agent")
-        self.assertEqual(entry.query_arg, "inputs")
-
+        self.assertFalse(
+            (self.bundle / ".clawcodex" / "agent-catalog.json").exists(),
+            "legacy agent-catalog.json must not be written",
+        )
         resource_catalog = ResourceCatalog.load(
             self.bundle / ".clawcodex" / "resource-catalog.json"
         )
         record = resource_catalog.find_by_resource_id("verify-bot")[0]
+        self.assertEqual(record.payload.get("model"), "deepseek-v4-flash")
+        self.assertEqual(record.payload.get("provider"), "deepseek")
         self.assertEqual(record.materializer["kind"], "python_function")
         self.assertEqual(record.materializer["name"], "create_llm_agent")
+        self.assertEqual(record.invoker.get("input_param"), "inputs")
+        self.assertEqual(record.metadata.get("factory", {}).get("name"), "create_llm_agent")
 
         invoke_cmd = [
             sys.executable,

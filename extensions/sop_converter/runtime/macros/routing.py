@@ -194,6 +194,37 @@ def ensure_builtin_routes(catalog: MacroRouteCatalog | None = None) -> MacroRout
             ),
             replace=True,
         )
+    # Always replace so phrase/keyword updates apply after reload.
+    target.register_route(
+        MacroRoute(
+            phrases=[
+                "resume-resource",
+                "resume resource",
+                "恢复资源",
+                "资源恢复",
+                "恢复一下资源",
+                "把资源恢复",
+                "按 resource_type 调用",
+                "按 resource_ref 恢复",
+                "resume catalog resource",
+                "invoke resource by resource_ref",
+            ],
+            # Chinese NL often inserts particles (一下/那个) between 恢复 and 资源,
+            # so phrase-only matching is too brittle. Require both keywords.
+            keywords=["恢复", "资源"],
+            negative_keywords=["创建", "删除", "列出"],
+            target_tool="resume-resource",
+            match_mode="all",
+            selection="prefer",
+            priority=90,
+            verified=False,
+            intent_key="resource.resume",
+            covered_tools=[],
+            unavailable_policy="restore-covered",
+            scope="builtin",
+        ),
+        replace=True,
+    )
     return target
 
 

@@ -129,8 +129,10 @@ class TestAgentDefinitionGenerator:
             assert "-stage-skill" not in content.split("---", 2)[1]
 
     def test_hybrid_agent_includes_output_contract(self, tmp_path: Path):
-        from examples.sdk_extractor import PatternExtractor
-        from examples.sdk_extractor.pattern_extractor import ARC_COMPAT_CONFIG
+        from extensions.sop_converter.workflow_mode.extractors.pattern import (
+            ARC_COMPAT_CONFIG,
+            PatternExtractor,
+        )
 
         path = FIXTURES / "fixture_arc_project"
         graph = PatternExtractor(config=ARC_COMPAT_CONFIG, mode="fwa").extract(path)

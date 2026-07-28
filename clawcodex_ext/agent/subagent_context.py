@@ -235,6 +235,10 @@ def create_subagent_context(
         ),
         user_modified=parent_context.user_modified,
         session_id=parent_context.session_id,
+        # Share overlay for dispatch; never inherit registration capability.
+        session_macro_overlay=parent_context.session_macro_overlay,
+        allow_session_macro_registration=False,
+        confirm_session_macro_plan=None,
         lkb_plan_id=parent_context.lkb_plan_id,
         _active_provider=parent_context._active_provider,
         # ch01 round-4 WI-1 — hooks apply to sub-agents exactly as to the

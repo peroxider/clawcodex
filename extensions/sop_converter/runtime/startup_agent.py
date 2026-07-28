@@ -16,8 +16,9 @@ def build_bundle_overview_agent_definition(
 ) -> Any:
     """Turn a parsed overview agent dict into the REPL main-loop definition.
 
-    Uses ``POS_PROXY_BASE_TOOLS`` so the session starts with Skill +
-    ToolSearch + delegation tools instead of the general-purpose wildcard.
+    Uses :meth:`AgentToolConstants.registered_proxy_base_tools` so the
+    session starts with the SOP Overview routing set (Skill, ToolSearch,
+    Agent, Read, TodoWrite, StructuredOutput).
     """
     name = str(agent.get("name") or "clawcodex-overview")
     raw_skills = agent.get("skills")
@@ -28,7 +29,7 @@ def build_bundle_overview_agent_definition(
     return DEFAULTS.agent_definition_factory(
         agent_type=name,
         when_to_use=str(agent.get("description") or ""),
-        tools=sorted(AgentToolConstants.POS_PROXY_BASE_TOOLS),
+        tools=AgentToolConstants.registered_proxy_base_tools(),
         skills=skills,
         source="dynamic",
         base_dir=str(bundle_dir.resolve()),
