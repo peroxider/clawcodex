@@ -1069,22 +1069,20 @@ class Orchestrator:
             for issue in issues:
                 if launched_this_poll >= available_slots:
                     break
-                if (
-                    issue.id in self._state.running
-                    or issue.id in self._state.completed
-                    or issue.id in self._state.pending_review
-                ):
+                if issue.id in self._state.running:
                     continue
                 if issue.id in self._state.claimed:
                     continue
 
-                # F-39 Sub-A + Sub-D + Sub-E: intent pre-check happens
-                # BEFORE the `has_pr` / `is_completed` skip. Operators
-                # can trigger an intent via labels (Sub-A), comment
-                # commands (Sub-D), or the local CLI fallback (Sub-E).
-                # The merged intent here already applies the priority
-                # rules from `merge_intents_with_cli`.
+                # F-39 Sub-A + Sub-D + Sub-E: intent resolution must
+                # happen BEFORE the completed/pending_review skip so
+                # operators can trigger RETRY / FOLLOWUP on completed
+                # issues via labels, comments, or CLI.
                 intent, command_intent_obj, intent_source = await self._resolve_intent(issue)
+
+                if issue.id in self._state.completed or issue.id in self._state.pending_review:
+                    if intent not in (Intent.RETRY, Intent.FOLLOWUP):
+                        continue
                 # `command_intent_obj` may carry the comment author
                 # for F-39 Sub-F role checks; the bare `Command` value
                 # is in `command_intent_obj.command`.

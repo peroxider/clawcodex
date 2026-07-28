@@ -993,23 +993,21 @@ class GitSyncService:
         return branch_name
 
     def _ensure_commit_identity(self, repo_root: str) -> None:
-        email = self._run_git_output(["config", "user.email"], repo_root)
-        name = self._run_git_output(["config", "user.name"], repo_root)
-        if not email and self._git_email:
+        if self._git_email:
             self._run_git_checked(["config", "user.email", self._git_email], repo_root)
-        elif not email and self._git_username:
+        elif self._git_username:
             self._run_git_checked(
                 ["config", "user.email", f"{self._git_username}@gitcode.com"],
                 repo_root,
             )
-        elif not email:
+        else:
             self._run_git_checked(
                 ["config", "user.email", "clawcodex-bot@local.invalid"],
                 repo_root,
             )
-        if not name and self._git_username:
+        if self._git_username:
             self._run_git_checked(["config", "user.name", self._git_username], repo_root)
-        elif not name:
+        else:
             self._run_git_checked(["config", "user.name", "ClawCodex Bot"], repo_root)
 
     _ORCHESTRATOR_ARTIFACTS: tuple[str, ...] = (
