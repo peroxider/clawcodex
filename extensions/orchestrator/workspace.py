@@ -407,6 +407,9 @@ class WorkspaceManager:
         if not (path / ".git").exists():
             return
         if await self._try_process(["git", "checkout", base_branch], cwd=str(path)):
+            # Fork 工作流：本地 checkout 成功后，仍需从 upstream 同步最新代码
+            if self._upstream_configured():
+                await self._sync_base_from_upstream(path, base_branch)
             return
 
         # Fork 工作流：从 upstream fetch base branch；否则从 origin fetch
@@ -442,6 +445,28 @@ class WorkspaceManager:
             )
         else:
             await self._try_process(["git", "checkout", "-b", base_branch], cwd=str(path))
+
+    async def _sync_base_from_upstream(self, path: Path, base_branch: str) -> None:
+        """Fetch upstream base branch and merge into local fork base branch.
+
+        In fork workflow, the fork's base branch is stale.  This fetches the
+        upstream's latest base branch and merges it into the local checkout so
+        development starts from the current upstream tip.
+        """
+        remote = "upstream"
+        ref = f"refs/remotes/{remote}/{base_branch}"
+        await self._try_process(
+            ["git", "fetch", remote, f"{base_branch}:{ref}"],
+            cwd=str(path),
+        )
+        if await self._try_process(
+            ["git", "show-ref", "--verify", "--quiet", ref],
+            cwd=str(path),
+        ):
+            await self._try_process(
+                ["git", "merge", f"{remote}/{base_branch}", "--no-ff"],
+                cwd=str(path),
+            )
 
     async def _checkout_issue_branch(self, path: Path, issue: Any) -> None:
         if not self.config.checkout_issue_branch:
