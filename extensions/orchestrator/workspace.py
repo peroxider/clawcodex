@@ -55,6 +55,7 @@ class WorkspaceConfig:
     root: Path
     hooks: dict[str, Any] = None  # type: ignore[assignment]
     repo_clone_url: str | None = None
+    upstream_clone_url: str | None = None
     clone_depth: int | None = 1
     checkout_issue_branch: bool = True
     git_username: str | None = None

@@ -83,6 +83,7 @@ class OrchestrationSubsystem:
                 hooks=workflow_config.workspace.hooks,
                 repo_clone_url=workflow_config.workspace.repo_clone_url
                 or repository_clone_url_for_tracker(workflow_config.tracker),
+                upstream_clone_url=workflow_config.workspace.upstream_clone_url,
                 clone_depth=workflow_config.workspace.clone_depth,
                 checkout_issue_branch=(workflow_config.workspace.checkout_issue_branch),
                 git_username=workflow_config.workspace.git_username,
