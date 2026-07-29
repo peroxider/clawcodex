@@ -68,7 +68,8 @@ workspace:
   clone_depth: 1                                           # shallow clone for speed
   base_branch: main                                         # repository default branch (main / master)
   checkout_issue_branch: true                              # create per-issue branch from main
-  git_username: {{GIT_PUSH_USER}}                         # used for `git push`
+  git_username: {{GIT_PUSH_USER}}                         # git commit author name
+  git_email: {{GIT_PUSH_EMAIL}}                              # git commit author email
   git_token: ${{GIT_PUSH_TOKEN_ENV}}                       # $VAR form reads from env at load time
   gitignore_patterns:                                      # paths excluded from agent workspace
     - "*.pyc"
@@ -86,16 +87,26 @@ agent:
   max_turns: 200                                            # tool-call turns per issue run
   max_retry_attempts: 6
   max_retry_backoff_ms: 300000                             # 5 min backoff between retries
+  max_retries_per_issue: 3                                 # max operator-driven retries per issue
+  run_timeout_ms: 1800000                                  # 30 min per-run timeout
   provider: anthropic                                      # anthropic | openai | ...
+  model: {{MODEL}}                                         # model name, leave blank for provider default
   # permission_mode MUST be bypassPermissions for unattended orchestrator runs.
   # - dontAsk still triggers ApprovalPolicy checks → can block headless runs
   # - bypassPermissions → headless sets permission_handler=None, all tools auto-approved
   # schema.py auto-promotes dontAsk → bypassPermissions when tracker is present.
   permission_mode: bypassPermissions
+  # Test / build / lint commands (runs before git push)
+  # test_command: "pytest"                                 # test command (empty = auto-detect)
+  # build_command: "make build"                            # build command
+  # lint_command: "ruff check ."                           # lint command
+  # Human review gate: when True, each completed issue requires manual approval
+  # via `clawcodex-dev orchestrator issue review --approve --id <id>`.
+  # review_required: false
   # Environment variables merged into every Bash subprocess and orchestrator
   # verification/hook subprocess. Values override inherited daemon env; use
   # $PATH in PATH values to prepend/append without losing the host PATH.
-  # env:
+  env: {}
   #   PATH: "/custom/bin:$PATH"
   #   MY_VAR: "value"
 
@@ -135,6 +146,92 @@ observability:
 server:
   host: 127.0.0.1
   port: 8765
+
+# ============================================================================
+# Review Feedback — PR检视意见自动处理（可选）
+# ============================================================================
+# 开启后每轮 poll 自动采集 PR 行内检视意见，触发 follow-up agent 修复。
+# 必须配合 Issue 评论 /agent follow-up 或 review_feedback 自动检测使用。
+review_feedback:
+  enabled: false                                           # 开启后自动检测PR检视意见
+  mode: manual                                             # auto=自动拉起agent, manual=等待CLI审批
+  poll_interval_ms: 60000                                  # 检测间隔
+  max_followup_attempts_per_pr: 5                          # 单PR最大followup次数
+  include_ci_failures: true                                # 是否包含CI失败
+  reply_to_comments: true                                  # 处理后是否回复评论
+  # ignore_authors: [bot-user]                             # 忽略指定作者的评论
+  # bot_login: clawcodex-bot                               # 机器人登录名，跳过自己的评论
+
+# ============================================================================
+# Verification — 测试验证门禁（可选）
+# ============================================================================
+# 控制 git push 前的测试验证行为。
+verification:
+  timeout_ms: 600000                                       # 测试超时（10分钟）
+  regression_guard: true                                   # 回归守卫：与基线比较，仅阻断新增失败
+  # fallback_test_command: "pytest"                        # 显式 fallback 命令，留空则自动检测
+
+# ============================================================================
+# Repro First — 先复现后修复（可选）
+# ============================================================================
+# 开启后，每个新 issue 先跑一次复现 agent，复现失败则拒绝修复。
+repro_first:
+  enabled: false
+  timeout_ms: 900000                                       # 复现 agent 预算
+  # labels: [bug]                                          # 仅对携带这些标签的 issue 生效，空=全部
+
+# ============================================================================
+# Modes — 多Agent协作模式（可选）
+# ============================================================================
+# 配置多 Agent 协作模式。省略此段则使用默认 single 模式。
+modes:
+  enabled: [single]                                        # 注册的模式：single | pipeline | coordinator | debate | swarm
+  default: single                                          # 路由失败时的回退模式
+  # router:
+  #   kind: heuristic                                      # heuristic | llm | none
+  #   min_confidence: 0.5
+  # pipeline:
+  #   stages: [analyzer, implementer, tester]
+
+# ============================================================================
+# Rules — 从PR检视意见中学习规则（F-121，可选）
+# ============================================================================
+# 自动从 PR review 反馈中提取可复用的编码规则，注入后续 agent prompt。
+rules:
+  enabled: false
+  # path: .clawcodex_rules.md                             # 规则存储路径
+  max_rules: 20
+  min_confidence: low                                      # low | medium | high
+
+# ============================================================================
+# PR Conflict Scan — PR冲突自动检测（F-120，可选）
+# ============================================================================
+# 后台定时扫描 PR 合并状态，检测到冲突时自动触发 rebase。
+# 注意：GitCode 不暴露 mergeable 字段，此功能在 GitCode 上无效。
+pr_conflict_scan:
+  enabled: false
+  poll_interval_ms: 300000                                 # 5分钟
+  max_rebase_attempts_per_issue: 3
+  # use_force_push: false                                  # 是否使用 force push
+
+# ============================================================================
+# Clarifier — Issue 清晰度分析（F-124，可选）
+# ============================================================================
+# 在 issue 分派前分析描述是否足够清晰，不清晰时可自动评论提问。
+clarifier:
+  enabled: false
+  max_questions: 3
+  max_rounds: 2
+  min_confidence: 0.7
+  # remote_label: "needs-clarification"                    # 可选远端标签
+
+# ============================================================================
+# Worker — 分布式Worker（可选）
+# ============================================================================
+# 配置 SSH 远程 worker 主机。省略则所有 agent 在本地运行。
+worker:
+  # ssh_hosts: []                                          # SSH 主机列表
+  # max_concurrent_agents_per_host: 2                      # 单机最大并发 agent
 ---
 
 # Orchestrator Agent Prompt
