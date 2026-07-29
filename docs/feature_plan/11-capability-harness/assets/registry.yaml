@@ -1,0 +1,203 @@
+# clawcodex Capability Registry v1
+#
+# 静态 tier 注册表 + 开源社区 benchmark fallback。
+# 加载器: clawcodex_ext/query/capability/registry_loader.py
+# SIGHUP hot-reload 已注册。
+#
+# 字段说明见 docs/feature_plan/11-capability-harness/01-registry-yaml.md §2
+
+version: 1
+updated_at: "2026-07-28T20:00:00Z"
+
+# 默认 tier 阈值（可被顶层 override）
+tier_thresholds:
+  strong_min_swe_bench: 0.80
+  standard_min_swe_bench: 0.50
+
+models:
+
+  # ============================================================
+  # STRONG tier — Anthropic / OpenAI 旗舰
+  # ============================================================
+
+  - model: claude-fable-5
+    provider: anthropic
+    tier: strong
+    auto_tier: false
+    confidence: 0.92
+    metrics:
+      swe_bench_verified: 0.950
+      livecodebench: 0.898
+      mt_bench: 0.962
+    probe_score: null
+    capability_flags:
+      tool_use: true
+      json_mode: true
+      extended_thinking: true
+      adaptive_thinking: true
+      vision: true
+      audio: false
+      parallel_tool_calls: true
+      long_context_1m: true
+    reasoning_channel_mapping:
+      reasoning_content: ""
+      thinking_blocks: "thinking"
+    context_window: 1000000
+    max_output_tokens: 32000
+    probe_suite: tests/capability_probe/probe_spec.yaml
+    anti_hacking:
+      knowing_evaluated_variant: true
+      judge_blind: true
+      probe_rotation_days: 30
+    cadence:
+      re_probe_after_days: 30
+      re_probe_on_drift: true
+    notes: "Anthropic 2026-Q3 旗舰，tool_use SOTA；本地有 SaaS 代理"
+
+  - model: gpt-5.6-codex
+    provider: openai
+    tier: strong
+    auto_tier: true                # 新发布，需 bootstrap probe 校准
+    confidence: 0.85
+    metrics:
+      swe_bench_verified: 0.841
+      livecodebench: 0.795
+      mt_bench: 0.910
+    probe_score: null
+    capability_flags:
+      tool_use: true
+      json_mode: true
+      extended_thinking: false    # OpenAI 风格为 reasoning_content
+      adaptive_thinking: false
+      vision: true
+      audio: false
+      parallel_tool_calls: true
+      long_context_1m: false
+    reasoning_channel_mapping:
+      reasoning_content: "reasoning_content"
+      thinking_blocks: ""
+    context_window: 256000
+    max_output_tokens: 16000
+    probe_suite: tests/capability_probe/probe_spec.yaml
+    anti_hacking:
+      knowing_evaluated_variant: true
+      judge_blind: true
+      probe_rotation_days: 30
+    cadence:
+      re_probe_after_days: 14      # 新模型，前两周 re-probe 频繁
+      re_probe_on_drift: true
+    notes: "OpenAI 编码特化版，2026-07 发布；boot probe 校准中"
+
+  # ============================================================
+  # STANDARD tier — Claude Code 默认主脑 + 国内旗舰
+  # ============================================================
+
+  - model: claude-sonnet-4-6
+    provider: anthropic
+    tier: standard
+    auto_tier: false
+    confidence: 0.95
+    metrics:
+      swe_bench_verified: 0.712
+      livecodebench: 0.684
+      mt_bench: 0.892
+    probe_score: null
+    capability_flags:
+      tool_use: true
+      json_mode: true
+      extended_thinking: true
+      adaptive_thinking: true
+      vision: true
+      audio: false
+      parallel_tool_calls: true
+      long_context_1m: true
+    reasoning_channel_mapping:
+      reasoning_content: ""
+      thinking_blocks: "thinking"
+    context_window: 1000000
+    max_output_tokens: 16000
+    probe_suite: tests/capability_probe/probe_spec.yaml
+    anti_hacking:
+      knowing_evaluated_variant: true
+      judge_blind: true
+      probe_rotation_days: 30
+    cadence:
+      re_probe_after_days: 60
+      re_probe_on_drift: true
+    notes: "Claude Code 默认主脑；clawcodex CI 主要跑该模型"
+
+  - model: glm-4.7
+    provider: glm
+    tier: standard
+    auto_tier: false
+    confidence: 0.88
+    metrics:
+      swe_bench_verified: 0.628
+      livecodebench: 0.589
+      mt_bench: 0.851
+    probe_score: null
+    capability_flags:
+      tool_use: true
+      json_mode: true
+      extended_thinking: true
+      adaptive_thinking: false
+      vision: true
+      audio: false
+      parallel_tool_calls: true
+      long_context_1m: false
+    reasoning_channel_mapping:
+      reasoning_content: "reasoning_content"
+      thinking_blocks: ""
+    context_window: 128000
+    max_output_tokens: 8000
+    probe_suite: tests/capability_probe/probe_spec.yaml
+    anti_hacking:
+      knowing_evaluated_variant: true
+      judge_blind: true
+      probe_rotation_days: 30
+    cadence:
+      re_probe_after_days: 30
+      re_probe_on_drift: true
+    notes: "智谱 2026-Q2 旗舰；中文场景略优"
+
+  # ============================================================
+  # WEAK tier — 本地可跑的小模型
+  # ============================================================
+
+  - model: qwen3-coder-next:32b-active-moe
+    provider: openai_compatible     # via ollama / vllm
+    tier: weak
+    auto_tier: true                # 每次模型升级需重新校准
+    confidence: 0.78
+    metrics:
+      swe_bench_verified: 0.443
+      livecodebench: 0.417
+      mt_bench: 0.625
+    probe_score: null
+    capability_flags:
+      tool_use: true                # 支持 tool use 但精度有限
+      json_mode: true
+      extended_thinking: false
+      adaptive_thinking: false
+      vision: false
+      audio: false
+      parallel_tool_calls: false    # 不支持并发 tool calls
+      long_context_1m: false
+    reasoning_channel_mapping:
+      reasoning_content: ""
+      thinking_blocks: ""
+    context_window: 32000
+    max_output_tokens: 4096
+    probe_suite: tests/capability_probe/probe_spec.yaml
+    anti_hacking:
+      knowing_evaluated_variant: true
+      judge_blind: true
+      probe_rotation_days: 14       # MoE 变体多，频繁轮换
+    cadence:
+      re_probe_after_days: 14
+      re_probe_on_drift: true
+    notes: |
+      Qwen3-Coder-Next 32B-active MoE（阿里 2026-Q2）。
+      本地可跑（vllm 单 4090）；narrow typed 工具集必备；
+      SWE-bench 44.3% 不代表不能用，narrow/well-scoped 任务上仍可达 70%+；
+      open-ended 任务需 strong tier 工具与权限约束。

@@ -17,6 +17,7 @@ docs/feature_plan/
 ├── 06-ccb-benchmark/                  ← CCB 对标
 ├── 07-cli-config/                    ← CLI 与配置系统
 ├── 08-recording/                     ← F-REC Asciicast v2 录制器
+├── 11-capability-harness/              ← 能力感知 Harness 自适应
 └── ../decoupling/                     ← 三层解耦方案与 P3 整改记录（独立规划）
 ```
 
@@ -58,6 +59,12 @@ docs/feature_plan/
 | F-164 | 多视角扇出 — 5 个默认视角 (资深工程师/安全/新人/性能/维护者) 并行推理 + 综合 | 📋 | [f-164-multi-perspective-fan-out.md](03-agent-core/f-164-multi-perspective-fan-out.md) |
 | F-165 | 矛盾检测独立版 — 三维语义矛盾检测（vs VERIFIED / intra-reply / vs history）+ 自动修订 | 📋 | [f-165-self-contradiction-detector.md](03-agent-core/f-165-self-contradiction-detector.md) |
 | F-166 | 记忆分层 W/E — Working（进程内 LRU + GC）+ Episodic（NDJSON 跨会话）+ Provenance 追溯 + 5 Profile 写读策略 | 📋 | [f-166-memory-layering-we.md](03-agent-core/f-166-memory-layering-we.md) |
+
+### 能力感知 Harness 自适应
+
+| F-Number | 名称 | 状态 | 章节路径 |
+|----------|------|:----:|---------|
+| F-174 | 能力感知 Harness 自适应（P174-A~P174-I） | 📋 | [11-capability-harness/README.md](11-capability-harness/README.md) |
 
 ### CLI 与配置系统
 
@@ -187,3 +194,4 @@ docs/feature_plan/
 | 2026-07-22 | 新增 F-165 矛盾检测独立版（覆盖 DC-007 完整版） | DC-A §4.4 映射表基础上落地 Wave 2 P1 工具化组第四个特性；F-130 P130-A 仅覆盖工具重复维度，F-165 扩展到三维语义矛盾检测：vs VERIFIED（消费 F-158 Working Memory）/ intra-reply（同一回复前后断言）/ vs history（前几轮对话断言）；三档修订阈值（auto_rewrite / flag / ask_user）+ 修订循环（max_rewrite_attempts=1 + detect_after_rewrite + fail_open_on_detector_error）+ F130Coordinator 信号路由（正交不重叠）+ 5 Profile 触发策略（default / review / strict / debug / creative）+ 长度门控（min/max_reply_length）+ 与 F-163 counter_evidence 字段协同；与 F-130 P130-A / F-158 / F-119 / F-102 / F-163 / F-164 协同；解耦落地于 `extensions/contradiction_detector/`，零 `src/` 侵入 |
 | 2026-07-22 | 新增 F-166 记忆分层 W/E（覆盖 DC-004 Working + Episodic） | DC-A §4.4 映射表基础上落地 Wave 2 P1 工具化组第五个特性（**Wave 2 P1 收官**）；DC-004 完整版含 Semantic + Procedural 4 层，Wave 2 P1 范围仅 Working + Episodic 两层先落地（Semantic + Procedural 留 Wave 3 / F-168+）；Working Memory（进程内 OrderedDict + LRU 淘汰 + TTL 自动 GC + RLock 线程安全）+ Episodic Memory（NDJSON 追加 + session_id 隔离 + tags 检索 + max_file_size_mb 自动轮转 + JSON 损坏行容忍）+ Provenance 追溯（source_tool / source_turn / source_user_input / source_file / source_url / source_timestamp）+ 写入/读取策略（5 Profile 映射：default/strict/review/debug/creative）+ LifecycleManager（周期 GC + 容量上限 + Episodic 按 age_days GC）+ F-158 VERIFIED markers 作为 `MemoryEntry(type=VERIFIED_FACT)` 视图（**不重复存储**）；与 F-119 / F-102 / F-158 / F-130 / F-159 协同；解耦落地于 `extensions/memory_layers/`，零 `src/` 侵入 |
 | 2026-07-21 | 更新 CCB 对标章节:F-84/F-87/F-88/F-92/F-95 标记为 ✅,F-94 保持 🚧 | 代码确认 5 个特性完全落地,同步 `06-ccb-benchmark/README.md` §A 缺口矩阵与单篇文档状态 |
+| 2026-07-28 | 新增 F-174「能力感知 Harness 自适应」独立章节 | 将能力感知 harness 设计、调研、资产与 F-174/P174-A~I 子特性统一归档至 `11-capability-harness/`，并完成原 `docs/capability/` 路径迁移 |

@@ -1,0 +1,125 @@
+# clawcodex Tier Profiles v1
+#
+# 4 层约束（AGENT.md / Tool Profile / Permission Profile / Prompt Assembly）
+# 按 tier 维度的统一声明。review 此文件可一次性看到所有 tier 差异。
+# 加载器: clawcodex_ext/query/capability/tier_decision.py
+# 详细 schema: docs/feature_plan/11-capability-harness/02-tier-profiles.md §4
+
+version: 1
+updated_at: "2026-07-28T20:00:00Z"
+
+tiers:
+
+  # ============================================================
+  # WEAK — 受限模式，6 narrow typed tools, read-only default
+  # ============================================================
+  weak:
+    agent_md: AGENT.weak.md
+    tool_profile: WeakProfile
+    permission_profile_default: WeakReadOnlyProfile
+    permission_profile_workspace_write: WeakWorkspaceWriteProfile
+
+    loop_control:
+      max_tool_calls_per_turn: 1
+      max_turns: 50
+      compact_threshold_tokens: 30000
+      recovery_max_retries: 1
+      max_output_tokens_per_turn: 4096
+
+    prompt_overrides:
+      tool_usage_style: single-step
+      example_density: 5
+      enable_reasoning_echo: false
+      plan_first: false
+      show_thinking: false
+      system_prompt_max_length: 8000
+
+    runtime_negotiation:
+      allow_elevation: true
+      allow_demotion: true
+      demote_on_error_burst: 3
+      demote_on_consecutive_zero_precision: 5
+      promotion_requires_all_4_dims_above: 0.75
+      flip_max_per_session: 1
+
+    notes: |
+      适用于本地 Qwen3-Coder-Next 32B / GLM-4.7 Air 等模型。
+      工具集窄（6 个 narrow typed）；路径白名单限制；
+      python cell 禁 exec/eval/__import__。
+      用户需手动验证测试结果（exec.run 被禁）。
+
+  # ============================================================
+  # STANDARD — 默认模式，Claude Code 26 tools + workspace-write
+  # ============================================================
+  standard:
+    agent_md: AGENT.standard.md
+    tool_profile: StandardProfile
+    permission_profile_default: StandardProfile
+    permission_profile_workspace_write: StandardProfile
+
+    loop_control:
+      max_tool_calls_per_turn: 5
+      max_turns: 100
+      compact_threshold_tokens: 80000
+      recovery_max_retries: 3
+      max_output_tokens_per_turn: 16000
+
+    prompt_overrides:
+      tool_usage_style: composable
+      example_density: 3
+      enable_reasoning_echo: true
+      plan_first: true
+      show_thinking: true
+      system_prompt_max_length: 16000
+
+    runtime_negotiation:
+      allow_elevation: true
+      allow_demotion: true
+      demote_on_error_burst: 5
+      demote_on_consecutive_zero_precision: 7
+      promotion_requires_all_4_dims_above: 0.75
+      flip_max_per_session: 1
+
+    notes: |
+      适用于 Sonnet 4.6 / GLM-4.7 / GPT-5.6 Codex 等模型。
+      Claude Code 默认 26 工具；bash 30 s timeout；
+      git push / network out / destructive ASK。
+      clawcodex CI 主要跑该 tier。
+
+  # ============================================================
+  # STRONG — 高自由度，4 CodeAct primitives, danger-full-access
+  # ============================================================
+  strong:
+    agent_md: AGENT.strong.md
+    tool_profile: StrongProfile
+    permission_profile_default: StrongProfile
+    permission_profile_workspace_write: StrongProfile
+
+    loop_control:
+      max_tool_calls_per_turn: 20
+      max_turns: 200
+      compact_threshold_tokens: 150000
+      recovery_max_retries: 5
+      max_output_tokens_per_turn: 32000
+
+    prompt_overrides:
+      tool_usage_style: codeact
+      example_density: 1
+      enable_reasoning_echo: true
+      plan_first: false
+      show_thinking: true
+      system_prompt_max_length: 32000
+
+    runtime_negotiation:
+      allow_elevation: false
+      allow_demotion: true
+      demote_on_error_burst: 7
+      demote_on_consecutive_zero_precision: 10
+      promotion_requires_all_4_dims_above: 1.00
+      flip_max_per_session: 1
+
+    notes: |
+      适用于 Fable 5 / Mythos 5 / Opus 4.8 等强模型。
+      4 CodeAct primitives（bash + python_exec + 2 file）；
+      danger-full-access 默认；destructive op 兜底 confirm。
+      必须通过 bash_safety_smoke 探针（binary classifier FPR ≤ 5%）。
