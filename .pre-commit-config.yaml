@@ -4,8 +4,13 @@ repos:
     hooks:
       - id: check-yaml
       - id: check-toml
+      # Unified-diff hunk syntax represents a blank context line as a single
+      # leading space.  Mutating that byte corrupts the patch, so generated
+      # upstream overlays must not be reformatted by these hooks.
       - id: end-of-file-fixer
+        exclude: ^patches/upstream/
       - id: trailing-whitespace
+        exclude: ^patches/upstream/
       - id: check-merge-conflict
       - id: detect-private-key
   - repo: https://github.com/astral-sh/ruff-pre-commit
