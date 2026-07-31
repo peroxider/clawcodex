@@ -154,6 +154,9 @@ review_feedback:
   include_ci_failures: true
   reply_to_comments: true
   ignore_authors: []
+  ignored_comment_commands: [/lgtm, /approve, /approved]
+  ignored_feedback_sources: []
+  ignored_body_patterns: []
   max_log_chars_per_check: 12000
   max_followup_attempts_per_pr: 5
 

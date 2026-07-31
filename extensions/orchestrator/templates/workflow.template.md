@@ -194,6 +194,9 @@ review_feedback:
   include_ci_failures: true                                # 是否包含CI失败
   reply_to_comments: true                                  # 处理后是否回复评论
   # ignore_authors: [bot-user]                             # 忽略指定作者的评论
+  ignored_comment_commands: [/lgtm, /approve, /approved]  # 仅忽略整条为该命令的评论
+  # ignored_feedback_sources: [ci]                         # 采集但不触发指定来源的反馈
+  # ignored_body_patterns: ['(?i)^all checks have passed$'] # 整条正文正则匹配
   # bot_login: clawcodex-bot                               # 机器人登录名，跳过自己的评论
 
 # ============================================================================

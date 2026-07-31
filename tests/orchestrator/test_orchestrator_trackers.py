@@ -135,6 +135,9 @@ class TestWorkflowTrackerConfig(unittest.TestCase):
         self.assertEqual(config.review_feedback.mode, "manual")
         self.assertTrue(config.review_feedback.include_ci_failures)
         self.assertTrue(config.review_feedback.reply_to_comments)
+        self.assertEqual(config.review_feedback.ignored_comment_commands, [])
+        self.assertEqual(config.review_feedback.ignored_feedback_sources, [])
+        self.assertEqual(config.review_feedback.ignored_body_patterns, [])
         self.assertEqual(config.review_feedback.max_feedback_items_per_run, 20)
         self.assertEqual(config.review_feedback.max_followup_attempts_per_pr, 5)
 
@@ -149,6 +152,9 @@ class TestWorkflowTrackerConfig(unittest.TestCase):
                     "include_ci_failures": False,
                     "reply_to_comments": False,
                     "ignore_authors": "clawcodex-bot",
+                    "ignored_comment_commands": ["/lgtm", "/approve"],
+                    "ignored_feedback_sources": "ci",
+                    "ignored_body_patterns": ["^all checks passed$"],
                     "max_log_chars_per_check": 800,
                     "max_followup_attempts_per_pr": 2,
                 }
@@ -162,6 +168,9 @@ class TestWorkflowTrackerConfig(unittest.TestCase):
         self.assertFalse(config.review_feedback.include_ci_failures)
         self.assertFalse(config.review_feedback.reply_to_comments)
         self.assertEqual(config.review_feedback.ignore_authors, ["clawcodex-bot"])
+        self.assertEqual(config.review_feedback.ignored_comment_commands, ["/lgtm", "/approve"])
+        self.assertEqual(config.review_feedback.ignored_feedback_sources, ["ci"])
+        self.assertEqual(config.review_feedback.ignored_body_patterns, ["^all checks passed$"])
         self.assertEqual(config.review_feedback.max_log_chars_per_check, 800)
         self.assertEqual(config.review_feedback.max_followup_attempts_per_pr, 2)
 

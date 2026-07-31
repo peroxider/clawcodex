@@ -118,6 +118,9 @@ def _config(**overrides: Any) -> SimpleNamespace:
         include_ci_failures=True,
         max_log_chars_per_check=12_000,
         ignore_authors=[],
+        ignored_comment_commands=[],
+        ignored_feedback_sources=[],
+        ignored_body_patterns=[],
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -232,6 +235,42 @@ class TestFilterPending(unittest.TestCase):
         )
         result = service._filter_pending(self.record, [_feedback(author_login="ignored-user")])
         self.assertEqual(result, [])
+
+    def test_standalone_ignored_command_excluded(self) -> None:
+        service = ReviewFeedbackService(
+            tracker=_FakeTracker(),
+            registry=self.registry,
+            config=_config(ignored_comment_commands=["/lgtm", "approve"]),
+        )
+        result = service._filter_pending(
+            self.record,
+            [_feedback(body="@clawcodex /APPROVE"), _feedback(id="keep", body="/lgtm fix lint")],
+        )
+        self.assertEqual([item.id for item in result], ["keep"])
+
+    def test_ignored_source_excluded(self) -> None:
+        service = ReviewFeedbackService(
+            tracker=_FakeTracker(),
+            registry=self.registry,
+            config=_config(ignored_feedback_sources=["CI"]),
+        )
+        result = service._filter_pending(self.record, [_feedback(source="ci")])
+        self.assertEqual(result, [])
+
+    def test_ignored_body_pattern_requires_full_match(self) -> None:
+        service = ReviewFeedbackService(
+            tracker=_FakeTracker(),
+            registry=self.registry,
+            config=_config(ignored_body_patterns=[r"all checks have passed"]),
+        )
+        result = service._filter_pending(
+            self.record,
+            [
+                _feedback(body="All checks have passed"),
+                _feedback(id="keep", body="All checks have passed; please fix lint"),
+            ],
+        )
+        self.assertEqual([item.id for item in result], ["keep"])
 
     def test_system_comment_dropped(self) -> None:
         body = "## ClawCodex Run Summary\nAll green"

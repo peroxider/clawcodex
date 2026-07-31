@@ -154,6 +154,24 @@ pr_template:
     - [x] Relevant tests were run
 
 # ============================================================================
+# Review feedback — PR review comments and CI follow-ups (optional)
+# ============================================================================
+# When enabled, PR feedback can trigger a follow-up agent run.
+review_feedback:
+  enabled: false
+  mode: manual                                            # auto | manual
+  poll_interval_ms: 60000
+  max_feedback_items_per_run: 20
+  max_followup_attempts_per_pr: 5
+  include_ci_failures: true                               # false skips CI API calls
+  reply_to_comments: true
+  # ignore_authors: [dependabot[bot], github-actions[bot]]
+  ignored_comment_commands: [/lgtm, /approve, /approved] # exact-comment match only
+  # ignored_feedback_sources: [ci]                        # fetch, but do not trigger
+  # ignored_body_patterns: ['(?i)^all checks have passed$'] # full-body regex match
+  # bot_login: clawcodex-bot
+
+# ============================================================================
 # Observability — TUI dashboard
 # ============================================================================
 observability:

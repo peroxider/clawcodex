@@ -750,6 +750,9 @@ class ReviewFeedbackConfig:
     include_ci_failures: bool = True
     reply_to_comments: bool = True
     ignore_authors: list[str] = field(default_factory=list)
+    ignored_comment_commands: list[str] = field(default_factory=list)
+    ignored_feedback_sources: list[str] = field(default_factory=list)
+    ignored_body_patterns: list[str] = field(default_factory=list)
     bot_login: str | None = None
     max_log_chars_per_check: int = 12_000
     max_followup_attempts_per_pr: int = 5
@@ -1243,6 +1246,15 @@ class WorkflowConfig:
                 reply_to_comments=bool(review_feedback_raw.get("reply_to_comments", True)),
                 ignore_authors=_normalize_string_list(
                     review_feedback_raw.get("ignore_authors"), []
+                ),
+                ignored_comment_commands=_normalize_string_list(
+                    review_feedback_raw.get("ignored_comment_commands"), []
+                ),
+                ignored_feedback_sources=_normalize_string_list(
+                    review_feedback_raw.get("ignored_feedback_sources"), []
+                ),
+                ignored_body_patterns=_normalize_string_list(
+                    review_feedback_raw.get("ignored_body_patterns"), []
                 ),
                 bot_login=_resolve_env_value(review_feedback_raw.get("bot_login")),
                 max_log_chars_per_check=review_feedback_raw.get("max_log_chars_per_check", 12_000),

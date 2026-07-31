@@ -164,7 +164,12 @@ review_feedback:
   enabled: false               # 启用 PR 评论自动处理
   mode: manual                 # manual | auto
   poll_interval_ms: 60000      # 轮询间隔
+  include_ci_failures: true    # false 时不拉取 CI 失败结果
   reply_to_comments: true      # 是否自动回复评论
+  ignore_authors: []           # 忽略指定作者（如机器人）
+  ignored_comment_commands: [/lgtm, /approve, /approved] # 仅整条命令匹配
+  ignored_feedback_sources: [] # 如 [ci]：采集但不触发 follow-up
+  ignored_body_patterns: []    # 正则完整匹配评论正文
   max_followup_attempts_per_pr: 5  # 每个 PR 最大 follow-up 次数
 ```
 
