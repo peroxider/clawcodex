@@ -771,7 +771,34 @@ register_profile(ProfileTemplate(
 - `agent:retry --profile debug` 命令行显式指定 Profile
 - `agent:follow-up` 保留当前 Profile 继续执行
 
-## §4 变更记录
+## §4 DC-A 补充分解：模式与继承链
+
+本节将 DC-001、DC-002 中未被 P130-A~H 覆盖的语义纳入 F-130，避免另开重复 F-Number。
+
+| 编号 | 子特性 | 实施范围 | 验收 |
+|------|--------|----------|------|
+| P130-I | ContextNode 继承链 | `Global → Task → Subtask → Loop` 四层运行时实例；子级按 section id 覆盖父级 | 最大深度 3；`effective_sections()` 顺序稳定；子级销毁不修改父级 |
+| P130-J | Mode Stack 与冲突策略 | named Mode、工具 allow/deny、知识锚点、样式和显式优先级 | 冲突可解释；deny 始终优先；默认仅允许单 Mode，叠加需显式启用 |
+| P130-K | 上下文 diff 与审计 | `diff(ctx_a, ctx_b)`、mode stack 与覆盖来源 | diff 显示新增/删除/覆盖及来源；可由 F-177 snapshot 调用 |
+
+**文件落点**：`extensions/self_correct/{context_node,mode_registry,context_diff}.py`、`extensions/self_correct/profiles/`、`tests/self_correct/test_context_node.py`、`test_mode_registry.py`、`test_context_diff.py`。
+
+```python
+@dataclass(frozen=True)
+class ContextNode:
+    parent: "ContextNode | None"
+    scope: Literal["session", "task", "subtask", "loop"]
+    sections: Mapping[str, SectionRef]
+    invariants: tuple[Invariant, ...]
+
+def effective_sections(node: ContextNode) -> list[SectionRef]: ...
+def diff_context(a: ContextNode, b: ContextNode) -> ContextDiff: ...
+def activate_modes(modes: list[str], *, allow_blend: bool = False) -> EffectiveMode: ...
+```
+
+实施顺序：ContextNode/不变量 → ProfileTemplate 适配 → mode registry 与冲突解析 → diff/audit → F-119/F-177 集成。Mode 不得直接扩大用户权限；工具 deny、会话级用户约束和 F-162 强制验证规则均为不可被子级覆盖的不变量。
+
+## §5 变更记录
 
 | 日期 | 变更 | 原因 |
 |------|------|------|

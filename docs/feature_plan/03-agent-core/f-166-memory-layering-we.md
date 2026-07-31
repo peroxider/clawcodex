@@ -959,7 +959,27 @@ F-166 与 F-158 Working Memory **不重复**，定位互补：
 
 ---
 
-## §4 变更记录
+## §4 DC-A 补充分解：Semantic 与 Procedural Memory
+
+P166-A~G 仍只交付 Working / Episodic。本节定义 DC-004 剩余两层的后续实施边界，防止“留 Wave 3”成为未定义范围。
+
+| 编号 | 子特性 | 实施范围 | 验收 |
+|------|--------|----------|------|
+| P166-H | Semantic Memory | 项目级、经审核的术语/结构/约定；只读默认 | 未审批内容不可晋升；每项可追溯到证据与审批 |
+| P166-I | Procedural Memory | 可复用成功流程的版本化步骤与适用条件 | 执行前校验前置条件；失败不会自动覆盖既有流程 |
+| P166-J | 晋升与回退工作流 | Working/Episodic → review queue → Semantic；支持撤销 | 审批、拒绝、撤销都有审计记录与来源链 |
+
+**文件落点**：`extensions/memory_layers/{semantic,procedural,promotion,review_queue}.py`、`.memory/semantic/`、`.memory/procedural/` 与 `tests/memory_layers/test_{semantic,procedural,promotion}.py`。
+
+```python
+def propose_promotion(entry_id: str, *, target: Literal["semantic", "procedural"]) -> ReviewItem: ...
+def approve_promotion(review_id: str, approver: str) -> MemoryEntry: ...
+def retrieve_procedure(intent: str, context: Mapping[str, str]) -> Procedure | None: ...
+```
+
+Semantic 写入必须由人类或验证 Hook 批准，包含 source、confidence、expiry 和 owner；Procedural 条目必须包含 preconditions、steps、rollback 与 last_verified_at。任何自动检索结果都作为候选上下文，不得绕过 F-158/F-162 的证据与验证规则。
+
+## §5 变更记录
 
 | 日期 | 作者 | 变更 |
 |:----:|------|------|
