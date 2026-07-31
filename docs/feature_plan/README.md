@@ -136,11 +136,11 @@ docs/feature_plan/
 
 ### Agent 元架构 / 动态上下文 (Brainstorm)
 
-> 元架构脑暴规划，20 项 DC-NN 已收敛为 **16 个 F-N 文档**（F-158~F-166、F-175~F-181；F-167、F-168 与 F-174 已被其他特性占用，按 Wave 1/2/3 三波落地；F-130 已承载 DC-001/DC-002/DC-007-部分）。详见 [dynamic-context-architecture.md §4.4 映射表](dynamic-context-architecture.md)。
+> 动态上下文的跨特性决策、映射与实施顺序见 [dynamic-context-index.md](dynamic-context-index.md)；20 项 DC-NN 已收敛为 16 个 F-N 文档（F-158~F-166、F-175~F-181；F-167、F-168 与 F-174 已被其他特性占用）。
 
 | 编号 | 名称 | 组别 | 核心杠杆 | 落地门槛 | 章节路径 |
 |:----:|------|------|:--------:|:--------:|---------|
-| DC-001 | 上下文模式热切换 | 生命周期 | 🟡 | 中 | [dynamic-context-architecture.md §3.A](dynamic-context-architecture.md) |
+| DC-001 | 上下文模式热切换 | 生命周期 | 🟡 | 中 | [dynamic-context-index.md](dynamic-context-index.md) |
 | DC-002 | 上下文继承链 | 生命周期 | 🟡 | 中 | 同上 |
 | DC-003 | JIT 上下文合成 | 生命周期 | 🔴🔴 | 低 | 同上 |
 | DC-004 | 记忆分层 (W/E/S) | 生命周期 | 🟢 | 低-高 | 同上 |
@@ -186,8 +186,8 @@ docs/feature_plan/
 | 2026-07-13 | 新增 08-recording 章节与 F-156 Asciicast v2 录制器 | 5 子系统（orchestrator / query / SOP / visualizer / cron）零 src/ 改动落地，60 unit+integration 测试通过，稳定性门禁 Stages 1-5/7-9 全绿 |
 | 2026-07-14 | 新增 F-130 自校正上下文切换 | 在 F-119 section registry 基础上规划元认知换脑机制；模板 + Agent 自定义的 Profile 系统；循环检测器框架；上下文切换引擎 + rollback；默认 4 个 Profile（default/debug/creative/review） |
 | 2026-07-18 | 新增 F-157 ToolSearch 宏/原子分层检索，并回写 F-56/F-57 边界 | 自然语言验收显示 phrase-only route 不能稳定阻止 SDK 原子工具抢占；新增 `intent_key`、`covered_tools`、RetrievalPlan、exclusive suppression 与执行前回滚设计 |
-| 2026-07-21 | 新增 dynamic-context-architecture.md (DC-001 ~ DC-020) | 用户提出"动态上下文切换/装配/生成"挑战性脑暴问题；沉淀 20 项原理特性规划，覆盖上下文生命周期 / 抗幻觉 / 推理扩展 / 元架构 4 组；定位为 brainstorm 文档，不申请 F-Number，落地时按子特性单独立项 |
-| 2026-07-22 | dynamic-context-architecture.md 新增 §4.4 DC → F-N 映射表 | 把 20 项 DC-NN 收敛为 16 个 F-N 文档（F-158 ~ F-173，F-N 编号接续 F-157 ToolSearch），按 Wave 1（P0 立竿见影）/ Wave 2（P1 工具化）/ Wave 3（P2/P3 元架构）三波落地；DC-001 / DC-002 / DC-007-部分 保留在 F-130 不单独立项 |
+| 2026-07-21 | 新增动态上下文架构规划 (DC-001 ~ DC-020) | 用户提出"动态上下文切换/装配/生成"挑战性脑暴问题；沉淀 20 项原理特性规划，覆盖上下文生命周期 / 抗幻觉 / 推理扩展 / 元架构 4 组；定位为 brainstorm 文档，不申请 F-Number，落地时按子特性单独立项 |
+| 2026-07-22 | 新增 DC → F-N 映射表 | 把 20 项 DC-NN 收敛为 16 个 F-N 文档（F-158 ~ F-173，F-N 编号接续 F-157 ToolSearch），按 Wave 1（P0 立竿见影）/ Wave 2（P1 工具化）/ Wave 3（P2/P3 元架构）三波落地；DC-001 / DC-002 / DC-007-部分 保留在 F-130 不单独立项 |
 | 2026-07-31 | 解决 DC-A F-Number 冲突并补齐 Wave 3 文档 | F-167（Visualizer）、F-168（被动累积）与 F-174（能力感知 Harness）保留原归属；DC-A 的 7 个 Wave 3 特性重编号为 F-175~F-181，新增 7 份对应规划文档，并同步 DC→F-N 映射、总表与交叉引用 |
 | 2026-07-22 | 新增 F-158 抗幻觉基线协议（覆盖 DC-005 / DC-009 / DC-020） | DC-A §4.4 映射表基础上落地 Wave 1 P0 高杠杆特性；置信度声明协议 + 否定式检索 + 边界追踪三层防御抑制幻觉；解耦落地于 `extensions/anti_hallucination/`，零 `src/` 侵入 |
 | 2026-07-22 | 新增 F-159 JIT 上下文合成（覆盖 DC-003） | DC-A §4.4 映射表基础上落地 Wave 1 P0 上下文生命周期特性；Intent 解析 + Loader 集合 + 缓存 + register_section 注入 + 触发限流；与 F-130（占位符填充）/ F-158-A（VERIFIED source）/ F-161（执行层）强协同；解耦落地于 `extensions/jit_context/`，零 `src/` 侵入 |

@@ -3,7 +3,7 @@
 > 状态: 📋 规划中
 > 章节: `docs/feature_plan/03-agent-core/f-159-jit-context-synthesis.md`
 > 最后更新: 2026-07-22
-> 设计来源: DC-A 元架构脑暴 [§3.A 上下文生命周期 — DC-003](dynamic-context-architecture.md)
+> 设计来源: [动态上下文总览](../dynamic-context-index.md) — DC-003
 
 ## §0 元信息
 
@@ -99,7 +99,7 @@ F-159 在 F-119 基础上提供 **JIT (Just-In-Time) 上下文合成**机制：�
 | `clawcodex_ext/context_system/section_registry.py` | 暴露 `register_section` 给 F-159 调用（已存在） |
 | `tests/stability_gate/test_stage5_extensions.py` | 增加 `extensions.jit_context` 模块导入断言 |
 | `docs/feature_plan/README.md` | F-Number 状态总表 + 变更历史加 F-159 |
-| `docs/feature_plan/dynamic-context-architecture.md` | §8 变更记录加 F-159 启动行 |
+| `docs/feature_plan/dynamic-context-index.md` | DC→F 映射、依赖与全局验收总则 |
 
 ### 1.7 核心 API 设计
 

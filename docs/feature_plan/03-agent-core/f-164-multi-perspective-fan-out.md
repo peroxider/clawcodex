@@ -3,7 +3,7 @@
 > 状态: 📋 规划中
 > 章节: `docs/feature_plan/03-agent-core/f-164-multi-perspective-fan-out.md`
 > 最后更新: 2026-07-22
-> 设计来源: DC-A 元架构脑暴 [§3.C 推理扩展机制](dynamic-context-architecture.md) — DC-010
+> 设计来源: [动态上下文总览](../dynamic-context-index.md) — DC-010
 
 ## §0 元信息
 
@@ -104,7 +104,7 @@ F-158 / F-162 已提供"事实层"防御（标注 + 拦截），F-163 引入"单
 | `extensions/sub_agent/` （F-118） | 不修改；F-164 通过 F-118 public API 调用 |
 | `tests/stability_gate/test_stage5_extensions.py` | 增加 `extensions.multi_perspective` 模块导入断言 |
 | `docs/feature_plan/README.md` | F-Number 状态总表 + 变更历史加 F-164 |
-| `docs/feature_plan/dynamic-context-architecture.md` | §8 变更记录 + §4.4 映射表标记 F-164 状态 |
+| `docs/feature_plan/dynamic-context-index.md` | DC→F 映射、依赖与全局验收总则 |
 
 ### 1.7 核心 API 设计
 

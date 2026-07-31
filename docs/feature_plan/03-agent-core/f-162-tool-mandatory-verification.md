@@ -3,7 +3,7 @@
 > 状态: 📋 规划中
 > 章节: `docs/feature_plan/03-agent-core/f-162-tool-mandatory-verification.md`
 > 最后更新: 2026-07-22
-> 设计来源: DC-A 元架构脑暴 [§3.B 抗幻觉机制](dynamic-context-architecture.md) — DC-006
+> 设计来源: [动态上下文总览](../dynamic-context-index.md) — DC-006
 
 ## §0 元信息
 
@@ -109,7 +109,7 @@ def pre_reply_hook(reply: str, history: list[dict]) -> tuple[str, list[str]]:
 | `extensions/anti_hallucination/rules.py` | `VERIFY_RULES` 标 `severity="warn"`；新增 `STRICT_RULES` 标 `severity="block"`（与 F-158 解耦的契约边界） |
 | `tests/stability_gate/test_stage5_extensions.py` | 增加 `extensions.tool_verification` 模块导入断言 |
 | `docs/feature_plan/README.md` | F-Number 状态总表 + 变更历史加 F-162 |
-| `docs/feature_plan/dynamic-context-architecture.md` | §8 变更记录 + §4.4 映射表标记 F-162 状态 |
+| `docs/feature_plan/dynamic-context-index.md` | DC→F 映射、依赖与全局验收总则 |
 
 ### 1.7 核心 API 设计
 
