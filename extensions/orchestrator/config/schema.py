@@ -948,6 +948,19 @@ class ClarifierConfig:
 
 
 @dataclass
+class PrTemplateConfig:
+    """Optional, workflow-defined pull request title and body templates.
+
+    Templates are rendered by :class:`GitSyncService` with a deliberately
+    small, data-only set of ``{{ variable }}`` placeholders.  An empty body
+    preserves the built-in PR body for backwards compatibility.
+    """
+
+    title: str = ""
+    body: str = ""
+
+
+@dataclass
 class WorkflowConfig:
     tracker: TrackerConfig = field(default_factory=TrackerConfig)
     polling: PollingConfig = field(default_factory=PollingConfig)
@@ -961,6 +974,7 @@ class WorkflowConfig:
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     modes: ModesConfig = field(default_factory=ModesConfig)
+    pr_template: PrTemplateConfig = field(default_factory=PrTemplateConfig)
     pr_conflict_scan: "PrConflictScanConfig" = field(default_factory=lambda: PrConflictScanConfig())
     clarifier: "ClarifierConfig" = field(default_factory=lambda: ClarifierConfig())
     source_path: str = ""
@@ -984,6 +998,10 @@ class WorkflowConfig:
         server_raw = raw.get("server", {})
         pr_conflict_scan_raw = raw.get("pr_conflict_scan", {})
         clarifier_raw = raw.get("clarifier", {}) or {}
+        pr_template_raw = raw.get("pr_template", {}) or {}
+        if not isinstance(pr_template_raw, dict):
+            logger.warning("pr_template must be a mapping; ignoring it")
+            pr_template_raw = {}
 
         tracker_kind = normalize_tracker_kind(tracker_raw.get("kind", "linear"))
         tracker_info = tracker_kind_info(tracker_kind)
@@ -1245,6 +1263,10 @@ class WorkflowConfig:
                 host=server_raw.get("host", "127.0.0.1"),
             ),
             modes=_parse_modes_config(modes_raw),
+            pr_template=PrTemplateConfig(
+                title=str(pr_template_raw.get("title", "") or "").strip(),
+                body=str(pr_template_raw.get("body", "") or ""),
+            ),
             pr_conflict_scan=PrConflictScanConfig(
                 enabled=bool(pr_conflict_scan_raw.get("enabled", False)),
                 poll_interval_ms=pr_conflict_scan_raw.get("poll_interval_ms", 300_000),

@@ -276,6 +276,7 @@ class Orchestrator:
             git_email=workflow.workspace.git_email,
             upstream_clone_url=workflow.workspace.upstream_clone_url,
             fork_clone_url=workflow.workspace.repo_clone_url,
+            pr_template=workflow.pr_template,
         )
         self._state = OrchestratorState(
             poll_interval_ms=workflow.polling.interval_ms,

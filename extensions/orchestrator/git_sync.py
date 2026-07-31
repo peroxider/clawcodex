@@ -18,7 +18,7 @@ from extensions.orchestrator_runtime.adapters.clawcodex_compat import (
     get_repo_root,
     _run_git,
 )
-from .config.schema import AgentConfig, HooksConfig
+from .config.schema import AgentConfig, HooksConfig, PrTemplateConfig
 from . import report_writer
 from .issue import Issue
 from .prompt_builder import resolve_python_executable
@@ -103,6 +103,7 @@ class GitSyncService:
         git_email: str | None = None,
         upstream_clone_url: str | None = None,
         fork_clone_url: str | None = None,
+        pr_template: PrTemplateConfig | None = None,
     ) -> None:
         self.tracker = tracker
         self._branch_prefix = branch_prefix
@@ -112,7 +113,8 @@ class GitSyncService:
         self._git_email = git_email
         self._upstream_clone_url = upstream_clone_url
         self._fork_clone_url = fork_clone_url
-        self._gitignore_patterns = gitignore_patterns or [
+        self._pr_template = pr_template or PrTemplateConfig()
+        self._gitignore_patterns = list(gitignore_patterns or [
             ".event_streams",
             ".orchestrator_control",
             ".orchestrator_workspace",
@@ -130,8 +132,20 @@ class GitSyncService:
             "*.log",
             "analysis.md",
             "changes_summary.md",
+            "implementation_notes.md",
             "verification_report.md",
-        ]
+        ])
+        # Agent-generated PR artifacts are orchestration metadata, never part
+        # of the implementation commit. Keep that invariant even when callers
+        # provide their own gitignore list.
+        for artifact in (
+            "analysis.md",
+            "changes_summary.md",
+            "implementation_notes.md",
+            "verification_report.md",
+        ):
+            if artifact not in self._gitignore_patterns:
+                self._gitignore_patterns.append(artifact)
 
     def _fork_mode(self) -> bool:
         """是否处于 fork 工作流模式（upstream 和 fork 不同）。"""
@@ -1142,6 +1156,13 @@ class GitSyncService:
         )
 
     def _build_pr_title(self, issue: Issue) -> str:
+        if self._pr_template.title:
+            title = self._render_pr_template(
+                self._pr_template.title,
+                self._pr_template_context(issue=issue),
+            ).replace("\n", " ").strip()
+            if title:
+                return title
         identifier = (issue.identifier or "issue").strip()
         title = (issue.title or "Automated update").strip()
         return f"{identifier}: {title}"
@@ -1156,6 +1177,19 @@ class GitSyncService:
         session: Any,
         pull_request: PullRequestRef | None,
     ) -> str:
+        if self._pr_template.body:
+            return self._render_pr_template(
+                self._pr_template.body,
+                self._pr_template_context(
+                    issue=issue,
+                    commit_sha=commit_sha,
+                    branch_name=branch_name,
+                    base_branch=base_branch,
+                    session=session,
+                    pull_request=pull_request,
+                ),
+            ).strip()
+
         report_path = getattr(session, "report_path", None)
         verification_status = getattr(session, "verification_status", None) or "skipped"
         workspace_path = (
@@ -1273,6 +1307,63 @@ class GitSyncService:
         if report_path:
             lines.extend(["", f"<!-- metadata: report_path={report_path} -->"])
         return "\n".join(lines)
+
+    def _pr_template_context(
+        self,
+        *,
+        issue: Issue,
+        commit_sha: str | None = None,
+        branch_name: str = "",
+        base_branch: str = "",
+        session: Any | None = None,
+        pull_request: PullRequestRef | None = None,
+    ) -> dict[str, str]:
+        """Return the safe, data-only variables exposed to PR templates."""
+        workspace_path = getattr(getattr(session, "workspace", None), "path", None)
+        changes_summary = self._read_pr_artifact(workspace_path, "changes_summary.md")
+        implementation_notes = self._read_pr_artifact(workspace_path, "implementation_notes.md")
+        verification_report = self._read_pr_artifact(workspace_path, "verification_report.md")
+        verification_status = getattr(session, "verification_status", None) or "skipped"
+        verification_output = getattr(session, "verification_output", None) or ""
+        verification_summary = verification_report or self._verification_summary(verification_output)
+        return {
+            "issue.id": str(issue.id or ""),
+            "issue.identifier": str(issue.identifier or ""),
+            "issue.title": str(issue.title or ""),
+            "issue.url": str(issue.url or ""),
+            "branch_name": branch_name,
+            "base_branch": base_branch,
+            "commit_sha": commit_sha or "",
+            "verification_status": str(verification_status),
+            "verification_summary": verification_summary,
+            "changes_summary": changes_summary,
+            "implementation_notes": implementation_notes,
+            "pull_request.url": str(getattr(pull_request, "url", None) or ""),
+            "pull_request.number": str(getattr(pull_request, "number", None) or ""),
+        }
+
+    @staticmethod
+    def _render_pr_template(template: str, context: dict[str, str]) -> str:
+        """Replace ``{{ variable }}`` tokens without evaluating template code."""
+        return re.sub(
+            r"{{\s*([A-Za-z_][A-Za-z0-9_.]*)\s*}}",
+            lambda match: context.get(match.group(1), ""),
+            template,
+        )
+
+    def _read_pr_artifact(self, workspace_path: str | Path | None, filename: str) -> str:
+        if not workspace_path:
+            return ""
+        try:
+            text = (Path(workspace_path) / filename).read_text(encoding="utf-8")
+        except OSError:
+            return ""
+        return self._strip_think_blocks(text).strip()
+
+    @staticmethod
+    def _verification_summary(output: str) -> str:
+        lines = [line for line in output.strip().splitlines() if "passed" in line or "failed" in line]
+        return lines[-1] if lines else output.strip()
 
     @staticmethod
     def _strip_think_blocks(text: str) -> str:

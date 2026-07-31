@@ -73,6 +73,10 @@ workspace:
     - __pycache__
     - "*.egg-info"
     - .pytest_cache
+    - analysis.md
+    - changes_summary.md
+    - implementation_notes.md
+    - verification_report.md
 
 # ============================================================================
 # Agent — Claude invocation parameters
@@ -120,6 +124,36 @@ hooks:
   timeout_ms: 60000
 
 # ============================================================================
+# Pull Request Template — fixed structure plus generated implementation notes
+# ============================================================================
+# `title` and `body` use safe {{ variable }} substitutions (not executable
+# template code). Available variables: issue.id, issue.identifier, issue.title,
+# issue.url, branch_name, base_branch, commit_sha, verification_status,
+# verification_summary, changes_summary, implementation_notes,
+# pull_request.number, pull_request.url.
+# The dynamic Markdown values are read after the agent finishes from
+# `changes_summary.md`, `implementation_notes.md`, and `verification_report.md`.
+# Omit this section or leave body empty to retain the built-in PR body.
+pr_template:
+  title: "{{ issue.identifier }}: {{ issue.title }}"
+  body: |
+    ## Summary
+    {{ changes_summary }}
+
+    ## Implementation Notes
+    {{ implementation_notes }}
+
+    ## Verification
+    {{ verification_summary }}
+
+    ## Related Issue
+    {{ issue.url }}
+
+    ## Checklist
+    - [x] Changes are self-reviewed
+    - [x] Relevant tests were run
+
+# ============================================================================
 # Observability — TUI dashboard
 # ============================================================================
 observability:
@@ -152,6 +186,9 @@ assigned to you.
 2. Explore the {{REPO_NAME}} codebase as needed (Read, Grep, Glob, Bash).
 3. Implement the required changes against the base branch baseline.
 4. Run the existing test suite (and add new tests if behavior is non-trivial).
+   Before committing, write `changes_summary.md` and `implementation_notes.md`.
+   Describe only real changes, tests run, and known limitations; do not copy the
+   diff or claim verification that was not executed.
 5. Commit your changes with a descriptive message
    (`feat: ...` / `fix: ...` / `refactor: ...`).
 6. Push the branch and open a pull request back to the base branch.

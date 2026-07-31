@@ -64,6 +64,10 @@ workspace:
     - .mypy_cache
     - .ruff_cache
     - "*.log"
+    - analysis.md
+    - changes_summary.md
+    - implementation_notes.md
+    - verification_report.md
     - ".issues/*.comments.ndjson"
 
 # -----------------------------------------------------------------------------
@@ -118,6 +122,26 @@ hooks:
   timeout_ms: 120000
 
 # -----------------------------------------------------------------------------
+# Pull request template — used when this workflow is switched to a remote tracker
+# -----------------------------------------------------------------------------
+# Safe variables include issue.identifier, issue.title, issue.url,
+# changes_summary, implementation_notes, and verification_summary.
+pr_template:
+  title: "{{ issue.identifier }}: {{ issue.title }}"
+  body: |
+    ## Summary
+    {{ changes_summary }}
+
+    ## Implementation Notes
+    {{ implementation_notes }}
+
+    ## Verification
+    {{ verification_summary }}
+
+    ## Related Issue
+    {{ issue.url }}
+
+# -----------------------------------------------------------------------------
 # Review feedback (F-37): pull PR review comments to trigger follow-up
 # No real PRs in local mode; leave disabled. Set enabled=true and configure
 # mode to turn on.
@@ -162,8 +186,11 @@ defined by a local issue card.
 3. Explore the codebase, locate files that need changes
 4. Implement changes, add / update tests
 5. Run `agent.test_command` (configured in the workflow) and ensure it passes
-6. **Do NOT push, do NOT open a PR, do NOT merge** — the orchestrator handles sync
-7. Use Conventional Commits style (`feat:` / `fix:` / `refactor:` etc.)
+6. Before committing, write `changes_summary.md` and `implementation_notes.md`
+   with the actual changes, tests run, and known limitations. Do not claim
+   verification that was not executed.
+7. **Do NOT push, do NOT open a PR, do NOT merge** — the orchestrator handles sync
+8. Use Conventional Commits style (`feat:` / `fix:` / `refactor:` etc.)
 
 **Constraints:**
 - Only modify files inside the working tree; do not touch files outside the workspace root

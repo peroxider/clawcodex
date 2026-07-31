@@ -6,7 +6,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from extensions.orchestrator.config.schema import AgentConfig, HooksConfig
+from extensions.orchestrator.config.schema import (
+    AgentConfig,
+    HooksConfig,
+    PrTemplateConfig,
+    WorkflowConfig,
+)
 from extensions.orchestrator.git_sync import (
     GitSyncPostCommitError,
     GitSyncService,
@@ -156,6 +161,83 @@ def _build_origin_repo(base: Path) -> Path:
 
 
 class TestGitSyncService(unittest.IsolatedAsyncioTestCase):
+    def test_pr_template_renders_fixed_and_generated_content(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_path = Path(tmp)
+            (workspace_path / "changes_summary.md").write_text(
+                "- Added configurable PR bodies.", encoding="utf-8"
+            )
+            (workspace_path / "implementation_notes.md").write_text(
+                "Templates use data-only substitutions.", encoding="utf-8"
+            )
+            (workspace_path / "verification_report.md").write_text(
+                "pytest: 12 passed", encoding="utf-8"
+            )
+            issue = Issue(
+                id="77",
+                identifier="ISSUE-77",
+                title="Configurable PR template",
+                url="https://example.test/issues/77",
+            )
+            session = _Session(issue, Workspace(workspace_path, "ISSUE-77", "77"))
+            session.verification_status = "passed"
+            service = GitSyncService(
+                _Tracker(),
+                pr_template=PrTemplateConfig(
+                    title="PR: {{ issue.identifier }} / {{ issue.title }}",
+                    body=(
+                        "## Summary\n{{ changes_summary }}\n\n"
+                        "## Notes\n{{ implementation_notes }}\n\n"
+                        "## Checks\n{{ verification_status }}: {{ verification_summary }}\n\n"
+                        "{{ issue.url }}"
+                    ),
+                ),
+            )
+
+            self.assertEqual(
+                service._build_pr_title(issue), "PR: ISSUE-77 / Configurable PR template"
+            )
+            self.assertEqual(
+                service._build_pr_body(
+                    issue,
+                    "abc123",
+                    "clawcodex/issue-77",
+                    "main",
+                    session=session,
+                    pull_request=None,
+                ),
+                "## Summary\n- Added configurable PR bodies.\n\n"
+                "## Notes\nTemplates use data-only substitutions.\n\n"
+                "## Checks\npassed: pytest: 12 passed\n\nhttps://example.test/issues/77",
+            )
+
+    def test_pr_template_keeps_unknown_variables_empty(self) -> None:
+        service = GitSyncService(
+            _Tracker(),
+            pr_template=PrTemplateConfig(
+                body="Known={{ issue.identifier }}, unknown={{ no_such_value }}"
+            ),
+        )
+        issue = Issue(id="1", identifier="ISSUE-1", title="Test")
+        self.assertEqual(
+            service._build_pr_body(
+                issue, None, "branch", "main", session=object(), pull_request=None
+            ),
+            "Known=ISSUE-1, unknown=",
+        )
+
+    def test_workflow_config_parses_pr_template(self) -> None:
+        workflow = WorkflowConfig.from_dict(
+            {
+                "pr_template": {
+                    "title": "{{ issue.title }}",
+                    "body": "## Fixed\n{{ changes_summary }}",
+                }
+            }
+        )
+        self.assertEqual(workflow.pr_template.title, "{{ issue.title }}")
+        self.assertEqual(workflow.pr_template.body, "## Fixed\n{{ changes_summary }}")
+
     def test_merge_pr_ref_preserves_existing_number_and_url(self) -> None:
         service = GitSyncService(_Tracker())
 
