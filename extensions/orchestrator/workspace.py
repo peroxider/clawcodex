@@ -447,11 +447,19 @@ class WorkspaceManager:
             await self._try_process(["git", "checkout", "-b", base_branch], cwd=str(path))
 
     async def _sync_base_from_upstream(self, path: Path, base_branch: str) -> None:
-        """Fetch upstream base branch and merge into local fork base branch.
+        """Fetch upstream base branch and fast-forward local fork base branch.
 
-        In fork workflow, the fork's base branch is stale.  This fetches the
-        upstream's latest base branch and merges it into the local checkout so
+        In fork workflow, the fork's base branch is often stale.  This fetches the
+        upstream's latest base branch and fast-forwards the local checkout so
         development starts from the current upstream tip.
+
+        fast-forward-only is intentional: if the fork's local base branch contains
+        commits that have NOT been merged upstream (e.g. personal WIP pushed
+        directly to the fork), a regular ``merge --no-ff`` would cement those
+        commits into the local base branch and every issue branch created from it
+        would carry the unrelated changes into the PR. ff-only fails in that case
+        and leaves the local base untouched; issue branches are created directly
+        from ``upstream/{base_branch}`` anyway (see ``_checkout_issue_branch``).
         """
         remote = "upstream"
         ref = f"refs/remotes/{remote}/{base_branch}"
@@ -463,10 +471,17 @@ class WorkspaceManager:
             ["git", "show-ref", "--verify", "--quiet", ref],
             cwd=str(path),
         ):
-            await self._try_process(
-                ["git", "merge", f"{remote}/{base_branch}", "--no-ff"],
+            if not await self._try_process(
+                ["git", "merge", "--ff-only", f"{remote}/{base_branch}"],
                 cwd=str(path),
-            )
+            ):
+                logger.warning(
+                    "Fork base branch %s has diverged from upstream (contains "
+                    "unmerged commits); skipping sync — issue branches are "
+                    "created from upstream/%s directly",
+                    base_branch,
+                    base_branch,
+                )
 
     async def _checkout_issue_branch(self, path: Path, issue: Any) -> None:
         if not self.config.checkout_issue_branch:
@@ -504,6 +519,28 @@ class WorkspaceManager:
                 cwd=str(path),
             ):
                 return
+
+        # Fork 工作流：新分支必须基于 upstream 的 base 分支创建，而不能从当前
+        # HEAD（fork 本地 base）创建——fork 仓的 base 可能包含尚未合入上游的
+        # 个人提交，从它创建会把无关改动带进 PR，污染 PR diff。
+        if self._upstream_configured():
+            base_branch = (self.config.base_branch or "").strip()
+            if base_branch:
+                # 幂等 fetch，确保 upstream/{base_branch} 引用可用
+                await self._try_process(
+                    [
+                        "git",
+                        "fetch",
+                        "upstream",
+                        f"{base_branch}:refs/remotes/upstream/{base_branch}",
+                    ],
+                    cwd=str(path),
+                )
+                if await self._try_process(
+                    ["git", "checkout", "-b", branch_name, f"upstream/{base_branch}"],
+                    cwd=str(path),
+                ):
+                    return
 
         if not await self._try_process(
             ["git", "checkout", "-b", branch_name],
