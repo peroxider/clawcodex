@@ -59,6 +59,10 @@ docs/feature_plan/
 | F-164 | 多视角扇出 — 5 个默认视角 (资深工程师/安全/新人/性能/维护者) 并行推理 + 综合 | 📋 | [f-164-multi-perspective-fan-out.md](03-agent-core/f-164-multi-perspective-fan-out.md) |
 | F-165 | 矛盾检测独立版 — 三维语义矛盾检测（vs VERIFIED / intra-reply / vs history）+ 自动修订 | 📋 | [f-165-self-contradiction-detector.md](03-agent-core/f-165-self-contradiction-detector.md) |
 | F-166 | 记忆分层 W/E — Working（进程内 LRU + GC）+ Episodic（NDJSON 跨会话）+ Provenance 追溯 + 5 Profile 写读策略 | 📋 | [f-166-memory-layering-we.md](03-agent-core/f-166-memory-layering-we.md) |
+| F-175 | 类比迁移 — 基于 Episodic Memory 的结构映射与反例校验 | 📋 | [f-175-analogical-transfer.md](03-agent-core/f-175-analogical-transfer.md) |
+| F-176 | 假设并行情景 — 多假设并行验证与证据收敛 | 📋 | [f-176-parallel-hypothetical-scenarios.md](03-agent-core/f-176-parallel-hypothetical-scenarios.md) |
+| F-177 | 上下文时序回放 — Context Snapshot、diff 与分支探索 | 📋 | [f-177-context-time-travel.md](03-agent-core/f-177-context-time-travel.md) |
+| F-178 | 认知模式混合 — 可解释的推理风格权重编排 | 📋 | [f-178-cognitive-mode-blending.md](03-agent-core/f-178-cognitive-mode-blending.md) |
 
 ### 能力感知 Harness 自适应
 
@@ -99,6 +103,9 @@ docs/feature_plan/
 |----------|------|:----:|---------|
 | F-156 | Asciicast v2 录制器（orchestrator / query / SOP / visualizer / cron） | ✅ 已落地 | *特性文档已归档* |
 | F-167 | Visualizer 独立包化（商业化脱离） | ✅ 已落地 | [f-167-visualizer-package-extract.md](04-architecture-sdk/f-167-visualizer-package-extract.md) |
+| F-179 | 上下文即代码（CaC）— 声明式 Context Pack 与校验 CLI | 📋 | [f-179-context-as-code.md](04-architecture-sdk/f-179-context-as-code.md) |
+| F-180 | 上下文市场 — Context Pack 的本地/远程分发与签名 | 📋 | [f-180-context-marketplace.md](04-architecture-sdk/f-180-context-marketplace.md) |
+| F-181 | 上下文压力测试 — Context Pack 上线前的对抗性质量门禁 | 📋 | [f-181-context-stress-test.md](04-architecture-sdk/f-181-context-stress-test.md) |
 
 ### CCB 对标
 
@@ -129,7 +136,7 @@ docs/feature_plan/
 
 ### Agent 元架构 / 动态上下文 (Brainstorm)
 
-> 元架构脑暴规划，20 项 DC-NN 已收敛为 **16 个 F-N 文档**（F-158 ~ F-173，按 Wave 1/2/3 三波落地；F-130 已承载 DC-001/DC-002/DC-007-部分）。详见 [dynamic-context-architecture.md §4.4 映射表](dynamic-context-architecture.md)。
+> 元架构脑暴规划，20 项 DC-NN 已收敛为 **16 个 F-N 文档**（F-158~F-166、F-175~F-181；F-167、F-168 与 F-174 已被其他特性占用，按 Wave 1/2/3 三波落地；F-130 已承载 DC-001/DC-002/DC-007-部分）。详见 [dynamic-context-architecture.md §4.4 映射表](dynamic-context-architecture.md)。
 
 | 编号 | 名称 | 组别 | 核心杠杆 | 落地门槛 | 章节路径 |
 |:----:|------|------|:--------:|:--------:|---------|
@@ -181,6 +188,7 @@ docs/feature_plan/
 | 2026-07-18 | 新增 F-157 ToolSearch 宏/原子分层检索，并回写 F-56/F-57 边界 | 自然语言验收显示 phrase-only route 不能稳定阻止 SDK 原子工具抢占；新增 `intent_key`、`covered_tools`、RetrievalPlan、exclusive suppression 与执行前回滚设计 |
 | 2026-07-21 | 新增 dynamic-context-architecture.md (DC-001 ~ DC-020) | 用户提出"动态上下文切换/装配/生成"挑战性脑暴问题；沉淀 20 项原理特性规划，覆盖上下文生命周期 / 抗幻觉 / 推理扩展 / 元架构 4 组；定位为 brainstorm 文档，不申请 F-Number，落地时按子特性单独立项 |
 | 2026-07-22 | dynamic-context-architecture.md 新增 §4.4 DC → F-N 映射表 | 把 20 项 DC-NN 收敛为 16 个 F-N 文档（F-158 ~ F-173，F-N 编号接续 F-157 ToolSearch），按 Wave 1（P0 立竿见影）/ Wave 2（P1 工具化）/ Wave 3（P2/P3 元架构）三波落地；DC-001 / DC-002 / DC-007-部分 保留在 F-130 不单独立项 |
+| 2026-07-31 | 解决 DC-A F-Number 冲突并补齐 Wave 3 文档 | F-167（Visualizer）、F-168（被动累积）与 F-174（能力感知 Harness）保留原归属；DC-A 的 7 个 Wave 3 特性重编号为 F-175~F-181，新增 7 份对应规划文档，并同步 DC→F-N 映射、总表与交叉引用 |
 | 2026-07-22 | 新增 F-158 抗幻觉基线协议（覆盖 DC-005 / DC-009 / DC-020） | DC-A §4.4 映射表基础上落地 Wave 1 P0 高杠杆特性；置信度声明协议 + 否定式检索 + 边界追踪三层防御抑制幻觉；解耦落地于 `extensions/anti_hallucination/`，零 `src/` 侵入 |
 | 2026-07-22 | 新增 F-159 JIT 上下文合成（覆盖 DC-003） | DC-A §4.4 映射表基础上落地 Wave 1 P0 上下文生命周期特性；Intent 解析 + Loader 集合 + 缓存 + register_section 注入 + 触发限流；与 F-130（占位符填充）/ F-158-A（VERIFIED source）/ F-161（执行层）强协同；解耦落地于 `extensions/jit_context/`，零 `src/` 侵入 |
 | 2026-07-22 | 新增 F-160 反事实推理（覆盖 DC-012） | DC-A §4.4 映射表基础上落地 Wave 1 P0 推理扩展轻量级特性；门槛最低（仅 prompt + 1 Hook）；3 类模板（决策 / 断言 / 推荐）+ 6 档 verdict 标注 + 自检 Hook；与 F-119 / F-102 / F-158-A / F-130 / F-163 协同；解耦落地于 `extensions/counterfactual/`，零 `src/` 侵入 |

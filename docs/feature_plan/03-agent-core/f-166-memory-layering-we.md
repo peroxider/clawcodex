@@ -10,7 +10,7 @@
 | 字段 | 值 |
 |------|---|
 | 文档性质 | Wave 2 P1 工具化组（中等门槛，~2-3 月可落地；Working 层低门槛可独立落地） |
-| 覆盖 DC | DC-004 记忆分层 (Working + Episodic 两层先落地；Semantic + Procedural 留 Wave 3 / F-168+) |
+| 覆盖 DC | DC-004 记忆分层 (Working + Episodic 两层先落地；Semantic + Procedural 留 Wave 3 / F-175+) |
 | 前置依赖 | F-119 Section Registry + F-102 Hook 扩展点 + F-158 Working Memory (VERIFIED markers) |
 | 协同 | F-158 Working Memory (VERIFIED 标记)、F-130 Profile (不同 Profile 访问不同层)、F-159 JIT (跨会话查询) |
 | 解耦原则 | ✅ 全部新增代码落在 `extensions/memory_layers/`，零 `src/` 侵入 |
@@ -46,7 +46,7 @@
 
 ### 1.3 非目标 (Out of Scope)
 
-- 不立即落地 Semantic Memory（DC-004 完整版留 Wave 3 / F-168+；Wave 2 P1 范围仅 Working + Episodic）
+- 不立即落地 Semantic Memory（DC-004 完整版留 Wave 3 / F-175+；Wave 2 P1 范围仅 Working + Episodic）
 - 不落地 Procedural Memory（DC-004 可选第四层，留 Wave 3）
 - 不替代 F-130 Profile 切换机制（F-166 提供记忆层基础设施，F-130 提供 Profile 切换策略）
 - 不替代 F-159 JIT 缓存（F-159 是"按需抓取"机制，F-166 是"分层持久化"机制）
@@ -860,7 +860,7 @@ def memory_layers_read_for_context_hook(
 | **NDJSON 损坏** | 单行损坏 → 整文件不可读 | P166-B `_iter_entries` 容忍 `JSONDecodeError`（跳过损坏行）+ 写审计 |
 | **文件膨胀** | Episodic 文件超过 max_file_size_mb | P166-B `_rotate_if_needed` 自动轮转（带时间戳归档） |
 | **与 F-158 冲突** | F-158 单独存储 VERIFIED markers 与 F-166 Working Memory 重复 | F-166 Working Memory 把 F-158 VERIFIED markers 作为 `MemoryEntry(type=VERIFIED_FACT)` **视图**（不复制数据） |
-| **Wave 3 范围溢出** | 用户期望 F-166 包含 Semantic / Procedural 层 | §1.3 非目标明确：Wave 2 P1 仅 Working + Episodic；Semantic + Procedural 留 Wave 3 / F-168+ |
+| **Wave 3 范围溢出** | 用户期望 F-166 包含 Semantic / Procedural 层 | §1.3 非目标明确：Wave 2 P1 仅 Working + Episodic；Semantic + Procedural 留 Wave 3 / F-175+ |
 
 ---
 

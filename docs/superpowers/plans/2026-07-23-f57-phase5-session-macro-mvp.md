@@ -2,6 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.  
 > **Revision:** 2026-07-23 v2 — incorporates second review (task order, unified resolver, snapshot COW, session cleanup, ValidatedSessionMacro, TOCTOU, REPL+registration bootstrap, expanded tests, git hygiene).
+> **Status:** ✅ Completed. Implementation and acceptance matrix re-verified on 2026-07-31 (`90 passed, 21 subtests passed`).
 
 **Goal:** Register a complete MacroDefinition into a per-session immutable overlay (after a dedicated confirm gate) so the macro is immediately searchable and callable on **all** lookup paths—without mutating the shared `ToolRegistry`.
 
@@ -78,29 +79,29 @@
   - `validate_macro_core(...)` used by bundle + session
 - Consumes: existing `workflow_dict_to_spec`, `MacroConvertError`, `AgentToolSpec`
 
-- [ ] **Step 1: Add ToolContext fields (slots-safe)**
+- [x] **Step 1: Add ToolContext fields (slots-safe)**
 
 Add the three fields with defaults to `ToolContext` so later tasks can construct real contexts.
 
-- [ ] **Step 2: Write failing validation/parse tests**
+- [x] **Step 2: Write failing validation/parse tests**
 
 Cover: non-kebab name; exclusive rejected; target mismatch; unknown field; illegal selection enum (strict, not coerced); workflow callable forbidden; returns `ValidatedSessionMacro` with normalized `definition.routing.target_tool == name`.
 
-- [ ] **Step 3: Implement strict parse + validation split**
+- [x] **Step 3: Implement strict parse + validation split**
 
 - `parse_session_macro_route`: invalid enum → `MacroConvertError` (no silent default).  
 - Bundle `validate_macro_definition` keeps Phase 4 exclusive→prefer downgrade.  
 - Session path rejects exclusive; builds `AgentToolSpec(call_type="workflow", call_impl={"catalog_id": f"session:{name}"}, ...)`.  
 - `tool_index` parameter documented as allowlist-shaped; tests pass a small allowlist only.
 
-- [ ] **Step 4: Run**
+- [x] **Step 4: Run**
 
 ```bash
 pytest tests/misc/test_sop_session_macros.py -k "parse or Validat or name or exclusive or target" -v
 pytest tests/misc/test_sop_macro_convert_phase4.py -v
 ```
 
-- [ ] **Step 5: Commit (path-limited)**
+- [x] **Step 5: Commit (path-limited)**
 
 ```bash
 git add clawcodex_ext/tool_system/context.py \
@@ -126,7 +127,7 @@ git commit -m "feat(f57): session macro parse/validate and ToolContext fields"
   - `resolve_tool_for_context(context, name, *, base_registry=None) -> Tool | None`
 - Consumes: ToolContext fields from Task 1
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```python
 def test_resolver_prefers_overlay_over_registry_and_options(): ...
@@ -134,7 +135,7 @@ def test_snapshot_cow_replace_is_atomic(): ...
 def test_resolver_ignores_overlay_when_owner_session_mismatches(): ...
 ```
 
-- [ ] **Step 2: Implement snapshot + resolver**
+- [x] **Step 2: Implement snapshot + resolver**
 
 Resolver order:
 
@@ -143,7 +144,7 @@ Resolver order:
 3. Else `base_registry.get(name)` if provided.  
 4. Else `find_tool_by_name(context.options.tools, name)` **skipping** stale session-provenance tools if owner mismatch.
 
-- [ ] **Step 3: Tests PASS + commit**
+- [x] **Step 3: Tests PASS + commit**
 
 ```bash
 git add extensions/sop_converter/macros/resolve_tool.py extensions/sop_converter/macros/session.py tests/misc/test_sop_session_macros.py
@@ -168,7 +169,7 @@ git commit -m "feat(f57): immutable session overlay snapshot and resolve_tool_fo
   - `sync_effective_tools(context) -> None`
 - Consumes: provenance markers, `covered_base_tools` on snapshot
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```python
 def test_session_switch_removes_overlay_tools_from_options_but_restores_covered_base(): ...
@@ -177,7 +178,7 @@ def test_restore_retrieval_tools_does_not_revive_foreign_session_macros(): ...
 def test_bundle_filter_keeps_session_macros(): ...
 ```
 
-- [ ] **Step 2: Implement cleanup**
+- [x] **Step 2: Implement cleanup**
 
 `clear_session_macros_for_context`:
 
@@ -190,9 +191,9 @@ def test_bundle_filter_keeps_session_macros(): ...
 
 Hook: whenever `session_id` is assigned/changed in TUI resume / REPL session bind, call cleanup (Task 6 also wires call sites).
 
-- [ ] **Step 3: Wire `_resolve_effective_tools` to `iter_effective_tools`**
+- [x] **Step 3: Wire `_resolve_effective_tools` to `iter_effective_tools`**
 
-- [ ] **Step 4: Tests PASS + commit**
+- [x] **Step 4: Tests PASS + commit**
 
 ```bash
 git commit -m "feat(f57): provenance-aware session macro cleanup and tool pool merge"
@@ -210,7 +211,7 @@ git commit -m "feat(f57): provenance-aware session macro cleanup and tool pool m
 - Produces: `SessionMacroPlan`, `register_session_macro(context, definition_dict, *, replace, tool_index, workflow_tool_names, protected_builtin_exclusive_targets, create_tool) -> dict`
 - Consumes: `ValidatedSessionMacro`, confirm callback, allow flag
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```python
 def test_capability_gate_blocks_even_when_interactive_confirm_would_pass(): ...
@@ -223,7 +224,7 @@ def test_protected_builtin_exclusive_target_conflict(): ...
 def test_concurrent_replace_uses_generation_check(): ...  # threading or sequential simulated TOCTOU
 ```
 
-- [ ] **Step 2: Implement register_session_macro**
+- [x] **Step 2: Implement register_session_macro**
 
 Order (mandatory):
 
@@ -242,7 +243,7 @@ Order (mandatory):
 13. `sync_effective_tools(context)`.  
 14. Return success JSON from **validated.definition**, not raw input.
 
-- [ ] **Step 3: Tests PASS + commit**
+- [x] **Step 3: Tests PASS + commit**
 
 ```bash
 git commit -m "feat(f57): session macro register with confirm and TOCTOU snapshot commit"
@@ -262,7 +263,7 @@ git commit -m "feat(f57): session macro register with confirm and TOCTOU snapsho
 - Modify: `extensions/sop_converter/macros/catalog.py`
 - Test: `tests/misc/test_sop_session_macros.py`, extend `tests/tool/test_tool_search_macro_routes.py` if needed
 
-- [ ] **Step 1: Failing tests per path**
+- [x] **Step 1: Failing tests per path**
 
 ```python
 def test_main_tool_execution_uses_overlay_macro(): ...
@@ -273,7 +274,7 @@ def test_workflow_resolve_macro_from_snapshot(): ...
 def test_subagent_can_dispatch_but_cannot_register(): ...
 ```
 
-- [ ] **Step 2: Replace lookups with `resolve_tool_for_context`**
+- [x] **Step 2: Replace lookups with `resolve_tool_for_context`**
 
 - `tool_execution.py`: replace `find_tool_by_name(options.tools, ...)` primary lookup.  
 - `registry.dispatch`: resolve via helper (pass `self` as base_registry).  
@@ -283,7 +284,7 @@ def test_subagent_can_dispatch_but_cannot_register(): ...
 - `resolve_macro`: if `catalog_id.startswith("session:")`, load from snapshot.  
 - `subagent_context`: copy `session_macro_overlay`; set `allow_session_macro_registration=False`, `confirm_session_macro_plan=None`.
 
-- [ ] **Step 3: Run focused suites + commit (hunk-careful on factory/catalog)**
+- [x] **Step 3: Run focused suites + commit (hunk-careful on factory/catalog)**
 
 ```bash
 pytest tests/misc/test_sop_session_macros.py tests/tool/test_tool_search_macro_routes.py -v
@@ -304,20 +305,20 @@ git commit -m "feat(f57): unify session macro resolution across execution paths"
 - TUI resume (`tui/app.py` `_on_session_selected`): call `clear_session_macros_for_context` after session swap
 - Test: confirm formatter unit tests; register tool e2e with injected confirm
 
-- [ ] **Step 1: Implement `register-macro-workflow` Tool** calling `register_session_macro`; build `tool_index` from active bundle allowlist + base tool names helper.
+- [x] **Step 1: Implement `register-macro-workflow` Tool** calling `register_session_macro`; build `tool_index` from active bundle allowlist + base tool names helper.
 
-- [ ] **Step 2: Register in `extensions/tool_system_ext/registration.py`**
+- [x] **Step 2: Register in `extensions/tool_system_ext/registration.py`**
 
-- [ ] **Step 3: Shared confirm helper** `format_session_macro_plan_for_ui(plan) -> str`; wire TUI modal **and** REPL ask path; both set `allow_session_macro_registration=True` and assign confirm callback. Confirm path must not update normal permission “don't ask again” rules.
+- [x] **Step 3: Shared confirm helper** `format_session_macro_plan_for_ui(plan) -> str`; wire TUI modal **and** REPL ask path; both set `allow_session_macro_registration=True` and assign confirm callback. Confirm path must not update normal permission “don't ask again” rules.
 
-- [ ] **Step 4: Tests**
+- [x] **Step 4: Tests**
 
 ```python
 def test_register_tool_requires_capability(): ...
 def test_tui_and_repl_confirm_helpers_render_step_args(): ...
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(f57): register-macro-workflow tool with TUI/REPL confirm wiring"
@@ -361,7 +362,7 @@ pytest tests/misc/test_sop_session_macros.py \
 
 - [x] **Step 3: Update F-57 §0/§7** — Phase 5 MVP wired; compiler/promote/trace still out.
 
-- [ ] **Step 4: Commit docs + tests only via path-limited add**
+- [x] **Step 4: Commit docs + tests only via path-limited add**
 
 ```bash
 git add tests/misc/test_sop_session_macros.py \

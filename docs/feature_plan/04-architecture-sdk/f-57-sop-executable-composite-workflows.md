@@ -92,14 +92,14 @@ Phase 2–4 已打通 portable tool 链、trusted F-56 恢复链、direct route 
 | F-56 `resource_type` 注册表消费（通用 `resume-resource`） | ✅ 已实现；`invoke-existing-agent` 为 agent 门面（执行链走 `resource_runtime` / ResourceHandler） | §9.3 |
 | Skill / Task Guide 从宏 catalog 通用生成 | ✅ 最小 `select:<macro>`；深度消歧归属 F-157，F-57 **不再追**更深生成 | Phase 4 / F-157 |
 | `RegisterMacroWorkflow` + 安全门闩（§7.2） | ✅ Phase 5 MVP：`register-macro-workflow` + 专用 confirm + TOCTOU overlay（**非** F-57 关闭条件） | Phase 5 MVP |
-| Session 宏 / trace-to-macro / promote | ⚠️ Phase 5 MVP：会话 overlay 注册已完成；❌ trace-to-macro / promote / 落盘仍出范围 | Phase 5 |
+| Session 宏 / trace-to-macro / promote | ✅ Phase 5 MVP + Phase B：会话 overlay 注册、trace-to-macro、promote 落盘均已完成 | Phase 5 |
 | `condition` / retry / optional step | **未实现**；保留设计，另排期 | Phase 6（可选） |
 | 将 `invoke-existing-agent` 薄封装为 handler/`resume-resource` 执行链 | ✅ 已汇合（保留产品名与 agent schema） | — |
 | AST/WorkflowGraph 自动挖宏 | **明确非目标**（§2.3 / §6.5） | 独立 Feature（若重评） |
 
 **已通主路径：** portable 宏可在主进程 dispatch 多步 tool 链；`invoke-existing-agent` 以 builtin workflow 执行 F-56 get → materialize → invoke，opaque 状态留在 private lane；ToolSearch 已接 MacroRoute direct recall。
 
-**验收后新增边界：** F-57 保留宏定义、路由意图与执行；“宏覆盖哪些原子工具、何时隐藏、何时恢复、如何从 active tools 移除”统一交由 F-157。Phase 5 会话宏 MVP（register/confirm/overlay）已完成；compiler / promote / trace-to-macro 仍出范围。
+**验收后新增边界：** F-57 保留宏定义、路由意图与执行；“宏覆盖哪些原子工具、何时隐藏、何时恢复、如何从 active tools 移除”统一交由 F-157。Phase 5 MVP + Phase B（register/confirm/overlay、compiler、promote、trace-to-macro）均已完成。
 
 ---
 
@@ -967,7 +967,7 @@ Phase 2 已按以下门禁完成并通过回归测试；`resource_type` 可扩�
 | `extensions/sop_converter/composite_runtime.py` | tool result 规范化、trusted private context、递归保护、schema/binding 增强 |
 | `extensions/sop_converter/composite_tools/models.py` | 与通用 MacroDefinition 对接，逐步移除 script-name 强依赖 |
 | `extensions/sop_converter/composite_tools/__init__.py` | 支持 manifest/workflow 注册，不再要求每个宏有专用 wrapper |
-| `extensions/sop_converter/macros/*` | ✅ models/catalog/routing/convert/templates；✅ Phase 5 `session.py` / `session_parse.py` / `resolve_tool.py` / `register_tool.py`；❌ `compiler.py` / promote / trace |
+| `extensions/sop_converter/macros/*` | ✅ models/catalog/routing/convert/templates；✅ Phase 5 `session.py` / `session_parse.py` / `resolve_tool.py` / `register_tool.py`；✅ Phase B `compiler.py` / promote / trace |
 | `extensions/sop_converter/composite_workflows.py` | ✅ `invoke_existing_agent_workflow` / `resume_resource_workflow` |
 | `extensions/sop_converter/resource_runtime.py` | ✅ 恢复链统一经 ResourceHandler |
 | `clawcodex_ext/agent/tool_authoring/spec.py` | 增加 `call_type="workflow"` 和可选 `output_schema` |

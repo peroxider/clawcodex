@@ -800,7 +800,7 @@ Level 4 (基础设施): DC-014, DC-016, DC-019
 
 ### 4.4 DC → F-N 映射表（落地粒度收敛）
 
-> **本节为本元架构与 F-Number 体系的对接点**：把 20 项 DC-NN 收敛为 **16 个 F-N 文档**，按 Wave 1/2/3 三波落地。收敛原则：低门槛/低风险项合并（如 DC-005/009/020 合并到 F-131）；独立可拆分的高门槛项单独成 F-N。
+> **本节为本元架构与 F-Number 体系的对接点**：把 20 项 DC-NN 收敛为 **16 个 F-N 文档**，按 Wave 1/2/3 三波落地。收敛原则：低门槛/低风险项合并（如 DC-005/009/020 合并到 F-158）；独立可拆分的高门槛项单独成 F-N。
 
 | Wave | F-Number | 名称 | 覆盖 DC | 杠杆 | 门槛 | 前置依赖 |
 |:----:|---------|------|:-------:|:----:|:----:|----------|
@@ -818,13 +818,13 @@ Level 4 (基础设施): DC-014, DC-016, DC-019
 | 2    | **F-165** | 矛盾检测独立版 | DC-007 完整 | 🔴 | 🟡 | F-119 + F-130 检测器 |
 | 2    | **F-166** | 记忆分层 (W/E/S) — 先 Working + Episodic | DC-004 | 🟢 | 🟡 | F-119 |
 | **Wave 3 (P2/P3, ~半年+)** | | | | | | |
-| 3    | **F-167** | 类比迁移 | DC-013 | 🟡 | 🟡 | F-166 (Episodic) |
-| 3    | **F-168** | 假设并行情景 | DC-011 | 🟡 | 🟡 | F-118 子 agent |
-| 3    | **F-169** | 上下文时序回放 | DC-015 | 🟡 | 🟡 | F-119 + F-130 切换历史 |
-| 3    | **F-170** | 认知模式混合 | DC-017 | 🟡 | 🟡 | F-130 Profile 体系 |
-| 3    | **F-171** | 上下文即代码 (CaC) | DC-014 | 🟡 | 🔴 | F-158~170 全部 |
-| 3    | **F-172** | 上下文市场 Marketplace | DC-016 | 🟢 | 🔴 | F-171 (CaC) |
-| 3    | **F-173** | 上下文压力测试 | DC-019 | 🟢 | 🔴 | F-171 (CaC) + 幻觉模式库 |
+| 3    | **F-175** | 类比迁移 | DC-013 | 🟡 | 🟡 | F-166 (Episodic) |
+| 3    | **F-176** | 假设并行情景 | DC-011 | 🟡 | 🟡 | F-118 子 agent |
+| 3    | **F-177** | 上下文时序回放 | DC-015 | 🟡 | 🟡 | F-119 + F-130 切换历史 |
+| 3    | **F-178** | 认知模式混合 | DC-017 | 🟡 | 🟡 | F-130 Profile 体系 |
+| 3    | **F-179** | 上下文即代码 (CaC) | DC-014 | 🟡 | 🔴 | F-158~178 全部 |
+| 3    | **F-180** | 上下文市场 Marketplace | DC-016 | 🟢 | 🔴 | F-179 (CaC) |
+| 3    | **F-181** | 上下文压力测试 | DC-019 | 🟢 | 🔴 | F-179 (CaC) + 幻觉模式库 |
 
 **收敛说明**：
 
@@ -835,8 +835,8 @@ Level 4 (基础设施): DC-014, DC-016, DC-019
 
 **F-N 编号冲突检查**：
 
-- F-158~F-173 当前未在 `docs/feature_plan/README.md` 的 F-Number 状态总表中占用，编号空间连续可用
-- F-174+ 保留给尚未规划的 CCB / Orchestrator 后续特性
+- F-167 已用于 Visualizer 独立包化，F-168 已用于被动累积模式，F-174 已用于能力感知 Harness；三者均不属于 DC-A
+- DC-A 已占用 F-158~F-166 与 F-175~F-181；上述编号均在总表中登记并有对应规划文档
 
 **不申请 F-N 的情况**：
 
@@ -895,8 +895,8 @@ Level 4 (基础设施): DC-014, DC-016, DC-019
 - 验证指标：关键决策类任务可观察对抗/多视角结果
 
 **Wave 3 (半年后)** — 基础设施组
-- **F-167** / **F-168** / **F-169** / **F-170** 配合 Wave 1+2 落地逐步建设
-- **F-171** (CaC) → **F-172** (Marketplace) → **F-173** (Stress Test) 顺序构建
+- **F-175** / **F-176** / **F-177** / **F-178** 配合 Wave 1+2 落地逐步建设
+- **F-179** (CaC) → **F-180** (Marketplace) → **F-181** (Stress Test) 顺序构建
 - 验证指标：存在可复用 / 可测试 / 可审计的上下文体系
 
 ### 5.3 快速验证假设 (Quick Wins)
@@ -964,7 +964,8 @@ Level 4 (基础设施): DC-014, DC-016, DC-019
 | 日期 | 变更 | 原因 |
 |------|------|------|
 | 2026-07-21 | 初始创建 (20 项脑暴规划) | 用户提出"动态上下文切换/装配/生成"挑战性问题，经头脑风暴形成 DC-001 ~ DC-020 方案集，需落盘为单一规划文档指导后续 F-Number 申请与实施 |
-| 2026-07-22 | 新增 §4.4 DC → F-N 映射表 | 把 20 项 DC-NN 收敛为 16 个 F-N 文档（F-158 ~ F-173），按 Wave 1/2/3 三波落地；F-N 编号从 F-158 起（接续 F-157 ToolSearch），同步更新 §5.2 推荐路线与 §9 速查表 |
+| 2026-07-22 | 新增 §4.4 DC → F-N 映射表 | 把 20 项 DC-NN 收敛为 16 个 F-N 文档；初始编号为 F-158~F-173，后因 F-167/F-168/F-174 已被其他特性占用而调整，见 2026-07-31 记录 |
+| 2026-07-31 | 解决 DC-A F-Number 编号冲突 | 保留已占用的 F-167（Visualizer）、F-168（被动累积）和 F-174（能力感知 Harness）；DC-A Wave 3 七项改用 F-175~F-181，并补齐对应规划文档及总表链接 |
 | 2026-07-22 | F-158 抗幻觉基线协议文档启动（Wave 1 首个落地） | 在 §4.4 映射表基础上规划 F-158，覆盖 DC-005 置信度声明协议 + DC-009 否定式检索 + DC-020 边界追踪三个 P0 高杠杆项；详见 [03-agent-core/f-158-anti-hallucination-baseline.md](../03-agent-core/f-158-anti-hallucination-baseline.md)；解耦落地于 `extensions/anti_hallucination/`，零 `src/` 侵入 |
 | 2026-07-22 | F-159 JIT 上下文合成文档启动（Wave 1 第二个落地） | 在 §4.4 映射表基础上规划 F-159，覆盖 DC-003；Intent 路由 + Loader 集合（Grep/WebFetch/Bash）+ 合成缓存 + F-119 register_section 动态注入 + 单 turn/session 配额 + 冷却期；与 F-130 / F-158-A / F-161 强协同；详见 [03-agent-core/f-159-jit-context-synthesis.md](../03-agent-core/f-159-jit-context-synthesis.md)；解耦落地于 `extensions/jit_context/`，零 `src/` 侵入 |
 | 2026-07-22 | F-160 反事实推理文档启动（Wave 1 第三个落地） | 在 §4.4 映射表基础上规划 F-160，覆盖 DC-012；门槛最低（仅 prompt 模板 + 1 Hook）；3 类模板（决策 / 断言 / 推荐）+ 6 档 verdict 标注 + 反事实块自检 + INFERRED 降级桥；与 F-119 / F-102 / F-158-A / F-130 / F-163 协同；详见 [03-agent-core/f-160-counterfactual-reasoning.md](../03-agent-core/f-160-counterfactual-reasoning.md)；解耦落地于 `extensions/counterfactual/`，零 `src/` 侵入 |
@@ -973,7 +974,7 @@ Level 4 (基础设施): DC-014, DC-016, DC-019
 | 2026-07-22 | F-163 对抗质疑器文档启动（Wave 2 P1 第二个落地） | 在 §4.4 映射表基础上规划 F-163，覆盖 DC-008；是 Wave 2 P1 的"方案层"对抗（区别于 F-162 "事实层"硬拦截）；Proposer / Critic / Synthesizer 三角色 + 多轮迭代循环（max 3 轮 + fingerprint 去重早停）+ 结构化质疑输出（claim / counter_evidence / severity / category）+ 5 Profile 触发策略（default / review / strict / debug / creative）+ 与 F-162 audit log schema 兼容；与 F-118 / F-119 / F-102 / F-162 / F-130 / F-164 协同；详见 [03-agent-core/f-163-red-team-critic.md](../03-agent-core/f-163-red-team-critic.md)；解耦落地于 `extensions/red_team_critic/`，零 `src/` 侵入 |
 | 2026-07-22 | F-164 多视角扇出文档启动（Wave 2 P1 第三个落地） | 在 §4.4 映射表基础上规划 F-164，覆盖 DC-010；是 Wave 2 P1 的"决策层"多视角对照（区别于 F-162 "事实层"硬拦截 / F-163 "方案层"纵深对抗）；5 个默认 Perspective Persona（senior-engineer / security-reviewer / newcomer / perf-optimizer / maintainer）+ asyncio.gather 并行扇出 + Synthesizer 二阶段综合（启发式聚类 + LLM 兜底）+ 5 Profile 触发策略（default / review / strict / debug / creative）+ 动态注册 Protocol；与 F-118 / F-119 / F-102 / F-162 / F-130 / F-163 协同；详见 [03-agent-core/f-164-multi-perspective-fan-out.md](../03-agent-core/f-164-multi-perspective-fan-out.md)；解耦落地于 `extensions/multi_perspective/`，零 `src/` 侵入 |
 | 2026-07-22 | F-165 矛盾检测独立版文档启动（Wave 2 P1 第四个落地） | 在 §4.4 映射表基础上规划 F-165，覆盖 DC-007 完整版（F-130 P130-A 仅覆盖工具重复维度，F-165 扩展到三维语义矛盾检测：vs VERIFIED 消费 F-158 Working Memory / intra-reply 同一回复前后断言 / vs history 前几轮对话断言）；三档修订阈值（auto_rewrite / flag / ask_user）+ 修订循环（max_rewrite_attempts=1 + detect_after_rewrite + fail_open_on_detector_error）+ F130Coordinator 信号路由（正交不重叠）+ 5 Profile 触发策略（default / review / strict / debug / creative）+ 长度门控；与 F-130 P130-A / F-158 / F-119 / F-102 / F-163 / F-164 协同；详见 [03-agent-core/f-165-self-contradiction-detector.md](../03-agent-core/f-165-self-contradiction-detector.md)；解耦落地于 `extensions/contradiction_detector/`，零 `src/` 侵入 |
-| 2026-07-22 | F-166 记忆分层 W/E 文档启动（Wave 2 P1 第五个落地 / **Wave 2 P1 收官**） | 在 §4.4 映射表基础上规划 F-166，覆盖 DC-004 Working + Episodic 两层先落地（DC-004 完整版含 Semantic + Procedural 4 层，Wave 3 / F-168+ 再扩展）；Working Memory（进程内 OrderedDict + LRU 淘汰 + TTL 自动 GC + RLock 线程安全）+ Episodic Memory（NDJSON 追加 + session_id 隔离 + tags 检索 + max_file_size_mb 自动轮转 + JSON 损坏行容忍）+ Provenance 追溯（source_tool / source_turn / source_user_input / source_file / source_url / source_timestamp）+ 写入/读取策略（5 Profile 映射：default/strict/review/debug/creative）+ LifecycleManager（周期 GC + 容量上限 + Episodic 按 age_days GC）+ F-158 VERIFIED markers 作为 `MemoryEntry(type=VERIFIED_FACT)` 视图（**不重复存储**）；与 F-119 / F-102 / F-158 / F-130 / F-159 协同；详见 [03-agent-core/f-166-memory-layering-we.md](../03-agent-core/f-166-memory-layering-we.md)；解耦落地于 `extensions/memory_layers/`，零 `src/` 侵入 |
+| 2026-07-22 | F-166 记忆分层 W/E 文档启动（Wave 2 P1 第五个落地 / **Wave 2 P1 收官**） | 在 §4.4 映射表基础上规划 F-166，覆盖 DC-004 Working + Episodic 两层先落地（DC-004 完整版含 Semantic + Procedural 4 层，Wave 3 / F-175+ 再扩展）；Working Memory（进程内 OrderedDict + LRU 淘汰 + TTL 自动 GC + RLock 线程安全）+ Episodic Memory（NDJSON 追加 + session_id 隔离 + tags 检索 + max_file_size_mb 自动轮转 + JSON 损坏行容忍）+ Provenance 追溯（source_tool / source_turn / source_user_input / source_file / source_url / source_timestamp）+ 写入/读取策略（5 Profile 映射：default/strict/review/debug/creative）+ LifecycleManager（周期 GC + 容量上限 + Episodic 按 age_days GC）+ F-158 VERIFIED markers 作为 `MemoryEntry(type=VERIFIED_FACT)` 视图（**不重复存储**）；与 F-119 / F-102 / F-158 / F-130 / F-159 协同；详见 [03-agent-core/f-166-memory-layering-we.md](../03-agent-core/f-166-memory-layering-we.md)；解耦落地于 `extensions/memory_layers/`，零 `src/` 侵入 |
 
 ---
 
@@ -991,13 +992,13 @@ Level 4 (基础设施): DC-014, DC-016, DC-019
 | DC-008 | F-163 (Wave 2) | 对抗质疑器 | 抗幻觉 | 🔴🔴 | 中 |
 | DC-009 | F-158 (Wave 1) | 否定式检索 | 抗幻觉 | 🔴🔴🔴 | 低 |
 | DC-010 | F-164 (Wave 2) | 多视角扇出 | 推理扩展 | 🔴🔴 | 中-高 |
-| DC-011 | F-168 (Wave 3) | 假设并行情景 | 推理扩展 | 🟡 | 中 |
+| DC-011 | F-176 (Wave 3) | 假设并行情景 | 推理扩展 | 🟡 | 中 |
 | DC-012 | F-160 (Wave 1) | 反事实推理 | 推理扩展 | 🔴 | 低 |
-| DC-013 | F-167 (Wave 3) | 类比迁移 | 推理扩展 | 🟡 | 中 |
-| DC-014 | F-171 (Wave 3) | 上下文即代码 (CaC) | 元架构 | 🟡 | 高 |
-| DC-015 | F-169 (Wave 3) | 上下文时序回放 | 元架构 | 🟡 | 中 |
-| DC-016 | F-172 (Wave 3) | 上下文市场 | 元架构 | 🟢 | 高 |
-| DC-017 | F-170 (Wave 3) | 认知模式混合 | 元架构 | 🟡 | 中 |
+| DC-013 | F-175 (Wave 3) | 类比迁移 | 推理扩展 | 🟡 | 中 |
+| DC-014 | F-179 (Wave 3) | 上下文即代码 (CaC) | 元架构 | 🟡 | 高 |
+| DC-015 | F-177 (Wave 3) | 上下文时序回放 | 元架构 | 🟡 | 中 |
+| DC-016 | F-180 (Wave 3) | 上下文市场 | 元架构 | 🟢 | 高 |
+| DC-017 | F-178 (Wave 3) | 认知模式混合 | 元架构 | 🟡 | 中 |
 | DC-018 | F-161 (Wave 1) | 涌现式上下文发现 | 元架构 | 🔴 | 低 |
-| DC-019 | F-173 (Wave 3) | 上下文压力测试 | 元架构 | 🟢 | 高 |
+| DC-019 | F-181 (Wave 3) | 上下文压力测试 | 元架构 | 🟢 | 高 |
 | DC-020 | F-158 (Wave 1) | 边界追踪 | 元架构 | 🔴🔴🔴 | 低 |
