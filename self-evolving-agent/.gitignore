@@ -1,0 +1,4 @@
+data/*
+!data/codebase_map.md
+__pycache__/
+*.pyc

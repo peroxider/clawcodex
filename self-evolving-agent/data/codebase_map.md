@@ -1,0 +1,413 @@
+# ClawCodex Codebase Map
+> Generated:2026-07-27|Files:0|Facades:10
+
+## clawcodex_ext/ (7 files)
+
+- [x] _version.py: 动态日历版本号管理，支持 RELEASE_TAG 环境变量冻结版本
+- [x] init.py: 系统启动初始化，多入口点统一引导流程
+- [x] mcp_ext.py: MCP 协议增强：资源缓存、批量工具调用、进度通知
+- [x] task_registry.py: 运行时任务注册表，管理各类型任务的生命周期
+- [x] tasks_core.py: 任务状态机核心类型定义和 ID 生成
+- [x] telemetry_lifecycle.py: 遥测数据的进程退出时刷新钩子
+- [x] tool_stats.py: 工具和 Skill 跨会话调用统计，写入 JSONL 日志
+## src/ (12 files)
+
+- [x] cli.py: CLI entry point for Claw Codex — compatibility facade
+- [x] config.py: 三级配置管理（全局/项目/本地），支持 JSON 读写
+- [x] costHook.py: API 调用成本钩子，记录每次模型调用的费用
+- [x] cost_tracker.py: 成本追踪器，按模型计算每轮和累计费用
+- [x] deferred_init.py: 延迟初始化，在渲染完成后触发后台预取任务
+- [x] history.py: 会话历史事件和日志的数据模型
+- [x] prefetch.py: 模块级即发即弃预取，加速后续操作的数据加载
+- [x] projectOnboardingState.py: 项目入门状态的数据类定义
+- [x] replLauncher.py: REPL 启动器，启动交互式编程环境
+- [x] secret_store.py: 密钥和 API Key 的安全存储管理
+- [x] task_registry.py: Facade — task_registry
+- [x] tasks_core.py: Facade — tasks_core
+## clawcodex_ext/agent/ (32 files)
+
+- [x] _outlines_adapter.py: 结构化输出的 Outlines 库适配器
+- [x] agent_definitions.py: Agent 定义类型和内置 Agent 注册
+- [x] agent_tool_utils.py: Agent 工具过滤和权限解析工具函数
+- [x] auto_mode_runner.py: 自动模式运行器，管理无需人工交互的 Agent 执行
+- [x] background_runner.py: 后台 Agent 运行器，管理 fork 子进程中的 Agent
+- [x] background_state.py: 进程级后台信号管理器（单例）
+- [x] chain_filter.py: 对话链过滤器，按 parentUuid 链裁剪消息历史
+- [x] constants.py: Agent 系统常量：工具名称、禁止工具集
+- [x] conversation.py: 对话管理，消息组装和上下文构建
+- [x] filter_agents_by_mcp.py: 按 MCP 服务依赖过滤可用 Agent 列表
+- [x] foreground_promotion.py: 前台转后台 Agent 提升逻辑
+- [x] fork_subagent.py: Fork 子 Agent 的辅助工具函数
+- [x] forked_agent.py: Fork Agent 执行原语
+- [x] load_agents_dir.py: 从磁盘和插件发现并合并自定义 Agent 定义
+- [x] load_plugin_agents.py: 加载已启用插件暴露的 Agent 定义
+- [x] markdown_discovery.py: Markdown 驱动的 Agent 发现机制
+- [x] parse_agent_markdown.py: 解析 Markdown 格式的 Agent 定义文件
+- [x] policy.py: 共享的身份声明和行动规范原语
+- [x] prompt.py: Agent 工具提示词生成
+- [x] read_file_seed.py: 无头模式恢复时的文件读取状态种子
+- [x] registry.py: Agent 注册表，支持装饰器和显式两种注册方式
+- [x] report_store.py: Explore/Plan 报告的磁盘持久化存储
+- [x] resume_agent.py: 终端 local_agent 任务的自动恢复机制
+- [x] resume_checks.py: 无头模式下恢复时的前置条件检查
+- [x] routing.py: 提示词到子 Agent 类型的分类路由器
+- [x] run_agent.py: Agent 生命周期管理：启动、执行、终止
+- [x] session.py: 带持久化的会话管理
+- [x] session_ext.py: 会话扩展：带尾部追加的恢复功能
+- [x] side_question.py: 旁路问题执行包装器
+- [x] sidechain_transcript.py: 旁路对话的侧链转录记录
+- [x] subagent_context.py: 子 Agent 上下文的创建和隔离
+- [x] transcript.py: 侧链 JSONL 转录的写入和读取
+## clawcodex_ext/tool_system/ (13 files)
+
+- [x] build_tool.py: Tool 基类构建器，定义工具的生命周期接口
+- [x] context.py: 工具执行上下文管理，传递共享状态
+- [x] defaults.py: 工具系统的默认配置值
+- [x] diff_utils.py: 代码差异计算的工具函数
+- [x] errors.py: 工具系统的错误类型定义
+- [x] loader.py: 工具加载器，从各模块发现和装载工具类
+- [x] protocol.py: 工具协议定义，规范工具输入输出接口
+- [x] registry.py: 工具注册表，管理所有已注册工具的查找和调度
+- [x] renderers.py: 工具输出的渲染格式化
+- [x] schema_validation.py: 工具参数的 JSON Schema 校验
+- [x] task_manager.py: 工具调用的任务管理器
+- [x] team_aware_pool.py: 团队感知的工具池分配
+- [x] tool_search.py: 工具搜索和匹配算法
+## clawcodex_ext/tool_system/tools/ (43 files)
+
+- [x] advisor.py: 顾问工具，提供代码建议和最佳实践指导
+- [x] agent.py: Agent 工具，创建和委托子 Agent 执行任务
+- [x] ask_issue_author.py: 向 Issue 作者提问的工具
+- [x] ask_user_question.py: 向用户提问以澄清需求的工具
+- [x] bg_session.py: 后台会话管理工具
+- [x] brief.py: 简要模式工具，生成简短摘要
+- [x] config.py: 配置管理工具，读写系统配置项
+- [x] create_agent_tool.py: 创建自定义 Agent 工具的定义
+- [x] cron.py: 定时任务创建、删除和列表管理
+- [x] edit.py: 代码编辑工具，应用精确的文本补丁
+- [x] execute.py: 命令执行工具，运行 Shell 命令
+- [x] glob.py: 文件匹配工具，支持通配符模式搜索
+- [x] grep.py: 文本搜索工具，在文件中匹配正则表达式
+- [x] lodestone.py: Lodestone 集成工具
+- [x] lsp.py: LSP 语言服务器协议集成工具
+- [x] mcp.py: MCP 工具调用网关
+- [x] mcp_resources.py: MCP 资源的读取和列表工具
+- [x] misc.py: 杂项工具集合
+- [x] notebook_edit.py: Notebook 文件编辑工具
+- [x] plan_mode.py: 计划模式工具，支持分阶段规划执行
+- [x] progress_report.py: 进度报告工具，汇报任务完成状态
+- [x] read.py: 文件读取工具，支持分页和行号范围
+- [x] remote_trigger.py: 远程触发工具，调用外部服务
+- [x] send_message.py: 发送消息到其他 Agent 或用户
+- [x] send_user_message.py: 向用户发送交互消息
+- [x] skill.py: Skill 调用工具，执行已注册的技能
+- [x] sleep.py: 休眠工具，暂停执行指定时长
+- [x] snip.py: 代码片段管理工具
+- [x] structured_output.py: 结构化输出工具，按 Schema 生成输出
+- [x] task_directives.py: 任务指令工具，管理任务目标和约束
+- [x] task_inspect.py: 任务检查工具，查看任务状态和详情
+- [x] task_stop.py: 任务终止工具，停止运行中的任务
+- [x] tasks_v2.py: V2 版任务管理工具
+- [x] team.py: 团队协作工具，多 Agent 协调
+- [x] team_memory.py: 团队共享记忆工具
+- [x] todo_write.py: 待办事项写入和管理工具
+- [x] tool_search.py: 工具发现和搜索工具
+- [x] tool_search_matching.py: 工具搜索匹配算法
+- [x] web_browser.py: Web 浏览器集成工具
+- [x] web_fetch.py: Web 内容抓取工具
+- [x] web_search.py: Web 搜索工具
+- [x] worktree.py: Git Worktree 隔离工作区工具
+- [x] write.py: 文件写入工具
+## clawcodex_ext/command_system/ (28 files)
+
+- [x] aggregator.py: 统一命令聚合器，合并多个命令源的输出
+- [x] argument_substitution.py: 命令和 Skill 的参数替换处理
+- [x] bg_commands.py: 后台会话管理命令族
+- [x] btw_command.py: By The Way 旁路提问命令
+- [x] btw_stats.py: 旁路会话的统计信息
+- [x] buddy_command.py: Buddy 伴侣功能命令
+- [x] builtins.py: 内置斜杠命令的实现集合
+- [x] effort_command.py: 推理强度级别控制命令
+- [x] engine.py: 命令解析、路由和调度引擎
+- [x] export_command.py: 会话导出命令
+- [x] input_processing.py: 用户输入的预处理和规范化
+- [x] lodestone_commands.py: Lodestone 集成命令
+- [x] model_command.py: 模型选择和切换命令
+- [x] moved_to_plugin.py: 已迁移到插件的命令存根
+- [x] output_style_command.py: 输出样式控制命令
+- [x] registry.py: 命令注册表，管理命令的注册和查找
+- [x] safe_commands.py: 安全模式下允许的命令列表
+- [x] security_review.py: 安全审查命令
+- [x] shell_prompt.py: Shell 提示符定制
+- [x] skills_integration.py: Skill 到命令的集成桥接
+- [x] statusline.py: TUI 状态栏渲染
+- [x] team_memory_commands.py: 团队共享记忆命令
+- [x] template_commands.py: 模板化命令支持
+- [x] theme_command.py: UI 主题控制命令
+- [x] tts_command.py: 文本转语音命令
+- [x] types.py: 命令系统类型定义
+- [x] ultraplan_command.py: Ultraplan 工作流命令
+- [x] voice_command.py: 语音模式控制命令
+## src/command_system/ (34 files)
+
+- [x] aggregator.py: Facade — command_system/aggregator
+- [x] argument_substitution.py: Facade — command_system/argument_substitution
+- [x] buddy_command.py: Facade — command_system/buddy_command
+- [x] builtins.py: Facade — command_system/builtins
+- [x] copy_command.py: 复制命令：将助手回复复制到剪贴板
+- [x] diff_command.py: diff命令：显示当前会话的文件变更差异
+- [x] doctor_command.py: 诊断命令：检查和修复系统配置问题
+- [x] effort_command.py: Facade — command_system/effort_command
+- [x] engine.py: Facade — command_system/engine
+- [x] export_command.py: Facade — command_system/export_command
+- [x] input_processing.py: Facade — command_system/input_processing
+- [x] logo_command.py: Logo命令：在终端显示ClawCodex标志
+- [x] mcp_command.py: MCP命令：管理MCP服务器的添加和配置
+- [x] memory_command.py: 记忆命令：查看和管理持久化记忆
+- [x] model_command.py: Facade — command_system/model_command
+- [x] moved_to_plugin.py: Facade — command_system/moved_to_plugin
+- [x] output_style_command.py: Facade — command_system/output_style_command
+- [x] permissions_command.py: 权限命令：管理和查看权限规则
+- [x] registry.py: Facade — command_system/registry
+- [x] release_notes_command.py: 版本说明命令：显示更新日志
+- [x] rename_command.py: 重命名命令：修改会话标题
+- [x] resume_command.py: 恢复命令：恢复之前的会话
+- [x] safe_commands.py: Facade — command_system/safe_commands
+- [x] security_review.py: Facade — command_system/security_review
+- [x] shell_prompt.py: Facade — command_system/shell_prompt
+- [x] skills_integration.py: Facade — command_system/skills_integration
+- [x] statusline.py: Facade — command_system/statusline
+- [x] stickers_command.py: 贴纸命令：发送预定义提示模板
+- [x] tasks_command.py: 任务命令：管理运行中的后台任务
+- [x] theme_command.py: Facade — command_system/theme_command
+- [x] types.py: Facade — command_system/types
+- [x] vim_command.py: Vim命令：切换Vim模式编辑
+- [x] workflows_command.py: 工作流命令：管理工作流的创建和执行
+- [x] workflows_integration.py: 工作流集成命令：工作流与命令系统桥接
+## clawcodex_ext/bridge/ (28 files)
+
+- [x] bounded_uuid_set.py: 固定容量UUID去重集合，FIFO淘汰策略
+- [x] bridge_api.py: Bridge环境的OAuth认证HTTP客户端
+- [x] bridge_config.py: 共享的Bridge认证和URL解析配置
+- [x] bridge_enabled.py: Bridge启用状态和授权门控检查
+- [x] bridge_permission_callbacks.py: Bridge权限回调处理器
+- [x] bridge_pointer.py: Bridge服务器指针和引用管理
+- [x] bridge_status_util.py: Bridge连接状态查询工具
+- [x] capacity_wake.py: 基于容量的空闲Bridge唤醒机制
+- [x] close_codes.py: WebSocket关闭代码定义
+- [x] code_session_api.py: 通过Bridge的Code Session API客户端
+- [x] debug_utils.py: Bridge调试工具函数
+- [x] env_less_bridge_config.py: 无环境变量的Bridge配置方案
+- [x] exceptions.py: Bridge专用异常类型定义
+- [x] flush_gate.py: Bridge刷新门控，限制消息发送速率
+- [x] inbound_attachments.py: 入站文件附件的接收和处理
+- [x] inbound_messages.py: 从Bridge接收的入站消息处理
+- [x] init_repl_bridge.py: REPL到Bridge的初始化连接
+- [x] jwt_utils.py: Bridge认证的JWT令牌工具
+- [x] messaging.py: Bridge消息协议实现
+- [x] messaging_handlers.py: Bridge消息处理器注册和调度
+- [x] no_proxy.py: Bridge连接的无代理配置
+- [x] poll_config.py: Bridge轮询配置管理
+- [x] poll_config_defaults.py: Bridge轮询的默认配置值
+- [x] repl_bridge_handle.py: REPL Bridge会话句柄管理
+- [x] session_id_compat.py: 会话ID兼容层，处理新旧格式转换
+- [x] types.py: Bridge系统类型定义
+- [x] work_secret.py: Bridge认证的工作密钥管理
+- [x] worktree.py: Bridge环境中的Git Worktree隔离支持
+## src/bridge/ (32 files)
+
+- [x] bounded_uuid_set.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] bridge_api.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] bridge_config.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] bridge_enabled.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] bridge_permission_callbacks.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] bridge_pointer.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] bridge_status_util.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] capacity_wake.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] close_codes.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] code_session_api.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] debug_utils.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] env_less_bridge_config.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] exceptions.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] flush_gate.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] inbound_attachments.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] inbound_messages.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] init_repl_bridge.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] jwt_utils.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] messaging.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] messaging_handlers.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] no_proxy.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] poll_config.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] poll_config_defaults.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] protojson.py: ProtoJSON工具：protobuf与JSON的互转
+- [x] repl_bridge_handle.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] repl_bridge_transport.py: REPL Bridge的传输层实现
+- [x] sdk_types.py: Bridge SDK的类型定义
+- [x] session_id_compat.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] trusted_device.py: Bridge受信任设备管理
+- [x] types.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] work_secret.py: Compatibility facade — see :mod:`clawcodex_ext
+- [x] worktree.py: Compatibility facade — see :mod:`clawcodex_ext
+## clawcodex_ext/hooks/ (14 files)
+
+- [x] _pluggy_adapter.py: Pluggy 插件框架适配器
+- [x] config_manager.py: Hook 配置管理器
+- [x] exec_agent_hook.py: Agent 执行钩子，在 Agent 生命周期注入自定义逻辑
+- [x] exec_http_hook.py: HTTP 请求执行钩子
+- [x] exec_prompt_hook.py: Prompt 执行钩子，在 LLM 调用前后插入处理
+- [x] hook_executor.py: Hook 执行器，管理钩子的调度和运行
+- [x] hook_types.py: Hook 系统的类型定义
+- [x] output_schema.py: 输出 Schema 钩子，校验和格式化输出
+- [x] post_sampling_hooks.py: LLM 采样后处理钩子
+- [x] registry.py: Hook 注册表，管理插件的注册和查找
+- [x] session_hooks.py: 会话级 Hook，管理会话生命周期事件
+- [x] shell_invocation.py: Shell 命令调用钩子
+- [x] ssrf_guard.py: SSRF 攻击防护钩子
+- [x] trust_gate.py: 信任门控，控制高风险操作的执行权限
+## clawcodex_ext/permissions/ (19 files)
+
+- [x] _treesitter_adapter.py: Tree-sitter 语法解析适配器
+- [x] bash_security.py: Bash 命令安全分析
+- [x] check.py: 权限检查核心逻辑
+- [x] classifier.py: 命令风险分类器
+- [x] cycle.py: 权限审批循环处理
+- [x] danger_detector.py: 危险操作检测器
+- [x] dangerous_safety.py: 危险命令安全评估
+- [x] filesystem.py: 文件系统访问权限控制
+- [x] handler.py: 权限处理器，统一权限决策入口
+- [x] loader.py: 权限规则加载器
+- [x] modes.py: 权限模式定义
+- [x] powershell_security.py: PowerShell 命令安全分析
+- [x] rule_parser.py: 权限规则解析器
+- [x] rules.py: 权限规则的定义和匹配
+- [x] runtime.py: 运行时权限决策和执行
+- [x] setup.py: 权限系统初始化设置
+- [x] trust_boundary.py: 信任边界管理
+- [x] types.py: 权限系统类型定义
+- [x] updates.py: 权限规则更新处理
+## clawcodex_ext/services/mcp/ (31 files)
+
+- [x] auth.py: MCP认证模块：OAuth配置和Token管理
+- [x] auth_discovery.py: OAuth元数据发现：RFC 9728 + RFC 8414 认证端点探测
+- [x] auth_provider.py: MCP认证提供者：编排OAuth授权流程
+- [x] channel_permissions.py: MCP通道权限检查和策略执行
+- [x] claudeai.py: Claude.ai 官方MCP服务器集成
+- [x] client.py: MCP客户端：连接管理和JSON-RPC通信
+- [x] config.py: MCP配置管理：服务器注册、策略过滤和持久化
+- [x] connection_manager.py: 运行时MCP连接管理器，管理服务器生命周期
+- [x] doctor.py: MCP诊断工具：检查服务器连接健康状况
+- [x] elicitation.py: MCP诱导式输入：从用户收集所需参数
+- [x] env_expansion.py: MCP环境变量展开：支持平台特定的路径解析
+- [x] errors.py: MCP错误类型层次和错误处理
+- [x] fetch_wrappers.py: HTTP抓取包装器：带MCP适配超时的httpx客户端
+- [x] in_process_transport.py: 进程内传输：同进程的客户端-服务器配对
+- [x] manager.py: MCP管理器：顶层服务编排和生命周期
+- [x] mcp_string_utils.py: MCP字符串工具：描述文本截断和格式化
+- [x] normalization.py: MCP数据规范化：统一不同来源的服务器配置
+- [x] oauth_callback_server.py: OAuth回调HTTP服务器：监听本地回环地址
+- [x] oauth_error_normalization.py: OAuth错误规范化：处理各厂商的错误响应格式
+- [x] oauth_port.py: OAuth回调端口分配器：查找可用端口
+- [x] oauth_redaction.py: OAuth URL脱敏：剥离安全敏感的查询参数
+- [x] official_registry.py: 官方MCP注册表预取和URL分类
+- [x] output_storage.py: 二进制工具输出持久化：大文件侧通道存储
+- [x] output_validation.py: MCP工具输出校验：Token预算和截断控制
+- [x] telemetry.py: MCP遥测事件：可插拔的遥测存根
+- [x] text_truncation.py: MCP描述文本截断辅助函数
+- [x] tool_wrapper.py: MCP工具包装器：将MCP工具Schema转换为内部工具格式
+- [x] transport.py: MCP传输层：包装官方mcp SDK的传输适配器
+- [x] types.py: MCP类型定义：服务器配置和地址类型
+- [x] xaa.py: 跨应用访问XAA：令牌交换和服务间认证
+- [x] xaa_idp_login.py: XAA身份提供商登录：IdP认证流程
+## src/services/mcp/ (31 files)
+
+- [x] auth.py: MCP认证模块：OAuth配置和Token管理
+- [x] auth_discovery.py: OAuth元数据发现：RFC 9728 + RFC 8414 认证端点探测
+- [x] auth_provider.py: MCP认证提供者：编排OAuth授权流程
+- [x] channel_permissions.py: MCP通道权限检查和策略执行
+- [x] claudeai.py: Claude.ai 官方MCP服务器集成
+- [x] client.py: MCP客户端：连接管理和JSON-RPC通信
+- [x] config.py: MCP配置管理：服务器注册、策略过滤和持久化
+- [x] connection_manager.py: 运行时MCP连接管理器，管理服务器生命周期
+- [x] doctor.py: MCP诊断工具：检查服务器连接健康状况
+- [x] elicitation.py: MCP诱导式输入：从用户收集所需参数
+- [x] env_expansion.py: MCP环境变量展开：支持平台特定的路径解析
+- [x] errors.py: MCP错误类型层次和错误处理
+- [x] fetch_wrappers.py: HTTP抓取包装器：带MCP适配超时的httpx客户端
+- [x] in_process_transport.py: 进程内传输：同进程的客户端-服务器配对
+- [x] manager.py: MCP管理器：顶层服务编排和生命周期
+- [x] mcp_string_utils.py: MCP字符串工具：描述文本截断和格式化
+- [x] normalization.py: MCP数据规范化：统一不同来源的服务器配置
+- [x] oauth_callback_server.py: OAuth回调HTTP服务器：监听本地回环地址
+- [x] oauth_error_normalization.py: OAuth错误规范化：处理各厂商的错误响应格式
+- [x] oauth_port.py: OAuth回调端口分配器：查找可用端口
+- [x] oauth_redaction.py: OAuth URL脱敏：剥离安全敏感的查询参数
+- [x] official_registry.py: 官方MCP注册表预取和URL分类
+- [x] output_storage.py: 二进制工具输出持久化：大文件侧通道存储
+- [x] output_validation.py: MCP工具输出校验：Token预算和截断控制
+- [x] telemetry.py: MCP遥测事件：可插拔的遥测存根
+- [x] text_truncation.py: MCP描述文本截断辅助函数
+- [x] tool_wrapper.py: MCP工具包装器：将MCP工具Schema转换为内部工具格式
+- [x] transport.py: MCP传输层：包装官方mcp SDK的传输适配器
+- [x] types.py: MCP类型定义：服务器配置和地址类型
+- [x] xaa.py: 跨应用访问XAA：令牌交换和服务间认证
+- [x] xaa_idp_login.py: XAA身份提供商登录：IdP认证流程
+## clawcodex_ext/services/ (7 files)
+
+- [x] cost_restore.py: 成本状态恢复编排器
+- [x] pricing.py: 按模型的 API 调用定价计算
+- [x] session_migrate.py: 会话格式迁移工具
+- [x] session_resume.py: 会话恢复：读取 JSONL 重构类型化消息
+- [x] session_storage.py: 会话存储：JSONL 转录记录
+- [x] session_title.py: 会话标题自动生成
+- [x] tail_follower.py: 实时转录更新的尾部跟踪器
+## src/workflow/ (17 files)
+
+- [x] budget.py: Token 预算原语，硬上限控制
+- [x] callpath.py: 确定性调用路径键，修复 spawn 排序问题
+- [x] constants.py: 工作流引擎运行时常量上限
+- [x] errors.py: 工作流引擎异常类型层次
+- [x] gating.py: 动态工作流的功能开关
+- [x] journal.py: 每次运行的日志记录，支持同会话恢复
+- [x] launch.py: 后台启动器，将工作流运行绑定到 local_workflow 任务
+- [x] primitives.py: parallel/pipeline 原语的纯辅助函数
+- [x] progress.py: 运行中工作流的进度树模型
+- [x] runner.py: 生产级 AgentRunner，连接 agent() 和真实子 Agent
+- [x] runtime.py: 工作流运行时，绑定编排原语到运行状态并执行
+- [x] sandbox.py: 模型编写的工作流 Python 脚本的沙盒执行
+- [x] scheduler.py: agent() 并行调度的有界并发调度器
+- [x] structured.py: 结构化输出：Schema 校验的 agent() 输出
+- [x] types.py: 工作流引擎核心数据类型和子 Agent 运行器接口
+- [x] ultracode.py: ultracode 工作流编写触发器
+- [x] worktree.py: Agent 的 Git Worktree 隔离环境
+## src/bootstrap/ (1 files)
+
+- [x] state.py: 进程级会话状态管理，全局单例状态容器
+## clawcodex_ext/query/ (12 files)
+
+- [x] agent_loop_compat.py: Agent Loop兼容适配器，将query()输出转换为AgentLoopResult
+- [x] config.py: Query模块的配置管理
+- [x] deps.py: Query模块的依赖注入管理
+- [x] engine.py: Query执行引擎，LLM调用的核心循环
+- [x] hook_registry.py: Agent Loop Hook注册表，统一管理pre_llm和post_llm钩子
+- [x] outbox_types.py: 类型化的Outbox事件定义
+- [x] query.py: 核心查询函数，LLM调用的主入口
+- [x] recovery_strategies.py: Post-LLM恢复策略注册表，将硬编码恢复链改为注册式策略
+- [x] stop_hooks.py: 停止钩子，处理回合结束钩子执行和后台任务
+- [x] streaming.py: SSE事件流循环，Agent Loop的流式并行实现
+- [x] token_budget.py: Token预算管理，预算检查和控制决策
+- [x] transitions.py: 查询状态转换管理
+## clawcodex_ext/query/plugins/ (1 files)
+
+- [x] recovery_strategy_rate_limit.py: 速率限制恢复策略插件
+## Facade Mappings
+
+  - `clawcodex_ext/config.py` -> `src/config.py`
+  - `clawcodex_ext/outputStyles.py` -> `src/outputStyles.py`
+  - `src/init.py` -> `src/init.py`
+  - `src/token_estimation.py` -> `src/token_estimation.py`
+  - `clawcodex_ext/bridge/repl_bridge_transport.py` -> `clawcodex_ext/bridge/repl_bridge_transport.py`
+  - `src/bridge/bridge_main.py` -> `src/bridge/bridge_main.py`
+  - `src/bridge/remote_bridge_core.py` -> `src/bridge/remote_bridge_core.py`
+  - `src/bridge/repl_bridge.py` -> `src/bridge/repl_bridge.py`
+  - `src/bridge/session_runner.py` -> `src/bridge/session_runner.py`
+  - `clawcodex_ext/services/cost_tracker.py` -> `__future__.py`
