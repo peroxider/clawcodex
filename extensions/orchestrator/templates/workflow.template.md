@@ -50,6 +50,14 @@ tracker:
     - open                                                 # all repo trackers (github/gitee/gitcode)
   terminal_states:
     - closed
+  # Issues carrying any of these labels (case-insensitive) are excluded from
+  # the candidate queue at fetch time. Use for web-only workflow labels
+  # (e.g. "completed", "wontfix") that the tracker state does not reflect.
+  # skip_labels: [wontfix]
+  # Issues must carry at least ONE of these labels (OR semantics) to enter
+  # the candidate queue. Use to scope the orchestrator to a class of work
+  # (e.g. only `priority/high`). Empty = no requirement.
+  # require_any_labels: [priority/high]
 
 # ============================================================================
 # Polling — how often to fetch issue lists
@@ -80,6 +88,30 @@ workspace:
     - changes_summary.md
     - implementation_notes.md
     - verification_report.md
+  # Workspace strategy: isolated (default, per-issue dir) | shared | sequential
+  strategy: isolated
+  # Sequential mode: the integration branch all issues commit onto.
+  # integration_branch: main
+  # Require a clean workspace before starting / between issues.
+  require_clean_start: true
+  require_clean_between_issues: true
+  # Keep the workspace after terminal states so you can inspect artifacts,
+  # re-run verification, or debug failures. Default: keep on all terminals.
+  preserve_on_terminal: true
+  preserve_on_failure: true
+  preserve_on_abandoned: true
+  preserve_on_timeout: true
+  sequential_lock: true
+  # Python interpreter resolution. Empty = auto-detect via python_detect_files,
+  # then fall back to agent.python_executable, then PATH python3.
+  # python_executable: ""
+  python_auto_detect: true
+  python_detect_files:
+    - .python-version
+    - pyvenv.cfg
+    - .venv/pyvenv.cfg
+    - Pipfile
+    - environment.yml
 
 # ============================================================================
 # Agent — Claude invocation parameters
@@ -92,7 +124,12 @@ agent:
   max_retry_attempts: 6
   max_retry_backoff_ms: 300000                             # 5 min backoff between retries
   max_retries_per_issue: 3                                 # max operator-driven retries per issue
+  max_turns_retry_delay_ms: 30000                          # base delay before retrying after max_turns
   run_timeout_ms: 1800000                                  # 30 min per-run timeout
+  delay_between_requests_ms: 2000                          # min gap between provider API requests (anti-rate-limit)
+  stall_timeout_ms: 300000                                 # abort run after this much stream inactivity (0=off)
+  stall_warn_ms: 30000                                     # emit stall_suspected diagnostic after this silence
+  audit_log: minimal                                       # tool-call audit: none | minimal | full
   provider: anthropic                                      # anthropic | openai | ...
   model: {{MODEL}}                                         # model name, leave blank for provider default
   # permission_mode MUST be bypassPermissions for unattended orchestrator runs.
@@ -101,18 +138,39 @@ agent:
   # schema.py auto-promotes dontAsk → bypassPermissions when tracker is present.
   permission_mode: bypassPermissions
   # Test / build / lint commands (runs before git push)
-  # test_command: "pytest"                                 # test command (empty = auto-detect)
+  test_command: "pytest -x"                                # test command (empty = auto-detect)
   # build_command: "make build"                            # build command
   # lint_command: "ruff check ."                           # lint command
   # Human review gate: when True, each completed issue requires manual approval
   # via `clawcodex-dev orchestrator issue review --approve --id <id>`.
   # review_required: false
+  # auto_approve: false                                    # auto-approve completed issues
+  # coordinator_mode: false                                # boot agent with restricted coordinator tool set
+  # allowed_changed_files: [src/**]                        # whitelist globs for files allowed into the commit
+  # Stagnation / loop guards
+  # max_no_op_turns: 3                                     # consecutive empty turns → stagnation
+  # loop_detection_window: 5                               # look-back window for loop detection
+  # loop_detection_threshold: 3                            # repeated tool signature → loop_detected
+  # max_tools_per_turn: 50                                 # per-turn tool call cap (prevents infinite loops)
+  # phases: [analyze, implement, verify]                   # named phases driving honest progress %
+  # fallback_to_phase_step: false                          # legacy phase*25 progress fallback
   # Environment variables merged into every Bash subprocess and orchestrator
   # verification/hook subprocess. Values override inherited daemon env; use
   # $PATH in PATH values to prepend/append without losing the host PATH.
   env: {}
   #   PATH: "/custom/bin:$PATH"
   #   MY_VAR: "value"
+  # Test verification gate — controls behavior before git push.
+  verification:
+    timeout_ms: 600000                                     # test timeout (10 min)
+    regression_guard: true                                 # compare against baseline; block only net-new failures
+    # fallback_test_command: "pytest"                      # explicit fallback, empty = auto-detect
+  # Repro-first gate — reproduce the bug before the fix stage may run.
+  repro_first:
+    enabled: false
+    timeout_ms: 900000                                     # reproduction agent budget (15 min)
+    command_timeout_ms: 300000                             # reproduction command execution budget
+    # labels: [bug]                                        # only issues with these labels; empty = all
 
 # ============================================================================
 # Sandbox — execution sandbox and approval policy
@@ -127,13 +185,21 @@ sandbox:
       sandbox_approval: true
       rules: true
       mcp_elicitations: true
+  # command: ""                                            # sandbox launch command
+  # turn_sandbox_policy: {}                                # per-turn sandbox policy
 
 # ============================================================================
 # Hooks — shell commands run around each issue run
 # ============================================================================
 hooks:
+  after_create: echo "[orchestrator] workspace created for $ISSUE_IDENTIFIER"
   before_run: echo "[orchestrator] starting work on issue $ISSUE_IDENTIFIER"
   after_run: echo "[orchestrator] finished issue $ISSUE_IDENTIFIER"
+  before_remove: echo "[orchestrator] removing workspace $ISSUE_IDENTIFIER"
+  # Local test gates — run BEFORE commit/push so CI is not the first line of defense.
+  # pre_commit: "ruff check --fix && pytest -x tests/"
+  # pre_push: "pytest -x tests/ --timeout=120"
+  # post_sync: "pytest tests/e2e/ --timeout=300"
   timeout_ms: 60000
 
 # ============================================================================
@@ -193,29 +259,20 @@ review_feedback:
   max_followup_attempts_per_pr: 5                          # 单PR最大followup次数
   include_ci_failures: true                                # 是否包含CI失败
   reply_to_comments: true                                  # 处理后是否回复评论
-  # ignore_authors: [bot-user]                             # 忽略指定作者的评论
+  # ignore_authors: [ascend-robot]                         # 忽略指定作者（平台/CI机器人）的评论，按实际机器人账号配置
   ignored_comment_commands: [/lgtm, /approve, /approved]  # 仅忽略整条为该命令的评论
   # ignored_feedback_sources: [ci]                         # 采集但不触发指定来源的反馈
   # ignored_body_patterns: ['(?i)^all checks have passed$'] # 整条正文正则匹配
+  # max_feedback_items_per_run: 20                         # 每轮最多处理反馈条数
+  # max_log_chars_per_check: 12000                         # 单条 CI 日志截断长度
+  # pending_feedback_timeout_seconds: 600                  # pending 反馈超时（秒）
   # bot_login: clawcodex-bot                               # 机器人登录名，跳过自己的评论
 
 # ============================================================================
-# Verification — 测试验证门禁（可选）
+# Verification & Repro First — 已移至 agent 段下（agent.verification / agent.repro_first）
 # ============================================================================
-# 控制 git push 前的测试验证行为。
-verification:
-  timeout_ms: 600000                                       # 测试超时（10分钟）
-  regression_guard: true                                   # 回归守卫：与基线比较，仅阻断新增失败
-  # fallback_test_command: "pytest"                        # 显式 fallback 命令，留空则自动检测
-
-# ============================================================================
-# Repro First — 先复现后修复（可选）
-# ============================================================================
-# 开启后，每个新 issue 先跑一次复现 agent，复现失败则拒绝修复。
-repro_first:
-  enabled: false
-  timeout_ms: 900000                                       # 复现 agent 预算
-  # labels: [bug]                                          # 仅对携带这些标签的 issue 生效，空=全部
+# 注意：verification 和 repro_first 必须配置在 agent 段内才能生效。
+# 顶层放置会被 schema 忽略（见 config/schema.py 的 WorkflowConfig.from_dict）。
 
 # ============================================================================
 # Modes — 多Agent协作模式（可选）
@@ -224,11 +281,30 @@ repro_first:
 modes:
   enabled: [single]                                        # 注册的模式：single | pipeline | coordinator | debate | swarm
   default: single                                          # 路由失败时的回退模式
-  # router:
-  #   kind: heuristic                                      # heuristic | llm | none
-  #   min_confidence: 0.5
-  # pipeline:
-  #   stages: [analyzer, implementer, tester]
+  router:                                                  # Issue→模式 路由器
+    kind: heuristic                                        # heuristic（关键词）| llm | none
+    min_confidence: 0.5                                    # 低于此置信度回退 default
+    # model: deepseek-v4-flash                             # kind=llm 时的路由模型
+    # endpoint: https://api.deepseek.com/chat/completions  # kind=llm 时的路由端点
+    # api_key_env: DEEPSEEK_API_KEY                        # kind=llm 时的 API Key 环境变量名
+  pipeline:                                                # pipeline 模式配置
+    stages: [analyzer, implementer, tester]
+    # handoff: prompt                                       # prompt=注入前序输出 | mailbox=工作区邮箱交接
+    # max_retries_per_stage: 1
+    # stage_models:                                        # 每阶段独立模型（异构 LLM）
+    #   implementer: deepseek-v4
+    # stage_max_turns:                                     # 每阶段独立轮数预算
+    #   analyzer: 80
+  # debate:                                                # debate 模式配置
+  #   proposers: [proposer_a, proposer_b]
+  #   judge_mode: pick                                     # pick | synthesize
+  #   judge_model: deepseek-v4
+  #   isolation: reset                                     # reset | worktree | none
+  #   parallel: false                                      # 并行提案（需 isolation=worktree）
+  # swarm:                                                 # swarm 模式配置
+  #   max_subtasks: 8
+  #   max_parallel: 3
+  #   max_waves: 6
 
 # ============================================================================
 # Rules — 从PR检视意见中学习规则（F-121，可选）
@@ -249,7 +325,10 @@ pr_conflict_scan:
   enabled: false
   poll_interval_ms: 300000                                 # 5分钟
   max_rebase_attempts_per_issue: 3
-  # use_force_push: false                                  # 是否使用 force push
+  # max_prs_per_scan: 25                                  # 每轮扫描 PR 上限
+  use_force_push: false                                    # 是否使用 force push
+  # bot_login: clawcodex-bot                              # 跳过该账号自己的评论
+  # scan_states: [open]                                   # 扫描的 PR 状态
 
 # ============================================================================
 # Clarifier — Issue 清晰度分析（F-124，可选）
@@ -257,9 +336,17 @@ pr_conflict_scan:
 # 在 issue 分派前分析描述是否足够清晰，不清晰时可自动评论提问。
 clarifier:
   enabled: false
+  block_on_unclear: false                                  # 不清晰时是否阻止分派（false=放行让 agent 探索）
+  author_first: true                                       # 优先询问 Issue 作者
   max_questions: 3
   max_rounds: 2
   min_confidence: 0.7
+  # max_input_tokens: 6000                                # 分析输入 token 上限
+  # max_output_tokens: 800                                # 分析输出 token 上限
+  # fail_open: true                                       # LLM 不可用时放行（不卡住流水线）
+  # cache_enabled: true                                   # 缓存分析结果（按 Issue 内容指纹）
+  # max_analyses_per_poll: 4                              # 每轮 poll 最多分析数
+  # workspace_focus_enabled: false                        # follow-up 时用工作区改动富化上下文
   # remote_label: "needs-clarification"                    # 可选远端标签
 
 # ============================================================================
@@ -267,8 +354,8 @@ clarifier:
 # ============================================================================
 # 配置 SSH 远程 worker 主机。省略则所有 agent 在本地运行。
 worker:
-  # ssh_hosts: []                                          # SSH 主机列表
-  # max_concurrent_agents_per_host: 2                      # 单机最大并发 agent
+  ssh_hosts: []                                          # SSH 主机列表
+  max_concurrent_agents_per_host: 2                      # 单机最大并发 agent
 ---
 
 # Orchestrator Agent Prompt
