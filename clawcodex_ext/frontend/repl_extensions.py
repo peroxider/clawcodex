@@ -22,6 +22,7 @@ calls :func:`install_repl_extensions` immediately after
 from __future__ import annotations
 
 import logging
+import os
 import shlex
 import threading
 from pathlib import Path
@@ -613,6 +614,20 @@ def install_repl_extensions(repl: "ClawcodexREPL", ctx) -> None:
 
     # ---- SIGTERM / SIGINT: save session + print resume hint (S-R1) ----
     _register_signal_session_save(repl)
+
+    # ---- Evolve controller (self-evolution) ----
+    try:
+        evolve_hook = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "self-evolving-agent", "evolve_hook.py"))
+        if os.path.isfile(evolve_hook):
+            import importlib.util as _iu
+            _spec = _iu.spec_from_file_location("evolve_hook", evolve_hook)
+            if _spec and _spec.loader:
+                _mod = _iu.module_from_spec(_spec)
+                _spec.loader.exec_module(_mod)
+                _mod.install_evolve_controller(repl)
+    except Exception:
+        import traceback as _tb
+        _tb.print_exc()
 
 
 def _install_gateway_client(repl: "ClawcodexREPL", ctx=None) -> None:
