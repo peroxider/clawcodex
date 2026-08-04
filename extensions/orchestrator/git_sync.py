@@ -415,18 +415,26 @@ class GitSyncService:
         )
 
         if pr_ref is not None and not no_push:
-            updated_pr = await self.tracker.update_pull_request(
-                pull_request=pr_ref,
-                title=pr_title,
-                body=self._build_pr_body(
-                    issue,
-                    commit_sha,
-                    branch_name,
-                    base_branch,
-                    session=session,
+            # PR body/title 在首次创建后归用户掌控（用户可能已手动修改描述）。
+            # follow-up / 检视意见处理流程不再重写 PR 描述 —— 处理结果通过
+            # _reply_to_processed_feedback 以 thread reply 回在对应检视意见下，
+            # 避免覆盖用户手动编辑的内容（历史 bug：/lgtm 等触发 follow-up 后
+            # 模板 body 覆盖用户改动）。
+            if followup_pr is not None:
+                updated_pr = None
+            else:
+                updated_pr = await self.tracker.update_pull_request(
                     pull_request=pr_ref,
-                ),
-            )
+                    title=pr_title,
+                    body=self._build_pr_body(
+                        issue,
+                        commit_sha,
+                        branch_name,
+                        base_branch,
+                        session=session,
+                        pull_request=pr_ref,
+                    ),
+                )
             if updated_pr is not None:
                 pr_ref = self._merge_pr_ref(updated_pr, pr_ref)
                 if not pr_ref.number or not pr_ref.url:

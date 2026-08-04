@@ -373,6 +373,54 @@ class TestGitSyncService(unittest.IsolatedAsyncioTestCase):
             )
             self.assertIn("Pull request: https://example.test/pr/9", tracker.updated_comments[0][2])
 
+    async def test_followup_sync_does_not_overwrite_pr_body(self) -> None:
+        """Follow-up sync must not rewrite the PR body/title.
+
+        Regression guard: a review-feedback follow-up previously called
+        ``update_pull_request`` with a freshly rendered ``_build_pr_body``,
+        clobbering any manual edits the author made to the PR description
+        (e.g. /lgtm /approve comments triggering a follow-up run). The
+        follow-up path now leaves the PR body untouched — the fix summary
+        is delivered as review thread replies instead.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            origin = _build_origin_repo(base)
+            manager = WorkspaceManager(
+                WorkspaceConfig(
+                    root=base / "workspaces",
+                    repo_clone_url=str(origin),
+                    checkout_issue_branch=True,
+                )
+            )
+            issue = Issue(
+                id="78",
+                identifier="ISSUE-78",
+                title="Do not clobber PR body",
+                branch_name="clawcodex/issue-78",
+            )
+            workspace = await manager.create_for_issue(issue)
+            (workspace.path / "README.md").write_text("review fix\n", encoding="utf-8")
+
+            session = _Session(issue, workspace)
+            # Author manually edited the PR description; follow-up must keep it.
+            session.pull_request = PullRequestRef(
+                number="12",
+                url="https://example.test/pr/12",
+            )
+            session.base_branch = "main"
+            tracker = _Tracker()
+            service = GitSyncService(tracker)
+            result = await service.sync(session)
+
+            self.assertIsNotNone(result)
+            assert result is not None
+            self.assertTrue(result.committed)
+            self.assertTrue(result.pushed)
+            # update_pull_request must NOT be invoked on the follow-up path —
+            # no body/title rewrite, the author's manual edits survive.
+            self.assertEqual(tracker.pr_updates, [])
+
     async def test_sync_push_non_fast_forward_recovers(self) -> None:
         """Non-fast-forward push triggers rebase and returns conflict state."""
         with tempfile.TemporaryDirectory() as tmp:
