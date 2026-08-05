@@ -11,267 +11,89 @@ This replaces the previous design where every optional method defaulted to
 ``None`` / ``False`` — callers could not distinguish "not supported" from
 "failed".  The refactor assumes all adapters ship together in the same
 release, so cross-version back-compat defaults are no longer needed.
+
+This module is the single-file home of the adapter contract, the
+normalized data models, and the capability protocols.  Two sibling
+modules hold the rest of the former ``tracker.py`` contents and are
+re-exported here for back-compat:
+
+  - :mod:`extensions.orchestrator.intent` — ``Intent`` / ``Command``
+    semantics, label/comment parsing, priority merging.
+  - :mod:`extensions.orchestrator.tracker_kinds` — tracker kind registry,
+    config validation, and the ``create_tracker_adapter`` factory.
 """
 
 from __future__ import annotations
 
-import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 from .issue import Issue
-
-if TYPE_CHECKING:
-    import httpx
-
-
-class Intent(str, Enum):
-    """Operator intent expressed via issue labels or comment commands.
-
-    Each issue may carry an intent that overrides the default
-    4-layer "already handled" defense in the orchestrator.
-
-      - NONE: no operator intent recorded
-      - RETRY: reset local registry entry + close remote PR + new run
-      - FOLLOWUP: keep PR, append commit on same branch
-      - BLOCKED: permanently skip the issue
-      - REBASE: orchestrator rebases the existing PR's feature branch
-        onto the latest base and force-pushes. Agent reentry only
-        triggered if rebase leaves content conflicts.
-    """
-
-    NONE = "none"
-    RETRY = "retry"
-    FOLLOWUP = "followup"
-    BLOCKED = "blocked"
-    REBASE = "rebase"
-
-
-# Default label conventions for the three retry intents. Adapters accept an
-# override at construction time; the keys map Intent values to label names.
-DEFAULT_INTENT_LABELS: dict[str, str] = {
-    "retry": "agent:retry",
-    "followup": "agent:follow-up",
-    "blocked": "agent:blocked",
-    "rebase": "agent:rebase",
-}
-
-
-def _normalize_label(value: str) -> str:
-    """Normalize a label for case-insensitive comparison."""
-    return value.strip().lower()
-
-
-def intent_from_label_set(
-    labels: list[str] | None,
-    intent_labels: dict[str, str] | None = None,
-) -> Intent:
-    """Resolve an Intent from a list of issue labels.
-
-    Priority rules:
-      - ``agent:blocked`` wins over any other intent (permanent skip).
-      - ``agent:rebase`` wins over RETRY/FOLLOWUP (rebase touches the
-        remote history directly; treat as higher priority than
-        follow-up commit appending).
-      - ``agent:retry`` + ``agent:follow-up`` together → FOLLOWUP is more
-        conservative (keeps PR evidence), so it wins.
-      - Otherwise return whichever single intent label is present, or NONE.
-    """
-    if not labels:
-        return Intent.NONE
-    mapping = intent_labels or DEFAULT_INTENT_LABELS
-    retry_label = _normalize_label(mapping.get("retry", ""))
-    followup_label = _normalize_label(mapping.get("followup", ""))
-    blocked_label = _normalize_label(mapping.get("blocked", ""))
-    rebase_label = _normalize_label(mapping.get("rebase", ""))
-    normalized = {_normalize_label(label) for label in labels if label}
-    if blocked_label and blocked_label in normalized:
-        return Intent.BLOCKED
-    if rebase_label and rebase_label in normalized:
-        return Intent.REBASE
-    if followup_label and followup_label in normalized:
-        return Intent.FOLLOWUP
-    if retry_label and retry_label in normalized:
-        return Intent.RETRY
-    return Intent.NONE
-
-
-# ---------------------------------------------------------------------------
-# Comment command parsing
-# ---------------------------------------------------------------------------
-
-
-class Command(str, Enum):
-    """Operator command expressed via an issue comment.
-
-    Distinct from ``Intent`` because commands may carry side effects
-    (e.g. UNBLOCK clears an abandoned status) and because not every
-    command maps to a run-mode intent.
-
-    ``REBASE``: a comment-issued rebase request that maps to
-    ``Intent.REBASE``.
-    """
-
-    RETRY = "retry"
-    FOLLOWUP = "followup"
-    UNBLOCK = "unblock"
-    REBASE = "rebase"
-
-
-# Regex for ``/agent <subcommand> [args]`` at the start of a line / body.
-# Permissive trailing text: any args / reason after the subcommand.
-# Includes ``rebase`` in the recognized subcommand set.
-_AGENT_COMMAND_RE = re.compile(
-    r"^/agent\s+(retry|follow-up|unblock|rebase)\b[^\n]*",
-    re.IGNORECASE | re.MULTILINE,
+from .intent import (
+    DEFAULT_INTENT_LABELS,
+    Command,
+    Intent,
+    command_to_intent,
+    intent_from_label_set,
+    merge_intents,
+    merge_intents_with_cli,
+    parse_agent_command,
+)
+from .tracker_kinds import (
+    SUPPORTED_TRACKERS,
+    TrackerConfigError,
+    TrackerKindInfo,
+    create_tracker_adapter,
+    default_active_states_for_kind,
+    default_terminal_states_for_kind,
+    normalize_tracker_kind,
+    repository_clone_url_for_tracker,
+    tracker_kind_info,
+    validate_tracker_config,
 )
 
+__all__ = [
+    # intent.py re-exports
+    "DEFAULT_INTENT_LABELS",
+    "Command",
+    "Intent",
+    "command_to_intent",
+    "intent_from_label_set",
+    "merge_intents",
+    "merge_intents_with_cli",
+    "parse_agent_command",
+    # tracker_kinds.py re-exports
+    "SUPPORTED_TRACKERS",
+    "TrackerConfigError",
+    "TrackerKindInfo",
+    "create_tracker_adapter",
+    "default_active_states_for_kind",
+    "default_terminal_states_for_kind",
+    "normalize_tracker_kind",
+    "repository_clone_url_for_tracker",
+    "tracker_kind_info",
+    "validate_tracker_config",
+    # data models
+    "Comment",
+    "CommandIntent",
+    "MergeableStatus",
+    "PullRequestFeedback",
+    "PullRequestRef",
+    # core contract + capability protocols
+    "CommentHistoryCapability",
+    "CommandIntentCapability",
+    "LabelCapability",
+    "PullRequestCapability",
+    "PullRequestFeedbackCapability",
+    "PullRequestMaintenanceCapability",
+    "TrackerAdapter",
+    "UserIdentityCapability",
+    "supports",
+]
 
-def parse_agent_command(body: str | None) -> Command | None:
-    """Extract a ClawCodex operator command from a comment body.
-
-    Recognized forms (case-insensitive, anywhere in the body):
-      - ``/agent retry [reason...]``
-      - ``/agent follow-up [note...]``
-      - ``/agent unblock``
-      - ``/agent rebase [reason...]``
-
-    Returns the matched ``Command`` or ``None`` if no recognized command
-    is present. Only the first match is returned — operators that
-    pile commands into one comment will get the first one honored.
-    """
-    if not body:
-        return None
-    match = _AGENT_COMMAND_RE.search(body)
-    if not match:
-        return None
-    raw = match.group(1).lower()
-    if raw == "retry":
-        return Command.RETRY
-    if raw == "follow-up":
-        return Command.FOLLOWUP
-    if raw == "unblock":
-        return Command.UNBLOCK
-    if raw == "rebase":
-        return Command.REBASE
-    return None
-
-
-def command_to_intent(command: Command) -> Intent:
-    """Map a Command to the Intent the orchestrator should run with.
-
-    ``UNBLOCK`` is a state-clearing meta-command and has no direct
-    run-mode intent; it returns Intent.NONE so the next poll re-
-    applies the label-based intent (or stays NONE if the operator
-    removed the agent:blocked label too).
-
-    ``Command.REBASE`` maps to ``Intent.REBASE``.
-    """
-    if command is Command.RETRY:
-        return Intent.RETRY
-    if command is Command.FOLLOWUP:
-        return Intent.FOLLOWUP
-    if command is Command.REBASE:
-        return Intent.REBASE
-    return Intent.NONE
-
-
-# Priority merge: a comment command can override a label intent, but
-# BLOCKED is sticky: it is a permanent skip and only the unblock
-# command / CLI override can lift it.
-#
-# Conservative rule between RETRY and FOLLOWUP: FOLLOWUP wins (preserves
-# PR evidence). This mirrors the label-only priority in
-# ``intent_from_label_set``.
-def merge_intents(label_intent: Intent, command_intent: Intent) -> Intent:
-    """Merge a label-derived Intent with a command-derived Intent.
-
-    Precedence (high → low):
-      1. Intent.BLOCKED — sticky permanent skip.
-      2. Intent.REBASE — orchestrator-side rebase is a
-         remote-history-touching operation that beats the more
-         conservative RETRY/FOLLOWUP branches.
-      3. The more conservative of {RETRY, FOLLOWUP} = FOLLOWUP.
-      4. Otherwise: command_intent wins over label_intent.
-      5. Otherwise: whichever is non-NONE; else NONE.
-    """
-    if label_intent is Intent.BLOCKED or command_intent is Intent.BLOCKED:
-        return Intent.BLOCKED
-    if label_intent is Intent.REBASE or command_intent is Intent.REBASE:
-        return Intent.REBASE
-    if label_intent is Intent.FOLLOWUP or command_intent is Intent.FOLLOWUP:
-        return Intent.FOLLOWUP
-    if command_intent is not Intent.NONE:
-        return command_intent
-    if label_intent is not Intent.NONE:
-        return label_intent
-    return Intent.NONE
-
-
-def merge_intents_with_cli(
-    label_intent: Intent,
-    command_intent: Intent,
-    cli_intent: Intent,
-) -> Intent:
-    """Merge three intent sources (label / comment / CLI).
-
-    Used by :meth:`Orchestrator._resolve_intent` to combine the three
-    ways an operator can drive a retry:
-
-      1. **Label** — ``agent:retry`` / ``agent:follow-up`` /
-         ``agent:blocked`` / ``agent:rebase`` on the issue.
-      2. **Comment** — ``/agent retry`` / ``/agent follow-up`` /
-         ``/agent unblock`` / ``/agent rebase`` in the issue thread.
-      3. **CLI** — ``clawcodex-dev orchestrator issue retry --mode
-         reset|followup|unblock|rebase`` which writes ``registry.intent``
-         with ``intent_source="cli"``. This is the
-         operator's authoritative local command and is the ONLY
-         source that survives even when the remote issue tracker is
-         unreachable / read-only / local-only (LocalTracker).
-
-    Precedence (high → low):
-      1. Intent.BLOCKED — sticky permanent skip (any source).
-      2. Intent.REBASE — remote-history rebase beats
-         retry/followup which only affect local state.
-      3. The more conservative of {RETRY, FOLLOWUP} = FOLLOWUP.
-      4. CLI intent — operator's local command beats remote signals.
-      5. Comment command beats label-only intent.
-      6. Otherwise: whichever is non-NONE; else NONE.
-
-    Why CLI wins: the CLI is the operator's deliberate, authenticated
-    local action. Remote signals (label, comment) can be stale,
-    spoofed, or lost. When the operator runs ``clawcodex-dev orchestrator
-    issue retry --id 5 --mode reset --force``, they expect the daemon
-    to honor that intent on the next poll regardless of what the
-    remote tracker says.
-    """
-    if (
-        label_intent is Intent.BLOCKED
-        or command_intent is Intent.BLOCKED
-        or cli_intent is Intent.BLOCKED
-    ):
-        return Intent.BLOCKED
-    if (
-        label_intent is Intent.REBASE
-        or command_intent is Intent.REBASE
-        or cli_intent is Intent.REBASE
-    ):
-        return Intent.REBASE
-    if (
-        label_intent is Intent.FOLLOWUP
-        or command_intent is Intent.FOLLOWUP
-        or cli_intent is Intent.FOLLOWUP
-    ):
-        return Intent.FOLLOWUP
-    if cli_intent is not Intent.NONE:
-        return cli_intent
-    if command_intent is not Intent.NONE:
-        return command_intent
-    if label_intent is not Intent.NONE:
-        return label_intent
-    return Intent.NONE
+if TYPE_CHECKING:
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -456,7 +278,8 @@ class PullRequestRef:
 #
 # A concrete adapter structurally satisfies a capability when it implements
 # every method of the protocol (duck-typed via ``runtime_checkable``).
-# Callers gate capability use behind :func:`supports`.
+# Callers gate capability use behind :func:`supports` — the structural
+# check itself is documented in :func:`supports` (and the module docstring).
 
 
 @runtime_checkable
@@ -615,220 +438,3 @@ def supports(adapter: TrackerAdapter, capability: type) -> bool:
     if required is None:
         return isinstance(adapter, capability)
     return all(callable(getattr(adapter, name, None)) for name in required)
-
-
-# ---------------------------------------------------------------------------
-# Tracker kind registry & factory
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class TrackerKindInfo:
-    """Static metadata used by config validation and adapter creation."""
-
-    kind: str
-    label: str
-    default_endpoint: str
-    default_clone_base_url: str | None
-    api_key_env_vars: tuple[str, ...]
-    owner_env_vars: tuple[str, ...] = ()
-    repo_env_vars: tuple[str, ...] = ()
-    assignee_env_vars: tuple[str, ...] = ()
-    requires_project_slug: bool = False
-    requires_repository: bool = False
-
-
-# Supported tracker kinds — adapters accept these in ``tracker.kind``.
-SUPPORTED_TRACKERS = frozenset({"linear", "github", "gitee", "gitcode", "local"})
-
-
-class TrackerConfigError(ValueError):
-    """Raised when tracker configuration is invalid."""
-
-
-_TRACKER_KIND_INFO: dict[str, TrackerKindInfo] = {
-    "linear": TrackerKindInfo(
-        kind="linear",
-        label="Linear",
-        default_endpoint="https://api.linear.app/graphql",
-        default_clone_base_url=None,
-        api_key_env_vars=("LINEAR_API_KEY",),
-        assignee_env_vars=("LINEAR_ASSIGNEE",),
-        requires_project_slug=True,
-    ),
-    "github": TrackerKindInfo(
-        kind="github",
-        label="GitHub",
-        default_endpoint="https://api.github.com",
-        default_clone_base_url="https://github.com",
-        api_key_env_vars=("GITHUB_TOKEN", "GITHUB_API_KEY"),
-        owner_env_vars=("GITHUB_OWNER", "TRACKER_OWNER"),
-        repo_env_vars=("GITHUB_REPO", "TRACKER_REPO"),
-        assignee_env_vars=("GITHUB_ASSIGNEE", "TRACKER_ASSIGNEE"),
-        requires_repository=True,
-    ),
-    "gitee": TrackerKindInfo(
-        kind="gitee",
-        label="Gitee",
-        default_endpoint="https://gitee.com/api/v5",
-        default_clone_base_url="https://gitee.com",
-        api_key_env_vars=("GITEE_TOKEN", "GITEE_API_KEY"),
-        owner_env_vars=("GITEE_OWNER", "TRACKER_OWNER"),
-        repo_env_vars=("GITEE_REPO", "TRACKER_REPO"),
-        assignee_env_vars=("GITEE_ASSIGNEE", "TRACKER_ASSIGNEE"),
-        requires_repository=True,
-    ),
-    "gitcode": TrackerKindInfo(
-        kind="gitcode",
-        label="GitCode",
-        default_endpoint="https://api.gitcode.com/api/v5",
-        default_clone_base_url="https://gitcode.com",
-        api_key_env_vars=("GITCODE_TOKEN", "GITCODE_API_KEY"),
-        owner_env_vars=("GITCODE_OWNER", "TRACKER_OWNER"),
-        repo_env_vars=("GITCODE_REPO", "TRACKER_REPO"),
-        assignee_env_vars=("GITCODE_ASSIGNEE", "TRACKER_ASSIGNEE"),
-        requires_repository=True,
-    ),
-    "local": TrackerKindInfo(
-        kind="local",
-        label="Local",
-        default_endpoint="",
-        default_clone_base_url=None,
-        api_key_env_vars=(),
-    ),
-}
-
-
-def normalize_tracker_kind(kind: str | None) -> str:
-    """Normalize user-provided tracker kind values."""
-    normalized = (kind or "linear").strip().lower()
-    if normalized not in SUPPORTED_TRACKERS:
-        raise TrackerConfigError(
-            f"Unsupported tracker kind: {kind!r}. "
-            f"Supported values: {', '.join(sorted(SUPPORTED_TRACKERS))}"
-        )
-    return normalized
-
-
-def tracker_kind_info(kind: str) -> TrackerKindInfo:
-    """Return static metadata for a tracker kind."""
-    normalized = normalize_tracker_kind(kind)
-    try:
-        return _TRACKER_KIND_INFO[normalized]
-    except KeyError as exc:
-        raise TrackerConfigError(
-            f"Unsupported tracker kind: {kind!r}. "
-            f"Supported values: {', '.join(sorted(SUPPORTED_TRACKERS))}"
-        ) from exc
-
-
-def default_active_states_for_kind(kind: str) -> list[str]:
-    """Return sane active-state defaults per tracker."""
-    normalized = normalize_tracker_kind(kind)
-    if normalized == "linear":
-        return ["Todo", "In Progress"]
-    if normalized == "local":
-        return ["open", "ready"]
-    if normalized == "gitcode":
-        return ["opened"]
-    return ["open"]
-
-
-def default_terminal_states_for_kind(kind: str) -> list[str]:
-    """Return sane terminal-state defaults per tracker."""
-    normalized = normalize_tracker_kind(kind)
-    if normalized == "linear":
-        return ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
-    if normalized == "local":
-        return ["completed", "closed", "cancelled", "failed", "abandoned"]
-    return ["closed"]
-
-
-def validate_tracker_config(config: Any) -> None:
-    """Validate tracker configuration before adapter creation."""
-    info = tracker_kind_info(getattr(config, "kind", None))
-    if info.kind == "local":
-        if not getattr(config, "issues_path", None):
-            raise TrackerConfigError(
-                "Local issues path not configured. Set tracker.issues_path in WORKFLOW.md"
-            )
-        return
-    if not getattr(config, "api_key", None):
-        env_hint = " or ".join(info.api_key_env_vars)
-        raise TrackerConfigError(
-            f"{info.label} API key not configured. Set {env_hint} or tracker.api_key in WORKFLOW.md"
-        )
-    if info.requires_project_slug and not getattr(config, "project_slug", None):
-        raise TrackerConfigError(
-            f"{info.label} project slug not configured. Set tracker.project_slug in WORKFLOW.md"
-        )
-    if info.requires_repository:
-        owner = getattr(config, "owner", None)
-        repo = getattr(config, "repo", None)
-        if not owner or not repo:
-            raise TrackerConfigError(
-                f"{info.label} repository not configured. "
-                "Set tracker.owner and tracker.repo in WORKFLOW.md"
-            )
-
-
-def create_tracker_adapter(
-    config: Any,
-    *,
-    http_client: "httpx.AsyncClient | None" = None,
-) -> TrackerAdapter:
-    """Create a tracker adapter from workflow tracker config."""
-    kind = normalize_tracker_kind(getattr(config, "kind", None))
-    validate_tracker_config(config)
-    if kind == "linear":
-        from .linear.adapter import LinearAdapter
-
-        return LinearAdapter(
-            api_key=getattr(config, "api_key", "") or "",
-            project_slug=getattr(config, "project_slug", None),
-            endpoint=getattr(config, "endpoint", None)
-            or tracker_kind_info("linear").default_endpoint,
-            active_states=list(getattr(config, "active_states", []) or []),
-            assignee=getattr(config, "assignee", None),
-        )
-    if kind == "local":
-        from .local_tracker.adapter import LocalTrackerAdapter
-
-        return LocalTrackerAdapter(
-            issues_path=getattr(config, "issues_path", None) or "",
-            active_states=list(getattr(config, "active_states", []) or []),
-            terminal_states=list(getattr(config, "terminal_states", []) or []),
-        )
-
-    from .repo_tracker.adapter import RepositoryTrackerAdapter
-
-    return RepositoryTrackerAdapter(
-        platform=kind,
-        owner=getattr(config, "owner", None) or "",
-        repo=getattr(config, "repo", None) or "",
-        api_key=getattr(config, "api_key", None),
-        endpoint=getattr(config, "endpoint", None) or tracker_kind_info(kind).default_endpoint,
-        active_states=list(getattr(config, "active_states", []) or []),
-        terminal_states=list(getattr(config, "terminal_states", []) or []),
-        assignee=getattr(config, "assignee", None),
-        http_client=http_client,
-        skip_labels=list(getattr(config, "skip_labels", []) or []),
-        require_any_labels=list(getattr(config, "require_any_labels", []) or []),
-    )
-
-
-def repository_clone_url_for_tracker(config: Any) -> str | None:
-    """Resolve clone URL for repository-backed trackers."""
-    clone_url = getattr(config, "clone_url", None)
-    if clone_url:
-        return clone_url
-
-    info = tracker_kind_info(getattr(config, "kind", None))
-    if not info.requires_repository or not info.default_clone_base_url:
-        return None
-
-    owner = getattr(config, "owner", None)
-    repo = getattr(config, "repo", None)
-    if not owner or not repo:
-        return None
-    return f"{info.default_clone_base_url}/{owner}/{repo}.git"
