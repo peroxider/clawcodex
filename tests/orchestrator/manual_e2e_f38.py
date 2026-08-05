@@ -357,8 +357,15 @@ class TestRound2VerificationFailure(unittest.IsolatedAsyncioTestCase):
                 await ctx["service"].sync(session)
             self.assertIsInstance(cm.exception.cause, VerificationFailed)
             self.assertIn("test", str(cm.exception).lower())
-            self.assertTrue(cm.exception.result.committed)
+            # b6cceddb 引入「先提交后验证」：验证失败会回滚刚创建的 commit，
+            # 所以 committed=False，但 commit_sha 保留被回滚 commit 的 sha。
+            self.assertFalse(cm.exception.result.committed)
             self.assertIsNotNone(cm.exception.result.commit_sha)
+            # HEAD 已回滚到被回滚 commit 之前。
+            self.assertNotEqual(
+                _git_output(["rev-parse", "HEAD"], workspace.path),
+                cm.exception.result.commit_sha,
+            )
 
             # 1. NO push happened
             branch_name = "clawcodex/issue-e2e-2-verify-with-failing-test"
@@ -500,7 +507,8 @@ class TestRound4PrePushDirtyHook(unittest.IsolatedAsyncioTestCase):
                 await ctx["service"].sync(session)
             self.assertIsInstance(cm.exception.cause, HookFailedError)
             self.assertIn("modified the workspace", str(cm.exception))
-            self.assertTrue(cm.exception.result.committed)
+            # pre_push hook 弄脏工作区 → HookFailedError，同样触发 commit 回滚。
+            self.assertFalse(cm.exception.result.committed)
             self.assertIsNotNone(cm.exception.result.commit_sha)
 
             # NO push happened
