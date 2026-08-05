@@ -74,7 +74,7 @@ class IssueRecord:
     verification_output: str | None = None
     last_hook_error: str | None = None
     summary_comment_id: str | None = None
-    # F-?? root-cause fix: explicit end-of-session reason captured by
+    # Root-cause fix: explicit end-of-session reason captured by
     # AgentRunner before returning. Possible values:
     #   None | "stagnation" | "loop_detected" | "noop_completed" |
     #   "budget_exhausted" | "user_abort" | "task_complete"
@@ -90,7 +90,7 @@ class IssueRecord:
     # Clarification-related fields (for three-channel clarification flow)
     clarification_status: str | None = None  # ClarificationStatus value
     question_history: list[str] = field(default_factory=list)
-    # F-124 pre-dispatch clarity gate. ``question_history`` remains the
+    # Pre-dispatch clarity gate. ``question_history`` remains the
     # append-only audit trail; ``open_questions`` is the current unresolved set.
     open_questions: list[str] = field(default_factory=list)
     clarification_round: int = 0
@@ -104,7 +104,7 @@ class IssueRecord:
     stale_answers: list[str] = field(default_factory=list)
     processed_feedback_ids: list[str] = field(default_factory=list)
     pending_feedback_ids: list[str] = field(default_factory=list)
-    # F-?? feedback URL persistence: parallel lookup of the canonical
+    # Feedback URL persistence: parallel lookup of the canonical
     # comment/check URL for each pending feedback id, so the IM/CLI
     # ``issue feedback --list`` surface can show a clickable link instead
     # of the internal source-prefixed id. Keyed by the same id string
@@ -118,15 +118,16 @@ class IssueRecord:
     followup_attempt_count: int = 0
     last_followup_commit_sha: str | None = None
     last_feedback_checked_at: float | None = None
-    # F-39: operator intent + retry bookkeeping. These fields are
-    # absent from registry.json files written before F-39, so they
+    # Operator intent + retry bookkeeping. These fields are
+    # absent from registry.json files written before intent
+    # support, so they
     # default to NONE / 0 / None and the existing _load() filter
     # (known_fields) handles back-compat transparently.
     intent: Intent = Intent.NONE
     retry_count: int = 0
     last_command: str | None = None
     intent_source: str | None = None  # "label" | "command" | "cli"
-    # F-39 Sub-D: comment-command incremental-scan cursor. Set to
+    # Comment-command incremental-scan cursor. Set to
     # the bot's confirmation-comment ID after a command is honored;
     # the next poll uses it as `since_comment_id` so the same
     # command isn't re-processed.
@@ -140,7 +141,7 @@ class IssueRecord:
     run_output_len: int = 0
     run_timeout_deadline_at: float | None = None
     run_workspace_dirty: bool | None = None
-    # F-?? retry context: list of run_ids from previous attempts for this
+    # Retry context: list of run_ids from previous attempts for this
     # issue.  The retrying agent can Read() the transcript at
     # ~/.clawcodex/sessions/<run_id>/transcript.jsonl to learn what was
     # attempted before.  Populated by _schedule_retry in orchestrator.py.
@@ -156,14 +157,15 @@ class IssueRecord:
     # is copied verbatim. Absent from records written before mode support;
     # ``_load`` filters via known_fields so old files still load cleanly.
     mode_decision_reason: str | None = None
-    # F-120: PR conflict persistence. Fields default to safe no-op
-    # values so registry.json files written before F-120 load cleanly
+    # PR conflict persistence. Fields default to safe no-op
+    # values so registry.json files written before conflict
+    # support load cleanly
     # via the known_fields back-compat filter.
     has_conflict: bool = False
     conflict_files: list[str] = field(default_factory=list)
     rebase_attempt_count: int = 0
     last_rebase_attempt_at: float | None = None
-    # F-129 pause reason recorded when the issue is paused by an operator
+    # Pause reason recorded when the issue is paused by an operator
     # control command. Set by mark_paused(); cleared by mark_resumed().
     # Absent from records written before this field — _load() handles
     # back-compat via the known_fields filter.
@@ -217,8 +219,9 @@ class IssueRegistry:
                         v["status"] = IssueStatus(v["status"])
                     except ValueError:
                         v["status"] = IssueStatus.PENDING
-                # Convert intent string to Intent enum (F-39 back-compat:
-                # records written before F-39 have no `intent` field, so
+                # Convert intent string to Intent enum (back-compat:
+                # records written before intent support have no
+                # `intent` field, so
                 # the dict-comprehension filter below drops it and the
                 # dataclass default Intent.NONE kicks in).
                 if isinstance(v.get("intent"), str):
@@ -384,7 +387,7 @@ class IssueRegistry:
     ) -> IssueRecord:
         """Create a pending record for a newly claimed issue.
 
-        F-40 follow-up: ``_launch_issue`` calls ``register`` at the
+        Follow-up: ``_launch_issue`` calls ``register`` at the
         start of every run, including re-launches after a previous
         ``mark_synced`` already recorded a ``commit_sha`` /
         ``pr_number`` / ``pr_url``.  Naively overwriting
@@ -429,14 +432,14 @@ class IssueRegistry:
             # the right branch.
             if existing.branch_name:
                 record.branch_name = existing.branch_name
-            # F-39: preserve operator intent + retry bookkeeping so a
+            # Preserve operator intent + retry bookkeeping so a
             # label-driven FOLLOWUP/RETRY is not silently wiped.
             record.intent = existing.intent
             record.intent_source = existing.intent_source
             record.retry_count = existing.retry_count
             record.last_command = existing.last_command
             record.command_cursor = existing.command_cursor
-            # F-37: preserve review-feedback tracking across re-launches.
+            # Preserve review-feedback tracking across re-launches.
             record.processed_feedback_ids = list(existing.processed_feedback_ids)
             record.pending_feedback_ids = list(existing.pending_feedback_ids)
             record.pending_feedback_urls = dict(existing.pending_feedback_urls)
@@ -444,7 +447,7 @@ class IssueRegistry:
             record.feedback_cursor = existing.feedback_cursor
             record.followup_attempt_count = existing.followup_attempt_count
             record.last_feedback_checked_at = existing.last_feedback_checked_at
-            # F-120: preserve rebase-conflict state across re-launches.
+            # Preserve rebase-conflict state across re-launches.
             # A retry / followup must not silently wipe has_conflict
             # because the daemon's PR conflict scan needs the flag
             # set until the next rebase succeeds.
@@ -452,7 +455,7 @@ class IssueRegistry:
             record.conflict_files = list(existing.conflict_files)
             record.rebase_attempt_count = existing.rebase_attempt_count
             record.last_rebase_attempt_at = existing.last_rebase_attempt_at
-            # F-124: pre-dispatch clarification is completed before
+            # Pre-dispatch clarification is completed before
             # ``_launch_issue`` re-registers the record with workspace data.
             # Preserve the answer and audit state so the normal agent session
             # receives the author's requirements instead of silently losing
@@ -852,7 +855,7 @@ class IssueRegistry:
         fingerprint: str,
         round_number: int,
     ) -> IssueRecord | None:
-        """Record an F-124 clarification wait without abandoning the issue."""
+        """Record a clarification wait without abandoning the issue."""
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -922,7 +925,7 @@ class IssueRegistry:
         return record
 
     # ------------------------------------------------------------------
-    # F-39 intent + retry bookkeeping
+    # Intent + retry bookkeeping
     # ------------------------------------------------------------------
 
     def mark_intent(
@@ -933,7 +936,7 @@ class IssueRegistry:
         source: str | None = None,
         command: str | None = None,
     ) -> IssueRecord | None:
-        """Record an operator intent (F-39 Sub-A) on an existing record.
+        """Record an operator intent on an existing record.
 
         If the record does not exist yet, this is a no-op — the orchestrator
         creates the record on first claim via `register()`. Callers that need
@@ -960,9 +963,9 @@ class IssueRegistry:
         *,
         record_intent_history: bool = False,
     ) -> IssueRecord | None:
-        """Reset intent back to NONE (F-39 Sub-A).
+        """Reset intent back to NONE.
 
-        Used by Sub-B / Sub-C after the intent has been honored (reset
+        Used after the intent has been honored (reset
         succeeded / follow-up commit landed). If the record doesn't
         exist, returns None.
         """
@@ -977,7 +980,7 @@ class IssueRegistry:
         return record
 
     def increment_retry_count(self, issue_id: str) -> IssueRecord | None:
-        """Bump retry_count by one (F-39 Sub-A → Sub-F rate limiting)."""
+        """Bump retry_count by one (retry rate limiting)."""
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -987,7 +990,7 @@ class IssueRegistry:
         return record
 
     # ------------------------------------------------------------------
-    # F-120 PR conflict persistence
+    # PR conflict persistence
     # ------------------------------------------------------------------
 
     def mark_conflict(
@@ -1032,7 +1035,7 @@ class IssueRegistry:
         return record
 
     def increment_rebase_attempt(self, issue_id: str) -> IssueRecord | None:
-        """Bump ``rebase_attempt_count`` by one (F-120 rate limiting).
+        """Bump ``rebase_attempt_count`` by one (rate limiting).
 
         Used by ``_check_rebase_rate_limit`` before launching a new
         rebase resolution so the count reflects attempts started,
@@ -1054,7 +1057,7 @@ class IssueRegistry:
         increment_retry: bool = True,
         reset_retry_count: bool = False,
     ) -> IssueRecord | None:
-        """F-39 Sub-B: clear transient PR / commit state for a retry.
+        """Clear transient PR / commit state for a retry.
 
         Per the design doc: "对本地 IssueRecord ... 清空 status → pending,
         删 commit_sha / pr_number / pr_url / report_path".
@@ -1103,7 +1106,7 @@ class IssueRegistry:
         return record
 
     def unblock(self, issue_id: str) -> IssueRecord | None:
-        """F-39 Sub-E: roll an ABANDONED issue back to PENDING.
+        """Roll an ABANDONED issue back to PENDING.
 
         Used by the CLI ``issue retry --mode unblock`` fallback and
         by the orchestrator's UNBLOCK comment-command handler. Per

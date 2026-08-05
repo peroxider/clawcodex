@@ -378,7 +378,7 @@ class RepositoryIssueClient:
         return result if isinstance(result, dict) else None
 
     async def _fetch_issue_labels(self, issue_id: str) -> list[str]:
-        """F-39 Sub-E: read the current label list for one issue.
+        """Read the current label list for one issue.
 
         Returns the list of label names as strings. On HTTP error
         or unparseable payload, returns an empty list (the caller
@@ -401,7 +401,7 @@ class RepositoryIssueClient:
         return _extract_labels(payload)
 
     async def add_label(self, issue_id: str, label: str) -> bool:
-        """F-39 Sub-E: mirror the CLI retry intent onto the remote issue.
+        """Mirror the CLI retry intent onto the remote issue.
 
         Read-modify-write: fetch the current labels, append ``label``
         if not present, then PATCH the new list. Idempotent: adding
@@ -427,7 +427,7 @@ class RepositoryIssueClient:
         return True
 
     async def remove_label(self, issue_id: str, label: str) -> bool:
-        """F-39 Sub-E: drop a label from the remote issue.
+        """Drop a label from the remote issue.
 
         Read-modify-write symmetric to :meth:`add_label`. Idempotent.
         On HTTP error, returns False — the local registry.intent is
@@ -641,7 +641,7 @@ class RepositoryIssueClient:
         self,
         pull_request: PullRequestRef,
     ) -> bool:
-        """F-39 Sub-B: close a remote PR so a fresh one can be opened.
+        """Close a remote PR so a fresh one can be opened.
 
         Uses `PATCH /repos/{owner}/{repo}/pulls/{number}` with
         `{"state": "closed"}`. Compatible with GitHub, Gitee, GitCode —
@@ -843,7 +843,7 @@ class RepositoryIssueClient:
         *,
         pull_request: PullRequestRef,
     ) -> MergeableStatus | None:
-        """F-120: fetch normalized mergeability report for a PR.
+        """Fetch normalized mergeability report for a PR.
 
         Implementation: ``GET /repos/{owner}/{repo}/pulls/{n}``,
         then delegate to ``_normalize_mergeable_status``. Returns
@@ -1165,7 +1165,7 @@ def _normalize_feedback_status(payload: dict[str, Any]) -> str:
 
 
 def _coerce_bool(value: Any) -> bool | None:
-    """F-120: tolerant string-to-bool coercion.
+    """Tolerant string-to-bool coercion.
 
     Some platforms (GitCode nested ``conflict_passed``) emit
     ``true`` / ``false`` as strings rather than JSON booleans.
@@ -1203,7 +1203,7 @@ def _coerce_int(value: Any) -> int | None:
 
 
 def _extract_gitcode_conflict_state(payload: dict[str, Any]) -> tuple[bool | None, str | None]:
-    """F-120: GitCode exposes merge status as a nested object.
+    """GitCode exposes merge status as a nested object.
 
     The field path varies; we look at:
       - ``mergeable_state`` as object → ``conflict_passed`` (bool),
@@ -1228,7 +1228,7 @@ def _normalize_mergeable_status(
     platform: str,
     raw: dict[str, Any] | None = None,
 ) -> MergeableStatus:
-    """F-120: normalize a PR payload into MergeableStatus.
+    """Normalize a PR payload into MergeableStatus.
 
     Behavior per platform:
 

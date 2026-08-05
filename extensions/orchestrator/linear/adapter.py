@@ -81,7 +81,7 @@ class LinearAdapter(TrackerAdapter):
         self.project_slug = project_slug
         self.active_states = active_states or ["Todo", "In Progress"]
         self.assignee = assignee
-        # F-39: same label conventions as the other adapters.
+        # same label conventions as the other adapters.
         from ..tracker import DEFAULT_INTENT_LABELS, intent_from_label_set
 
         self.intent_labels: dict[str, str] = (
@@ -102,16 +102,16 @@ class LinearAdapter(TrackerAdapter):
         self,
         pull_request: "PullRequestRef",
     ) -> bool:
-        # TODO(F-39 Sub-B extension): LinearAdapter does not have a
+        # TODO LinearAdapter does not have a
         # remote GitHub-style PR to close. Linear's PR model is
         # implicit; the issue's state transitions to "Cancelled" or
         # similar. For now we report the operation as unsupported and
         # rely on the orchestrator to record the intent as FAILED
         # (or move on without remote close, since the registry will
-        # still reset the local state — F-39 design §Sub-B).
+        # still reset the local state).
         logger.warning(
             "LinearAdapter.close_pull_request is not implemented; "
-            "local registry will still be reset (F-39 Sub-B fallback)"
+            "local registry will still be reset"
         )
         return False
 

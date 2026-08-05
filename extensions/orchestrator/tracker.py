@@ -17,16 +17,16 @@ if TYPE_CHECKING:
 class Intent(str, Enum):
     """Operator intent expressed via issue labels or comment commands.
 
-    F-39: each issue may carry an intent that overrides the default
+    Each issue may carry an intent that overrides the default
     4-layer "already handled" defense in the orchestrator.
 
       - NONE: no operator intent recorded
       - RETRY: reset local registry entry + close remote PR + new run
       - FOLLOWUP: keep PR, append commit on same branch
       - BLOCKED: permanently skip the issue
-      - REBASE: F-120 — orchestrator rebases the existing PR's
-        feature branch onto the latest base and force-pushes.
-        Agent reentry only triggered if rebase leaves content conflicts.
+      - REBASE: orchestrator rebases the existing PR's feature branch
+        onto the latest base and force-pushes. Agent reentry only
+        triggered if rebase leaves content conflicts.
     """
 
     NONE = "none"
@@ -56,11 +56,11 @@ def intent_from_label_set(
 ) -> Intent:
     """Resolve an Intent from a list of issue labels.
 
-    Priority rules (per F-39 design + F-120):
+    Priority rules:
       - `agent:blocked` wins over any other intent (permanent skip).
-      - `agent:rebase` wins over RETRY/FOLLOWUP (F-120: rebase
-        touches the remote history directly; treat as higher
-        priority than follow-up commit appending).
+      - `agent:rebase` wins over RETRY/FOLLOWUP (rebase touches the
+        remote history directly; treat as higher priority than
+        follow-up commit appending).
       - `agent:retry` + `agent:follow-up` together → FOLLOWUP is more
         conservative (keeps PR evidence), so it wins.
       - Otherwise return whichever single intent label is present, or NONE.
@@ -89,7 +89,7 @@ def _normalize_label(value: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# F-39 Sub-D: comment command parsing
+# Comment command parsing
 # ---------------------------------------------------------------------------
 
 
@@ -100,8 +100,8 @@ class Command(str, Enum):
     (e.g. UNBLOCK clears an abandoned status) and because not every
     command maps to a run-mode intent.
 
-    F-120 adds ``REBASE``: a comment-issued rebase request that maps
-    to ``Intent.REBASE``.
+    ``REBASE``: a comment-issued rebase request that maps to
+    ``Intent.REBASE``.
     """
 
     RETRY = "retry"
@@ -112,7 +112,7 @@ class Command(str, Enum):
 
 # Regex for `/agent <subcommand> [args]` at the start of a line / body.
 # Permissive trailing text: any args / reason after the subcommand.
-# F-120: include ``rebase`` in the recognized subcommand set.
+# Includes ``rebase`` in the recognized subcommand set.
 _AGENT_COMMAND_RE = re.compile(
     r"^/agent\s+(retry|follow-up|unblock|rebase)\b[^\n]*",
     re.IGNORECASE | re.MULTILINE,
@@ -126,7 +126,7 @@ def parse_agent_command(body: str | None) -> Command | None:
       - `/agent retry [reason...]`
       - `/agent follow-up [note...]`
       - `/agent unblock`
-      - `/agent rebase [reason...]`  (F-120)
+      - `/agent rebase [reason...]`
 
     Returns the matched `Command` or `None` if no recognized command
     is present. Only the first match is returned — operators that
@@ -157,7 +157,7 @@ def command_to_intent(command: Command) -> Intent:
     applies the label-based intent (or stays NONE if the operator
     removed the agent:blocked label too).
 
-    F-120: ``Command.REBASE`` → ``Intent.REBASE``.
+    ``Command.REBASE`` maps to ``Intent.REBASE``.
     """
     if command is Command.RETRY:
         return Intent.RETRY
@@ -169,8 +169,8 @@ def command_to_intent(command: Command) -> Intent:
 
 
 # Priority merge: a comment command can override a label intent, but
-# BLOCKED is sticky (per F-39 design: blocked is a permanent skip and
-# only the unblock command / CLI override can lift it).
+# BLOCKED is sticky: it is a permanent skip and only the unblock
+# command / CLI override can lift it.
 #
 # Conservative rule between RETRY and FOLLOWUP: FOLLOWUP wins (preserves
 # PR evidence). This mirrors the label-only priority in
@@ -180,7 +180,7 @@ def merge_intents(label_intent: Intent, command_intent: Intent) -> Intent:
 
     Precedence (high → low):
       1. Intent.BLOCKED — sticky permanent skip.
-      2. Intent.REBASE — F-120: orchestrator-side rebase is a
+      2. Intent.REBASE — orchestrator-side rebase is a
          remote-history-touching operation that beats the more
          conservative RETRY/FOLLOWUP branches.
       3. The more conservative of {RETRY, FOLLOWUP} = FOLLOWUP.
@@ -205,27 +205,25 @@ def merge_intents_with_cli(
     command_intent: Intent,
     cli_intent: Intent,
 ) -> Intent:
-    """F-39 Sub-E + F-120: merge three intent sources (label / comment / CLI).
+    """Merge three intent sources (label / comment / CLI).
 
     Used by :meth:`Orchestrator._resolve_intent` to combine the three
     ways an operator can drive a retry:
 
       1. **Label** — ``agent:retry`` / ``agent:follow-up`` /
-         ``agent:blocked`` / ``agent:rebase`` on the issue
-         (F-39 Sub-A + F-120).
+         ``agent:blocked`` / ``agent:rebase`` on the issue.
       2. **Comment** — ``/agent retry`` / ``/agent follow-up`` /
-         ``/agent unblock`` / ``/agent rebase`` in the issue thread
-         (F-39 Sub-D + F-120).
+         ``/agent unblock`` / ``/agent rebase`` in the issue thread.
       3. **CLI** — ``clawcodex-dev orchestrator issue retry --mode
          reset|followup|unblock|rebase`` which writes ``registry.intent``
-         with ``intent_source="cli"`` (F-39 Sub-E + F-120). This is the
+         with ``intent_source="cli"``. This is the
          operator's authoritative local command and is the ONLY
          source that survives even when the remote issue tracker is
          unreachable / read-only / local-only (LocalTracker).
 
     Precedence (high → low):
       1. Intent.BLOCKED — sticky permanent skip (any source).
-      2. Intent.REBASE — F-120: remote-history rebase beats
+      2. Intent.REBASE — remote-history rebase beats
          retry/followup which only affect local state.
       3. The more conservative of {RETRY, FOLLOWUP} = FOLLOWUP.
       4. CLI intent — operator's local command beats remote signals.
@@ -280,10 +278,10 @@ class Comment:
 
 @dataclass(frozen=True)
 class CommandIntent:
-    """F-39 Sub-F: a parsed `/agent ...` command plus provenance.
+    """A parsed `/agent ...` command plus provenance.
 
-    The orchestrator needs the author login to perform the F-39 Sub-F
-    role check ("only the issue author or a maintainer may trigger
+    The orchestrator needs the author login to perform the role check
+    ("only the issue author or a maintainer may trigger
     `/agent retry`"). Older callers that only need the command value
     should use ``intent.command``.
     """
@@ -318,7 +316,7 @@ SUPPORTED_TRACKERS = frozenset({"linear", "github", "gitee", "gitcode", "local"}
 
 @dataclass(frozen=True)
 class MergeableStatus:
-    """F-120: normalized PR mergeability report.
+    """Normalized PR mergeability report.
 
     The three platforms we target expose this differently:
 
@@ -407,7 +405,7 @@ class TrackerAdapter(ABC):
         self,
         pull_request: "PullRequestRef",
     ) -> "MergeableStatus | None":
-        """F-120: fetch a normalized PR mergeability report.
+        """Fetch a normalized PR mergeability report.
 
         Returns ``None`` if the platform does not expose the
         required fields (e.g. GitCode with JS-rendered merge
@@ -486,7 +484,7 @@ class TrackerAdapter(ABC):
         return None
 
     def add_label(self, issue_id: str, label: str) -> bool:
-        """F-124-P2: 为 issue 添加标签。默认 return False（不支持的 tracker 无操作）。
+        """为 issue 添加标签。默认 return False（不支持的 tracker 无操作）。
 
         Args:
             issue_id: the issue to label
@@ -498,7 +496,7 @@ class TrackerAdapter(ABC):
         return False
 
     def remove_label(self, issue_id: str, label: str) -> bool:
-        """F-124-P2: 移除 issue 上的标签。默认 return False。
+        """移除 issue 上的标签。默认 return False。
 
         Args:
             issue_id: the issue to unlabel
@@ -513,7 +511,7 @@ class TrackerAdapter(ABC):
         self,
         labels: list[str] | None,
     ) -> Intent:
-        """Resolve an operator Intent from the issue's label set (F-39).
+        """Resolve an operator Intent from the issue's label set.
 
         Default implementation is a no-op (returns Intent.NONE) — it has
         no platform-specific label conventions. Subclasses that ship
@@ -525,7 +523,7 @@ class TrackerAdapter(ABC):
         return Intent.NONE
 
     async def add_label(self, issue_id: str, label: str) -> bool:
-        """F-39 Sub-E: add a single label to a remote issue.
+        """Add a single label to a remote issue.
 
         Default implementation is a no-op (returns False) — adapters
         that do not support label management can leave this alone.
@@ -541,7 +539,7 @@ class TrackerAdapter(ABC):
         return False
 
     async def remove_label(self, issue_id: str, label: str) -> bool:
-        """F-39 Sub-E: remove a single label from a remote issue.
+        """Remove a single label from a remote issue.
 
         Default implementation is a no-op (returns False) — see
         :meth:`add_label` for the rationale. Used by
@@ -558,7 +556,7 @@ class TrackerAdapter(ABC):
         self,
         pull_request: "PullRequestRef",
     ) -> bool:
-        """Close a remote pull request (F-39 Sub-B reset path).
+        """Close a remote pull request (reset path).
 
         Default implementation is a no-op (returns False). Subclasses
         for platforms that support closing a PR (GitHub, Gitee, GitCode
@@ -576,18 +574,18 @@ class TrackerAdapter(ABC):
         issue_id: str,
         since_comment_id: str | None,
     ) -> "CommandIntent | None":
-        """F-39 Sub-D + Sub-F: scan recent issue comments for a `/agent ...` command.
+        """Scan recent issue comments for a `/agent ...` command.
 
         Default implementation returns None (no command found). Subclasses
         that can fetch issue comments should override this to call
         `fetch_new_comments_since(issue_id, since_comment_id)`, iterate
         the results oldest-first, and return the first `Command` returned
         by `parse_agent_command(body)`. The returned `CommandIntent`
-        MUST include the comment's `author_login` (F-39 Sub-F role
-        check) and `comment_id` (for the `command_cursor`).
+        MUST include the comment's `author_login` (role check) and
+        `comment_id` (for the `command_cursor`).
 
-        Back-compat note: F-39 Sub-D callers that only need the
-        `Command` value should read `intent.command`.
+        Back-compat note: callers that only need the `Command` value
+        should read `intent.command`.
 
         Operators can pass `since_comment_id=None` to scan the full
         comment history; the orchestrator will typically pass the

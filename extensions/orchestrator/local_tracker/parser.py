@@ -62,7 +62,7 @@ def parse_markdown_issue(path: Path) -> LocalIssueDocument:
         labels=_string_list(metadata.get("labels")),
         created_at=_datetime_or_none(metadata.get("created_at")),
         updated_at=_datetime_or_none(metadata.get("updated_at")),
-        # F-?? per-issue python interpreter override (cascade level 1,
+        # Per-issue python interpreter override (cascade level 1,
         # highest priority). Pulled from the issue markdown
         # frontmatter; remote trackers (GitHub/Gitee/GitCode/Linear)
         # leave this empty and rely on workspace-level or agent-level
@@ -106,7 +106,7 @@ def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
         delimiter. Many editors prepend a blank line at the top of the
         file and a strict ``lines[0]`` check would silently drop the
         whole frontmatter block — the same silent failure that hid the
-        F-40 dispatch bug.
+        dispatch bug.
     """
     lines = text.splitlines(keepends=True)
     span = _find_frontmatter_span(lines)

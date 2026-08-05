@@ -53,7 +53,7 @@ class LocalTrackerAdapter(TrackerAdapter):
             else ["completed", "closed", "cancelled", "failed", "abandoned"]
         )
         self._active_state_set = _normalize_states(self._active_states)
-        # F-39: same label conventions as the repository-backed adapters.
+        # same label conventions as the repository-backed adapters.
         self.intent_labels: dict[str, str] = (
             dict(intent_labels) if intent_labels else dict(DEFAULT_INTENT_LABELS)
         )
@@ -255,7 +255,7 @@ class LocalTrackerAdapter(TrackerAdapter):
         return intent_from_label_set(labels, self.intent_labels)
 
     async def add_label(self, issue_id: str, label: str) -> bool:
-        """F-39 Sub-E: append ``label`` to the issue's frontmatter list.
+        """Append ``label`` to the issue's frontmatter list.
 
         Idempotent: adding a label that is already present returns
         True without rewriting the file. Missing issues return False
@@ -282,7 +282,7 @@ class LocalTrackerAdapter(TrackerAdapter):
         return True
 
     async def remove_label(self, issue_id: str, label: str) -> bool:
-        """F-39 Sub-E: drop ``label`` from the issue's frontmatter list.
+        """Drop ``label`` from the issue's frontmatter list.
 
         Idempotent: removing a label that is already absent returns
         True without rewriting the file. Missing issues return False.

@@ -71,7 +71,7 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         self.terminal_states = terminal_states or default_terminal_states_for_kind(platform)
         self.skip_labels: list[str] = list(skip_labels or [])
         self.require_any_labels: list[str] = list(require_any_labels or [])
-        # F-39: intent label conventions (operator-driven retry/followup/blocked).
+        # Intent label conventions (operator-driven retry/followup/blocked).
         # If caller passes None, fall back to the standard "agent:*" set.
         self.intent_labels: dict[str, str] = (
             dict(intent_labels) if intent_labels else dict(DEFAULT_INTENT_LABELS)
@@ -265,7 +265,7 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         self,
         pull_request: PullRequestRef,
     ) -> "MergeableStatus | None":
-        """F-120: delegate to ``RepositoryIssueClient`` and translate
+        """Delegate to ``RepositoryIssueClient`` and translate
         to the platform-normalized ``MergeableStatus``.
 
         The PullRequestRef's ``number`` is the PR number on the

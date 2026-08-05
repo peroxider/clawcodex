@@ -1,4 +1,4 @@
-"""F-105 — Per-session cache for ``AgentRunner._should_continue`` polling.
+"""Per-session cache for ``AgentRunner._should_continue`` polling.
 
 Decouples the skip decision from the agent runner so the orchestrator
 can call :class:`IssueStateCache` independently and so unit tests can
@@ -14,8 +14,7 @@ Skip policy
 ``should_skip_poll(issue_id, turn)`` returns ``True`` iff ALL of:
 
 - ``stable_skip_turns > 0`` (configurable knob — set to 0 disables the
-  cache entirely and the runner always polls, identical to pre-F-105
-  behaviour);
+  cache entirely and the runner always polls);
 - the last ``stable_skip_turns`` recorded snapshots are all
   ``is_active=True``;
 - the last ``stable_skip_turns`` recorded snapshots all share the same
@@ -92,7 +91,7 @@ class IssueStateCache:
     # ------------------------------------------------------------------
 
     def should_skip_poll(self, issue_id: str, turn: int) -> bool:
-        """Return ``True`` iff the tracker poll can be skipped at ``turn``."""
+        """Return ``True`` if the tracker poll can be skipped at ``turn``."""
         if self.stable_skip_turns <= 0:
             return False
 
@@ -126,7 +125,7 @@ class IssueStateCache:
         return True
 
     def has_recent_inactive(self, issue_id: str, turn: int) -> bool:
-        """Return ``True`` iff the snapshot at ``turn`` reported inactive.
+        """Return ``True`` if the snapshot at ``turn`` reported inactive.
 
         Used by ``_should_continue`` as a forced-poll condition: an
         issue that was inactive on the previous poll must always be

@@ -27,7 +27,7 @@ class Issue:
     assigned_to_worker: bool = True
     created_at: datetime | None = None
     updated_at: datetime | None = None
-    # F-?? per-issue python interpreter override (cascade level 1,
+    # Per-issue python interpreter override (cascade level 1,
     # highest priority). When non-empty, this value overrides every
     # other source — workspace ``python_executable``,
     # ``_detect_python_in_workspace``, and ``agent.python_executable``.
