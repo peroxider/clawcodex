@@ -47,6 +47,7 @@ DEFAULT_INTENT_LABELS: dict[str, str] = {
 
 
 def _normalize_label(value: str) -> str:
+    """Normalize a label for case-insensitive comparison."""
     return value.strip().lower()
 
 
@@ -57,11 +58,11 @@ def intent_from_label_set(
     """Resolve an Intent from a list of issue labels.
 
     Priority rules:
-      - `agent:blocked` wins over any other intent (permanent skip).
-      - `agent:rebase` wins over RETRY/FOLLOWUP (rebase touches the
+      - ``agent:blocked`` wins over any other intent (permanent skip).
+      - ``agent:rebase`` wins over RETRY/FOLLOWUP (rebase touches the
         remote history directly; treat as higher priority than
         follow-up commit appending).
-      - `agent:retry` + `agent:follow-up` together → FOLLOWUP is more
+      - ``agent:retry`` + ``agent:follow-up`` together → FOLLOWUP is more
         conservative (keeps PR evidence), so it wins.
       - Otherwise return whichever single intent label is present, or NONE.
     """
@@ -84,10 +85,6 @@ def intent_from_label_set(
     return Intent.NONE
 
 
-def _normalize_label(value: str) -> str:
-    return value.strip().lower()
-
-
 # ---------------------------------------------------------------------------
 # Comment command parsing
 # ---------------------------------------------------------------------------
@@ -96,7 +93,7 @@ def _normalize_label(value: str) -> str:
 class Command(str, Enum):
     """Operator command expressed via an issue comment.
 
-    Distinct from `Intent` because commands may carry side effects
+    Distinct from ``Intent`` because commands may carry side effects
     (e.g. UNBLOCK clears an abandoned status) and because not every
     command maps to a run-mode intent.
 
@@ -110,7 +107,7 @@ class Command(str, Enum):
     REBASE = "rebase"
 
 
-# Regex for `/agent <subcommand> [args]` at the start of a line / body.
+# Regex for ``/agent <subcommand> [args]`` at the start of a line / body.
 # Permissive trailing text: any args / reason after the subcommand.
 # Includes ``rebase`` in the recognized subcommand set.
 _AGENT_COMMAND_RE = re.compile(
@@ -123,12 +120,12 @@ def parse_agent_command(body: str | None) -> Command | None:
     """Extract a ClawCodex operator command from a comment body.
 
     Recognized forms (case-insensitive, anywhere in the body):
-      - `/agent retry [reason...]`
-      - `/agent follow-up [note...]`
-      - `/agent unblock`
-      - `/agent rebase [reason...]`
+      - ``/agent retry [reason...]``
+      - ``/agent follow-up [note...]``
+      - ``/agent unblock``
+      - ``/agent rebase [reason...]``
 
-    Returns the matched `Command` or `None` if no recognized command
+    Returns the matched ``Command`` or ``None`` if no recognized command
     is present. Only the first match is returned — operators that
     pile commands into one comment will get the first one honored.
     """
@@ -152,7 +149,7 @@ def parse_agent_command(body: str | None) -> Command | None:
 def command_to_intent(command: Command) -> Intent:
     """Map a Command to the Intent the orchestrator should run with.
 
-    `UNBLOCK` is a state-clearing meta-command and has no direct
+    ``UNBLOCK`` is a state-clearing meta-command and has no direct
     run-mode intent; it returns Intent.NONE so the next poll re-
     applies the label-based intent (or stays NONE if the operator
     removed the agent:blocked label too).
@@ -174,7 +171,7 @@ def command_to_intent(command: Command) -> Intent:
 #
 # Conservative rule between RETRY and FOLLOWUP: FOLLOWUP wins (preserves
 # PR evidence). This mirrors the label-only priority in
-# `intent_from_label_set`.
+# ``intent_from_label_set``.
 def merge_intents(label_intent: Intent, command_intent: Intent) -> Intent:
     """Merge a label-derived Intent with a command-derived Intent.
 
@@ -264,6 +261,11 @@ def merge_intents_with_cli(
     return Intent.NONE
 
 
+# ---------------------------------------------------------------------------
+# Normalized data models
+# ---------------------------------------------------------------------------
+
+
 @dataclass(frozen=True)
 class Comment:
     """Normalized issue comment."""
@@ -278,11 +280,11 @@ class Comment:
 
 @dataclass(frozen=True)
 class CommandIntent:
-    """A parsed `/agent ...` command plus provenance.
+    """A parsed ``/agent ...`` command plus provenance.
 
     The orchestrator needs the author login to perform the role check
     ("only the issue author or a maintainer may trigger
-    `/agent retry`"). Older callers that only need the command value
+    ``/agent retry``"). Older callers that only need the command value
     should use ``intent.command``.
     """
 
@@ -309,9 +311,6 @@ class PullRequestFeedback:
     updated_at: str | None = None
     commit_sha: str | None = None
     url: str | None = None
-
-
-SUPPORTED_TRACKERS = frozenset({"linear", "github", "gitee", "gitcode", "local"})
 
 
 @dataclass(frozen=True)
@@ -342,6 +341,11 @@ class MergeableStatus:
     ahead_by: int | None = None
     has_conflicts: bool = False
     raw: dict[str, Any] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Adapter protocol
+# ---------------------------------------------------------------------------
 
 
 class TrackerAdapter(ABC):
@@ -484,7 +488,7 @@ class TrackerAdapter(ABC):
         return None
 
     def add_label(self, issue_id: str, label: str) -> bool:
-        """为 issue 添加标签。默认 return False（不支持的 tracker 无操作）。
+        """Add a label to an issue. Defaults to return False (unsupported tracker no-op).
 
         Args:
             issue_id: the issue to label
@@ -496,7 +500,7 @@ class TrackerAdapter(ABC):
         return False
 
     def remove_label(self, issue_id: str, label: str) -> bool:
-        """移除 issue 上的标签。默认 return False。
+        """Remove a label from an issue. Defaults to return False.
 
         Args:
             issue_id: the issue to unlabel
@@ -515,10 +519,10 @@ class TrackerAdapter(ABC):
 
         Default implementation is a no-op (returns Intent.NONE) — it has
         no platform-specific label conventions. Subclasses that ship
-        labels through `Issue.labels` should override this to apply
+        labels through ``Issue.labels`` should override this to apply
         platform-specific intent label resolution.
 
-        See `intent_from_label_set` for the priority rules.
+        See ``intent_from_label_set`` for the priority rules.
         """
         return Intent.NONE
 
@@ -560,8 +564,8 @@ class TrackerAdapter(ABC):
 
         Default implementation is a no-op (returns False). Subclasses
         for platforms that support closing a PR (GitHub, Gitee, GitCode
-        via `PATCH /repos/{owner}/{repo}/pulls/{number}` with
-        `{"state": "closed"}`) should override and return True on
+        via ``PATCH /repos/{owner}/{repo}/pulls/{number}`` with
+        ``{"state": "closed"}``) should override and return True on
         success.
 
         Returns True if the PR was closed (or was already closed).
@@ -574,25 +578,25 @@ class TrackerAdapter(ABC):
         issue_id: str,
         since_comment_id: str | None,
     ) -> "CommandIntent | None":
-        """Scan recent issue comments for a `/agent ...` command.
+        """Scan recent issue comments for a ``/agent ...`` command.
 
         Default implementation returns None (no command found). Subclasses
         that can fetch issue comments should override this to call
-        `fetch_new_comments_since(issue_id, since_comment_id)`, iterate
-        the results oldest-first, and return the first `Command` returned
-        by `parse_agent_command(body)`. The returned `CommandIntent`
-        MUST include the comment's `author_login` (role check) and
-        `comment_id` (for the `command_cursor`).
+        ``fetch_new_comments_since(issue_id, since_comment_id)``, iterate
+        the results oldest-first, and return the first ``Command`` returned
+        by ``parse_agent_command(body)``. The returned ``CommandIntent``
+        MUST include the comment's ``author_login`` (role check) and
+        ``comment_id`` (for the ``command_cursor``).
 
-        Back-compat note: callers that only need the `Command` value
-        should read `intent.command`.
+        Back-compat note: callers that only need the ``Command`` value
+        should read ``intent.command``.
 
-        Operators can pass `since_comment_id=None` to scan the full
+        Operators can pass ``since_comment_id=None`` to scan the full
         comment history; the orchestrator will typically pass the
-        most recent `IssueRecord.command_cursor` so already-
+        most recent ``IssueRecord.command_cursor`` so already-
         processed commands are skipped.
 
-        Returns the first `CommandIntent` found, or `None` if no
+        Returns the first ``CommandIntent`` found, or ``None`` if no
         command is present in the unscanned portion of the comment
         stream.
         """
@@ -606,6 +610,11 @@ class PullRequestRef:
     number: str | None = None
     url: str | None = None
     title: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Tracker kind registry & factory
+# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -622,6 +631,14 @@ class TrackerKindInfo:
     assignee_env_vars: tuple[str, ...] = ()
     requires_project_slug: bool = False
     requires_repository: bool = False
+
+
+# Supported tracker kinds — adapters accept these in ``tracker.kind``.
+SUPPORTED_TRACKERS = frozenset({"linear", "github", "gitee", "gitcode", "local"})
+
+
+class TrackerConfigError(ValueError):
+    """Raised when tracker configuration is invalid."""
 
 
 _TRACKER_KIND_INFO: dict[str, TrackerKindInfo] = {
@@ -677,6 +694,17 @@ _TRACKER_KIND_INFO: dict[str, TrackerKindInfo] = {
 }
 
 
+def normalize_tracker_kind(kind: str | None) -> str:
+    """Normalize user-provided tracker kind values."""
+    normalized = (kind or "linear").strip().lower()
+    if normalized not in SUPPORTED_TRACKERS:
+        raise TrackerConfigError(
+            f"Unsupported tracker kind: {kind!r}. "
+            f"Supported values: {', '.join(sorted(SUPPORTED_TRACKERS))}"
+        )
+    return normalized
+
+
 def tracker_kind_info(kind: str) -> TrackerKindInfo:
     """Return static metadata for a tracker kind."""
     normalized = normalize_tracker_kind(kind)
@@ -687,17 +715,6 @@ def tracker_kind_info(kind: str) -> TrackerKindInfo:
             f"Unsupported tracker kind: {kind!r}. "
             f"Supported values: {', '.join(sorted(SUPPORTED_TRACKERS))}"
         ) from exc
-
-
-def normalize_tracker_kind(kind: str | None) -> str:
-    """Normalize user-provided tracker kind values."""
-    normalized = (kind or "linear").strip().lower()
-    if normalized not in SUPPORTED_TRACKERS:
-        raise TrackerConfigError(
-            f"Unsupported tracker kind: {kind!r}. "
-            f"Supported values: {', '.join(sorted(SUPPORTED_TRACKERS))}"
-        )
-    return normalized
 
 
 def default_active_states_for_kind(kind: str) -> list[str]:
@@ -720,6 +737,34 @@ def default_terminal_states_for_kind(kind: str) -> list[str]:
     if normalized == "local":
         return ["completed", "closed", "cancelled", "failed", "abandoned"]
     return ["closed"]
+
+
+def validate_tracker_config(config: Any) -> None:
+    """Validate tracker configuration before adapter creation."""
+    info = tracker_kind_info(getattr(config, "kind", None))
+    if info.kind == "local":
+        if not getattr(config, "issues_path", None):
+            raise TrackerConfigError(
+                "Local issues path not configured. Set tracker.issues_path in WORKFLOW.md"
+            )
+        return
+    if not getattr(config, "api_key", None):
+        env_hint = " or ".join(info.api_key_env_vars)
+        raise TrackerConfigError(
+            f"{info.label} API key not configured. Set {env_hint} or tracker.api_key in WORKFLOW.md"
+        )
+    if info.requires_project_slug and not getattr(config, "project_slug", None):
+        raise TrackerConfigError(
+            f"{info.label} project slug not configured. Set tracker.project_slug in WORKFLOW.md"
+        )
+    if info.requires_repository:
+        owner = getattr(config, "owner", None)
+        repo = getattr(config, "repo", None)
+        if not owner or not repo:
+            raise TrackerConfigError(
+                f"{info.label} repository not configured. "
+                "Set tracker.owner and tracker.repo in WORKFLOW.md"
+            )
 
 
 def create_tracker_adapter(
@@ -765,38 +810,6 @@ def create_tracker_adapter(
         skip_labels=list(getattr(config, "skip_labels", []) or []),
         require_any_labels=list(getattr(config, "require_any_labels", []) or []),
     )
-
-
-class TrackerConfigError(ValueError):
-    """Raised when tracker configuration is invalid."""
-
-
-def validate_tracker_config(config: Any) -> None:
-    """Validate tracker configuration before adapter creation."""
-    info = tracker_kind_info(getattr(config, "kind", None))
-    if info.kind == "local":
-        if not getattr(config, "issues_path", None):
-            raise TrackerConfigError(
-                "Local issues path not configured. Set tracker.issues_path in WORKFLOW.md"
-            )
-        return
-    if not getattr(config, "api_key", None):
-        env_hint = " or ".join(info.api_key_env_vars)
-        raise TrackerConfigError(
-            f"{info.label} API key not configured. Set {env_hint} or tracker.api_key in WORKFLOW.md"
-        )
-    if info.requires_project_slug and not getattr(config, "project_slug", None):
-        raise TrackerConfigError(
-            f"{info.label} project slug not configured. Set tracker.project_slug in WORKFLOW.md"
-        )
-    if info.requires_repository:
-        owner = getattr(config, "owner", None)
-        repo = getattr(config, "repo", None)
-        if not owner or not repo:
-            raise TrackerConfigError(
-                f"{info.label} repository not configured. "
-                "Set tracker.owner and tracker.repo in WORKFLOW.md"
-            )
 
 
 def repository_clone_url_for_tracker(config: Any) -> str | None:
