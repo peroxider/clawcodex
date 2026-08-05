@@ -20,7 +20,7 @@ from extensions.orchestrator.git_sync import (
     VerificationFailed,
 )
 from extensions.orchestrator.issue import Issue
-from extensions.orchestrator.tracker import PullRequestRef, TrackerAdapter
+from extensions.orchestrator.tracker import Intent, PullRequestRef, TrackerAdapter
 from extensions.orchestrator.workspace import Workspace, WorkspaceConfig, WorkspaceManager
 
 
@@ -78,6 +78,34 @@ class _Tracker(TrackerAdapter):
         return _Comment(comment_id, body)
 
     async def update_issue_state(self, issue_id: str, state: str) -> None:
+        return None
+
+    async def create_clarification_comment(
+        self,
+        issue_id: str,
+        body: str,
+        mentions: list[str] | None = None,
+    ) -> _Comment | None:
+        return None
+
+    async def extract_intent_from_labels(self, labels: list[str] | None) -> Intent:
+        return Intent.NONE
+
+    async def close_pull_request(self, pull_request: PullRequestRef) -> bool:
+        return False
+
+    async def fetch_pull_request_mergeable(
+        self,
+        pull_request: PullRequestRef,
+    ) -> None:
+        return None
+
+    async def find_pull_request(
+        self,
+        *,
+        head_branch: str,
+        base_branch: str,
+    ) -> PullRequestRef | None:
         return None
 
     async def ensure_pull_request(

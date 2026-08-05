@@ -53,7 +53,7 @@ from extensions.orchestrator.config.schema import WorkflowConfig
 
 
 class _StubAdapter(TrackerAdapter):
-    """Minimal concrete subclass for testing the default no-op."""
+    """Minimal concrete subclass for testing explicit close_pull_request support."""
 
     async def fetch_candidate_issues(self) -> list:
         return []
@@ -66,6 +66,19 @@ class _StubAdapter(TrackerAdapter):
 
     async def update_issue_state(self, issue_id, state) -> None:
         return None
+
+    async def update_comment(self, issue_id, comment_id, body):
+        return None
+
+    async def create_clarification_comment(self, issue_id, body, mentions=None):
+        return None
+
+    async def extract_intent_from_labels(self, labels):
+        return Intent.NONE
+
+    async def close_pull_request(self, pull_request) -> bool:
+        # 显式声明不支持关闭 PR —— 返回 False（而非继承默认 no-op）。
+        return False
 
 
 class TestTrackerAdapterCloseDefault(unittest.IsolatedAsyncioTestCase):

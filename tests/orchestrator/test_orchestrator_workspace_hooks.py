@@ -24,7 +24,7 @@ from extensions.orchestrator.issue import Issue
 from extensions.orchestrator.issue_registry import IssueStatus
 from extensions.orchestrator.orchestrator import Orchestrator
 from extensions.orchestrator.repo_tracker.client import RepositoryTrackerError
-from extensions.orchestrator.tracker import TrackerAdapter
+from extensions.orchestrator.tracker import Intent, TrackerAdapter
 from extensions.orchestrator.tracker import PullRequestRef
 from extensions.orchestrator.workspace import Workspace, WorkspaceHookError, WorkspaceManager
 
@@ -41,6 +41,20 @@ class _Tracker(TrackerAdapter):
 
     async def update_issue_state(self, issue_id: str, state: str) -> None:
         return None
+
+    async def update_comment(self, issue_id: str, comment_id: str, body: str) -> None:
+        return None
+
+    async def create_clarification_comment(
+        self, issue_id: str, body: str, mentions: list[str] | None = None
+    ) -> None:
+        return None
+
+    async def extract_intent_from_labels(self, labels: list[str] | None) -> Intent:
+        return Intent.NONE
+
+    async def close_pull_request(self, pull_request: PullRequestRef) -> bool:
+        return False
 
 
 class _RecordingTracker(_Tracker):

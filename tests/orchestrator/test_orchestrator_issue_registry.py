@@ -131,14 +131,14 @@ class TestIssueRegistryPersistence(unittest.TestCase):
         self.assertEqual(record.issue_identifier, "owner/repo#1")
         self.assertEqual(record.branch_name, "feat/x")
 
-    def test_malformed_json_loads_empty(self) -> None:
+    def test_malformed_json_raises(self) -> None:
+        # 严格加载：非法 JSON 直接抛出，不再吞异常后空启动。
         path = Path(self.tmp.name) / "registry.json"
         path.write_text("not-valid-json", encoding="utf-8")
-        with self.assertLogs("extensions.orchestrator.issue_registry", level="WARNING"):
-            registry = IssueRegistry(storage_path=path)
-        self.assertEqual(list(registry._records.values()), [])
+        with self.assertRaises(Exception):
+            IssueRegistry(storage_path=path)
 
-    def test_missing_status_string_falls_back_to_pending(self) -> None:
+    def test_invalid_status_string_raises(self) -> None:
         path = Path(self.tmp.name) / "registry.json"
         path.write_text(
             json.dumps(
@@ -152,12 +152,11 @@ class TestIssueRegistryPersistence(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        # Invalid status silently falls back to PENDING (no exception,
-        # no log emission — the loader absorbs the value).
-        registry = IssueRegistry(storage_path=path)
-        self.assertEqual(registry.get("i1").status, IssueStatus.PENDING)
+        # 严格加载：无效 status 值抛 ValueError，不再静默回退 PENDING。
+        with self.assertRaises(ValueError):
+            IssueRegistry(storage_path=path)
 
-    def test_missing_intent_string_falls_back_to_none(self) -> None:
+    def test_invalid_intent_string_raises(self) -> None:
         path = Path(self.tmp.name) / "registry.json"
         path.write_text(
             json.dumps(
@@ -171,11 +170,12 @@ class TestIssueRegistryPersistence(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        registry = IssueRegistry(storage_path=path)
-        self.assertEqual(registry.get("i1").intent, Intent.NONE)
+        # 严格加载：无效 intent 值抛 ValueError，不再静默回退 NONE。
+        with self.assertRaises(ValueError):
+            IssueRegistry(storage_path=path)
 
-    def test_unknown_fields_silently_dropped(self) -> None:
-        # Forward-compat: a future-added field shouldn't break the loader.
+    def test_unknown_fields_raise(self) -> None:
+        # 严格加载：未知字段抛 TypeError（旧实现是静默丢弃 forward-compat）。
         path = Path(self.tmp.name) / "registry.json"
         path.write_text(
             json.dumps(
@@ -189,10 +189,8 @@ class TestIssueRegistryPersistence(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        registry = IssueRegistry(storage_path=path)
-        record = registry.get("i1")
-        self.assertIsNotNone(record)
-        self.assertFalse(hasattr(record, "future_field_unknown_to_loader"))
+        with self.assertRaises(TypeError):
+            IssueRegistry(storage_path=path)
 
 
 # ---------------------------------------------------------------------------

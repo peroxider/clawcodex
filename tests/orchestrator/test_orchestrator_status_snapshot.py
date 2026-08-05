@@ -51,6 +51,15 @@ class _StubTracker(TrackerAdapter):
     async def update_comment(self, *a, **k):  # type: ignore[override]
         return None
 
+    async def create_clarification_comment(self, *a, **k):  # type: ignore[override]
+        return None
+
+    async def extract_intent_from_labels(self, *a, **k):  # type: ignore[override]
+        return Intent.NONE
+
+    async def close_pull_request(self, *a, **k):  # type: ignore[override]
+        return False
+
     async def update_issue_state(self, *a, **k):  # type: ignore[override]
         return None
 

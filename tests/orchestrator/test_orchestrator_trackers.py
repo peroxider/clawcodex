@@ -30,6 +30,7 @@ from extensions.orchestrator.repo_tracker.client import (
 from extensions.orchestrator.repo_tracker.adapter import RepositoryTrackerAdapter
 from extensions.orchestrator.repo_tracker.client import RepositoryIssueClient
 from extensions.orchestrator.tracker import (
+    Intent,
     PullRequestFeedback,
     PullRequestRef,
     TrackerAdapter,
@@ -818,7 +819,9 @@ class TestIssueRegistryFeedbackState(unittest.TestCase):
         self.assertFalse(reloaded.can_follow_up("42", 1))
         self.assertEqual(len(reloaded.iter_records_with_pr()), 1)
 
-    def test_registry_load_ignores_unknown_fields(self) -> None:
+    def test_registry_load_rejects_unknown_fields(self) -> None:
+        # 严格加载：registry.json 中出现 dataclass 未知字段 → TypeError
+        # （旧实现是静默过滤；重构后数据损坏/外来文件应显式暴露）。
         with TemporaryDirectory() as tmp:
             registry_path = Path(tmp) / "registry.json"
             registry_path.write_text(
@@ -835,12 +838,8 @@ class TestIssueRegistryFeedbackState(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            registry = IssueRegistry(registry_path)
-            record = registry.get("42")
-
-        assert record is not None
-        self.assertEqual(record.issue_identifier, "#42")
-        self.assertEqual(record.pending_feedback_ids, [])
+            with self.assertRaises(TypeError):
+                IssueRegistry(registry_path)
 
 
 class _ReviewFeedbackTracker(TrackerAdapter):
@@ -860,6 +859,20 @@ class _ReviewFeedbackTracker(TrackerAdapter):
 
     async def update_issue_state(self, issue_id: str, state: str) -> None:
         return None
+
+    async def update_comment(self, issue_id: str, comment_id: str, body: str) -> None:
+        return None
+
+    async def create_clarification_comment(
+        self, issue_id: str, body: str, mentions: list[str] | None = None
+    ) -> None:
+        return None
+
+    async def extract_intent_from_labels(self, labels: list[str] | None) -> Intent:
+        return Intent.NONE
+
+    async def close_pull_request(self, pull_request: PullRequestRef) -> bool:
+        return False
 
     async def fetch_pull_request_feedback(
         self,
@@ -938,6 +951,20 @@ class _DependencyTracker(TrackerAdapter):
 
     async def update_issue_state(self, issue_id: str, state: str) -> None:
         self.updated_states.append((issue_id, state))
+
+    async def update_comment(self, issue_id: str, comment_id: str, body: str) -> None:
+        return None
+
+    async def create_clarification_comment(
+        self, issue_id: str, body: str, mentions: list[str] | None = None
+    ) -> None:
+        return None
+
+    async def extract_intent_from_labels(self, labels: list[str] | None) -> Intent:
+        return Intent.NONE
+
+    async def close_pull_request(self, pull_request: PullRequestRef) -> bool:
+        return False
 
 
 class TestOrchestratorDependencies(unittest.IsolatedAsyncioTestCase):

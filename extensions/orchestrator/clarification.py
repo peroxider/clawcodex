@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .clarification_queue import ClarificationQueue, ClarificationStatus
-from .tracker import Comment
+from .tracker import Comment, CommentHistoryCapability, supports
 
 if TYPE_CHECKING:
     from .clarification_queue import ClarificationItem
@@ -291,6 +291,8 @@ class ClarificationResolver:
         since_comment_id: str | None,
     ) -> list[Comment]:
         """Fetch new comments since last checked comment."""
+        if not supports(self._tracker, CommentHistoryCapability):
+            return []
         try:
             comments = await self._tracker.fetch_new_comments_since(
                 issue_id,

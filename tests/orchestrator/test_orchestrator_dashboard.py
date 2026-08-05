@@ -110,6 +110,20 @@ class MockTrackerAdapter(TrackerAdapter):
     async def update_issue_state(self, issue_id: str, state: str) -> None:
         pass
 
+    async def update_comment(self, issue_id: str, comment_id: str, body: str) -> None:
+        return None
+
+    async def create_clarification_comment(
+        self, issue_id: str, body: str, mentions: list[str] | None = None
+    ) -> None:
+        return None
+
+    async def extract_intent_from_labels(self, labels: list[str] | None) -> Intent:
+        return Intent.NONE
+
+    async def close_pull_request(self, pull_request: Any) -> bool:
+        return False
+
 
 class MockWorkspaceManager(WorkspaceManager):
     """Mock workspace manager that uses temp directories."""

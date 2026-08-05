@@ -22,7 +22,13 @@ from .config.schema import AgentConfig, HooksConfig, PrTemplateConfig
 from . import report_writer
 from .issue import Issue
 from .prompt_builder import resolve_python_executable
-from .tracker import PullRequestRef, TrackerAdapter
+from .tracker import (
+    PullRequestCapability,
+    PullRequestMaintenanceCapability,
+    PullRequestRef,
+    TrackerAdapter,
+    supports,
+)
 from .workspace import Workspace
 
 logger = logging.getLogger(__name__)
@@ -383,20 +389,21 @@ class GitSyncService:
                 fork_owner_repo = self._extract_owner_repo_from_url(self._fork_clone_url)
                 if fork_owner_repo:
                     head_ref = f"{fork_owner_repo}:{branch_name}"
-            pr_ref = await self.tracker.ensure_pull_request(
-                issue=issue,
-                head_branch=head_ref,
-                base_branch=base_branch,
-                title=pr_title,
-                body=self._build_pr_body(
-                    issue,
-                    commit_sha,
-                    branch_name,
-                    base_branch,
-                    session=session,
-                    pull_request=None,
-                ),
-            )
+            if supports(self.tracker, PullRequestCapability):
+                pr_ref = await self.tracker.ensure_pull_request(
+                    issue=issue,
+                    head_branch=head_ref,
+                    base_branch=base_branch,
+                    title=pr_title,
+                    body=self._build_pr_body(
+                        issue,
+                        commit_sha,
+                        branch_name,
+                        base_branch,
+                        session=session,
+                        pull_request=None,
+                    ),
+                )
             # GitCode PR creation may not return number/url immediately;
             # fall back to listing open PRs and matching by head branch.
             if pr_ref is not None and (not pr_ref.number or not pr_ref.url):
@@ -422,7 +429,7 @@ class GitSyncService:
             # 模板 body 覆盖用户改动）。
             if followup_pr is not None:
                 updated_pr = None
-            else:
+            elif supports(self.tracker, PullRequestMaintenanceCapability):
                 updated_pr = await self.tracker.update_pull_request(
                     pull_request=pr_ref,
                     title=pr_title,
@@ -435,6 +442,9 @@ class GitSyncService:
                         pull_request=pr_ref,
                     ),
                 )
+            else:
+                # Tracker 无 PR 维护能力（如 Linear）—— 不更新元数据。
+                updated_pr = None
             if updated_pr is not None:
                 pr_ref = self._merge_pr_ref(updated_pr, pr_ref)
                 if not pr_ref.number or not pr_ref.url:

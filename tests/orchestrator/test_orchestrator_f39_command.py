@@ -192,9 +192,26 @@ class TestTrackerAdapterCommandDefault(unittest.IsolatedAsyncioTestCase):
             async def update_issue_state(self, issue_id, state):
                 return None
 
+            async def update_comment(self, issue_id, comment_id, body):
+                return None
+
+            async def create_clarification_comment(self, issue_id, body, mentions=None):
+                return None
+
+            async def extract_intent_from_labels(self, labels):
+                return Intent.NONE
+
+            async def close_pull_request(self, pull_request):
+                return False
+
         adapter = _Adapter()
-        self.assertIsNone(await adapter.fetch_issue_command_intent("1", None))
-        self.assertIsNone(await adapter.fetch_issue_command_intent("1", "cursor-1"))
+        # 未实现 CommandIntentCapability 的 adapter 不具备该方法 ——
+        # supports() 检测应为 False，直接调用会 AttributeError。
+        from extensions.orchestrator.tracker import CommandIntentCapability, supports
+
+        self.assertFalse(supports(adapter, CommandIntentCapability))
+        with self.assertRaises(AttributeError):
+            await adapter.fetch_issue_command_intent("1", None)
 
 
 class TestRepositoryTrackerAdapterCommand(unittest.IsolatedAsyncioTestCase):

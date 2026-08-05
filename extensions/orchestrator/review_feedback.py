@@ -9,7 +9,14 @@ from dataclasses import dataclass
 
 from .issue import Issue
 from .issue_registry import IssueRecord, IssueRegistry
-from .tracker import PullRequestFeedback, PullRequestRef, TrackerAdapter
+from .tracker import (
+    PullRequestFeedback,
+    PullRequestFeedbackCapability,
+    PullRequestRef,
+    TrackerAdapter,
+    UserIdentityCapability,
+    supports,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +69,11 @@ class ReviewFeedbackService:
                 self._bot_login = explicit
                 self._bot_login_explicit = True
             else:
-                try:
-                    self._bot_login = await self.tracker.get_authenticated_user()
-                except Exception:
-                    pass
+                if supports(self.tracker, UserIdentityCapability):
+                    try:
+                        self._bot_login = await self.tracker.get_authenticated_user()
+                    except Exception:
+                        pass
             self._bot_login_resolved = True
             if self._bot_login:
                 logger.debug("Bot login resolved: %s", self._bot_login)
@@ -92,6 +100,8 @@ class ReviewFeedbackService:
                 number=record.pr_number,
                 url=record.pr_url,
             )
+            if not supports(self.tracker, PullRequestFeedbackCapability):
+                continue
             feedback = await self.tracker.fetch_pull_request_feedback(
                 pull_request=pull_request,
                 issue_id=record.issue_id,

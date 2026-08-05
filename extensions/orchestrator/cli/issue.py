@@ -2536,7 +2536,11 @@ def _mirror_intent_label(
     """
     if tracker is None:
         return False
-    method = getattr(tracker, "remove_label" if remove else "add_label", None)
+    from extensions.orchestrator.tracker import LabelCapability, supports
+
+    if not supports(tracker, LabelCapability):
+        return False
+    method = tracker.remove_label if remove else tracker.add_label
     if method is None:
         return False
     try:

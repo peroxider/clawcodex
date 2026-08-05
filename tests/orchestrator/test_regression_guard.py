@@ -17,7 +17,7 @@ from pathlib import Path
 
 from extensions.orchestrator.config.schema import AgentConfig, VerificationConfig
 from extensions.orchestrator.git_sync import GitSyncService, VerificationFailed
-from extensions.orchestrator.tracker import TrackerAdapter
+from extensions.orchestrator.tracker import Intent, TrackerAdapter
 
 
 class _NullTracker(TrackerAdapter):
@@ -32,6 +32,18 @@ class _NullTracker(TrackerAdapter):
 
     async def update_issue_state(self, issue_id, state):  # pragma: no cover
         return None
+
+    async def update_comment(self, issue_id, comment_id, body):  # pragma: no cover
+        return None
+
+    async def create_clarification_comment(self, issue_id, body, mentions=None):  # pragma: no cover
+        return None
+
+    async def extract_intent_from_labels(self, labels):  # pragma: no cover
+        return Intent.NONE
+
+    async def close_pull_request(self, pull_request):  # pragma: no cover
+        return False
 
 
 class _Session:

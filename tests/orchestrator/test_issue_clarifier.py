@@ -40,6 +40,9 @@ class FakeTracker:
         self.comments.append((issue_id, body))
         return SimpleNamespace(id=f"comment-{len(self.comments)}", body=body)
 
+    async def fetch_issue_comments(self, _issue_id):
+        return list(self.new_comments)
+
     async def fetch_new_comments_since(self, _issue_id, _since_comment_id):
         return list(self.new_comments)
 

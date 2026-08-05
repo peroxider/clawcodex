@@ -63,13 +63,18 @@ from extensions.orchestrator_runtime.adapters.clawcodex_compat import (
 )
 from .tracker import (
     Command,
+    CommandIntentCapability,
     Intent,
+    PullRequestCapability,
     PullRequestFeedback,
+    PullRequestFeedbackCapability,
+    PullRequestMaintenanceCapability,
     PullRequestRef,
     TrackerAdapter,
     command_to_intent,
     merge_intents,
     merge_intents_with_cli,
+    supports,
 )
 from .workspace import WorkspaceManager
 
@@ -1413,6 +1418,8 @@ class Orchestrator:
             return None
         record = self._registry.get(issue_id)
         cursor = record.command_cursor if record is not None else None
+        if not supports(self.tracker, CommandIntentCapability):
+            return None
         try:
             return await self.tracker.fetch_issue_command_intent(issue_id, cursor)
         except Exception as exc:
@@ -1971,6 +1978,8 @@ class Orchestrator:
                 number=record.pr_number,
                 url=record.pr_url,
             )
+            if not supports(self.tracker, PullRequestMaintenanceCapability):
+                continue
             try:
                 status = await self.tracker.fetch_pull_request_mergeable(pr_ref)
             except Exception as exc:
@@ -2632,7 +2641,7 @@ class Orchestrator:
                 return
             # Check for existing PR (only for repository-backed trackers)
             branch_name = refreshed_issue.branch_name
-            if branch_name and hasattr(self.tracker, "find_pull_request"):
+            if branch_name and supports(self.tracker, PullRequestCapability):
                 base_branch = getattr(refreshed_issue, "base_branch", "main") or "main"
                 existing_pr = await self.tracker.find_pull_request(
                     head_branch=branch_name,
@@ -3930,6 +3939,8 @@ class Orchestrator:
         feedback_ids = set(getattr(session, "feedback_ids", []))
         if pull_request is None or not feedback_ids:
             return
+        if not supports(self.tracker, PullRequestFeedbackCapability):
+            return
         try:
             feedback = await self.tracker.fetch_pull_request_feedback(
                 pull_request=pull_request,
@@ -3971,6 +3982,8 @@ class Orchestrator:
         record = self._registry.get(session.issue.id or "")
         attempt = record.followup_attempt_count if record else 1
 
+        if not supports(self.tracker, PullRequestFeedbackCapability):
+            return
         try:
             all_feedback = await self.tracker.fetch_pull_request_feedback(
                 pull_request=pull_request,
@@ -4038,6 +4051,8 @@ class Orchestrator:
             branch_name=record.branch_name,
         )
         feedback_items: list[PullRequestFeedback] = []
+        if not supports(self.tracker, PullRequestFeedbackCapability):
+            return
         try:
             all_feedback = await self.tracker.fetch_pull_request_feedback(
                 pull_request=pull_request,

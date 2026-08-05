@@ -1,4 +1,17 @@
-"""Tracker adapter protocol for issue tracker backends."""
+"""Tracker adapter protocol for issue tracker backends.
+
+The tracker layer is split into a **core contract** (``TrackerAdapter``,
+methods every backend must implement) and **capability protocols**
+(``PullRequestCapability``, ``LabelCapability``, ...) for optional feature
+groups.  Callers must check ``supports(tracker, SomeCapability)`` before
+invoking a capability method; unsupported trackers simply do not have the
+method instead of returning a silent no-op.
+
+This replaces the previous design where every optional method defaulted to
+``None`` / ``False`` — callers could not distinguish "not supported" from
+"failed".  The refactor assumes all adapters ship together in the same
+release, so cross-version back-compat defaults are no longer needed.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +19,7 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 from .issue import Issue
 
@@ -349,7 +362,13 @@ class MergeableStatus:
 
 
 class TrackerAdapter(ABC):
-    """Adapter boundary for issue tracker reads and writes."""
+    """Core adapter contract: methods every tracker backend must implement.
+
+    Optional feature groups live in the capability protocols below
+    (``PullRequestCapability`` etc.).  Use :func:`supports` to test
+    whether a concrete adapter implements a capability before calling it —
+    unsupported trackers simply lack the method.
+    """
 
     @abstractmethod
     async def fetch_candidate_issues(self) -> list[Issue]:
@@ -370,105 +389,18 @@ class TrackerAdapter(ABC):
     async def update_issue_state(self, issue_id: str, state: str) -> None:
         """Transition issue to a new state."""
 
-    async def ensure_pull_request(
-        self,
-        *,
-        issue: Issue,
-        head_branch: str,
-        base_branch: str,
-        title: str,
-        body: str,
-    ) -> "PullRequestRef | None":
-        """Ensure a pull request exists for the branch."""
-        return None
+    # -- comment & clarification (implemented by every backend) --
 
-    async def update_pull_request(
-        self,
-        *,
-        pull_request: "PullRequestRef",
-        title: str | None = None,
-        body: str | None = None,
-    ) -> "PullRequestRef | None":
-        """Update pull request metadata when supported."""
-        return None
-
-    async def get_authenticated_user(self) -> str | None:
-        """Return the platform login of the token owner, if detectable."""
-        return None
-
+    @abstractmethod
     async def update_comment(
         self,
         issue_id: str,
         comment_id: str,
         body: str,
     ) -> "Comment | None":
-        """Update an existing issue comment when supported."""
-        return None
+        """Update an existing issue comment."""
 
-    async def fetch_pull_request_mergeable(
-        self,
-        pull_request: "PullRequestRef",
-    ) -> "MergeableStatus | None":
-        """Fetch a normalized PR mergeability report.
-
-        Returns ``None`` if the platform does not expose the
-        required fields (e.g. GitCode with JS-rendered merge
-        status). The default implementation returns ``None`` so
-        existing adapters (Linear, LocalTracker) opt out by
-        inheritance. ``RepositoryTrackerAdapter`` overrides this
-        to delegate to the underlying client.
-        """
-        return None
-
-    async def find_pull_request(
-        self,
-        *,
-        head_branch: str,
-        base_branch: str,
-    ) -> "PullRequestRef | None":
-        """Check if a pull request already exists for the given branch.
-
-        Used as a guard to skip already-handled issues before launching a new agent run.
-        """
-        return None
-
-    async def fetch_pull_request_feedback(
-        self,
-        *,
-        pull_request: "PullRequestRef",
-        issue_id: str | None = None,
-        include_ci_failures: bool = True,
-        max_log_chars_per_check: int = 12_000,
-    ) -> list[PullRequestFeedback]:
-        """Fetch review feedback and CI failures for a pull request."""
-        return []
-
-    async def reply_to_pull_request_feedback(
-        self,
-        *,
-        pull_request: "PullRequestRef",
-        feedback: PullRequestFeedback,
-        body: str,
-        issue_id: str | None = None,
-    ) -> "Comment | None":
-        """Reply to a pull request feedback item after a follow-up run."""
-        return None
-
-    async def fetch_issue_comments(self, issue_id: str) -> list["Comment"]:
-        """Fetch all comments on an issue for clarification polling."""
-        return []
-
-    async def fetch_new_comments_since(
-        self,
-        issue_id: str,
-        since_comment_id: str | None,
-    ) -> list["Comment"]:
-        """Fetch comments newer than a given comment ID (for incremental polling).
-
-        Returns comments sorted oldest-first so the caller can process them in order.
-        """
-        return []
-
+    @abstractmethod
     async def create_clarification_comment(
         self,
         issue_id: str,
@@ -485,122 +417,28 @@ class TrackerAdapter(ABC):
         Returns:
             The created comment, or None if not supported.
         """
-        return None
 
-    def add_label(self, issue_id: str, label: str) -> bool:
-        """Add a label to an issue. Defaults to return False (unsupported tracker no-op).
-
-        Args:
-            issue_id: the issue to label
-            label: the label name to add (e.g. ``"agent:awaiting-clarification"``)
-
-        Returns:
-            True if the label was added, False if the operation is not supported.
-        """
-        return False
-
-    def remove_label(self, issue_id: str, label: str) -> bool:
-        """Remove a label from an issue. Defaults to return False.
-
-        Args:
-            issue_id: the issue to unlabel
-            label: the label name to remove
-
-        Returns:
-            True if the label was removed (or didn't exist), False if not supported.
-        """
-        return False
-
+    @abstractmethod
     async def extract_intent_from_labels(
         self,
         labels: list[str] | None,
     ) -> Intent:
-        """Resolve an operator Intent from the issue's label set.
+        """Resolve an operator Intent from the issue's label set (F-39).
 
-        Default implementation is a no-op (returns Intent.NONE) — it has
-        no platform-specific label conventions. Subclasses that ship
-        labels through ``Issue.labels`` should override this to apply
-        platform-specific intent label resolution.
-
-        See ``intent_from_label_set`` for the priority rules.
+        Adapters apply platform-specific label conventions; the shared
+        priority rules live in ``intent_from_label_set``.
         """
-        return Intent.NONE
 
-    async def add_label(self, issue_id: str, label: str) -> bool:
-        """Add a single label to a remote issue.
-
-        Default implementation is a no-op (returns False) — adapters
-        that do not support label management can leave this alone.
-        The CLI retry path uses this to mirror the
-        ``clawcodex-dev orchestrator issue retry --mode reset``
-        operator intent onto the remote issue so that label-based
-        intent resolution also sees the change.
-
-        Returns True if the label is now present on the issue
-        (whether the adapter added it or it was already there).
-        Returns False if the adapter cannot modify labels.
-        """
-        return False
-
-    async def remove_label(self, issue_id: str, label: str) -> bool:
-        """Remove a single label from a remote issue.
-
-        Default implementation is a no-op (returns False) — see
-        :meth:`add_label` for the rationale. Used by
-        ``--mode unblock`` to drop ``agent:blocked`` once the
-        operator has decided the issue is unblocked.
-
-        Returns True if the label is now absent from the issue
-        (whether the adapter removed it or it was already gone).
-        Returns False if the adapter cannot modify labels.
-        """
-        return False
-
+    @abstractmethod
     async def close_pull_request(
         self,
         pull_request: "PullRequestRef",
     ) -> bool:
-        """Close a remote pull request (reset path).
+        """Close a remote pull request (F-39 Sub-B reset path).
 
-        Default implementation is a no-op (returns False). Subclasses
-        for platforms that support closing a PR (GitHub, Gitee, GitCode
-        via ``PATCH /repos/{owner}/{repo}/pulls/{number}`` with
-        ``{"state": "closed"}``) should override and return True on
-        success.
-
-        Returns True if the PR was closed (or was already closed).
-        Returns False if the platform does not support PR closure.
+        Returns True if the PR was closed (or was already closed),
+        False if the platform does not support PR closure.
         """
-        return False
-
-    async def fetch_issue_command_intent(
-        self,
-        issue_id: str,
-        since_comment_id: str | None,
-    ) -> "CommandIntent | None":
-        """Scan recent issue comments for a ``/agent ...`` command.
-
-        Default implementation returns None (no command found). Subclasses
-        that can fetch issue comments should override this to call
-        ``fetch_new_comments_since(issue_id, since_comment_id)``, iterate
-        the results oldest-first, and return the first ``Command`` returned
-        by ``parse_agent_command(body)``. The returned ``CommandIntent``
-        MUST include the comment's ``author_login`` (role check) and
-        ``comment_id`` (for the ``command_cursor``).
-
-        Back-compat note: callers that only need the ``Command`` value
-        should read ``intent.command``.
-
-        Operators can pass ``since_comment_id=None`` to scan the full
-        comment history; the orchestrator will typically pass the
-        most recent ``IssueRecord.command_cursor`` so already-
-        processed commands are skipped.
-
-        Returns the first ``CommandIntent`` found, or ``None`` if no
-        command is present in the unscanned portion of the comment
-        stream.
-        """
-        return None
 
 
 @dataclass(frozen=True)
@@ -610,6 +448,173 @@ class PullRequestRef:
     number: str | None = None
     url: str | None = None
     title: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Capability protocols — optional feature groups
+# ---------------------------------------------------------------------------
+#
+# A concrete adapter structurally satisfies a capability when it implements
+# every method of the protocol (duck-typed via ``runtime_checkable``).
+# Callers gate capability use behind :func:`supports`.
+
+
+@runtime_checkable
+class PullRequestCapability(Protocol):
+    """PR creation & lookup.  Implemented by local + repo trackers."""
+
+    async def ensure_pull_request(
+        self,
+        *,
+        issue: Issue,
+        head_branch: str,
+        base_branch: str,
+        title: str,
+        body: str,
+    ) -> "PullRequestRef | None":
+        """Ensure a pull request exists for the branch."""
+
+    async def find_pull_request(
+        self,
+        *,
+        head_branch: str,
+        base_branch: str,
+    ) -> "PullRequestRef | None":
+        """Check if a pull request already exists for the given branch."""
+
+
+@runtime_checkable
+class PullRequestMaintenanceCapability(Protocol):
+    """PR metadata update / mergeability probing.
+
+    Implemented by repo trackers (GitHub / Gitee / GitCode).
+    """
+
+    async def update_pull_request(
+        self,
+        *,
+        pull_request: "PullRequestRef",
+        title: str | None = None,
+        body: str | None = None,
+    ) -> "PullRequestRef | None":
+        """Update pull request metadata."""
+
+    async def fetch_pull_request_mergeable(
+        self,
+        pull_request: "PullRequestRef",
+    ) -> "MergeableStatus | None":
+        """Fetch a normalized PR mergeability report (F-120)."""
+
+
+@runtime_checkable
+class PullRequestFeedbackCapability(Protocol):
+    """PR review feedback fetch & reply.
+
+    Implemented by repo trackers (GitHub / Gitee / GitCode).
+    """
+
+    async def fetch_pull_request_feedback(
+        self,
+        *,
+        pull_request: "PullRequestRef",
+        issue_id: str | None = None,
+        include_ci_failures: bool = True,
+        max_log_chars_per_check: int = 12_000,
+    ) -> list["PullRequestFeedback"]:
+        """Fetch review feedback and CI failures for a pull request."""
+
+    async def reply_to_pull_request_feedback(
+        self,
+        *,
+        pull_request: "PullRequestRef",
+        feedback: "PullRequestFeedback",
+        body: str,
+        issue_id: str | None = None,
+    ) -> "Comment | None":
+        """Reply to a pull request feedback item after a follow-up run."""
+
+
+@runtime_checkable
+class UserIdentityCapability(Protocol):
+    """Platform identity of the token owner (repo trackers)."""
+
+    async def get_authenticated_user(self) -> str | None:
+        """Return the platform login of the token owner, if detectable."""
+
+
+@runtime_checkable
+class LabelCapability(Protocol):
+    """Issue label management.  Implemented by local + repo trackers."""
+
+    async def add_label(self, issue_id: str, label: str) -> bool:
+        """Add a single label to an issue (F-39 Sub-E / F-124-P2).
+
+        Returns True if the label is now present, False if the adapter
+        cannot modify labels.
+        """
+
+    async def remove_label(self, issue_id: str, label: str) -> bool:
+        """Remove a single label from an issue.
+
+        Returns True if the label is now absent, False if the adapter
+        cannot modify labels.
+        """
+
+
+@runtime_checkable
+class CommandIntentCapability(Protocol):
+    """Issue comment command scanning (F-39 Sub-D + Sub-F)."""
+
+    async def fetch_issue_command_intent(
+        self,
+        issue_id: str,
+        since_comment_id: str | None,
+    ) -> "CommandIntent | None":
+        """Scan recent issue comments for a ``/agent ...`` command.
+
+        Returns the first ``CommandIntent`` found, or ``None`` if no
+        command is present in the unscanned portion of the comment
+        stream.  The returned ``CommandIntent`` MUST include the
+        comment's ``author_login`` (F-39 Sub-F role check) and
+        ``comment_id`` (for the ``command_cursor``).
+        """
+
+
+@runtime_checkable
+class CommentHistoryCapability(Protocol):
+    """Issue comment history for clarification polling."""
+
+    async def fetch_issue_comments(self, issue_id: str) -> list["Comment"]:
+        """Fetch all comments on an issue for clarification polling."""
+
+    async def fetch_new_comments_since(
+        self,
+        issue_id: str,
+        since_comment_id: str | None,
+    ) -> list["Comment"]:
+        """Fetch comments newer than a given comment ID (incremental polling).
+
+        Returns comments sorted oldest-first so the caller can process
+        them in order.
+        """
+
+
+def supports(adapter: TrackerAdapter, capability: type) -> bool:
+    """Return True if ``adapter`` implements the given capability protocol.
+
+    Structural check: an adapter satisfies a capability when it defines
+    every method of the protocol.  Unsupported trackers simply lack the
+    method — callers must gate capability use behind this check.
+
+    Uses ``getattr`` (not ``runtime_checkable``'s static ``isinstance``)
+    so dynamically-mocked adapters (``MagicMock`` in tests) are detected
+    correctly: ``__getattr__``-generated methods count as present, and
+    real adapters are matched by the same duck-typed rule.
+    """
+    required = getattr(capability, "__protocol_attrs__", None)
+    if required is None:
+        return isinstance(adapter, capability)
+    return all(callable(getattr(adapter, name, None)) for name in required)
 
 
 # ---------------------------------------------------------------------------

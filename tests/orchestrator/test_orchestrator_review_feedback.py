@@ -103,6 +103,16 @@ class _FakeTracker:
         self.feedback_calls.append((issue_id, pull_request.number if pull_request.number else None))
         return list(self._feedback.get(issue_id, []))
 
+    async def reply_to_pull_request_feedback(
+        self,
+        *,
+        pull_request: PullRequestRef,
+        feedback: PullRequestFeedback,
+        body: str,
+        issue_id: str | None = None,
+    ) -> None:
+        return None
+
     async def get_authenticated_user(self) -> str:
         self.user_calls += 1
         return "clawcodex-bot"

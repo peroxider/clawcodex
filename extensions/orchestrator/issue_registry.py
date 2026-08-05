@@ -17,7 +17,7 @@ import tempfile
 import time
 from collections.abc import Mapping
 from contextlib import suppress
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
 
@@ -57,6 +57,10 @@ class IssueRecord:
 
     issue_id: str
     issue_identifier: str
+    # File-format version guard. All writers ship the same release, so
+    # this is a forward guard only: a registry written by a NEWER build
+    # refuses to load in this build instead of silently misreading.
+    schema_version: int = 1
     branch_name: str | None = None
     commit_sha: str | None = None
     pr_number: str | None = None
@@ -208,38 +212,27 @@ class IssueRegistry:
     def _load(self) -> None:
         if not self._path.exists():
             return
-        try:
-            data = json.loads(self._path.read_text(encoding="utf-8"))
-            self._records = {}
-            for k, v in data.items():
-                # Convert status string to IssueStatus enum
-                if isinstance(v.get("status"), str):
-                    v = dict(v)
-                    try:
-                        v["status"] = IssueStatus(v["status"])
-                    except ValueError:
-                        v["status"] = IssueStatus.PENDING
-                # Convert intent string to Intent enum (back-compat:
-                # records written before intent support have no
-                # `intent` field, so
-                # the dict-comprehension filter below drops it and the
-                # dataclass default Intent.NONE kicks in).
-                if isinstance(v.get("intent"), str):
-                    v = dict(v)
-                    try:
-                        v["intent"] = Intent(v["intent"])
-                    except ValueError:
-                        v["intent"] = Intent.NONE
-                known_fields = {field.name for field in fields(IssueRecord)}
-                self._records[k] = IssueRecord(
-                    **{
-                        field_name: value
-                        for field_name, value in v.items()
-                        if field_name in known_fields
-                    }
+        data = json.loads(self._path.read_text(encoding="utf-8"))
+        self._records = {}
+        for k, v in data.items():
+            v = dict(v)
+            file_version = int(v.pop("schema_version", 1))
+            if file_version > IssueRecord.schema_version:
+                raise ValueError(
+                    f"registry {self._path} schema_version={file_version} "
+                    f"newer than supported {IssueRecord.schema_version}; "
+                    "refusing to load (upgrade the code first)"
                 )
-        except Exception as exc:
-            logger.warning("Failed to load issue registry: %s — starting fresh", exc)
+            # Convert status / intent strings to their enum values. Strict:
+            # an unknown value raises instead of silently falling back.
+            if isinstance(v.get("status"), str):
+                v["status"] = IssueStatus(v["status"])
+            if isinstance(v.get("intent"), str):
+                v["intent"] = Intent(v["intent"])
+            # Strict construction: any key not on IssueRecord raises a
+            # TypeError, so a corrupted / foreign registry file surfaces
+            # loudly instead of being silently dropped.
+            self._records[k] = IssueRecord(**v)
 
     def _save(self) -> None:
         tmp_path: Path | None = None

@@ -12,7 +12,7 @@ from extensions.orchestrator.config.schema import WorkflowConfig
 from extensions.orchestrator.issue import Issue
 from extensions.orchestrator.issue_registry import IssueRegistry, IssueStatus
 from extensions.orchestrator.orchestrator import Orchestrator
-from extensions.orchestrator.tracker import TrackerAdapter
+from extensions.orchestrator.tracker import Intent, TrackerAdapter
 from extensions.orchestrator.workspace import Workspace, WorkspaceConfig, WorkspaceManager
 
 
@@ -30,6 +30,20 @@ class _Tracker(TrackerAdapter):
 
     async def update_issue_state(self, issue_id: str, state: str) -> None:
         return None
+
+    async def update_comment(self, issue_id: str, comment_id: str, body: str) -> Any:
+        return None
+
+    async def create_clarification_comment(
+        self, issue_id: str, body: str, mentions: list[str] | None = None
+    ) -> Any:
+        return None
+
+    async def extract_intent_from_labels(self, labels: list[str] | None) -> Intent:
+        return Intent.NONE
+
+    async def close_pull_request(self, pull_request: Any) -> bool:
+        return False
 
 
 class _HangingRunner:
