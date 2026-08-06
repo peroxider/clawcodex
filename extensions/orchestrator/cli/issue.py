@@ -1273,6 +1273,16 @@ def _run_show(registry_path: Path | None, args: argparse.Namespace) -> int:
     print(f"  Commit SHA     : {record.commit_sha or '-'}")
     print(f"  PR Number      : {record.pr_number or '-'}")
     print(f"  PR URL         : {record.pr_url or '-'}")
+    pr_created = getattr(record, "pr_created_at", None)
+    if pr_created:
+        pr_created_text = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(pr_created))
+        # Time from issue claim to first PR creation — the orchestrator's
+        # key "issue → PR" latency metric for leadership reporting.
+        latency_s = pr_created - record.created_at
+        print(f"  PR Created     : {pr_created_text}")
+        print(f"  Issue→PR Time  : {latency_s:.0f}s")
+    else:
+        print(f"  PR Created     : -")
     print(f"  Attempts       : {record.attempt_count}")
     print(f"  Run ID         : {getattr(record, 'run_id', None) or '-'}")
     print(

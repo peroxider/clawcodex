@@ -128,6 +128,7 @@ class StateMachineMixin:
             record.commit_sha = existing.commit_sha
             record.pr_number = existing.pr_number
             record.pr_url = existing.pr_url
+            record.pr_created_at = existing.pr_created_at
             record.report_path = existing.report_path
             record.verification_status = existing.verification_status
             record.verification_output = existing.verification_output
@@ -204,6 +205,12 @@ class StateMachineMixin:
         if commit_sha is not None:
             record.commit_sha = commit_sha
         if pr_number is not None:
+            # First PR creation for this issue: record the wall-clock
+            # timestamp. Follow-up / review-feedback runs reuse the same
+            # PR and pass the same pr_number — the guard keeps the
+            # original "first PR created" time intact.
+            if record.pr_number is None and record.pr_created_at is None:
+                record.pr_created_at = time.time()
             record.pr_number = pr_number
         if pr_url is not None:
             record.pr_url = pr_url

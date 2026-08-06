@@ -289,6 +289,37 @@ class TestStatusMutations(unittest.TestCase):
         self.assertEqual(result.commit_sha, "b")
         self.assertEqual(result.branch_name, "feat/x")
 
+    def test_mark_synced_records_pr_created_at_once(self) -> None:
+        # First PR creation stamps pr_created_at.
+        result = self.registry.mark_synced(
+            "i1", branch_name="feat/x", commit_sha="a", pr_number=1, pr_url="https://x/pull/1"
+        )
+        self.assertIsNotNone(result.pr_created_at)
+        first_created = result.pr_created_at
+        # Re-sync with the SAME PR must NOT overwrite the first timestamp.
+        result2 = self.registry.mark_synced("i1", commit_sha="b", pr_number=1)
+        self.assertEqual(result2.pr_created_at, first_created)
+        # A different PR number (retry reusing a new PR) resets the clock.
+        result3 = self.registry.mark_synced("i1", commit_sha="c", pr_number=2)
+        self.assertIsNotNone(result3.pr_created_at)
+        self.assertGreaterEqual(result3.pr_created_at, first_created)
+
+    def test_pr_created_at_survives_re_register_and_retry_reset(self) -> None:
+        # Stamp a PR first.
+        self.registry.mark_synced(
+            "i1", branch_name="feat/x", commit_sha="a", pr_number=1, pr_url="https://x/pull/1"
+        )
+        # Re-register (e.g. daemon relaunch) must preserve pr_created_at.
+        self.registry.register("i1", "ISSUE-1", branch_name="feat/x", base_branch="main")
+        rec = self.registry.get("i1")
+        self.assertIsNotNone(rec.pr_created_at)
+        preserved = rec.pr_created_at
+        # reset_for_retry must clear pr_created_at so the clock restarts.
+        self.registry.reset_for_retry("i1")
+        rec2 = self.registry.get("i1")
+        self.assertIsNone(rec2.pr_created_at)
+        self.assertIsNone(rec2.pr_number)
+
     def test_mark_synced_missing_returns_none(self) -> None:
         self.assertIsNone(self.registry.mark_synced("missing"))
 
