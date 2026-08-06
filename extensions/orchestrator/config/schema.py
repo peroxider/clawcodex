@@ -708,6 +708,19 @@ class AgentConfig:
     # spawned by the orchestrator. Values override inherited daemon
     # env, so ``PATH`` can be extended without breaking the host.
     env: dict[str, str] = field(default_factory=dict)
+    # Three-channel clarification flow tuning. These map 1:1 onto
+    # ``ClarificationConfig`` fields consumed in orchestrator.py
+    # (``getattr(workflow.agent, ...)``). Defaults mirror the module-level
+    # ``_DEFAULT_*`` constants in extensions/orchestrator/clarification.py
+    # — keep them in sync when retuning.
+    clarification_enabled: bool = True
+    clarification_timeout_local: float = 30 * 60  # 30 minutes for local channels
+    clarification_timeout_author: float = 72 * 3600  # 72 hours for author channel
+    max_questions_per_issue: int = 3
+    clarification_operator_priority: bool = True  # operator answers beat author
+    clarification_simultaneous_grace_ms: float = 5000  # 5 seconds for "tied" answers
+    # What to do when all three channels time out: "skip" | "mark_failed" | "notify"
+    clarification_escalation: str = "skip"
 
 
 @dataclass
@@ -1176,12 +1189,30 @@ class WorkflowConfig:
             # Per-turn tool cap: schema default was 50 but ``from_dict`` did not
             # forward the YAML value, so workflow.md edits were ignored.
             max_tools_per_turn=int(agent_raw.get("max_tools_per_turn", 50)),
-            # F-40 root-cause fix: model name override.
+            # Root-cause fix: model name override.
             model=_resolve_env_value(agent_raw.get("model")) or None,
             # Multi-model stage overrides (parsed above).
             stage_overrides=stage_overrides,
             # Per-run env vars merged into Bash/hook subprocess env.
             env={str(k): str(v) for k, v in (agent_raw.get("env") or {}).items() if v is not None},
+            # Three-channel clarification flow tuning. Keys mirror the
+            # ``getattr(workflow.agent, ...)`` reads in orchestrator.py;
+            # defaults mirror the ``_DEFAULT_*`` constants in clarification.py.
+            clarification_enabled=bool(agent_raw.get("clarification_enabled", True)),
+            clarification_timeout_local=float(
+                agent_raw.get("clarification_timeout_local", 30 * 60)
+            ),
+            clarification_timeout_author=float(
+                agent_raw.get("clarification_timeout_author", 72 * 3600)
+            ),
+            max_questions_per_issue=int(agent_raw.get("max_questions_per_issue", 3)),
+            clarification_operator_priority=bool(
+                agent_raw.get("clarification_operator_priority", True)
+            ),
+            clarification_simultaneous_grace_ms=float(
+                agent_raw.get("clarification_simultaneous_grace_ms", 5000)
+            ),
+            clarification_escalation=str(agent_raw.get("clarification_escalation", "skip")),
         )
         if workspace.strategy == "sequential":
             if agent.max_concurrent_agents != 1:
