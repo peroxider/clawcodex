@@ -83,7 +83,7 @@ class IssueRecord:
     # Clarification-related fields (for three-channel clarification flow)
     clarification_status: str | None = None  # ClarificationStatus value
     question_history: list[str] = field(default_factory=list)
-    # F-124 pre-dispatch clarity gate. ``question_history`` remains the
+    # Pre-dispatch clarity gate. ``question_history`` remains the
     # append-only audit trail; ``open_questions`` is the current unresolved set.
     open_questions: list[str] = field(default_factory=list)
     clarification_round: int = 0
@@ -109,12 +109,12 @@ class IssueRecord:
     followup_attempt_count: int = 0
     last_followup_commit_sha: str | None = None
     last_feedback_checked_at: float | None = None
-    # F-39: operator intent + retry bookkeeping.
+    # Operator intent + retry bookkeeping.
     intent: Intent = Intent.NONE
     retry_count: int = 0
     last_command: str | None = None
     intent_source: str | None = None  # "label" | "command" | "cli"
-    # F-39 Sub-D: comment-command incremental-scan cursor.
+    # Comment-command incremental-scan cursor.
     command_cursor: str | None = None
     run_id: str | None = None
     debug_log_path: str | None = None
@@ -137,12 +137,12 @@ class IssueRecord:
     collaboration_mode: str = "single"
     # Why that mode was picked — for operator audit.
     mode_decision_reason: str | None = None
-    # F-120: PR conflict persistence.
+    # PR conflict persistence.
     has_conflict: bool = False
     conflict_files: list[str] = field(default_factory=list)
     rebase_attempt_count: int = 0
     last_rebase_attempt_at: float | None = None
-    # F-129 pause reason recorded when the issue is paused by an operator
+    # Pause reason recorded when the issue is paused by an operator
     # control command. Set by mark_paused(); cleared by mark_resumed().
     pause_reason: str = ""
 

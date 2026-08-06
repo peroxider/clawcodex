@@ -1,4 +1,4 @@
-"""Small persistent fingerprint cache for F-124 analysis results."""
+"""Small persistent fingerprint cache for issue clarity analysis results."""
 
 from __future__ import annotations
 

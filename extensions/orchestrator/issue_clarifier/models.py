@@ -1,4 +1,4 @@
-"""Data structures returned by the F-124 issue clarifier."""
+"""Data structures returned by the issue clarifier."""
 
 from __future__ import annotations
 

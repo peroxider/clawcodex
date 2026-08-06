@@ -1,4 +1,4 @@
-"""Strict-but-fail-open response parsing for F-124."""
+"""Strict-but-fail-open response parsing for issue clarity analysis."""
 
 from __future__ import annotations
 

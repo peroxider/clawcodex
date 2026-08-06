@@ -1,4 +1,4 @@
-"""Orchestrator dispatch gate that connects F-124 to the existing resolver."""
+"""Orchestrator dispatch gate that connects issue clarity analysis to the existing resolver."""
 
 from __future__ import annotations
 
@@ -100,7 +100,7 @@ class IssueClarificationGate:
         max_analyses = max(1, int(getattr(self.config, "max_analyses_per_poll", 4)))
         if self._analyses_this_poll >= max_analyses:
             logger.info(
-                "Deferring F-124 analysis for issue %s: per-poll budget %d exhausted",
+                "Deferring issue-clarifier analysis for issue %s: per-poll budget %d exhausted",
                 issue_id,
                 max_analyses,
             )
@@ -119,7 +119,7 @@ class IssueClarificationGate:
         return await self._apply_result(issue, result, replies)
 
     def _workspace_focus_for_followup(self, issue: "Issue") -> list[dict] | None:
-        """F-124-L: 在 follow-up 模式下计算 workspace focus 作为澄清上下文富化。
+        """在 follow-up 模式下计算 workspace focus 作为澄清上下文富化。
 
         仅在以下条件全部满足时返回非空列表：
         - workspace_focus_enabled=True

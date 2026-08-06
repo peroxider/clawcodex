@@ -102,40 +102,6 @@ class ClarificationQueue:
         self._records: dict[str, ClarificationItem] = {}
         self._load()
 
-    # ------------------------------------------------------------------
-    # Persistence
-    # ------------------------------------------------------------------
-
-    def _load(self) -> None:
-        if not self._path.exists():
-            return
-        try:
-            data = json.loads(self._path.read_text(encoding="utf-8"))
-            self._records = {k: ClarificationItem(**v) for k, v in data.items()}
-        except Exception as exc:
-            logger.warning(
-                "Failed to load clarification queue: %s — starting fresh",
-                exc,
-            )
-
-    def _save(self) -> None:
-        try:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
-            self._path.write_text(
-                json.dumps(
-                    {k: asdict(v) for k, v in self._records.items()},
-                    indent=2,
-                    ensure_ascii=False,
-                ),
-                encoding="utf-8",
-            )
-        except Exception as exc:
-            logger.warning("Failed to save clarification queue: %s", exc)
-
-    # ------------------------------------------------------------------
-    # Queries
-    # ------------------------------------------------------------------
-
     def get(self, issue_id: str) -> ClarificationItem | None:
         return self._records.get(issue_id)
 
@@ -204,10 +170,6 @@ class ClarificationQueue:
         if item is None:
             return []
         return item.stale_answers
-
-    # ------------------------------------------------------------------
-    # Mutations
-    # ------------------------------------------------------------------
 
     def enqueue(
         self,
@@ -478,3 +440,29 @@ class ClarificationQueue:
             item.touch()
         self._save()
         return item
+
+    def _load(self) -> None:
+        if not self._path.exists():
+            return
+        try:
+            data = json.loads(self._path.read_text(encoding="utf-8"))
+            self._records = {k: ClarificationItem(**v) for k, v in data.items()}
+        except Exception as exc:
+            logger.warning(
+                "Failed to load clarification queue: %s — starting fresh",
+                exc,
+            )
+
+    def _save(self) -> None:
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._path.write_text(
+                json.dumps(
+                    {k: asdict(v) for k, v in self._records.items()},
+                    indent=2,
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            logger.warning("Failed to save clarification queue: %s", exc)

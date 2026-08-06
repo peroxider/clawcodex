@@ -241,7 +241,7 @@ class TrackerAdapter(ABC):
         self,
         labels: list[str] | None,
     ) -> Intent:
-        """Resolve an operator Intent from the issue's label set (F-39).
+        """Resolve an operator Intent from the issue's label set.
 
         Adapters apply platform-specific label conventions; the shared
         priority rules live in ``intent_from_label_set``.
@@ -252,7 +252,7 @@ class TrackerAdapter(ABC):
         self,
         pull_request: "PullRequestRef",
     ) -> bool:
-        """Close a remote pull request (F-39 Sub-B reset path).
+        """Close a remote pull request (reset path).
 
         Returns True if the PR was closed (or was already closed),
         False if the platform does not support PR closure.
@@ -322,7 +322,7 @@ class PullRequestMaintenanceCapability(Protocol):
         self,
         pull_request: "PullRequestRef",
     ) -> "MergeableStatus | None":
-        """Fetch a normalized PR mergeability report (F-120)."""
+        """Fetch a normalized PR mergeability report."""
 
 
 @runtime_checkable
@@ -366,7 +366,7 @@ class LabelCapability(Protocol):
     """Issue label management.  Implemented by local + repo trackers."""
 
     async def add_label(self, issue_id: str, label: str) -> bool:
-        """Add a single label to an issue (F-39 Sub-E / F-124-P2).
+        """Add a single label to an issue.
 
         Returns True if the label is now present, False if the adapter
         cannot modify labels.
@@ -382,7 +382,7 @@ class LabelCapability(Protocol):
 
 @runtime_checkable
 class CommandIntentCapability(Protocol):
-    """Issue comment command scanning (F-39 Sub-D + Sub-F)."""
+    """Issue comment command scanning."""
 
     async def fetch_issue_command_intent(
         self,
@@ -394,7 +394,7 @@ class CommandIntentCapability(Protocol):
         Returns the first ``CommandIntent`` found, or ``None`` if no
         command is present in the unscanned portion of the comment
         stream.  The returned ``CommandIntent`` MUST include the
-        comment's ``author_login`` (F-39 Sub-F role check) and
+        comment's ``author_login`` (for the role check) and
         ``comment_id`` (for the ``command_cursor``).
         """
 

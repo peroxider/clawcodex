@@ -1,4 +1,4 @@
-"""LLM-backed static issue clarity analysis for F-124."""
+"""LLM-backed static issue clarity analysis."""
 
 from __future__ import annotations
 

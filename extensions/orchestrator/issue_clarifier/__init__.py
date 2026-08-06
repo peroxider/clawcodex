@@ -1,4 +1,4 @@
-"""Pre-dispatch issue clarity analysis (F-124)."""
+"""Pre-dispatch issue clarity analysis."""
 
 from .cache import ClarifierCache, build_fingerprint
 from .gate import IssueClarificationGate

@@ -1,4 +1,4 @@
-"""Prompt construction for F-124 issue clarity analysis."""
+"""Prompt construction for issue clarity analysis."""
 
 from __future__ import annotations
 

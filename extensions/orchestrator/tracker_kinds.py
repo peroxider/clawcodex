@@ -16,6 +16,10 @@ if TYPE_CHECKING:
     from .tracker import TrackerAdapter
 
 
+# Supported tracker kinds — adapters accept these in ``tracker.kind``.
+SUPPORTED_TRACKERS = frozenset({"linear", "github", "gitee", "gitcode", "local"})
+
+
 @dataclass(frozen=True)
 class TrackerKindInfo:
     """Static metadata used by config validation and adapter creation."""
@@ -30,10 +34,6 @@ class TrackerKindInfo:
     assignee_env_vars: tuple[str, ...] = ()
     requires_project_slug: bool = False
     requires_repository: bool = False
-
-
-# Supported tracker kinds — adapters accept these in ``tracker.kind``.
-SUPPORTED_TRACKERS = frozenset({"linear", "github", "gitee", "gitcode", "local"})
 
 
 class TrackerConfigError(ValueError):

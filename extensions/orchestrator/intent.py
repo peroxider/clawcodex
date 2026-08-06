@@ -11,6 +11,24 @@ from __future__ import annotations
 import re
 from enum import Enum
 
+# Default label conventions for the three retry intents. Adapters accept an
+# override at construction time; the keys map Intent values to label names.
+DEFAULT_INTENT_LABELS: dict[str, str] = {
+    "retry": "agent:retry",
+    "followup": "agent:follow-up",
+    "blocked": "agent:blocked",
+    "rebase": "agent:rebase",
+}
+
+
+# Regex for ``/agent <subcommand> [args]`` at the start of a line / body.
+# Permissive trailing text: any args / reason after the subcommand.
+# Includes ``rebase`` in the recognized subcommand set.
+_AGENT_COMMAND_RE = re.compile(
+    r"^/agent\s+(retry|follow-up|unblock|rebase)\b[^\n]*",
+    re.IGNORECASE | re.MULTILINE,
+)
+
 
 class Intent(str, Enum):
     """Operator intent expressed via issue labels or comment commands.
@@ -32,21 +50,6 @@ class Intent(str, Enum):
     FOLLOWUP = "followup"
     BLOCKED = "blocked"
     REBASE = "rebase"
-
-
-# Default label conventions for the three retry intents. Adapters accept an
-# override at construction time; the keys map Intent values to label names.
-DEFAULT_INTENT_LABELS: dict[str, str] = {
-    "retry": "agent:retry",
-    "followup": "agent:follow-up",
-    "blocked": "agent:blocked",
-    "rebase": "agent:rebase",
-}
-
-
-def _normalize_label(value: str) -> str:
-    """Normalize a label for case-insensitive comparison."""
-    return value.strip().lower()
 
 
 def intent_from_label_set(
@@ -83,11 +86,6 @@ def intent_from_label_set(
     return Intent.NONE
 
 
-# ---------------------------------------------------------------------------
-# Comment command parsing
-# ---------------------------------------------------------------------------
-
-
 class Command(str, Enum):
     """Operator command expressed via an issue comment.
 
@@ -103,15 +101,6 @@ class Command(str, Enum):
     FOLLOWUP = "followup"
     UNBLOCK = "unblock"
     REBASE = "rebase"
-
-
-# Regex for ``/agent <subcommand> [args]`` at the start of a line / body.
-# Permissive trailing text: any args / reason after the subcommand.
-# Includes ``rebase`` in the recognized subcommand set.
-_AGENT_COMMAND_RE = re.compile(
-    r"^/agent\s+(retry|follow-up|unblock|rebase)\b[^\n]*",
-    re.IGNORECASE | re.MULTILINE,
-)
 
 
 def parse_agent_command(body: str | None) -> Command | None:
@@ -163,13 +152,6 @@ def command_to_intent(command: Command) -> Intent:
     return Intent.NONE
 
 
-# Priority merge: a comment command can override a label intent, but
-# BLOCKED is sticky: it is a permanent skip and only the unblock
-# command / CLI override can lift it.
-#
-# Conservative rule between RETRY and FOLLOWUP: FOLLOWUP wins (preserves
-# PR evidence). This mirrors the label-only priority in
-# ``intent_from_label_set``.
 def merge_intents(label_intent: Intent, command_intent: Intent) -> Intent:
     """Merge a label-derived Intent with a command-derived Intent.
 
@@ -263,3 +245,8 @@ def merge_intents_with_cli(
     if label_intent is not Intent.NONE:
         return label_intent
     return Intent.NONE
+
+
+def _normalize_label(value: str) -> str:
+    """Normalize a label for case-insensitive comparison."""
+    return value.strip().lower()

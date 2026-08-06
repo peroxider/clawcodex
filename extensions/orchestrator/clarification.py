@@ -96,10 +96,6 @@ class ClarificationResolver:
         self._tracker = tracker
         self._config = config or ClarificationConfig()
 
-    # ------------------------------------------------------------------
-    # Public API — called by Orchestrator poll loop
-    # ------------------------------------------------------------------
-
     async def poll_clarification_answers(self) -> None:
         """Poll both ClarificationQueue and issue comments for new answers.
 
@@ -191,10 +187,6 @@ class ClarificationResolver:
             source=None,
             status=status,
         )
-
-    # ------------------------------------------------------------------
-    # Internal — called by poll loop
-    # ------------------------------------------------------------------
 
     async def _check_for_answer(self, item: "ClarificationItem") -> None:
         """Check both channels for an answer to the given clarification item."""
@@ -521,10 +513,6 @@ class ClarificationResolver:
             return dt.timestamp()
         except Exception:
             return time.time()
-
-    # ------------------------------------------------------------------
-    # Utilities
-    # ------------------------------------------------------------------
 
     def get_answer(self, issue_id: str) -> ClarificationResult | None:
         """Get the resolved answer for an issue, if any."""
