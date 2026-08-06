@@ -1,6 +1,6 @@
-"""F-108 P108-H — ``clawcodex-dev diag`` CLI subcommand.
+"""``clawcodex-dev diag`` CLI subcommand.
 
-Layer 4 of the F-108 freeze detection plan. Subcommands:
+Layer 4 of the freeze detection plan. Subcommands:
 
 * ``clawcodex-dev diag freeze-report [--last N] [--dump-dir PATH]``
   — show the most recent N freeze dumps.
@@ -176,7 +176,7 @@ def _run_status(argv: list[str]) -> int:
         json.dump(payload, sys.stdout, indent=2, default=str)
         sys.stdout.write("\n")
         return 0
-    sys.stdout.write("F-108 Freeze detector status\n")
+    sys.stdout.write("Freeze detector status\n")
     sys.stdout.write(f"  diag env var ({DEFAULT_FREEZE_DIAG_ENV}): {diag_env}\n")
     sys.stdout.write(f"  watchdog alive: {detector_alive}\n")
     sys.stdout.write(f"  resolved settings:\n")

@@ -1,4 +1,4 @@
-"""F-118 dynamic decomposition backed by the existing coordinator runtime.
+"""Dynamic decomposition backed by the existing coordinator runtime.
 
 Checkpoint / crash recovery
 ---------------------------
@@ -6,7 +6,7 @@ Before each run, ``SwarmModeRunner.run()`` checks for an existing
 ``task_decomposition.json`` with partial execution data. If found, it
 reuses the plan instead of re-decomposing, and the coordinator resumes
 from the last incomplete wave. This avoids full re-execution when the
-daemon is restarted mid-run (F-39 retry / daemon crash).
+daemon is restarted mid-run (retry / daemon crash).
 
 The checkpoint file is written at ``.orchestrator_control/swarm_checkpoint.json``
 after the coordinator finishes. On the next invocation, the runner reads it
@@ -77,7 +77,7 @@ class SwarmModeRunner:
         if not resumed:
             plan = await self._decomposer.decompose_issue(session.issue)
             plan_path = write_task_plan(plan, workspace_path)
-        # Clean up any stale evidence from previous runs (F-39 retry safety).
+        # Clean up any stale evidence from previous runs (retry safety).
         evidence_dir = Path(plan_path.parent) / "task_evidence"
         if evidence_dir.is_dir():
             shutil.rmtree(evidence_dir)
@@ -90,7 +90,7 @@ class SwarmModeRunner:
         session.prompt_override = build_swarm_prompt(session.issue, plan, plan_path)
         session.run_kind = "swarm"
         logger.info(
-            "F-118 swarm plan issue=%s tasks=%d waves=%d max_parallel=%d path=%s",
+            "Swarm plan issue=%s tasks=%d waves=%d max_parallel=%d path=%s",
             session.issue.id,
             len(plan.subtasks),
             len(plan.waves),
@@ -178,7 +178,7 @@ class SwarmModeRunner:
         session.prompt_override = build_swarm_prompt(session.issue, plan, plan_path)
         session.run_kind = "swarm"
         logger.info(
-            "F-118 swarm checkpoint resume: issue=%s resumed after wave %d/%d",
+            "Swarm checkpoint resume: issue=%s resumed after wave %d/%d",
             session.issue.id,
             completed_wave,
             len(plan.waves),

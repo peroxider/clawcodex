@@ -6,14 +6,14 @@
 - event_bus: 事件总线 + State Journal 写入
 - cost: CostTracker + CostBudget
 - errors: 异常类型定义
-- stage_runner: StageRunner 适配器 (F-111)
-- gate_handler: GATE 门禁处理器 (F-112)
-- gate_rollback: GATE 回滚处理器 (F-112)
-- decision_handler: DECISION 决策处理器 (F-113)
-- rollback: 阶段回滚管理器 (F-113)
-- validators: 阶段契约验证器 (F-114)
-- checkpoint: 检查点持久化 (F-115)
-- observability: 工作流可观测性集成 (F-116)
+- stage_runner: StageRunner 适配器
+- gate_handler: GATE 门禁处理器
+- gate_rollback: GATE 回滚处理器
+- decision_handler: DECISION 决策处理器
+- rollback: 阶段回滚管理器
+- validators: 阶段契约验证器
+- checkpoint: 检查点持久化
+- observability: 工作流可观测性集成
 """
 
 from __future__ import annotations
@@ -74,34 +74,34 @@ __all__ = [
     "ValidationError",
     "CheckpointError",
     "RollbackError",
-    # StageRunner (F-111)
+    # StageRunner
     "StageRunner",
     "StageRunResult",
     "GateRunResult",
     "DecisionRunResult",
-    # GATE (F-112)
+    # GATE
     "GateHandler",
     "GateMode",
     "GateResult",
     "GateRollbackHandler",
     "GateRollbackResult",
-    # DECISION (F-113)
+    # DECISION
     "DecisionHandler",
     "DecisionHistory",
     "DecisionResult",
-    # Rollback (F-113)
+    # Rollback
     "RollbackManager",
     "StageSnapshot",
     "RollbackTarget",
-    # Validators (F-114)
+    # Validators
     "ContractValidator",
     "ValidationResult",
-    # Checkpoint (F-115)
+    # Checkpoint
     "Checkpoint",
     "CheckpointManager",
     "WorkflowResumer",
     "ArtifactResolver",
-    # Observability (F-116)
+    # Observability
     "WorkflowObservability",
     "WorkflowProgressSink",
     "WorkflowAuditEvent",

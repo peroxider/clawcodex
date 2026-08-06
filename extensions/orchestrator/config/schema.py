@@ -381,8 +381,8 @@ def permission_mode_to_triple(
     """Translate legacy permission_mode enum into three orthogonal fields.
 
     Explicit overrides take precedence; missing values are inferred from the
-    legacy mode. F-46.0 only wires ``audit_log``; ``interactive`` and
-    ``default_decision`` are reserved for F-46.1+.
+    legacy mode. The current wiring only sets ``audit_log``; ``interactive`` and
+    ``default_decision`` are reserved for future extensions.
     """
     mode = str(permission_mode).strip() if permission_mode else "default"
     mapping: dict[str, dict[str, Any]] = {
@@ -569,7 +569,7 @@ class AgentConfig:
     # NEW: ClawCodex-specific fields
     provider: str = "anthropic"
     permission_mode: str = "dontAsk"
-    # F-46.0: per-tool decision audit log level. "none" disables the NDJSON
+    # Per-tool decision audit log level. "none" disables the NDJSON
     # audit trail; "minimal" records only denied decisions; "full" records
     # every tool call. Defaults to "minimal" to save disk.
     audit_log: str = "minimal"
@@ -578,13 +578,13 @@ class AgentConfig:
     lint_command: str = ""
     verification: VerificationConfig = field(default_factory=VerificationConfig)
     repro_first: ReproFirstConfig = field(default_factory=ReproFirstConfig)
-    # F-39 Sub-F: rate limit on operator-driven retries. When an
+    # Rate limit on operator-driven retries. When an
     # issue's `IssueRecord.retry_count` reaches this value, the
     # orchestrator refuses to honor further `agent:retry` labels /
     # `/agent retry` comment commands, even with a force flag from
     # the CLI (which is logged as a high-priority audit entry).
     max_retries_per_issue: int = 3
-    # F-39 Sub-F: allow `agent:retry` / `agent:follow-up` /
+    # Allow `agent:retry` / `agent:follow-up` /
     # `/agent retry` to be triggered by any GitHub-style user, not
     # just the issue author. By default we enforce the strict
     # "author or maintainer only" rule. Setting this to True
@@ -602,7 +602,7 @@ class AgentConfig:
     # model (e.g. ``gpt-4o`` for OpenAI, ``claude-sonnet-4-20250514``
     # for Anthropic).  Leave ``None`` to use the provider's built-in
     # default (which may be a placeholder like ``gpt-5.4`` that does
-    # not exist on the real API — see F-40 root-cause analysis).
+    # not exist on the real API — see stagnation root-cause analysis).
     model: str | None = None
     # Multi-model stage overrides: keyed by run_kind (e.g. "review_followup",
     # "agent_followup"), each value is a dict with optional "provider" and/or
@@ -622,7 +622,7 @@ class AgentConfig:
     # personal plan). Set to 0 for unlimited request rate.
     delay_between_requests_ms: int = 2000
     run_timeout_ms: int = 1_800_000
-    # F-108 P108-C — stream-stall watchdog: abort a run once the headless
+    # Stream-stall watchdog: abort a run once the headless
     # session shows no activity (no tool events, no stdout growth) for
     # this long, instead of waiting out the whole run_timeout_ms budget.
     # Default 300s: measured healthy runs pause up to 240s (long LLM
@@ -638,7 +638,7 @@ class AgentConfig:
     # AFTER ``git add -A`` and unstages any file that doesn't match.
     # An empty list disables the gate (default).
     allowed_changed_files: list[str] = field(default_factory=list)
-    # F-44: Human review gating. When True, the orchestrator marks each
+    # Human review gating. When True, the orchestrator marks each
     # completed issue as PENDING_REVIEW instead of COMPLETED after sync,
     # requiring a human to run `orchestrator issue review --id <id> --approve`
     # before the issue transitions to COMPLETED.
@@ -667,13 +667,13 @@ class AgentConfig:
     max_no_op_turns: int = 3
     loop_detection_window: int = 5
     loop_detection_threshold: int = 3
-    # F-105: skip the tracker poll in ``_should_continue`` when the
+    # Skip the tracker poll in ``_should_continue`` when the
     # issue state has been identical across ``N`` consecutive polls.
     # Set to 0 to disable the cache and always poll (identical to
-    # pre-F-105 behaviour). The cache lives on the ``AgentSession``
+    # the pre-cache behaviour). The cache lives on the ``AgentSession``
     # instance — concurrent sessions never share state.
     perf_should_continue_skip_turns: int = 3
-    # F-40: ProgressReporter Sink 协议重构. ``phases`` is the ordered
+    # ProgressSink 协议重构. ``phases`` is the ordered
     # list of named workflow phases the orchestrator drives a session
     # through. When the LLM completes a phase, :class:`ToolContextProgressSink`
     # uses ``(n / total) * 100`` to compute an honest progress
@@ -889,7 +889,7 @@ class ModesConfig:
     # so each parallel branch has its own physical workspace. When False
     # (default), proposers run sequentially.
     debate_parallel: bool = False
-    # F-118 dynamic task decomposition. The seed task graph is persisted in
+    # Dynamic task decomposition. The seed task graph is persisted in
     # the issue workspace and executed through the existing coordinator mode.
     swarm_max_subtasks: int = 8
     swarm_max_parallel: int = 3
@@ -903,7 +903,7 @@ class ModesConfig:
 
 @dataclass
 class RulesConfig:
-    """F-121: configuration for learned rule extraction from PR review feedback."""
+    """Configuration for learned rule extraction from PR review feedback."""
 
     enabled: bool = False
     path: str = ""
@@ -913,7 +913,7 @@ class RulesConfig:
 
 @dataclass
 class PrConflictScanConfig:
-    """F-120: configuration for the optional PR conflict scan daemon job.
+    """Configuration for the optional PR conflict scan daemon job.
 
     When ``enabled=False`` (the default) the daemon does not poll the
     remote PR mergeable state at all — operators must trigger rebase
@@ -939,7 +939,7 @@ class PrConflictScanConfig:
 
 @dataclass
 class ClarifierConfig:
-    """F-124 pre-dispatch issue clarity analysis.
+    """Pre-dispatch issue clarity analysis.
 
     This config is deliberately separate from ``ClarificationConfig`` in
     ``clarification.py``. The clarifier decides *whether* a question is
@@ -957,7 +957,7 @@ class ClarifierConfig:
     fail_open: bool = True
     cache_enabled: bool = True
     max_analyses_per_poll: int = 4
-    # F-124-L (P2): follow-up workspace focus 富化
+    # Follow-up workspace focus 富化
     workspace_focus_enabled: bool = False
     # 运营增强 2: 可选的专用远端等待标签，空字符串=不推送
     remote_label: str = ""
@@ -1131,7 +1131,7 @@ class WorkflowConfig:
                 agent_raw.get("permission_mode"),
                 is_orchestrator=bool(tracker_raw),
             ),
-            # F-46.0: orthogonal audit_log level, independent of permission_mode.
+            # Orthogonal audit_log level, independent of permission_mode.
             audit_log=_resolve_audit_log(agent_raw.get("audit_log")),
             test_command=_resolve_env_value(agent_raw.get("test_command")) or "",
             build_command=_resolve_env_value(agent_raw.get("build_command")) or "",
@@ -1144,7 +1144,7 @@ class WorkflowConfig:
                 ),
             ),
             repro_first=_parse_repro_first_config(agent_raw.get("repro_first") or {}),
-            # F-39 Sub-F
+            # Retry rate limit + role check settings
             max_retries_per_issue=agent_raw.get("max_retries_per_issue", 3),
             allow_anyone_to_retry=bool(agent_raw.get("allow_anyone_to_retry", False)),
             # 429-aware in-turn backoff (see AgentConfig docstring above)
@@ -1162,13 +1162,13 @@ class WorkflowConfig:
             allowed_changed_files=_normalize_string_list(
                 agent_raw.get("allowed_changed_files"), default=[]
             ),
-            # F-44: review gate — when True, sync ends at PENDING_REVIEW
+            # Review gate — when True, sync ends at PENDING_REVIEW
             # instead of COMPLETED, requiring human approve CLI command.
             review_required=bool(agent_raw.get("review_required", False)),
             auto_approve=bool(agent_raw.get("auto_approve", False)),
             # MVP multi-agent: coordinator mode toggle (from workflow.md)
             coordinator_mode=bool(agent_raw.get("coordinator_mode", False)),
-            # F-40: named workflow phases drive honest progress
+            # Named workflow phases drive honest progress
             # percentages in ToolContextProgressSink. ``phases`` is
             # parsed as a list (the YAML ``- a`` / ``- b`` syntax)
             # and defaults to empty. ``fallback_to_phase_step``
@@ -1178,7 +1178,7 @@ class WorkflowConfig:
             # instead of misleading 25/50/75/100.
             phases=_normalize_string_list(agent_raw.get("phases"), default=[]),
             fallback_to_phase_step=bool(agent_raw.get("fallback_to_phase_step", False)),
-            # F-40 root-cause fix: stagnation / loop guard knobs.
+            # Root-cause fix: stagnation / loop guard knobs.
             # These were defined in AgentConfig (schema.py) and set in
             # workflow.md, but ``from_dict`` never forwarded them to the
             # dataclass constructor, so the schema defaults (3/5/3) were

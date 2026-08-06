@@ -1,4 +1,4 @@
-"""Tests for F-88 MonitorTool."""
+"""Tests for MonitorTool."""
 
 from __future__ import annotations
 

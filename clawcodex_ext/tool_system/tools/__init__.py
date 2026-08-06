@@ -15,7 +15,7 @@ from .brief import BriefTool
 from .config import ConfigTool
 from .cron import CronCreateTool, CronDeleteTool, CronListTool
 
-# F-120 Agent Dashboard — read-only observability tools.
+# Agent Dashboard — read-only observability tools.
 from extensions.agent_dashboard.tools import (
     DashboardGetTool,
     DashboardListTool,

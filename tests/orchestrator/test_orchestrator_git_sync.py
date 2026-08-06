@@ -564,7 +564,7 @@ class TestGitSyncService(unittest.IsolatedAsyncioTestCase):
             workspace = await manager.create_for_issue(issue)
             # Pre-existing implementation commit on the integration
             # branch — represents a prior run that already produced the
-            # F-40 work. This session makes no further file changes.
+            # prior work. This session makes no further file changes.
             (workspace.path / "progress_sink.py").write_text(
                 "# implementation\n",
                 encoding="utf-8",
@@ -588,7 +588,7 @@ class TestGitSyncService(unittest.IsolatedAsyncioTestCase):
             session.integration_branch = "integration/f40"
             # Session started with HEAD already at the implementation
             # commit (e.g. after a reset/retry that didn't roll back
-            # the branch). This is the exact F-40 shape.
+            # the branch). This is the exact shape.
             session.start_commit_sha = head_sha
 
             service = GitSyncService(
@@ -813,7 +813,7 @@ class TestGitSyncService(unittest.IsolatedAsyncioTestCase):
             await manager.cleanup(issue_two)
 
     async def test_empty_branch_no_commits_skips_pr_creation(self) -> None:
-        """F-40 补遗：当 daemon 触发 read-only loop 终止时，分支无 reviewable
+        """补遗：当 daemon 触发 read-only loop 终止时，分支无 reviewable
         commit。git_sync.sync() 必须拒绝创建 PR 并在 session_end_reason 中
         标记 empty_branch_no_commits（orchestrator 据此走 mark_failed）。"""
         with tempfile.TemporaryDirectory() as tmp:

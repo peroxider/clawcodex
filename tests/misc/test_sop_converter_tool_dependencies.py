@@ -1,4 +1,4 @@
-"""Unit tests for F-55 L2 — :mod:`extensions.sop_converter.dependency`.
+"""Unit tests for L2 — :mod:`extensions.sop_converter.dependency`.
 
 Covers:
 

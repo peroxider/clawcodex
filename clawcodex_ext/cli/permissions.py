@@ -24,7 +24,7 @@ def resolve_permission_state(args) -> None:
         initial_permission_mode_from_cli,
     )
 
-    # F-47: plumb ``settings.permissions.default_mode`` into the mode
+    # Plumb ``settings.permissions.default_mode`` into the mode
     # resolver. Import lazily so the CLI module stays importable in tests
     # that never touch settings (e.g. permission-only unit tests).
     try:
@@ -41,7 +41,7 @@ def resolve_permission_state(args) -> None:
         bypass_requested=dangerously or allow_dangerously,
     )
 
-    # F-47: resolve settings-side default mode from the structured
+    # Resolve settings-side default mode from the structured
     # ``permissions.default_mode`` field. The legacy top-level
     # ``settings.permission_mode`` channel has been removed; on-disk
     # values at that key are no longer consulted at startup.

@@ -1,4 +1,4 @@
-"""DynamicCommandDiscovery — F-53 scan of ``ToolRegistry`` for non-core tools.
+"""DynamicCommandDiscovery — scan of ``ToolRegistry`` for non-core tools.
 
 The discovery walks the supplied ``ToolRegistry``, filters out core /
 built-in tools (via :mod:`clawcodex_ext.cli.tool_cmd.core_filter`), and
@@ -18,7 +18,7 @@ Two scan modes
 Conflict policy
 ---------------
 If a discovered tool's name collides with an already-registered
-command (e.g. a F-43 dynamic command or a F-49 skill command), the
+command (e.g. a dynamic command or a skill command), the
 discovery skips it. The core set itself is filtered *before* this
 check, so collisions with built-ins like ``/read`` cannot happen.
 """

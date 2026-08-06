@@ -1,4 +1,4 @@
-"""F-57 tests for the executable composite workflow runtime."""
+"""Tests for the executable composite workflow runtime."""
 
 from __future__ import annotations
 

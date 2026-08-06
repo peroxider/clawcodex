@@ -25,7 +25,7 @@ __all__ = ["BTW_COMMAND", "btw_command_run", "BtwCommand"]
 logger = logging.getLogger(__name__)
 
 
-# F-122-F: when the answer body (excluding the 💡 prefix) exceeds this many
+# When the answer body (excluding the 💡 prefix) exceeds this many
 # lines we mark the InteractiveOutcome as scrollable so the REPL enters its
 # keyboard-scrolled view. Below the threshold, a flat print is friendlier —
 # the spinner-then-scrollable-modal would feel heavy for one-line replies.
@@ -68,7 +68,7 @@ async def btw_command_run(args: str, context: CommandContext) -> InteractiveOutc
         InteractiveOutcome with the answer text or usage help. Long
         answers (more than :data:`_SCROLLABLE_LINE_THRESHOLD` lines) carry
         ``scrollable=True`` so the REPL enters a keyboard-scrolled view
-        instead of dumping a wall of text (F-122-F).
+        instead of dumping a wall of text (scrollable rendering).
     """
     question = args.strip()
     if not question:
@@ -77,7 +77,7 @@ async def btw_command_run(args: str, context: CommandContext) -> InteractiveOutc
             display="user",
         )
 
-    # F-122-I: record this /btw invocation in the persistent use-count
+    # Record this /btw invocation in the persistent use-count
     # before any further work. Counting happens at the command layer so
     # every UI path (REPL/TUI/headless) flows through the same gate; the
     # counter increments regardless of whether the side question itself

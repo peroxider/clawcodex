@@ -1,4 +1,4 @@
-"""F-108 P108-G — auto-recovery strategy catalogue tests."""
+"""Auto-recovery strategy catalogue tests."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from clawcodex_ext.diagnostics import (
 class TestRecoveryTable(unittest.TestCase):
     def test_five_paths_match_plan(self):
         actions = {spec.action for spec in recovery_actions()}
-        # F-108 §十八 P108-G promises these five:
+        # §十八 P108-G promises these five:
         self.assertIn(RecoveryAction.PERMISSION_AUTO_DENY, actions)
         self.assertIn(RecoveryAction.ASK_USER_EMPTY, actions)
         self.assertIn(RecoveryAction.LLM_TURN_TIMEOUT, actions)

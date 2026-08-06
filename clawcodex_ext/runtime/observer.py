@@ -1,4 +1,4 @@
-"""Runtime observer protocol for F-43 hot-swap notifications.
+"""Runtime observer protocol for hot-swap notifications.
 
 Defines the :class:`RuntimeObserver` Protocol and the
 :class:`RuntimeContext.attach_observer` / :meth:`detach_observer` helpers.

@@ -1,7 +1,7 @@
 """AgentCatalog — **archival** on-disk format (no longer used by runtime).
 
 .. deprecated::
-    F-56 Phase D removed all runtime read/write of ``agent-catalog.json``.
+    Phase D removed all runtime read/write of ``agent-catalog.json``.
     Canonical persistence is :mod:`extensions.sop_converter.resource_catalog`.
     This module remains only for unit tests of the historical format and
     optional offline migration helpers.

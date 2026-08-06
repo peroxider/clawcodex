@@ -1,4 +1,4 @@
-"""Upstream-compatible model goal tool tests for F-122 Spec 4."""
+"""Upstream-compatible model goal tool tests for Spec 4."""
 
 from __future__ import annotations
 

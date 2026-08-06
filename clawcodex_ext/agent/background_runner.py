@@ -234,7 +234,7 @@ def _run_agent_headless(
         _update_runner_status(session.session_id, "failed", error=str(exc))
     finally:
         loop.close()
-        # F-49 Phase 0.4.5: write .json snapshot so --resume can
+        # Write .json snapshot so --resume can
         # fast-path via Session.load() instead of replaying JSONL.
         try:
             session.save()

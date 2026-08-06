@@ -1,4 +1,4 @@
-"""Local JSONL storage for F-97 telemetry.
+"""Local JSONL storage for telemetry.
 
 The store is fire-and-forget: every write is wrapped in a
 ``try/except OSError`` and any failure is logged but never raised. This

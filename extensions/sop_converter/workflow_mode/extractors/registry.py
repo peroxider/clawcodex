@@ -1,4 +1,4 @@
-"""Extractor registry (F-50.11.2)."""
+"""Extractor registry."""
 
 from __future__ import annotations
 

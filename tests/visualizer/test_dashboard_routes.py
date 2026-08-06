@@ -1,4 +1,4 @@
-"""Tests for F-120 Visualizer dashboard routes and WebSocket."""
+"""Tests for Visualizer dashboard routes and WebSocket."""
 
 from __future__ import annotations
 

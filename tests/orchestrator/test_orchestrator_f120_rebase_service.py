@@ -1,4 +1,4 @@
-"""F-120 Step 4: rebase_for_pr + PRRebaseResult + helpers.
+"""Step 4: rebase_for_pr + PRRebaseResult + helpers.
 
 Covers the full path through ``rebase_for_pr`` using a real (but
 in-process) git repo fixture:

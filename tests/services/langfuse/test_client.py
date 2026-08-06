@@ -1,4 +1,4 @@
-"""Tests for src/services/langfuse/client.py (F-65 P65-A).
+"""Tests for src/services/langfuse/client.py (P65-A).
 
 The Langfuse SDK is an *optional* dependency. These tests must
 work whether or not it is importable. We rely on

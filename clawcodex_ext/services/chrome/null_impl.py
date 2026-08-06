@@ -1,4 +1,4 @@
-"""F-62 P62-A — :class:`NullChromeController` (graceful degradation).
+"""NullChromeController (graceful degradation).
 
 The null controller is the fallback when no real backend is
 available — Playwright is not installed, and ``CHROME_MCP_URL`` is

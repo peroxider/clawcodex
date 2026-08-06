@@ -1,4 +1,4 @@
-"""Tests for F-88 watch compatibility conversion."""
+"""Tests for watch compatibility conversion."""
 
 from __future__ import annotations
 

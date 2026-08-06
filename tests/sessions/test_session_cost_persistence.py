@@ -58,7 +58,7 @@ class SaveCostBlockTests(unittest.TestCase):
     def _read_saved(self, sid: str) -> dict:
         """Read the cost block written by ``Session.save``.
 
-        F-49 P5-A: ``session.json`` no longer exists. The cost block
+        ``session.json`` no longer exists. The cost block
         lives in the trailing ``session_snapshot`` line of
         ``transcript.jsonl``. This helper returns a dict shaped like
         the legacy session.json (with a top-level ``cost`` key) so

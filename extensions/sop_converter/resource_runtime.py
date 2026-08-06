@@ -1,4 +1,4 @@
-"""Generic F-56 resource materialize/invoke helpers for F-57 resume-resource."""
+"""Generic resource materialize/invoke helpers for resume-resource."""
 
 from __future__ import annotations
 

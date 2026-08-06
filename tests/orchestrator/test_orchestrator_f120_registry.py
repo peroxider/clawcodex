@@ -1,10 +1,10 @@
-"""F-120 Step 2: IssueRecord 新字段 + 持久化 back-compat.
+"""Step 2: IssueRecord 新字段 + 持久化 back-compat.
 
 Covers:
   - IssueRecord 默认值 (has_conflict=False, conflict_files=(), ...)
   - IssueRegistry.mark_conflict / clear_conflict / increment_rebase_attempt
-  - register() 在 re-register 时保留 F-120 字段
-  - 旧版 registry.json (without F-120 fields) 仍能 load（默认值生效）
+  - register() 在 re-register 时保留 rebase 字段
+  - 旧版 registry.json (without rebase fields) 仍能 load（默认值生效）
 """
 
 from __future__ import annotations
@@ -109,7 +109,7 @@ class TestReregisterPreservesF120Fields(unittest.TestCase):
             reg = IssueRegistry(Path(tmp) / "r.json")
             reg.register(issue_id="7", issue_identifier="ISSUE-7")
             reg.mark_conflict("7", ("src/a.py",))
-            # Re-register with new metadata — F-120 fields preserved.
+            # Re-register with new metadata — rebase fields preserved.
             reg.register(issue_id="7", issue_identifier="ISSUE-7-renamed")
             record = reg.get("7")
             assert record is not None
@@ -130,8 +130,8 @@ class TestReregisterPreservesF120Fields(unittest.TestCase):
 
 class TestBackwardCompatPreF120Registry(unittest.TestCase):
     def test_legacy_registry_loads_with_defaults(self) -> None:
-        """A registry.json written before F-120 has no F-120 fields.
-        After load, the F-120 fields take their defaults so callers
+        """A registry.json written before this feature existed has no rebase fields.
+        After load, the rebase fields take their defaults so callers
         can still read them without KeyError."""
         with tempfile.TemporaryDirectory() as tmp:
             reg_path = Path(tmp) / "r.json"

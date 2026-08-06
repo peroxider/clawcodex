@@ -287,7 +287,7 @@ def _lifecycle_sort_key(
     tool_name: str,
     lifecycle_graph: Any | None,
 ) -> tuple[int, int, int]:
-    """Return a bias key from F-55 ``tool-dependencies.yaml`` metadata.
+    """Return a bias key from ``tool-dependencies.yaml`` metadata.
 
     Lower is better.  The key is intentionally coarse; normal ToolSearch scoring
     still decides relevance, while lifecycle metadata only breaks collisions and
@@ -407,7 +407,7 @@ def _direct_macro_route_names(
 ) -> tuple[list[str], list[str], bool]:
     """Return macro tools matched by direct route and excluded tools.
 
-    Macro routes are data-driven and independent of F-55 PriorityRoute.
+    Macro routes are data-driven and independent of PriorityRoute.
     Routes can actively recall a target tool that would not otherwise
     appear in normal ToolSearch results.
 
@@ -501,7 +501,7 @@ def rank_tools_by_lifecycle(
     query: str,
     lifecycle_graph: Any | None,
 ) -> list[str]:
-    """Sort ToolSearch match names using F-55 lifecycle metadata.
+    """Sort ToolSearch match names using lifecycle metadata.
 
     This implements the documented P2 hook: when ``priority_routes`` match the
     query, tools in the routed ``intent_group`` are lifted and ordered by the
@@ -710,7 +710,7 @@ def rank_tool_matches(
 ) -> list[str]:
     """Rank tools for a ToolSearch query and return tool names.
 
-    Order (F-57 §8.3):
+    Order (session macros §8.3):
       direct macro route → lifecycle-chain → normal scoring → lifecycle reorder
     """
     macro_route_matches, excluded_tools, exclusive = _direct_macro_route_names(

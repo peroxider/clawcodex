@@ -1,4 +1,4 @@
-"""ARC (AutoResearchClaw) stage → skill mapping helpers (F-50-C)."""
+"""ARC (AutoResearchClaw) stage → skill mapping helpers."""
 
 from __future__ import annotations
 

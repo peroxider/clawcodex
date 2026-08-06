@@ -1,4 +1,4 @@
-"""F-62 P62-A — :class:`MCPChromeController`.
+"""MCPChromeController.
 
 Bridges the abstract :class:`ChromeController` surface to a
 running Chrome DevTools MCP server. The Chrome DevTools MCP

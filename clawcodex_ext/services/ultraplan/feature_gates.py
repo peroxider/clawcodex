@@ -1,4 +1,4 @@
-"""Feature-gate helpers for F-87 ultraplan surfaces."""
+"""Feature-gate helpers for ultraplan surfaces."""
 
 from __future__ import annotations
 

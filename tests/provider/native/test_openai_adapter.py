@@ -1,4 +1,4 @@
-"""Tests for the native OpenAI adapter (F-72 P72-A)."""
+"""Tests for the native OpenAI adapter."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def _make_provider(monkeypatch: pytest.MonkeyPatch) -> tuple[NativeOpenAIProvide
 
 def test_capabilities_match_f72_plan() -> None:
     """The OpenAI adapter must declare exactly the capabilities the
-    F-72 plan attributes to it (structured output, vision, streaming
+    native provider plan attributes to it (structured output, vision, streaming
     tools, reasoning)."""
     expected = {CAP_STRUCTURED_OUTPUT, CAP_STREAMING_TOOLS, CAP_VISION, CAP_REASONING}
     assert NativeOpenAIProvider.capabilities == expected
@@ -92,8 +92,8 @@ def test_chat_returns_chat_response(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_chat_forwards_response_format(monkeypatch: pytest.MonkeyPatch) -> None:
     """The native path must surface ``response_format`` so callers
-    can request JSON-schema structured output — the headline F-72
-    capability that LiteLLM generalises away."""
+    can request JSON-schema structured output — the headline
+    native provider capability that LiteLLM generalises away."""
     provider, client = _make_provider(monkeypatch)
     provider.chat(
         [ChatMessage(role="user", content="hi")],

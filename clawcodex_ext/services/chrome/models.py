@@ -1,4 +1,4 @@
-"""F-62 P62-B/C/D — data models for the Chrome controller.
+"""Data models for the Chrome controller.
 
 The action-type enum and result dataclass are the only pieces
 of the chrome surface that are guaranteed to be importable

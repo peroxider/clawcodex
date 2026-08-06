@@ -1,4 +1,4 @@
-"""F-88 Monitor extension installation hooks.
+"""Monitor extension installation hooks.
 
 Called once per process from ``clawcodex_ext.ensure_eager_extensions_installed``
 after all ``src/`` modules are loaded.  Command and tool registration happen
@@ -15,7 +15,7 @@ _installed: bool = False
 
 
 def install_monitor_extensions() -> None:
-    """Install F-88 runtime extensions once per process.
+    """Install monitor runtime extensions once per process.
 
     Idempotent no-op when the feature gate is disabled; the command/tool
     ``is_enabled`` predicates already gate user-visible behaviour.

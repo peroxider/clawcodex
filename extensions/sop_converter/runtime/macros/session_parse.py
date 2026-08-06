@@ -1,4 +1,4 @@
-"""Strict parsers for session MacroDefinition / MacroRoute (F-57 Phase 5).
+"""Strict parsers for session MacroDefinition / MacroRoute.
 
 Unlike ``loader.parse_macro_route``, these parsers never silently coerce
 invalid enums — they raise ``MacroConvertError`` instead.

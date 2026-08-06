@@ -1,4 +1,4 @@
-"""SOP-only read-only tool for F-56 resource catalog introspection.
+"""SOP-only read-only tool for resource catalog introspection.
 
 Uses storage-safe views from ``catalog_cli`` (``get_stored`` / no secret
 restore). Registered at SOP startup — not in global ``EXTENSION_TOOLS``.
@@ -205,12 +205,12 @@ ResourceCatalogTool: Tool = build_tool(
     },
     call=_resource_catalog_call,
     description=(
-        "List or get F-56 SOP resource catalog records (session/bundle/user). "
+        "List or get SOP resource catalog records (session/bundle/user). "
         "Storage-redacted; use for inspecting persisted agents like verify-bot. "
         "Prefer this over Grep/Read for catalog discovery."
     ),
     prompt=(
-        "Inspect persisted SOP resources (agents, etc.) in the F-56 catalog. "
+        "Inspect persisted SOP resources (agents, etc.) in the catalog. "
         "Use action=list to browse, action=get with resource_id (e.g. verify-bot), "
         "action=latest with resource_type. Returns redacted JSON (no restored secrets). "
         "Do not Grep the workspace for agent ids — use this tool instead."

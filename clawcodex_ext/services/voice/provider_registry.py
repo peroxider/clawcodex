@@ -1,4 +1,4 @@
-"""STT + TTS + Dialogue provider registries — F-64 / F-65.
+"""STT + TTS + Dialogue provider registries.
 
 Three parallel registries that map provider names to *factory* callables
 producing :class:`STTProvider` / :class:`TTSProvider` /
@@ -94,7 +94,7 @@ def get_dialogue_provider(name: str) -> "FullDuplexDialogueProvider":  # type: i
     """Construct (not reuse) a full-duplex dialogue provider.
 
     Unlike STT/TTS providers which are typically stateless wrappers, the
-    F-65 dialogue provider is *session-scoped* (a live WebSocket + pump
+    dialogue provider is *session-scoped* (a live WebSocket + pump
     tasks per session). Returning a fresh instance per call sidesteps
     any cross-session state leak; the caller (``DialogueSessionManager``
     in P65-B) owns it for the duration of one session.
@@ -103,7 +103,7 @@ def get_dialogue_provider(name: str) -> "FullDuplexDialogueProvider":  # type: i
     # not at module scope, but keeping the import local makes the
     # dependency graph explicit at the only call site that materialises
     # the type. Anything that uses STT/TTS paths never touches
-    # ``dialogue.py`` so the cold-start cost stays zero (F-64 STG-6 perf).
+    # ``dialogue.py`` so the cold-start cost stays zero (STG-6 perf invariant).
     from .dialogue import FullDuplexDialogueProvider
 
     factory = DIALOGUE_REGISTRY.get(name.lower())
@@ -165,10 +165,10 @@ def _register_builtins() -> None:
     register_tts_provider("minimax", _minimax_tts_factory)
     register_tts_provider("gemini", _gemini_tts_factory)
 
-    # F-65 P65-A: full-duplex dialogue factories. Local-import the
+    # full-duplex dialogue factories. Local-import the
     # provider class inside the factory so REPL cold-start doesn't pay
     # for the websockets import unless the user actually starts a
-    # dialogue session. Matches the F-64 STT/TTS lazy-load pattern.
+    # dialogue session. Matches the STT/TTS lazy-load pattern.
     def _minimax_dialogue_factory() -> "FullDuplexDialogueProvider":  # type: ignore[name-defined]  # noqa: F821
         from .minimax_realtime_dialogue import MiniMaxRealtimeDialogueProvider
 

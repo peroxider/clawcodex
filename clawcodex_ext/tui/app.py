@@ -197,7 +197,7 @@ class ClawCodexTUI(App):
         self._away_summary_controller: AwaySummaryController | None = None
         self._intent_forecast_controller: IntentForecastController | None = None
         self._pending_system_messages: list[tuple[str, str, str | None]] = []
-        # F-9 / ``/goal``: persistent controller instance wired into
+        # ``/goal``: persistent controller instance wired into
         # the agent run lifecycle so continuation/budget-limit injections
         # are drained and enqueued for auto-continuation. Installed by
         # ``_install_goal_controller`` in ``__init__`` and on session resume.
@@ -626,7 +626,7 @@ class ClawCodexTUI(App):
         self._runtime_permission_controller.cycle()
 
     def action_monitor_panel(self) -> None:
-        """Shift+Down: open the F-88 monitor task panel."""
+        """Shift+Down: open the monitor task panel."""
         if self.tool_context is None:
             return
         self.push_screen(MonitorPanel(self.tool_context))
@@ -1530,7 +1530,7 @@ class ClawCodexTUI(App):
                 load_and_register_skills(registry=None)
             except Exception:
                 pass
-            # F-53: also register dynamic tool commands in the global
+            # Auto-expose non-core tools: also register dynamic tool commands in the global
             # registry so ``execute_command_sync`` (which looks at the
             # global registry, not the TUI's private one) can route
             # ``/<tool-name>`` slash commands.
@@ -1701,7 +1701,7 @@ class ClawCodexTUI(App):
                 return
             self.session = resumed
             self._agent_bridge._session = resumed
-            # F-57 Phase 5: drop previous session's overlay macros after swap.
+            # Phase 5: drop previous session's overlay macros after swap.
             if getattr(self, "tool_context", None) is not None:
                 self.tool_context.session_id = getattr(resumed, "session_id", None) or session_id
                 clear_session_macros_for_context(self.tool_context)

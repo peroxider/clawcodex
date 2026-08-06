@@ -1,4 +1,4 @@
-"""Textual widgets used by the F-157 multi-model display bridge."""
+"""Textual widgets used by the multi-model display bridge."""
 
 from .diff_panel import MultiModelDiffPanel
 from .progress_bar import ModelProgressBars

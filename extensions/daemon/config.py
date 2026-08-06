@@ -1,4 +1,4 @@
-"""Daemon configuration model (F-84).
+"""Daemon configuration model.
 
 A single :class:`DaemonConfig` describes everything the supervisor
 needs to know to launch its workers — name, working directory,

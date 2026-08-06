@@ -3,7 +3,7 @@
 Handles compound commands (&&, ||, ;, |), semantic-neutral commands
 (echo, printf, true, false, :), and redirect target skipping.
 
-F-107: Extended with PowerShell command sets for ``shell="powershell"``.
+Extended with PowerShell command sets for ``shell="powershell"``.
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ SILENT_COMMANDS: frozenset[str] = frozenset(
 )
 
 # ---------------------------------------------------------------------------
-# F-107: PowerShell command sets
+# PowerShell command sets
 # ---------------------------------------------------------------------------
 
 PWSH_SEARCH_COMMANDS: frozenset[str] = frozenset(
@@ -208,7 +208,7 @@ def _split_with_operators(command: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# F-107: PowerShell command classification helpers
+# PowerShell command classification helpers
 # ---------------------------------------------------------------------------
 
 # Pre-compute lowercase set for O(1) lookup

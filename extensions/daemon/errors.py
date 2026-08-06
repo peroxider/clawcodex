@@ -1,10 +1,10 @@
-"""Custom exceptions raised by the daemon subsystem (F-84)."""
+"""Custom exceptions raised by the daemon subsystem."""
 
 from __future__ import annotations
 
 
 class DaemonError(Exception):
-    """Base class for all F-84 daemon errors.
+    """Base class for all daemon errors.
 
     Catching ``DaemonError`` covers every error this subsystem emits so
     callers (orchestrator, RCS, CLI) can fail safely without enumerating
@@ -50,7 +50,7 @@ class DaemonAlreadyRunningError(DaemonError):
     """``daemon start`` refused because another instance owns the state file.
 
     The caller should run ``daemon stop`` first, or pass
-    ``--force`` if F-84 ever grows that option.
+    ``--force`` if the daemon ever grows that option.
     """
 
 

@@ -155,7 +155,7 @@ def _code_review() -> CompositeToolSpec:
         description=(
             "Run an automated code review on the current branch, apply "
             "auto-fixable changes, run verification tests, and generate "
-            "a review report.  Designed for PR review automation (F-37)."
+            "a review report.  Designed for PR review automation."
         ),
         input_schema={
             "type": "object",
@@ -262,7 +262,7 @@ def lifecycle_tools_for_skill(
 def _invoke_existing_agent(*, bundle_dir: Path | None = None) -> CompositeToolSpec:
     """Invoke a previously-created SOP agent by its persisted reference.
 
-    The tool looks up the agent in the F-56 resource catalog, materializes
+    The tool looks up the agent in the resource catalog, materializes
     the stored SDK resource, and calls its persisted invocation contract.
     """
     del bundle_dir
@@ -270,7 +270,7 @@ def _invoke_existing_agent(*, bundle_dir: Path | None = None) -> CompositeToolSp
         name="invoke_existing_agent",
         description=(
             "Invoke a previously-created agent by its stable agent_id or saved name. "
-            "The F-57 workflow loads its F-56 resource record, materializes "
+            "The workflow loads its saved resource record, materializes "
             "the saved SDK resource, then returns the original invocation output."
         ),
         input_schema={
@@ -298,7 +298,7 @@ def _invoke_existing_agent(*, bundle_dir: Path | None = None) -> CompositeToolSp
         stages=[
             CompositeStage(
                 name="resolve-catalog",
-                description="Resolve the F-56 resource record by saved name or agent_id.",
+                description="Resolve the resource record by saved name or agent_id.",
             ),
             CompositeStage(
                 name="materialize",
@@ -339,12 +339,12 @@ def _invoke_existing_agent(*, bundle_dir: Path | None = None) -> CompositeToolSp
 
 
 def _resume_resource(*, bundle_dir: Path | None = None) -> CompositeToolSpec:
-    """Resume any registered F-56 catalog resource by type and ref."""
+    """Resume any registered catalog resource by type and ref."""
     del bundle_dir
     return CompositeToolSpec(
         name="resume_resource",
         description=(
-            "Resume a previously persisted F-56 catalog resource by resource_type "
+            "Resume a previously persisted catalog resource by resource_type "
             "and resource_ref. Looks up the ResourceHandler registry, materializes "
             "the opaque handle in a trusted private lane, invokes it, and returns "
             "JSON-safe output."
@@ -354,7 +354,7 @@ def _resume_resource(*, bundle_dir: Path | None = None) -> CompositeToolSpec:
             "properties": {
                 "resource_type": {
                     "type": "string",
-                    "description": "Registered F-56 resource_type (e.g. agent, DemoHandle).",
+                    "description": "Registered resource_type (e.g. agent, DemoHandle).",
                 },
                 "resource_ref": {
                     "type": "string",
@@ -374,7 +374,7 @@ def _resume_resource(*, bundle_dir: Path | None = None) -> CompositeToolSpec:
         stages=[
             CompositeStage(
                 name="resolve-catalog",
-                description="Resolve the F-56 resource record by type and resource_ref.",
+                description="Resolve the resource record by type and resource_ref.",
             ),
             CompositeStage(
                 name="materialize",

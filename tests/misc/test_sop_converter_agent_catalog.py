@@ -1,4 +1,4 @@
-"""Unit tests for F-55 L1 — :mod:`extensions.sop_converter.agent_catalog`.
+"""Unit tests for L1 — :mod:`extensions.sop_converter.agent_catalog`.
 
 Covers:
 

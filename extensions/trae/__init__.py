@@ -1,4 +1,4 @@
-"""F-66 Trae IDE 集成 (Layer 2).
+"""Trae IDE 集成 (Layer 2).
 
 包含两个互补子特性:
   * P66-E — ``mcp_bridge``: MCP 反向桥，让 Trae IDE 通过 MCP 调用 clawcodex

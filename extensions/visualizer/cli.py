@@ -1,4 +1,4 @@
-"""``clawcodex viz`` CLI subcommand (F-94-A).
+"""``clawcodex viz`` CLI subcommand.
 
 Usage::
 
@@ -16,8 +16,8 @@ Layout in the new ClawCodeX format:
   (flat fallback, used when the nested resolver is not registered)
 - ``~/.clawcodex/sessions/<sid>/subagents/agent-<agent_id>.jsonl`` —
   sub-agent transcript nested under the parent session
-- ``~/.clawcodex/tool-events/<run_id>/events.ndjson`` — F-45 audit log
-- ``~/.clawcodex/reports/run_*/state_journal.ndjson`` — F-96 orchestrator
+- ``~/.clawcodex/tool-events/<run_id>/events.ndjson`` — tool-events audit log
+- ``~/.clawcodex/reports/run_*/state_journal.ndjson`` — orchestrator
   state journals
 """
 
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 def register_viz_subcommand() -> None:
     """Register the ``viz`` subcommand with the CLI registry.
 
-    F-167-F: this helper is now self-contained. It tries to import the
+    This helper is now self-contained. It tries to import the
     CLI subcommand registry lazily and silently no-ops if the registry
     is unavailable (e.g. a minimal environment where
     ``clawcodex_ext.cli.subcommand_registry`` has not been installed,

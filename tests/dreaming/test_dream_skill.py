@@ -1,4 +1,4 @@
-"""Tests for the ``/dream`` slash skill — F-100 / 100.4.
+"""Tests for the ``/dream`` slash skill — dream skill.
 
 Covers subcommand dispatch: ``run`` / ``once`` / ``status`` / ``help``,
 plus registration as a :class:`LocalCommand` in the global command

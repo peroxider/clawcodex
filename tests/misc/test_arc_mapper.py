@@ -1,4 +1,4 @@
-"""Tests for F-50-C ARC stage → skill mapping."""
+"""Tests for ARC stage → skill mapping."""
 
 from __future__ import annotations
 

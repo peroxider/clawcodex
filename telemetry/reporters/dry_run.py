@@ -51,9 +51,9 @@ class DryRunReporter(Reporter):
 
 
 def _render_markdown(summary: dict[str, Any], date: str) -> str:
-    """Render the F-97 daily summary as Markdown.
+    """Render the telemetry daily summary as Markdown.
 
-    Pure function. Mirrors the F-97 daily summary Issue body template
+    Pure function. Mirrors the daily summary Issue body template
     but is fully
     local-only — no issue creation, no remote upload.
 

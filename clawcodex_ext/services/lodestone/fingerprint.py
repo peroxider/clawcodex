@@ -1,4 +1,4 @@
-"""F-97 LODESTONE — workspace fingerprint.
+"""LODESTONE — workspace fingerprint.
 
 Wraps the upstream ``clawcodex_ext.utils.git`` primitives to produce a
 ``WorkspaceFingerprint`` that the resolver consumes.

@@ -86,7 +86,7 @@ SKILL_FRAGMENT_TEMPLATE = """\
 **When to use:** {when_to_use}
 """
 
-# --- Jinja2 templates for F-50 Agent Markdown Writer ---
+# --- Jinja2 templates for Agent Markdown Writer ---
 
 AGENT_MD_TEMPLATE = """\
 ---

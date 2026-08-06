@@ -64,7 +64,7 @@ _DESTRUCTIVE_PATTERNS: list[_DestructivePattern] = [
     (re.compile(r"\bkubectl\s+delete\b"), "Note: may delete Kubernetes resources"),
     (re.compile(r"\bterraform\s+destroy\b"), "Note: may destroy Terraform infrastructure"),
     # ---------------------------------------------------------------------------
-    # F-107: PowerShell-specific destructive patterns
+    # PowerShell-specific destructive patterns
     # ---------------------------------------------------------------------------
     # File deletion
     (

@@ -1,4 +1,4 @@
-"""F-88 Monitor service layer.
+"""Monitor service layer.
 
 Provides the controller, watch compatibility shim, generic text tail follower,
 and stall-watchdog exemption hook used by both the ``/monitor`` slash command

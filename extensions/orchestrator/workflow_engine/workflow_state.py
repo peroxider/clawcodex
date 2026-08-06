@@ -1,4 +1,4 @@
-"""工作流运行时状态 (F-110)。"""
+"""工作流运行时状态。"""
 
 from __future__ import annotations
 

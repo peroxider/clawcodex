@@ -50,7 +50,7 @@ class _LazyProvider:
 
     ``build_provider_from_config`` pulls in ``src.providers.runtime`` (~573ms
     of provider-class imports including ``clawcodex_ext.providers`` package
-    init for the F-99 OAuth override registration) plus constructs the
+    init for the OAuth override registration) plus constructs the
     actual provider object (HTTP clients, model lookup). REPL cold start
     used to pay both costs eagerly.
 
@@ -93,7 +93,7 @@ class _LazyProvider:
             raise self._errored
         try:
             # Local import — ``src.providers.runtime`` triggers the
-            # F-99 provider-override side-effect import on first load.
+            # provider-override side-effect import on first load.
             from src.providers.runtime import build_provider_from_config
 
             self._resolved = build_provider_from_config(self._provider_name, self._model)
@@ -193,7 +193,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
             # attribute access (e.g. ``self.provider.model`` in
             # ``Session.create`` below, or anywhere in the bottom toolbar).
             # This moves the ``src.providers.runtime`` import chain (~573ms
-            # of provider class imports + F-99 OAuth override side-effect)
+            # of provider class imports + OAuth override side-effect)
             # out of REPL cold start.
             self.provider = _LazyProvider(provider_name)
             # Cheap env-var pre-check preserves the ``_api_key_missing``
@@ -379,7 +379,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
         else:
             self.tool_context.permission_handler = self._handle_permission_ask_request
 
-        # F-57 Phase 5 — main REPL may register session macros. Confirm
+        # Phase 5 — main REPL may register session macros. Confirm
         # uses a dedicated y/n prompt (NOT permission don't-ask-again).
         self.tool_context.allow_session_macro_registration = True
         self.tool_context.confirm_session_macro_plan = self._confirm_session_macro_plan
@@ -718,7 +718,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
         register_intent_forecast_commands(self.command_registry)
         register_intent_forecast_commands(None)
 
-        # F-53: auto-expose non-core tools as /<tool-name> slash commands
+        # Auto-expose non-core tools: auto-expose non-core tools as /<tool-name> slash commands
         # in the REPL command registry. Schemas are captured at
         # registration; the actual tool lookup is deferred to
         # invocation time via ``context.tool_registry``.

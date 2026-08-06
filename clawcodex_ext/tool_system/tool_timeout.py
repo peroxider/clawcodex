@@ -1,4 +1,4 @@
-"""Per-tool timeout resolution + gap-watchdog helpers (F-108 P108-C / P108-G).
+"""Per-tool timeout resolution + gap-watchdog helpers.
 
 The canonical tool execution lives in ``src/tool_system/`` which
 this fork cannot modify. The practical Layer-2 mechanism is:
@@ -41,7 +41,7 @@ from clawcodex_ext.diagnostics.freeze_config import (
 )
 
 
-# F-108 §十八 acceptance §3: tool timeout default 120 s. ``0`` (via
+# Acceptance §3: tool timeout default 120 s. ``0`` (via
 # env or settings) disables the watchdog for a specific tool.
 DEFAULT_TOOL_TIMEOUT_S = 120.0
 
@@ -51,13 +51,13 @@ DEFAULT_TOOL_TIMEOUT_S = 120.0
 _FAST_TOOL_TIMEOUT_S = 30.0
 _LONG_RUNNING_TOOL_TIMEOUT_S = 600.0
 
-# F-108 §十八 — the triage table. ``Bash`` is the canonical
+# The triage table. ``Bash`` is the canonical
 # "tool that can hang forever if a child process is wedged" entry
 # (risk #6 in the audit table). WebFetch is bumped to 30 s so the
 # 5-min default doesn't cover an obviously-stalled HTTP socket;
 # most healthy WebFetch calls return inside the budget. The
 # ``Agent`` subagent dispatcher already has its own watchdog via
-# F-99 — keep its timeout at the default so we don't double-fire.
+# keep its timeout at the default so we don't double-fire.
 _TOOL_TIMEOUT_S: dict[str, float] = {
     "Bash": DEFAULT_TOOL_TIMEOUT_S,
     "Edit": _FAST_TOOL_TIMEOUT_S,

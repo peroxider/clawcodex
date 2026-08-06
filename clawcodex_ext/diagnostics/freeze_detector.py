@@ -1,4 +1,4 @@
-"""Layer-1 freeze-detection watchdog (F-108 §十八 P108-D).
+"""Layer-1 freeze-detection watchdog (§十八 P108-D).
 
 A daemon thread polls every ``check_interval_s`` and, if the last
 ``heartbeat()`` was more than ``threshold_s`` ago, dumps the captured
@@ -37,13 +37,13 @@ from .freeze_config import (
 )
 
 
-# F-108 §十八 P108-D default poll cadence. 10 s is well under the
+# §十八 P108-D default poll cadence. 10 s is well under the
 # 60 s default threshold (the detector must tick at least once
 # within the threshold window) and far above the syscall cost of
 # reading ``time.monotonic()``.
 DEFAULT_FREEZE_CHECK_INTERVAL_S = 10.0
 
-# F-108 §十八 acceptance §5: ``CLAWCODEX_FREEZE_DIAG=1`` flips the
+# §十八 acceptance §5: ``CLAWCODEX_FREEZE_DIAG=1`` flips the
 # watchdog on for an existing process. Empty/unset keeps it idle
 # (no thread spawned, no resource spent).
 DEFAULT_FREEZE_DIAG_ENV = "CLAWCODEX_FREEZE_DIAG"

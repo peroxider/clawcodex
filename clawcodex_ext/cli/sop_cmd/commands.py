@@ -69,15 +69,15 @@ class ConvertOptions:
     strict_workflow_yaml: bool = False
     json_output: bool = False
     validate_only: bool = False
-    interactive: bool = False  # F-50.11.4: generate TODO templates on empty extraction
+    interactive: bool = False  # generate TODO templates on empty extraction
     # F-REC: optional .cast output path. When set, the convert call is
     # wrapped in a :class:`SopStageProjector` so the SOP CLI's stdout
     # (and the start/done markers) land in an asciicast file. Default
     # empty string keeps the existing behaviour (no recording).
     record_path: str = ""
-    # F-57 Phase 4: explicit handwritten macro manifests (repeatable).
+    # Explicit handwritten macro manifests (repeatable).
     macro_manifests: list[str] | None = None
-    # F-57: directory of handwritten macros (globs *.yaml/*.yml).
+    # Directory of handwritten macros (globs *.yaml/*.yml).
     macros_dir: str = ""
 
 
@@ -492,7 +492,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
     except Exception:
         tool_deps_index = None
 
-    # F-57 Phase 4: preview / validate handwritten macros without writing
+    # Preview / validate handwritten macros without writing
     if opts.preview or opts.validate_only:
         try:
             from extensions.sop_converter.runtime.macros import (
@@ -560,7 +560,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 )
                 if composite_registered:
                     print(f"   Registered composite tools: {len(composite_registered)}")
-                # F-55: auto-promote lifecycle recovery composite tools into
+                # Auto-promote lifecycle recovery composite tools into
                 # skills whose allowed_tools intersect the agent_lifecycle group.
                 try:
                     from extensions.sop_converter.runtime.composite_tools.builtin import (
@@ -607,7 +607,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                     file=sys.stderr,
                 )
 
-            # F-57 Phase 4: handwritten / template macros (sop-macros/ + --macro-manifest)
+            # Handwritten / template macros (sop-macros/ + --macro-manifest)
             try:
                 from extensions.sop_converter.runtime.macros import (
                     MacroConvertError,
@@ -805,7 +805,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
     if workflow_graph and agent_map and out_path and not emit_workflow_bundle:
         print(
             "   Warning: workflow artifacts skipped (no mapped stages; "
-            "use fwa/hybrid mode or fix F-50-C mapping)",
+            "use fwa/hybrid mode or fix the macro mapping)",
             file=sys.stderr,
         )
     elif workflow_graph and agent_map and not agent_map.has_mapped_stages and emit_workflow_bundle:
@@ -944,7 +944,7 @@ def _handle_convert_from_source(opts: ConvertOptions) -> int:
                 sdk_source_dir=sdk_path,
             )
 
-        # F-50-E: write hybrid/wrapper/native stage agents last so coarse write_agent cannot overwrite them
+        # Write hybrid/wrapper/native stage agents last so coarse write_agent cannot overwrite them
         if workflow_graph and agent_map and emit_workflow_bundle and emit_stage_agents:
             from extensions.sop_converter.workflow_mode.generator import stage_agent_existing_names
 

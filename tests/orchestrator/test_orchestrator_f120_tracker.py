@@ -1,4 +1,4 @@
-"""F-120 Step 3: MergeableStatus + tracker adapter delegate.
+"""Step 3: MergeableStatus + tracker adapter delegate.
 
 Covers:
   - MergeableStatus dataclass 字段默认值 + has_conflicts derived

@@ -65,7 +65,7 @@ from src.query.tool_failure_loop_guard import (
 )
 
 # ---------------------------------------------------------------------------
-# F-68: Feature-gate helper for hook phases.
+# Feature-gate helper for hook phases.
 # Wraps hook invocation so that HOOK_PRE_LLM / HOOK_POST_LLM flags can
 # disable the entire hook pipeline without changing the call sites.
 # ---------------------------------------------------------------------------
@@ -1672,7 +1672,7 @@ def _dispatch_single_tool(
         result = tool_registry.dispatch(call, tool_use_context)
         _dur_ms = (time.monotonic() - _t0) * 1000
 
-        # F-75: 工具/Skill 调用统计（静默记录，不阻断热路径）
+        # 工具/Skill 调用统计（静默记录，不阻断热路径）
         try:
             from clawcodex_ext.tool_stats import record_tool, record_skill
 
@@ -1859,7 +1859,7 @@ async def _run_tools_partitioned(
     MAX_TOOL_USE_CONCURRENCY.  Non-safe tools (Bash, Edit, Write) run
     exclusively one at a time.
 
-    F-99 方案3: dispatch concurrent tools as ``asyncio`` tasks (rather
+    dispatch concurrent tools as ``asyncio`` tasks (rather
     than ``asyncio.gather`` on raw coroutines) and poll with
     ``asyncio.wait(FIRST_COMPLETED)`` so a user abort can cancel the
     in-flight tool tasks as soon as one completes, instead of
@@ -1887,7 +1887,7 @@ async def _run_tools_partitioned(
         primaries.append(pair[0])
         extras.extend(pair[1])
 
-    # F-99 方案3 helper: dispatch a batch of tool_use_blocks concurrently
+    # helper: dispatch a batch of tool_use_blocks concurrently
     # with FIRST_COMPLETED polling. Aborts short-circuit remaining tasks
     # so the agent loop unwinds the moment the abort signal trips,
     # without waiting for stragglers. Returns when every task is done
@@ -1930,7 +1930,7 @@ async def _run_tools_partitioned(
             tasks[task] = block
         try:
             pending: set[asyncio.Task[tuple[UserMessage, list[UserMessage]]]] = set(tasks)
-            # F-99 方案3 abort poll: ``asyncio.wait`` only returns when
+            # abort poll: ``asyncio.wait`` only returns when
             # a task completes, so without a timeout it would block
             # until the slowest remaining tool finishes — the very
             # behaviour we're fixing. By passing ``timeout=0.1`` we
@@ -1969,7 +1969,7 @@ async def _run_tools_partitioned(
                         # should not see AbortError in practice.
                         raise exc
                     _accumulate(task.result())
-                # F-99 方案3: poll abort between batches. Even if all
+                # poll abort between batches. Even if all
                 # remaining tasks finish naturally, an abort that
                 # fired mid-batch must short-circuit subsequent work
                 # so we don't burn another tool round-trip the user
@@ -2368,7 +2368,7 @@ async def query(
                 )
 
         # P102-A: pre-LLM 通用扩展钩子
-        # 允许外部策略（如 F-69 Budget Mode）在 _call_model_sync 之前
+        # 允许外部策略（如 Budget Mode）在 _call_model_sync 之前
         # 修改 messages 或 system_prompt，无需修改 query() 函数体。
         current_system_prompt = params.system_prompt
         hook_result = _call_hooks_if_enabled(
@@ -3273,7 +3273,7 @@ async def query(
         # to avoid touching ToolContext's public surface.
         setattr(tool_use_context, "_active_provider", params.provider)
 
-        # ── F-122-C: 保存 CacheSafeParams（供 /btw side_question 使用）──
+        # ── 保存 CacheSafeParams（供 /btw side_question 使用）──
         try:
             from clawcodex_ext.agent.forked_agent import (
                 CacheSafeParams,

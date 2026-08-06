@@ -1,4 +1,4 @@
-"""Compile-side DAG validation without importing F-110."""
+"""Compile-side DAG validation without importing the workflow schema validator."""
 
 from __future__ import annotations
 

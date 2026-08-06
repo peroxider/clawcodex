@@ -1,4 +1,4 @@
-"""F-97 LODESTONE — resolver.
+"""LODESTONE — resolver.
 
 Maps a ``LodestoneAnchor`` + ``AnchorContext`` to a ``RenderedAnchor``:
 

@@ -1,12 +1,12 @@
-"""F-103 — parentUuid chain + walkChainBeforeParse 读取过滤。
+"""parentUuid chain + walkChainBeforeParse 读取过滤。
 
-Test coverage for the decoupled F-103 implementation:
+Test coverage for the decoupled implementation:
 
 * Write side (``extensions/agent/session_persist.py::_inject_parent_uuids``)
 * Read side (``clawcodex_ext/agent/chain_filter.py``)
 * Integration (``clawcodex_ext/agent/session.py::_load_from_enhanced_transcript``)
 
-Acceptance scenarios for F-103:
+Acceptance scenarios:
 1. New-format write produces a correct parentUuid chain.
 2. ``/rewind`` → new messages form a branch on disk.
 3. ``walkChainBeforeParse`` drops dead-branch lines above the
@@ -42,7 +42,7 @@ from extensions.agent.session_persist import _inject_parent_uuids  # noqa: E402
 
 
 def _msg(uuid: str, parent_uuid, role: str, content: str) -> dict:
-    """Build a chat message dict with the F-103 ``parentUuid`` field."""
+    """Build a chat message dict with the ``parentUuid`` field."""
     return {
         "uuid": uuid,
         "parentUuid": parent_uuid,
@@ -124,7 +124,7 @@ class TestInjectParentUuids(unittest.TestCase):
         self.assertEqual(out[2]["parentUuid"], "u2")
 
     def test_always_recomputes_existing_parentUuid(self):
-        """F-103 design mandates recomputation on every write (写入时计算)."""
+        """Design mandates recomputation on every write (写入时计算)."""
         msgs = [
             {"uuid": "u1", "role": "user", "content": "x"},  # no parentUuid field
         ]

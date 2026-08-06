@@ -1,4 +1,4 @@
-"""Load handwritten MacroDefinition YAML for F-57 Phase 4."""
+"""Load handwritten MacroDefinition YAML."""
 
 from __future__ import annotations
 

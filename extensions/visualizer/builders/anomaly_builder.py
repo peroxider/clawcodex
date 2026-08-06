@@ -1,6 +1,6 @@
-"""Anomaly detection builder (F-91-C).
+"""Anomaly detection builder.
 
-Detects anomalies from session data using F-51 no-op thresholds and other heuristics.
+Detects anomalies from session data using no-op thresholds and other heuristics.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from ..models.viz_models import (
 
 logger = logging.getLogger(__name__)
 
-# Thresholds (mirrors F-51 settings where applicable)
+# Thresholds (mirrors no-op threshold settings where applicable)
 _LONG_TOOL_THRESHOLD_MS = 30_000  # 30 seconds
 _HIGH_COST_THRESHOLD_USD = 5.0  # $5
 _MAX_TURNS_WARNING = 50

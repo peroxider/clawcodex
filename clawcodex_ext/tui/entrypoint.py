@@ -193,7 +193,7 @@ def _run_tui_with_app(
     # ---- SIGTERM/SIGINT: save session + print resume hint via graceful shutdown (S-R1) ----
     _register_tui_signal_save(used_session)
 
-    # F-97: best-effort session_start. The session id is the same one
+    # Telemetry: best-effort session_start. The session id is the same one
     # the conversation persists under so the per-day aggregator can
     # cross-link events to a known session. Failures are swallowed.
     try:
@@ -215,7 +215,7 @@ def _run_tui_with_app(
     except KeyboardInterrupt:
         exit_code = 130
     except Exception as exc:
-        # F-97: best-effort error event with stable fingerprint.
+        # Telemetry: best-effort error event with stable fingerprint.
         # Failures are swallowed.
         try:
             from telemetry import record_error
@@ -225,7 +225,7 @@ def _run_tui_with_app(
             pass
         raise
     finally:
-        # F-97: best-effort session_end + command_run. Telemetry
+        # Telemetry: best-effort session_end + command_run. Telemetry
         # must never block the user's exit.
         try:
             from telemetry import (

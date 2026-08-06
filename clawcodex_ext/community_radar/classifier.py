@@ -1,6 +1,6 @@
-"""Keyword-based feature classifier for SR-5.1.
+"""Keyword-based feature classifier for the community feature radar.
 
-Implements the rule-first ``classifier`` module for SR-5.1.
+Implements the rule-first ``classifier`` module for the community feature radar.
 Classification is rule-first: every :class:`FeatureCategory` has a list
 of keyword signals that score ``title + description`` after lowercasing.
 

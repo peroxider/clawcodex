@@ -1,4 +1,4 @@
-"""F-120 ``/dashboard`` slash command.
+"""``/dashboard`` slash command.
 
 Provides a Rich-markup snapshot of every ``DashboardEntry`` currently
 visible in the cross-system aggregator. Pure read-only — never
@@ -35,7 +35,7 @@ Design notes:
     plain-text terminal.
   * The command is registered as an :class:`InteractiveCommand`
     so the REPL can route long snapshots through its
-    keyboard-scrolled viewer (F-122-F). Headless / non-interactive
+    keyboard-scrolled viewer (scrollable rendering). Headless / non-interactive
     surfaces degrade to a flat text print.
 """
 
@@ -71,7 +71,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["DASHBOARD_COMMAND", "DashboardCommand", "dashboard_command_call"]
 
-# F-122-F: when the formatted snapshot exceeds this many lines we mark the
+# When the formatted snapshot exceeds this many lines we mark the
 # InteractiveOutcome as scrollable so the REPL enters its keyboard-scrolled
 # view. Below the threshold a flat print is friendlier.
 _SCROLLABLE_LINE_THRESHOLD = 8
@@ -327,7 +327,7 @@ class DashboardCommand(InteractiveCommand):
     """``/dashboard`` — cross-system task progress dashboard (read-only).
 
     Implemented as an :class:`InteractiveCommand` so the REPL can route long
-    snapshots through its keyboard-scrolled viewer (F-122-F). On headless or
+    snapshots through its keyboard-scrolled viewer (scrollable rendering). On headless or
     non-interactive surfaces the command degrades to a flat text print; it
     never calls ``ctx.ui``.
     """

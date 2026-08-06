@@ -1,4 +1,4 @@
-"""F-97 LODESTONE: unified deep-link anchor layer for ClawCodex.
+"""LODESTONE: unified deep-link anchor layer for ClawCodex.
 
 LODESTONE recognises ``path:line[:column]`` / git refs / tracker issues /
 function symbols that appear in any agent output, REPL panel or markdown

@@ -1,7 +1,7 @@
-"""Recording subsystem configuration (F-REC).
+"""Recording subsystem configuration.
 
 Holds the runtime-tunable knobs for the asciicast recorder. Per the
-F-REC plan, defaults leave the recorder fully disabled so existing
+recording plan, defaults leave the recorder fully disabled so existing
 runs are unaffected. Operators opt in by setting the config key (or by
 invoking ``clawcodex record`` directly, which builds its own writer
 without touching this module).
@@ -34,7 +34,7 @@ class RecordingConfig:
             on the CLI. Empty list means the CLI must be given sources
             explicitly.
         flush_mode: ``"per_frame"`` flushes after every event (matches
-            the F-REC plan decision; enables ``tail -f``); periodic
+            the recording plan decision; enables ``tail -f``); periodic
             modes are reserved for future tuning and not yet
             implemented.
         default_width / default_height: Terminal size used when the

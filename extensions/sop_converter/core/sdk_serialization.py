@@ -509,7 +509,7 @@ def promote_flat_llm_agent_config(value: Any) -> Any:
     """Lift flat create payloads into nested ``ModelConfig`` shape.
 
     Mirrors the helper embedded in generated SDK wrappers so runtime factory
-    calls (F-57) accept the same natural-language ``agent_config`` form.
+    calls (runtime materialize) accept the same natural-language ``agent_config`` form.
 
     Leaf ``model_info`` dicts (string ``model`` + credentials, no agent
     identity fields) must not be rewritten.
@@ -562,7 +562,7 @@ def coerce_sdk_type(cls: Any, value: Any) -> Any:
     """Convert JSON-compatible *value* to an SDK annotation type.
 
     This is the runtime counterpart of the helper embedded into generated SDK
-    wrappers. F-57 uses it before calling a saved factory directly.
+    wrappers. Runtime helpers use it before calling a saved factory directly.
     """
     import dataclasses
     from types import UnionType

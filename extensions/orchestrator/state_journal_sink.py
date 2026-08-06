@@ -1,4 +1,4 @@
-"""State Journal Sink — bridges ProgressReporter → NDJSON (F-96-B).
+"""State Journal Sink — bridges ProgressReporter → NDJSON.
 
 Implements the :class:`ProgressSink` protocol so that agent progress events
 (phase/turn/session completion) are automatically written to the

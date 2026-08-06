@@ -1,4 +1,4 @@
-"""F-106 — Unit tests for the lazy compression pipeline gate.
+"""Unit tests for the lazy compression pipeline gate.
 
 Tests are intentionally small and deterministic; they cover the four
 decision branches (forced_source, forced_transition, forced_prev_error,

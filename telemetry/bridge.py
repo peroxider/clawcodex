@@ -1,11 +1,11 @@
-"""F-97-I bridge: route ``src.services.analytics`` events into telemetry.
+"""Bridge: route ``src.services.analytics`` events into telemetry.
 
 ClawCodex has two parallel event systems:
 
 * :mod:`src.services.analytics` — older, pluggable :class:`AnalyticsSink`
   abstraction (``NullSink``/``ConsoleSink``/``FileSink``) consumed by
   ``image_processor.py``/``image_validation.py``/``pdf_extraction.py``.
-* :mod:`telemetry` — newer, opt-in F-97 system with local
+* :mod:`telemetry` — newer, opt-in system with local
   JSONL storage, redaction, daily aggregation and opt-in Issue
   reporting. Redaction runs on every event in
   :meth:`_TelemetryRecorderImpl._enqueue_event` so any field set on a

@@ -80,13 +80,13 @@ agent:
   provider: anthropic
   # Leave blank to let schema.py auto-promote dontAsk → bypassPermissions (headless safe)
   permission_mode: bypassPermissions
-  # F-38 verification trio. Empty string = skip that step.
+  # verification trio. Empty string = skip that step.
   test_command: "{{TEST_COMMAND}}"        # e.g. "python3 -m pytest tests/test_orchestrator_*.py -q"
   build_command: ""
   lint_command: ""
   verification:
     timeout_ms: 600000
-  # F-39 Sub-F: max auto-retries per issue (agent:retry disabled after this)
+  # max auto-retries per issue (agent:retry disabled after this)
   max_retries_per_issue: 3
   allow_anyone_to_retry: false
 
@@ -105,7 +105,7 @@ sandbox:
 # Hooks
 # -----------------------------------------------------------------------------
 # - before_run / after_run: lightweight notifications at start / end
-# - pre_commit / pre_push / post_sync: F-38 sync hooks; empty string = skip
+# - pre_commit / pre_push / post_sync: sync hooks; empty string = skip
 # - post_sync here pushes the branch to {{REVIEW_REMOTE}} as review/<id> for
 #   manual review. Push does not modify the working tree, so the post_sync
 #   dirty check will not trigger. Leave post_sync empty to keep branches local only.
@@ -118,7 +118,7 @@ hooks:
   timeout_ms: 120000
 
 # -----------------------------------------------------------------------------
-# Review feedback (F-37): pull PR review comments to trigger follow-up
+# Review feedback: pull PR review comments to trigger follow-up
 # No real PRs in local mode; leave disabled. Set enabled=true and configure
 # mode to turn on.
 # -----------------------------------------------------------------------------

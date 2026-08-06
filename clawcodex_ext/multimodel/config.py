@@ -1,4 +1,4 @@
-"""Persistent configuration and selection precedence for F-157."""
+"""Persistent configuration and selection precedence for multi-model scheduling."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
-"""Default discovery paths for templates (F-85 / P85-B).
+"""Default discovery paths for templates.
 
-This module is the **path** half of P85-B: it computes where to look
+This module is the **path** half of the discovery feature: it computes where to look
 for template files on disk. It is intentionally pure — no I/O, no
 registry mutation — so tests can exercise the resolution logic
 without touching the filesystem.

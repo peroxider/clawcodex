@@ -1,4 +1,4 @@
-"""F-120 Agent Dashboard — cross-system read-only aggregator.
+"""Agent Dashboard — cross-system read-only aggregator.
 
 The agent_dashboard package provides a unified, read-only view of
 progress data from all agent-loop subsystems (goal, task,

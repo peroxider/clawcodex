@@ -1,4 +1,4 @@
-"""F-56 section 14 / F-55 section 8.8 extensibility matrix (E1-E5)."""
+"""Section 14 / section 8.8 extensibility matrix (E1-E5)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""E2E unit tests for F-55 L1 — invoke-existing-agent via F-56 ResourceCatalog.
+"""E2E unit tests for L1 — invoke-existing-agent via ResourceCatalog.
 
 Covers:
 
@@ -8,7 +8,7 @@ Covers:
 4. Missing catalog / missing id → structured error
 5. Materialize failures
 
-Legacy ``agent-catalog.json`` is no longer consulted (F-56 Phase D).
+Legacy ``agent-catalog.json`` is no longer consulted (Phase D).
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ def _persist_entry(
     *,
     bundle_id: str = "bundle",
 ) -> Path:
-    """Write an agent fixture into the F-56 resource catalog."""
+    """Write an agent fixture into the resource catalog."""
     loc = resolve_resource_catalog_path(bundle, bundle_id=bundle_id)
     loc.ensure_parent()
     cat = ResourceCatalog()
@@ -229,7 +229,7 @@ class TestInvokeExistingAgentCrossProcess(unittest.TestCase):
 
 
 class TestInvokeExistingAgentResourceCatalogFallback(unittest.TestCase):
-    """F-56: resource-catalog alone can recover an existing agent."""
+    """resource-catalog alone can recover an existing agent."""
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()

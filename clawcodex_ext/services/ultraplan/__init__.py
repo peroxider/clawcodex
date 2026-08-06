@@ -1,9 +1,9 @@
-"""Ultraplan service primitives and F-87 user-facing planning helpers.
+"""Ultraplan service primitives and user-facing planning helpers.
 
 This package ships a hierarchical plan model (Plan → SubPlan → Step)
 with strict dataclass validation, an atomic JSON store, a step state
 machine executor, an adjuster for mid-execution changes, and a
-sandboxed acceptance-criteria verifier. F-87 adds LLM plan generation,
+sandboxed acceptance-criteria verifier. It adds LLM plan generation,
 templates, keyword detection, CCR client plumbing, audit logging, and
 the controller used by the ``/ultraplan`` command.
 """

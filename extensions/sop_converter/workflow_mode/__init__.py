@@ -1,4 +1,4 @@
-"""F-50-A/B workflow mode package."""
+"""Workflow mode package."""
 
 from .discriminator import WorkflowDiscriminator
 from .models import DiscriminationResult, HeuristicMatch, THRESHOLD_FWA, THRESHOLD_SDK

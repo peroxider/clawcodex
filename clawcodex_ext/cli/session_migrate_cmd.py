@@ -1,6 +1,6 @@
 """Fast-path ``clawcodex-dev session migrate`` CLI command.
 
-F-49 P5-H: register the ``session`` subcommand so operators can run::
+Register the ``session`` subcommand so operators can run::
 
     clawcodex-dev session migrate --from-3-file [--all] [--remove-legacy] [SESSION_ID]
 

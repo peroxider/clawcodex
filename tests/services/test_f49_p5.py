@@ -1,4 +1,4 @@
-"""Tests for F-49 Phase 5 — session.json + transcript.jsonl 合并 (方案 C).
+"""Tests for Phase 5 — session.json + transcript.jsonl 合并 (方案 C).
 
 Verifies the end-to-end behavior of the unified on-disk format
 introduced by Phase 5:
@@ -16,7 +16,7 @@ introduced by Phase 5:
 * ``session_migrate.migrate_session()`` converts the legacy 3-file
   format to the unified 2-file format.
 
-Acceptance scenarios for F-49 P5:
+Acceptance scenarios for Phase 5:
 
 1. REPL 交互 → exit → Session.load(): provider + 全量消息 + cost 正确恢复,无 session.json 依赖
 2. cost_restore.restore_cost_state_for_session(): 从 transcript.jsonl tail -1 恢复 cost

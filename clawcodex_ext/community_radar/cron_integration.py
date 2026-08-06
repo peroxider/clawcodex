@@ -1,7 +1,7 @@
-"""Cron integration helpers for SR-5.1.
+"""Cron integration helpers for the community feature radar.
 
-Wires the radar into the existing F-22 Cron system. The actual
-scheduling is done by the F-22 scheduler
+Wires the radar into the existing Cron system. The actual
+scheduling is done by the Cron scheduler
 (``clawcodex_ext.cron_system``) calling
 :func:`clawcodex_ext.community_radar.run_community_scan`. This module
 provides the thin adapter so a user (or the bootstrap script) can:
@@ -13,7 +13,7 @@ provides the thin adapter so a user (or the bootstrap script) can:
   (``get_cron_task_status``).
 
 The helpers use the existing ``CronTask`` + ``CronScheduler`` APIs and
-fall back to a no-op when the F-22 module is unavailable (e.g. on a
+fall back to a no-op when the Cron module is unavailable (e.g. on a
 slim CI image) so importing this module never crashes the radar.
 """
 
@@ -33,7 +33,7 @@ _log = logging.getLogger(__name__)
 
 DEFAULT_CRON_TASK_ID = "community-radar-weekly"
 DEFAULT_CRON_PROMPT = (
-    "Run the SR-5.1 community radar scan "
+    "Run the community radar scan "
     "via run_community_scan(); persist the digest to "
     "~/.clawcodex/reports/community-radar."
 )
@@ -50,7 +50,7 @@ class CronTaskSummary:
 
 
 # ---------------------------------------------------------------------------
-# Cron helpers — F-22 integration. Imports are lazy so the radar can
+# Cron helpers — Cron integration. Imports are lazy so the radar can
 # run on systems where the Cron subsystem is disabled (e.g. headless CI).
 # ---------------------------------------------------------------------------
 
@@ -90,7 +90,7 @@ def install_cron_task(
 ) -> CronTaskSummary:
     """Install (or replace) the radar's Cron task.
 
-    Returns a :class:`CronTaskSummary`. When the F-22 Cron module is not
+    Returns a :class:`CronTaskSummary`. When the Cron module is not
     importable the helper degrades to a no-op and returns
     ``installed=False``; this keeps callers' code paths uniform.
     """
@@ -100,7 +100,7 @@ def install_cron_task(
             task_id=task_id,
             installed=False,
             schedule=schedule or "",
-            message="F-22 cron system unavailable; nothing installed.",
+            message="Cron system unavailable; nothing installed.",
         )
 
     config = _load_config_safely()

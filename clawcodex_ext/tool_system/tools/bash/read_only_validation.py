@@ -4,7 +4,7 @@ Splits on pipes and checks each sub-command's leading token against
 a known allowlist.  Rejects shell meta-characters that could bypass
 the simple token check (back-ticks, $(), etc.).
 
-F-107: Extended with PowerShell read-only command set when
+Extended with PowerShell read-only command set when
 ``shell="powershell"``.
 """
 
@@ -102,7 +102,7 @@ READONLY_COMMANDS: frozenset[str] = frozenset(
 )
 
 # ---------------------------------------------------------------------------
-# F-107: PowerShell read-only command set
+# PowerShell read-only command set
 # ---------------------------------------------------------------------------
 
 PWSH_READONLY_COMMANDS: frozenset[str] = frozenset(

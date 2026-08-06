@@ -1,4 +1,4 @@
-"""F-68: Feature Gate CLI subcommand.
+"""Feature Gate CLI subcommand.
 
 Usage::
 

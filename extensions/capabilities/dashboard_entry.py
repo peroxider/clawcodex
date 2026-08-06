@@ -1,4 +1,4 @@
-"""F-120 Agent Dashboard — unified entry & source contracts.
+"""Agent Dashboard — unified entry & source contracts.
 
 Layer 2 Protocol module. Defines the cross-subsystem contract that lets
 all consumer surfaces (TUI ``/dashboard`` command, Visualizer Web tab,

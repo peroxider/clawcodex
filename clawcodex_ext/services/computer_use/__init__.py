@@ -1,4 +1,4 @@
-"""Computer Use service primitives (F-61 first iteration).
+"""Computer Use service primitives (first iteration).
 
 This package ships the cross-platform ABCs, a safety-gated Linux backend, a
 null backend for tests and unsupported platforms, and a thin factory used by

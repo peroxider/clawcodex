@@ -997,7 +997,7 @@ class TestOperatorHintsInjection(unittest.TestCase):
 
 
 class TestRulesReferenceInjection(unittest.TestCase):
-    """F-121: verify render() injects the 📐 rules reference line."""
+    """verify render() injects the 📐 rules reference line."""
 
     def setUp(self) -> None:
         WorkflowStore.reset()

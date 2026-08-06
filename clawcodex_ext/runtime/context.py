@@ -73,9 +73,9 @@ class RuntimeContext:
     session: Any | None
     workspace_root: Path
     options: RuntimeOptions
-    # F-157 selection resolved by the CLI or a runtime slash command.
+    # Multi-model selection resolved by the CLI or a runtime slash command.
     multimodel_group: str = ""
-    # F-125 C14: ``resume_session_with_tail`` returns a TailFollower that
+    # Resume/fork support C14: ``resume_session_with_tail`` returns a TailFollower that
     # headless never iterates. Without an explicit release the follower
     # holds a reference to the session transcript path and keeps the
     # ``_offset`` / asyncio event state alive for the lifetime of the
@@ -118,7 +118,7 @@ class RuntimeContext:
         options.provider_name = provider_name
         options.model = resolution.model
 
-        # F-157: replace the ordinary provider only after resolving the base
+        # Multi-model ensemble: replace the ordinary provider only after resolving the base
         # runtime settings, keeping the core query loop unaware of ensembles.
         if options.multimodel_group:
             from clawcodex_ext.multimodel.config import default_config_path, load_config
@@ -163,12 +163,12 @@ class RuntimeContext:
             tool_context.allow_docs = True
         tool_context.options.is_non_interactive_session = False
 
-        # Wire persistent cron scheduler to the tool context (F-22).
+        # Wire persistent cron scheduler to the tool context (cron scheduler).
         # Runs a background daemon thread that checks for due tasks
         # every second and pushes cron_prompt events to the outbox.
         attach_cron_runtime(tool_context, autostart=True)
 
-        # F-100: Wire the dreaming system (background memory consolidation).
+        # Dreaming system: Wire the dreaming system (background memory consolidation).
         try:
             from clawcodex_ext.dreaming.runner import wire_real_dream_runner
             from clawcodex_ext.dreaming.service import init_auto_dream
@@ -250,7 +250,7 @@ class RuntimeContext:
         return runtime
 
     def close_tail_follower(self) -> None:
-        """F-125 C14: release the TailFollower obtained during resume.
+        """Resume/fork support C14: release the TailFollower obtained during resume.
 
         ``resume_session_with_tail`` returns a follower that headless
         never iterates — without an explicit release the follower keeps
@@ -279,7 +279,7 @@ class RuntimeContext:
                 loop.close()
         except Exception:
             logging.getLogger(__name__).debug(
-                "F-125 C14: tail follower release failed (non-fatal)",
+                "C14: tail follower release failed (non-fatal)",
                 exc_info=True,
             )
 

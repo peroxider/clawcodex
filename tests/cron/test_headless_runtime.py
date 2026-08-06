@@ -1,4 +1,4 @@
-"""Headless entrypoint cron runtime integration tests (F-22).
+"""Headless entrypoint cron runtime integration tests.
 
 These tests verify that ``clawcodex_ext.entrypoints.headless.run_headless``
 wires cron tools, attaches the scheduler with the busy gate, drains cron

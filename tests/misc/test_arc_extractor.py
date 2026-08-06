@@ -1,4 +1,4 @@
-"""Tests for F-50-G ArcExtractor (now via PatternExtractor + ARC_COMPAT_CONFIG)."""
+"""Tests for ArcExtractor (now via PatternExtractor + ARC_COMPAT_CONFIG)."""
 
 from __future__ import annotations
 

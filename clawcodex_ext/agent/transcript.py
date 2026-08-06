@@ -477,7 +477,7 @@ class TranscriptWriter:
         model: str = "",
         created_at: str | None = None,
     ) -> None:
-        """F-49 P5-G: write a ``session_init`` line as the first transcript entry.
+        """Write a ``session_init`` line as the first transcript entry.
 
         The line carries session-level metadata (provider, model, created_at)
         so ``Session.load()`` can reconstruct these fields from the JSONL

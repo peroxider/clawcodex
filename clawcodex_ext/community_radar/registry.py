@@ -1,6 +1,6 @@
-"""Source registry for SR-5.1 Community Feature Radar.
+"""Source registry for the Community Feature Radar.
 
-Implements the ``SourceRegistry`` for SR-5.1.
+Implements the ``SourceRegistry`` for the community feature radar.
 The registry owns the set of :class:`WatchSource` records the radar
 tracks, persists them as YAML, and ships with a sensible default set
 derived from the Phase-1 project list.

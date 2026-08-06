@@ -1,4 +1,4 @@
-"""Single feature-gate chokepoint for F-157 multi-model dispatch."""
+"""Single feature-gate chokepoint for multi-model dispatch."""
 
 from __future__ import annotations
 

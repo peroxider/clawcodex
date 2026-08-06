@@ -1,4 +1,4 @@
-"""F-108 P108-C — per-tool gap watchdog tests."""
+"""Per-tool gap watchdog tests."""
 
 from __future__ import annotations
 

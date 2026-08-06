@@ -1,4 +1,4 @@
-"""F-125: headless ``--resume`` / ``--continue`` / ``--fork-session`` tests.
+"""Headless ``--resume`` / ``--continue`` / ``--fork-session`` tests.
 
 These tests pin Phase 1 + Phase 2 + Phase 3 minimum-viable behaviour:
 
@@ -373,7 +373,7 @@ def test_headless_resume_session_at_out_of_range_exits_2(fake_wiring, monkeypatc
 
 
 # ---------------------------------------------------------------------------
-# F-125 Phase 3: C9 read-file-state seed (R9).
+# Phase 3: C9 read-file-state seed (R9).
 # ---------------------------------------------------------------------------
 
 
@@ -542,7 +542,7 @@ def test_read_file_seed_marks_partial_reads(fake_wiring, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# F-125 Phase 3: C5 --allowed-tools / --disallowed-tools conflict warning.
+# Phase 3: C5 --allowed-tools / --disallowed-tools conflict warning.
 # ---------------------------------------------------------------------------
 
 
@@ -665,7 +665,7 @@ def test_allowed_tools_no_warning_on_fresh_session(fake_wiring, monkeypatch, tmp
 
 
 # ---------------------------------------------------------------------------
-# F-125 Phase 2 acceptance: R3 cross-run accumulation (end-to-end).
+# Phase 2 acceptance: R3 cross-run accumulation (end-to-end).
 # ---------------------------------------------------------------------------
 
 

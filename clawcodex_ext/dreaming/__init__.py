@@ -1,4 +1,4 @@
-"""Dreaming — F-100 background memory consolidation subsystem.
+"""Dreaming — background memory consolidation subsystem.
 
 Mirrors the upstream ``claude-code-best/src/services/autoDream/`` stack:
 

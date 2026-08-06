@@ -1,4 +1,4 @@
-"""F-REC-L: capture the default prompt_toolkit + Rich REPL into a ``.cast``.
+"""Capture the default prompt_toolkit + Rich REPL into a ``.cast``.
 
 This module provides ``install_repl_capture(repl, ctx)`` which is called
 from ``clawcodex_ext/frontend/repl.py`` right after

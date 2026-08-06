@@ -10,7 +10,7 @@ Phase 3 may refactor this class to satisfy the
 (structural duck-typing on ``heartbeat() -> HeartbeatStatus``).
 """
 
-"""Layer-1 freeze-detection watchdog (F-108 §十八 P108-D).
+"""Layer-1 freeze-detection watchdog.
 
 A daemon thread polls every ``check_interval_s`` and, if the last
 ``heartbeat()`` was more than ``threshold_s`` ago, dumps the captured
@@ -21,7 +21,7 @@ log convention).
 The detector is deliberately **observation-only**: it never trips an
 abort controller, never raises, and never modifies the canonical
 agent loop. Auto-recovery is the responsibility of Layer 3
-(P108-G) — the detector's job is to give postmortem reporters (the
+— the detector's job is to give postmortem reporters (the
 Layer 4 ``diag freeze-report`` CLI) something to read.
 
 Why a watchdog thread rather than ``asyncio.create_task``? The
@@ -49,13 +49,13 @@ from .freeze_config import (
 )
 
 
-# F-108 §十八 P108-D default poll cadence. 10 s is well under the
+# Default poll cadence. 10 s is well under the
 # 60 s default threshold (the detector must tick at least once
 # within the threshold window) and far above the syscall cost of
 # reading ``time.monotonic()``.
 DEFAULT_FREEZE_CHECK_INTERVAL_S = 10.0
 
-# F-108 §十八 acceptance §5: ``CLAWCODEX_FREEZE_DIAG=1`` flips the
+# Acceptance §5: ``CLAWCODEX_FREEZE_DIAG=1`` flips the
 # watchdog on for an existing process. Empty/unset keeps it idle
 # (no thread spawned, no resource spent).
 DEFAULT_FREEZE_DIAG_ENV = "CLAWCODEX_FREEZE_DIAG"
@@ -315,7 +315,7 @@ class FreezeDetector:
         ``self._threshold`` we dump and emit a debug event.
 
         Critically the loop does NOT trip an abort controller —
-        that is P108-G's job. Self-termination would mask the bug
+        that is Layer 3's job. Self-termination would mask the bug
         we are trying to diagnose.
         """
         while not self._stop_event.is_set():

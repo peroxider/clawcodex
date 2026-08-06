@@ -1,4 +1,4 @@
-"""Fetcher for SR-5.1 Community Feature Radar.
+"""Fetcher for the Community Feature Radar.
 
 Release fetching:
     Releases are obtained by shallow-cloning the upstream repo (``--depth 30``)

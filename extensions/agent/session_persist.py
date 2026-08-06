@@ -18,7 +18,7 @@ Two public hooks:
 * ``load_from_session_storage(session_id)`` — construct a Session-like
   object from a SessionStorage directory if one exists.
 
-F-49 P5-E changes:
+Session-init line changes:
 
 * The very first call per session writes a ``session_init`` line as
   line 1 of ``transcript.jsonl`` carrying ``session_id``, ``provider``,
@@ -63,7 +63,7 @@ def save_to_session_storage(session: Any) -> None:
     that :class:`TailFollower` watches during ``--resume``, so it must
     exist and contain all current messages for the resume path to work.
 
-    F-49 P5-E: on the **first** call for a given session, write a
+    On the **first** call for a given session, write a
     ``session_init`` line as the very first entry in ``transcript.jsonl``.
     Subsequent calls are idempotent — they detect the existing init line
     and skip writing a duplicate.
@@ -93,7 +93,7 @@ def save_to_session_storage(session: Any) -> None:
             title=_derive_title(session),
         )
 
-        # F-49 P5-E: write the session_init line once, at the very start
+        # Write the session_init line once, at the very start
         # of the transcript, before any messages. Subsequent calls skip
         # this branch because ``_has_session_init`` returns True.
         if not _has_session_init(storage):
@@ -106,7 +106,7 @@ def save_to_session_storage(session: Any) -> None:
         conv_dict = session.conversation.to_dict()
         messages_list = conv_dict.get("messages", []) if isinstance(conv_dict, dict) else []
 
-        # F-103 P103-E: compute ``parentUuid`` for each message and
+        # Compute ``parentUuid`` for each message and
         # stamp it onto the dict before writing. ``parentUuid``
         # encodes the chain topology so ``walkChainBeforeParse`` can
         # prune dead branches (from /rewind / fork) on read.
@@ -134,7 +134,7 @@ def _inject_parent_uuids(
 ) -> list[dict[str, Any]]:
     """Return a copy of ``messages_list`` with ``parentUuid`` populated.
 
-    F-103 P103-E: each message's ``parentUuid`` is set to the previous
+    Each message's ``parentUuid`` is set to the previous
     message's ``uuid`` in the conversation list. Root message
     (index 0) gets ``parentUuid = None``.
 
@@ -179,7 +179,7 @@ def _inject_parent_uuids(
         uuid = entry.get("uuid")
         if isinstance(uuid, str) and uuid:
             # Always recompute parentUuid from the previous message
-            # in the conversation list. The F-103 design doc
+            # in the conversation list. The design doc
             # explicitly mandates "写入时计算" (compute on write);
             # we never trust a pre-existing value because rewinds
             # truncate the in-memory conversation and a stale
@@ -231,7 +231,7 @@ def _has_session_init(storage: Any) -> bool:
 def _write_session_init_line(storage: Any, session: Any) -> None:
     """Write a ``session_init`` line as the FIRST entry of the transcript.
 
-    F-49 P5-E: this line carries ``session_id``, ``provider``, ``model``,
+    This line carries ``session_id``, ``provider``, ``model``,
     ``cwd``, and ``created_at`` — the information :meth:`Session.load`
     needs to reconstruct provider/model without a separate ``session.json``.
     Subsequent ``Session.save()`` calls do NOT touch this line; new
@@ -319,7 +319,7 @@ def _extract_last_user_input(messages_list: list) -> str:
 def load_from_session_storage(session_id: str) -> Optional[dict[str, Any]]:
     """Construct session data from a SessionStorage directory if one exists.
 
-    F-49 Phase 0.2: supports sessions stored in the SessionStorage
+    Supports sessions stored in the SessionStorage
     directory format (``~/.clawcodex/sessions/<sid>/transcript.jsonl`` +
     ``metadata.json``). This is the on-disk shape the orchestrator's
     AgentRunner writes.

@@ -1,4 +1,4 @@
-"""F-167-C: ASCII rendering helpers inlined into the visualizer package.
+"""ASCII rendering helpers inlined into the visualizer package.
 
 Private module — not part of the public API. ``extensions.recording``
 imports :func:`panel` from here for the asciicast dashboard adapter; the
@@ -8,7 +8,7 @@ module makes the cross-package dependency intentional and avoids
 advertising it as a stable surface.
 
 Originally this helper lived in :mod:`extensions.recording.renderers`
-(``extensions/recording/renderers.py:78-91``). F-167 moved it here as
+(``extensions/recording/renderers.py:78-91``). This helper moved here as
 part of the visualizer package-extraction effort so the recording
 adapter can stay co-located with the recorder while the visualizer
 package owns its rendering primitives.

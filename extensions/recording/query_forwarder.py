@@ -1,4 +1,4 @@
-"""Query-loop event forwarder for asciicast recording (F-REC).
+"""Query-loop event forwarder for asciicast recording.
 
 Translates :class:`QueryEvent` instances
 (``extensions/api/query.py:128-186``) into asciicast frames and pushes
@@ -115,7 +115,7 @@ def summarize_tool_params(params: dict[str, Any] | None) -> str:
     return f"({rendered[:120]}{'…' if len(rendered) > 120 else ''})"
 
 
-# Backward-compat aliases used by earlier F-REC adapters.
+# Backward-compat aliases used by earlier recording adapters.
 _summarize_params = summarize_tool_params
 
 
@@ -132,7 +132,7 @@ def summarize_tool_output(output: Any) -> str:
     return f"({rendered[:80]}{'…' if len(rendered) > 80 else ''})"
 
 
-# Backward-compat aliases used by earlier F-REC adapters.
+# Backward-compat aliases used by earlier recording adapters.
 _summarize_output = summarize_tool_output
 
 

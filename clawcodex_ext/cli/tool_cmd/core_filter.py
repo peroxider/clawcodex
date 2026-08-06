@@ -1,14 +1,14 @@
-"""Core tool name filter for F-53 dynamic command discovery.
+"""Core tool name filter for dynamic command discovery.
 
 The default ``ToolRegistry`` ships with a fixed set of built-in tools (Read,
-Write, Bash, Edit, Glob, Grep, etc.). Per the F-53 spec, those built-in
+Write, Bash, Edit, Glob, Grep, etc.). Per the spec, those built-in
 tools MUST NOT be re-exposed as ``/tool-name`` slash commands — they have
 their own dedicated code paths (e.g. ``/read`` is meaningless since
-``Read`` is a model-only tool). F-53 is about exposing *non-core* tools,
+``Read`` is a model-only tool). The filter is about exposing *non-core* tools,
 which are typically:
 
-* F-52 SDK-derived tools (e.g. ``detect_modality``, ``load_dataset``)
-* F-18 / F-49 agent-created tools (persisted via
+* SDK-derived tools (e.g. ``detect_modality``, ``load_dataset``)
+* agent-created tools (persisted via
   ``clawcodex_ext/agent/tool_authoring``)
 * Custom tools registered by user scripts / plugins
 
@@ -145,7 +145,7 @@ def _extension_names_orig() -> frozenset[str]:
 def is_core_tool_name(name: str) -> bool:
     """Return True if *name* is a core (built-in or extension) tool.
 
-    F-53 skip-list: any tool whose name matches a built-in / extension
+    Skip-list: any tool whose name matches a built-in / extension
     name should NOT be re-exposed as ``/tool-name``. This prevents
     collisions like ``/read`` and the more dangerous ``/bash`` (which
     would create a CLI escape hatch bypassing the LLM's permission flow).
@@ -166,7 +166,7 @@ def is_core_tool(tool: "Tool") -> bool:
 
 
 def register_core_tool_name(name: str) -> None:
-    """Mark *name* as a core tool that should be skipped by F-53.
+    """Mark *name* as a core tool that should be skipped by dynamic command discovery.
 
     The module-level frozensets are replaced (not mutated — frozensets
     are immutable) so concurrent readers see a consistent view. Use this

@@ -1,4 +1,4 @@
-"""Operation categorizer (F-95 waterfall legend).
+"""Operation categorizer (waterfall legend).
 
 Maps a ``TimelineBar`` to one of eight ``OperationCategory`` buckets that
 match the reference visualization's top legend:

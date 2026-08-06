@@ -1,4 +1,4 @@
-"""F-94 P94-A — BG_SESSIONS 数据模型与状态机。
+"""BG_SESSIONS 数据模型与状态机。
 
 定义 ``BgSession`` / ``BgSessionStatus`` / ``BgSessionEvent`` /
 ``BgSessionConfig`` 以及失败模式异常类。
@@ -100,7 +100,7 @@ class BgSession:
 
     ``id`` 与 ``session_id`` 的关系：当 background 来自 Ctrl+B 时两者相同；
     当 background 来自 Agent tool / Team spawn 时 ``id`` 可为稳定的 bg id
-    （F-99 DIRECT_CONNECT 共享 session_id 命名空间，通过 ``source=bg_session``
+    （DIRECT_CONNECT 共享 session_id 命名空间，通过 ``source=bg_session``
     区分）。
     """
 
@@ -209,7 +209,7 @@ class BgSessionEvent:
 
 @dataclass(frozen=True)
 class BgSessionConfig:
-    """F-94 BG_SESSIONS 运行时配置。
+    """BG_SESSIONS 运行时配置。
 
     ``enabled`` 由环境变量 ``CLAWCODEX_BG_SESSIONS`` 决定（``off`` / ``0``
     / ``false`` 关闭，其余开启）。关闭时不写全局 index，仅保留现有

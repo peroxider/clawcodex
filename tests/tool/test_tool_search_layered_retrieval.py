@@ -1,4 +1,4 @@
-"""F-157 layered macro / atomic ToolSearch acceptance tests."""
+"""Layered macro / atomic ToolSearch acceptance tests."""
 
 from __future__ import annotations
 

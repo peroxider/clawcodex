@@ -1,4 +1,4 @@
-"""Shared AST scan cache for F-50-A / F-50-B."""
+"""Shared AST scan cache for discriminator / workflow extractors."""
 
 from __future__ import annotations
 

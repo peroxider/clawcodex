@@ -1,4 +1,4 @@
-"""Gemini TTS provider — F-64 P64-E4.
+"""Gemini TTS provider.
 
 Implements :class:`TTSProvider` against Google's Gemini ``generate_content``
 API with output modality AUDIO (PCM16 24 kHz mono). Gemini is unique

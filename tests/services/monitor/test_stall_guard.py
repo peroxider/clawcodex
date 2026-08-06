@@ -1,4 +1,4 @@
-"""Tests for F-88 stall-watchdog exemption predicate."""
+"""Tests for stall-watchdog exemption predicate."""
 
 from __future__ import annotations
 

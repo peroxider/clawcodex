@@ -1,4 +1,4 @@
-"""Smoke test for the declarative workflow engine integration (F-110~F-116).
+"""Smoke test for the declarative workflow engine integration.
 
 Verifies:
 1. All module imports work (no circular deps, no broken paths)

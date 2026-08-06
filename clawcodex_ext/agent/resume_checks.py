@@ -1,4 +1,4 @@
-"""F-125 Phase 3: resume-time checks for headless mode.
+"""Resume-time checks for headless mode.
 
 Consolidates three resume-time concerns that the design doc
 (`docs/feature_plan/06-ccb-benchmark/f-125-headless-multi-turn.md`)
@@ -52,7 +52,7 @@ def warn_system_prompt_drift(
     current_append_prompt: str,
     stderr: IO[str],
 ) -> None:
-    """F-125 C8 / R10: warn when ``append_system_prompt`` differs across runs.
+    """Warn when ``append_system_prompt`` differs across runs.
 
     The resumed conversation's history was generated under a system
     prompt that included ``old_append``; the current run uses
@@ -106,7 +106,7 @@ def warn_provider_model_mismatch(
     current_model: str,
     stderr: IO[str],
 ) -> None:
-    """F-125 C11 / R11: warn when provider/model differs on resume.
+    """Warn when provider/model differs on resume.
 
     A resumed conversation's history carries assistant turns produced
     by ``(original_provider, original_model)``. Running the new turn
@@ -164,7 +164,7 @@ def restore_metadata_from_session(
     *,
     agent_name: str = "",
 ) -> bool:
-    """F-125 R8: copy title/tags/agent_name from source to target session.
+    """Copy title/tags/agent_name from source to target session.
 
     When a session is resumed (or forked), the new run should inherit
     the original's ``title`` / ``tags`` so the ``/resume`` browser and
@@ -223,7 +223,7 @@ def restore_metadata_from_session(
         return True
     except Exception:
         logger.debug(
-            "F-125 R8: metadata inheritance from %s -> %s failed",
+            "R8: metadata inheritance from %s -> %s failed",
             source_session_id,
             target_session_id,
             exc_info=True,

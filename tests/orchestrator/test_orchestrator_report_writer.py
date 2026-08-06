@@ -6,7 +6,7 @@ Covers the structured per-run report writer:
 * :func:`write` dual-write (workspace ``.reports/`` + persistent
   ``~/.clawcodex/reports/{tracker}/{owner}/{repo}/{issue}/``) of both
   Markdown and JSON artefacts.
-* F-45 tool-event dual-write (per-tool ``events.ndjson`` mirrored into
+* tool-event dual-write (per-tool ``events.ndjson`` mirrored into
   the persistent layer).
 * :func:`_safe_segment` path-segment sanitisation.
 * :func:`_excerpt` truncation behaviour.
@@ -448,7 +448,7 @@ class TestWriteEdgeCases(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# write() — F-45 tool events dual-write
+# write() — tool events dual-write
 # ---------------------------------------------------------------------------
 
 
@@ -510,7 +510,7 @@ class TestWriteToolEvents(unittest.TestCase):
         self.assertFalse(persistent_events.exists())
 
     def test_none_tool_events_path_skips_copy_and_markdown_line(self) -> None:
-        # F-46.0: when audit_log is "none" the runner never sets
+        # When audit_log is "none" the runner never sets
         # tool_events_path; report_writer must skip both copy and mention.
         result = write(
             run_id="r1",

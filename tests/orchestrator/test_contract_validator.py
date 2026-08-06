@@ -1,4 +1,4 @@
-"""Unit tests for F-114 ContractValidator.
+"""Unit tests for ContractValidator.
 
 覆盖全部 7 种内置验证器、自定义验证器注册、上下文注入（workspace_dir / llm_client）。
 """

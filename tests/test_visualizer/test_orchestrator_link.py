@@ -1,4 +1,4 @@
-"""Tests for OrchestratorLink (F-95)."""
+"""Tests for OrchestratorLink."""
 
 from __future__ import annotations
 
@@ -15,17 +15,17 @@ def session_dir(tmp_path):
     sd = tmp_path / "sessions" / "test-orch-001"
     sd.mkdir(parents=True)
 
-    # Create F-38 report
+    # Create report
     (sd / "report.md").write_text("# Test Report\nAll good.", encoding="utf-8")
 
-    # Create F-45 events
+    # Create events
     events = [
         json.dumps({"event": "tool_call", "tool_name": "Read", "timestamp": time.time()}),
         json.dumps({"event": "tool_result", "tool_name": "Read", "timestamp": time.time()}),
     ]
     (sd / "events.ndjson").write_text("\n".join(events), encoding="utf-8")
 
-    # Create F-54 debug log
+    # Create debug log
     debug = [
         json.dumps({"phase": "analysis", "timestamp": time.time()}),
     ]

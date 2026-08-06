@@ -1,4 +1,4 @@
-"""F-84 Daemon — long-running supervisor for worker subprocesses.
+"""Daemon — long-running supervisor for worker subprocesses.
 
 This package implements the ClawCodex counterpart of CCB's
 ``src/daemon/main.ts`` supervisor. The supervisor process owns a

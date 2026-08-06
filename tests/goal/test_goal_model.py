@@ -1,4 +1,4 @@
-"""Thread goal model parity tests for F-122 Spec 2."""
+"""Thread goal model parity tests for Spec 2."""
 
 from __future__ import annotations
 

@@ -6,12 +6,12 @@ discovery paths (user / project / managed) plus the P85-E built-in
 catalogue. Uses ``tmp_path`` and ``monkeypatch`` to isolate the
 filesystem from the host environment and from other tests.
 
-P85-E/F-95: ``bootstrap_default_templates`` now registers the 5 built-in
+P85-E: ``bootstrap_default_templates`` now registers the 5 built-in
 canonical agent templates plus 4 built-in orchestrator templates BEFORE
 walking the user / project / managed dirs. The constant
 :data:`_BOOTSTRAP_BASE_COUNT` captures that baseline so the count assertions
 below can be expressed as ``_BOOTSTRAP_BASE_COUNT + N`` instead of bare
-``N`` - keeping the tests honest about the post-P85-E/F-95 contract
+``N`` - keeping the tests honest about the post-P85-E contract
 without sprinkling magic numbers through the file.
 """
 

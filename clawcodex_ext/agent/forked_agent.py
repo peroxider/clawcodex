@@ -92,7 +92,7 @@ class ForkedAgentResult:
 
 
 # ---------------------------------------------------------------------------
-# Global memory cache for CacheSafeParams (F-122-C/D)
+# Global memory cache for CacheSafeParams
 # ---------------------------------------------------------------------------
 
 _last_cache_safe_params: CacheSafeParams | None = None

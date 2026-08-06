@@ -1,4 +1,4 @@
-"""Dream slash skill — F-100 / 100.4.
+"""Dream slash skill.
 
 The ``/dream`` command exposes the auto-dream service to REPL/headless
 surfaces. Mirrors the upstream ``/dream`` bundled skill

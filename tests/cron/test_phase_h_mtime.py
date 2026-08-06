@@ -1,4 +1,4 @@
-"""F-22-H-1: mtime-based incremental read cache for durable cron tasks.
+"""mtime-based incremental read cache for durable cron tasks.
 
 Pins the contract documented in
 ``docs/feature_plan/05-cron-system/f-22-cron-execution.md`` §Phase H:

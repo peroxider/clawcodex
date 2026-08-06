@@ -1,4 +1,4 @@
-"""Tests for the F-120 ``/dashboard`` slash command."""
+"""Tests for the ``/dashboard`` slash command."""
 
 from __future__ import annotations
 

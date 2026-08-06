@@ -1,4 +1,4 @@
-"""F-97 LODESTONE — ``LodestoneTool`` (agent-facing).
+"""LODESTONE — ``LodestoneTool`` (agent-facing).
 
 Single tool, five ``action``s — referenced by the agent when it wants
 to linkify / inspect anchors without going through the ``/link`` slash

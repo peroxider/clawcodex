@@ -1,4 +1,4 @@
-"""Tests for ``clawcodex_ext.dreaming.prompt`` — F-100.
+"""Tests for ``clawcodex_ext.dreaming.prompt``.
 
 Covers the 4-phase consolidation prompt builder. The body is largely
 prose; we assert the structural shape (sections, key terms, mode

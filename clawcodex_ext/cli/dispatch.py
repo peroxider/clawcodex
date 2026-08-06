@@ -13,7 +13,7 @@ from typing import Any
 def _telemetry_record_session(
     *, session_id: str, entrypoint: str, is_non_interactive: bool
 ) -> None:
-    """Best-effort F-97 session_start.
+    """Best-effort session_start.
 
     Local import keeps ``telemetry`` out of the CLI dispatch
     module surface for ``--help`` cold start.
@@ -177,7 +177,7 @@ def _maybe_argcomplete_top_level(argv: list[str]) -> None:
 
 def run_cli(argv: list[str] | None = None) -> int:
     """CLI main entry point, parameterized to avoid sys.argv mutation in tests."""
-    # F-22 (Stage 2 stability gate): print a diagnostic Provider/Model line
+    # (Stage 2 stability gate): print a diagnostic Provider/Model line
     # at the VERY START of run_cli so it survives the 12s kill when
     # RuntimeContext.build() takes ~10s. Config reads are cheap (~ms) so
     # this is safe to do before any heavy initialization. Without this
@@ -244,7 +244,7 @@ def run_cli(argv: list[str] | None = None) -> int:
 
     _apply_agent_debug_if_requested(argv)
 
-    # F-97: emit session_start as early as possible. The session id
+    # Emit session_start as early as possible. The session id
     # is best-effort and never blocks the CLI; failures are swallowed
     # inside the helper.
     _telemetry_session_id = _derive_session_id()
@@ -296,7 +296,7 @@ def run_cli(argv: list[str] | None = None) -> int:
         # Import src_cli late so monkeypatches to src.cli.* take effect.
         import src.cli as src_cli
 
-        # F-97: each fast-path return is wrapped to record command_run
+        # Each fast-path return is wrapped to record command_run
         # + session_end. The helper swallows any telemetry failure.
         if token == "login":
             rc = src_cli.handle_login()
@@ -628,7 +628,7 @@ def run_cli(argv: list[str] | None = None) -> int:
         if candidate.is_dir():
             bundle_path = candidate
 
-    # F-157: command-line selection wins over an in-process runtime choice,
+    # Command-line selection wins over an in-process runtime choice,
     # which in turn wins over config.yaml's default_group.
     from clawcodex_ext.multimodel.config import MultiModelConfigError  # fmt: skip
 
@@ -760,7 +760,7 @@ def run_cli(argv: list[str] | None = None) -> int:
 
     # Select frontend by name; dispatch stays as the thin orchestration layer.
     if args.print:
-        # F-97 telemetry notice — shown once on stderr for headless/CLI mode
+        # Telemetry notice — shown once on stderr for headless/CLI mode
         # so users know when collection + reporting are active.
         try:
             from telemetry.config import load_config as _load_telemetry_cfg

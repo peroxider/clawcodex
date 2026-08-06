@@ -1,4 +1,4 @@
-"""F-65 P65-A — Langfuse observability integration.
+"""Langfuse observability integration.
 
 A plug-in :class:`AnalyticsSink` that translates :class:`AnalyticsEvent`
 records into Langfuse traces / spans / generations. Implements CCB's

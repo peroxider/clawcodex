@@ -1,7 +1,7 @@
 """Spec-1 goal boundary.
 
 Old goal v1 modules and the legacy model-callable `Goal` tool are not part
-of this package anymore. Later F-122 specs will rebuild the upstream
+of this package anymore. Later goal specs will rebuild the upstream
 contract in place.
 """
 

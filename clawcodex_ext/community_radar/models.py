@@ -1,4 +1,4 @@
-"""Data models for SR-5.1 Community Feature Radar.
+"""Data models for the Community Feature Radar.
 
 Declares the shared dataclasses for the radar so the
 rest of the pipeline (registry → fetcher → extractor → classifier →
@@ -505,7 +505,7 @@ class CommunityDigest:
     period_start: str = ""  # ISO-8601, the "since" cutoff for this scan
     new_features: list[FeatureRecord] = field(default_factory=list)
     trending: list[ScoredFeature] = field(default_factory=list)
-    # Phase 4 / SR-5.3: major-feature highlights for the prose-summary block.
+    # Phase 4 / report filtering: major-feature highlights for the prose-summary block.
     highlights: list[ScoredFeature] = field(default_factory=list)
     # LLM importance data: feature_id → {"level": "MAJOR"|"MINOR", "highlight": "intro text"}
     llm_importance: dict[str, dict[str, str]] = field(default_factory=dict)

@@ -1,6 +1,6 @@
-"""Rule-first feature extractor for SR-5.1.
+"""Rule-first feature extractor for the community feature radar.
 
-Mirrors the SR-5.1 extraction contract. The extractor
+Mirrors the extraction contract. The extractor
 takes a release ``body`` (and metadata) and produces a list of
 :class:`FeatureRecord` candidates using Markdown heuristics:
 

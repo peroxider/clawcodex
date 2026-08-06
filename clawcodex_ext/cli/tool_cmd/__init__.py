@@ -1,4 +1,4 @@
-"""F-53: Tool 自动暴露为 CLI 斜杠命令.
+"""Tool 自动暴露为 CLI 斜杠命令.
 
 Public API
 ----------

@@ -314,7 +314,7 @@ def _phase_progress(phase: int, phases_total: int | None) -> int:
         return 0
     if phases_total and phases_total > 0:
         return max(0, min(100, int(phase / phases_total * 100)))
-    # No configured total — fall back to the F-38 era 25/50/75/100 cadence
+    # No configured total — fall back to the legacy 25/50/75/100 cadence
     # so the user still sees movement.
     return min(phase * 25, 100)
 

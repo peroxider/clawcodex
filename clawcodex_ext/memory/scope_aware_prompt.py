@@ -1,4 +1,4 @@
-"""Scope-aware memory prompt builder — F-13 memory scope isolation.
+"""Scope-aware memory prompt builder — memory scope isolation.
 
 This module sits entirely in ``clawcodex_ext/`` and relies on the existing
 ``src.memdir.load_memory_prompts()`` interface. No changes to ``src/memdir/``

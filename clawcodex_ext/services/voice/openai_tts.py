@@ -1,4 +1,4 @@
-"""OpenAI TTS provider — F-64 P64-E2.
+"""OpenAI TTS provider.
 
 Reference implementation of :class:`TTSProvider` against OpenAI's
 ``POST /v1/audio/speech`` endpoint. The endpoint is *server-streaming*

@@ -1,4 +1,4 @@
-"""Anthropic STT provider — F-64 P64-A + P64-C.
+"""Anthropic STT provider.
 
 Mirrors TS ``src/services/voiceStreamSTT.ts``: streams raw PCM audio over
 a WebSocket to the Anthropic ``voice_stream`` endpoint (Nova 3 STT model)

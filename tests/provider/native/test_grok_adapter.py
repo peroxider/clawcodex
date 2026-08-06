@@ -1,4 +1,4 @@
-"""Tests for the native Grok / xAI adapter (F-72 P72-C)."""
+"""Tests for the native Grok / xAI adapter."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from src.providers.native.grok_adapter import _DEFAULT_BASE_URL, NativeGrokProvi
 
 
 def test_default_base_url_points_to_xai() -> None:
-    """The F-72 plan calls out that the Grok adapter must use the
+    """The native provider plan calls out that the Grok adapter must use the
     xAI endpoint by default — otherwise it would silently target
     OpenAI's API."""
     assert "x.ai" in _DEFAULT_BASE_URL

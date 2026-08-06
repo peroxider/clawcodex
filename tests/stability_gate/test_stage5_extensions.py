@@ -759,7 +759,7 @@ class TestStage5ExtToolSystem:
         assert ProgressReportTool is not None
 
     def test_monitor_tool_import(self):
-        """F-88 Monitor tool and controller import without side effects."""
+        """Monitor tool and controller import without side effects."""
         from clawcodex_ext.services.monitor import (
             MonitorController,
             StallWatchdogExemptor,
@@ -975,14 +975,14 @@ class TestStage5Resilience:
 
 
 class TestStage5Telemetry:
-    """F-97: telemetry (clawcodex_ext/cli/dispatch 段并行的遥测段)。
+    """Telemetry (clawcodex_ext/cli/dispatch 段并行的遥测段)。
 
     验证 telemetry 子系统在不破坏现有扩展语义的前提下提供
     privacy-first 的本地事件流 + crash 去重 fingerprint。
     """
 
     def test_telemetry_subpackage_imports(self):
-        """All F-97 submodules importable."""
+        """All telemetry submodules importable."""
         import telemetry
         from telemetry import (
             aggregator,
@@ -1171,7 +1171,7 @@ class TestStage5Telemetry:
 
 
 class TestStage5ExtDreaming:
-    """F-100: 移植 Dreaming 后台记忆整合系统 — Phase A.
+    """移植 Dreaming 后台记忆整合系统 — Phase A.
 
     验证 ``clawcodex_ext/dreaming/`` 子系统的 public surface 可加载,
     并锁定与上游 ``claude-code-best`` 对齐的常量/默认值. 子模块覆盖:
@@ -1311,7 +1311,7 @@ class TestStage5ExtDreaming:
 
 
 class TestStage5ExtF84Daemon:
-    """F-84 Daemon subsystem smoke tests.
+    """Daemon subsystem smoke tests.
 
     Validates that the ``extensions.daemon`` package, the
     ``extensions.capabilities.daemon_protocol`` module, and the
@@ -1371,12 +1371,12 @@ class TestStage5ExtF84Daemon:
 
         parser = build_parser()
         verbs = set(parser._subparsers._group_actions[0].choices.keys())  # type: ignore[attr-defined]
-        # The verb set should cover the F-84 P84-E/F surface.
+        # The verb set should cover the daemon CLI surface.
         for verb in ("start", "stop", "status", "ps", "bg", "attach", "logs", "kill"):
             assert verb in verbs, f"daemon CLI missing verb {verb!r}"
 
     def test_feature_flags_registered(self):
-        """F-84 P84-H — DAEMON + BRIDGE_MODE are registered with the
+        """DAEMON + BRIDGE_MODE are registered with the
         feature registry and default to disabled."""
         from clawcodex_ext.feature_gate import get_registry
 

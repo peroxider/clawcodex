@@ -1,4 +1,4 @@
-"""F-94 P94-E1 — BgSessionTool — 面向 Agent 的后台会话查询/控制工具。
+"""BgSessionTool — 面向 Agent 的后台会话查询/控制工具。
 
 设计（f-94-bg-sessions.md §1.8 BgSessionTool 表）：
 
@@ -342,7 +342,7 @@ Actions:
 
 When BG_SESSIONS is off, returns {disabled: true} — fall back to TaskList/TaskInspect.
 """,
-    description="Query and control background agent sessions (F-94 BG_SESSIONS).",
+    description="Query and control background agent sessions.",
     strict=True,
     max_result_size_chars=8000,
     is_read_only=lambda inp: (inp or {}).get("action") in ("list", "inspect"),

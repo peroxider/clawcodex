@@ -1,4 +1,4 @@
-"""F-120 Step 1: Intent.REBASE + Command.REBASE + 解析 + 优先级合并.
+"""Step 1: Intent.REBASE + Command.REBASE + 解析 + 优先级合并.
 
 Covers:
   - Intent.REBASE enum 值稳定

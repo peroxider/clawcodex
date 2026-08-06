@@ -60,7 +60,7 @@ class _AppState:
         self.import_tasks: dict[str, ImportStatus] = {}
         self._shares_path = Path.home() / ".clawcodex" / "viz_shares.json"
         self._load_share_links()
-        # F-120: shared dashboard store. Tests can override by setting
+        # Shared dashboard store. Tests can override by setting
         # ``app.state.viz.dashboard_store`` after ``create_app`` returns.
         try:
             from extensions.agent_dashboard import get_default_store
@@ -166,7 +166,7 @@ def create_app(
         source: str | None = None,
         status: str | None = None,
     ):
-        """Return the current cross-system dashboard snapshot (F-120)."""
+        """Return the current cross-system dashboard snapshot."""
         store = getattr(app.state.viz, "dashboard_store", None)
         if store is None:
             return []

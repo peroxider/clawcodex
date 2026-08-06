@@ -1,9 +1,9 @@
-"""F-93 TeamMem — Team shared memory service layer (P93-A/B/C).
+"""TeamMem — Team shared memory service layer.
 
 Provides a persistent, searchable, auditable, team-isolated long-term
 collaboration knowledge base for the Team / Coordinator / Agent modes.
 
-This module is the **new independent subsystem** per F-93 §0.3 (Layer 2).
+This module is the **new independent subsystem** (Layer 2).
 It reuses the existing path-defense primitives from
 ``clawcodex_ext/memdir/team_mem_paths.py`` (Layer 1) and the
 ``TeamFile`` roster model from ``clawcodex_ext/services/swarm/team_file.py``
@@ -21,9 +21,9 @@ Layout on disk (per team workspace, under the auto-memory dir)::
 All writes are atomic (tmp + ``os.replace``). The JSONL store is
 append-only with tombstones for ``delete`` — readers skip tombstoned
 ids. Corrupt single lines are skipped with a WARN log, never aborting
-the whole store (F-93 §1.10 / acceptance #6).
+the whole store (§1.10 / acceptance #6).
 
-Score model (F-93 §1.8)::
+Score model (§1.8)::
 
     score = lexical * tag_boost * source_weight * recency_decay * confidence
 
@@ -279,7 +279,7 @@ class TeamMemoryAuditLog:
     def record(self, *, action: str, actor: str, entry_id: str, **detail: Any) -> None:
         """Append one audit line. Never raises on I/O failure — audit is
         best-effort; a missing audit line must not block a successful
-        user-visible write (F-93 §3 risk: JSONL 写冲突)."""
+        user-visible write (§3 risk: JSONL 写冲突)."""
         line = {
             "ts": make_iso_timestamp(),
             "action": action,
@@ -586,7 +586,7 @@ _TOKEN_RE = re.compile(r"[A-Za-z0-9_\-/.]+")
 def _tokenize(text: str) -> list[str]:
     """Cheap lexical tokenizer — lowercased word tokens.
 
-    F-93 §1.8 notes that once F-92 Skill Search lands, this can be
+    §1.8 notes that once Skill Search lands, this can be
     swapped for the shared TF-IDF tokenizer. For now a regex split is
     sufficient for the acceptance criterion (#8: 1000 entries top8
     < 50ms)."""
@@ -636,10 +636,10 @@ class TeamMemoryIndex:
     """In-memory retrieval index over a :class:`TeamMemoryStore`.
 
     Rebuilt from the JSONL on every :meth:`search` call — acceptable
-    for the F-93 #8 budget (1000 entries, top8, <50ms). A persistent
-    ``index.json`` cache (F-93 §1.4) is left as a follow-up: the
+    for the #8 budget (1000 entries, top8, <50ms). A persistent
+    ``index.json`` cache (§1.4) is left as a follow-up: the
     JSONL scan is already fast and the cache would add a staleness
-    failure mode (F-93 §1.10 ``TeamMemoryIndexStaleError``) without
+    failure mode (§1.10 ``TeamMemoryIndexStaleError``) without
     a measurable win at current scale.
     """
 
@@ -904,7 +904,7 @@ class TeamMemoryService:
         """Return the ``<team_memory>...</team_memory>`` prompt section.
 
         Empty string when disabled or no results — callers should drop
-        the section entirely on empty (F-93 §1.8 / acceptance #1)."""
+        the section entirely on empty (§1.8 / acceptance #1)."""
         if not self._config.enabled or not is_team_memory_enabled():
             return ""
         results = self.recall(
@@ -946,7 +946,7 @@ class TeamMemoryService:
         """Sink a SendMessage exchange into team memory.
 
         Returns ``None`` when disabled (the integration hook treats
-        ``None`` as "skip silently" — F-93 §1.10 ``TeamMemoryDisabledError``
+        ``None`` as "skip silently" — §1.10 ``TeamMemoryDisabledError``
         is for explicit tool calls, not background hooks)."""
         if not self._config.enabled or not is_team_memory_enabled():
             return None

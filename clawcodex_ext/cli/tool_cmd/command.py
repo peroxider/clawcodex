@@ -1,4 +1,4 @@
-"""DynamicToolCommand — F-53 adapter from a single ``Tool`` to a REPL/TUI
+"""DynamicToolCommand — adapter from a single ``Tool`` to a REPL/TUI
 ``LocalCommand``.
 
 Each ``DynamicToolCommand`` wraps a tool's *snapshot* (name, schema,
@@ -98,7 +98,7 @@ class DynamicToolCommand:
         except Exception:  # noqa: BLE001
             desc = ""
         if not isinstance(desc, str) or not desc.strip():
-            desc = f"Dynamically exposed tool '{tool.name}' (F-53)."
+            desc = f"Dynamically exposed tool '{tool.name}'."
         return textwrap.shorten(desc, width=200, placeholder="…")
 
     @staticmethod
@@ -191,7 +191,7 @@ class DynamicToolCommand:
                 )
             result = registry.dispatch(call, tool_context)
         except Exception as exc:  # noqa: BLE001
-            log.exception("tool %r raised during F-53 dispatch", self._tool_name)
+            log.exception("tool %r raised during dispatch", self._tool_name)
             return _text_result(self._tool_name, _format_error(self._tool_name, str(exc)))
 
         if getattr(result, "is_error", False):
@@ -250,7 +250,7 @@ class DynamicToolCommand:
         try:
             result = tool_registry.dispatch(call, tool_context)
         except Exception as exc:  # noqa: BLE001
-            log.exception("tool %r raised during F-53 CLI dispatch", self._tool_name)
+            log.exception("tool %r raised during CLI dispatch", self._tool_name)
             print(_format_error(self._tool_name, str(exc)), flush=True)
             return 1
 

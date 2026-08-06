@@ -98,7 +98,7 @@ clawcodex-dev orchestrator issue workspace --id <issue-id> --edit <file> --with 
 
 # 初始化
 clawcodex-dev orchestrator issue init                                           # 交互式创建 Issue 卡片
-clawcodex-dev orchestrator issue init --id F-37.1 --title "..." --non-interactive  # 非交互式
+clawcodex-dev orchestrator issue init --id <ID> --title "..." --non-interactive  # 非交互式
 ```
 
 ## 工作流管理

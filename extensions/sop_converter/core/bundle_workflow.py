@@ -1,4 +1,4 @@
-"""Resolve F-50 workflow artifacts inside a POS bundle directory."""
+"""Resolve workflow artifacts inside a POS bundle directory."""
 
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ def workflow_artifacts_enabled(
     has_mapped_stages: bool,
     workflow_mode: str | None,
 ) -> bool:
-    """Whether F-50-D/E/F artifacts should be emitted."""
+    """Whether stage workflow artifacts should be emitted."""
     if has_mapped_stages:
         return True
     return workflow_mode in ("fwa", "hybrid")

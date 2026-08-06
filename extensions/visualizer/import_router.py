@@ -1,4 +1,4 @@
-"""Conditional session import router (F-92-C).
+"""Conditional session import router.
 
 Only mounted when ``--allow-import`` flag is set.
 Provides endpoints for importing external session data via URL,

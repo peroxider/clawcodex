@@ -1,4 +1,4 @@
-"""F-93 P93-H — unit tests for TeamMemoryPolicy (P93-D).
+"""Unit tests for TeamMemoryPolicy.
 
 Covers membership gate, scope visibility (team / lead_only /
 agent_pair), write authorization, delete rules, and compact=lead-only.

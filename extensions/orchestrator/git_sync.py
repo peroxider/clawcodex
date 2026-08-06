@@ -57,7 +57,7 @@ class GitSyncResult:
     has_conflict: bool = False
     conflict_files: tuple[str, ...] = field(default_factory=tuple)
     pending_review: bool = False  # True for LocalTracker after successful commit
-    # F-40 / F-38 补遗: 当分支没有可评审 commit 时（如 daemon 触发了 read-only
+    # 补遗: 当分支没有可评审 commit 时（如 daemon 触发了 read-only
     # loop 终止），标记终结原因。orchestrator 据此走 mark_failed_with_reason
     # 而非 mark_synced，避免给空 PR 标 SYNCED。
     session_end_reason: str | None = None
@@ -187,17 +187,17 @@ class GitSyncService:
     ) -> GitSyncResult | None:
         """Commit/push/PR sync.
 
-        F-39 Sub-C: when `mode == "followup"`, the session is expected
+        When `mode == "followup"`, the session is expected
         to already carry a `pull_request` attribute (set by the
         orchestrator from the registry record) and the run is treated
         as a same-branch follow-up commit. The commit message uses
         the "fix:" prefix (vs. "feat:" for new runs) and the existing
         `update_pull_request` path appends a `## ClawCodex Follow-up
-        #N` section to the PR body (F-38 Sub-C, already in place).
+        #N` section to the PR body (already in place).
 
         Other modes (default / future) are unchanged.
         """
-        # F-39 Sub-C: validate followup-mode prerequisites BEFORE any
+        # Validate followup-mode prerequisites BEFORE any
         # workspace / repo_root I/O. A follow-up that forgot to wire
         # the existing PR would otherwise silently open a brand-new
         # PR, which is exactly what follow-up is trying to avoid.
@@ -270,7 +270,7 @@ class GitSyncService:
                     # Agent already committed, skip auto-commit
                     agent_committed = True
                     commit_sha = current_sha
-                    # F-121: amend agent's commit with review metadata (safe before push)
+                    # Amend agent's commit with review metadata (safe before push)
                     if followup_pr is not None:
                         await asyncio.to_thread(
                             self._ensure_review_metadata, repo_root, session, followup_pr
@@ -378,7 +378,7 @@ class GitSyncService:
 
         pr_ref: PullRequestRef | None = followup_pr
         pr_title = self._build_pr_title(issue)
-        # F-40 / F-38 补遗：阻止空 PR 创建。当分支无 reviewable commit（daemon
+        # 补遗：阻止空 PR 创建。当分支无 reviewable commit（daemon
         # 触发 read_only_loop / loop_detected / stagnation 终止场景），
         # 即便分支被 push 也不能创建 PR — 否则会留下 0 commit 的空 PR。
         has_reviewable_commit = committed or has_run_commit
@@ -480,7 +480,7 @@ class GitSyncService:
                 ) from exc
             raise
 
-        # F-40 补遗：仅当有 reviewable commit **或**已存在 PR（follow-up 场景）
+        # 补遗：仅当有 reviewable commit **或**已存在 PR（follow-up 场景）
         # 时才发 summary comment。空分支 + 推送到远端但无 commit 的场景不再发
         # 总结评论（避免给一个"什么也没改"的 PR 写总结）。
         if has_reviewable_commit or pr_ref is not None:
@@ -497,7 +497,7 @@ class GitSyncService:
                 ),
             )
 
-        # F-40 / F-38 补遗：标记 session_end_reason，便于 orchestrator
+        # 补遗：标记 session_end_reason，便于 orchestrator
         # 决定走 mark_synced 还是 mark_failed_with_reason。
         session_end_reason: str | None = None
         if not has_reviewable_commit and pr_ref is None:
@@ -925,7 +925,7 @@ class GitSyncService:
 
         # Attempt fetch + rebase
         self._run_git_checked(["fetch", "origin"], repo_root)
-        # F-120: defensively clear any leftover REBASE_HEAD before
+        # Defensively clear any leftover REBASE_HEAD before
         # starting a fresh rebase — if a previous run aborted mid-
         # rebase, this prevents compounding conflict markers.
         _git_rebase_abort(repo_root)
@@ -941,12 +941,12 @@ class GitSyncService:
                 return True, False, ()
             conflict_files = self._detect_conflicts(repo_root)
             if conflict_files:
-                # F-120: leave the half-finished rebase in place so
+                # Leave the half-finished rebase in place so
                 # the follow-up agent run can resume with
                 # ``git rebase --continue`` after resolving the
                 # conflict markers.
                 return False, True, conflict_files
-            # F-120: non-conflict rebase failure (auth / network) —
+            # Non-conflict rebase failure (auth / network) —
             # abort the half-finished rebase so the workspace
             # doesn't stay stuck in REBASE_HEAD.
             _git_rebase_abort(repo_root)
@@ -1168,7 +1168,7 @@ class GitSyncService:
         new_msg = "\n".join(lines)
         self._run_git_checked(["commit", "--amend", "-m", new_msg], repo_root)
         logger.info(
-            "F-121: amended commit with review metadata (PR=%s, body=%s)",
+            "Amended commit with review metadata (PR=%s, body=%s)",
             pr_num,
             feedback_body[:40],
         )
@@ -1438,7 +1438,7 @@ class GitSyncService:
             verification_status=getattr(session, "verification_status", None),
             verification_output=getattr(session, "verification_output", None),
             output_text=getattr(session, "output_text", ""),
-            # F-45: forward the per-tool audit log path so report_writer
+            # Forward the per-tool audit log path so report_writer
             # can dual-write the NDJSON into the persistent layer.
             tool_events_path=getattr(session, "tool_events_path", None),
         )
@@ -1614,7 +1614,7 @@ def _slugify(value: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# F-120: PR conflict auto-resolution
+# PR conflict auto-resolution
 # ---------------------------------------------------------------------------
 
 
@@ -1659,7 +1659,7 @@ class PRRebaseResult:
 
 
 def _git_rebase_abort(repo_root: str) -> None:
-    """F-120: best-effort ``git rebase --abort``.
+    """Best-effort ``git rebase --abort``.
 
     Used by ``rebase_for_pr`` to clear a stuck rebase state when
     pre-flight checks fail (e.g. fetch returned 0 commits, or the
@@ -1705,7 +1705,7 @@ def rebase_for_pr(
     base_branch: str,
     force: bool = False,
 ) -> PRRebaseResult:
-    """F-120: resolve a stale-base PR by rebasing the feature branch.
+    """Resolve a stale-base PR by rebasing the feature branch.
 
     Flow:
       1. **Pre-flight** — ``git checkout <branch>`` (if not already

@@ -135,7 +135,7 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         type=str,
         default=None,
         metavar="PATH",
-        help="Path to workflow.yaml for declarative workflow engine (F-110)",
+        help="Path to workflow.yaml for the declarative workflow engine",
     )
     start_parser.add_argument(
         "--dashboard",
@@ -1071,7 +1071,7 @@ def _run_orchestrator(
     import asyncio
     import logging
 
-    # F-108 P108-D: start the opt-in freeze-detection watchdog when the
+    # Start the opt-in freeze-detection watchdog when the
     # env var is set. The orchestrator daemon is long-running and spawns
     # agent loops in subprocesses/threads; a hung worker can deadlock the
     # parent. Layer-1 dumps thread stacks so postmortem analysis can
@@ -1148,7 +1148,7 @@ def _run_orchestrator(
 
     subsystem = OrchestrationSubsystem(config, workflow_yaml_path=workflow_yaml_path)
 
-    # F-120: wire the orchestrator into the process-wide dashboard store.
+    # Wire the orchestrator into the process-wide dashboard store.
     # The provider reads subsystem._orchestrator which is constructed inside
     # subsystem.run(); until then the source returns an empty snapshot.
     try:

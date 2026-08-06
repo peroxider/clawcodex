@@ -23,7 +23,7 @@ class ValidationError:
 
 
 def _effective_default_permission_mode(settings: SettingsSchema) -> str | None:
-    """Resolve the effective default permission mode from F-47 channels.
+    """Resolve the effective default permission mode from the permissions channels.
 
     Priority:
 
@@ -54,10 +54,10 @@ def validate_settings(settings: SettingsSchema) -> list[ValidationError]:
             )
         )
 
-    # F-47: permission default mode is read from ``permissions.default_mode``
+    # permission default mode is read from ``permissions.default_mode``
     # first, then the top-level ``permission_mode`` (back-compat). Empty
     # strings on both are treated as "unset" and skip the enum check --
-    # this avoids F-47 defaulting `permission_mode` to ``""`` from being
+    # this avoids the permissions refactor defaulting `permission_mode` to ``""`` from being
     # reported as an invalid mode.
     effective_default_mode = _effective_default_permission_mode(settings)
     if effective_default_mode is not None and effective_default_mode not in VALID_PERMISSION_MODES:
@@ -150,8 +150,8 @@ def validate_settings(settings: SettingsSchema) -> list[ValidationError]:
             )
         )
 
-    # F-47: permissions.rules is a dict[str, list[str]] (allow/deny/ask).
-    # The legacy list[PermissionRule] path is gone (Sub-H); rule strings
+    # permissions.rules is a dict[str, list[str]] (allow/deny/ask).
+    # The legacy list[PermissionRule] path is gone; rule strings
     # are kept verbatim on disk and validated as non-empty here.
     permissions = settings.permissions
     legacy_rules = (

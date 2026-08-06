@@ -1,4 +1,4 @@
-"""Cron task accumulation guard — F-22-D1~D4 integration tests.
+"""Cron task accumulation guard — integration tests.
 
 Verifies that when a recurring task's interval is shorter than its
 execution time, the scheduler does NOT pile up prompts in the outbox.

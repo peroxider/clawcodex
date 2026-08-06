@@ -1,4 +1,4 @@
-"""F-88 ``/monitor`` slash command family.
+"""``/monitor`` slash command family.
 
 Subcommands:
   /monitor <cmd>            Start a background monitor task.

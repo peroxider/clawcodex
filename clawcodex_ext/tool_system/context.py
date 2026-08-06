@@ -67,7 +67,7 @@ class GlobLimits:
 
 @dataclass(slots=True)
 class RetrievalPlan:
-    """Turn-local F-157 decision for macro / atomic tool exposure."""
+    """Turn-local decision for macro / atomic tool exposure."""
 
     query: str = ""
     intent_key: str | None = None
@@ -284,7 +284,7 @@ class ToolContext:
     startup_agent: Any | None = None
     bundle_context: Any | None = None
     workflow_stack: list[str] = field(default_factory=list)
-    # F-157 layered ToolSearch.  Suppression is reversible and scoped to the
+    # Layered ToolSearch.  Suppression is reversible and scoped to the
     # current search/dispatch decision; it never unregisters or deletes tools.
     retrieval_plan: RetrievalPlan | None = None
     retrieval_hidden_tools: list[Any] = field(default_factory=list)
@@ -306,7 +306,7 @@ class ToolContext:
     # refresher. ToolContext uses slots, so the integration cannot attach
     # this state dynamically at runtime.
     _lkb_repl_status_state: dict[str, Any] | None = None
-    # F-122 goal-mode model tools. ``session_id`` is the normal persisted
+    # goal-mode model tools. ``session_id`` is the normal persisted
     # thread id; ``goal_thread_id`` lets tests or protocol adapters pin the
     # recoverable thread explicitly. ``goal_service`` is injected when a
     # caller needs an isolated GoalStore, otherwise tools construct the
@@ -315,7 +315,7 @@ class ToolContext:
     goal_service: Any | None = None
     goal_runtime: Any | None = None
 
-    # F-57 Phase 5 session macros — overlay snapshot + registration gates.
+    # Session macros — overlay snapshot + registration gates.
     # Declared early (slots=True) so later tasks can construct real contexts.
     session_macro_overlay: Any | None = None
     confirm_session_macro_plan: Callable | None = None

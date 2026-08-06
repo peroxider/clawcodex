@@ -1,4 +1,4 @@
-"""F-97 independent telemetry package.
+"""Independent telemetry package.
 
 Public surface (the only symbols business code should reach for):
 
@@ -12,7 +12,7 @@ Public surface (the only symbols business code should reach for):
 * :func:`record_tool_summary`
 * :class:`TelemetryConfig`      — config dataclass + :func:`load_config`
 * :class:`TelemetryEvent`        — event dataclass + :class:`EventType`
-* :class:`AnalyticsTelemetrySink` — F-97-I drop-in :class:`AnalyticsSink`
+* :class:`AnalyticsTelemetrySink` — drop-in :class:`AnalyticsSink`
   that routes ``src.services.analytics`` events into the live
   recorder. Installed by :func:`install_analytics_bridge`.
 

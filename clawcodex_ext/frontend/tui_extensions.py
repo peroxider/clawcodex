@@ -1,7 +1,7 @@
-"""F-43 extension hook for the TUI frontend.
+"""Runtime slash command extension hook for the TUI frontend.
 
 Mirror of :mod:`clawcodex_ext.frontend.repl_extensions` for the Textual
-TUI. Owns the F-43 ``/provider`` and ``/model`` slash command
+TUI. Owns the ``/provider`` and ``/model`` slash command
 registration plus the runtime observer that syncs the TUI's
 ``app_state`` / ``AgentBridge`` private state after
 :meth:`RuntimeContext.swap_provider`.
@@ -13,7 +13,7 @@ The TUI lives at ``src/tui/*`` and the AgentBridge inside
 ``provider`` / ``tool_registry`` / ``tool_context`` that need to be
 refreshed on provider swap. By keeping the observer in downstream, the
 upstream TUI only needs to expose an ``_agent_bridge`` attribute and a
-``status_bar`` widget; all F-43 logic stays in
+``status_bar`` widget; all runtime slash command logic stays in
 ``clawcodex_ext/frontend/tui_extensions.py``.
 """
 
@@ -86,7 +86,7 @@ class _TuiRuntimeObserver:
 
 
 def install_tui_extensions(app: "ClawCodexTUI", ctx) -> None:
-    """Wire F-43 slash commands + observer into the TUI.
+    """Wire runtime slash commands + observer into the TUI.
 
     Registers ``/provider`` and ``/model`` into both the local REPL
     registry (for the REPL screen) and the global command registry

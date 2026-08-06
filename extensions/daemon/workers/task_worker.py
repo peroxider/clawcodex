@@ -1,4 +1,4 @@
-"""通用远程任务执行 worker（F-84 重构）。
+"""通用远程任务执行 worker（重构）。
 
 替代原有的 ``remoteControl`` worker，不再依赖 Anthropic Cloud bridge。
 使用 Unix Domain Socket 监听入站任务，通过子进程执行 agent 任务。

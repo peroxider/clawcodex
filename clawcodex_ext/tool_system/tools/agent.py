@@ -57,7 +57,7 @@ from clawcodex_ext.utils.abort_controller import AbortController, AbortError
 logger = logging.getLogger(__name__)
 
 
-# F-88 P88-D: helper to persist Explore / Plan reports to disk after the
+# Helper to persist Explore / Plan reports to disk after the
 # one-shot agent completes. Best-effort: any I/O error is logged and
 # swallowed so the user's in-session output is never disrupted by a
 # report-store failure.
@@ -426,7 +426,7 @@ def make_agent_tool(
         # - subagent_type omitted, fork gate on → implicit fork via FORK_AGENT.
         # - subagent_type omitted, fork gate off → default to general-purpose.
         #
-        # F-88 P88-C: BEFORE the explicit-type check, run a phrase-based
+        # BEFORE the explicit-type check, run a phrase-based
         # classifier over the prompt. If the classifier picks Explore /
         # Plan and those are available, we fill in the missing
         # ``subagent_type`` so the existing dispatch (below) selects the
@@ -606,7 +606,7 @@ def make_agent_tool(
         # Spawn-attribution record: the Agent tool is the ONLY place that
         # knows both the child's ``agent_id`` and the ``description`` at
         # the spawn moment. Persist the mapping so the visualizer can
-        # attach each spawn bar to its exact sub-agent lane (the F-45
+        # attach each spawn bar to its exact sub-agent lane (the
         # call row cannot carry the id — it's minted here, after the
         # event is emitted — and the result event only carries rendered
         # text). Best-effort; never affects the spawn.
@@ -1048,7 +1048,7 @@ def make_agent_tool(
         sync_state.completed_at = time.time()
         sync_state.result_text = result_text
 
-        # F-88 P88-D: persist Explore / Plan reports to disk for
+        # Persist Explore / Plan reports to disk for
         # later-session reference. Best-effort — never raises.
         if agent_type in ONE_SHOT_BUILTIN_AGENT_TYPES and result_text:
             _persist_agent_report(
@@ -1290,7 +1290,7 @@ def make_agent_tool(
                         },
                         registry=context.runtime_tasks,
                     )
-                    # F-88 P88-D: persist Explore / Plan reports to disk
+                    # Persist Explore / Plan reports to disk
                     # for later-session reference. Best-effort — never
                     # raises. Mirrors the sync-path hook in
                     # ``_run_sync_agent``.

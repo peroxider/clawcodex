@@ -1,4 +1,4 @@
-"""F-157 structural metadata for layered macro / atomic ToolSearch.
+"""Structural metadata for layered macro / atomic ToolSearch.
 
 The persisted index is a compiled runtime view.  Macro manifests remain the
 authoritative source for ``intent_key`` / ``covered_tools``; the index makes

@@ -1,4 +1,4 @@
-"""F-50-B workflow extractor base class."""
+"""Workflow extractor base class."""
 
 from __future__ import annotations
 

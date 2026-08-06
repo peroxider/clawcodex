@@ -369,7 +369,7 @@ def test_build_digest_message_truncates_long_body(monkeypatch) -> None:
     record.description = "Y" * 50
     digest = _digest(trending=[record])
     msg = build_digest_message(digest, top_n=1)
-    # F-63 hard cap is 30 000; we leave headroom at 8 000.
+    # hard cap is 30 000; we leave headroom at 8 000.
     assert len(msg.kwargs["text"]) <= 8000
 
 

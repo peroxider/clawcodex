@@ -166,7 +166,7 @@ def read_workflow_stage_pipeline(bundle_path: Path) -> list[dict[str, object]]:
 
 
 def is_prefixed_stage_agent(agent_type: str, project_name: str | None) -> bool:
-    """True for ``{Project}-topic-init-agent`` style F-50-E stage agents."""
+    """True for ``{Project}-topic-init-agent`` style stage agents."""
     if not project_name or not agent_type.endswith("-agent"):
         return False
     prefix = f"{project_name}-"

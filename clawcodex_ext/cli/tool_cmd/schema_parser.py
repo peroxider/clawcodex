@@ -1,11 +1,11 @@
-"""JSON Schema → argparse adapter for F-53.
+"""JSON Schema → argparse adapter for the dynamic tool command feature.
 
-F-53 maps a tool's ``input_schema`` (JSON Schema) to a CLI argument
+The adapter maps a tool's ``input_schema`` (JSON Schema) to a CLI argument
 parser so the user can invoke ``/detect_modality --path /data/raw`` or
 ``clawcodex-dev tool detect_modality --path /data/raw`` instead of
 crafting raw JSON.
 
-Mapping rules (mirrors F-53 spec §1.5):
+Mapping rules (mirrors spec §1.5):
 
 ================================== ===========================================
 JSON Schema field                   argparse argument
@@ -97,7 +97,7 @@ def build_arg_parser(tool_name: str, schema: Mapping[str, Any] | None) -> argpar
     """
     parser = argparse.ArgumentParser(
         prog=f"/{tool_name}",
-        description=f"Auto-generated CLI for tool '{tool_name}' (F-53).",
+        description=f"Auto-generated CLI for tool '{tool_name}'.",
         add_help=True,
         exit_on_error=False,  # raise ``ArgumentError`` instead of sys.exit
     )

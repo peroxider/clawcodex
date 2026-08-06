@@ -1,4 +1,4 @@
-"""Tests for the LLM-backed dream runner — F-100 Phase B.
+"""Tests for the LLM-backed dream runner.
 
 Covers the real LLM-backed dream runner's building blocks (tool
 filtering, context creation, event handler, factory wiring) without

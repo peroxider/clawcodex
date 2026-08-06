@@ -1,4 +1,4 @@
-"""F-66 P66-F — Trae Agent CLI 包装 (ACP 适配模式).
+"""Trae Agent CLI 包装 (ACP 适配模式).
 
 把字节开源的 ``trae-agent`` (``trae-cli``) 包装为**伪 ACP server**，
 让 clawcodex 内部按 P66-A 设计的统一 :class:`ACPTransport` /

@@ -1,4 +1,4 @@
-"""Auto-dream service main loop — F-100.
+"""Auto-dream service main loop.
 
 Mirrors ``typescript/src/services/autoDream/autoDream.ts``. The gate
 order (cheapest first) is preserved:

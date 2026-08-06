@@ -3,7 +3,7 @@
 These tests wire two or more subsystem adapters into one shared
 :class:`AsciicastWriter` and verify the on-disk .cast is valid + the
 event ordering matches expectations. This is the closest analogue to
-the F-38 manual_e2e_f38.py flow — exercises the cross-cutting
+the manual_e2e_f38.py flow — exercises the cross-cutting
 plumbing rather than any single adapter.
 """
 

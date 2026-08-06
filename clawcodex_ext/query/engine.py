@@ -300,7 +300,7 @@ class QueryEngine:
             # failures across user prompts. ``auto_compact_if_needed``
             # mutates ``tracking.consecutive_failures`` in place.
             autocompact_tracking=self._auto_compact_tracking,
-            # F-9: when a goal is active for this session, raise the
+            # when a goal is active for this session, raise the
             # compression threshold and protect goal-steering messages.
             goal_active=self._check_goal_active(),
         )

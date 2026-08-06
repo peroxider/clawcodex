@@ -1,9 +1,9 @@
-"""F-84 Daemon downstream extension hooks.
+"""Daemon downstream extension hooks.
 
 This package is the *Layer-1* counterpart to ``extensions.daemon/``.
 It owns the wiring that:
 
-* Registers the F-84 ``DAEMON`` + ``BRIDGE_MODE`` feature flags with
+* Registers the ``DAEMON`` + ``BRIDGE_MODE`` feature flags with
   the runtime registry (only when called from
   :func:`install_daemon_gate`).
 * Connects the ``extensions.daemon.cli`` verb to the downstream CLI

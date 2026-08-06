@@ -87,7 +87,7 @@ def test_recorder_writes_crash_event(tmp_path):
 
 
 def test_record_event_writes_to_storage_via_public_api(tmp_path):
-    """F-97-I: ``record_event`` is the public chokepoint the bridge uses.
+    """``record_event`` is the public chokepoint the bridge uses.
 
     It must accept a pre-built :class:`TelemetryEvent`, run it through
     the same redaction + storage + aggregation pipeline as the typed
@@ -252,7 +252,7 @@ def test_flush_forces_fresh_aggregation_before_emit(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# F-97-J: SessionAnalyticsMetadata → record_session_start bridge
+# SessionAnalyticsMetadata → record_session_start bridge
 # ---------------------------------------------------------------------------
 
 
@@ -268,7 +268,7 @@ def _build_recorder_for_j(tmp_path: Path) -> _TelemetryRecorderImpl:
 
 
 def test_record_session_start_includes_analytics_metadata_fields(tmp_path):
-    """F-97-J: explicit analytics metadata kwargs land in the JSONL row."""
+    """Explicit analytics metadata kwargs land in the JSONL row."""
     impl = _build_recorder_for_j(tmp_path)
 
     impl.record_session_start(
@@ -297,7 +297,7 @@ def test_record_session_start_includes_analytics_metadata_fields(tmp_path):
 
 
 def test_record_session_start_autocollects_analytics_when_kwargs_omitted(tmp_path):
-    """F-97-J: omitting the new kwargs still fills them in via
+    """Omitting the new kwargs still fills them in via
     ``collect_session_metadata``. The bridge must be transparent so old
     call sites that pass only the 8-kw signature keep working."""
     impl = _build_recorder_for_j(tmp_path)
@@ -328,7 +328,7 @@ def test_record_session_start_autocollects_analytics_when_kwargs_omitted(tmp_pat
 
 
 def test_record_session_start_redacts_extra_dict(tmp_path):
-    """F-97-J: the ``extra`` dict must never smuggle prompt/output/
+    """the ``extra`` dict must never smuggle prompt/output/
     transcript/messages into the payload, even if a caller passes them
     directly. The redactor's ``_BLOCKED_EXTRA_KEYS`` set is the single
     gate."""
@@ -363,7 +363,7 @@ def test_record_session_start_redacts_extra_dict(tmp_path):
 
 
 def test_record_session_start_noop_when_disabled_even_with_metadata(tmp_path):
-    """F-97-J: the NullRecorder swallows all kwargs without raising so
+    """the NullRecorder swallows all kwargs without raising so
     direct call sites in CLI dispatch can pass the analytics fields
     unconditionally — no need to gate by enabled-state."""
     null = _NullRecorder()

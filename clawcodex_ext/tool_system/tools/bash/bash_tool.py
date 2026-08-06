@@ -94,7 +94,7 @@ def _run_bash_with_abort(
         "encoding": "utf-8",
         "errors": "replace",
     }
-    # F-40 root-cause fix: ensure /root/Conda/bin is in PATH for every
+    # Root-cause fix: ensure /root/Conda/bin is in PATH for every
     # bash subprocess.  The daemon's own PATH includes it; we re-prepend
     # it here as a defense-in-depth so the agent's most-used command
     # interpreter (``python3``) keeps working even if a downstream hook

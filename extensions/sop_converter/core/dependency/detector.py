@@ -1,6 +1,6 @@
 """Detect tool lifecycle patterns and build a :class:`ToolDependencyGraph`.
 
-F-55 §3.3.3: feed a ``list[SourceComponent]`` through:
+Feed a ``list[SourceComponent]`` through:
 
 1. :func:`pair_build_invoke` — locate ``build_*`` / ``create_*`` ↔
    ``run_*`` / ``invoke_*`` candidate pairs.

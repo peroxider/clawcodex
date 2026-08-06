@@ -1,4 +1,4 @@
-"""Deterministic seed planner and coordinator prompt for F-118."""
+"""Deterministic seed planner and coordinator prompt for swarm execution."""
 
 from __future__ import annotations
 

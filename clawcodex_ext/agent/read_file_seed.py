@@ -1,4 +1,4 @@
-"""F-125 C9: read-file-state seed for headless resume.
+"""read-file-state seed for headless resume.
 
 When a session is resumed via ``--resume`` / ``--fork-session``, the
 conversation history carries ``tool_use`` blocks for prior ``Read``
@@ -100,13 +100,13 @@ def seed_read_file_state_from_history(
                 # mark_file_read stats the file; if it races with a
                 # delete or a permission change, treat as a skip.
                 logger.debug(
-                    "F-125 read-file-state seed: mark_file_read failed for %s",
+                    "Read-file-state seed: mark_file_read failed for %s",
                     path,
                     exc_info=True,
                 )
     if seeded:
         logger.debug(
-            "F-125 read-file-state seed: populated %d file fingerprint(s) from resumed history",
+            "Read-file-state seed: populated %d file fingerprint(s) from resumed history",
             seeded,
         )
     return seeded

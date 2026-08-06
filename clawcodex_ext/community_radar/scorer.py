@@ -1,4 +1,4 @@
-"""Multi-dimension feature scorer for SR-5.1.
+"""Multi-dimension feature scorer for the community feature radar.
 
 Implements the multi-dimension scoring model:
 
@@ -57,7 +57,7 @@ _ADAPTATION_COST: dict[FeatureCategory, float] = {
 
 
 # Architecture fit: 100 if a category already lives fully under
-# ``clawcodex_ext/*`` per F-48; lower if the change has to touch
+# ``clawcodex_ext/*``; lower if the change has to touch
 # ``src/upstream`` shape.
 _ARCHITECTURE_FIT: dict[FeatureCategory, float] = {
     FeatureCategory.CLI: 95.0,

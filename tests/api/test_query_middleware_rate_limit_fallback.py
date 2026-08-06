@@ -1,4 +1,4 @@
-"""Contract test for F-48 ``extensions/api/query_middleware.py``.
+"""Contract test for ``extensions/api/query_middleware.py``.
 
 The fork extracted the rate-limit / throttling logic out of
 ``src/query/query.py`` into ``extensions/api/query_middleware.py`` so the

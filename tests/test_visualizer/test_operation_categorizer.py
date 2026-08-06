@@ -1,4 +1,4 @@
-"""Tests for OperationCategorizer (F-95 legend mapper)."""
+"""Tests for OperationCategorizer (legend mapper)."""
 
 from __future__ import annotations
 
@@ -144,5 +144,5 @@ class TestOperationCategoryColor:
 
     def test_legend_labels_present(self):
         labels = {c.label for c in OperationCategory}
-        # All eight Chinese labels (F-95 follow-up split OTHER into 3 sub-cats)
+        # All eight Chinese labels (follow-up split OTHER into 3 sub-cats)
         assert {"读取", "执行", "写入", "编排", "推理", "轮次", "后台", "其他"} <= labels

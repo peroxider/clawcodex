@@ -43,7 +43,7 @@ class TemplateResolutionError(TemplatesError):
 
 
 # ---------------------------------------------------------------------------
-# F-95 (P95-B / P95-C / P95-G) — product-layer exceptions
+# Product-layer exceptions
 # ---------------------------------------------------------------------------
 
 

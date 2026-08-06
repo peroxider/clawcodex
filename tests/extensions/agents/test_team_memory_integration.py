@@ -1,4 +1,4 @@
-"""F-93 P93-H — integration tests for team_memory_integration (P93-E/G).
+"""Integration tests for team_memory_integration.
 
 Covers the TeamCreate/TeamDelete/SendMessage hooks and the prompt
 section builder. Uses a tmp workspace with a real ``.clawcodex/team.json``

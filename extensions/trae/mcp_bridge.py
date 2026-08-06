@@ -1,4 +1,4 @@
-"""F-66 P66-E — Trae IDE MCP 反向桥.
+"""Trae IDE MCP 反向桥.
 
 让 Trae IDE 用户在对话窗口内直接调用 clawcodex 的下游能力
 (Orchestrator、SOP Compiler、Skills 桥接、稳定性门禁)，无需离开 IDE。
@@ -210,7 +210,7 @@ def build_tool_specs() -> list[ACPToolSpec]:
         ACPToolSpec(
             name=TOOL_SKILL_INVOKE,
             description=(
-                "调用已注册的 Skill（透传到 F-66 P66-D skill 桥接层，"
+                "调用已注册的 Skill（透传到 skill 桥接层，"
                 "经 SkillRegistryExt 解析 skill markdown prompt）。"
             ),
             input_schema={

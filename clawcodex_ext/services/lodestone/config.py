@@ -1,4 +1,4 @@
-"""F-97 LODESTONE — configuration loading & persistence.
+"""LODESTONE — configuration loading & persistence.
 
 *   ``LodestoneConfig`` is the only source of truth (declared in
     :mod:`clawcodex_ext.services.lodestone.models`).

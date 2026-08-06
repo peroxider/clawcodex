@@ -1,4 +1,4 @@
-"""Operation statistics builder (F-91-C).
+"""Operation statistics builder.
 
 Aggregates OperationStats from a list of TimelineBars.
 """

@@ -1,7 +1,7 @@
-"""F-167-B: Asciicast recorder Protocol inlined into visualizer.
+"""Asciicast recorder Protocol inlined into visualizer.
 
 Originally this Protocol module lived at
-``extensions/capabilities/recorder.py``. F-167 copies it here so the
+``extensions/capabilities/recorder.py``. It is copied here so the
 visualizer package is self-contained and can be lifted out as an
 independent PyPI distribution without pulling in the upstream
 ``extensions.capabilities`` package.

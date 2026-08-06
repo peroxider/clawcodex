@@ -1,4 +1,4 @@
-"""F-50-A heuristic rules for workflow discrimination."""
+"""Heuristic rules for workflow discrimination."""
 
 from __future__ import annotations
 

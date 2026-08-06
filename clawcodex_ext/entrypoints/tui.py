@@ -121,8 +121,8 @@ def run_tui(options: TUIOptions) -> int:
         tool_context.allow_docs = True
     tool_context.options.is_non_interactive_session = False
 
-    # F-22-G-1: Wire cron scheduler to the TUI tool context.
-    # F-22-G-3: Track whether the agent loop is active so the cron scheduler
+    # Cron scheduler: Wire cron scheduler to the TUI tool context.
+    # Cron scheduler: Track whether the agent loop is active so the cron scheduler
     # can defer fires during model responses.
     class _InAgentLoopFlag:
         value: bool = False
@@ -268,14 +268,14 @@ def _filter_registry(registry, *, keep: Callable[[str], bool]) -> None:
                     pass
 
 
-# ---- F-22-G-1: TUI cron integration ----
+# ---- TUI cron integration ----
 
 
 def _attach_cron_to_tui(tool_context) -> None:
     """Wire cron scheduler + replace cron tools for the TUI entrypoint."""
     from clawcodex_ext.cron_system.runtime import attach_cron_runtime, replace_cron_tools
 
-    # F-22-G-3: pass is_loading callback so cron fires defer during agent turns.
+    # Cron scheduler: pass is_loading callback so cron fires defer during agent turns.
     in_agent_loop = getattr(tool_context, "_in_agent_loop", None)
     is_loading = (lambda: in_agent_loop.value) if in_agent_loop is not None else None
 

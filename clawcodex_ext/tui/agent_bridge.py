@@ -61,7 +61,7 @@ from .state import AppState
 
 
 def _resolve_permission_timeout_s() -> float:
-    """Layer-0 modal deadline (F-108 P108-A / P108-E).
+    """Layer-0 modal deadline (permission modal timeout).
 
     Resolved honouring ``FreezeSettings.permission_timeout_s`` →
     ``$CLAWCODEX_PERMISSION_TIMEOUT`` → the dataclass default
@@ -146,7 +146,7 @@ class AgentBridge:
         # empty ``{}`` (or nothing at all) and the agent loop would
         # never see the user's choices.
         tool_context.ask_user = self._ask_user_handler
-        # F-57 Phase 5 — main TUI may register session macros. Confirm
+        # Phase 5 — main TUI may register session macros. Confirm
         # uses AskUserQuestion modal (NOT the permission don't-ask-again
         # path); capability stays False on subagent/headless defaults.
         tool_context.allow_session_macro_registration = True
@@ -1095,7 +1095,7 @@ class AgentBridge:
                 tool_input=None,
             )
         )
-        # F-108 P108-A: bound the wait so a stuck modal cannot hang the
+        # Permission modal timeout: bound the wait so a stuck modal cannot hang the
         # worker thread indefinitely (risk #2). After the timeout we
         # fall back to the safest default — deny without remembering —
         # which mirrors the legacy ESC behaviour.
@@ -1103,7 +1103,7 @@ class AgentBridge:
         if timeout_s > 0:
             done.wait(timeout=timeout_s)
             if not done.is_set():
-                # F-108 P108-A: UI never responded within the budget;
+                # Permission modal timeout: UI never responded within the budget;
                 # auto-deny. The pending modal is still in state — the
                 # eventual UI ``decide()`` call (or Escape) will call
                 # ``resolve_permission`` and drop it; that is idempotent.
@@ -1188,7 +1188,7 @@ class AgentBridge:
                 questions=list(questions),
             )
         )
-        # F-108 P108-A: bound the wait so a stuck AskUserQuestion modal
+        # Permission modal timeout: bound the wait so a stuck AskUserQuestion modal
         # cannot hang the worker thread indefinitely (risk #3). After
         # the timeout we return ``{}`` (parity with the Esc-cancel path)
         # so the agent loop can recover without a real answer.
@@ -1196,7 +1196,7 @@ class AgentBridge:
         if timeout_s > 0:
             done.wait(timeout=timeout_s)
             if not done.is_set():
-                # F-108 P108-A: UI never responded; return empty answers.
+                # Permission modal timeout: UI never responded; return empty answers.
                 # Same idempotency reasoning as ``_permission_handler`` —
                 # the modal's eventual decide() will still drain state.
                 outcome["answers"] = {}

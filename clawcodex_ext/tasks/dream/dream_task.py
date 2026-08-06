@@ -1,4 +1,4 @@
-"""``dream`` task state machine — F-100.
+"""``dream`` task state machine.
 
 Mirrors the chapter-10 pattern used by ``local_agent`` / ``in_process_teammate``:
 a typed ``DreamTaskState`` dataclass (subclass of ``TaskStateBase``) plus

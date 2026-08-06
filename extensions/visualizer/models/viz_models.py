@@ -354,10 +354,10 @@ class SessionVizData(BaseModel):
     # Multi-agent tree (P0: simplified flat list)
     agent_tree: list[AgentTreeNode] = Field(default_factory=list)
 
-    # Linked reports (F-95)
-    report_path: str | None = None  # F-38 markdown path
-    tool_events_path: str | None = None  # F-45 events.ndjson path
-    debug_log_path: str | None = None  # F-54 debug.ndjson path
+    # Linked reports
+    report_path: str | None = None  # markdown report path
+    tool_events_path: str | None = None  # events.ndjson path
+    debug_log_path: str | None = None  # debug.ndjson path
 
     # Raw data pointers (not serialized in full; frontend fetches on demand)
     transcript_path: str | None = None
@@ -380,7 +380,7 @@ class SessionVizData(BaseModel):
         description="Non-fatal damaged or unsupported transcript records.",
     )
 
-    # Session end reason (F-09 / F-40)
+    # Session end reason
     end_reason: str | None = None
     end_summary: str = ""
 
@@ -390,7 +390,7 @@ class SessionVizData(BaseModel):
         description="Aggregated layout info: spawn_time, join_time, subagent_count, by_role.",
     )
 
-    # F-96-E: Orchestrator issue association
+    # Orchestrator issue association
     issue_id: str = ""
     verification_status: str = ""
 
@@ -429,7 +429,7 @@ class ImportStatus(BaseModel):
 
 
 class DashboardEntryViz(BaseModel):
-    """F-120: single entry returned by the Agent Dashboard snapshot API.
+    """Single entry returned by the Agent Dashboard snapshot API.
 
     Mirrors :class:`extensions.capabilities.dashboard_entry.DashboardEntry`
     as a Pydantic model so FastAPI can use it as a ``response_model``.

@@ -134,7 +134,7 @@ __all__ = [
 ]
 
 
-# F-99 fix (defense-in-depth): trigger the cancel-latency provider
+# fix (defense-in-depth): trigger the cancel-latency provider
 # registration as a side-effect of importing this module. We place the
 # import at the bottom (after ``register_provider`` /
 # ``register_provider_info`` are defined) so that

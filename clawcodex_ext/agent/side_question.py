@@ -12,7 +12,7 @@ side-question:
 * Injects a <system-reminder> wrapped directive so the model knows it is
   an independent instance with no tools and no interruption semantics.
 
-F-122-H: every invocation also writes a one-line JSONL record to the
+Every invocation also writes a one-line JSONL record to the
 sidechain transcript under ``$CLAWCODEX_DATA_DIR/sidechains/`` so the
 question + answer + usage have a paper trail independent of the main
 session transcript. The record write is fire-and-forget — IO failures
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# F-122-H: sidechain transcript helpers (local, not exported)
+# Sidechain transcript helpers (local, not exported)
 # ---------------------------------------------------------------------------
 
 
@@ -104,7 +104,7 @@ def _record_btw_to_sidechain(
         # exception-safe, but belt-and-braces: sidechain writes must
         # NEVER escape into the /btw user flow.
         logger.warning(
-            "F-122-H: sidechain record wrapper crashed unexpectedly",
+            "Sidechain record wrapper crashed unexpectedly",
             exc_info=True,
         )
 
@@ -164,7 +164,7 @@ async def run_side_question(
     Returns:
         SideQuestionResult with the text response and usage info.
 
-    F-122-H: as a side effect, appends a JSONL record to the sidechain
+    As a side effect, appends a JSONL record to the sidechain
     transcript so ``/btw`` invocations are auditable. Recording happens
     on *both* success and failure paths — an API error leaves an
     ``error`` field in the record so a session can be replayed/rebuilt

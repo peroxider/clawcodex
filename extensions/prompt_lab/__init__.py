@@ -1,4 +1,4 @@
-"""prompt_lab — F-119 A/B variant framework skeleton (P119-E).
+"""prompt_lab — A/B variant framework skeleton.
 
 Layer 2 subsystem providing prompt variant management, experiment assignment,
 and metrics sinking for self-iteration optimization.  Zero third-party

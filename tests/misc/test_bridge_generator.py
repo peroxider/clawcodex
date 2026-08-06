@@ -1,4 +1,4 @@
-"""Tests for F-50-F bridge generator and CLI discovery."""
+"""Tests for the bridge generator and CLI discovery."""
 
 from __future__ import annotations
 

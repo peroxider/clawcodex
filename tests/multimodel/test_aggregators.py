@@ -1,4 +1,4 @@
-"""Behavioural tests for F-157 multi-model response aggregators."""
+"""Behavioural tests for multi-model response aggregators."""
 
 from __future__ import annotations
 

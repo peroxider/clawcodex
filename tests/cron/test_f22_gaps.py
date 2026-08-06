@@ -1,4 +1,4 @@
-"""F-22 9.11 CCB 差距补充测试（G1/G2/G3/G4/G5/G8）。"""
+"""CCB 差距补充测试（G1/G2/G3/G4/G5/G8）。"""
 
 from __future__ import annotations
 
@@ -124,7 +124,7 @@ class TestG2JitterConfig:
         assert cfg == validate_jitter_config(CronJitterConfig())
 
     def test_scheduler_hot_reloads_jitter_per_tick(self, tmp_path: Path) -> None:
-        # F-22-G2 hot-reload: scheduler reloads the jitter config every
+        # hot-reload: scheduler reloads the jitter config every
         # _THROTTLE_INTERVAL ticks (default 60) so live edits to
         # .clawcodex/cron/jitter_config.json or CLAWCODEX_CRON_* env vars
         # take effect within ~60 s without restart.
@@ -156,7 +156,7 @@ class TestG2JitterConfig:
         assert scheduler.get_jitter_config().recurring_max_age_ms == 10_000
 
     def test_prune_uses_live_max_age(self, tmp_path: Path) -> None:
-        # F-22-G2: scheduler passes the live recurring_max_age_ms to
+        # scheduler passes the live recurring_max_age_ms to
         # prune_expired_recurring_tasks so tightening the value mid-session
         # reaps stale tasks immediately.
         from clawcodex_ext.cron_system.tasks import write_cron_tasks

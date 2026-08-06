@@ -218,7 +218,7 @@ class TestRunPreActionSetsTrustAccepted(unittest.TestCase):
 
 
 class TestFreezeDetectorWiring(unittest.TestCase):
-    """F-108 P108-D: ``init()`` must adopt the freeze watchdog when
+    """``init()`` must adopt the freeze watchdog when
     ``CLAWCODEX_FREEZE_DIAG=1`` is set."""
 
     def _reset_freeze_singleton(self) -> None:

@@ -1,4 +1,4 @@
-"""F-75 tool/skill stats CLI subcommand.
+"""Tool/skill stats CLI subcommand.
 
 Usage::
 
@@ -23,7 +23,7 @@ from clawcodex_ext.tool_stats import get_stats, get_summary
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="clawcodex stats",
-        description="工具/Skill 调用统计（F-75）",
+        description="工具/Skill 调用统计",
     )
     p.add_argument(
         "--kind",

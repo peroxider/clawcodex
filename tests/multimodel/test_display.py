@@ -1,4 +1,4 @@
-"""Behavioural coverage for the display-only half of F-157."""
+"""Behavioural coverage for the display-only half of the multi-model feature."""
 
 from __future__ import annotations
 

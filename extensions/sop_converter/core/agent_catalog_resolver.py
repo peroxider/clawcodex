@@ -1,4 +1,4 @@
-"""Catalog path resolution — F-55 L1.
+"""Catalog path resolution — L1.
 
 Decides where to read/write the agent catalog based on:
 

@@ -1,4 +1,4 @@
-"""Timeline builder (F-91-C).
+"""Timeline builder.
 
 Aggregates TimelineBar objects from multiple parsers into a unified timeline.
 """

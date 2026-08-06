@@ -1,4 +1,4 @@
-"""F-108 P108-E — schema integration tests for FreezeSettings."""
+"""Schema integration tests for FreezeSettings."""
 
 from __future__ import annotations
 

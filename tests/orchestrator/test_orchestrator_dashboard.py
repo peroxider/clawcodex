@@ -374,7 +374,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-# --- F-124-P3: 澄清面板 ---
+# --- 澄清面板 ---
 
 
 def test_clarification_panel_empty() -> None:

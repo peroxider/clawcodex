@@ -163,7 +163,7 @@ class REPLScreen(Screen):
         if hasattr(app, "app_state"):
             self.status_bar.bind_state(app.app_state)
         # Drive the footer's "esc to interrupt" hint off the same busy
-        # signal as the spinner (single source of truth — F-38).
+        # signal as the spinner (single source of truth — unified key handling).
         self.status_bar.bind_footer(self.prompt_input._footer)
         # Set the initial permission mode on the status bar.
         try:
@@ -256,7 +256,7 @@ class REPLScreen(Screen):
             else:
                 self.transcript.append_system("Failed to save memory note", style="error")
             return
-        # F-89: expand @agent-name mentions in TUI.
+        # Expand @agent-name mentions in TUI.
         try:
             from clawcodex_ext.agent.load_agents_dir import get_agents_for_mentions
             from src.command_system.input_processing import (
@@ -326,7 +326,7 @@ class REPLScreen(Screen):
         controller = getattr(app, "_away_summary_controller", None)
         if controller is not None:
             controller.on_run_start()
-        # F-9: start the goal controller so it knows a new assistant
+        # Goal controller: start the goal controller so it knows a new assistant
         # turn is about to begin.
         goal_controller = getattr(app, "_goal_controller", None)
         if goal_controller is not None:
@@ -451,7 +451,7 @@ class REPLScreen(Screen):
                 )
         elif controller is not None:
             controller.on_assistant_turn_complete()
-        # F-9: drain the goal controller's continuation/budget_limit
+        # Goal controller: drain the goal controller's continuation/budget_limit
         # injection and enqueue it so the queued-prompt drain feeds it
         # to the next agent run (auto-continuation).
         goal_controller = getattr(app, "_goal_controller", None)

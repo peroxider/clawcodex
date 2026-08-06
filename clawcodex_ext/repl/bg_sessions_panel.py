@@ -1,4 +1,4 @@
-"""F-94 P94-F — REPL/TUI 后台会话显示适配器。
+"""REPL/TUI 后台会话显示适配器。
 
 提供 ``bg_sessions_panel``（footer 统计）与 ``format_bg_sessions_status``
 （task list 分组渲染）。**纯展示层** — 不持有状态，每次调用从 registry

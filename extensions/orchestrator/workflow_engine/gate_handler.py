@@ -1,4 +1,4 @@
-"""GATE 门禁处理器 (F-112)。
+"""GATE 门禁处理器。
 
 处理工作流中的 GATE 阶段——人类审批、自动阈值、回滚。
 三种审批模式: manual, auto, threshold。
@@ -38,8 +38,8 @@ class GateHandler:
     """GATE 门禁处理器。
 
     复用:
-    - F-39 ClarificationQueue (manual 模式)
-    - F-44 Human Review Gate (审批流程)
+    - ClarificationQueue (manual 模式)
+    - Human Review Gate (审批流程)
     """
 
     def __init__(
@@ -83,7 +83,7 @@ class GateHandler:
     ) -> GateResult:
         """Manual 审批模式。
 
-        通过 ClarificationQueue (F-39) 暂停工作流，等待人类审批。
+        通过 ClarificationQueue 暂停工作流，等待人类审批。
         """
         if self._clarification_queue is not None:
             try:

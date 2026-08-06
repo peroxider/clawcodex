@@ -8,7 +8,7 @@
 - TUI App 类可导入（如果 textual 已安装）
 - ``run_tui`` / ``ClawCodexExtREPL`` 等核心入口函数可调用
 
-背景：F-48 解耦重构中，``src/entrypoints/tui.py`` 和 ``src/repl/core.py``
+背景：解耦重构中，``src/entrypoints/tui.py`` 和 ``src/repl/core.py``
 已改为 lazy-proxy facade，通过 ``__getattr__`` 代理到 ``clawcodex_ext``。
 若代理链或 import 路径断裂，用户运行 ``clawcodex --tui`` 或 ``clawcodex``
 （默认 REPL）时将直接报错。此门禁锁住该行为。

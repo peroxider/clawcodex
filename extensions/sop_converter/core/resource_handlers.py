@@ -1,4 +1,4 @@
-"""Runtime extension registry for F-56 resource types."""
+"""Runtime extension registry for resource types."""
 
 from __future__ import annotations
 

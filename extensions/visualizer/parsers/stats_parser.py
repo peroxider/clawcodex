@@ -1,4 +1,4 @@
-"""F-75 tool_stats.jsonl parser for the Visualizer.
+"""tool_stats.jsonl parser for the Visualizer.
 
 Reads ``~/.clawcodex/tool_stats.jsonl`` written by
 ``clawcodex_ext.tool_stats`` and returns aggregated summaries
@@ -25,7 +25,7 @@ DEFAULT_STATS_PATH = Path.home() / ".clawcodex" / "tool_stats.jsonl"
 
 
 class StatsFileParser:
-    """Parser for tool_stats.jsonl (F-75)."""
+    """Parser for tool_stats.jsonl."""
 
     def __init__(self, path: Path | str | None = None) -> None:
         self._path = Path(path) if path else DEFAULT_STATS_PATH

@@ -44,7 +44,7 @@ class RunReport:
     verification_status: str | None
     verification_output: str | None
     output_excerpt: str
-    # F-45: path to ~/.clawcodex/tool-events/{run_id}/events.ndjson
+    # Path to ~/.clawcodex/tool-events/{run_id}/events.ndjson
     # (per-tool audit bypass). Added at the end of the dataclass so
     # existing reader code that constructs ``RunReport(**legacy_dict)``
     # keeps working (the field defaults to None).
@@ -127,7 +127,7 @@ def write(
     _copy_with_fallback(workspace_md, persistent_md)
     _copy_with_fallback(workspace_json, persistent_json)
 
-    # F-45 Sub-C: dual-write the per-tool NDJSON into the persistent
+    # Dual-write the per-tool NDJSON into the persistent
     # layer so the audit log survives workspace cleanup. We copy the
     # source file (under {workspace}/.reports/) into the persistent
     # reports dir using _copy_with_fallback for atomic semantics.
@@ -187,7 +187,7 @@ def _render_markdown(report: RunReport) -> str:
         f"- Tool calls: {report.tool_count}",
         f"- Verification: `{report.verification_status or 'skipped'}`",
     ]
-    # F-45: register the per-tool audit log path so the report reader
+    # register the per-tool audit log path so the report reader
     # can `cat` it without grepping ~/.clawcodex/ first.
     if report.tool_events_path:
         lines.append(f"- Tool events: `{report.tool_events_path}`")

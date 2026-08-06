@@ -1,6 +1,6 @@
-"""F-103 chain filter — parentUuid chain walker and byte-level pruner.
+"""Chain filter — parentUuid chain walker and byte-level pruner.
 
-This module is the read-side counterpart of F-103. The write side lives
+This module is the read-side counterpart of the chain filter. The write side lives
 in :mod:`extensions.agent.session_persist` (``_inject_parent_uuids``).
 
 Design:
@@ -37,7 +37,7 @@ Two-stage gating:
 Backward compatibility:
 
     Transcripts without any ``"parentUuid":`` substring (legacy
-    sessions written before F-103) skip the filter automatically.
+    sessions written before parentUuid support) skip the filter automatically.
     Mixed transcripts created by resuming a legacy session retain
     every legacy message while newer, chain-aware lines can still
     be pruned to their active branch.
@@ -192,7 +192,7 @@ def walk_chain_before_parse(
         if PARENT_UUID_TOKEN in line:
             parent_indices.append(idx)
         elif b'"uuid"' in line:
-            # A resumed pre-F-103 transcript has a legacy prefix without
+            # A resumed legacy transcript has a legacy prefix without
             # parentUuid followed by newly chained messages. Preserve every
             # valid legacy message: there is no topology with which to prune
             # that prefix safely, and a new message may point at its tail.

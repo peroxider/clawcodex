@@ -408,7 +408,7 @@ class PromptInput(Vertical):
         self._file_cache_bitmaps: list[int] = []
         self._file_cache_built_at: float = 0.0
         # ---- suggest mode: tracks which popup type is active for
-        #      unified key handling (F-38 Enter/Tab separation) ----
+        #      unified key handling (Enter/Tab separation) ----
         self._suggest_mode: str = ""  # "slash" | "at_file" | "at_agent" | "message" | ""
 
     def compose(self) -> ComposeResult:
@@ -644,7 +644,7 @@ class PromptInput(Vertical):
         # accept the selection (fill / splice) but do NOT submit —
         # the user must press Enter again to actually send.  Mirrors the
         # upstream behaviour where Enter on a highlighted row is "select
-        # + keep typing", not "select + submit" (F-38 unified path).
+        # + keep typing", not "select + submit" (unified suggestion path).
         if self._suggest_mode:
             if self._accept_suggestion():
                 return
@@ -665,7 +665,7 @@ class PromptInput(Vertical):
         """Handle Enter/Space on a suggestion row — insert the command."""
         if event.option.id:
             selected_text = event.option.id
-            # Check takes_args for slash commands (F-38 _arg_lookup)
+            # Check takes_args for slash commands (_arg_lookup)
             if event.option_list is self._suggestions and self._suggestions_provider is not None:
                 try:
                     suggestions = self._suggestions_provider() or []
@@ -733,7 +733,7 @@ class PromptInput(Vertical):
             return
 
         # Tab: if any suggestion popup is open, accept the highlighted
-        # item (F-38 Enter/Tab separation). Otherwise accept the
+        # item (Enter/Tab separation). Otherwise accept the
         # ghost-text suggestion when one is visible. If neither,
         # let the event bubble up to the App's default ``focus_next``
         # binding — crucially we do NOT call ``event.stop()`` in that
@@ -1035,7 +1035,7 @@ class PromptInput(Vertical):
         popup is visible or nothing was highlighted.
 
         This is the single entry point for both Enter (when a popup is open)
-        and Tab (F-38) — the caller decides whether to stop the key event.
+        and Tab (unified key handling) — the caller decides whether to stop the key event.
         """
         # Slash command popup
         if not self._suggestions.has_class("-hidden"):
@@ -1045,7 +1045,7 @@ class PromptInput(Vertical):
                 if option is not None and option.id:
                     # Check if the selected command takes arguments:
                     # if so, append a trailing space so the user can type
-                    # args immediately (F-38 _arg_lookup).
+                    # args immediately (_arg_lookup).
                     selected_text = option.id
                     current_text = (self._input.value or "").strip()
                     takes_args = False
@@ -1138,7 +1138,7 @@ class PromptInput(Vertical):
         * Plain queries (``@src/uti``) are matched against the cached
           project-file index via ``_filter_candidates``.
         """
-        # Custom files_provider takes priority when set (F-38).
+        # Custom files_provider takes priority when set (unified suggestion path).
         if self._files_provider is not None:
             try:
                 entries = self._files_provider()

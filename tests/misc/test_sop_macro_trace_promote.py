@@ -1,4 +1,4 @@
-"""F-57 Phase B — compiler / trace-to-macro / promote."""
+"""Phase B — compiler / trace-to-macro / promote."""
 
 from __future__ import annotations
 

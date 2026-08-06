@@ -28,7 +28,7 @@ save_spec = DEFAULTS.tool_authoring.save_spec
 
 
 def persist_builtin_retrieval_index(bundle_dir: Path) -> Path | None:
-    """Compile F-157 metadata for persisted builtin composite macros."""
+    """Compile retrieval metadata for persisted builtin composite macros."""
 
     try:
         from extensions.sop_converter.runtime.macros.routing import (
@@ -104,7 +104,7 @@ def register_composite_tools(
     for spec in builtin_composite_tools(bundle_dir=bundle_dir):
         # Placeholder composite tools (echo stage manifests) are skipped by
         # default because "echo" is not in the bash allowlist.  Executable
-        # macros such as F-55 L1 ``invoke-existing-agent`` set ``call_impl``
+        # macros such as lifecycle ``invoke-existing-agent`` set ``call_impl``
         # and must still be registered.
         if _SKIP_PLACEHOLDER_COMPOSITE_TOOLS and spec.call_impl is None:
             logger.info("Skipping placeholder composite tool: %s", spec.name)

@@ -1,4 +1,4 @@
-"""Native OpenAI provider using the ``openai`` SDK directly (F-72 P72-A).
+"""Native OpenAI provider using the ``openai`` SDK directly.
 
 Differences from the existing
 :class:`~src.providers.openai_provider.OpenAIProvider`:

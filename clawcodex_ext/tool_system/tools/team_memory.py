@@ -1,7 +1,7 @@
-"""F-93 TeamMem — TeamMemoryTool (P93-F).
+"""TeamMem — TeamMemoryTool.
 
 Agent-facing tool that exposes :class:`TeamMemoryService` to the LLM.
-One tool, five actions (F-93 §1.9): ``remember`` / ``recall`` / ``list``
+One tool, five actions: ``remember`` / ``recall`` / ``list``
 / ``delete`` / ``compact``.
 
 The tool is gated by ``is_team_memory_enabled()`` (env +

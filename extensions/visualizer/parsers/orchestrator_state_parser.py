@@ -1,4 +1,4 @@
-"""Orchestrator State Journal parser for the Visualizer (F-96-C).
+"""Orchestrator State Journal parser for the Visualizer.
 
 Reads ``{workspace}/.reports/run_*/state_journal.ndjson`` files produced by
 the Orchestrator's :class:`StateJournalWriter` and produces structured
@@ -207,7 +207,7 @@ class OrchestratorStateParser:
 
     @staticmethod
     def _apply_stage_event(state: RunState, event_type: str, event: dict[str, Any]) -> None:
-        """Fold a workflow stage event into the run state (F-116)."""
+        """Fold a workflow stage event into the run state."""
         stage_id = event.get("stage_id", 0)
         if stage_id and stage_id not in state.stages:
             state.stages[stage_id] = WorkflowStage(stage_id=stage_id)
@@ -288,7 +288,7 @@ class OrchestratorStateParser:
             state.started_at = ts
             return
 
-        # Workflow-level events (F-116)
+        # Workflow-level events
         if event_type == "workflow_start":
             state.workflow_status = "running"
             state.total_stages = event.get("total_stages", 0)

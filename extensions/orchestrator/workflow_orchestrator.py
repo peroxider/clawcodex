@@ -1,4 +1,4 @@
-"""工作流编排器 (F-110 集成)。
+"""工作流编排器。
 
 将 DeclarativeWorkflowEngine 接入 Orchestrator 体系，
 提供 workflow.yaml 加载、执行、可观测性集成。
@@ -106,7 +106,7 @@ class WorkflowOrchestrator:
             workflow_name=self._schema.name,
         )
 
-        # F-116 工作流可观测性（per-issue 激活）
+        # 工作流可观测性（per-issue 激活）
         self._observability: WorkflowObservability | None = None
 
         # 检查点
@@ -134,10 +134,10 @@ class WorkflowOrchestrator:
         self._engine.event_bus.on("cost_warning", self._on_cost_warning)
 
     def _wire_observability(self) -> None:
-        """F-116: 将 WorkflowObservability 接入事件总线。
+        """将 WorkflowObservability 接入事件总线。
 
         工作流阶段事件同时写入 State Journal（可视化器消费）
-        和 tool-events NDJSON（F-45 审计追踪）。
+        和 tool-events NDJSON（审计追踪）。
         """
         if self._observability is None:
             return
@@ -296,7 +296,7 @@ class WorkflowOrchestrator:
         if workspace_path:
             self._stage_runner._workspace_dir = workspace_path
 
-        # 设置 per-issue 检查点目录（F-115: 重试时从检查点恢复）
+        # 设置 per-issue 检查点目录（重试时从检查点恢复）
         issue_checkpoint_dir = None
         if workspace_path:
             issue_checkpoint_dir = str(
@@ -309,7 +309,7 @@ class WorkflowOrchestrator:
         else:
             self._checkpoint_mgr = None
 
-        # F-116: 激活 WorkflowObservability，写入 State Journal + tool-events
+        # 激活 WorkflowObservability，写入 State Journal + tool-events
         if workspace_path:
             journal_dir = Path(workspace_path) / ".orchestrator_workspace"
             journal_dir.mkdir(parents=True, exist_ok=True)
@@ -457,7 +457,7 @@ class WorkflowOrchestrator:
         return self._schema
 
     def set_progress_sink(self, sink: Any) -> None:
-        """注入外部进度接收器 (F-116: 编排器 Dashboard 集成)。
+        """注入外部进度接收器（编排器 Dashboard 集成）。
 
         WorkflowProgressSink 会将阶段进度事件转发给此 sink，
         使编排器的 StatusDashboard 能实时展示工作流阶段进度。

@@ -1,4 +1,4 @@
-"""ACP Protocol — Agent Client Protocol contract (F-66 P66-A).
+"""ACP Protocol — Agent Client Protocol contract.
 
 Defines the data model and Protocol interfaces for the Agent Client
 Protocol used by Zed / Cursor / Trae IDE integrations. This module is a

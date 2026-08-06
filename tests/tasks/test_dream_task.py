@@ -1,4 +1,4 @@
-"""Tests for ``src.tasks.dream`` — F-100.
+"""Tests for ``src.tasks.dream``.
 
 Covers the state machine + lifecycle helpers in
 :mod:`src.tasks.dream.dream_task`. Mirrors the shape of

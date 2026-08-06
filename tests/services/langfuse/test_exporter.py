@@ -1,4 +1,4 @@
-"""Tests for src/services/langfuse/exporter.py (F-65 P65-C)."""
+"""Tests for src/services/langfuse/exporter.py (P65-C)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""F-57 Phase 4: convert handwritten macros into bundle tools + routes."""
+"""Convert handwritten macros into bundle tools + routes."""
 
 from __future__ import annotations
 

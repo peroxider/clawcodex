@@ -1,6 +1,6 @@
-"""F-94 P94-H — BG_SESSIONS 单元测试。
+"""BG_SESSIONS 单元测试。
 
-覆盖验收标准（f-94-bg-sessions.md §1.11）：
+覆盖验收标准（bg-sessions.md §1.11）：
 1. bg_sessions=off 时不写 index.json；
 2. /bg list 能列出 session_id、pid、workspace、status；
 3. 后台 runner 完成后 status 从 running 变 completed；

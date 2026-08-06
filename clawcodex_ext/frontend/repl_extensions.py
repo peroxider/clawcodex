@@ -1,14 +1,14 @@
-"""F-43 extension hook for the REPL frontend.
+"""Runtime slash command extension hook for the REPL frontend.
 
-This module owns the downstream side of the F-43 ``/provider`` and
+This module owns the downstream side of the ``/provider`` and
 ``/model`` slash command wiring for :class:`src.repl.core.ClawcodexREPL`.
-The goal is to keep all F-43 knowledge in ``clawcodex_ext/`` so the
+The goal is to keep all runtime slash command knowledge in ``clawcodex_ext/`` so the
 upstream-shaped REPL core (``src/repl/core.py``) only sees a thin seam
 (``runtime_context`` field + observer notification on swap).
 
 Responsibilities
 ----------------
-1. Register the F-43 ``/provider`` and ``/model`` ``LocalCommand``
+1. Register the ``/provider`` and ``/model`` ``LocalCommand``
    objects on the REPL's command registry.
 2. Install a :class:`RuntimeObserver` that syncs the REPL's private
    ``provider`` / ``tool_registry`` / ``tool_context`` references after
@@ -568,7 +568,7 @@ class _ReplRuntimeObserver:
 
 
 def install_repl_extensions(repl: "ClawcodexREPL", ctx) -> None:
-    """Wire F-43 slash commands + observer into the REPL.
+    """Wire runtime slash commands + observer into the REPL.
 
     Args:
         repl: A fully-constructed :class:`ClawcodexREPL`. The function

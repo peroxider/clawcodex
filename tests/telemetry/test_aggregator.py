@@ -150,7 +150,7 @@ def test_aggregate_handles_payload_without_fields(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# F-97-L: mixed v1 / v2 events
+# mixed v1 / v2 events
 # ---------------------------------------------------------------------------
 
 
@@ -192,7 +192,7 @@ def _crash_v2(sid, fingerprint_hash, error_class="ValueError"):
 
 
 def test_aggregate_handles_v1_and_v2_mixed(tmp_path):
-    """F-97-L: events written before and after the v1→v2 cutover must
+    """Events written before and after the v1→v2 cutover must
     produce a single coherent daily summary — sessions counted from
     both shapes, summary stamped at v2."""
     storage = _storage(tmp_path)
@@ -215,7 +215,7 @@ def test_aggregate_handles_v1_and_v2_mixed(tmp_path):
 
 
 def test_aggregate_crash_summary_groups_v1_v2_same_hash(tmp_path):
-    """F-97-L: a v1 crash with fingerprint string 'abc123' and a v2
+    """A v1 crash with fingerprint string 'abc123' and a v2
     crash with fingerprint dict ``{'hash': 'abc123', ...}`` must end
     up in the same crash bucket after the v1→v2 migration."""
     storage = _storage(tmp_path)

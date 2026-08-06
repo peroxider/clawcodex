@@ -1,4 +1,4 @@
-"""F-49 Phase 3: resume a paused or completed orchestrator session.
+"""Resume a paused or completed orchestrator session.
 
 Given an issue identifier (or run_id), loads the SessionStorage
 transcript written by the headless agent, calls :func:`Session.resume`

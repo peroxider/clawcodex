@@ -1,4 +1,4 @@
-"""声明式工作流引擎核心 (F-110)。
+"""声明式工作流引擎核心。
 
 读取 workflow.yaml，按 DAG 顺序调度 Agent，管理 GATE/DECISION/回环，
 提供工作流级错误恢复和成本追踪。
@@ -218,23 +218,23 @@ class DeclarativeWorkflowEngine:
         self.cost_tracker = CostTracker(budget=self.config.cost_budget)
         self.event_bus = EventBus()
         self._dag_order: list[int] = []
-        self._stage_runner = None  # 延迟注入 (F-111)
+        self._stage_runner = None  # 延迟注入
 
-        # 阶段输出验证器 (F-114)
+        # 阶段输出验证器
         self._validator = ContractValidator(
             workspace_dir=self.config.workspace_dir,
             llm_client=self.config.llm_client,
         )
 
-        # 回滚系统 (F-113)
+        # 回滚系统
         self._rollback_manager: RollbackManager | None = None
         self._gate_rollback_handler: GateRollbackHandler | None = None
         self._init_rollback()
 
-        # 检查点系统 (F-115)
+        # 检查点系统
         self._checkpoint_manager: CheckpointManager | None = None
 
-        # GATE/DECISION 处理器 (F-112, F-113)
+        # GATE/DECISION 处理器
         self._gate_handler = GateHandler(
             workspace_dir=self.config.workspace_dir,
             llm_client=self.config.llm_client,
@@ -243,7 +243,7 @@ class DeclarativeWorkflowEngine:
         self._decision_count: dict[int, int] = {}  # 保留兼容；实际计数由 DecisionHandler.history 维护
 
     def set_stage_runner(self, runner: Any) -> None:
-        """注入 StageRunner 适配器 (F-111)。"""
+        """注入 StageRunner 适配器。"""
         self._stage_runner = runner
 
     def _init_rollback(self) -> None:
@@ -258,7 +258,7 @@ class DeclarativeWorkflowEngine:
             )
 
     def set_checkpoint_manager(self, checkpoint_manager: CheckpointManager) -> None:
-        """注入检查点管理器（F-115）。"""
+        """注入检查点管理器。"""
         self._checkpoint_manager = checkpoint_manager
 
     def _effective_timeout(self, stage: StageNode) -> int:
@@ -269,7 +269,7 @@ class DeclarativeWorkflowEngine:
         return stage.timeout_seconds or self.config.default_timeout_seconds
 
     def _save_checkpoint(self, current_stage_id: int) -> None:
-        """保存检查点（F-115）。"""
+        """保存检查点。"""
         if self._checkpoint_manager is None:
             return
         self.state.current_stage = current_stage_id
@@ -353,7 +353,7 @@ class DeclarativeWorkflowEngine:
                 result = await self._execute_stage(stage)
                 self.state.mark_stage_completed(stage.id, result)
 
-                # 每个阶段完成后保存检查点 (F-115)
+                # 每个阶段完成后保存检查点
                 self._save_checkpoint(stage.id)
 
                 self.event_bus.emit_stage_complete(
@@ -363,7 +363,7 @@ class DeclarativeWorkflowEngine:
                     duration=result.duration_seconds,
                 )
 
-                # GATE 拒绝处理 (F-112 补充)
+                # GATE 拒绝处理
                 if stage.is_gate_stage and result.status == StageStatus.GATE_REJECTED:
                     if stage.on_error == "rollback" or stage.gate_rollback_to is not None:
                         error_msg = result.error or f"GATE stage {stage.id} rejected"
@@ -479,7 +479,7 @@ class DeclarativeWorkflowEngine:
         return result
 
     async def _run_agent_stage(self, stage: StageNode) -> StageResult:
-        """执行 Agent 阶段 (F-110-B)。
+        """执行 Agent 阶段。
 
         通过 StageRunner 适配器调用 AgentRunner。
         """
@@ -519,7 +519,7 @@ class DeclarativeWorkflowEngine:
                 stage_id=stage.id,
             )
 
-        # 输出验证 (F-110-C)
+        # 输出验证
         if stage.validators:
             validation_errors = await self._validate_stage_output(stage, run_result)
             if validation_errors:
@@ -537,7 +537,7 @@ class DeclarativeWorkflowEngine:
         )
 
     async def _run_gate_stage(self, stage: StageNode) -> StageResult:
-        """执行 GATE 阶段 (F-112)。"""
+        """执行 GATE 阶段。"""
         if self._stage_runner is None:
             raise WorkflowEngineError("StageRunner not injected", stage_id=stage.id)
 
@@ -582,7 +582,7 @@ class DeclarativeWorkflowEngine:
             )
 
     async def _run_decision_stage(self, stage: StageNode) -> StageResult:
-        """执行 DECISION 阶段 (F-113)。
+        """执行 DECISION 阶段。
 
         通过 DecisionHandler 进行回环次数检查和收敛检测。
         """
@@ -650,7 +650,7 @@ class DeclarativeWorkflowEngine:
         )
 
     async def _validate_stage_output(self, stage: StageNode, run_result: Any) -> list[str]:
-        """执行阶段输出验证 (F-110-C, F-114)。
+        """执行阶段输出验证。
 
         委托给注入的 ``ContractValidator`` 实例，支持全部 7 种验证器类型。
         """
@@ -662,7 +662,7 @@ class DeclarativeWorkflowEngine:
     def _handle_stage_error(
         self, stage: StageNode, exc: WorkflowEngineError, error_type: str
     ) -> StageResult:
-        """处理阶段错误 (F-110-D)。"""
+        """处理阶段错误。"""
         self.event_bus.emit_stage_failed(
             stage_id=stage.id,
             stage_name=stage.name,

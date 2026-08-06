@@ -1,4 +1,4 @@
-"""TelemetryConfig — the F-97 configuration surface.
+"""TelemetryConfig — the telemetry configuration surface.
 
 The default is fully disabled; users opt in by writing a ``telemetry``
 section into their merged config (the TOML shape is mirrored by the
@@ -57,7 +57,7 @@ class ReportingConfig:
 
 @dataclass(frozen=True)
 class TelemetryConfig:
-    """F-97 configuration.
+    """Telemetry configuration.
 
     .. TODO::
        Before formal release, revert ``enabled`` and
@@ -120,7 +120,7 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
     base = TelemetryConfig()
 
     on_disk_section: dict[str, Any] = {}
-    # F-97-K: TOML is layered between dataclass defaults and the legacy
+    # TOML is layered between dataclass defaults and the legacy
     # JSON section. The JSON section is intentionally given precedence
     # so existing CI / production deployments that already maintain a
     # JSON config keep working untouched.

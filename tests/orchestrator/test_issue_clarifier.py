@@ -634,7 +634,7 @@ def test_clarify_cli_recheck_clears_gate_state(tmp_path) -> None:
     assert reloaded.clarifier_fingerprint is None
 
 
-# --- F-124-L: workspace focus 富化 ---
+# --- workspace focus 富化 ---
 
 
 def test_workspace_focus_injected_into_payload() -> None:

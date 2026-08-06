@@ -1,4 +1,4 @@
-"""Tests for F-120 DashboardGet / DashboardList model tools."""
+"""Tests for DashboardGet / DashboardList model tools."""
 
 from __future__ import annotations
 

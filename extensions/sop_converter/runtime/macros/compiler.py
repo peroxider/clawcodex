@@ -1,4 +1,4 @@
-"""F-57 Phase B — MacroCompiler (validate/normalize only; no LLM)."""
+"""MacroCompiler (validate/normalize only; no LLM)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from .validation import ValidatedSessionMacro, validate_session_macro_definition
 
 @dataclass(frozen=True)
 class MacroDraft:
-    """Session NL/trace draft metadata (F-57 §4.3); not persisted as-is."""
+    """Session NL/trace draft metadata (§4.3); not persisted as-is."""
 
     proposed_name: str
     requested_scope: str = "session"

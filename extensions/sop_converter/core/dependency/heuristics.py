@@ -1,10 +1,10 @@
-"""Heuristics for F-55 L2 dependency detection.
+"""Heuristics for dependency detection.
 
 Two pure functions:
 
 * :func:`pair_build_invoke` — given a list of lifecycle-classified ops,
   return the candidate ``(build_op, invoke_op)`` pairs using the
-  rules from F-55 §3.3.3:
+  rules from the dependency detection spec:
 
   * the build op's name returns a Dict containing an id-shaped field
   * the invoke op's required parameter name ends with ``_id`` / ``id``

@@ -1,4 +1,4 @@
-"""工作流可观测性集成 (F-116)。
+"""工作流可观测性集成。
 
 将工作流执行事件集成到 ClawCodex 的可视化和审计体系。
 集成点:
@@ -220,7 +220,7 @@ class WorkflowProgressSink:
     """工作流进度报告器。
 
     实现 ProgressSink 协议，报告阶段完成百分比。
-    复用 F-40 ProgressSink 协议。
+    复用 ProgressSink 协议。
     """
 
     workflow_name: str = ""

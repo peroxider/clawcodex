@@ -9,7 +9,7 @@ instance can plug into the idle ``PromptSession`` and the live
 ``LiveStatus`` input buffer used while the agent is working.
 
 Originally lived in :mod:`src.utils.agent_mention_completer`; moved to the
-extension layer per F-48 Phase 2-B (see ``DECOUPLING_PLAN.md`` §3.6). The
+extension layer per the decoupling plan (see ``DECOUPLING_PLAN.md`` §3.6). The
 ``src`` copy is now a thin facade.
 """
 

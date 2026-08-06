@@ -1,4 +1,4 @@
-"""F-49 Phase 3 tests for the ``issue resume-session`` CLI subcommand.
+"""Phase 3 tests for the ``issue resume-session`` CLI subcommand.
 
 Covers:
   * ``argparse`` registration: ``clawcodex issue resume-session --id X``

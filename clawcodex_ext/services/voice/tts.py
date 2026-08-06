@@ -1,4 +1,4 @@
-"""Text-to-speech provider abstraction — F-64 P64-E1.
+"""Text-to-speech provider abstraction.
 
 Mirrors :mod:`clawcodex_ext.services.voice.stt` (the STT side): an abstract
 :class:`TTSProvider` + :class:`TTSConfig` + :class:`TTSChunk` +

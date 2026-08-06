@@ -1,4 +1,4 @@
-"""DialogueSessionManager — F-65 P65-B.
+"""DialogueSessionManager.
 
 Owns the lifecycle of one full-duplex voice dialogue session:
 
@@ -15,7 +15,7 @@ IDLE ──> LISTENING ──> SPEAKING ──> INTERRUPTED ──> LISTENING
 Responsibilities
 ----------------
 * Construct / tear down a :class:`FullDuplexDialogueProvider` (the
-  F-65 ABC). One manager per session.
+  ABC). One manager per session.
 * Own the audio recorder + the audio player (via
   :class:`AudioChunkQueue` + :class:`AudioOutQueue` + :class:`AudioPlayer`).
 * Run an :class:`InterruptDetector` over the recorded PCM. When the user
@@ -36,7 +36,7 @@ Design notes
   provider's pump tasks use. PyAudio's blocking ``stream.write`` is
   offloaded to the default executor inside :class:`AudioPlayer`
   (``run_in_executor``) so the loop stays responsive to provider
-  events. This matches F-64 P64-E8 exactly.
+  events. This matches the agent-reply playback design exactly.
 * The interrupt arbitration policy follows ``f-65-voice-dialogue.md``
   §1.4 / §5: VAD speech-start + small cooldown, immediate stop+clear,
   server ``response.cancel``. No semantic "stop word" detection in the
@@ -313,7 +313,7 @@ class DialogueSessionManager:
                 return
             if event.type == "audio":
                 # Forward PCM into the player's queue. The queue drops the
-                # oldest frame on overflow (F-64 P64-E8 design) so a slow
+                # oldest frame on overflow (agent-reply playback design) so a slow
                 # device never blocks the provider's recv task.
                 if event.pcm:
                     self._has_agent_audio = True

@@ -1,4 +1,4 @@
-"""Validator dict helpers aligned with F-110 ContractValidator types."""
+"""Validator dict helpers aligned with ContractValidator types."""
 
 from __future__ import annotations
 

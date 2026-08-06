@@ -1,7 +1,7 @@
 """Tests for P119-C prompt dump / observability interface.
 
 Covers dump_effective_system_prompt across all formats and edge cases
-per F-119 §3.1 acceptance criteria item 5.
+per §3.1 acceptance criteria item 5.
 """
 
 from __future__ import annotations

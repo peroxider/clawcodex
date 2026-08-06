@@ -568,7 +568,7 @@ def _read_config_file() -> dict[str, Any]:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="clawcodex-dev community-radar",
-        description="SR-5.1 开源社区新特性雷达",
+        description="开源社区新特性雷达",
         add_help=False,
     )
     parser.add_argument("--registry", type=Path, default=None)

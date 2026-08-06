@@ -3,7 +3,7 @@
 ``sk-kimi-*`` keys for Kimi's coding plan route through
 ``https://api.kimi.com/coding`` and speak the Anthropic Messages API,
 not the OpenAI chat-completions protocol.  This provider subclasses
-``ClawcodexAnthropicProvider`` so it inherits the F-99 cancel-latency
+``ClawcodexAnthropicProvider`` so it inherits the cancel-latency
 bound and cache-state handling, while adding the endpoint-specific
 quirks required by Kimi:
 

@@ -1,4 +1,4 @@
-"""Tests for Voice subsystem — F-64 P64-A/B/C.
+"""Tests for Voice subsystem.
 
 Covers:
 * Detection + STT abstract types (existing baseline).
@@ -128,7 +128,7 @@ class TestVoiceActivityDetector(unittest.TestCase):
 
 class TestVoiceModeEnabled(unittest.TestCase):
     def setUp(self) -> None:
-        # Clear F-64 env vars so each test starts from a known state.
+        # Clear voice env vars so each test starts from a known state.
         for k in ("FEATURE_VOICE_MODE", "CLAWCODEX_VOICE_DISABLED"):
             os.environ.pop(k, None)
 

@@ -1,4 +1,4 @@
-"""MiniMax Realtime API full-duplex dialogue provider — F-65 P65-A.
+"""MiniMax Realtime API full-duplex dialogue provider.
 
 Implementation of :class:`FullDuplexDialogueProvider` that talks to
 MiniMax's Realtime WebSocket endpoint (``wss://api.minimax.io/ws/realtime``
@@ -6,7 +6,7 @@ or its ``cn`` / ``uw`` regional siblings). The server-side stack is
 ASR + LLM + TTS in a single pipe — this module mirrors the upstream
 event names following the OpenAI Realtime-API convention, with a
 MiniMax-specific quirk section at the bottom of :meth:`_handle_message`
-that matches the partial-F-64 protocol guess from :mod:`minimax_stt`.
+that matches the partial protocol guess from :mod:`minimax_stt`.
 
 Design
 ------
@@ -31,7 +31,7 @@ The provider drives three background tasks once started:
 Auth + protocol
 ---------------
 MiniMax accepts the API key as a Bearer token; ``group_id`` rides in the
-URL query for billing isolation (same convention used by the F-64
+URL query for billing isolation (same convention used by the
 :class:`MiniMaxStreamConnection`). The session is initialised by sending
 ``session.create`` with ``modalities`` reflecting the requested output
 modality (``text`` / ``audio``) — the server's response (``session.
@@ -65,7 +65,7 @@ __all__ = [
     "MINIMAX_REALTIME_ENDPOINTS",
 ]
 
-# Same path as F-64 ``minimax_stt``: ~/.clawcodex/tts/minimax/credentials.json.
+# Same path as ``minimax_stt``: ~/.clawcodex/tts/minimax/credentials.json.
 # We re-declare it locally rather than re-exporting to keep the dialogue
 # adapter self-contained for tests that don't import the STT module.
 MINIMAX_REALTIME_CREDENTIALS_PATH = Path("~/.clawcodex/tts/minimax/credentials.json")
@@ -203,7 +203,7 @@ class MiniMaxRealtimeDialogueProvider(FullDuplexDialogueProvider):
         elif group_id:
             endpoint = f"{endpoint}&group_id={group_id}"
 
-        # Lazy import: websockets is an optional dep (same as F-64).
+        # Lazy import: websockets is an optional dep.
         try:
             import websockets  # type: ignore[import-untyped]
         except ImportError as exc:
@@ -438,7 +438,7 @@ class MiniMaxRealtimeDialogueProvider(FullDuplexDialogueProvider):
     async def _handle_message(self, raw: object) -> None:
         """Parse one server message → :class:`DialogueEvent` dispatch.
 
-        Mirrors the F-64 ``minimax_stt._handle_message`` shape so the two
+        Mirrors the ``minimax_stt._handle_message`` shape so the two
         adapters stay symmetric; the only added surface is the audio
         delta path (``response.audio.delta``).
         """

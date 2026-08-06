@@ -1,4 +1,4 @@
-"""``/btw`` 使用统计 (F-122-I).
+"""``/btw`` 使用统计.
 
 记录用户每次 ``/btw`` 调用的次数与最近一次问题文本，存储于
 ``$CLAWCODEX_DATA_DIR/btw_stats.json``（默认 ``~/.clawcodex/btw_stats.json``），
@@ -7,7 +7,7 @@
 设计动机
 --------
 
-规划文档 §1.3 / §2.3 Phase 7 指出，F-122-I 是 P3 可选特性，用于「记录
+规划文档 §1.3 / §2.3 Phase 7 指出，使用计数是 P3 可选特性，用于「记录
 ``/btw`` 使用次数（类似 TS 的 ``btwUseCount`` config）」。该计数可在
 后续 /settings 面板、usage report 或 telemetry 仪表盘中展示，让用户
 直观看到自己侧边问答的使用频率。
@@ -147,14 +147,14 @@ def _load_existing_stats(path: Path) -> dict[str, Any]:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning(
-            "F-122-I: failed to read existing btw stats at %s (%s); starting from zero",
+            "Failed to read existing btw stats at %s (%s); starting from zero",
             path,
             exc,
         )
         return dict(_DEFAULT_STATS)
     if not isinstance(data, dict):
         logger.warning(
-            "F-122-I: existing btw stats at %s is not a JSON object; starting from zero",
+            "Existing btw stats at %s is not a JSON object; starting from zero",
             path,
         )
         return dict(_DEFAULT_STATS)
@@ -188,7 +188,7 @@ def increment_btw_use_count(*, question: str | None = None) -> dict[str, Any] | 
     swallowed. Returns the updated stats dict on success, ``None`` when
     recording is skipped (disabled) or unrecoverably failed.
 
-    F-122-I: this is the single source of truth for the ``/btw`` use
+    This is the single source of truth for the ``/btw`` use
     counter. The increment happens at the **command layer** (every UI path
     — REPL, TUI, headless — flows through ``btw_command_run``) so the
     counter is incremented exactly once per invocation regardless of
@@ -235,7 +235,7 @@ def increment_btw_use_count(*, question: str | None = None) -> dict[str, Any] | 
         return stats
     except Exception:
         logger.warning(
-            "F-122-I: failed to record /btw usage stat (question=%r)",
+            "Failed to record /btw usage stat (question=%r)",
             (question or "")[:60],
             exc_info=True,
         )

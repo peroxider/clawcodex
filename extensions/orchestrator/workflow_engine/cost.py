@@ -1,4 +1,4 @@
-"""成本追踪与预算控制 (F-110-F)。"""
+"""成本追踪与预算控制。"""
 
 from __future__ import annotations
 

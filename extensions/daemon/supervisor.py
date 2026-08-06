@@ -1,4 +1,4 @@
-"""Supervisor main loop (F-84 P84-A entry point).
+"""Supervisor main loop (daemon entry point).
 
 The supervisor owns one :class:`DaemonConfig` and a list of
 :class:`WorkerRuntime`. Its public surface is intentionally small:

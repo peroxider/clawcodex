@@ -1,4 +1,4 @@
-"""F-REC-L E2E driver: record a lightweight but real REPL-like capture.
+"""REPL capture E2E driver: record a lightweight but real REPL-like capture.
 
 This module is **not** a simulated dashboard demo — it exercises the
 real capture wiring from :mod:`extensions.recording.repl_source`:

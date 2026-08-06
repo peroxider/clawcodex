@@ -1,6 +1,6 @@
 """TasksDashboardSource — bridges ``ToolContext.tasks`` to the dashboard.
 
-The F-120 plan §3.2 says this source reads from
+The plan §3.2 says this source reads from
 ``ToolContext.tasks`` and emits one entry per task. The actual
 shape (ch17 / tasks_v2) is::
 
@@ -29,7 +29,7 @@ Design notes:
     granularity (sub-second in long runs), so we re-pull more
     eagerly than the goal source.
   * No write-back: the source never mutates the dict it reads.
-  * ``parent_id`` is left ``None`` for now; the F-120 plan
+  * ``parent_id`` is left ``None`` for now; the plan
     explicitly defers cross-task parent linking to a later
     feature.
 """

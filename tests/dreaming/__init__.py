@@ -1,1 +1,2 @@
-"""Tests for ``clawcodex_ext.dreaming`` — F-100."""
+"""Tests for ``clawcodex_ext.dreaming``."""
+

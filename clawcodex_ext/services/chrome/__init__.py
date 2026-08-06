@@ -1,4 +1,4 @@
-"""F-62 Chrome browser automation control.
+"""Chrome browser automation control.
 
 Public surface:
 

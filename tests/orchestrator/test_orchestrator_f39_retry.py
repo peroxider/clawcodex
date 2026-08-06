@@ -1,4 +1,4 @@
-"""F-39 Sub-B: agent:retry reset + remote PR close.
+"""Sub-B: agent:retry reset + remote PR close.
 
 Covers:
   - TrackerAdapter.close_pull_request default returns False (no-op)
@@ -342,7 +342,7 @@ def _make_orchestrator_for_test(
 
 
 class TestIssueRegistryRegisterPreservesSyncState(unittest.TestCase):
-    """F-40 follow-up: ``_launch_issue`` calls ``register`` at the
+    """follow-up: ``_launch_issue`` calls ``register`` at the
     start of every run, including re-launches after a previous
     ``mark_synced`` already recorded a ``commit_sha`` / ``pr_number``
     / ``pr_url``.  The old implementation replaced the entire record

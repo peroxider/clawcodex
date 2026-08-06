@@ -1,4 +1,4 @@
-"""F-39 Sub-C: agent:follow-up same-branch commit path.
+"""Sub-C: agent:follow-up same-branch commit path.
 
 Covers:
   - GitSyncService.sync(mode="followup") requires session.pull_request

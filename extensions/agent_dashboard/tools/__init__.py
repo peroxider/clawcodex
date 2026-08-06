@@ -1,11 +1,11 @@
-"""F-120 Agent Dashboard — Agent model tools.
+"""Agent Dashboard — Agent model tools.
 
 The :class:`DashboardGet` and :class:`DashboardList` tools expose
 the dashboard's read-only snapshot to the model. They mirror the
 :func:`/dashboard` command's semantics (per-source filters, status
 filter, etc.) so the model and the user see a consistent view.
 
-Both tools honour the F-120 plan §4.3 "read-only" invariant:
+Both tools honour the plan §4.3 "read-only" invariant:
 they never call any subsystem's write methods, and
 ``is_read_only`` is wired to ``True`` so the agent-loop's
 permission layer treats them as observability tools.

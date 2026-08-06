@@ -1,4 +1,4 @@
-"""SOPDashboardSource — placeholder adapter for SOP execution state (F-120).
+"""SOPDashboardSource — placeholder adapter for SOP execution state.
 
 The SOP Converter currently has no unified runtime state object, so this
 source is intentionally minimal: it accepts an optional provider callable

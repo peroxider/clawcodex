@@ -1,4 +1,4 @@
-"""F-65 P65-A — Langfuse SDK client loader.
+"""Langfuse SDK client loader.
 
 The ``langfuse`` Python SDK is an **optional** dependency. This
 module wraps the import + global singleton pattern so the rest of

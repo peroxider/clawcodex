@@ -1,4 +1,4 @@
-"""F-57 Phase B — extract successful tool traces into MacroDefinition drafts."""
+"""Extract successful tool traces into MacroDefinition drafts."""
 
 from __future__ import annotations
 

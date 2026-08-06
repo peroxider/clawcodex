@@ -157,7 +157,7 @@ def refresh_domain_agent_sop_prompts(agent_definitions: list[Any]) -> list[Any]:
         if agent_type == "clawcodex-overview":
             refreshed.append(agent)
             continue
-        # F-50-E stage agents: prepend condensed SOP while keeping hybrid body (contracts).
+        # stage agents: prepend condensed SOP while keeping hybrid body (contracts).
         if is_prefixed_stage_agent(agent_type, project_name):
             skill_name = agent_type_to_skill_name(agent_type, project_prefix=project_name)
             original_body = ""

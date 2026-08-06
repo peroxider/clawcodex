@@ -1,4 +1,4 @@
-"""Regression test for F-43 REPL routing fix.
+"""Regression test for REPL routing fix.
 
 The REPL's ``handle_command`` historically had a hardcoded TUI-only
 whitelist that intercepted ``/model`` and printed "is only available in the
@@ -6,7 +6,7 @@ Textual TUI" before the runtime command could run. This test guards the
 fix by asserting that ``/model`` and ``/provider`` are NOT in the
 TUI-only whitelist and that the new command system carries them.
 
-The CLI/TUI alignment (F-43 follow-up) also removed the legacy
+The CLI/TUI alignment also removed the legacy
 ``/models`` alias from the REPL built-ins; the unified ``/model`` slash
 command now serves both display and switch in REPL and TUI.
 """
@@ -38,7 +38,7 @@ def test_provider_listed_in_repl_builtins() -> None:
     src = open(repl_core.__file__, encoding="utf-8").read()
 
     # The original built-ins list declares which slash commands the REPL
-    # exposes. F-43 replaced the legacy TUI-only ``/model`` placeholder with
+    # exposes. The CLI/TUI alignment replaced the legacy TUI-only ``/model`` placeholder with
     # the runtime ``/provider`` command. The CLI/TUI alignment removed the
     # ``/models`` alias so the unified ``/model`` slash command is the only
     # entry point in REPL and TUI.

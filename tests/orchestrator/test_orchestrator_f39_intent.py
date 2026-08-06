@@ -1,4 +1,4 @@
-"""F-39 Sub-A: label parsing + intent dispatch.
+"""Sub-A: label parsing + intent dispatch.
 
 Covers:
   - Intent enum value stability
@@ -6,7 +6,7 @@ Covers:
   - Adapter overrides: RepositoryTrackerAdapter, LocalTrackerAdapter
   - IssueRecord new fields default to (Intent.NONE, 0, None, None)
   - IssueRegistry JSON round-trip preserves the new fields
-  - Back-compat: a pre-F-39 registry.json loads with defaults
+  - Back-compat: a registry.json from before this feature existed loads with defaults
   - IssueRegistry.mark_intent / clear_intent / increment_retry_count
 """
 
@@ -148,7 +148,7 @@ class TestIntentFromLabelSet(unittest.TestCase):
                 "retry": "agent:retry",
                 "followup": "agent:follow-up",
                 "blocked": "agent:blocked",
-                # F-120: rebase label convention.
+                # Rebase label convention.
                 "rebase": "agent:rebase",
             },
         )
@@ -319,7 +319,7 @@ class TestIssueRegistryIntentFields(unittest.TestCase):
             self.assertEqual(record.status, IssueStatus.COMPLETED)
 
     def test_backward_compat_old_json(self) -> None:
-        """A registry.json written before F-39 (no `intent` field) must
+        """A registry.json written before this feature existed (no `intent` field) must
         load cleanly with Intent.NONE / retry_count=0 defaults."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "registry.json"
@@ -345,7 +345,7 @@ class TestIssueRegistryIntentFields(unittest.TestCase):
             self.assertIsNone(record.intent_source)
             self.assertEqual(record.status, IssueStatus.COMPLETED)
             self.assertEqual(record.pr_number, "7")
-            # The record still has_pr() — that's the pre-F-39 default;
+            # The record still has_pr() — that's the default from before this feature existed;
             # Sub-A must not break this 4-layer defense.
             self.assertTrue(reg.has_pr("1"))
             self.assertTrue(reg.is_completed("1"))

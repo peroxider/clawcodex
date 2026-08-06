@@ -1,4 +1,4 @@
-"""Tests for src/services/langfuse/sink.py (F-65 P65-B)."""
+"""Tests for src/services/langfuse/sink.py (P65-B)."""
 
 from __future__ import annotations
 

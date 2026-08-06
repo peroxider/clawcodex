@@ -1494,7 +1494,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         last_snapshot_at = 0.0
 
         try:
-            # F-49 unified storage: live event stream is sourced from
+            # Unified storage: live event stream is sourced from
             # the session transcript JSONL.  We only push periodic
             # snapshot updates here — per-event streaming is handled
             # out-of-band by callers (e.g. ``issue takeover``) since the

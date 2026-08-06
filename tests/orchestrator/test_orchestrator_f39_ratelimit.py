@@ -1,4 +1,4 @@
-"""F-39 Sub-F: 限频 + 角色校验.
+"""Sub-F: 限频 + 角色校验.
 
 Covers:
   - WorkflowConfig.max_retries_per_issue defaults to 3

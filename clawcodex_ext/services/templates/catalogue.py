@@ -1,4 +1,4 @@
-"""Catalogue browsing, search, describe, and preview for F-95 templates."""
+"""Catalogue browsing, search, describe, and preview for templates."""
 
 from __future__ import annotations
 

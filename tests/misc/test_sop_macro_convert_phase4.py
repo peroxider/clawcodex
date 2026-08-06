@@ -1,4 +1,4 @@
-"""F-57 Phase 4 handwritten macro convert tests."""
+"""Phase 4 handwritten macro convert tests."""
 
 from __future__ import annotations
 

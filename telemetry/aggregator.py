@@ -100,7 +100,7 @@ class DailyAggregator:
         duration_count = 0
 
         for raw in events:
-            # F-97-L: normalize to v2 so the rest of the loop can rely
+            # Normalize to v2 so the rest of the loop can rely
             # on a single shape (especially the structured fingerprint
             # dict). The upgrade is idempotent for already-v2 events.
             raw = normalize_event(raw)
@@ -194,7 +194,7 @@ class DailyAggregator:
 
         buckets: dict[str, dict[str, Any]] = {}
         for raw in crashes:
-            # F-97-L: v2 events carry fingerprint as a structured dict;
+            # v2 events carry fingerprint as a structured dict;
             # v1 events carry it as a string. ``normalize_event`` already
             # ran in ``_build_summary`` but the crash sub-loop may also
             # be called directly, so re-normalize for safety.

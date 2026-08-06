@@ -1,12 +1,12 @@
 """``cron`` daemon worker (placeholder).
 
 The cron Worker is registered so the supervisor can spawn it, but the
-concrete ``run()`` is intentionally a no-op until F-89 lands a full
-implementation. Returning :data:`EXIT_CODE_PERMANENT` would be
+concrete ``run()`` is intentionally a no-op until a full
+implementation lands. Returning :data:`EXIT_CODE_PERMANENT` would be
 over-aggressive — instead we sleep until cancelled, so the supervisor
 sees a healthy long-running worker that it can restart cleanly.
 
-Real implementation is tracked under F-89 (Proactive) and will be a
+Real implementation is tracked as Proactive follow-up and will be a
 follow-up patch in ``extensions/cron_system/``.
 """
 

@@ -1,6 +1,6 @@
 """Tests for P119-A/B/H section registry — unified _registry + runtime_ctx + tags.
 
-Covers the acceptance criteria from F-119 §3.1:
+Covers the acceptance criteria from §3.1:
   items 1-4 — register/override/insert/disable
   items 5   — dump stability (in test_prompt_dump.py)
   items 7-8 — default byte-stability and 5-path assembly

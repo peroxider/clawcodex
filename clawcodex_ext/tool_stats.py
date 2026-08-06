@@ -1,7 +1,7 @@
-"""工具/Skill 跨会话调用统计（F-75）。
+"""工具/Skill 跨会话调用统计。
 
 追加写 JSONL 到 ``~/.clawcodex/tool_stats.jsonl``，统一 schema 记录每次
-工具或 Skill 调用的耗时、成功/失败状态。不依赖 F-45 audit 路径，独立运行。
+工具或 Skill 调用的耗时、成功/失败状态。不依赖 audit 路径，独立运行。
 
 用法::
 

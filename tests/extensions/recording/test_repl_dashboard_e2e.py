@@ -1,6 +1,6 @@
 """F-REC-L end-to-end: REPL ``/dashboard`` rendered into ``.cast``.
 
-F-156 §1.8 / F-REC-L wired a Rich-console tee + prompt_session proxy into
+§1.8 / F-REC-L wired a Rich-console tee + prompt_session proxy into
 the default interactive REPL via ``extensions.recording.repl_source`` and
 exposed ``clawcodex-dev --record <path>`` in
 ``clawcodex_ext/cli/parser.py``. Earlier tests in this directory only

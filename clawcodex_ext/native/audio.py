@@ -1,4 +1,4 @@
-"""F-81.2: 麦克风音频捕获模块.
+"""麦克风音频捕获模块.
 
 对标 CCB ``audio-capture-napi``，用 ``pyaudio``（首选）或 ``sounddevice``
 实现 WAV 录音与实时音频流。两个后端都是可选依赖——缺失时
@@ -6,7 +6,7 @@
 :func:`clawcodex_ext.native.load_or_fallback` 会返回
 :class:`_SilentFallback` 兜底实例（不产生音频、返回静音 WAV）。
 
-前置依赖: F-64 Voice Mode.
+前置依赖: Voice Mode.
 """
 
 from __future__ import annotations
@@ -152,7 +152,7 @@ class AudioCaptureModule:
         """实时音频流 —— 持续 yield PCM16 字节块.
 
         调用方负责在不需要时 ``break`` 退出 ``async for``，本生成器会在
-        ``finally`` 中关闭流. 暂未集成 VAD（F-64 子任务），当前输出原始帧.
+        ``finally`` 中关闭流. 暂未集成 VAD（Voice Mode 子任务），当前输出原始帧.
         """
         if self._backend is None:
             from clawcodex_ext.native import NativeModuleError
@@ -213,7 +213,7 @@ class AudioCaptureModule:
             wf.writeframes(pcm)
         return buf.getvalue()
 
-    # -- F-81.6 fallback --------------------------------------------------
+    # -- fallback --------------------------------------------------
 
     @classmethod
     def fallback(cls) -> "AudioFallback":
@@ -222,7 +222,7 @@ class AudioCaptureModule:
 
 
 class AudioFallback:
-    """F-81.6 fallback: 音频后端缺失时的兜底实现.
+    """fallback: 音频后端缺失时的兜底实现.
 
     所有录音/流操作返回静音 PCM，``is_available`` 恒为 ``False``，
     供 :func:`clawcodex_ext.native.load_or_fallback` 在依赖缺失场景使用.

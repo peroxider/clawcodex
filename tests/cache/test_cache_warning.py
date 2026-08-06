@@ -1,4 +1,4 @@
-"""Tests for F-12: cacheWarning capacity limit."""
+"""Tests for cacheWarning capacity limit."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Daemon state file IO (F-84 P84-A).
+"""Daemon state file IO.
 
 A single ``DaemonState`` describes the supervisor's identity — its PID,
 the working directory it was launched from, when it started, and the

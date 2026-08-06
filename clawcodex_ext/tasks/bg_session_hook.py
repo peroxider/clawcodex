@@ -1,4 +1,4 @@
-"""F-94 P94-B/C — 协调 ``launch_background_runner`` 写全局 index。
+"""协调 ``launch_background_runner`` 写全局 index。
 
 按 CLAUDE.md 黄金法则 1（不侵入 ``src/``）与模式 B（猴补丁）：包装
 ``launch_background_runner``，在原函数写完 ``.background-runner.json``

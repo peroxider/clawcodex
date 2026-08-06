@@ -1,4 +1,4 @@
-"""Sidechain transcript for /btw side questions (F-122-H).
+"""Sidechain transcript for /btw side questions.
 
 Records each ``/btw`` invocation (question + response + usage + provider)
 to a dedicated JSONL file under ``$CLAWCODEX_DATA_DIR/sidechains/`` so the
@@ -49,7 +49,7 @@ Sidechain writes are *fire-and-forget*. Any IO failure
 (``PermissionError``, ``OSError``, full disk, missing parent dir that
 ``mkdir`` cannot create, etc.) is logged at WARNING level and swallowed —
 the main ``/btw`` user flow must never be blocked or visibly affected by
-sidechain bookkeeping. This matches the F-122 isolation invariant that
+sidechain bookkeeping. This matches the isolation invariant that
 "the side question never observes any failure from the recording path".
 """
 
@@ -204,7 +204,7 @@ def record_btw_invocation(
         return path
     except Exception:
         logger.warning(
-            "F-122-H: failed to record /btw sidechain transcript (session=%s, question=%r)",
+            "Failed to record /btw sidechain transcript (session=%s, question=%r)",
             session_id,
             (question or "")[:80],
             exc_info=True,
@@ -249,7 +249,7 @@ def read_sidechain_file(path: Path) -> list[dict[str, Any]]:
                 records.append(json.loads(line))
             except json.JSONDecodeError:
                 logger.warning(
-                    "F-122-H: malformed JSON at %s:%d (skipping)",
+                    "Malformed JSON at %s:%d (skipping)",
                     path,
                     line_no,
                 )

@@ -1,4 +1,4 @@
-"""TelemetryRecorder — the single chokepoint for F-97 event capture.
+"""TelemetryRecorder — the single chokepoint for telemetry event capture.
 
 The recorder is the only public surface business code talks to:
 
@@ -185,9 +185,9 @@ class _TelemetryRecorderImpl:
         start_time: float | None = None,
         extra: dict[str, object] | None = None,
     ) -> None:
-        """Best-effort F-97 session_start.
+        """Best-effort session_start.
 
-        F-97-J: ``os_version`` / ``ide_type`` / ``ide_version`` /
+        ``os_version`` / ``ide_type`` / ``ide_version`` /
         ``is_resume`` / ``start_time`` / ``extra`` are bridged from
         :class:`src.services.analytics.metadata.SessionAnalyticsMetadata`.
         When any of them is ``None`` (or absent) the recorder falls back
@@ -211,7 +211,7 @@ class _TelemetryRecorderImpl:
             except Exception:
                 python_version = "unknown"
 
-        # F-97-J: when the analytics fields are not supplied, derive them
+        # When the analytics fields are not supplied, derive them
         # from the same source the analytics layer uses. Any failure is
         # swallowed — telemetry must never break business code.
         if (

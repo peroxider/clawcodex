@@ -1,4 +1,4 @@
-"""F-94 P94-D — BG_SESSIONS 多信号 orphan 检测。
+"""BG_SESSIONS 多信号 orphan 检测。
 
 实现 f-94-bg-sessions.md §1.7 状态判断优先级：
 

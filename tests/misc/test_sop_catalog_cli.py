@@ -1,4 +1,4 @@
-"""Tests for F-56 diagnostic ``sop catalog`` CLI (§15.5)."""
+"""Tests for the diagnostic ``sop catalog`` CLI (§15.5)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""GATE 回滚处理器 (F-112 补充)。
+"""GATE 回滚处理器。
 
 处理 GATE 拒绝后的回滚逻辑：
 - 确定回滚目标阶段
@@ -41,7 +41,7 @@ class GateRollbackHandler:
     """GATE 回滚处理器。
 
     当 GATE 阶段被拒绝时，执行回滚操作。
-    复用 F-44 (Human Review Gate) 的 workspace 保留策略。
+    复用 Human Review Gate 的 workspace 保留策略。
     """
 
     def __init__(

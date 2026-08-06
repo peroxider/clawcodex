@@ -1,4 +1,4 @@
-"""F-49 Phase 1: Unix domain socket for live control of an agent run.
+"""Unix domain socket for live control of an agent run.
 
 Path: ``{workspace}/.run_control/{run_id}.sock``. The socket accepts
 multiple concurrent clients. Incoming lines are newline-delimited JSON

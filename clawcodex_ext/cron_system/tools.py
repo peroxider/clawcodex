@@ -1,6 +1,6 @@
 """Downstream Cron tool implementations backed by persistent storage.
 
-Implements F-22-G1 (kill switch) and F-22-G6 (rich prompt docs).
+Implements the kill switch and rich prompt docs.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from .parser import cron_to_human, parse_cron_expression
 from .schedule import get_cron_task_detail, manual_fire_cron_task
 from .tasks import add_cron_task, read_all_cron_tasks, remove_cron_tasks
 
-# F-22-G1: keep in sync with `is_cron_disabled` for the in-process fast path.
+# keep in sync with `is_cron_disabled` for the in-process fast path.
 CRON_DISABLED_MESSAGE = "Cron is disabled (CLAWCODEX_DISABLE_CRON is set)."
 
 CRON_CREATE_PROMPT = """\
@@ -120,14 +120,14 @@ def _cron_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
     if not isinstance(prompt, str) or not prompt.strip():
         raise ToolInputError("prompt must be a non-empty string")
 
-    # F-22-G4: CronCreate cannot set `permanent`. The flag is reserved for
+    # CronCreate cannot set `permanent`. The flag is reserved for
     # the assistant-mode installer (write_if_missing).
     if tool_input.get("permanent") is True:
         raise ToolInputError("permanent is a system-only flag and cannot be set via CronCreate")
 
     recurring = bool(tool_input.get("recurring", True))
     durable = bool(tool_input.get("durable", False))
-    # F-22-F: auto-fill agent_id from tool_input (caller guarantees the value)
+    # auto-fill agent_id from tool_input (caller guarantees the value)
     agent_id = tool_input.get("agent_id")
     task = add_cron_task(
         context.workspace_root,
@@ -163,7 +163,7 @@ CronCreateTool: Tool = build_tool(
             "prompt": {"type": "string"},
             "recurring": {"type": "boolean"},
             "durable": {"type": "boolean"},
-            # F-22-F-3: caller-supplied agent identity. Optional — when
+            # caller-supplied agent identity. Optional — when
             # absent, the task is global (agent_id=None). The LLM is
             # expected to populate this from the runtime context when
             # running under a teammate/agent orchestration layer.
@@ -191,7 +191,7 @@ def _cron_list_call(tool_input: dict[str, Any], context: ToolContext) -> ToolRes
     jobs = [
         _task_output(task) for task in read_all_cron_tasks(context.workspace_root, context.crons)
     ]
-    # F-22-F: agent ownership filtering — when agent_id is provided and not "*",
+    # agent ownership filtering — when agent_id is provided and not "*",
     # only return tasks belonging to this agent or global tasks (agent_id=None).
     agent_id = tool_input.get("agent_id")
     if agent_id is not None and agent_id != "*":
@@ -205,7 +205,7 @@ CronListTool: Tool = build_tool(
         "type": "object",
         "additionalProperties": False,
         "properties": {
-            # F-22-F-3: when provided and not "*", only return tasks owned
+            # when provided and not "*", only return tasks owned
             # by this agent (or global tasks). "*" returns all tasks (admin).
             "agent_id": {"type": "string"},
         },
@@ -227,7 +227,7 @@ def _cron_delete_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
     if not isinstance(cron_id, str) or not cron_id.strip():
         raise ToolInputError("id must be a non-empty string")
     normalized_id = cron_id.strip()
-    # F-22-F: ownership validation — non-admin callers cannot delete tasks
+    # ownership validation — non-admin callers cannot delete tasks
     # owned by another agent.
     caller_agent_id = tool_input.get("agent_id")
     all_tasks = read_all_cron_tasks(context.workspace_root, context.crons)
@@ -253,7 +253,7 @@ CronDeleteTool: Tool = build_tool(
         "additionalProperties": False,
         "properties": {
             "id": {"type": "string"},
-            # F-22-F-3: caller agent identity for ownership validation.
+            # caller agent identity for ownership validation.
             # Non-admin callers cannot delete tasks owned by another agent.
             "agent_id": {"type": "string"},
         },

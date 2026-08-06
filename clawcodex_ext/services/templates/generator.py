@@ -1,4 +1,4 @@
-"""Materialize rendered F-95 templates onto disk."""
+"""Materialize rendered templates onto disk."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""F-97 LODESTONE — anchor parser.
+"""LODESTONE — anchor parser.
 
 Recognises the four primary anchor kinds in arbitrary text:
 

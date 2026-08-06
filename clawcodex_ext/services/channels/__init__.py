@@ -1,4 +1,4 @@
-"""Channels service primitives (F-63 first iteration).
+"""Channels service primitives (first iteration).
 
 This package ships the cross-platform ``BaseChannel`` ABC, a thread-safe
 ``ChannelManager`` dispatcher, a minimal async HTTP transport with

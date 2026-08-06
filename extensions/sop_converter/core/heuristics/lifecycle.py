@@ -1,6 +1,6 @@
 """Lifecycle-kind inference for SOP-converted tools.
 
-F-55 L1 — given a parsed :class:`SourceOperation`, decide whether it is
+L1 — given a parsed :class:`SourceOperation`, decide whether it is
 the *create* end of a lifecycle (e.g. ``build_agent`` / ``create_team_session``),
 the *invoke* end (e.g. ``run_agent`` / ``invoke_existing_agent``), or neither.
 
@@ -11,13 +11,13 @@ The result drives two behaviours:
   ``agent_id`` into the :mod:`agent_catalog` for later retrieval.
 * **invoke** → the wrapper script is left alone (callers will use the
   ``invoke-existing-agent`` macro tool, which itself is a separate composite
-  tool that loads the catalog before importing the SDK class).  F-55 L1 also
+  tool that loads the catalog before importing the SDK class).  L1 also
   lets generated invoke-kind wrappers use the same catalog path as an automatic
   fallback when the SDK reports that the in-memory agent no longer exists.
 * **none** → no special treatment; the wrapper script is the default
   ``python3 <script> <method> '{json_args}'`` template.
 
-Heuristics (F-55 §3.2.3 + §8 design patch — type-contract driven):
+Heuristics (§3.2.3 + §8 design patch — type-contract driven):
 
 * ``create``  — name starts with ``build_`` / ``create_`` / ``init_`` /
   ``register_`` / ``ensure_``; AND return type contains ``Dict`` /
@@ -279,7 +279,7 @@ def inject_resource_ref_schema(
     create_tool_name: str = "",
     consume_param: str | None = None,
 ) -> dict:
-    """Add the stable F-55/F-56 resource handle contract to an invoke schema.
+    """Add the stable resource handle contract to an invoke schema.
 
     The SDK-specific consume parameter remains in ``properties`` for legacy
     callers, but ``resource_ref`` replaces it in ``required`` when supplied.

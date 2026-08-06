@@ -1,4 +1,4 @@
-"""Diagnostic CLI for F-56 resource catalogs (§15.5).
+"""Diagnostic CLI for resource catalogs (§15.5).
 
 Reads always use ``get_stored`` / on-disk records — never ``get()`` /
 ``_restore_tree`` — so stdout cannot leak restored plaintext secrets.
@@ -118,7 +118,7 @@ def run_catalog_command(args: list[str]) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="clawcodex sop catalog",
-        description="Inspect and manage F-56 resource catalogs (storage/redacted view).",
+        description="Inspect and manage resource catalogs (storage/redacted view).",
     )
     sub = parser.add_subparsers(dest="subcommand", required=True)
 

@@ -1,4 +1,4 @@
-"""F-50-B workflow graph IR models."""
+"""Workflow graph IR models."""
 
 from __future__ import annotations
 

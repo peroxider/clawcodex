@@ -1,4 +1,4 @@
-"""Generic Python pipeline workflow extractor (F-50-B)."""
+"""Generic Python pipeline workflow extractor."""
 
 from __future__ import annotations
 

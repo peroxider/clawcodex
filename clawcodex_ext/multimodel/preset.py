@@ -1,4 +1,4 @@
-"""Built-in F-157 model-group templates."""
+"""Built-in model-group templates."""
 from __future__ import annotations
 
 from .config import GroupConfig, SlotConfig

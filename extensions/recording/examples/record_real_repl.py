@@ -1,6 +1,6 @@
 """Example: record the real interactive REPL and convert to MP4.
 
-This script demonstrates F-REC-M PTY mode end-to-end:
+This script demonstrates full-PTY capture mode end-to-end:
 
 1. Fork ``clawcodex-dev`` into a pseudo-terminal.
 2. Wait for the splash screen, type ``/dashboard`` and ``/quit``.

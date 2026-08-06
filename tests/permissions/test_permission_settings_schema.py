@@ -1,7 +1,7 @@
-"""F-47: Permission Settings Schema refactor -- 7 acceptance unit tests.
+"""Permission Settings Schema refactor -- 7 acceptance unit tests.
 
-Covers the F-47 §3.17 acceptance criteria spelled out in
-``docs/PROGRESS.md`` (F-47 验收标准):
+Covers the §3.17 acceptance criteria spelled out in
+``docs/PROGRESS.md`` (验收标准):
 
   1. test_permissions_dict_loads_into_struct
   2. test_default_mode_resolved_from_permissions_dict
@@ -120,7 +120,7 @@ class TestHasAllowBypassTrueAfterSettingsLoaded:
 # ---------------------------------------------------------------------------
 class TestLegacyExtraPermissionsFallback:
     def test_legacy_extra_permissions_fallback(self):
-        # Simulate the pre-F-47 shape: a dict landed in ``settings.extra``
+        # Simulate the pre-refactor shape: a dict landed in ``settings.extra``
         # because the schema field did not exist (or because a third-party
         # tool wrote it there). ``_settings_perms`` must still surface it.
         settings = SettingsSchema()

@@ -1,4 +1,4 @@
-"""Telemetry CLI subcommands (F-97-G).
+"""Telemetry CLI subcommands.
 
 Four read-only / preview commands; none of them mutate the on-disk
 config. The toggle (``enable|disable``) intentionally prints the

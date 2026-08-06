@@ -1,4 +1,4 @@
-"""Global exception hooks (F-97-E).
+"""Global exception hooks.
 
 The hooks wrap ``sys.excepthook`` and the asyncio loop exception
 handler. When a previously-unhandled exception escapes the program, the
@@ -147,7 +147,7 @@ def install_exception_hooks() -> None:
     Idempotent — calling this twice does not double-wrap. Safe to call
     from :func:`src.init.init` after ``setup_graceful_shutdown``.
 
-    Also installs the F-97-I analytics → telemetry bridge so existing
+    Also installs the analytics → telemetry bridge so existing
     ``log_event()`` calls in image / PDF pipelines are forwarded into
     the live recorder. When telemetry is disabled the recorder is a
     no-op and the bridge becomes one too, so this is safe to leave

@@ -1,4 +1,4 @@
-"""Display layer for F-157 multi-model scheduling."""
+"""Display layer for multi-model scheduling."""
 
 from .bridge import MultiModelBridge
 from .diff_display import DiffDisplay

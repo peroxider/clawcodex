@@ -1,4 +1,4 @@
-"""Deterministic jitter helpers for Cron tasks (F-22-G2 + G3)."""
+"""Deterministic jitter helpers for Cron tasks."""
 
 from __future__ import annotations
 

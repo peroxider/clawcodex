@@ -1,4 +1,4 @@
-"""Async audio chunk queue — F-64 P64-C.
+"""Async audio chunk queue.
 
 Mirrors TS ``src/services/doubaoSTT.ts`` ``AudioChunkQueue``: a push-style
 async queue that bridges a *push* audio producer (the recorder thread) to a

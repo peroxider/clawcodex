@@ -1,4 +1,4 @@
-"""Cross-platform PCM audio player — F-64 P64-E8.
+"""Cross-platform PCM audio player.
 
 Plays mono PCM16 bytes through the system audio device. Three backends
 with graceful fallback (mirrors :mod:`audio_recorder`'s PyAudio→SoX
@@ -286,7 +286,7 @@ class AudioPlayer:
         the queue (so any further ``push`` is a no-op) and cancels the
         drain task.
 
-        For F-65 P65-C full-duplex barge-in we instead want
+        For full-duplex barge-in we instead want
         :meth:`stop_nowait` — cancel without closing the queue so the
         same player can be reused for the next turn.
         """
@@ -296,7 +296,7 @@ class AudioPlayer:
     async def stop_nowait(self) -> None:
         """Cancel the drain task immediately, keep the queue alive.
 
-        Used by the F-65 P65-C interrupt path: the user barges in while
+        Used by the interrupt path: the user barges in while
         the agent is still speaking. The provider will send more
         :class:`TTSChunk` frames on the next response turn, so we only
         stop *this* one without closing the underlying
@@ -309,9 +309,9 @@ class AudioPlayer:
         """Cancel the drain task, close the queue, and release the device.
 
         Equivalent to the old combined ``stop()`` for code paths that
-        do want full teardown at session end (F-65 dialogue session
+        do want full teardown at session end (dialogue session
         ``close()``). :meth:`stop` keeps its original semantic so the
-        F-64 P64-E8 agent-reply integration is unchanged.
+        agent-reply integration is unchanged.
         """
         await self._queue.close()
         await self._cancel_task()

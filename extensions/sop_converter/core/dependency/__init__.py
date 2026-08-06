@@ -1,4 +1,4 @@
-"""Tool Dependency Graph — F-55 L2.
+"""Tool Dependency Graph — dependency detection.
 
 Builds a directed graph of tool lifecycle dependencies from a parsed
 ``list[SourceComponent]`` and persists it to a bundle-local

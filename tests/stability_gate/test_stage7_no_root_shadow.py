@@ -1,6 +1,6 @@
 """Stage 7 — 项目根目录无 src/ 阴影（无根门面 / 无 eager 根包 / 无陈旧空目录）。
 
-背景: F-48 decoupling refactor 在 ``src/X/Y.py`` 留 ``__getattr__`` lazy proxy
+背景: decoupling refactor 在 ``src/X/Y.py`` 留 ``__getattr__`` lazy proxy
 门面以兼容 ``from src.X.Y import Z`` 的旧调用点是设计上的合法存在。但同
 次 refactor 意外把同一份门面写到项目根 (``/X/Y.py``) — 共 14 个目录、40
 个 ``.py`` 文件, 全部 untracked, 0 个 import 引用, ``pyproject.toml`` 也
@@ -103,7 +103,7 @@ class TestNoRootLevelShadow:
         )
 
     def test_no_root_facade_module(self) -> None:
-        """根 ``*.py`` 不应以 F-48 迁移 header ``Facade —`` 起头。"""
+        """根 ``*.py`` 不应以迁移 header ``Facade —`` 起头。"""
         violations: list[str] = []
         for p in _iter_root_python_files():
             if p.name in _KNOWN_LEGIT_ROOT_PY:

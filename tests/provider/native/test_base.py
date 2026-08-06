@@ -1,4 +1,4 @@
-"""Tests for the ``NativeProvider`` abstract base class (F-72)."""
+"""Tests for the ``NativeProvider`` abstract base class."""
 
 from __future__ import annotations
 

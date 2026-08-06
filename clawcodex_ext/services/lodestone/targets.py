@@ -1,4 +1,4 @@
-"""F-97 LODESTONE — built-in target set and registry factory.
+"""LODESTONE — built-in target set and registry factory.
 
 The defaults registered here are:
 

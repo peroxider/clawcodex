@@ -1,4 +1,4 @@
-"""F-81.4: URL Handler 模块单元测试."""
+"""URL Handler 模块单元测试."""
 
 from __future__ import annotations
 

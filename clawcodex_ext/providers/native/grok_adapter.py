@@ -1,8 +1,8 @@
-"""Native Grok / xAI provider for F-72 (P72-C).
+"""Native Grok / xAI provider (composition over OpenAI SDK).
 
 xAI's Grok API is OpenAI-compatible: the same ``/chat/completions``
 shape, the same ``tools`` array, the same ``response_format`` JSON
-Schema option. The F-72 plan therefore says we can implement the
+Schema option. The plan therefore says we can implement the
 adapter by reusing the ``openai`` SDK against ``https://api.x.ai/v1``
 rather than pulling in a Grok-specific client.
 

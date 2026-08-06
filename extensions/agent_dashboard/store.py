@@ -1,4 +1,4 @@
-"""DashboardStore — the F-120 cross-system aggregator.
+"""DashboardStore — the cross-system aggregator.
 
 The store is the single point of truth for "what's happening across
 all agent-loop subsystems right now". It pulls from every registered
@@ -6,7 +6,7 @@ all agent-loop subsystems right now". It pulls from every registered
 applies the per-source TTL cache, and serves the merged snapshot to
 any consumer (TUI, Visualizer, model tools).
 
-Architecture choices, per the F-120 plan §2.3 / §6:
+Architecture choices, per the plan §2.3 / §6:
 
   * **Per-source TTL cache** — each source declares its own
     ``cache_ttl_ms``. We keep the most recent successful snapshot

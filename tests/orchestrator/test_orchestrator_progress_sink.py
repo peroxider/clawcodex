@@ -1,9 +1,9 @@
-"""Unit tests for the F-40 ProgressSink protocol and concrete sinks.
+"""Unit tests for the ProgressSink protocol and concrete sinks.
 
-Covers the four F-40 acceptance points:
+Covers the four acceptance points:
 
 * :class:`ToolContextProgressSink` writes phase / turn / session
-  events into ``ToolContext.tasks`` (regression for the F-38 reporter
+  events into ``ToolContext.tasks`` (regression for the reporter
   that this class replaces).
 * :class:`CompositeProgressSink` fans events out to multiple consumers
   and isolates exceptions so one bad consumer does not break the
@@ -298,7 +298,7 @@ class TestToolContextProgressSink(unittest.TestCase):
         )
         for s in stages:
             # ``progress_report._progress_report_call`` only writes the
-            # ``progress`` key when the value is not None. F-40's
+            # ``progress`` key when the value is not None. The
             # contract is "no fake success percentage for non-success
             # terminations" — both an explicit ``None`` and a missing
             # key satisfy that contract.
@@ -418,14 +418,14 @@ class TestWorkflowConfigPhases(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Concurrency: per-session isolation (F-40 acceptance criterion #1)
+# Concurrency: per-session isolation (acceptance criterion #1)
 # ---------------------------------------------------------------------------
 
 
 class TestPerSessionIsolation(unittest.TestCase):
     """Two concurrent sessions must not cross-talk.
 
-    F-40 acceptance criterion #1: each session's
+    acceptance criterion #1: each session's
     ``ToolContext.tasks[id].metadata.progress_stages`` must contain
     only the events from that session. The orchestrator builds a
     fresh per-session :class:`CompositeProgressSink` rooted in a

@@ -1,4 +1,4 @@
-"""MiniMax Realtime STT provider — F-64 P64-D1.
+"""MiniMax Realtime STT provider.
 
 Mirrors the Anthropic :class:`VoiceStreamConnection` surface but routes audio
 through MiniMax's Realtime WebSocket API, which exposes a voice-in / text-out

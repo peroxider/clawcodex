@@ -1,4 +1,4 @@
-"""Tests for F-121 rule extraction, storage, and the orchestration hook.
+"""Tests for rule extraction, storage, and the orchestration hook.
 
 Phase 1:  extract, RuleStore, exact dedup, get_rules_path
 Phase 2:  semantic dedup+merge (BatchedLLMJudge), score, prune
@@ -125,7 +125,7 @@ class TestRuleEngineExtract(unittest.TestCase):
         self.assertEqual(rules[0]["support_count"], 1)
 
     # -----------------------------------------------------------------
-    # F-121 fix: loose-format tolerance (LLM output that deviates from
+    # fix: loose-format tolerance (LLM output that deviates from
     # the canonical `- [category] summary` template).
     # -----------------------------------------------------------------
 
@@ -218,7 +218,7 @@ class TestRuleEngineExtract(unittest.TestCase):
 
 
 # ═══════════════════════════════════════════════════════════════════
-# _infer_category helper (F-121 fix)
+# _infer_category helper (fix)
 # ═══════════════════════════════════════════════════════════════════
 
 
@@ -930,7 +930,7 @@ class TestRuleEngineGetRulesPath(unittest.TestCase):
 
 
 class TestConflictDetection(unittest.TestCase):
-    """F-121 §3.1: BatchedLLMJudge + _apply_judge_results tests."""
+    """§3.1: BatchedLLMJudge + _apply_judge_results tests."""
 
     def test_extract_rule_has_conflict_with_field(self) -> None:
         """extract() 输出的规则应包含 conflict_with: [] 默认字段。"""

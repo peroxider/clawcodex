@@ -1,10 +1,10 @@
-"""Data model for the F-55 L2 ``tool-dependencies.yaml`` schema.
+"""Data model for the ``tool-dependencies.yaml`` schema.
 
 Pure dataclasses — no IO, no detection logic.  Downstream readers
 (task guide, system prompt) accept instances of these classes and
 serialize them themselves.
 
-Schema follows F-55 §7.1 + design doc §3.3.2:
+Schema follows the dependency detection spec §7.1 + design doc §3.3.2:
 
 .. code-block:: yaml
 

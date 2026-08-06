@@ -1,4 +1,4 @@
-"""F-62 P62-B/C — :class:`PlaywrightChromeController`.
+"""PlaywrightChromeController.
 
 The primary concrete controller. Wraps the ``playwright`` async
 API, which is the de-facto Python wrapper around the Chrome

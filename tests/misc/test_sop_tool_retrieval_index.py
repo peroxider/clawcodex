@@ -1,4 +1,4 @@
-"""F-157 ToolRetrievalIndex compile and persistence tests."""
+"""ToolRetrievalIndex compile and persistence tests."""
 
 from __future__ import annotations
 

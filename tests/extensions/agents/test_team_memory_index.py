@@ -1,4 +1,4 @@
-"""F-93 P93-H — unit tests for TeamMemoryIndex retrieval (P93-C).
+"""Unit tests for TeamMemoryIndex retrieval.
 
 Covers lexical scoring, tag/source filtering, recency decay, source
 weight, and the acceptance criterion #8 (1000 entries top8 < 50ms).

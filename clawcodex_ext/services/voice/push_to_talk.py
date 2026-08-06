@@ -1,4 +1,4 @@
-"""Push-to-Talk controller — F-64 P64-B.
+"""Push-to-Talk controller.
 
 Mirrors TS ``src/hooks/useVoice.ts``: orchestrates the recording lifecycle
 on a push-to-talk key event. The user holds a key (default: spacebar,
@@ -135,7 +135,7 @@ class PushToTalkController:
     def can_start(self) -> bool:
         """Gate check — should the hotkey arm at all right now?
 
-        Combines the three F-64 layers: feature flag + kill-switch (via
+        Combines the three layers: feature flag + kill-switch (via
         :func:`is_voice_available`) and the master on/off switch (via
         :func:`is_voice_enabled`). The per-provider OAuth check is
         deferred to :meth:`start` so the user gets a specific "run

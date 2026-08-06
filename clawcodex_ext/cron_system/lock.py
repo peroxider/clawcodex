@@ -1,4 +1,4 @@
-"""Filesystem lock for Cron scheduler ownership (F-22-G5).
+"""Filesystem lock for Cron scheduler ownership.
 
 Three enhancements over the original ``lock.py``:
 
@@ -36,7 +36,7 @@ _log = logging.getLogger(__name__)
 
 DEFAULT_STALE_LOCK_MS = 10 * 60 * 1000
 
-# F-22-G5: PID identity probe. When the recorded PID is alive but is not
+# PID identity probe. When the recorded PID is alive but is not
 # a ClawCodex-derived process, treat the lock as stale. Defaults to
 # /proc/<pid>/comm on Linux; on macOS uses ps; on unsupported platforms
 # returns True (allow).
@@ -81,7 +81,7 @@ def _default_pid_validator(pid: int) -> bool:
     return True
 
 
-# F-22-G5: cleanup registry. Process-exit handlers fire all registered
+# cleanup registry. Process-exit handlers fire all registered
 # cleanup callbacks; cron modules register their lock release here so
 # atexit + SIGTERM/SIGINT both unwind correctly.
 _cleanup_callbacks: list[Callable[[], Any]] = []
@@ -168,12 +168,12 @@ class CronTaskLock:
     stale_after_ms: int = DEFAULT_STALE_LOCK_MS
     lock_relative_path: Path = SCHEDULED_TASKS_LOCK_RELATIVE_PATH
     acquired: bool = False
-    # F-22-G5: when True, the lock may be silently re-acquired if the
+    # when True, the lock may be silently re-acquired if the
     # existing lock file already carries this session's sessionId. This
     # supports the --resume / fork-recovery case where the same ClawCodex
     # session is being re-instantiated.
     allow_session_takeover: bool = True
-    # F-22-G5: when True, run the PID identity check (validate that the
+    # when True, run the PID identity check (validate that the
     # owning process still looks like a ClawCodex-style process). When
     # False, the lock relies on age + kill(pid, 0) only.
     validate_pid_identity: bool = True
@@ -201,7 +201,7 @@ class CronTaskLock:
         }
         encoded = json.dumps(payload, sort_keys=True)
 
-        # F-22-G5: sessionId takeover — if the lock is already ours (same
+        # sessionId takeover — if the lock is already ours (same
         # sessionId) and takeover is allowed, refresh the lock content
         # with our current PID and return True. This handles the case
         # where a child process restarts and re-acquires the parent's
@@ -302,7 +302,7 @@ class CronTaskLock:
         now = int(time.time() * 1000)
         age_stale = isinstance(acquired_at, int) and now - acquired_at > self.stale_after_ms
         pid_dead = isinstance(pid, int) and not _pid_is_alive(pid)
-        # F-22-G5: PID identity check (PID alive but not ClawCodex).
+        # PID identity check (PID alive but not ClawCodex).
         pid_foreign = False
         if self.validate_pid_identity and isinstance(pid, int) and _pid_is_alive(pid):
             validator = _DEFAULT_PID_VALIDATOR or _default_pid_validator

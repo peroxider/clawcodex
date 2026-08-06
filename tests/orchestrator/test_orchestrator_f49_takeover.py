@@ -1,4 +1,4 @@
-"""F-49 Phase 4 tests for the ``takeover`` CLI subcommand.
+"""Phase 4 tests for the ``takeover`` CLI subcommand.
 
 Covers:
   * ``argparse`` registration: ``clawcodex issue takeover --id X``

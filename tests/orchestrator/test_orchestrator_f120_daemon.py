@@ -1,4 +1,4 @@
-"""F-120 Step 7: orchestrator daemon REBASE 分支 + agent reentry.
+"""Step 7: orchestrator daemon REBASE 分支 + agent reentry.
 
 Covers:
   - _check_rebase_rate_limit:
@@ -388,7 +388,7 @@ class TestProcessPrConflictScan(unittest.IsolatedAsyncioTestCase):
 
 
 class TestLaunchRebaseResolution(unittest.IsolatedAsyncioTestCase):
-    """F-120: the agent_rebase run's completion handling.
+    """the agent_rebase run's completion handling.
 
     Regression coverage for the bug where ``_launch_rebase_resolution``
     popped the session out of ``_state.running`` and did nothing else,
@@ -502,7 +502,7 @@ class TestLaunchRebaseResolution(unittest.IsolatedAsyncioTestCase):
 
 
 class TestRebaseConflictResolved(unittest.IsolatedAsyncioTestCase):
-    """F-120: git ground-truth detection for ``_rebase_conflict_resolved``.
+    """git ground-truth detection for ``_rebase_conflict_resolved``.
 
     The behavioral tests above stub this method; these exercise the real
     git probe so "resolved" actually means "no unmerged files and no

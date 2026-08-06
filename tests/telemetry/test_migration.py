@@ -1,4 +1,4 @@
-"""Tests for F-97-L schema v1 → v2 migration helpers."""
+"""Tests for schema v1 → v2 migration helpers."""
 
 from __future__ import annotations
 
@@ -159,7 +159,7 @@ def test_fingerprint_dict_to_hash_handles_both_shapes():
 
 
 def test_telemetry_event_field_default_is_v2():
-    """F-97-L: a freshly-constructed ``TelemetryEvent`` writes v2 by
+    """A freshly-constructed ``TelemetryEvent`` writes v2 by
     default so the recorder keeps producing v2 rows automatically."""
     event = TelemetryEvent(type="error")  # type: ignore[arg-type]
     assert event.schema_version == SCHEMA_VERSION_V2
@@ -168,7 +168,7 @@ def test_telemetry_event_field_default_is_v2():
 
 
 def test_privacy_audit_v1_v2_fingerprint_hash_equivalent():
-    """F-97-L cross-version guarantee: a v1 event and a v2 event with
+    """Cross-version guarantee: a v1 event and a v2 event with
     the same 16-char hash must end up in the same aggregator bucket
     after ``normalize_event`` and ``_fingerprint_dict_to_hash``.
 

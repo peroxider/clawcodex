@@ -1,4 +1,4 @@
-"""F-87 /ultraplan command family."""
+"""/ultraplan command family."""
 
 from __future__ import annotations
 

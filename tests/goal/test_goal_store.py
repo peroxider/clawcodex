@@ -1,4 +1,4 @@
-"""SQLite GoalStore parity tests for F-122 Spec 2."""
+"""SQLite GoalStore parity tests for Spec 2."""
 
 from __future__ import annotations
 

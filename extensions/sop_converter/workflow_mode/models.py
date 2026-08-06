@@ -1,4 +1,4 @@
-"""F-50-A data models — discrimination results and thresholds."""
+"""Workflow mode data models — discrimination results and thresholds."""
 
 from __future__ import annotations
 

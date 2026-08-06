@@ -1,4 +1,4 @@
-"""F-50-E Agent definition generator for per-stage agents."""
+"""Agent definition generator for per-stage agents."""
 
 from __future__ import annotations
 
@@ -213,7 +213,7 @@ class AgentDefinitionGenerator:
             profile.recommended_tools = scoped_tools
             tools = stage_agent_tool_names(tools_for_profile(profile, bridge_tool=bridge_tool))
 
-            # F-50 缺口2: inject composite macro tools into every stage agent
+            # workflow gap: inject composite macro tools into every stage agent
             # frontmatter so they can reference higher-level orchestration
             # tools (pipeline-execute, invoke-existing-agent, …).
             if composite_tools:

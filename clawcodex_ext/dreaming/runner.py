@@ -1,4 +1,4 @@
-"""Dream consolidation runner — F-100.
+"""Dream consolidation runner.
 
 Mirrors the ``runForkedAgent`` shape used upstream by
 ``claude-code-best/src/services/autoDream/autoDream.ts`` — i.e. a

@@ -1,4 +1,4 @@
-"""Consolidation prompt builder — F-100.
+"""Consolidation prompt builder.
 
 Mirrors ``typescript/src/services/autoDream/consolidationPrompt.ts`` +
 the prefix used by ``dream.ts`` (the manual /dream skill).

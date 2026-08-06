@@ -1,4 +1,4 @@
-"""Tests for the F-97-I analytics → telemetry bridge.
+"""Tests for the analytics → telemetry bridge.
 
 Covers the 14-way ``AnalyticsEvent`` → ``TelemetryEvent`` mapping in
 :class:`AnalyticsTelemetrySink`, the redaction pass-through that

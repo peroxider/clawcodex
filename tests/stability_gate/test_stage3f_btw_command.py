@@ -1,6 +1,6 @@
 """Stage 3f: /btw side-question command registration and basic invocation.
 
-F-122-J stability-gate coverage.
+Stability-gate coverage.
 """
 
 from __future__ import annotations
@@ -151,13 +151,13 @@ class TestExtractSideQuestionResponse:
 
 
 # ---------------------------------------------------------------------------
-# F-122-F: scrollable answer viewer
+# scrollable answer viewer
 # ---------------------------------------------------------------------------
 
 
 class TestInteractiveOutcomeScrollable:
     """Verify the InteractiveOutcome / CommandResult ``scrollable`` flag
-    exists and defaults to False (back-compat with pre-F-122 commands)."""
+    exists and defaults to False (back-compat with commands before scrollable support)."""
 
     def test_interactive_outcome_default_not_scrollable(self):
         from clawcodex_ext.command_system.types import InteractiveOutcome
@@ -327,7 +327,7 @@ class TestReplScrollViewerPlumbing:
 
 
 # ---------------------------------------------------------------------------
-# F-122-G: headless / --print mode /btw degradation
+# headless / --print mode /btw degradation
 # ---------------------------------------------------------------------------
 
 
@@ -451,7 +451,7 @@ async def _fake_short(question, params):  # noqa: ARG001
 
 
 # ---------------------------------------------------------------------------
-# F-122-H: sidechain transcript
+# sidechain transcript
 # ---------------------------------------------------------------------------
 
 
@@ -684,7 +684,7 @@ class TestSidechainRecordAndRead:
 
     def test_record_handles_io_failure_silently(self):
         """If the parent directory is not writable, record returns None
-        and does NOT raise — the F-122 isolation invariant requires
+        and does NOT raise — the sidechain isolation invariant requires
         sidechain failures to never reach the user."""
         from clawcodex_ext.agent.sidechain_transcript import record_btw_invocation
 
@@ -916,7 +916,7 @@ class TestRunSideQuestionTriggersSidechain:
 
 
 # ---------------------------------------------------------------------------
-# F-122-I: /btw usage statistics
+# /btw usage statistics
 # ---------------------------------------------------------------------------
 
 

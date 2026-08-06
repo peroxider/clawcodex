@@ -1,4 +1,4 @@
-"""End-to-end tests for the dreaming subsystem — F-100 / 100.7.
+"""End-to-end tests for the dreaming subsystem.
 
 Covers the *full* integration paths that a real session would take:
 
@@ -10,7 +10,7 @@ Covers the *full* integration paths that a real session would take:
   is a no-op (验收 #4: 启动时若检测到 dream 周期任务未注册，自动注册为
   permanent cron; 重复启动不会重复注册).
 * Real :class:`CronScheduler` tick with a backdated ``next_fire_at``
-  fires the dream task via the wire handler (F-22 dual-durable pattern).
+  fires the dream task via the wire handler (dual-durable pattern).
 * A custom runner factory records calls — proves the runner is
   reached end-to-end, not stubbed out by an early gate or exception.
 

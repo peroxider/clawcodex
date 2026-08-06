@@ -1,4 +1,4 @@
-"""Cron integration for auto-dream — F-100 / 100.5.
+"""Cron integration for auto-dream.
 
 Wires the dreaming subsystem into the downstream cron system as a
 **permanent** cron task, completing the "三件套" alongside
@@ -19,7 +19,7 @@ catch-up / morning-checkin.
 
 Why a *local* fire handler (not a model prompt)?
 
-* Dream is a forked-agent operation (F-100) — the model should never
+* Dream is a forked-agent operation — the model should never
   see the consolidation prompt. Routing it via the cron outbox would
   hand a 24h background task to whatever model the user has
   configured, including cheap / non-Anthropic providers, and would
@@ -61,7 +61,7 @@ DREAM_DEFAULT_CRON: str = "0 3 * * *"
 # intercepts before the outbox), but visible in ``cron list`` and the
 # outbox payload for debugging.
 DREAM_PERMANENT_PROMPT: str = (
-    "[auto-dream] memory consolidation (F-100) — local fire handler; not a model prompt"
+    "[auto-dream] memory consolidation — local fire handler; not a model prompt"
 )
 
 
@@ -89,7 +89,7 @@ def install_dream_permanent_cron_task(
             :data:`DREAM_DEFAULT_CRON` (3 AM daily).
         prompt: Prompt label. Defaults to :data:`DREAM_PERMANENT_PROMPT`.
         task_id: Task id. Defaults to :data:`DREAM_PERMANENT_TASK_ID`.
-        jitter: Optional :class:`CronJitterConfig` — see F-22-G2.
+        jitter: Optional :class:`CronJitterConfig` — see jitter config.
 
     Returns:
         ``(task, created)`` from

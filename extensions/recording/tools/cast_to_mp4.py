@@ -70,7 +70,7 @@ __all__ = [
 def _import_pillow():
     """Import :mod:`PIL` lazily and surface a friendly error if missing.
 
-    Recording is the primary purpose of the F-REC module; pulling
+    Recording is the primary purpose of the recording module; pulling
     Pillow at module import would impose a heavy dependency on
     everyone. Callers of this converter get a precise install hint
     instead.

@@ -122,7 +122,7 @@ def parse_user_input(text: str, *, cwd: str | None = None) -> ParsedInput:
 
 
 def find_ultraplan_triggers(text: str):
-    """Return F-87 ultraplan trigger hits for UI integrations."""
+    """Return ultraplan trigger hits for UI integrations."""
 
     from clawcodex_ext.services.ultraplan.keyword_detector import (
         find_ultraplan_trigger_positions,

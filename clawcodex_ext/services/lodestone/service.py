@@ -1,4 +1,4 @@
-"""F-97 LODESTONE — high-level service facade.
+"""LODESTONE — high-level service facade.
 
 Owns one :class:`AnchorTargetRegistry` and one :class:`AnchorResolver`
 in process.  Two reasons we expose the facade rather than calling

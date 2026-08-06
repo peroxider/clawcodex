@@ -1,4 +1,4 @@
-"""Source registry for the F-120 Agent Dashboard.
+"""Source registry for the Agent Dashboard.
 
 A :class:`DashboardSourceRegistry` maps ``source_name`` strings to
 :class:`DashboardSource` instances. The :class:`DashboardStore` reads

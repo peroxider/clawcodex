@@ -1,4 +1,4 @@
-"""GoalService parity tests for F-122 Spec 3."""
+"""GoalService parity tests for Spec 3."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Runtime configuration for SR-5.1 Community Feature Radar.
+"""Runtime configuration for the Community Feature Radar.
 
 Mirrors the workflow.md block for the radar:
 
@@ -79,7 +79,7 @@ DEFAULT_ROADMAP_KEYWORDS: list[str] = [
     "orchestrator",
     "provider",
     "context",
-    # SR-5.1 embodied / spatial intelligence domain keywords
+    # embodied / spatial intelligence domain keywords
     "embodied",
     "robot",
     "robotics",
@@ -123,7 +123,7 @@ class RadarConfig:
     output_dir: str = DEFAULT_OUTPUT_DIR
     notify: bool = True
     cache_dir: str = ".cache/community-radar"
-    # i18n & report filtering (Phase 4 / SR-5.3)
+    # i18n & report filtering (Phase 4 / report filtering)
     language: str = DEFAULT_LANGUAGE  # "zh" | "en"
     exclude_feature_types: list[str] = field(
         default_factory=lambda: list(DEFAULT_EXCLUDE_FEATURE_TYPES)

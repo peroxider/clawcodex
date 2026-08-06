@@ -1,6 +1,6 @@
 """AgentCatalog — persistent registry for SOP-converted Agent instances.
 
-F-55 L1 (P0) — fix the "create agent → call by ID" disconnect.
+L1 (P0) — fix the "create agent → call by ID" disconnect.
 
 The catalog persists ``agent_id → DSL/config/model/provider/class_name`` mappings
 on disk so that a wrapper subprocess (the agent-tools/bundle/scripts/* process
@@ -10,7 +10,7 @@ earlier wrapper subprocess whose in-memory Runner state is gone.
 The catalog is intentionally separate from ``AgentPersistenceSpec`` in
 ``agent_builder.py:AgentPersistenceSpec`` (which persists the
 ``AgentDefinition`` user-facing description for the Agent / Skills system).
-F-55's catalog is a *runtime contract* — what to import + instantiate to run
+The catalog is a *runtime contract* — what to import + instantiate to run
 the Agent — not the user-facing description.
 
 The storage location is decided by :mod:`agent_catalog_resolver`:

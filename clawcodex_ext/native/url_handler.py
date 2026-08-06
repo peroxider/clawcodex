@@ -1,4 +1,4 @@
-"""F-81.4: OS URL Scheme 注册与浏览器唤起模块.
+"""OS URL Scheme 注册与浏览器唤起模块.
 
 对标 CCB ``url-handler-napi``，用 Python 标准库 ``webbrowser`` + 平台
 特定机制注册 ``clawcodex://`` URL Scheme:
@@ -165,5 +165,5 @@ class UrlHandlerModule:
         path = path.lstrip("/")
         return self.open_url(f"clawcodex://{path}")
 
-    # -- F-81.6 fallback --------------------------------------------------
+    # -- fallback --------------------------------------------------
     # 该模块基于标准库，永远可用，无需 fallback；load_or_fallback 直接返回本类实例.

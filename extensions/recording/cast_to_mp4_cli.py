@@ -1,4 +1,4 @@
-"""F-REC: ``clawcodex cast-to-mp4`` CLI subcommand.
+"""``clawcodex cast-to-mp4`` CLI subcommand.
 
 Thin wrapper that exposes :func:`extensions.recording.tools.cast_to_mp4.
 run_cast_to_mp4_command` under :mod:`clawcodex_ext.cli.subcommand_registry`.

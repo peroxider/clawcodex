@@ -1,4 +1,4 @@
-"""F-49 Phase 0.2 validation: top-level ``clawcodex --resume <run_id>``
+"""Phase 0.2 validation: top-level ``clawcodex --resume <run_id>``
 must work for orchestrator runs.
 
 The orchestrator writes a JSONL transcript to
@@ -16,7 +16,7 @@ This test is the cross-validation: write the transcript the way
 :class:`AgentRunner` writes it, then read it back the way
 ``--resume`` reads it. The two paths share the on-disk format
 (JSONL) and the typed ``Message`` schema, so the round-trip
-exercises the full integration surface of the F-49 resume path
+exercises the full integration surface of the resume path
 (Phase 0.2).
 
 Sets ``CLAWCODEX_SESSIONS_DIR`` to a tmp dir so the test does not touch

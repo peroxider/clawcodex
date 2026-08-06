@@ -1,4 +1,4 @@
-"""F-88 Monitor controller.
+"""Monitor controller.
 
 High-level wrapper around ``spawn_background_bash`` that tags spawned tasks
 with ``kind='monitor'`` and applies the Windows ``watch`` compatibility shim.

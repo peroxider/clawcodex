@@ -50,7 +50,7 @@ def build_autonomy_runs(workspace_root: Path, *, deep: bool = False) -> str:
 def build_schedule_list(workspace_root: Path, *, deep: bool = False) -> str:
     """Build a human-readable list of scheduled cron jobs.
 
-    ``deep`` is reserved for future truncation control (F-22-J-2).
+    ``deep`` is reserved for future truncation control.
     Currently, all tasks are returned regardless of ``deep``.
     """
     _ = deep  # marker for future truncation

@@ -1,4 +1,4 @@
-"""PowerShell command safety analysis — F-107.
+"""PowerShell command safety analysis.
 
 Unlike the POSIX ``bash_security.py`` which uses ``tree-sitter-bash`` AST
 parsing, this module uses heuristic regex + Get-Command style analysis since:

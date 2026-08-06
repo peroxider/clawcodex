@@ -1,4 +1,4 @@
-"""F-93 TeamMem — Protocol contract for the team-memory service.
+"""TeamMem — Protocol contract for the team-memory service.
 
 Layer 2 → Layer 1 boundary per the decoupling mandate (CLAUDE.md
 Golden Rule #4). Three-party extensions (``extensions/``) that want to

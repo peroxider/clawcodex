@@ -1,4 +1,4 @@
-"""Tests for F-50-D workflow YAML emitter."""
+"""Tests for the workflow YAML emitter."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Multi-agent tree layout (F-95 waterfall rows).
+"""Multi-agent tree layout (waterfall rows).
 
 Infers the spawn / join x-coordinates and y-row (depth_y) for every
 sub-agent in ``SessionVizData.agent_tree``, by mining the parent agent's
@@ -272,7 +272,7 @@ class AgentTreeLayout:
             for n in candidates:
                 if n.name == desc:
                     return n
-        # 3) time-proximity fallback. F-45 spawn rows don't record the
+        # 3) time-proximity fallback. Spawn rows don't record the
         #    child agent id, but a worker's transcript starts moments
         #    AFTER the Agent call that spawned it — pick the candidate
         #    whose transcript ``start_ts`` is the earliest one at/after

@@ -1,4 +1,4 @@
-"""F-57 §9.3 resume-resource: generic F-56 ResourceHandler recovery."""
+"""§9.3 resume-resource: generic ResourceHandler recovery."""
 
 from __future__ import annotations
 

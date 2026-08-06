@@ -385,7 +385,7 @@ def activate_bundle_isolation(
 def load_bundle_macro_routes(bundle_path: Path | str) -> list[Any]:
     """Load MacroRoute entries from ``<bundle>/.clawcodex/macros/*.yaml``.
 
-    Each macro definition may embed a ``routing:`` block (F-57 §4 / §8).
+    Each macro definition may embed a ``routing:`` block (§4 / §8).
     Routes are tagged ``scope="bundle"``. Missing directory yields ``[]``.
 
     Parses routing via :func:`macros.loader.parse_macro_route` (route-only;

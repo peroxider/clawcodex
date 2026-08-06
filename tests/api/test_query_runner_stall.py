@@ -1,4 +1,4 @@
-"""F-108 P108-C — stream-stall watchdog in the query event-drain loop.
+"""Stream-stall watchdog in the query event-drain loop.
 
 The observed production failure: a provider accepts the request and then
 never sends a single chunk. The per-provider idle watchdog (WI-5.2)

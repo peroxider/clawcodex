@@ -1,4 +1,4 @@
-"""F-81.3: 图像差异对比与处理模块.
+"""图像差异对比与处理模块.
 
 对标 CCB ``color-diff-napi`` + ``image-processor-napi``，用 ``Pillow`` +
 ``numpy`` 实现:
@@ -10,7 +10,7 @@
 返回 :class:`ImageFallback`，后者用纯 Python 字节比较给出 *近似* 差异
 （字节级 ``hashlib`` 比较，不区分像素）。
 
-前置依赖: F-61 Computer Use.
+前置依赖: Computer Use.
 """
 
 from __future__ import annotations
@@ -155,7 +155,7 @@ class ImageProcessorModule:
         im.save(buf, fmt, quality=quality)
         return buf.getvalue()
 
-    # -- F-81.6 fallback --------------------------------------------------
+    # -- fallback --------------------------------------------------
 
     @classmethod
     def fallback(cls) -> "ImageFallback":
@@ -163,7 +163,7 @@ class ImageProcessorModule:
 
 
 class ImageFallback:
-    """F-81.6 fallback: Pillow/NumPy 缺失时的兜底实现.
+    """fallback: Pillow/NumPy 缺失时的兜底实现.
 
     差异对比降级为字节级 ``sha256`` 比较（完全相同 → 0.0，否则 → 1.0），
     失去像素级精度但能区分"完全相同 / 完全不同"两种极端.

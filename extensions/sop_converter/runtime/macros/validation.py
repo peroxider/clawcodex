@@ -363,7 +363,7 @@ def validate_macro_definition(
         macro.routing.target_tool = macro.name
     macro.routing.scope = "bundle"
 
-    # F-157: structural exclusive suppression needs a narrow intent and an
+    # structural exclusive suppression needs a narrow intent and an
     # explicit atomic coverage relation.  Phrase-only exclusive routes are
     # still readable at runtime for compatibility, but new bundle manifests
     # must not claim verified exclusive without the structural contract.

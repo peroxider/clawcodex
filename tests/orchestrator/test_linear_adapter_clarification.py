@@ -1,4 +1,4 @@
-"""Tests for LinearAdapter.create_clarification_comment override (F-124-G)."""
+"""Tests for LinearAdapter.create_clarification_comment override."""
 
 from __future__ import annotations
 

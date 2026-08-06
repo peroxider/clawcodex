@@ -1,4 +1,4 @@
-# F-167-E: independent-package metadata for the visualizer package.
+# Independent-package metadata for the visualizer package.
 #
 # Today this file is *informational only* — the visualizer package still
 # installs via the top-level ``clawcodex-dev-mind`` pyproject (no
@@ -23,7 +23,7 @@
 [project]
 name = "clawcodex-visualizer"
 version = "0.1.0"
-description = "Standalone web visualizer for ClawCodex agent sessions (F-94/F-120)."
+description = "Standalone web visualizer for ClawCodex agent sessions."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
@@ -44,7 +44,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 
-# F-167: only direct runtime dependencies live here. Soft / optional
+# Only direct runtime dependencies live here. Soft / optional
 # integrations (e.g. extensions.agent_dashboard for the live
 # DashboardStore) are imported inside try/except blocks at the
 # call site — they never appear as install requirements.
@@ -59,9 +59,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Recording-only consumers (F-REC / F-156). The asciicast dashboard
+# Recording-only consumers. The asciicast dashboard
 # adapter now lives in ``extensions.recording.visualizer_dashboard_source``
-# (post-F-167), but its renderer primitives (panel(), Protocol
+# (after extraction), but its renderer primitives (panel(), Protocol
 # definitions) still live here.
 record = [
     # no runtime deps; the recorder package owns its own deps
@@ -72,7 +72,7 @@ dev = [
     "ruff>=0.4",
 ]
 
-# F-167-F: entry-point declaration. Once this is a standalone
+# Entry-point declaration. Once this is a standalone
 # distribution, installing ``clawcodex-visualizer`` causes
 # ``clawcodex_dev.cli`` to discover the ``viz`` subcommand via
 # ``importlib.metadata.entry_points(group="clawcodex.commands")``.
@@ -93,7 +93,7 @@ Issues = "https://github.com/agentforce314/clawcodex/issues"
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
-# F-167-E: when the package is extracted to its own repo, rename the
+# When the package is extracted to its own repo, rename the
 # ``packages`` root from ``extensions`` (monorepo) to ``src`` (sdist
 # layout). Until then this section is informational.
 [tool.setuptools]

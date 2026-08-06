@@ -1,7 +1,7 @@
-"""F-88 Monitor tool — AI-callable long-running background monitor.
+"""Monitor tool — AI-callable long-running background monitor.
 
 ``Monitor`` is a built-in tool that starts a background shell task with
-``kind='monitor'``.  It reuses ``spawn_background_bash`` and the F-88
+``kind='monitor'``.  It reuses ``spawn_background_bash`` and the
 ``MonitorController`` so its output is written to the same log directory and
 is visible via ``TaskOutput`` / ``TaskStop`` and the TUI monitor panel.
 """

@@ -1,4 +1,4 @@
-"""F-49 Phase 1 tests for the Unix control socket.
+"""Phase 1 tests for the Unix control socket.
 
 Covers:
   * Lifecycle: start creates the socket file, stale files are unlinked,

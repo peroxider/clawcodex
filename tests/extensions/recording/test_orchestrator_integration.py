@@ -1,6 +1,6 @@
 """End-to-end integration tests for the F-REC asciicast recorder × orchestrator.
 
-This file closes the F-156 coverage gap (F-156 design doc archived
+This file closes the coverage gap (design doc archived
 after full implementation): the
 commit claims ``60 unit + integration + subprocess E2E`` test coverage,
 but the most consequential integration path —
@@ -305,7 +305,7 @@ def test_wiring_init_kwarg_carry_through_to_sink_phases_total(tmp_path: Path) ->
     init field assignments and shows up in ``_build_session_sink`` with the
     correct ``phases_total``.
 
-    This is the wiring gap F-156 missed: prior unit tests built the
+    This is the wiring gap missed: prior unit tests built the
     orchestrator via ``__new__`` so they never exercised that the
     ``Orchestrator.__init__`` field assignment at line 197
     (``self.asciicast_capture = asciicast_capture``) actually carries
@@ -737,7 +737,7 @@ class TestE2ERound2VerificationFailureStillRecords(unittest.IsolatedAsyncioTestC
 
 
 # ===========================================================================
-# Regression — serial two-session phase-counter independence (F-39 / F-37)
+# Regression — serial two-session phase-counter independence
 # ===========================================================================
 
 
@@ -747,7 +747,7 @@ def test_regression_serial_two_sessions_phase_counter_resets(tmp_path: Path) -> 
     not a continuation from session A.
 
     The mutable ``_current_task_id`` / ``_phase_count`` state mentioned in
-    CLAUDE.md lives on the F-38-era :class:`ProgressReporter`; F-40 fixed
+    CLAUDE.md lives on the legacy :class:`ProgressReporter`; a later fix fixed
     it by giving ``_build_session_sink`` a fresh
     :class:`CompositeProgressSink` per session. This test guards that the
     fix is intact by verifying session B's marker sequence starts over
@@ -806,7 +806,7 @@ def test_regression_serial_two_sessions_phase_counter_resets(tmp_path: Path) -> 
     )
     # Critically: no `[phase 4/3]` continuation leaked from session A
     # into session B — guard the per-sink counter independence that
-    # F-39 / F-37 will rely on.
+    # the phase-counter independence feature will rely on.
     assert not any(m.startswith("[phase 4") for m in markers), (
         f"session B's phase 1 must NOT continue session A's counter: {markers}"
     )

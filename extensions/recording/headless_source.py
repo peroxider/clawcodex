@@ -1,4 +1,4 @@
-"""Headless (non-interactive) agent-loop recorder for asciicast (F-REC-H).
+"""Headless (non-interactive) agent-loop recorder for asciicast.
 
 Provides :class:`HeadlessRecorder` — a context manager that opens an
 :class:`AsciicastWriter`, injects a capture handle into

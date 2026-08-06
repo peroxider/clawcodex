@@ -1,4 +1,4 @@
-"""F-22-I-1: CCB-compatible ``CLAUDE_CODE_DISABLE_CRON`` env var fallback.
+"""CCB-compatible ``CLAUDE_CODE_DISABLE_CRON`` env var fallback.
 
 Pins the contract from
 ``docs/feature_plan/05-cron-system/f-22-cron-execution.md`` §Phase I:

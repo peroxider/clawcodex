@@ -1,4 +1,4 @@
-"""F-81.5: 键盘修饰键状态检测模块.
+"""键盘修饰键状态检测模块.
 
 对标 CCB ``modifiers-napi``，检测 Shift / Ctrl / Alt / Meta (Cmd/Win) 的
 当前按下状态。后端按平台选择:
@@ -10,7 +10,7 @@
 缺失可选依赖时 :func:`clawcodex_ext.native.load_or_fallback` 返回
 :class:`ModifiersFallback`，所有状态恒为 ``False``（"未按下"）。
 
-辅助依赖: F-61 Computer Use（修饰键作为快捷键触发信号）.
+辅助依赖: Computer Use（修饰键作为快捷键触发信号）.
 """
 
 from __future__ import annotations
@@ -172,7 +172,7 @@ class ModifiersModule:
             break
         return ModifierState(shift=shift, ctrl=ctrl, alt=alt, meta=meta)
 
-    # -- F-81.6 fallback --------------------------------------------------
+    # -- fallback --------------------------------------------------
 
     @classmethod
     def fallback(cls) -> "ModifiersFallback":
@@ -287,7 +287,7 @@ class _EvdevStateTracker:
 
 
 class ModifiersFallback:
-    """F-81.6 fallback: 后端缺失时所有修饰键恒为 ``False``."""
+    """fallback: 后端缺失时所有修饰键恒为 ``False``."""
 
     name = "modifiers"
 

@@ -1,4 +1,4 @@
-"""State Journal Writer for Orchestrator (F-96-A).
+"""State Journal Writer for Orchestrator.
 
 Writes NDJSON events to ``{workspace}/.reports/run_{run_id}/state_journal.ndjson``
 so the Visualizer can consume orchestrator runtime state without importing

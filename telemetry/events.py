@@ -1,6 +1,6 @@
 """Telemetry event types and core data model.
 
-F-97 deliberately keeps the event model small and stable. The event
+Telemetry deliberately keeps the event model small and stable. The event
 table and privacy boundary are defined in the telemetry data model.
 Prompts, model outputs, transcripts, file contents, API keys, env vars,
 absolute paths and full shell args are **never** recorded here.
@@ -13,11 +13,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Final
 
-# F-97-L: ``SCHEMA_VERSION`` is the *read* default — events missing the
+# ``SCHEMA_VERSION`` is the *read* default — events missing the
 # ``schema_version`` field are treated as v1 so legacy on-disk data
 # still loads. New events are written with the value re-exported from
 # ``migration.py`` (see :data:`SCHEMA_VERSION_V2`).
-# F-97-L: ``SCHEMA_VERSION`` is the *read* default — events missing the
+# ``SCHEMA_VERSION`` is the *read* default — events missing the
 # ``schema_version`` field are treated as v1 so legacy on-disk data
 # still loads. Newly-written events are stamped with
 # :data:`SCHEMA_VERSION_V2` via the ``TelemetryEvent`` field default

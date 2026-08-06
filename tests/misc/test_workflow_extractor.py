@@ -1,4 +1,4 @@
-"""Tests for F-50-B workflow extractor."""
+"""Tests for the workflow extractor."""
 
 from __future__ import annotations
 

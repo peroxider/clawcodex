@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable
 
 from .debug_log import append_debug_event
 
-# F-108 P108-C — per-tool gap watchdog. Imported at module load to
+# Per-tool gap watchdog. Imported at module load to
 # keep ``QueryConfig`` construction cheap; the actual ``ToolGapWatchdog``
 # is built inside ``stream`` so we can plumb the user's QConfig knobs.
 from clawcodex_ext.tool_system.tool_timeout import ToolGapWatchdog
@@ -29,10 +29,10 @@ if TYPE_CHECKING:
     from ..capabilities.headless_runner import HeadlessSessionOptions
 
 
-# F-108 P108-B — wall-clock budget for a single headless query run.
+# Wall-clock budget for a single headless query run.
 # The runner spawns ``run_headless_session`` on the default executor and
 # awaits the resulting future; without a bound that future can hang
-# forever (see F-108 §十八 risk #5). ``asyncio.wait_for`` below cuts the
+# forever (see §十八 risk #5). ``asyncio.wait_for`` below cuts the
 # wait at ``QueryConfig.timeout_s`` seconds (default 1800, configured
 # via workflow.md ``agent.run_timeout_ms``), yielding
 # ``SessionComplete(reason="exit_code=124")`` so callers can detect the
@@ -42,11 +42,11 @@ if TYPE_CHECKING:
 # executor futures cannot be killed from the event loop — so the
 # underlying thread may keep running until ``run_headless_session``
 # returns naturally. The headless session is expected to honour
-# ``AbortController`` for cooperative cancellation in F-108 P108-G;
-# until then this is a known limitation called out in F-108 §十八 risk
+# ``AbortController`` for cooperative cancellation;
+# until then this is a known limitation called out in §十八 risk
 # table.
 #
-# Set to ``0`` to disable the timeout (F-108 §十八 design decision #5:
+# Set to ``0`` to disable the timeout (§十八 design decision #5:
 # every Layer-2 budget has a ``0`` escape hatch).
 
 
@@ -73,7 +73,7 @@ class QueryConfig:
     # across every turn, while the per-issue data (identifier, description,
     # labels) lives in ``prompt`` as the user message.
     append_system_prompt: str | None = None
-    # F-129 Phase 4: agent identity for pending_messages drain.
+    # Agent identity for pending_messages drain.
     # When set, the headless session's ToolContext gets this agent_id
     # and runtime_tasks, enabling real-time inject at ToolResult
     # boundaries.
@@ -87,9 +87,9 @@ class QueryConfig:
     # loop in ``stream_events`` enforces this budget and yields
     # ``SessionComplete(reason="exit_code=124")`` on expiry.  Default
     # 1800s (30 min) matches the orchestrator's ``run_timeout_ms``.
-    # Set to 0 to disable (F-108 §十八 design decision #5).
+    # Set to 0 to disable (§十八 design decision #5).
     timeout_s: float = 1800.0
-    # F-108 P108-C — stream-stall watchdog. When > 0, the event-drain
+    # Stream-stall watchdog. When > 0, the event-drain
     # loop aborts the run once the headless session shows NO activity
     # (no tool events AND no stdout growth) for this many consecutive
     # seconds, yielding ``SessionComplete(reason="exit_code=125")``.
@@ -115,14 +115,14 @@ class QueryConfig:
     # is what guarantees "clear diagnosis within 30 s of a hang"
     # without any false-kill risk. 0 disables.
     stall_warn_s: float = 30.0
-    # F-108 P108-C — per-tool budget policy. When > 0 the agent loop
+    # Per-tool budget policy. When > 0 the agent loop
     # aborts any tool call whose tool_use → tool_result gap exceeds
     # the resolved budget (see ``tool_timeout.resolve_tool_timeout``).
     # Per-tool overrides via ``tool_timeout_overrides`` take priority.
     # Set to 0 to disable the gap-watchdog entirely.
     tool_timeout_s: float = 120.0
     tool_timeout_overrides: dict[str, float] | None = None
-    # F-108 P108-F — outer agent-loop wall-clock budget. The runner
+    # Outer agent-loop wall-clock budget. The runner
     # enforces this in the polling loop (mirrors ``timeout_s``) — when
     # the run outlives the budget it yields
     # ``SessionComplete(reason="exit_code=124")`` and signals the
@@ -140,21 +140,21 @@ class QueryConfig:
     # ``None`` (the default) keeps the query loop allocation-free for
     # the common non-recording path.
     capture: Any = None
-    # F-129: callback invoked by the stream's polling loop (every ~60ms)
+    # Callback invoked by the stream's polling loop (every ~60ms)
     # to drain control-socket commands. Returns a non-None signal
     # (e.g. ``"stop"``) when the stream should abort and break; ``None``
     # to continue normally. When ``None`` (the default), the stream does
     # not drain — preserving backward compatibility for non-orchestrator
     # callers.
     control_drain_fn: Callable[[], str | None] | None = None
-    # F-129: async callback invoked by the stream's polling loop after
+    # Async callback invoked by the stream's polling loop after
     # the drain. When the session is paused, this callback blocks
     # (internally running a drain-and-wait loop) so that resume/stop
     # commands are still processed. When not paused, it returns
     # immediately. When ``None`` (the default), the stream does not
     # pause-check — preserving backward compatibility.
     pause_wait_fn: Callable[[], Awaitable[None]] | None = None
-    # F-129: threading.Event used as a "pause gate" — when cleared,
+    # threading.Event used as a "pause gate" — when cleared,
     # the headless session's on_event callback blocks before putting
     # events into event_queue, preventing further LLM API calls.
     # Set = running (default), clear = paused. ``None`` = no pause
@@ -190,7 +190,7 @@ class ToolResultEvent:
 
     tool_name: str
     result: dict[str, Any]
-    # F-49 Phase 0.1: pair this result with the originating ToolCallEvent.
+    # Pair this result with the originating ToolCallEvent.
     # Populated by convert_tool_event from the bridge dict; defaults to
     # None for events that lack an id.
     tool_use_id: str | None = None
@@ -265,14 +265,14 @@ class QueryRunner:
         last_event_at = time.monotonic()
         tool_names_by_id: dict[str, str] = {}
 
-        # F-108 P108-C — tool-gap watchdog. Constructed lazily on
+        # Tool-gap watchdog. Constructed lazily on
         # the first tool event (so we can plumb the abort_controller
         # that the headless session owns). ``tool_watchdog_state``
         # holds the watchdog + the bookkeeping flags the polling
         # loop checks per tick.
         tool_watchdog_state: dict[str, Any] = {"wd": None, "tripped": False, "last_trip": None}
 
-        # F-129: capture pause_gate and abort_controller references for
+        # Capture pause_gate and abort_controller references for
         # the on_event closure. Both are defined here so the closure
         # captures them by reference (late binding).
         _pause_gate = self.config.pause_gate
@@ -302,7 +302,7 @@ class QueryRunner:
                     is_error=is_error,
                     error=str(error)[:500] if error is not None and is_error else None,
                 )
-                # F-108 P108-C — feed the gap-watchdog from the headless
+                # Feed the gap-watchdog from the headless
                 # ``on_event`` channel so the trip fires at the moment
                 # the event arrives, not at the polling-loop tick.
                 wd = tool_watchdog_state.get("wd")
@@ -311,7 +311,7 @@ class QueryRunner:
                         wd.observe_tool_use(str(tool_use_id), str(tool_name or ""))
                     elif kind in ("tool_result", "tool_error"):
                         wd.observe_tool_result(str(tool_use_id))
-                # F-129: block on pause_gate before queuing the event.
+                # Block on pause_gate before queuing the event.
                 # When paused, the headless session's thread blocks here,
                 # preventing further LLM API calls. The abort check
                 # ensures we unblock when stop/takeover is received.
@@ -330,7 +330,7 @@ class QueryRunner:
         # allows us to signal the headless session to unwind on
         # timeout / teardown / operator stop.
 
-        # F-108 P108-C — build the gap watchdog now that the abort
+        # Build the gap watchdog now that the abort
         # controller exists. ``tool_watchdog_state`` captures the
         # watchdog handle + a trip flag so the polling loop can react.
         def _build_tool_watchdog() -> Any:
@@ -458,7 +458,7 @@ class QueryRunner:
         else:
             forward_event = None
         #
-        # F-108 P108-B: the polling loop also enforces ``timeout_s`` from
+        # The polling loop also enforces ``timeout_s`` from
         # ``QueryConfig`` (default 1800 s). ``asyncio.wait_for`` cannot cancel an executor
         # future — ``future.done()`` would stay False even after
         # ``wait_for`` raised — so the budget check lives INSIDE the
@@ -467,7 +467,7 @@ class QueryRunner:
         timeout_s = self.config.timeout_s
         loop_started_at = time.monotonic()
         timed_out = False
-        # F-108 P108-C: stall-watchdog bookkeeping. ``stdout.tell()`` is
+        # Stall-watchdog bookkeeping. ``stdout.tell()`` is
         # O(1) (write position), unlike ``getvalue()`` which copies the
         # whole buffer — safe to poll every loop iteration.
         stall_timeout_s = self.config.stall_timeout_s
@@ -478,7 +478,7 @@ class QueryRunner:
         last_stdout_change_at = loop_started_at
         try:
             while True:
-                # F-129: drain control-socket commands at every polling
+                # Drain control-socket commands at every polling
                 # iteration so pause/stop/inject/resume take effect within
                 # ~60ms (the queue-timeout + sleep interval) instead of
                 # waiting for the next tool event. The callback is
@@ -488,7 +488,7 @@ class QueryRunner:
                     if _drain_signal is not None:
                         abort_controller.abort(f"operator_{_drain_signal}")
                         break
-                # F-129: if the session is paused, block here in a
+                # If the session is paused, block here in a
                 # drain-and-wait loop (the callback handles resume/stop
                 # delivery while paused). This prevents the stream from
                 # yielding events while paused AND keeps the command
@@ -516,7 +516,7 @@ class QueryRunner:
                                 yield event
                         break
                     now = time.monotonic()
-                    # F-108 P108-C — tick the tool-gap watchdog. Trip
+                    # Tick the tool-gap watchdog. Trip
                     # is callback-driven (sets ``tool_watchdog_state``
                     # + signals abort), so the loop just needs to
                     # honour the tripped flag once the headless
@@ -527,14 +527,14 @@ class QueryRunner:
                             wd.tick(now=now)
                         except Exception:
                             pass
-                    # F-108 P108-B: budget enforcement inside the polling
+                    # Budget enforcement inside the polling
                     # loop. Conventional GNU ``timeout`` exit code (124)
                     # distinguishes "wall-clock budget exhausted" from
                     # other non-zero exits.
                     if timeout_s > 0 and (now - loop_started_at) >= timeout_s:
                         timed_out = True
                         break
-                    # F-108 P108-F — outer agent-loop budget
+                    # Outer agent-loop budget
                     # (``agent_loop_timeout_s``). Surfaces as
                     # ``exit_code=124`` so callers can tell "outer
                     # budget" from "stall" (125) and "tool timeout"
@@ -545,7 +545,7 @@ class QueryRunner:
                     if agent_loop_budget > 0 and (now - loop_started_at) >= agent_loop_budget:
                         timed_out = True
                         break
-                    # F-108 P108-C: stream-stall watchdog. "Activity" is
+                    # Stream-stall watchdog. "Activity" is
                     # any tool event (``last_event_at``, updated by
                     # ``on_event``) or stdout growth (streamed text).
                     # When both signals have been flat for
@@ -636,7 +636,7 @@ class QueryRunner:
                     )
                 except Exception:
                     pass
-            # F-129: unblock the pause gate so the headless session's
+            # Unblock the pause gate so the headless session's
             # on_event callback can exit its wait loop and check the
             # abort signal. Without this, a paused session would
             # deadlock on teardown.
@@ -658,7 +658,7 @@ class QueryRunner:
             )
             exit_code = 124
         elif tool_watchdog_state.get("tripped"):
-            # F-108 P108-G — tool-level auto-recovery. The
+            # Tool-level auto-recovery. The
             # ``tool_watchdog_state['last_trip']`` payload is the
             # most-recent trip so postmortem tooling can attribute
             # the run outcome to a specific tool call. 126 is
@@ -683,7 +683,7 @@ class QueryRunner:
             # full wall-clock budget.
             exit_code = 125
         elif abort_controller.signal.aborted:
-            # F-129: operator stop/takeover via control_drain_fn. The
+            # Operator stop/takeover via control_drain_fn. The
             # abort was tripped by the drain callback, not by a timeout
             # or stall. Don't block on ``await future`` — the headless
             # session is unwinding cooperatively in the background.

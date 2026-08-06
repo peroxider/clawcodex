@@ -26,7 +26,7 @@ class CronTaskDetail:
     last_fired_at: int | None
     next_fire_at: int | None
     last_run: CronRun | None
-    agent_id: str | None = None  # F-22-F: 创建者 agent 标识
+    agent_id: str | None = None  # 创建者 agent 标识
 
 
 def get_cron_task_detail(

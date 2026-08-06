@@ -1,4 +1,4 @@
-"""工作流级事件总线 + State Journal 写入 (F-110-E)。
+"""工作流级事件总线 + State Journal 写入。
 
 事件类型:
 - workflow_start / workflow_complete / workflow_error

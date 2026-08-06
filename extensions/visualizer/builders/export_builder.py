@@ -1,4 +1,4 @@
-"""Export builder (F-91-C / F-92-C).
+"""Export builder.
 Handles export to PNG/SVG/JSON/PDF formats.
 """
 

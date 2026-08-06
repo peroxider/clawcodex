@@ -1,4 +1,4 @@
-"""F-115 检查点与恢复单元测试。"""
+"""检查点与恢复单元测试。"""
 
 from __future__ import annotations
 

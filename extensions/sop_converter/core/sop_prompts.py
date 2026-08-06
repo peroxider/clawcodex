@@ -223,7 +223,7 @@ def stage_agent_sop_body(
     output_files: list[str] | None = None,
     contract_dod: str | None = None,
 ) -> str:
-    """Condensed SOP body prepended to F-50-E stage agents (keeps output contracts below)."""
+    """Condensed SOP body prepended to stage agents (keeps output contracts below)."""
     sdk_block = format_sdk_source_dir_block(sdk_source_dir)
     sdk_section = f"\n\n{sdk_block}" if sdk_block else ""
     pipeline_line = (
@@ -315,7 +315,7 @@ def domain_agent_sop_body(
             with absolute paths so the agent can Read SDK source on
             demand.
         bundle: Optional bundle directory.  When set, the body picks
-            up the F-55 L3 lifecycle block if the bundle contains a
+            up the lifecycle block if the bundle contains a
             ``tool-dependencies.yaml``.
     """
     sdk_block = format_sdk_source_dir_block(sdk_source_dir)
@@ -371,7 +371,7 @@ def domain_agent_sop_body(
 
 
 def _lifecycle_prompt_block(bundle: str | Path | None) -> str:
-    """F-55 L3 — render the tool lifecycle hint for the system prompt.
+    """Render the tool lifecycle hint for the system prompt.
 
     The block is **only** emitted when:
 
@@ -381,7 +381,7 @@ def _lifecycle_prompt_block(bundle: str | Path | None) -> str:
 
     The content is intentionally compact — a short table of the
     top ``min(N, 3)`` dependencies plus an explicit recovery hint
-    for the create→invoke failure mode the F-55 doc calls out.  The
+    for the create→invoke failure mode the lifecycle doc calls out.  The
     block is appended after the SDK source block so it never
     interferes with the existing prompt structure.
     """

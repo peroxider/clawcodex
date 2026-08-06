@@ -1,4 +1,4 @@
-"""Layer-3 auto-recovery policy (F-108 §十八 P108-G).
+"""Layer-3 auto-recovery policy (§十八 P108-G).
 
 Catalogues the five recovery paths the freeze-detection plan
 promises, and routes them to the existing AbortController

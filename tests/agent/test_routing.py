@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`src.agent.routing` (F-88 P88-C).
+"""Unit tests for :mod:`src.agent.routing`.
 
 The classifier is a pure function — no I/O, no globals. The
 contract being pinned here:

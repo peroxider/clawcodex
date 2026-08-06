@@ -291,7 +291,7 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
     )
 
     # --- issue resume-session ---
-    # F-49 Phase 3: load the JSONL transcript written by the
+    # Load the JSONL transcript written by the
     # headless agent and rehydrate the LLM context (the
     # orchestrator-side counterpart of `clawcodex --resume <run_id>`).
     # This does NOT touch the control socket; the agent is unaffected.
@@ -637,11 +637,11 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Explicit workspace root path (optional auto-detection override)",
     )
 
-    # --- issue retry (F-39 Sub-E: CLI 兜底命令) ---
+    # --- issue retry (CLI 兜底命令) ---
     retry_parser = issue_sub.add_parser(
         "retry",
         help="Retry/follow-up/unblock an issue via the CLI fallback",
-        description="Operator-driven fallback for F-39 intents when label / "
+        description="Operator-driven fallback for retry / follow-up / unblock intents when label / "
         "comment paths are inconvenient. Records the action in "
         "~/.clawcodex/orchestrator/audit.jsonl and updates the "
         "local issue registry so the next daemon poll picks up "
@@ -729,13 +729,13 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "--id",
         default="",
         metavar="ID",
-        help="Issue ID (e.g. F-37.1-pr-auto-fix)",
+        help="Issue ID (e.g. <ID>-pr-auto-fix)",
     )
     init_parser.add_argument(
         "--identifier",
         default="",
         metavar="IDENTIFIER",
-        help="Short identifier (e.g. F-37.1)",
+        help="Short identifier (e.g. <id>)",
     )
     init_parser.add_argument(
         "--title",
@@ -798,11 +798,11 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Skip prompts; use defaults for missing values",
     )
 
-    # --- issue rebase (F-120: CLI 兜底命令) ---
+    # --- issue rebase (CLI 兜底命令) ---
     rebase_parser = issue_sub.add_parser(
         "rebase",
         help="Rebase the PR's feature branch onto the latest base (CLI fallback)",
-        description="Operator-driven fallback for F-120 PR conflict resolution. "
+        description="Operator-driven fallback for PR conflict resolution. "
         "Writes a control file that the daemon picks up on its next "
         "poll cycle. The orchestrator itself performs the rebase "
         "(no external agent for clean rebases); the agent is only "
@@ -1019,13 +1019,13 @@ def _write_control(
     delivery. Falls back to the control-file mechanism (picked up on the
     orchestrator's next poll cycle) when the socket is unavailable.
 
-    F-129 Phase 2: socket-first delivery eliminates the 30s poll-cycle
+    Socket-first delivery eliminates the 30s poll-cycle
     latency for ``pause`` / ``resume`` / ``stop`` when the agent is
     running and the control socket is alive.
     """
     from pathlib import Path
 
-    # F-129 Phase 2: try to resolve run_id + workspace_path from the
+    # Try to resolve run_id + workspace_path from the
     # registry so we can attempt a direct socket connection.
     # Only agent-level commands (pause/resume/stop) go through the
     # socket; orchestrator-level commands (retry/rebase/etc.) always
@@ -1095,7 +1095,7 @@ def _try_socket_inject(issue_id: str, hint: str) -> bool:
     the next ToolResult boundary). Returns ``False`` if the socket
     is unavailable — the caller should fall back to file-based inject.
 
-    F-129 Phase 4: CLI ``issue inject`` prefers socket delivery for
+    CLI ``issue inject`` prefers socket delivery for
     near-real-time inject, matching the socket ``inject`` command.
     """
     try:
@@ -1392,7 +1392,7 @@ def _resolve_tail_run_id(
 def _run_tail(registry_path: Path | None, args: argparse.Namespace) -> int:
     """Tail a session transcript for an issue or run. Idempotent — pure read.
 
-    F-49 unified storage: headless agent and REPL sessions both
+    Unified storage: headless agent and REPL sessions both
     write to ``~/.clawcodex/sessions/{run_id}/transcript.jsonl``
     via :class:`SessionStorage`.  This command tails that file and
     renders tool calls / tool results / assistant text the same
@@ -1802,7 +1802,7 @@ def _print_message(
 def _run_transcript(registry_path: Path | None, args: argparse.Namespace) -> int:
     """Print the full session transcript for an issue or run. Idempotent.
 
-    F-49 Phase 0.2: read-only access to the unified
+    Read-only access to the unified
     ``~/.clawcodex/sessions/{run_id}/transcript.jsonl`` so operators
     can review a completed (or in-progress) orchestrator run without
     entering an interactive REPL.  Suitable for piping.
@@ -2335,7 +2335,7 @@ def _inject_hint(issue_id: str, hints_file: Path, hint: str) -> int:
     import time
 
     hints = _parse_hints_file(hints_file)
-    # F-129 Phase 5: idempotency — skip if the exact hint text
+    # Idempotency — skip if the exact hint text
     # already exists.
     for _ts, existing_hint in hints:
         if existing_hint.strip() == hint.strip():
@@ -2523,7 +2523,7 @@ def _mirror_intent_label(
     *,
     remove: bool,
 ) -> bool:
-    """F-39 Sub-E (Part B): best-effort mirror of CLI intent onto issue label.
+    """Best-effort mirror of CLI intent onto issue label.
 
     Calls ``tracker.add_label(issue_id, label)`` (default) or
     ``tracker.remove_label(issue_id, label)`` (when ``remove=True``)
@@ -3115,7 +3115,7 @@ def _get_status_str(status) -> str:
 
 
 # ---------------------------------------------------------------------------
-# issue retry  (F-39 Sub-E: CLI 兜底命令)
+# issue retry  (CLI 兜底命令)
 # ---------------------------------------------------------------------------
 
 # Single source of truth for the on-disk audit log location. Tests
@@ -3152,7 +3152,7 @@ def _append_audit_log(
 ) -> Path | None:
     """Append a single JSONL line to the local audit log.
 
-    F-39 design: "~/.clawcodex/orchestrator/audit.jsonl 记录
+    Design: "~/.clawcodex/orchestrator/audit.jsonl 记录
     {ts, operator, issue_id, mode, reason} 便于追溯".
 
     Returns the path written, or None on I/O failure (the CLI surfaces
@@ -3191,7 +3191,7 @@ def _append_audit_log(
 def _run_rebase(
     registry_path: Path | None, args: argparse.Namespace, workspace_root: str | Path | None = None
 ) -> int:
-    """F-120: CLI 兜底命令 — request a PR rebase via the built-in path.
+    """CLI 兜底命令 — request a PR rebase via the built-in path.
 
     Unlike ``issue retry``, this command DOES NOT mutate the local
     registry intent directly. Instead it writes a control file that
@@ -3329,7 +3329,7 @@ def _run_retry(
     *,
     workspace_root: str | Path | None = None,
 ) -> int:
-    """F-39 Sub-E: CLI 兜底命令 — record an operator-driven retry intent.
+    """CLI 兜底命令 — record an operator-driven retry intent.
 
     Behaviour (per the design doc):
 
@@ -3373,7 +3373,7 @@ def _run_retry(
     registry = IssueRegistry(registry_path)
     record = registry.get_by_issue_ref(issue_id)
 
-    # F-129: --stop-first: if the agent is still running, stop it
+    # --stop-first: if the agent is still running, stop it
     # before retrying. Equivalent to 'issue stop' + 'issue retry'.
     stop_first = bool(getattr(args, "stop_first", False))
     if stop_first and record is not None and record.status.value == "running":
@@ -3423,7 +3423,7 @@ def _run_retry(
     # so the ``max_retries_per_issue`` cap does not apply (you cannot
     # be locked out of a command whose whole point is to wipe the
     # lock). ``--force`` is still accepted as an audit-priority
-    # marker (the original F-39 design required high-priority entries
+    # marker (the original design required high-priority entries
     # for cap bypasses) but no longer gates the cap check.
     #
     # Other retry paths (label-driven ``agent:retry``, comment-driven
@@ -3439,7 +3439,7 @@ def _run_retry(
         audit_priority = "high"
         audit_event = "retry_rejected"
     else:
-        # F-39 Sub-E (Part B): obtain the tracker once so we can
+        # Obtain the tracker once so we can
         # mirror the CLI intent onto the remote issue label AND
         # reopen the issue. The tracker is optional — operators
         # who run from a directory without a workflow.md will get
@@ -3603,8 +3603,8 @@ def _run_init(args: argparse.Namespace) -> int:
                 return default
         return default
 
-    issue_id = val(args.id, "Issue ID (e.g. F-37.1-pr-auto-fix)", "")
-    identifier = val(args.identifier, "Short identifier (e.g. F-37.1)", "")
+    issue_id = val(args.id, "Issue ID (e.g. <ID>-pr-auto-fix)", "")
+    identifier = val(args.identifier, "Short identifier (e.g. <id>)", "")
     title = val(args.title, "Issue title", "")
     priority = val(args.priority, "Priority (0-3)", "3")
     state = args.state or "open"

@@ -1,4 +1,4 @@
-"""F-84 §1.12.2 — end-to-end Supervisor round-trip tests.
+"""End-to-end Supervisor round-trip tests.
 
 These tests drive a real ``extensions.daemon.Supervisor`` instance through
 its full lifecycle:

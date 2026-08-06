@@ -4,7 +4,7 @@ This module historically forced ``call_type=\"bash\"`` plus a copied wrapper
 script. Registration now shares converters with
 :mod:`extensions.sop_converter.runtime.composite_tools`, which respects
 ``CompositeToolSpec.call_type`` / ``call_impl`` (including ``workflow`` +
-builtin catalog ids) and registers F-57 workflow specs.
+builtin catalog ids) and registers workflow specs.
 """
 
 from __future__ import annotations

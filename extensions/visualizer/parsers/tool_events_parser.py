@@ -1,11 +1,11 @@
-"""Tool events NDJSON parser (F-91-B / F-45).
+"""Tool events NDJSON parser.
 
 Parses ``events.ndjson`` files written by ``AgentRunner._append_tool_event_log``.
 In the new format the canonical location is::
 
     ~/.clawcodex/tool-events/<run_id>/events.ndjson
 
-(per the F-45 contract). The parser is path-agnostic — the caller
+(per the tool-events contract). The parser is path-agnostic — the caller
 hands it an explicit ``path`` — so the only update is documentation
 of the default location. No format change to the on-disk file.
 """
@@ -21,7 +21,7 @@ from ..models.viz_models import BarStatus, BarType, TimelineBar
 
 logger = logging.getLogger(__name__)
 
-# Canonical tool-events root in the new format (F-45).
+# Canonical tool-events root in the new format.
 DEFAULT_TOOL_EVENTS_DIR = Path.home() / ".clawcodex" / "tool-events"
 
 

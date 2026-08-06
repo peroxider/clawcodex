@@ -1,4 +1,4 @@
-"""Multi-agent tree builder (F-91-C).
+"""Multi-agent tree builder.
 
 P0 simplified version: builds a flat tree from AgentTreeNode objects.
 P1 full version would infer hierarchy from mailbox cross-references.

@@ -1,14 +1,14 @@
-"""SR-5.1 Community Feature Radar.
+"""Community Feature Radar.
 
 Public surface for the community radar package. Most consumers should
 import from the submodules (e.g. ``from clawcodex_ext.community_radar
 import run_community_scan``); this file re-exports the high-level
 helpers so external modules can grab everything in one import.
 
-This package implements SR-5.1 (Community Feature Radar) entirely
+This package implements the Community Feature Radar entirely
 inside ``clawcodex_ext/*`` so it never touches ``src/*`` and stays
 clear of the upstream-sync audit. The Cron integration is provided
-by :func:`run_community_scan`, which the F-22 durable task scheduler
+by :func:`run_community_scan`, which the durable task scheduler
 calls as ``run_community_scan``.
 """
 
@@ -141,7 +141,7 @@ __all__ = [
     "build_extractor_hook",
     "build_summarizer_hook",
     "llm_generated_marker",
-    # i18n (Phase 4 / SR-5.3)
+    # i18n (Phase 4 / report filtering)
     "STRINGS",
     "Language",
     "get_text",

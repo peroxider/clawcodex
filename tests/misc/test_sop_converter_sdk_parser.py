@@ -403,7 +403,7 @@ class TestParseSdkSpec(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# SdkParam dataclass (F-52)
+# SdkParam dataclass
 # ---------------------------------------------------------------------------
 
 
@@ -439,7 +439,7 @@ class TestSdkParam(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# SdkParser.parse — OpenAPI enhanced parsing (F-52)
+# SdkParser.parse — OpenAPI enhanced parsing
 # ---------------------------------------------------------------------------
 
 

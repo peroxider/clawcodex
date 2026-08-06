@@ -72,23 +72,23 @@ def _set_pdeathsig() -> None:
 # force-completes the session to avoid wasting API calls and retries.
 _NOOP_DETECTION_MAX_TURNS = 5
 
-# F-45: tool-event audit log rotation threshold. When events.ndjson
+# Tool-event audit log rotation threshold. When events.ndjson
 # exceeds this size on next append, rotate to events.ndjson.1 (single
 # generation, overwrite). v2.14 will hook a cron for 7-day cleanup.
 _TOOL_EVENT_LOG_ROTATE_BYTES = 50 * 1024 * 1024
 
-# F-40 root-cause fix: after this many consecutive turns where the
+# Root-cause fix: after this many consecutive turns where the
 # agent makes ONLY read-only tool calls (Bash, Read, Grep, …) without
 # a single modifying tool call (Write / Edit / …) AND without changing
 # the workspace (no new untracked or modified files), the session is
 # considered stuck in an investigation spiral and terminated with
 # ``session_end_reason="read_only_loop"``.  The threshold is generous
 # because genuine development also involves exploration; the guard is
-# meant to catch degenerate cases (F-40's 100+ Python-debug Bash calls
+# meant to catch degenerate cases (the 100+ Python-debug Bash calls
 # that spanned multiple outer-loop turns without any code change).
 _MAX_READ_ONLY_TURNS = 4
 
-# F-40 root-cause fix: tool names that modify workspace files.
+# Root-cause fix: tool names that modify workspace files.
 # Only Write / Edit tools count toward ``has_made_progress`` so the
 # stagnation guard can distinguish "exploring the codebase" turns
 # from actual code-production work.  ``Bash`` is intentionally omitted
@@ -108,11 +108,11 @@ _MODIFYING_TOOL_NAMES = frozenset(
     }
 )
 
-# F-40 root-cause fix: tool names that are read-only (exploration /
+# Root-cause fix: tool names that are read-only (exploration /
 # diagnostics).  When an agent spends multiple consecutive turns
 # making ONLY read-only tool calls without any modifying tool call
 # and without changing the workspace, it is likely stuck in an
-# investigation spiral (F-40's Python env debugging loop).  The
+# investigation spiral (the Python env debugging loop).  The
 # stagnation guard below tracks a separate ``read_only_streak`` and
 # breaks after ``max_read_only_turns`` such turns.
 _READ_ONLY_TOOL_NAMES = frozenset(
@@ -191,13 +191,13 @@ class AgentSession:
     # Event stream for CLI tail command
     event_queue: "asyncio.Queue | None" = None
     prompt_override: str | None = None
-    # F-124: resolved pre-dispatch clarification context copied from the
+    # Resolved pre-dispatch clarification context copied from the
     # persistent IssueRecord before the run starts.
     clarification_question: str | None = None
     clarification_answer: str | None = None
     clarification_source: str | None = None
     coordinator_mode: bool | None = None
-    # F-49 Phase 1: Unix domain socket for live operator control. None if
+    # Unix domain socket for live operator control. None if
     # the socket failed to start (or was disabled by configuration). When
     # set, the runner broadcasts every dispatched event and polls for
     # control commands at turn boundaries. Defensive: all socket ops
@@ -210,7 +210,7 @@ class AgentSession:
     control_socket_path: str | None = None
     run_kind: str = "issue"
     run_id: str | None = None
-    # F-129 Phase 4: RuntimeTaskRegistry for this session. When set,
+    # RuntimeTaskRegistry for this session. When set,
     # the agent_id (== run_id) is wired into the QueryConfig so
     # _drain_pending_user_messages fires at ToolResult boundaries,
     # enabling real-time inject via queue_pending_message.
@@ -220,23 +220,23 @@ class AgentSession:
     verification_status: str | None = None
     verification_output: str | None = None
     report_path: str | None = None
-    # F-105: per-session cache for the tracker poll in ``_should_continue``.
+    # Per-session cache for the tracker poll in ``_should_continue``.
     # Initialised by ``AgentRunner.run()`` from
     # ``agent_config.perf_should_continue_skip_turns``. When ``None`` the
-    # runner falls back to the pre-F-105 behaviour of always polling.
+    # runner falls back to the pre-cache behaviour of always polling.
     state_cache: "IssueStateCache | None" = None
-    # F-120: list of files git left in conflict state. Populated by
+    # List of files git left in conflict state. Populated by
     # ``Orchestrator._prepare_rebase_session`` from
     # ``IssueRecord.conflict_files`` when ``run_kind == "agent_rebase"``.
     # The prompt builder injects these into the conflict-resolution
     # prompt so the agent knows exactly which files need ``git add``
     # before ``git rebase --continue``.
     conflict_files: tuple[str, ...] | None = None
-    # F-45: canonical path to ~/.clawcodex/tool-events/{run_id}/events.ndjson.
+    # Canonical path to ~/.clawcodex/tool-events/{run_id}/events.ndjson.
     # Set in AgentRunner.run() at session start; consumed by
     # report_writer.write() to dual-write the NDJSON to the persistent layer.
     tool_events_path: str | None = None
-    # F-49 Phase 0.1: session-transcript storage for conversation recording.
+    # Session-transcript storage for conversation recording.
     # Lazy-initialized in run() via SessionStorage. The agent_runner buffers
     # per-turn blocks here and emits exactly one AssistantMessage and (if
     # tool calls happened) one UserMessage per LLM turn at end-of-turn.
@@ -276,7 +276,7 @@ class AgentSession:
     last_agent_event: str | None = None
     last_tool_name: str | None = None
     timeout_deadline_at: float | None = None
-    # F-09 / F-40 root-cause fix: capture the reason the session ended
+    # Root-cause fix: capture the reason the session ended
     # before the registry writeback. ``session_end_reason`` is one of
     # ``task_complete`` / ``noop_completed`` / ``budget_exhausted`` /
     # ``stagnation`` / ``loop_detected`` / ``failed`` / ``paused`` /
@@ -292,13 +292,13 @@ class AgentSession:
     # by PromptBuilder.render() to inject a hint into the agent's prompt
     # so it can Read() past transcripts.
     previous_run_ids: list[str] = field(default_factory=list)
-    # F-120: file paths with conflict markers carried from
+    # File paths with conflict markers carried from
     # ``IssueRecord.conflict_files`` so the rebase-resolution prompt
     # can hand them to the agent. ``None`` for non-rebase sessions.
     conflict_files: tuple[str, ...] | None = None
     _snapshot_provider: str = ""
     _snapshot_model: str = ""
-    # F-129: threading.Event used as a "pause gate" — when cleared,
+    # threading.Event used as a "pause gate" — when cleared,
     # the headless session's on_event callback blocks, preventing
     # further LLM API calls while paused. Set = running, clear = paused.
     _pause_gate: Any = None
@@ -309,7 +309,7 @@ class AgentSession:
     _on_pause_state_change: Any | None = None
 
     def _save_json_snapshot(self) -> None:
-        """F-49 Phase 0.4.5: write a ``src.agent.Session``-compatible
+        """Write a ``src.agent.Session``-compatible
         ``.json`` snapshot so ``Session.load()`` can fast-path on
         ``--resume`` instead of replaying the full JSONL transcript.
 
@@ -410,7 +410,7 @@ class AgentSession:
                 _json.dump(snapshot_data, f, indent=2)
         except Exception:
             logger.exception(
-                "F-49 Phase 0.4.5: failed to write .json snapshot run_id=%s",
+                "Failed to write .json snapshot run_id=%s",
                 self.run_id,
             )
 
@@ -527,7 +527,7 @@ class AgentRunner:
 
     @staticmethod
     def _event_to_broadcast_dict(event: Any) -> dict:
-        """F-49 Phase 1: JSON-safe dict representation of a query event.
+        """JSON-safe dict representation of a query event.
 
         Used by ``ControlSocket.send_event`` to broadcast to attached
         clients. Defensive: never raises; missing fields are omitted
@@ -636,7 +636,7 @@ class AgentRunner:
         loop. ``pause`` / ``resume`` / ``inject`` / ``detach`` are
         handled inline and never request an early break.
 
-        F-129 Phase 2: ``inject`` now writes to ``.operator_hints.md``
+        ``inject`` now writes to ``.operator_hints.md``
         (converging with the file-based ``issue inject`` path).
         ``stop`` now sets ``session.status = "failed"`` (was
         metadata-only). ``detach`` is logged (basic version).
@@ -906,7 +906,7 @@ class AgentRunner:
             next_num = 1
             if hints_file.exists():
                 content = hints_file.read_text(encoding="utf-8")
-                # F-129 Phase 5: idempotency — skip if the hint
+                # Idempotency — skip if the hint
                 # text already exists (same check as issue.py).
                 if hint.strip() in content:
                     return
@@ -929,7 +929,7 @@ class AgentRunner:
         event: ToolCallEvent,
         session_context: dict[str, Any],
     ) -> None:
-        """Persist a per-tool decision row to events.ndjson (F-45 / F-46.0).
+        """Persist a per-tool decision row to events.ndjson.
 
         Writes one NDJSON line to
         ``{workspace}/.reports/{run_id}.events.ndjson``, co-located with the
@@ -939,7 +939,7 @@ class AgentRunner:
         varies.  Failures are logged and swallowed: the audit log must never
         block the agent run.
 
-        F-46.0: writing is gated by ``session_context["audit_log"]``:
+        Writing is gated by ``session_context["audit_log"]``:
         ``none`` skips all rows, ``minimal`` only records denied decisions,
         and ``full`` records every tool call.
         """
@@ -971,7 +971,7 @@ class AgentRunner:
                 )
                 return
 
-            # Single-generation rotate (F-45 Sub-E decision: 50MB
+            # Single-generation rotate (decision: 50MB
             # threshold, single backup). v2.14 will add 7-day cleanup.
             try:
                 if log_path.exists() and log_path.stat().st_size >= _TOOL_EVENT_LOG_ROTATE_BYTES:
@@ -1062,7 +1062,7 @@ class AgentRunner:
             logger.exception("agent spawn result log failed")
 
     def _flush_turn_transcript(self, session: AgentSession) -> None:
-        """F-49 Phase 0.1: emit one AssistantMessage + (optionally) one UserMessage per turn.
+        """Emit one AssistantMessage + (optionally) one UserMessage per turn.
 
         Called at end-of-turn: every ToolResultEvent (conditional on "all
         results in"), every SessionComplete, the max_turns fallthrough,
@@ -1349,7 +1349,7 @@ class AgentRunner:
         workspace = session.workspace
         if session.run_id is None:
             session.run_id = self._build_run_id(session)
-        # F-129 Phase 4: register a LocalAgentTaskState for this
+        # Register a LocalAgentTaskState for this
         # session so _drain_pending_user_messages fires at ToolResult
         # boundaries. The agent_id is the run_id; the runtime_tasks
         # registry is stored on the session for the socket inject
@@ -1376,18 +1376,18 @@ class AgentRunner:
                     session.run_id,
                     exc_info=True,
                 )
-        # F-49 Phase 0.4.5: stash provider/model on the session so the
+        # Stash provider/model on the session so the
         # exit-callback can write the .json snapshot even when the
         # session has been partially cleaned up or the run aborted via
         # exception / early return.
         session._snapshot_provider = self.agent_config.provider or ""
         session._snapshot_model = self.agent_config.model or ""
-        # F-129: create the pause gate — a threading.Event that blocks
+        # Create the pause gate — a threading.Event that blocks
         # the headless session's on_event callback when paused, preventing
         # further LLM API calls. Set = running (default), clear = paused.
         session._pause_gate = threading.Event()
         session._pause_gate.set()
-        # F-105: initialise the per-session tracker poll cache. Built
+        # Initialise the per-session tracker poll cache. Built
         # once at run() start so the rest of the loop shares a single
         # instance; concurrent sessions still get their own. Setting
         # ``perf_should_continue_skip_turns=0`` on the agent config
@@ -1456,15 +1456,15 @@ class AgentRunner:
             "issue_identifier": issue.identifier,
             "workspace_path": str(workspace.path),
             "workflow": workflow,
-            # F-45: run_id + permission_mode are consumed by
+            # run_id + permission_mode are consumed by
             # _append_tool_event_log to write per-tool rows to
             # {workspace}/.reports/{run_id}.events.ndjson.
             "run_id": session.run_id,
             "permission_mode": self.agent_config.permission_mode,
-            # F-46.0: audit_log level drives per-tool NDJSON filtering.
+            # audit_log level drives per-tool NDJSON filtering.
             "audit_log": self.agent_config.audit_log,
         }
-        # F-45/F-46.0: stash the NDJSON path co-located with the RunReport
+        # Stash the NDJSON path co-located with the RunReport
         # under ``{workspace}/.reports/<run_id>.events.ndjson`` so that
         # report_writer.write() can dual-write it to the persistent layer
         # (Sub-C).  Resolved here (not in the property) so the path is
@@ -1499,7 +1499,7 @@ class AgentRunner:
         turn_number = 0
         tool_count = 0
         consecutive_clean_turns = 0  # legacy workspace-dirty no-op counter
-        # F-40: F-38 used a shared ``ProgressReporter`` singleton; the
+        # The legacy design used a shared ``ProgressReporter`` singleton; the
         # orchestrator now passes a per-session :class:`ProgressSink`
         # via the ``progress_reporter`` kwarg. Bind it to ``sink`` so
         # the three ``_dispatch_sink`` calls (stagnation / loop /
@@ -1512,19 +1512,19 @@ class AgentRunner:
         # F-?? root-cause fix: stagnation + loop guards. Independent of
         # the workspace-dirty heuristic above (which never fires when
         # the workspace has untracked files — the exact pattern observed
-        # in F-09's repeated 30-min timeouts). no_work_streak counts
+        # in the repeated 30-min timeouts). no_work_streak counts
         # consecutive turns where the LLM produced zero tool calls AND
         # empty output. tool_signature_history tracks recent turn
         # signatures to detect repeated tool-call loops.
         no_work_streak = 0
-        # F-40 root-cause fix: has_made_progress dual-threshold stagnation.
+        # Root-cause fix: has_made_progress dual-threshold stagnation.
         # ``has_made_progress`` is set to True the first time the LLM
         # emits a modifying tool call (Write / Edit / …) in any turn.
         # When True, the stagnation guard requires 2× the configured
         # max_no_op_turns before triggering, because the agent has
         # already demonstrated it *can* produce useful work and the
         # empty-turn pattern is more likely a recoverable LLM tail
-        # than a fundamental deadlock (as seen in F-40's run-06).
+        # than a fundamental deadlock (as seen in the earlier run-06).
         # Stored on the session so ``_should_continue`` can read it.
         session.has_made_progress = False
         # Pre-existing bug (commit 8fb1b78): ``_dispatch_sink`` was added
@@ -1533,7 +1533,7 @@ class AgentRunner:
         # would raise ``NameError``.  Default to ``progress_reporter``
         # (None in test stubs, which ``_dispatch_sink`` treats as no-op).
         sink = progress_reporter
-        # F-40 root-cause fix: read-only tool spiral detection.
+        # Root-cause fix: read-only tool spiral detection.
         # Counts consecutive turns where the agent only made read-only
         # tool calls (Bash / Read / Grep / …) without any modifying
         # tool call (Write / Edit / …).  BashTool always produces
@@ -1632,7 +1632,7 @@ class AgentRunner:
                                 issue_executable=getattr(issue, "python_executable", "") or "",
                             ),
                             previous_run_ids=getattr(session, "previous_run_ids", None),
-                            # F-120: inject the conflict-file list for an
+                            # Inject the conflict-file list for an
                             # agent_rebase reentry run so the agent knows
                             # which files need marker resolution. Defense-
                             # in-depth: _launch_rebase_resolution also sets
@@ -1667,7 +1667,7 @@ class AgentRunner:
                         issue.id,
                     )
 
-                # F-49 Phase 0: lazy-init SessionStorage and write user prompt
+                # Lazy-init SessionStorage and write user prompt
                 if session.run_id:
                     if session._transcript_storage is None:
                         try:
@@ -1691,7 +1691,7 @@ class AgentRunner:
                                 "Failed to init transcript storage run_id=%s",
                                 session.run_id,
                             )
-                    # F-49 Phase 1: start the Unix control socket. Defensive:
+                    # Start the Unix control socket. Defensive:
                     # a socket failure must NOT abort the agent run — log
                     # and leave ``control_socket = None`` so the broadcast
                     # + poll sites become no-ops.
@@ -1776,21 +1776,21 @@ class AgentRunner:
                     # and stops the daemon from re-sending 5KB of background
                     # in every user message.
                     append_system_prompt=getattr(session, "_system_prompt_append", None),
-                    # F-129 Phase 4: wire agent identity so
+                    # Wire agent identity so
                     # _drain_pending_user_messages fires at ToolResult
                     # boundaries for real-time inject.
                     agent_id=session.run_id,
                     runtime_tasks=session._runtime_tasks,
-                    # F-129: drain control-socket commands from inside the
+                    # Drain control-socket commands from inside the
                     # stream's polling loop so pause/stop/inject/resume take
                     # effect within ~60ms instead of waiting for the next
                     # tool event. Returns "stop" when the stream should abort.
                     control_drain_fn=self._make_control_drain_fn(session),
-                    # F-129: async pause-check that blocks in a
+                    # Async pause-check that blocks in a
                     # drain-and-wait loop when paused, so resume
                     # commands are not deadlocked.
                     pause_wait_fn=self._make_pause_wait_fn(session),
-                    # F-129: threading.Event passed to the headless
+                    # threading.Event passed to the headless
                     # session's on_event. When cleared (pause), on_event
                     # blocks, preventing further LLM API calls.
                     pause_gate=session._pause_gate,
@@ -1870,7 +1870,7 @@ class AgentRunner:
                                 except Exception:
                                     pass
 
-                            # F-49 Phase 1: broadcast to attached socket clients.
+                            # Broadcast to attached socket clients.
                             # Defensive: a broken socket must never abort the
                             # agent run, so the whole block is wrapped in
                             # try/except and guarded by ``is not None``.
@@ -1887,7 +1887,7 @@ class AgentRunner:
                                 except Exception:
                                     pass
 
-                            # F-49 Phase 0: accumulate assistant text for transcript
+                            # Accumulate assistant text for transcript
                             session._transcript_asst_text += event.content
 
                         elif isinstance(event, ToolCallEvent):
@@ -1901,7 +1901,7 @@ class AgentRunner:
                             # spot repeated tool-call patterns across turns.
                             if event.tool_name:
                                 turn_tool_names.append(event.tool_name)
-                            # F-40 root-cause fix: has_made_progress tracking.
+                            # Root-cause fix: has_made_progress tracking.
                             # Once the LLM emits a modifying tool call, set the
                             # flag so the stagnation guard uses the relaxed
                             # (2×) threshold for subsequent empty turns.
@@ -1923,13 +1923,13 @@ class AgentRunner:
                                     issue.id,
                                 )
 
-                            # F-129: pause blocking now happens at the stream
+                            # Pause blocking now happens at the stream
                             # level via pause_wait_fn (drain-and-wait loop),
                             # not here. This fixes the resume deadlock where
                             # control_drain_fn couldn't run while the agent
                             # was blocked on pause_resume_event.wait().
 
-                            # F-45: in headless (orchestrator) mode the api.query
+                            # In headless (orchestrator) mode the api.query
                             # stream yields ToolCallEvent with _approved=None
                             # (TS upstream's ToolContext.approval_policy =
                             # "bypassPermissions" + permission_handler = None
@@ -1958,7 +1958,7 @@ class AgentRunner:
                                 except Exception:
                                     pass
 
-                            # F-49 Phase 1: broadcast to attached socket clients.
+                            # Broadcast to attached socket clients.
                             # Defensive: a broken socket must never abort the
                             # agent run, so the whole block is wrapped in
                             # try/except and guarded by ``is not None``.
@@ -1975,7 +1975,7 @@ class AgentRunner:
                                 except Exception:
                                     pass
 
-                            # F-49 Phase 0.1: buffer tool_use block for end-of-turn flush.
+                            # Buffer tool_use block for end-of-turn flush.
                             # The spec requires ONE AssistantMessage per turn with N
                             # ToolUseBlocks in event arrival order; the flush is called
                             # from (a) the next ToolResultEvent, (b) SessionComplete,
@@ -2012,7 +2012,7 @@ class AgentRunner:
                             )
                             # Spawn attribution: an Agent result may carry
                             # the spawned child's agent_id — persist it as
-                            # a supplemental F-45 row (joined to the call
+                            # a supplemental audit row (joined to the call
                             # row via tool_use_id by the visualizer).
                             if event.tool_name == "Agent":
                                 self._append_agent_spawn_result_log(event, session_context)
@@ -2029,7 +2029,7 @@ class AgentRunner:
                                 except Exception:
                                     pass
 
-                            # F-49 Phase 1: broadcast to attached socket clients.
+                            # Broadcast to attached socket clients.
                             # Defensive: a broken socket must never abort the
                             # agent run, so the whole block is wrapped in
                             # try/except and guarded by ``is not None``.
@@ -2046,7 +2046,7 @@ class AgentRunner:
                                 except Exception:
                                     pass
 
-                            # F-49 Phase 0.1: buffer tool_result for end-of-turn flush.
+                            # Buffer tool_result for end-of-turn flush.
                             # Keyed by tool_use_id (populated by convert_tool_event
                             # in extensions/api/query.py) so out-of-order arrivals
                             # are paired correctly. Flush at the natural end-of-
@@ -2111,7 +2111,7 @@ class AgentRunner:
                                 # so the outer loop re-issues the turn prompt.
                                 break
 
-                            # F-129 Phase 2: drain control commands at the
+                            # Drain control commands at the
                             # ToolResult boundary (mid-turn) so pause/inject/
                             # stop take effect without waiting for the turn to
                             # end. If stop/takeover is received and no tools
@@ -2210,7 +2210,7 @@ class AgentRunner:
                                 return
 
                         elif isinstance(event, SessionComplete):
-                            # F-129: if operator stop/takeover was received via
+                            # If operator stop/takeover was received via
                             # control_drain_fn (stream-level drain), the
                             # session_end_reason is already set. Skip 429
                             # detection, turn-boundary processing, and
@@ -2268,7 +2268,7 @@ class AgentRunner:
                                 )
                                 if new_status == "rate_limit_circuit_open":
                                     return
-                                # F-49 Phase 0.1: reset per-turn transcript
+                                # Reset per-turn transcript
                                 # buffers so the re-issued turn starts clean.
                                 # The previous code leaked _transcript_asst_text
                                 # and a stale _transcript_tool_use_id across
@@ -2285,14 +2285,14 @@ class AgentRunner:
 
                             # Normal completion path — increment the turn
                             # counter and emit PhaseComplete.
-                            # F-129 Phase 2: drain control commands via the
+                            # Drain control commands via the
                             # shared helper (handles pause/resume/stop/
                             # takeover/inject/detach). Returns True if
                             # stop/takeover was received.
                             self._drain_control_commands(session)
                             turn_number += 1
                             session.turn_count = turn_number
-                            # F-49 Phase 0.1: emit any buffered turn content
+                            # Emit any buffered turn content
                             # (AssistantMessage + optional UserMessage) and
                             # flush the storage buffer. The helper handles
                             # empty buffers idempotently.
@@ -2305,7 +2305,7 @@ class AgentRunner:
                                         "Failed to flush transcript run_id=%s",
                                         session.run_id,
                                     )
-                            # F-129 Phase 1: the control socket now persists
+                            # The control socket now persists
                             # across turns — attached clients stay connected
                             # and receive a PhaseComplete/TurnComplete frame
                             # as the turn-boundary signal (replacing the old
@@ -2328,16 +2328,16 @@ class AgentRunner:
                                 turn_count=turn_number,
                             )
                             turn_event = TurnComplete(turn=turn_number)
-                            # F-129: broadcast turn-boundary events to
+                            # Broadcast turn-boundary events to
                             # attached socket clients so they can render
                             # turn separators without disconnecting.
                             await self._broadcast_to_socket(session, phase_event)
                             await self._broadcast_to_socket(session, turn_event)
                             if sink is not None:
-                                # F-40: dispatch PhaseComplete + TurnComplete
+                                # Dispatch PhaseComplete + TurnComplete
                                 # through the new protocol methods. The old
                                 # ``on_event`` shim is no longer used by
-                                # AgentRunner; the F-38 stub tests were
+                                # AgentRunner; the legacy stub tests were
                                 # already updated to record on these
                                 # callbacks.
                                 self._dispatch_sink(sink, "on_phase_complete", phase_event, session)
@@ -2357,7 +2357,7 @@ class AgentRunner:
                                 session.rate_limit_pending_turn = None
 
                                 # Check if issue is still active before declaring completion
-                                # F-54 root-cause fix: pass the session so
+                                # Root-cause fix: pass the session so
                                 # ``_should_continue`` can also check the
                                 # workspace's git state and stop the
                                 # continuation loop when work is done.
@@ -2394,7 +2394,7 @@ class AgentRunner:
                                         # Counts consecutive turns where the LLM
                                         # produced zero tool calls AND empty
                                         # output — the exact pattern observed in
-                                        # F-09's repeated 30-min timeouts (run-06
+                                        # The repeated 30-min timeouts (run-06
                                         # had 0 tool calls / 328 SessionComplete
                                         # events in a tight loop). Independent of
                                         # the workspace-dirty heuristic below,
@@ -2405,7 +2405,7 @@ class AgentRunner:
                                         else:
                                             no_work_streak = 0
 
-                                        # F-40 root-cause fix: dual-threshold.
+                                        # Root-cause fix: dual-threshold.
                                         # An agent that has already made progress
                                         # (emitted at least one modifying tool
                                         # call — Write / Edit / …) is given 2× the
@@ -2421,7 +2421,7 @@ class AgentRunner:
                                             else max_no_op_turns
                                         )
                                         if no_work_streak >= _stagnation_threshold:
-                                            # F-54 root-cause fix: when the
+                                            # Root-cause fix: when the
                                             # agent never emitted a single
                                             # modifying tool call (Write/Edit)
                                             # AND tool_count is 0 (SessionComplete
@@ -2434,7 +2434,7 @@ class AgentRunner:
                                                 not getattr(session, "has_made_progress", False)
                                                 and tool_count == 0
                                             ):
-                                                # F-54 root-cause fix: before
+                                                # Root-cause fix: before
                                                 # declaring ``llm_gave_up``,
                                                 # verify via test_command.
                                                 if getattr(
@@ -2506,13 +2506,13 @@ class AgentRunner:
                                             )
                                             return
 
-                                        # F-40 root-cause fix: read-only
+                                        # Root-cause fix: read-only
                                         # tool spiral guard.  When the agent
                                         # spends multiple consecutive turns
                                         # making ONLY read-only tool calls
                                         # (Bash / Read / Grep / …) without a
                                         # single Write / Edit, it is stuck
-                                        # in an investigation spiral (F-54's
+                                        # in an investigation spiral (the
                                         # turn 1-6 pattern: 230+ Bash calls,
                                         # 0 code changes).  Bash output is
                                         # always non-empty, so we do NOT
@@ -2637,7 +2637,7 @@ class AgentRunner:
                                                     f"{consecutive_clean_turns} "
                                                     "consecutive clean turns"
                                                 )
-                                                # F-40: surface the
+                                                # Surface the
                                                 # no-op completion to the
                                                 # sink as a synthetic
                                                 # SessionComplete so
@@ -2745,7 +2745,7 @@ class AgentRunner:
                                 # ``max_turns``, the right status is
                                 # ``max_turns_exceeded`` and
                                 # ``session_end_reason`` is
-                                # ``budget_exhausted`` — the F-09 budget
+                                # ``budget_exhausted`` — the budget
                                 # test depends on this distinction.
                                 if (
                                     turn_number >= self.max_turns
@@ -2779,7 +2779,7 @@ class AgentRunner:
                                             tool_count,
                                         )
                                 elif session.status == "running":
-                                    # F-54 root-cause fix: distinguish real
+                                    # Root-cause fix: distinguish real
                                     # completions from "LLM gave up without
                                     # doing work".  When the session ends
                                     # but the agent never emitted a single
@@ -2851,7 +2851,7 @@ class AgentRunner:
                                                 tool_count,
                                             )
                                     else:
-                                        # F-54 root-cause fix: before
+                                        # Root-cause fix: before
                                         # declaring ``llm_gave_up``, run
                                         # the workflow's ``test_command``
                                         # to check if the work was already
@@ -2896,7 +2896,7 @@ class AgentRunner:
                             else:
                                 session.status = "failed"
                                 if session.session_end_reason is None:
-                                    # F-40: capture a per-reason end reason
+                                    # Capture a per-reason end reason
                                     # so downstream sinks can distinguish
                                     # ``exit_code=N`` style failures from
                                     # clean termination paths.
@@ -2909,8 +2909,8 @@ class AgentRunner:
                                     issue.id,
                                     event.reason,
                                 )
-                            # F-40: terminal SessionComplete is the only
-                            # event the F-38 design never dispatched. The
+                            # Terminal SessionComplete is the only
+                            # event the legacy design never dispatched. The
                             # reason we record on the wire is
                             # ``session_end_reason`` (set by the success /
                             # noop / max_turns / failure paths above) so
@@ -2919,7 +2919,7 @@ class AgentRunner:
                             session_complete_event = SessionComplete(
                                 reason=session.session_end_reason or event.reason
                             )
-                            # F-129: broadcast SessionComplete to attached
+                            # Broadcast SessionComplete to attached
                             # socket clients so they see a clean "session
                             # ended" frame before the socket is stopped.
                             await self._broadcast_to_socket(session, session_complete_event)
@@ -2930,7 +2930,7 @@ class AgentRunner:
                                     session_complete_event,
                                     session,
                                 )
-                            # F-49 Phase 0.1: final flush before returning.
+                            # Final flush before returning.
                             # Helper handles empty buffers idempotently.
                             if session._transcript_storage is not None:
                                 try:
@@ -2941,7 +2941,7 @@ class AgentRunner:
                                         "Failed to final-flush transcript run_id=%s",
                                         session.run_id,
                                     )
-                            # F-49 Phase 1: stop the control socket on the
+                            # Stop the control socket on the
                             # terminal SessionComplete path.
                             if session.control_socket is not None:
                                 try:
@@ -2970,7 +2970,7 @@ class AgentRunner:
                         )
                         if new_status == "rate_limit_circuit_open":
                             return
-                        # F-49 Phase 0.1: reset per-turn transcript buffers.
+                        # Reset per-turn transcript buffers.
                         self._flush_turn_transcript(session)
                         turn_output = ""
                         turn_has_tool_calls = False
@@ -2978,7 +2978,7 @@ class AgentRunner:
                     # Not a 429 — re-raise to preserve existing behavior.
                     raise
 
-                # F-129 Phase 2: if stop/takeover was received mid-turn
+                # If stop/takeover was received mid-turn
                 # via the socket drain, the stream loop broke early.
                 # Flush the transcript and return immediately — the
                 # session is ending, not continuing to the next turn.
@@ -3034,7 +3034,7 @@ class AgentRunner:
                                 "Failed to flush transcript after cap break run_id=%s",
                                 session.run_id,
                             )
-                    # F-129 Phase 1: socket persists across the forced
+                    # Socket persists across the forced
                     # turn boundary (cap-break) — no stop here.
                     append_debug_event(
                         session.debug_log_path,
@@ -3075,7 +3075,7 @@ class AgentRunner:
                 turn_count=turn_number,
             )
             if sink is not None:
-                # F-40: max_turns path now dispatches BOTH PhaseComplete
+                # max_turns path now dispatches BOTH PhaseComplete
                 # (so the trailing phase is recorded with its progress)
                 # AND SessionComplete(reason="budget_exhausted") so
                 # downstream consumers always see a terminal event. The
@@ -3096,7 +3096,7 @@ class AgentRunner:
                 )
 
             session.tool_count = tool_count
-            # F-49 Phase 0.1: final flush before max_turns exit.
+            # Final flush before max_turns exit.
             # Helper handles empty buffers idempotently; covers the
             # "Late TextDelta flow interruption" case from the spec.
             if session._transcript_storage is not None:
@@ -3108,7 +3108,7 @@ class AgentRunner:
                         "Failed to final-flush transcript run_id=%s",
                         session.run_id,
                     )
-            # F-49 Phase 1: stop the control socket on max_turns exit.
+            # Stop the control socket on max_turns exit.
             if session.control_socket is not None:
                 try:
                     await session.control_socket.stop()
@@ -3135,11 +3135,11 @@ class AgentRunner:
             from .logging_setup import clear_log_context
 
             clear_log_context()
-            # F-49 Phase 0.4.5: write .json snapshot on every exit path
+            # Write .json snapshot on every exit path
             # (normal, early return, exception).  Best-effort; errors
             # are logged inside _save_json_snapshot().
             session._save_json_snapshot()
-            # Visualizer bridge: the F-45 tool-event audit log lives in
+            # Visualizer bridge: the tool-event audit log lives in
             # ``{workspace}/.reports/{run_id}.events.ndjson`` but the
             # Multi-Session Visualizer looks for
             # ``~/.clawcodex/sessions/{run_id}/events.ndjson``. Mirror it on
@@ -3152,7 +3152,7 @@ class AgentRunner:
 
         Two identity gaps keep orchestrator runs invisible in the viz:
 
-        * The F-45 tool-event audit log lives in the workspace
+        * The tool-event audit log lives in the workspace
           ``.reports/`` dir but ``SessionMetadataParser`` only scans
           ``~/.clawcodex/sessions/<run_id>/events.ndjson``.
         * Worker (sub-agent) transcripts nest under the HEADLESS session's
@@ -3246,13 +3246,13 @@ class AgentRunner:
     ) -> tuple[bool, Issue]:
         """Check if the issue is still in an active state.
 
-        F-54 root-cause fix: even when the tracker reports the issue
+        Root-cause fix: even when the tracker reports the issue
         as active, return False (stop) if the workspace already has
         uncommitted or committed changes that satisfy the issue, so
         the agent does not keep spinning in continuation loops after
         completing its work.
 
-        F-105 perf optimisation: when a per-session ``IssueStateCache``
+        Perf optimisation: when a per-session ``IssueStateCache``
         is attached to ``session.state_cache`` and the issue state has
         been identical across ``N`` consecutive polls, skip the tracker
         HTTP call and return the cached active state. See
@@ -3262,7 +3262,7 @@ class AgentRunner:
         if not issue.id:
             return False, issue
 
-        # F-105: cache lookup before the tracker round-trip. Forced-poll
+        # Cache lookup before the tracker round-trip. Forced-poll
         # conditions mirror the spec: never skip on the first turn, never
         # skip when the most recent snapshot reported inactive, and never
         # skip while a user-interrupt flag is set on the session.
@@ -3278,7 +3278,7 @@ class AgentRunner:
                 and cache.should_skip_poll(issue.id, turn)
             ):
                 logger.debug(
-                    "F-105 skip tracker poll issue=%s turn=%d cache=%s",
+                    "Skip tracker poll issue=%s turn=%d cache=%s",
                     issue.id,
                     turn,
                     cache.stats(),
@@ -3296,7 +3296,7 @@ class AgentRunner:
             and refreshed_issue.state.strip().lower() in active_states
         )
 
-        # F-105: record the freshly-fetched snapshot so future calls can
+        # Record the freshly-fetched snapshot so future calls can
         # skip the HTTP round-trip. Only record active results; an
         # inactive snapshot will force a re-poll on the next call via
         # ``has_recent_inactive``.
@@ -3311,7 +3311,7 @@ class AgentRunner:
         if not is_active:
             return False, refreshed_issue
 
-        # F-54 root-cause fix: if the tracker still says active but
+        # Root-cause fix: if the tracker still says active but
         # the workspace already has real user-visible changes, trust the
         # agent's completion signal and stop the continuation loop. The
         # workspace changes will be committed by git_sync after the session
@@ -3370,7 +3370,7 @@ class AgentRunner:
                     except Exception:
                         pass  # Fail-open: allow continue if git check fails
 
-        # F-54 root-cause fix: detect "fake progress" — the agent made
+        # Root-cause fix: detect "fake progress" — the agent made
         # read-only tool calls and empty commits but never wrote a
         # single line of code.  When ``has_made_progress`` is False
         # AND the session has consumed multiple turns with only
@@ -3461,7 +3461,7 @@ class AgentRunner:
         Returns ``True`` when the command succeeds (exit code 0) or
         when no test command is configured.  ``False`` on failure.
 
-        F-54 root-cause fix: before marking a session as
+        Root-cause fix: before marking a session as
         ``llm_gave_up``, run this check.  If the test command passes,
         the work was already done in a previous session and the
         current session is correctly detecting completion — not

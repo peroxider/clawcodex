@@ -99,7 +99,7 @@ def convert_sop_to_agent(
             "error": "No skills produced from grouping",
         }
 
-    # Step 3: Register HTTP tools for OpenAPI specs (F-52)
+    # Step 3: Register HTTP tools for OpenAPI specs (subprocess bridge)
     name_map: dict[str, str] = {}
     is_openapi = any(m.http_method is not None for m in methods)
     if register_http and is_openapi:

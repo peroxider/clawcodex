@@ -13,7 +13,7 @@ into one :class:`AsciicastWriter`. The tests below assert the .cast
 file is valid, the markers are present in the expected order, and
 the CLI ``record --auto`` subcommand reaches the same code path.
 
-These tests are the regression net for F-REC-AUTO (the F-156
+These tests are the regression net for F-REC-AUTO (the
 deferred §1.8 entry). They run subprocess-free for the orchestration
 parts (using :func:`asyncio.run` on the module's own coroutine) so
 they stay fast; only ``test_auto_demo_cli_subprocess_auto_flag``

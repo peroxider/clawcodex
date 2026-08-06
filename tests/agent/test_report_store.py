@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`src.agent.report_store` (F-88 P88-D).
+"""Unit tests for :mod:`src.agent.report_store`.
 
 Covers the on-disk report store: dual MD+JSON write, atomic
 write primitive, session-scoped paths, and the

@@ -1,6 +1,6 @@
-"""Kairos / Brief scheduling service layer (F-86 first iteration).
+"""Kairos / Brief scheduling service layer (first iteration).
 
-This package provides the core primitives for the F-86 feature slice:
+This package provides the core primitives for the scheduling feature slice:
 
 * :mod:`models` — :class:`TickConfig`, :class:`TickEvent`,
   :class:`BriefSummarySnapshot`, and :class:`DailyLogEntry` dataclasses

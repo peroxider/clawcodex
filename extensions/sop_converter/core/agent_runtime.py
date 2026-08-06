@@ -1,4 +1,4 @@
-"""F-57 runtime helpers for materializing and invoking F-56 agent records."""
+"""Runtime helpers for materializing and invoking agent records."""
 
 from __future__ import annotations
 
@@ -97,7 +97,7 @@ def _empty_sequence_for_origin(origin: Any) -> Any:
 def _coerce_factory_kwargs(factory: Any, init_kwargs: dict[str, Any]) -> dict[str, Any]:
     """Apply the generated-wrapper coercion contract before a direct factory call.
 
-    F-56 stores JSON-compatible input arguments. F-57 must reconstruct the
+    The catalog stores JSON-compatible input arguments. Runtime helpers must reconstruct the
     SDK's Pydantic/dataclass objects before calling the SDK factory directly;
     otherwise factories such as Jiuwen's ``create_llm_agent`` receive a plain
     ``dict`` instead of ``LegacyReActAgentConfig``.

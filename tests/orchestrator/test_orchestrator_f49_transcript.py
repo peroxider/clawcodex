@@ -1,4 +1,4 @@
-"""F-49 Phase 0.2: tests for the ``issue transcript`` CLI subcommand.
+"""Phase 0.2: tests for the ``issue transcript`` CLI subcommand.
 
 The transcript subcommand reads ``~/.clawcodex/sessions/{run_id}/transcript.jsonl``
 (same unified storage as the headless AgentRunner) and prints a

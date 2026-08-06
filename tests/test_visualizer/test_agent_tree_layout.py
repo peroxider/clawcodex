@@ -1,4 +1,4 @@
-"""Tests for AgentTreeLayout (F-95 spawn_x / join_x inference)."""
+"""Tests for AgentTreeLayout (spawn_x / join_x inference)."""
 
 from __future__ import annotations
 

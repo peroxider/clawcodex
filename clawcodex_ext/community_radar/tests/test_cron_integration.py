@@ -19,7 +19,7 @@ def test_install_uninstall_roundtrip(tmp_path: Path, monkeypatch) -> None:  # ty
     monkeypatch.setenv("CLAWCODEX_HOME", str(tmp_path))
     summary = install_cron_task(schedule="0 8 * * 1")
     if not summary.installed:
-        # F-22 not available in this environment — treat as smoke test.
+        # Cron system not available in this environment — treat as smoke test.
         return
     assert summary.schedule == "0 8 * * 1"
 
@@ -64,7 +64,7 @@ def test_ensure_cron_installed_first_time(tmp_path: Path, monkeypatch) -> None: 
     monkeypatch.setenv("CLAWCODEX_HOME", str(tmp_path))
     summary = ensure_cron_installed()
     if not summary.installed:
-        # F-22 not available; treat as smoke test.
+        # Cron system not available; treat as smoke test.
         return
     assert summary.task_id == DEFAULT_CRON_TASK_ID
     assert summary.schedule  # cron expression recorded

@@ -42,9 +42,9 @@ def collect_session_metadata(
     """Collect session metadata from the environment.
 
     ``start_time`` defaults to ``time.time()`` when omitted; ``extra`` is
-    a free-form dict that the F-97 telemetry redactor will scrub for
+    a free-form dict that the telemetry redactor will scrub for
     sensitive keys (``prompt``/``output``/``transcript``/``messages``).
-    The dataclass was extended with these two fields in F-97-J so the
+    The dataclass was extended with these two fields so the
     analytics → telemetry bridge can pass through caller-supplied
     start_time and per-deployment extras without losing fidelity.
     """

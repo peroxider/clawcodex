@@ -1,4 +1,4 @@
-"""F-57 Phase 5 session macro MVP — parse/validate + overlay resolver."""
+"""Phase 5 session macro MVP — parse/validate + overlay resolver."""
 
 from __future__ import annotations
 
@@ -429,7 +429,7 @@ class TestSessionMacroCleanupAndPool(unittest.TestCase):
         self.assertIn(session_tool, filtered)
 
     def test_bundle_filter_keeps_session_macro_register_tools(self) -> None:
-        """F-57 register/promote tools must survive --agent bundle isolation."""
+        """register/promote tools must survive --agent bundle isolation."""
         register_tool = _make_tool("register-macro-workflow")
         from_trace_tool = _make_tool("register-macro-from-trace")
         promote_tool = _make_tool("promote-macro-workflow")

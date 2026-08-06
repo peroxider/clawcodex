@@ -1,6 +1,6 @@
 """Stage 10 proactive mode smoke tests.
 
-These keep the F-89 public integration points importable and verify the
+These keep the proactive mode public integration points importable and verify the
 lightweight state transitions without starting a long-running scheduler.
 """
 

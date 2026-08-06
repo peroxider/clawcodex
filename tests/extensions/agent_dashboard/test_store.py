@@ -1,4 +1,4 @@
-"""Tests for the F-120 Agent Dashboard store and source registry."""
+"""Tests for the Agent Dashboard store and source registry."""
 
 from __future__ import annotations
 

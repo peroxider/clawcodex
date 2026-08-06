@@ -1,4 +1,4 @@
-"""Tests for the native Gemini adapter wrapper (F-72 P72-B)."""
+"""Tests for the native Gemini adapter wrapper."""
 
 from __future__ import annotations
 
@@ -102,7 +102,7 @@ def test_chat_delegates_to_inner(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_chat_splices_safety_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``safety_settings`` is a F-72 native-only kwarg that the
+    """``safety_settings`` is a native-only kwarg that the
     wrapper attaches to the call so it's observable in logs and
     trace events."""
     inner = MagicMock()

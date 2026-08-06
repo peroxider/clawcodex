@@ -1,4 +1,4 @@
-"""F-125 Phase 3 tests: resume-time checks (C8 / C11 / R8 / C14 / C13 / R2).
+"""Phase 3 tests: resume-time checks (C8 / C11 / R8 / C14 / C13 / R2).
 
 Covers the Phase 3 边角修复 items from
 ``docs/feature_plan/06-ccb-benchmark/f-125-headless-multi-turn.md``:

@@ -1,4 +1,4 @@
-"""Base class for native SDK adapters (F-72).
+"""Base class for native SDK adapters.
 
 Native providers sit alongside the existing LiteLLM-based
 ``BaseProvider`` implementations. The motivation is the same as CCB's

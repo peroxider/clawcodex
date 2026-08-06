@@ -1,4 +1,4 @@
-"""LLM-assisted classification for SR-5.1 (Phase 2).
+"""LLM-assisted classification for the community feature radar (Phase 2).
 
 Implements the LLM-assisted classification hook:
 
@@ -73,7 +73,7 @@ def _get_litellm() -> Any:
     except Exception as exc:  # noqa: BLE001 — surface clearly to callers
         _LITELLM_IMPORT_ERROR = exc
         raise RuntimeError(
-            "litellm is required for SR-5.1 LLM hooks. "
+            "litellm is required for the LLM hooks. "
             "Install with `pip install litellm` or disable "
             "`use_llm` in RadarConfig."
         ) from exc
@@ -131,7 +131,7 @@ def _extract_json(text: str) -> Any:
 
 @dataclass
 class LLMConfig:
-    """Runtime knobs for LLM-assisted SR-5.1 hooks."""
+    """Runtime knobs for LLM-assisted hooks."""
 
     model: str
     api_key: str | None = None

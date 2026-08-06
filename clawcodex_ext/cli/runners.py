@@ -8,7 +8,7 @@ import uuid
 
 
 def _telemetry_session_record(*, entrypoint: str, is_non_interactive: bool) -> tuple[str, float]:
-    """F-97: best-effort session_start helper. Returns (session_id, start_ts)."""
+    """Best-effort session_start helper. Returns (session_id, start_ts)."""
     sid = _telemetry_derive_session_id()
     start = time.monotonic()
     try:
@@ -79,7 +79,7 @@ def run_print_mode(args) -> int:
     from src.cli_core.exit import cli_error
     from src.entrypoints.headless import HeadlessOptions, run_headless
 
-    # F-97: print mode is invoked directly by external callers, so emit
+    # Print mode is invoked directly by external callers, so emit
     # session_start here as a fallback for the dispatch path that does
     # not pass through run_cli. The dispatch path emits a session_start
     # of its own with entrypoint="cli"; we keep this branch distinct so
@@ -172,7 +172,7 @@ def run_tui_mode(args) -> int:
     from clawcodex_ext.tui.entrypoint import run_tui
     from src.entrypoints.tui import TUIOptions
 
-    # F-97: emit session_start so direct invocations of run_tui_mode
+    # Emit session_start so direct invocations of run_tui_mode
     # (e.g. from tests or sub-shells) are still observable. The
     # dispatch path in run_cli also emits one; the recorder de-dupes
     # session_id matching via the per-day cache.
@@ -400,7 +400,7 @@ def start_repl(
     from src.config import get_default_provider
     from clawcodex_ext.repl.app import ClawCodexExtREPL
 
-    # F-97: emit session_start so direct invocations of start_repl
+    # Emit session_start so direct invocations of start_repl
     # (e.g. from legacy tests, MCP fast-path, or `python -m`) are
     # observable. The dispatch path in run_cli also emits one; the
     # recorder dedupes by session_id match in the per-day cache.

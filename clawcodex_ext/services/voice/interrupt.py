@@ -1,4 +1,4 @@
-"""Interrupt detector — F-65 P65-B.
+"""Interrupt detector.
 
 Watches an inbound PCM stream for *barge-in*: the user starts speaking
 while the agent is mid-reply. Triggered by a sustained rise in audio
@@ -6,7 +6,7 @@ energy above a configurable threshold, with a debounce window so a
 single noisy frame doesn't kill a fresh reply.
 
 The detector is intentionally simple — energy-based VAD on rolling PCM
-windows. The F-64 :class:`VoiceActivityDetector` in :mod:`detection`
+windows. The :class:`VoiceActivityDetector` in :mod:`detection`
 already does this for the speech/state machine; rather than wrap that
 class (which is session-lifecycle-coupled via ``start`` / ``stop``),
 :Class:`InterruptDetector` keeps its own numeric state and exposes

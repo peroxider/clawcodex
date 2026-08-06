@@ -199,7 +199,7 @@ def test_get_task_by_type_dispatches_correctly() -> None:
 
 
 def test_get_task_by_type_dream_registered_f100() -> None:
-    """F-100: ``DreamTask`` is registered at import time via
+    """``DreamTask`` is registered at import time via
     ``src.tasks.__init__``'s centralized registration. This unlocks
     the prior ``dream is None`` invariant.
     """
@@ -214,9 +214,9 @@ def test_get_task_by_type_dream_registered_f100() -> None:
 def test_get_task_by_type_unknown_returns_none() -> None:
     """Out-of-scope chapter task types stay unregistered (per plan §3:
     RemoteAgent / Workflow / Monitor are deferred; ``dream`` is now
-    registered as of F-100, so it's not in this list).
+    registered as of this feature, so it's not in this list).
     """
-    # ``dream`` is now registered (F-100) — moved to its own test above.
+    # ``dream`` is now registered — moved to its own test above.
     # Still-unregistered: remote_agent / monitor_mcp / local_workflow.
     assert get_task_by_type("remote_agent") is None
     assert get_task_by_type("monitor_mcp") is None

@@ -144,7 +144,7 @@ class PromptBuilder:
             options: If in clarification flow, the available options for the question
             previous_run_ids: Run IDs from previous failed attempts; injected as a
                 hint so the agent can Read() past transcripts to learn what was tried.
-            conflict_files: F-120 — when the agent is in a rebase-resolution
+            conflict_files: when the agent is in a rebase-resolution
                 reentry run, this lists the files that git left in conflict
                 state. Injected into the prompt so the agent can read each
                 file's conflict markers and resolve them.
@@ -194,7 +194,7 @@ class PromptBuilder:
         if operator_hints:
             rendered = f"---\n## Operator Hints\n\n{operator_hints}\n---\n\n{rendered}"
 
-        # F-40 root-cause fix: inject workspace diff context so the
+        # Root-cause fix: inject workspace diff context so the
         # agent sees exactly which files are already modified and can
         # skip re-exploration when code already exists on disk.
         # Only injected when there are uncommitted changes (first turn).
@@ -254,14 +254,14 @@ class PromptBuilder:
                 f"不要调试环境差异。\n\n{rendered}"
             )
 
-        # F-120: inject the list of files git left in conflict state so the
+        # Inject the list of files git left in conflict state so the
         # agent can read each file's conflict markers and resolve them in
         # place. Only emitted when conflict_files is non-empty.
         if conflict_files:
             file_lines = "\n".join(f"- `{name}`" for name in conflict_files)
             rendered = (
                 "---\n"
-                "## Conflicting Files (F-120 rebase reentry)\n"
+                "## Conflicting Files (rebase reentry)\n"
                 "\n"
                 "The orchestrator's automated rebase left the following files in a\n"
                 "conflict state (REBASE_HEAD is set in the workspace). Read each\n"
@@ -285,10 +285,10 @@ class PromptBuilder:
                 f"{rendered}"
             )
 
-        # F-121: rules file reference injection
+        # Rules file reference injection
         rendered = PromptBuilder._inject_rules_reference_from_store(rendered)
 
-        # F-140: inject Task V2 / Logical Kanban guidance so orchestrator-launched
+        # inject Task V2 / Logical Kanban guidance so orchestrator-launched
         # agents use the same task-loop discipline as interactive sessions.
         lkb_guidance = task_v2_guidelines()
         if lkb_guidance:
@@ -304,7 +304,7 @@ class PromptBuilder:
     USER_MESSAGE_MARKER = "<!-- === USER MESSAGE === -->"
 
     # ------------------------------------------------------------------
-    # F-121: rules reference injection (shared by all prompt flows)
+    # Rules reference injection (shared by all prompt flows)
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -312,7 +312,7 @@ class PromptBuilder:
         """Append a rules file reference line to *prompt* if *rules_path* is set.
 
         The reference is deliberately a single line — the agent is expected
-        to ``Read()`` the file on demand (F-121 §1.2: "参考示例而非强制约束").
+        to ``Read()`` the file on demand ("参考示例而非强制约束").
         """
         if not rules_path:
             return prompt
@@ -352,7 +352,7 @@ class PromptBuilder:
         that pass an old / un-migrated workflow.md still work — the full
         prompt lands in user and the system append is empty.
 
-        F-89: ``@agent-<type>`` mentions in either half of the prompt are
+        ``@agent-<type>`` mentions in either half of the prompt are
         expanded into ``agent_mention`` attachments (matching REPL/TUI/
         headless). Unknown agents are stripped with a logged warning —
         orchestrator runs must not abort on a typo in the issue body.
@@ -387,7 +387,7 @@ class PromptBuilder:
         conflict_files: tuple[str, ...] | list[str] = (),
         reason: str | None = None,
     ) -> str:
-        """F-120: build a prompt for an agent run that resolves a rebase conflict.
+        """Build a prompt for an agent run that resolves a rebase conflict.
 
         This is used when ``_process_rebase_intent`` left content conflicts
         (has_conflict=True) and the daemon launches a fresh ``agent_rebase``
@@ -415,7 +415,7 @@ class PromptBuilder:
 
         template = (
             "---\n"
-            f"# F-120 PR Conflict Resolution — {identifier}\n"
+            f"# PR Conflict Resolution — {identifier}\n"
             f"\n**Title:** {title}\n"
             f"**Branch:** `{branch_name}` (base `{base_branch}`)\n"
             f"{reason_block}"
@@ -487,7 +487,7 @@ class PromptBuilder:
             logger.error("Review feedback template render error: %s", exc)
             return _DEFAULT_PROMPT
 
-        # F-121: inject rules reference
+        # Inject rules reference
         rendered = PromptBuilder._inject_rules_reference_from_store(rendered)
         return rendered
 
@@ -563,7 +563,7 @@ class PromptBuilder:
     ) -> str:
         """Build continuation prompt for subsequent turns.
 
-        F-54 root-cause fix: inject a summary of recent git commits
+        Root-cause fix: inject a summary of recent git commits
         so the LLM can see what has already been done in previous
         turns and avoid re-exploring from scratch.
         """
@@ -576,7 +576,7 @@ class PromptBuilder:
             else ""
         )
 
-        # F-54 root-cause fix: inject recent git log so the LLM knows
+        # Root-cause fix: inject recent git log so the LLM knows
         # what was already done in previous turns.
         git_log_summary = _get_git_log_summary(session)
 
@@ -606,7 +606,7 @@ class PromptBuilder:
             f"- Your FIRST action should be a Write or Edit to implement the feature.\n"
             f"{git_log_summary}"
         )
-        # F-121: inject rules reference on continuation turns
+        # Inject rules reference on continuation turns
         prompt = PromptBuilder._inject_rules_reference_from_store(prompt)
         return prompt
 
@@ -681,7 +681,7 @@ def _expand_agent_mentions_in_prompt(
     *,
     session: Any | None = None,
 ) -> tuple[str, str]:
-    """F-89: expand ``@agent-<type>`` mentions across the rendered prompt.
+    """Expand ``@agent-<type>`` mentions across the rendered prompt.
 
     Mirrors the REPL/TUI/headless behaviour using the shared
     :func:`clawcodex_ext.command_system.input_processing` helpers. Returns
@@ -710,7 +710,7 @@ def _expand_agent_mentions_in_prompt(
         agents = get_agents_for_mentions(str(workspace_path)) if workspace_path else []
     except Exception as exc:  # noqa: BLE001 — best-effort only
         logger.warning(
-            "F-89: failed to load agents for @agent-name expansion: %s",
+            "Failed to load agents for @agent-name expansion: %s",
             exc,
         )
         return system_part, user_part
@@ -726,7 +726,7 @@ def _expand_agent_mentions_in_prompt(
     unknown = find_unknown_agent_mentions(combined, agents)
     if unknown:
         logger.warning(
-            "F-89: stripping unknown agent mention(s) from orchestrator prompt: %s",
+            "Stripping unknown agent mention(s) from orchestrator prompt: %s",
             ", ".join(unknown),
         )
         combined = strip_agent_mentions(combined)
@@ -862,7 +862,7 @@ def _get_git_log_summary(session: Any) -> str:
     compact summary of recent commits, or an empty string when there
     is no session / workspace / git history.
 
-    F-54 root-cause fix: injected into continuation prompts so the
+    Root-cause fix: injected into continuation prompts so the
     LLM can see what has already been committed in previous turns
     and avoid re-exploring from scratch.
     """

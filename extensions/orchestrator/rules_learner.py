@@ -1,4 +1,4 @@
-"""F-121: Rule extraction, storage, and retrieval from PR review feedback.
+"""Rule extraction, storage, and retrieval from PR review feedback.
 
 Pipeline:
   - RuleStore: read/write workflow.rules.yaml with atomic write
@@ -239,22 +239,22 @@ _RULES_SECTION_RE = re.compile(
 # Regex to parse individual rule items inside the section — strict form.
 # Matches the canonical template format: `- [category] summary` + optional
 # `Body: ...` on the next indented line. Kept for backward compatibility
-# with the prompt template's documented format (F-121 §2.3).
+# with the prompt template's documented format.
 #
 # The lookahead accepts the start of ANY next list item (strict `[cat]`,
 # loose `**bold**`, or bare `\w` summary) so a strict item does not
-# greedily swallow a following loose-format item (F-121 fix).
+# greedily swallow a following loose-format item (regex fix).
 #
 # The Body capture tolerates an optional leading list marker (`- ` or
 # `* `) since LLMs frequently write `  - Body: ...` instead of `  Body:`
-# (F-121 fix).
+# (regex fix).
 _RULE_ITEM_RE = re.compile(
     r"^\s*[-*]\s+\[([^\]]+)\]\s+(.+?)(?:\n\s*[-*]?\s*Body:\s*(.+?))?"
     r"(?=\n\s*[-*]\s+(?:\[|\*\*|\w)|\n\s*$|\Z)",
     re.DOTALL | re.MULTILINE,
 )
 
-# F-121 fix: loose fallback regex for LLM output that deviates from the
+# loose fallback regex for LLM output that deviates from the
 # template. Tolerates three common deviations observed in practice:
 #   (a) bold title instead of `[category]` — `- **Quote Style** — desc`
 #   (b) Body line with a leading list marker — `  - Body: ...`
@@ -270,7 +270,7 @@ _RULE_ITEM_LOOSE_RE = re.compile(
     re.DOTALL | re.MULTILINE,
 )
 
-# F-121 §2.2 canonical category enum. Used by `_infer_category()` to map
+# canonical category enum. Used by `_infer_category()` to map
 # free-form summary/body text to a category when the agent omits `[cat]`.
 _RULE_CATEGORIES = (
     "naming",
@@ -326,7 +326,7 @@ def _infer_category(text: str) -> str:
 
     Returns the first matching category from ``_CATEGORY_KEYWORDS``, or
     ``'other'`` if no keyword hits. Used when the agent omits the
-    ``[category]`` prefix (F-121 fix for loose LLM output).
+    ``[category]`` prefix (fix for loose LLM output).
     """
     lowered = text.lower()
     for category, keywords in _CATEGORY_KEYWORDS:
@@ -478,7 +478,7 @@ class RuleEngine:
             )
             strict_spans.append((m.start(), m.end()))
 
-        # F-121 fix: loose fallback for LLM output that deviates from the
+        # loose fallback for LLM output that deviates from the
         # canonical `- [category] summary` template. Common deviations:
         # bold-title instead of `[cat]`, Body line with a leading `- `,
         # or a bare summary with no category prefix at all. We skip any

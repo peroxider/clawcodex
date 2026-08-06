@@ -1,4 +1,4 @@
-"""Tests for F-75 工具/Skill 调用统计.
+"""Tests for 工具/Skill 调用统计.
 
 Covers:
 - clawcodex_ext/tool_stats.py: recording module

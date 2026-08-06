@@ -115,7 +115,7 @@ class QueryState:
     # continuation_nudge_count, this survives successful tool rounds.
     exhaustive_audit_performed: bool = False
     transition: Transition | None = None
-    # P102-E: 逐 turn 回调注册。外部消费者（如 F-69 Budget Mode）可以
+    # 逐 turn 回调注册。外部消费者（如 Budget Mode）可以
     # 在 turn 开始/结束时注入自定义逻辑，无需修改 query() 函数体。
     on_turn_start_callbacks: list[Callable[["QueryState"], None]] = field(default_factory=list)
     on_turn_end_callbacks: list[Callable[["QueryState"], None]] = field(default_factory=list)

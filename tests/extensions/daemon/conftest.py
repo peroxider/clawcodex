@@ -1,4 +1,4 @@
-"""Shared fixtures for F-84 daemon tests.
+"""Shared fixtures for daemon tests.
 
 Every test gets an isolated, tmp-path-based state directory so
 ``write_daemon_state`` / ``remove_daemon_state`` never touch the

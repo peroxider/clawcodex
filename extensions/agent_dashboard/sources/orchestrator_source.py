@@ -1,4 +1,4 @@
-"""OrchestratorDashboardSource — exposes orchestrator state to the F-120 dashboard.
+"""OrchestratorDashboardSource — exposes orchestrator state to the dashboard.
 
 The source is provider-based so it can be registered before the
 :class:`Orchestrator` instance exists (the orchestrator is constructed

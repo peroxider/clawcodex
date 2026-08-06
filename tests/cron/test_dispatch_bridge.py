@@ -1,4 +1,4 @@
-"""CronDispatchBridge unit tests (F-22-G-2).
+"""CronDispatchBridge unit tests.
 
 The bridge must:
 - pop typed ``CronPromptEvent`` / ``CronMissedEvent`` from the outbox;

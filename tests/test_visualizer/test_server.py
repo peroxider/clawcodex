@@ -1,4 +1,4 @@
-"""Tests for the Visualizer FastAPI server and API endpoints (F-92)."""
+"""Tests for the Visualizer FastAPI server and API endpoints."""
 
 from __future__ import annotations
 
@@ -744,7 +744,7 @@ class TestFrontend:
 
 
 class TestExportFormats:
-    """Verify all export formats (F-92-C)."""
+    """Verify all export formats."""
 
     def test_export_content_disposition_handles_unicode_session_id(self, sessions_dir, client):
         session_id = "\u4e2d\u6587 session"
@@ -824,7 +824,7 @@ class TestExportFormats:
 
 
 class TestWorkspaceSearch:
-    """Workspace session search/filter (F-93-B)."""
+    """Workspace session search/filter."""
 
     def test_list_workspace_sessions(self, client):
         resp = client.get("/api/viz/workspaces/default/sessions")
@@ -889,7 +889,7 @@ class TestWorkspaceSearch:
 
 
 class TestShareLinkPersistence:
-    """Share link disk persistence (F-95-B)."""
+    """Share link disk persistence."""
 
     def test_persistence_preserves_links_across_app_restart(self, sessions_dir, tmp_path):
         """Create a share link, then recreate the app — the link should survive."""

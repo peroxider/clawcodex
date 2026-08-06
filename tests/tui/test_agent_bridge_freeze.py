@@ -1,10 +1,10 @@
-"""F-108 P108-A — Permission / AskUser modal timeout (Layer 0 quick fix).
+"""Permission / AskUser modal timeout (Layer 0 quick fix).
 
 Verifies that ``AgentBridge._permission_handler`` and
 ``AgentBridge._ask_user_handler`` auto-resolve after a configurable
 timeout when the UI side never calls ``decide()``. Without this
 guarantee a stuck modal holds the agent-loop worker thread forever
-(see F-108 §十八 risk #2 #3).
+(see §十八 risk #2 #3).
 
 Test strategy: monkey-patch the module-level ``_PERMISSION_TIMEOUT_S``
 constant to a tiny value so we don't have to wait 30 real seconds.
@@ -253,7 +253,7 @@ def test_ask_user_handler_resolves_state_after_timeout(short_timeout) -> None:
 
 
 def test_permission_handler_no_timeout_when_disabled(monkeypatch) -> None:
-    """``timeout=0`` is the documented escape hatch (F-108 §十八 design
+    """``timeout=0`` is the documented escape hatch (§十八 design
     decision #5): it falls back to the legacy unbounded ``done.wait()``.
 
     We can't easily prove "blocks forever" in a unit test without

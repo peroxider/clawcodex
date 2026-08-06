@@ -1,4 +1,4 @@
-"""Tests for F-120 Layer-2 contracts: DashboardEntry + DashboardSource."""
+"""Tests for Layer-2 contracts: DashboardEntry + DashboardSource."""
 
 from __future__ import annotations
 

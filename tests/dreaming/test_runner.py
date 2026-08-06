@@ -1,4 +1,4 @@
-"""Tests for ``clawcodex_ext.dreaming.runner`` — F-100.
+"""Tests for ``clawcodex_ext.dreaming.runner``.
 
 The Phase A runner is intentionally a stub. Tests cover the stub
 contract (callback invocation, no-op result) and the factory swap

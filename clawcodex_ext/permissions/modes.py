@@ -177,9 +177,9 @@ def has_allow_bypass_permissions_mode() -> bool:
     user, local, flag, and policy settings — projectSettings is intentionally
     excluded because a malicious project could otherwise auto-enable bypass.
 
-    F-47: read through :func:`_settings_perms` which aggregates the
+    Permissions config: read through :func:`_settings_perms` which aggregates the
     structured ``PermissionsConfig`` field + the legacy
-    ``settings.extra["permissions"]`` path. Pre-F-47 binaries that wrote
+    ``settings.extra["permissions"]`` path. Binaries from before this feature existed that wrote
     the dict into ``extra`` keep working.
     """
     try:

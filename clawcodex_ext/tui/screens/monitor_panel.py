@@ -1,4 +1,4 @@
-"""F-88 TUI monitor panel.
+"""TUI monitor panel.
 
 Opened with Shift+Down.  Shows the list of active monitor tasks on the left
 and a live tail of the selected task's log on the right.

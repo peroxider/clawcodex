@@ -1,4 +1,4 @@
-"""Worker kind → factory registry (F-84 P84-D).
+"""Worker kind → factory registry.
 
 The supervisor looks up workers by *kind* (e.g. ``"remoteControl"``)
 and instantiates a fresh one per spawn cycle. This module owns the

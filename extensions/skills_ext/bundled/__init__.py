@@ -2,7 +2,7 @@
 Bundled Skill Extension — SOP Converter + Dreaming.
 
 Mirrors the src/skills/bundled/ pattern for clawcodex-specific bundled skills.
-SOP conversion skill + F-100 ``/dream`` skill registered here for skills_ext
+SOP conversion skill + ``/dream`` skill registered here for skills_ext
 integration.
 """
 

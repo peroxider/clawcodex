@@ -42,7 +42,7 @@ from clawcodex_ext.command_system.proactive_command import PROACTIVE_COMMAND
 from clawcodex_ext.command_system.btw_command import BTW_COMMAND
 from clawcodex_ext.command_system.monitor_command import MONITOR_COMMAND
 
-# F-120 Agent Dashboard — ``/dashboard`` cross-system read-only view.
+# Agent Dashboard — ``/dashboard`` cross-system read-only view.
 from clawcodex_ext.command_system.dashboard_command import DASHBOARD_COMMAND
 
 # Upstream 0573f4c new slash commands. The implementations live in
@@ -1487,7 +1487,7 @@ def telemetry_command_call(args: str, context: CommandContext) -> LocalCommandRe
     """
     Handle /telemetry command — show & manage telemetry configuration.
 
-    Delegates to the F-97 telemetry.cli module, capturing its stdout
+    Delegates to the telemetry.cli module, capturing its stdout
     output into the command result.  Best-effort: failures (missing
     telemetry package, config errors) return a clear text message
     instead of crashing.
@@ -1861,7 +1861,7 @@ def get_builtin_commands() -> list[Command]:
         PROACTIVE_COMMAND,
         RESUME_COMMAND,
         BTW_COMMAND,
-        # F-120 Agent Dashboard — cross-system read-only view.
+        # Agent Dashboard — cross-system read-only view.
         DASHBOARD_COMMAND,
         # Upstream 0573f4c new slash commands
         DOCTOR_COMMAND,
@@ -1875,11 +1875,11 @@ def get_builtin_commands() -> list[Command]:
         RENAME_COMMAND,
         LOGO_COMMAND,
         MCP_COMMAND,
-        # F-64 Voice Mode — /voice toggle + STT backend selection.
+        # Voice Mode — /voice toggle + STT backend selection.
         VOICE_COMMAND,
-        # F-64 P64-E TTS — /tts toggle + TTS backend selection + 试听.
+        # TTS — /tts toggle + TTS backend selection + 试听.
         TTS_COMMAND,
-        # F-65 Voice Dialogue — /dialogue full-duplex mode.
+        # Voice Dialogue — /dialogue full-duplex mode.
         DIALOGUE_COMMAND,
     ]
     try:
@@ -1959,7 +1959,7 @@ def register_builtin_commands(registry: CommandRegistry | None = None) -> None:
         register_intent_forecast_commands(reg)
     except Exception:
         pass
-    # F-94 BG_SESSIONS — /bg command family. Self-gates on
+    # BG_SESSIONS — /bg command family. Self-gates on
     # CLAWCODEX_BG_SESSIONS (returns disabled message when off), so
     # unconditional registration is safe.
     try:
@@ -1968,7 +1968,7 @@ def register_builtin_commands(registry: CommandRegistry | None = None) -> None:
         register_bg_commands(reg)
     except Exception:
         pass
-    # F-97 LODESTONE — /link command family. Self-gates on
+    # LODESTONE — /link command family. Self-gates on
     # ``LODESTONE=off`` (renderer falls back to plain text), so the
     # command stays harmless when the feature is disabled.
     try:
@@ -1977,7 +1977,7 @@ def register_builtin_commands(registry: CommandRegistry | None = None) -> None:
         register_lodestone_commands(reg)
     except Exception:
         pass
-    # F-95 TEMPLATES — productized template catalogue/render/create surface.
+    # TEMPLATES — productized template catalogue/render/create surface.
     try:
         from clawcodex_ext.command_system.template_commands import register_template_commands
 

@@ -1,4 +1,4 @@
-"""Fine-grained tests for F-107 PowerShell support.
+"""Fine-grained tests for PowerShell support.
 
 Covers:
 - search_classification

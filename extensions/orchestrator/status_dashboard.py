@@ -73,13 +73,13 @@ class DashboardState:
     retry_queue: list[dict[str, Any]] = field(default_factory=list)
     poll_check_in_progress: bool = False
     next_poll_due_at_ms: int | None = None
-    # F-124-P3: 澄清状态数据
+    # 澄清状态数据
     clarifications: list["ClarificationEntry"] = field(default_factory=list)
 
 
 @dataclass
 class ClarificationEntry:
-    """F-124-P3: A single issue's clarification status for the dashboard panel."""
+    """A single issue's clarification status for the dashboard panel."""
     issue_id: str
     status: str  # "awaiting_author" | "awaiting_local" | "manual_required" | "resolved"
     open_questions: list[str] = field(default_factory=list)
@@ -202,12 +202,12 @@ class StatusDashboard:
         self._state.retry_queue = retry_items
 
     def on_clarification_update(self, entries: list["ClarificationEntry"]) -> None:
-        """F-124-P3: 接收澄清状态更新，刷新 dashboard 面板。"""
+        """接收澄清状态更新，刷新 dashboard 面板。"""
         self._state.clarifications = list(entries)
 
     @property
     def pending_clarifications(self) -> list["ClarificationEntry"]:
-        """F-124-P3: 当前需要操作员回答的澄清问题（awaiting_local 或 manual_required）。"""
+        """当前需要操作员回答的澄清问题（awaiting_local 或 manual_required）。"""
         return [
             e for e in self._state.clarifications
             if e.status in ("awaiting_local", "manual_required")
@@ -327,7 +327,7 @@ class StatusDashboard:
                     f"  error={retry.get('error', '')[:40]}"
                 )
 
-        # Clarification panel (F-124-P3)
+        # Clarification panel
         clarification_panel = self._clarification_panel()
         if clarification_panel:
             lines.append("")
@@ -456,7 +456,7 @@ class StatusDashboard:
         return f"  {icon} Issue {issue_id}: clarification {status}{timeout_str}"
 
     def _clarification_panel(self) -> str:
-        """F-124-P3: 渲染澄清状态专用面板。"""
+        """渲染澄清状态专用面板。"""
         entries = self._state.clarifications
         if not entries:
             return ""

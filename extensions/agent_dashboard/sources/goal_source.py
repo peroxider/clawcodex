@@ -1,8 +1,8 @@
 """GoalDashboardSource — bridges :class:`GoalService` to the dashboard.
 
-The F-120 plan §3.1 says this source reads from a
+The plan §3.1 says this source reads from a
 ``GoalStateRegistry`` and emits one entry per session with an active
-``GoalState``. The actual F-122 goal implementation uses a SQLite
+``GoalState``. The actual goal implementation uses a SQLite
 ``GoalStore`` keyed by thread_id, accessed through
 ``GoalService``. There is no in-memory registry of *all* live
 goals because most processes only have one thread; we therefore
@@ -53,7 +53,7 @@ __all__ = ["GoalDashboardSource"]
 # ``ThreadGoalStatus`` -> dashboard status. Mapped by value (the
 # upstream enum) so we don't need a hard import here; the import
 # below is intentionally lazy so this module stays import-safe
-# even when the goal package is unavailable (e.g. F-122 spec
+# even when the goal package is unavailable (e.g. spec
 # boundary tests).
 _GOAL_STATUS_MAP: dict[str, str] = {
     "active": DASHBOARD_STATUS_IN_PROGRESS,

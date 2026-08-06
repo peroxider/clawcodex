@@ -1,4 +1,4 @@
-"""F-50-A/B workflow mode — discriminate and extract workflow structure from source."""
+"""Workflow mode — discriminate and extract workflow structure from source."""
 
 from __future__ import annotations
 
@@ -22,19 +22,19 @@ def extract_workflow(
     interactive: bool = False,
     out_dir: str | Path | None = None,
 ) -> WorkflowGraph | None:
-    """Run F-50-B extraction when mode is hybrid or fwa.
+    """Run extraction when mode is hybrid or fwa.
 
     Parameters
     ----------
     source_dir:
         Path to the source code directory.
     disc:
-        Discrimination result from F-50-A.
+        Discrimination result from the discriminator.
     extractor:
         Optional override for extractor name.
     interactive:
         When True and extraction yields no graph, generate TODO
-        completion templates (F-50.11.4) regardless of mode.
+        completion templates regardless of mode.
     out_dir:
         Where to write the TODO templates (only used when
         ``interactive=True``).

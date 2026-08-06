@@ -1,4 +1,4 @@
-"""End-to-end integration tests for F-88 P88-C + P88-D.
+"""End-to-end integration tests for the auto-routing classifier and report persistence.
 
 Verifies that the auto-routing classifier and the report-persist
 hook fire correctly through the full Agent tool dispatch.

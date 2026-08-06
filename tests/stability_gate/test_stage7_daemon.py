@@ -1,4 +1,4 @@
-"""Stage 7 — F-84 Daemon subsystem smoke test.
+"""Stage 7 — Daemon subsystem smoke test.
 
 Per ``docs/feature_plan/06-ccb-benchmark/f-84-daemon.md`` §1.12.3, this
 stage provides a lightweight round-trip check on the daemon subsystem:
@@ -110,7 +110,7 @@ class TestStage7DaemonImports:
         verbs = set(
             build_parser()._subparsers._group_actions[0].choices.keys()  # type: ignore[attr-defined]
         )
-        # F-84 P84-E/F: every verb documented in §1.9 must be present.
+        # every verb documented in §1.9 must be present.
         for verb in ("start", "stop", "status", "ps", "bg", "attach", "logs", "kill"):
             assert verb in verbs, f"missing CLI verb {verb!r}"
 
@@ -308,7 +308,7 @@ class TestStage7DaemonCliSubprocess:
 
     def test_cli_help_lists_daemon_verb(self, tmp_state_dir: Path):
         """``extensions.daemon.cli.run_daemon`` invoked with ``--help``
-        must list every F-84 verb — a low-cost but high-signal
+        must list every daemon verb — a low-cost but high-signal
         regression catcher for the CLI parser."""
         # The CLI module has no ``if __name__ == "__main__"`` block,
         # so we drive it via the public ``run_daemon`` entry point in a

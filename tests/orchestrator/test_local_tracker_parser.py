@@ -2,7 +2,7 @@
 
 Background
 ----------
-The F-40 dispatch bug surfaced when a hand-authored issue at
+The dispatch bug surfaced when a hand-authored issue at
 ``/tmp/clawcodex-issues/001-f40-progress-sink.md`` used ``--`` (two
 dashes) instead of the canonical ``---`` as its frontmatter delimiter.
 ``LocalTrackerAdapter.fetch_candidate_issues`` returned zero
@@ -38,7 +38,7 @@ class SplitFrontmatterTests(unittest.TestCase):
         self.assertEqual(body, "body\n")
 
     def test_two_dash_typo_is_accepted(self) -> None:
-        # The exact F-40 hand-authored shape.
+        # The exact hand-authored shape.
         text = "\n--\nid: F-40-progress-sink\nstate: open\npriority: 1\n---\n# Title\n"
         metadata, body = _split_frontmatter(text)
         self.assertEqual(
@@ -83,7 +83,7 @@ class ParseMarkdownIssueTests(unittest.TestCase):
     """End-to-end coverage for ``parse_markdown_issue``."""
 
     def test_two_dash_delimiter_yields_active_candidate(self) -> None:
-        # Mirrors the F-40 file shape: leading newline, ``--`` delimiter,
+        # Mirrors the file shape: leading newline, ``--`` delimiter,
         # state and priority present, body starts with a ``# Title`` heading.
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "001-f40-progress-sink.md"
@@ -120,7 +120,7 @@ class ParseMarkdownIssueTests(unittest.TestCase):
             # No frontmatter ⇒ id falls back to path.stem and state/priority
             # are None. ``LocalTrackerAdapter.fetch_candidate_issues``
             # rejects such issues via the active_states filter, which is
-            # why the F-40 issue was silently dropped from the dispatch
+            # why the issue was silently dropped from the dispatch
             # queue.
             self.assertEqual(document.issue.id, "001-foo")
             self.assertIsNone(document.issue.state)

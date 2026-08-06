@@ -80,7 +80,7 @@ class PipelineConfig:
     autocompact_threshold: float = 0.80
     autocompact_tracking: AutoCompactTracking | None = None
 
-    # F-106: lazy compression gate. When ``est_input_tokens`` is below
+    # Lazy compression gate. When ``est_input_tokens`` is below
     # ``context_window * gate_skip_ratio``, the pipeline short-circuits
     # and returns an empty result instead of running all 5 layers. Set
     # to 0 to disable the gate (always run). Overridable at runtime via
@@ -109,7 +109,7 @@ class PipelineConfig:
     # Token budget: if pipeline frees this many tokens, skip remaining layers
     early_exit_tokens: int = 20_000
 
-    # Goal-aware compression (F-9 / F-38).
+    # Goal-aware compression.
     # When ``goal_active`` is True, the autocompact threshold is raised
     # (compact less aggressively) and messages containing
     # ``<goal-steering`` are preserved from compaction so the model
@@ -201,7 +201,7 @@ class CompressionPipeline:
         layers_applied: list[str] = []
         current_messages = messages
 
-        # F-106: lazy compression gate. When est_input_tokens is well
+        # Lazy compression gate. When est_input_tokens is well
         # below context_window * skip_ratio, all five layers would be
         # no-ops; short-circuit before doing any work.  A zero (or
         # negative) input_token_count means "not measured" — skip the
@@ -218,7 +218,7 @@ class CompressionPipeline:
             )
             if not gate_should_run:
                 logger.debug(
-                    "F-106 compression pipeline skipped reason=%s est=%d threshold=%d",
+                    "Compression pipeline skipped reason=%s est=%d threshold=%d",
                     gate_reason,
                     input_token_count,
                     int(cfg.context_window * effective_ratio),
@@ -308,7 +308,7 @@ class CompressionPipeline:
         # --- Layer 5: Autocompact ---
         autocompact_result = None
         if cfg.provider is not None and cfg.model:
-            # F-9: when a goal is active, raise the autocompact threshold
+            # When a goal is active, raise the autocompact threshold
             # (compact less aggressively) and pre-filter goal-steering
             # messages so they survive compaction.
             effective_threshold = cfg.autocompact_threshold
@@ -377,7 +377,7 @@ class CompressionPipeline:
 
 
 def _is_goal_steering_message(message: Message) -> bool:
-    """Check if a message is a goal-steering injection (F-9).
+    """Check if a message is a goal-steering injection.
 
     Goal-steering prompts are wrapped in ``<goal-steering type=...>``
     XML tags.  These must survive autocompact so the model never loses

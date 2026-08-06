@@ -1,4 +1,4 @@
-"""Provider/model metadata helpers for F-43 commands."""
+"""Provider/model metadata helpers for model commands."""
 
 from __future__ import annotations
 

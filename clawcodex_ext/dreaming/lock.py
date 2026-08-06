@@ -1,4 +1,4 @@
-"""Consolidation lock — F-100 / 100.3 (with Phase B TTL enhancement).
+"""Consolidation lock (with Phase B TTL enhancement).
 
 Mirrors ``typescript/src/services/autoDream/consolidationLock.ts``.
 The lock file lives in the auto-memory dir and its mtime *is*

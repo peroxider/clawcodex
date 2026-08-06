@@ -353,7 +353,7 @@ def test_in_flight_dedup_across_file_and_session(tmp_path) -> None:
 
 
 def test_daemon_mode_dir_override(tmp_path: Path) -> None:
-    """F-22-G9: dir_override redirects all file I/O."""
+    """dir_override redirects all file I/O."""
     import time
 
     alt_root = tmp_path / "daemon-workspace"
@@ -393,7 +393,7 @@ def test_daemon_mode_dir_override(tmp_path: Path) -> None:
 
 
 def test_daemon_mode_no_override_falls_back(tmp_path: Path) -> None:
-    """F-22-G9: when dir_override/lock_identity are None, existing
+    """when dir_override/lock_identity are None, existing
     behaviour is preserved."""
     fired: list[str] = []
     scheduler = CronScheduler(
@@ -409,7 +409,7 @@ def test_daemon_mode_no_override_falls_back(tmp_path: Path) -> None:
 
 
 def test_daemon_mode_async_scheduler(tmp_path: Path) -> None:
-    """F-22-G9: AsyncCronScheduler respects dir_override and lock_identity."""
+    """AsyncCronScheduler respects dir_override and lock_identity."""
     alt_root = tmp_path / "async-daemon-workspace"
     alt_root.mkdir()
 

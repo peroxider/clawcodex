@@ -1,4 +1,4 @@
-"""Tests for SOP Converter F-50: SourceCodeParser + enhanced SkillGrouper + AgentMarkdownWriter."""
+"""Tests for SOP Converter: SourceCodeParser + enhanced SkillGrouper + AgentMarkdownWriter."""
 
 from __future__ import annotations
 
@@ -1292,7 +1292,7 @@ class TestAgentBuilder:
             builder.build(format="invalid")
 
     def test_overview_built_from_skills_not_components(self) -> None:
-        """F-55: overview agent reflects grouped skills, not raw components."""
+        """overview agent reflects grouped skills, not raw components."""
         ops_a = [SourceOperation(name="op_a", description="Op A")]
         ops_b = [SourceOperation(name="op_b", description="Op B")]
         comp_a = SourceComponent(
@@ -1322,7 +1322,7 @@ class TestAgentBuilder:
             assert "merged_skill" in agent_content
 
     def test_multi_skill_overview_generation(self) -> None:
-        """F-55: multiple grouped skills → overview agent generated."""
+        """multiple grouped skills → overview agent generated."""
         skills = [
             SkillSpec(name="skill_a", description="Skill A", allowed_tools=["tool_a1"]),
             SkillSpec(name="skill_b", description="Skill B", allowed_tools=["tool_b1"]),

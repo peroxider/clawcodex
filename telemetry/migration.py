@@ -1,6 +1,6 @@
-"""F-97-L schema v1 → v2 migration helpers.
+"""Schema v1 → v2 migration helpers.
 
-The on-disk event format grew from v1 to v2 in F-97-L. The breaking
+The on-disk event format grew from v1 to v2. The breaking
 change is the shape of ``fields["fingerprint"]``:
 
 * v1: ``"abc1234567890def"`` (16-char hex string)

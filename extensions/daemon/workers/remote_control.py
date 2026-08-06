@@ -1,6 +1,6 @@
 """``remoteControl`` daemon worker（重构版）。
 
-F-84 重构：不再依赖 Anthropic Cloud bridge。
+重构：不再依赖 Anthropic Cloud bridge。
 
 现在 ``remoteControl`` worker 是 :class:`TaskServerWorker`
 的薄封装 —— 监听本地 Unix Domain Socket，接受 JSON 行协议的

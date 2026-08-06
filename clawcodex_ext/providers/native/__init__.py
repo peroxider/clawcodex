@@ -1,4 +1,4 @@
-"""Native SDK adapter factory for F-72 (P72-D).
+"""Native SDK adapter factory.
 
 This package re-implements a slim set of provider classes that talk
 directly to vendor SDKs (``openai``, ``google-genai``) rather than
@@ -7,7 +7,7 @@ features (Gemini's ``SafetySetting``, OpenAI's ``response_format``
 JSON-Schema mode, Grok's tool-calling variant) that the universal
 LiteLLM facade tends to flatten.
 
-The factory follows the resolution order spelled out in the F-72
+The factory follows the resolution order spelled out in the
 plan:
 
 1. If the caller passed an explicit provider class, build it.
@@ -21,7 +21,7 @@ plan:
 
 The :func:`create_native_provider` helper is the public entry point;
 :func:`get_native_provider_class` is a thin wrapper around the
-internal registry that the F-72 wiring code in
+internal registry that the wiring code in
 ``clawcodex_ext.providers.factory`` uses when a caller asks for a
 native adapter by name.
 """
@@ -125,7 +125,7 @@ def create_native_provider(
 
     The factory is deliberately permissive: any failure (unknown
     name, missing SDK, bad config) returns ``None`` so the caller
-    can fall back to LiteLLM without a try/except. The F-72 plan
+    can fall back to LiteLLM without a try/except. The plan
     calls this "soft fallback" — the native path is an
     *optimisation*, not a requirement.
 

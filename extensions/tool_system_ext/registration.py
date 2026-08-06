@@ -26,22 +26,22 @@ EXTENSION_TOOLS: list[Tool] = [
     TaskDirectivesTool,
     TaskInspectTool,
     make_create_agent_tool(),
-    # F-94 BG_SESSIONS — Agent-facing background session query/control.
+    # Agent-facing background session query/control.
     # Tool self-gates on CLAWCODEX_BG_SESSIONS (returns {disabled: true}
     # when off), so unconditional registration is safe.
     BgSessionTool,
-    # F-97 LODESTONE — Deep-link anchor parser + resolver.
+    # Deep-link anchor parser + resolver.
     # Self-gates on ``LODESTONE=off`` (renderer falls back to plain
     # text), so unconditional registration is safe.
     LodestoneTool,
-    # F-57 Phase 5/B — session macro register / from-trace / promote
+    # Session macro register / from-trace / promote
     # (capability-gated; confirm wired by TUI/REPL).
     RegisterMacroWorkflowTool,
     RegisterMacroFromTraceTool,
     PromoteMacroWorkflowTool,
 ]
 
-# F-62 Chrome browser automation — seven ``chrome_*`` tools
+# Chrome browser automation — seven ``chrome_*`` tools
 # registered when the optional chrome service module is importable.
 # The chrome controller depends on Playwright / Pillow / the MCP
 # SDK as optional dependencies; the tools themselves are built

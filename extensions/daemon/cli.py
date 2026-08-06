@@ -1,4 +1,4 @@
-"""``clawcodex-dev daemon`` CLI — supervisor lifecycle subcommands (F-84 P84-E/F).
+"""``clawcodex-dev daemon`` CLI — supervisor lifecycle subcommands.
 
 Verbs
 -----
@@ -68,8 +68,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="clawcodex daemon",
         description=(
-            "Long-running daemon supervisor for ClawCodex workers "
-            "(F-84). Use 'start' to fork the supervisor, 'stop' to "
+            "Long-running daemon supervisor for ClawCodex workers. "
+            "Use 'start' to fork the supervisor, 'stop' to "
             "shut it down, 'status' to inspect it."
         ),
     )

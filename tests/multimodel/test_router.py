@@ -1,4 +1,4 @@
-"""Behavioural coverage for the transparent F-157 provider router."""
+"""Behavioural coverage for the transparent multi-model provider router."""
 
 from __future__ import annotations
 

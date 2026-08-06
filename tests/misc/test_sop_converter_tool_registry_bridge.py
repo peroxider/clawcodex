@@ -1260,7 +1260,7 @@ class TestRegisterComponentTools(unittest.TestCase):
         self.assertEqual(len(list(self.scripts_dir.iterdir())), 2)
 
     def test_register_create_kind_tool_enriches_call_impl(self) -> None:
-        """F-55 L1: create-kind ops get --catalog-metadata + bundle env prefix."""
+        """create-kind ops get --catalog-metadata + bundle env prefix."""
         with tempfile.TemporaryDirectory() as tmp:
             source_dir = Path(tmp) / "proj"
             source_dir.mkdir()
@@ -2163,7 +2163,7 @@ class TestPydanticParamCoercion(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# CLI handler subprocess bridge (F-52)
+# CLI handler subprocess bridge
 # ---------------------------------------------------------------------------
 
 

@@ -1,4 +1,4 @@
-"""Full-duplex voice dialogue abstraction — F-65 P65-A.
+"""Full-duplex voice dialogue abstraction.
 
 Defines the interface every full-duplex voice backend (MiniMax Realtime,
 OpenAI GPT-4o Voice, etc.) must implement. A full-duplex provider owns a
@@ -18,7 +18,7 @@ in one pipe. Pulling transcripts out of a transcript stream and pushing
 text into a TTS stream would double the latency and lose the server's
 VAD / turn-taking state. The single-pipe design is what makes
 sub-second end-to-end response possible — so the abstraction mirrors it.
-The standalone STT and TTS providers stay around as the F-64 half-duplex
+The standalone STT and TTS providers stay around as the half-duplex
 / 试听 fallback paths.
 
 Lifecycle

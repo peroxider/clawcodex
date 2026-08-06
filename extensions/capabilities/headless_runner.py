@@ -59,13 +59,13 @@ class HeadlessSessionOptions:
     # caller (QueryRunner) can cooperatively cancel a session running on
     # an executor thread it cannot otherwise kill.
     abort_controller: Any | None = None
-    # F-129 Phase 4: agent identity for pending_messages drain.
+    # Agent identity for pending_messages drain.
     # When set, the headless session's ToolContext gets this agent_id
     # and runtime_tasks, enabling real-time inject at ToolResult
     # boundaries via _drain_pending_user_messages.
     agent_id: str | None = None
     runtime_tasks: Any | None = None
-    # F-129 Phase 3: when set, run_headless calls Session.resume()
+    # When set, run_headless calls Session.resume()
     # to load the existing transcript into the Conversation.
     resume_session_id: str | None = None
 

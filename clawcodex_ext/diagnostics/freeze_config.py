@@ -1,4 +1,4 @@
-"""Layer-2/Layer-1 freeze-configuration resolution (F-108 §十八 P108-E).
+"""Layer-2/Layer-1 freeze-configuration resolution (§十八 P108-E).
 
 Centralises the env-var → settings dataclass resolution the freeze
 subsystem depends on, so a single import surface can answer:
@@ -22,11 +22,11 @@ from pathlib import Path
 from typing import Callable
 
 
-# F-108 §十八 acceptance §5: ``CLAWCODEX_FREEZE_DIAG=1`` flips the
+# §十八 acceptance §5: ``CLAWCODEX_FREEZE_DIAG=1`` flips the
 # watchdog on from an existing run without code changes.
 DIAG_ENV_VAR = "CLAWCODEX_FREEZE_DIAG"
 
-# F-108 §十八 design decision #5: ``0`` disables the Layer-2 budget
+# §十八 design decision #5: ``0`` disables the Layer-2 budget
 # without removing the watch — a fast-recovery escape hatch for users
 # who hit a known-false-positive.
 ENV_VAR_FOR: dict[str, str] = {
@@ -50,7 +50,7 @@ def env_var_for(field_name: str) -> str | None:
 
 @dataclass(frozen=True)
 class FreezeSettings:
-    """Frozen view of the F-108 freeze knobs.
+    """Frozen view of the freeze knobs.
 
     Kept distinct from :class:`clawcodex_ext.settings.types.FreezeSettings`
     so we don't import the full settings module in cold paths.
@@ -104,7 +104,7 @@ def resolve_freeze_settings(
     Resolution order per knob:
 
     1. Settings file (if ``settings_factory`` returns an object with a
-       ``freeze`` dataclass — the F-108 P108-E block we added to
+       ``freeze`` dataclass — the P108-E block we added to
        :class:`SettingsSchema`).
     2. Env var (from :data:`ENV_VAR_FOR`).
     3. :data:`DEFAULT_FREEZE_SETTINGS`.

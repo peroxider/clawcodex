@@ -1,4 +1,4 @@
-"""LLM-as-Judge 验证器 (F-114 P1)。
+"""LLM-as-Judge 验证器。
 
 使用 LLM 评估阶段输出，根据评分阈值判定通过/失败。
 用于 threshold GATE 模式的自动评分。

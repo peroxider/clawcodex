@@ -1,4 +1,4 @@
-"""Tests for ``clawcodex_ext.dreaming.cron_integration`` — F-100 / 100.5.
+"""Tests for ``clawcodex_ext.dreaming.cron_integration`` — cron integration.
 
 Covers the permanent-cron installer and the local fire handler that
 intercepts the dream task before it reaches the model outbox.

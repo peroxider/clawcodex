@@ -1,4 +1,4 @@
-"""F-97 LODESTONE — ``/link`` slash commands.
+"""LODESTONE — ``/link`` slash commands.
 
 Surface area:
 

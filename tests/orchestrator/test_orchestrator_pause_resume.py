@@ -176,7 +176,7 @@ class TestRegistryPausedStatus(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# F-105: pause must invalidate the per-session state cache
+# pause must invalidate the per-session state cache
 # ---------------------------------------------------------------------------
 
 
@@ -210,7 +210,7 @@ class TestPauseInvalidatesStateCache(unittest.TestCase):
         self.assertFalse(session.state_cache.should_skip_poll(session.issue.id, turn=2))
 
     def test_pause_without_state_cache_is_safe(self) -> None:
-        """Sessions created before F-105 (or with the cache disabled)
+        """Sessions created before this feature existed (or with the cache disabled)
         have ``state_cache=None``; pause must not crash."""
         session = _make_session()
         self.assertIsNone(session.state_cache)

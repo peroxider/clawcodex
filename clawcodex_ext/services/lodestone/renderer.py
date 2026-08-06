@@ -1,4 +1,4 @@
-"""F-97 LODESTONE — renderer.
+"""LODESTONE — renderer.
 
 Three output sinks:
 

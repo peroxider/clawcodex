@@ -538,7 +538,7 @@ _CRON_PROMPT_PRELUDE = "This prompt was generated automatically from a scheduled
 def _wrap_cron_prompt(prompt: str, task_id: str = "", run_id: str = "") -> str:
     """Wrap a cron prompt with context so the LLM knows it's automated.
 
-    F-22-G-2: signature now matches the
+    Cron dispatch bridge: signature now matches the
     ``Callable[[prompt, task_id, run_id], str]`` shape expected by
     :class:`CronDispatchBridge`. ``run_id`` is currently unused but
     is reserved for future runs-by-id display.
@@ -828,7 +828,7 @@ class ClawcodexREPL:
         else:
             self.tool_context.permission_handler = self._handle_permission_ask_request
 
-        # F-57 Phase 5 — main REPL may register session macros. Confirm
+        # Phase 5 — main REPL may register session macros. Confirm
         # uses a dedicated y/n prompt (NOT permission don't-ask-again).
         self.tool_context.allow_session_macro_registration = True
         self.tool_context.confirm_session_macro_plan = self._confirm_session_macro_plan
@@ -2170,7 +2170,7 @@ class ClawcodexREPL:
         except Exception:
             pass
 
-        # F-53: auto-expose non-core tools as /<tool-name> slash commands.
+        # Auto-expose non-core tools: auto-expose non-core tools as /<tool-name> slash commands.
         # The runtime ``tool_registry`` is captured lazily at invocation
         # time via ``context.tool_registry`` (set by
         # ``attach_downstream_context`` below), so we only need a
@@ -2365,7 +2365,7 @@ class ClawcodexREPL:
                         result.text,
                         command=result.command_name,
                     )
-                # F-122-F: long /btw answers carry scrollable=True. Route
+                # Scrollable answer viewer: long /btw answers carry scrollable=True. Route
                 # them through the keyboard-scrolled viewer so the user
                 # can navigate instead of seeing a wall of text scroll
                 # past. Falls back to a flat print when prompt_toolkit is
@@ -2729,7 +2729,7 @@ class ClawcodexREPL:
             return
 
     # ------------------------------------------------------------------
-    # F-122-F: scrollable answer viewer for /btw side questions
+    # Scrollable answer viewer: scrollable answer viewer for /btw side questions
     # ------------------------------------------------------------------
     # /btw answers can be long (multi-paragraph explanations). Dumping them
     # in a single block makes them scroll past unreadable. When the engine
@@ -2743,7 +2743,7 @@ class ClawcodexREPL:
     _SCROLL_VIEWER_MIN_WINDOW = 5  # never paginate fewer than this many lines
 
     def _print_scrollable_text(self, text: str, *, command: str = "") -> None:
-        """Render *text* in a keyboard-scrollable viewer (F-122-F).
+        """Render *text* in a keyboard-scrollable viewer (scrollable answer viewer).
 
         The viewer opens only if the body exceeds one terminal page; if the
         whole answer fits, we degrade to a flat print (no extra keystroke
@@ -3842,7 +3842,7 @@ class ClawcodexREPL:
         outbox pile-up when a recurring task's interval is shorter than
         its execution time.
 
-        F-22-G-2: the typed-or-dict parsing and prompt wrapping is now
+        Cron dispatch bridge: the typed-or-dict parsing and prompt wrapping is now
         delegated to :class:`CronDispatchBridge.drain` /
         :meth:`CronDispatchBridge.drain_missed`. The accumulation
         guard stays here because it depends on the per-REPL-session
@@ -4309,11 +4309,11 @@ class ClawcodexREPL:
         include background agent output. The JSONL transcript has the complete
         history and is used by TailFollower in TUI --resume mode.
 
-        F-49 Phase 0.4.2: if Session.resume() already populated messages
+        Phase 0.4.2: if Session.resume() already populated messages
         (via the core Phase 0.4.1 fix in session.py), this method is a
         quick-return no-op — kept as a defensive double-check.
         """
-        # F-49 Phase 0.4.2: quick-return if messages already populated
+        # Phase 0.4.2: quick-return if messages already populated
         # by Session.resume()'s JSONL back-fill (Phase 0.4.1).
         if self.session.conversation.messages:
             return
@@ -4424,7 +4424,7 @@ class ClawcodexREPL:
             content = getattr(msg, "content", None)
 
             if role == "system":
-                # F-103: Render away_summary (Recapitulate) system messages
+                # Render away_summary (Recapitulate) system messages
                 # instead of skipping them, matching live-chat behaviour where
                 # _print_local_command_text renders /recap output as Markdown.
                 subtype = getattr(msg, "subtype", None) or ""
@@ -4713,7 +4713,7 @@ class ClawcodexREPL:
             style=self._p.text_muted,
         )
 
-        # F-97 telemetry notice — show when both stats collection and error
+        # Telemetry notice — show when both stats collection and error
         # reporting are enabled.  Best-effort & swallowed on failure so a
         # misconfigured telemetry package never blocks REPL startup.
         try:
@@ -5121,7 +5121,7 @@ class ClawcodexREPL:
                 # TUI-only commands — keep only the truly TUI-specific ones here
                 "repl",
                 "theme",
-                # F-43 runtime commands: /provider and /model are routed via
+                # Runtime slash commands: /provider and /model are routed via
                 # the new command system (clawcodex_ext/cli/runtime_commands.py)
                 # and work in both REPL and TUI; do NOT mark them TUI-only.
                 "",
@@ -5430,7 +5430,7 @@ class ClawcodexREPL:
 
         elif cmd.startswith("/provider"):
             # Safety fallback: /provider may have failed through the new
-            # command system path (F-43). Try direct sync execution.
+            # command system path (runtime slash commands). Try direct sync execution.
             parts = raw.split(maxsplit=1)
             provider_args = parts[1] if len(parts) > 1 else ""
             try:
@@ -7260,7 +7260,7 @@ class ClawcodexREPL:
             command_context.session = loaded_session
             command_context.conversation = loaded_session.conversation
             command_context.tool_context = self.tool_context
-        # F-57 Phase 5: drop previous session overlay macros after swap.
+        # Phase 5: drop previous session overlay macros after swap.
         if getattr(self, "tool_context", None) is not None:
             from clawcodex_ext.runtime.tool_context_binding import bind_tool_context_runtime
             from extensions.sop_converter.runtime.macros.session import clear_session_macros_for_context

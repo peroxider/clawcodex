@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""F-57 executable macro for invoking an agent from an F-56 catalog record."""
+"""Executable macro for invoking an agent from a catalog record."""
 
 from __future__ import annotations
 
@@ -49,9 +49,9 @@ def invoke_existing_agent(
     resource_type: str = "",
     agent_id: str = "",
 ) -> dict[str, Any]:
-    """Execute F-57: load record, materialize agent, invoke, return output.
+    """Execute: load record, materialize agent, invoke, return output.
 
-    ``resource_type`` is accepted only for compatibility with pre-F-57
+    ``resource_type`` is accepted only for compatibility with legacy
     generated fallback wrappers. ``agent_ref`` may be the stable ID or the
     persisted agent name; ``agent_id`` remains a backwards-compatible alias.
     """

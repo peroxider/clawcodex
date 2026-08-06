@@ -1,4 +1,4 @@
-"""F-REC tooling: ancillary utilities that operate on ``.cast`` artifacts.
+"""Recording tooling: ancillary utilities that operate on ``.cast`` artifacts.
 
 Currently ships :mod:`extensions.recording.tools.cast_to_mp4`, which
 turns a recorded ``.cast`` file into a sequence of PNG frames and then

@@ -1,4 +1,4 @@
-"""F-65 P65-B — :class:`LangfuseSink` analytics sink.
+"""LangfuseSink analytics sink.
 
 Translates :class:`AnalyticsEvent` records into Langfuse traces,
 spans, and generations, and keeps a local in-memory buffer of the

@@ -1,7 +1,7 @@
-"""F-167-A: DashboardEntry/Source/Sink Protocol inlined into visualizer.
+"""DashboardEntry/Source/Sink Protocol inlined into visualizer.
 
 Originally this Protocol module lived at
-``extensions/capabilities/dashboard_entry.py``. F-167 copies it here so
+``extensions/capabilities/dashboard_entry.py``. It is copied here so
 the visualizer package is self-contained and can be lifted out as an
 independent PyPI distribution (``clawcodex-visualizer``) without
 pulling in the upstream ``extensions.capabilities`` package.

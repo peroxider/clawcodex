@@ -3,7 +3,7 @@
 These tests verify that the CLI and TUI can start without crashing.
 They serve as regression detection for issues like missing imports,
 AttributeError at startup, or broken dependency chains — especially
-after refactoring or decoupling work (F-48).
+after refactoring or decoupling work.
 
 Two styles:
 1. Subprocess-based CLI tests — actually runs ``python -m src.cli``

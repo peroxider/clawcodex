@@ -1,4 +1,4 @@
-# F-97 telemetry example configuration
+# Telemetry example configuration
 #
 # TODO before formal release:
 #   enabled = false
@@ -10,8 +10,8 @@
 # to local JSONL; the crashes.total > 0 gate ensures only error days
 # trigger a remote push.
 #
-# This file shows every key the F-97 telemetry system understands. Drop
-# it into your project as `telemetry.toml` (the location the F-97
+# This file shows every key the telemetry system understands. Drop
+# it into your project as `telemetry.toml` (the location the telemetry
 # loader probes automatically) or copy the `[tool.clawcodex.telemetry]`
 # table into your existing `pyproject.toml`.
 #
@@ -22,7 +22,7 @@
 #   4. src.config JSON section                    (wins on collision)
 #   5. CLAW_TELEMETRY_* environment variables
 #
-# All toggles default to off — you must opt in explicitly. F-97 is
+# All toggles default to off — you must opt in explicitly. Telemetry is
 # privacy-first; see the telemetry data model for the event schema.
 #
 # Token auto-detection (when api_key / token_env are unset):

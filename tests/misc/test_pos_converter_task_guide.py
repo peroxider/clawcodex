@@ -504,7 +504,7 @@ class TestRegistryChainInjection(unittest.TestCase):
 
 
 class TestMacroRouteTaskGuideRows(unittest.TestCase):
-    """F-57: bundle MacroRoute rows appear in Task Guide when allowlisted."""
+    """bundle MacroRoute rows appear in Task Guide when allowlisted."""
 
     def test_macro_rows_from_bundle_macros(self) -> None:
         import tempfile

@@ -1,4 +1,4 @@
-"""MiniMax T2A TTS provider — F-64 P64-E3.
+"""MiniMax T2A TTS provider.
 
 Implements :class:`TTSProvider` against MiniMax's ``POST /v1/t2a_v2``
 HTTP endpoint (Text-to-Audio v2). MiniMax T2A supports 8 models
@@ -9,7 +9,7 @@ with ``stream=true`` (hex-encoded PCM frames in a JSON envelope).
 Credentials
 -----------
 Same as P64-D1 STT: ``MINIMAX_API_KEY`` + ``MINIMAX_GROUP_ID`` env, or
-``~/.clawcodex/tts/minimax/credentials.json``. The two F-64 sub-features
+``~/.clawcodex/tts/minimax/credentials.json``. The two sub-features
 share the credential file (per f-64-voice-mode.md §5.8).
 
 Streaming

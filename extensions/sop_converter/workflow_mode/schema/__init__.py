@@ -1,4 +1,4 @@
-"""F-50-D workflow YAML schema helpers."""
+"""Workflow YAML schema helpers."""
 
 from .emitter import emit_engine_workflow_yaml, graph_to_engine_yaml_dict
 from .dag_validator import validate_workflow_dict

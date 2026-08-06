@@ -413,7 +413,7 @@ class InteractiveOutcome:
     hardcodes away). ``display == "skip"`` signals "produce no output" (TS
     ``display: 'skip'``); use :meth:`skip` for the cancelled path.
 
-    ``scrollable`` (F-122-F) hints that the rendered body may exceed the
+    ``scrollable`` hints that the rendered body may exceed the
     terminal height and the surface should consider entering a paginated /
     keyboard-scrolled view. The engine transparently propagates the flag
     onto :class:`CommandResult`; surfaces that do not implement scroll
@@ -424,7 +424,7 @@ class InteractiveOutcome:
     display: str = "system"  # "skip" | "system" | "user"
     should_query: bool = False  # TS onDone.shouldQuery
     meta_messages: list[str] = field(default_factory=list)  # TS onDone.metaMessages
-    # F-122-F: surface should consider scrollable rendering for ``message``.
+    # Surface should consider scrollable rendering for ``message``.
     # Defaults to False so existing interactive commands keep their current
     # behaviour (single block print).
     scrollable: bool = False

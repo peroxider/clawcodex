@@ -1,4 +1,4 @@
-"""F-50-C capability profile data models."""
+"""Capability profile data models."""
 
 from __future__ import annotations
 

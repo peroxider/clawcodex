@@ -325,7 +325,7 @@ class AgentMarkdownWriter:
             输出根目录（函数会在其中创建 ``.claude/agents/``）。
         bundle : str | Path | None
             Optional bundle directory. When provided, the generated domain
-            agent body includes the F-55 lifecycle prompt block if the bundle
+            agent body includes the lifecycle prompt block if the bundle
             contains ``.clawcodex/tool-dependencies.yaml``.
 
         Returns

@@ -1,4 +1,4 @@
-"""F-49 takeover: read-only snapshot viewer for a running orchestrator agent.
+"""Takeover: read-only snapshot viewer for a running orchestrator agent.
 
 Spawns a ``--resume`` REPL against the agent's ``run_id`` so the operator
 can inspect the current conversation history. The orchestrator agent is

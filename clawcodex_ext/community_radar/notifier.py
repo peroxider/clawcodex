@@ -1,10 +1,10 @@
-"""Phase 4 notification integration for SR-5.1.
+"""Phase 4 notification integration for the community feature radar.
 
 Pushes a digest summary to user-configured notification channels via the
-existing F-63 Channels system (``src.services.channels``).
+existing Channels system (``src.services.channels``).
 
 Why ``Channels``:
-* The F-63 stack already abstracts Feishu / Slack / Discord / WeChat /
+* The Channels stack already abstracts Feishu / Slack / Discord / WeChat /
   MCP-push transports with a uniform ``ChannelManager.broadcast`` API.
 * The notifications are best-effort: a single failing channel never
   blocks the others, and the radar never crashes when no channels are
@@ -34,7 +34,7 @@ Configuration:
 Payload:
 * Title: ``ClawCodex 社区动态 {period_label}`` (e.g. ``周报``).
 * Body: digest summary + top-5 trending features (title + score +
-  category). Keeps the message under the F-63 30 000-character cap so
+  category). Keeps the message under the 30 000-character cap so
   the broadcast path never truncates.
 * Level: ``SUCCESS`` when ``len(trending) > 0``, else ``INFO``.
 * Metadata: digest stats + the markdown path so users can jump to the
@@ -66,14 +66,14 @@ NOTIFY_CONFIG_RELATIVE_PATH = Path(".clawcodex") / "community-radar" / "notify.y
 
 
 def _load_channels_module() -> Any:
-    """Return the F-63 channels package or None on ImportError."""
+    """Return the Channels package or None on ImportError."""
     try:
         from src.services.channels import base as _base  # type: ignore
         from src.services.channels import models as _models  # type: ignore
 
         return {"base": _base, "models": _models}
     except Exception as exc:  # noqa: BLE001
-        _log.debug("F-63 Channels unavailable: %s", exc)
+        _log.debug("Channels unavailable: %s", exc)
         return None
 
 
@@ -131,7 +131,7 @@ def _load_notify_config(path: Path | None = None) -> NotifyConfig:
 
 
 class DigestNotifier:
-    """Broadcast a digest summary via F-63 Channels.
+    """Broadcast a digest summary via Channels.
 
     ``manager_factory`` is a test seam; production code passes ``None``
     and the notifier builds a fresh :class:`ChannelManager`. Tests can
@@ -176,7 +176,7 @@ class DigestNotifier:
         channels_module = _load_channels_module()
         if channels_module is None:
             _log.warning(
-                "F-63 Channels unavailable; install or fix Channels to enable notifications."
+                "Channels unavailable; install or fix Channels to enable notifications."
             )
             return {"_error": False}  # type: ignore[dict-item]
 
@@ -295,9 +295,9 @@ def build_digest_message(
     issue_sync_created: list[dict[str, Any]] | None = None,
     repo_url: str = "",
 ) -> Any:
-    """Build the F-63 ``ChannelMessage`` broadcast by :class:`DigestNotifier`.
+    """Build the ``ChannelMessage`` broadcast by :class:`DigestNotifier`.
 
-    Imported lazily so importing this module never requires F-63.
+    Imported lazily so importing this module never requires the Channels system.
     """
     channels_module = _load_channels_module()
     if channels_module is None:

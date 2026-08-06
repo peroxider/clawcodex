@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from src.utils.abort_controller import AbortSignal
 
 
-# Downstream F-99: cap a blocking SDK read so platforms where a cross-thread
+# Downstream: cap a blocking SDK read so platforms where a cross-thread
 # response.close() is advisory still surface an exception promptly. Explicit
 # clients/timeouts supplied by callers remain authoritative.
 _F99_READ_TIMEOUT = 5.0

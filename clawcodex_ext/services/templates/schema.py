@@ -51,7 +51,7 @@ TEMPLATE_TOP_LEVEL_KEYS: frozenset[str] = frozenset(
         "fields",
         "metadata",
         "source",
-        # F-95 convenience keys. They are normalized into metadata/fields
+        # Convenience keys. They are normalized into metadata/fields
         # before constructing Template so the storage model remains stable.
         "kind",
         "variables",

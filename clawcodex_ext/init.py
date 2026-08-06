@@ -147,7 +147,7 @@ def init() -> None:
     ensure_eager_extensions_installed()
     profile_checkpoint("init_after_eager_extensions")
 
-    # F-68: initialize the feature-gate registry so that
+    # initialize the feature-gate registry so that
     # ``@feature_gated`` decorators and ``registry.is_enabled()``
     # calls work from the earliest possible point in the agent loop.
     _logger.info("init: initializing feature-gate registry")
@@ -233,10 +233,10 @@ def init() -> None:
     except Exception as exc:  # noqa: BLE001
         _logger.debug("init: feature-gate registry init failed: %s", exc)
 
-    # F-97: install global exception hooks. Idempotent and best-effort —
+    # install global exception hooks. Idempotent and best-effort —
     # a misconfigured telemetry config must never block init. Local
     # import avoids pinning telemetry in ``src.init``'s module surface.
-    _logger.info("init: installing F-97 exception hooks")
+    _logger.info("init: installing telemetry exception hooks")
     try:
         from telemetry.hooks import install_exception_hooks
 
@@ -245,7 +245,7 @@ def init() -> None:
         _logger.debug("init: telemetry hook install failed: %s", exc)
     profile_checkpoint("init_after_telemetry_hooks")
 
-    # F-97: register telemetry shutdown flush so the aggregator and
+    # register telemetry shutdown flush so the aggregator and
     # reporter emit run on SIGINT/SIGTERM/atexit. Idempotent, best-effort.
     _logger.info("init: registering telemetry shutdown flush")
     try:
@@ -256,7 +256,7 @@ def init() -> None:
         _logger.debug("init: telemetry shutdown flush install failed: %s", exc)
     profile_checkpoint("init_after_telemetry_shutdown_flush")
 
-    # F-108 P108-D: opt-in freeze-detection watchdog. ``maybe_start_from_env``
+    # opt-in freeze-detection watchdog. ``maybe_start_from_env``
     # is a no-op when ``CLAWCODEX_FREEZE_DIAG`` is unset, so this adds no
     # overhead to normal runs. When the env var is set it spawns the daemon
     # thread that dumps thread stacks after ``threshold_s`` of silence.

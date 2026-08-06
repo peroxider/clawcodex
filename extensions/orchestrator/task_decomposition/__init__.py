@@ -1,4 +1,4 @@
-"""Dynamic task decomposition primitives for F-118."""
+"""Dynamic task decomposition primitives."""
 
 from .models import Subtask, TaskPlan
 from .planner import (

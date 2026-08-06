@@ -1,13 +1,13 @@
-"""二开 permissions extensions — F-47 structured permissions read path.
+"""二开 permissions extensions — structured permissions read path.
 
 Extracted from ``src/permissions/modes.py`` so the upstream mode
-resolution stays free of F-47-specific config aggregation concerns.
+resolution stays free of structured permissions config aggregation concerns.
 
 Architecture::
 
     src/permissions/modes.py              ← upstream (calls hooks below)
         ↑ import
-    extensions/permissions/perms_reader.py ← this module (F-47 read path)
+    extensions/permissions/perms_reader.py ← this module (structured permissions read path)
 
 Two public helpers:
 
@@ -26,7 +26,7 @@ from typing import Any
 def settings_perms_structured_is_explicit(perms_obj: Any) -> bool:
     """True when :class:`PermissionsConfig` carries any user-set value.
 
-    F-47 (2026-06-02): the structured field is always populated (defaults
+    The structured field is always populated (defaults
     are non-None), so we can't use "field is None" to detect "user set it".
     Instead we look for any value that diverges from the dataclass defaults
     -- a non-empty rules bucket, a behavior key not in the default
@@ -62,15 +62,15 @@ def settings_perms_structured_is_explicit(perms_obj: Any) -> bool:
 def settings_perms(settings: Any) -> dict[str, Any]:
     """Aggregate all readable ``permissions`` sub-keys from a settings object.
 
-    F-47 (2026-06-02): replaces the previous ``settings.extra["permissions"]``
+    Replaces the previous ``settings.extra["permissions"]``
     read path, which was the only working fallback under the legacy
-    ``list[PermissionRule]`` schema but became a dead-end once F-47 promoted
-    ``permissions`` to a structured :class:`PermissionsConfig` field.
+    ``list[PermissionRule]`` schema but became a dead-end once
+    ``permissions`` was promoted to a structured :class:`PermissionsConfig` field.
 
     Semantic:
 
     * Legacy ``settings.extra["permissions"]`` is the *baseline* (covers
-      pre-F-47 binaries that wrote the dict into ``extra``).
+      legacy binaries that wrote the dict into ``extra``).
     * Structured :class:`PermissionsConfig` *overrides* the baseline only
       when it carries an explicit non-default value
       (see :func:`settings_perms_structured_is_explicit`). The structured
@@ -86,7 +86,7 @@ def settings_perms(settings: Any) -> dict[str, Any]:
     if settings is None:
         return bag
 
-    # 1. Legacy baseline (pre-F-47 / F-47-landing window fallback).
+    # 1. Legacy baseline (legacy / landing-window fallback).
     legacy = getattr(settings, "extra", None)
     if isinstance(legacy, dict):
         legacy_perms = legacy.get("permissions")

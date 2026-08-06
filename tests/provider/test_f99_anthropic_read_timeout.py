@@ -1,4 +1,4 @@
-"""F-99 方案1 tests — ``AnthropicProvider._ensure_client`` read_timeout bound.
+"""Read timeout tests — ``AnthropicProvider._ensure_client`` read_timeout bound.
 
 The fix caps the blocking httpx socket read at 5s so a Ctrl+C on
 platforms where ``response.close()`` is advisory (LiteLLM proxy,
@@ -61,7 +61,7 @@ def patched_anthropic(fake_anthropic_module):
 
 
 def test_read_timeout_constant_is_five_seconds() -> None:
-    """F-99: the bound is 5s — short enough to feel instant, long enough to
+    """The bound is 5s — short enough to feel instant, long enough to
     tolerate real network jitter on slow chunks.
 
     Pinning the constant prevents accidental drift (e.g. someone
@@ -72,7 +72,7 @@ def test_read_timeout_constant_is_five_seconds() -> None:
 
 
 def test_ensure_client_passes_timeout_kwarg(fresh_provider, patched_anthropic) -> None:
-    """F-99 方案1: ``_ensure_client`` forwards a ``timeout=5.0`` kwarg.
+    """``_ensure_client`` forwards a ``timeout=5.0`` kwarg.
 
     The Anthropic SDK accepts ``timeout`` as either an ``httpx.Timeout``
     or a float (defaults applied). Pinning the kwarg rather than the
@@ -90,10 +90,10 @@ def test_ensure_client_passes_timeout_kwarg(fresh_provider, patched_anthropic) -
 
 
 def test_ensure_client_preserves_explicit_timeout(fresh_provider, patched_anthropic) -> None:
-    """F-99: caller-supplied ``timeout`` overrides the F-99 default.
+    """Caller-supplied ``timeout`` overrides the read timeout default.
 
     If a future caller threads an ``http_client`` or custom
-    ``timeout`` through ``_client_kwargs``, F-99 must not stomp on
+    ``timeout`` through ``_client_kwargs``, the read timeout must not stomp on
     it. The ``if 'timeout' not in kwargs`` guard makes the
     override opt-in: callers that need the old behaviour can
     request it explicitly.
@@ -108,12 +108,12 @@ def test_ensure_client_preserves_explicit_timeout(fresh_provider, patched_anthro
 
 
 def test_ensure_client_preserves_explicit_http_client(fresh_provider, patched_anthropic) -> None:
-    """F-99: caller-supplied ``http_client`` wins over the F-99 timeout.
+    """Caller-supplied ``http_client`` wins over the read timeout.
 
     A caller that builds their own httpx client (e.g. with proxy,
-    SSL context, or telemetry hooks) wants F-99 to stay out of the
+    SSL context, or telemetry hooks) wants the read timeout to stay out of the
     way. The ``if 'http_client' not in kwargs`` guard ensures the
-    F-99 timeout is only applied when the SDK is responsible for
+    read timeout is only applied when the SDK is responsible for
     building its own httpx client.
     """
     mod, fake_anthropic_module = patched_anthropic
@@ -121,17 +121,17 @@ def test_ensure_client_preserves_explicit_http_client(fresh_provider, patched_an
     fresh_provider._client_kwargs["http_client"] = custom_http
     fresh_provider._ensure_client()
     call_kwargs = fake_anthropic_module.Anthropic.call_args.kwargs
-    # When http_client is supplied, F-99 must NOT also supply
+    # When http_client is supplied, the read timeout must NOT also supply
     # timeout — the user's client owns its own timeout config.
     assert "timeout" not in call_kwargs
     assert call_kwargs.get("http_client") is custom_http
 
 
 def test_ensure_client_caches_client(fresh_provider, patched_anthropic) -> None:
-    """F-99: subsequent calls return the cached client.
+    """Subsequent calls return the cached client.
 
     The existing cache contract (set ``self.client`` once, return
-    the same instance) must be preserved by the F-99 fix. This pins
+    the same instance) must be preserved by the read timeout fix. This pins
     that we don't accidentally rebuild the client per request.
     """
     mod, fake_anthropic_module = patched_anthropic
@@ -143,9 +143,9 @@ def test_ensure_client_caches_client(fresh_provider, patched_anthropic) -> None:
 
 
 def test_ensure_client_forwards_base_url(fresh_provider, patched_anthropic) -> None:
-    """F-99: ``base_url`` (and any other ``_client_kwargs`` keys) still forwarded.
+    """``base_url`` (and any other ``_client_kwargs`` keys) still forwarded.
 
-    Regression guard — the F-99 fix only adds a default ``timeout``
+    Regression guard — the read timeout fix only adds a default ``timeout``
     kwarg; existing keys must still reach the constructor so the
     proxy / custom-endpoint flow keeps working.
     """

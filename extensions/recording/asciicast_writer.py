@@ -5,8 +5,8 @@ Owns one ``.cast`` file. The writer:
 * writes the JSON header on :meth:`open`,
 * converts :class:`AsciicastEvent` instances into JSONL lines,
 * flushes after every frame (per-frame flush keeps ``tail -f`` working
-  and matches the recording-strategy decision documented in the F-REC
-  plan),
+  and matches the recording-strategy decision documented in the
+  recording plan),
 * serializes concurrent emits via a ``threading.Lock`` so multiple
   :class:`ProgressSink` instances can fan into one writer.
 

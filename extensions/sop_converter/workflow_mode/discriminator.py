@@ -1,4 +1,4 @@
-"""F-50-A workflow mode discriminator."""
+"""Workflow mode discriminator."""
 
 from __future__ import annotations
 

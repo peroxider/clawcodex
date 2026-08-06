@@ -1,4 +1,4 @@
-"""StageRunner 适配器 (F-111)。
+"""StageRunner 适配器。
 
 桥接 DeclarativeWorkflowEngine 与 AgentRunner，
 将阶段执行适配为 AgentRunner 可消费的合成 Issue 工作单元。
@@ -62,7 +62,7 @@ class DecisionRunResult:
 
 
 class StageRunner:
-    """阶段执行适配器 (F-111 DD-5)。
+    """阶段执行适配器。
 
     通过合成 Issue 调用 AgentRunner，复用其全部生命周期管理能力：
     - 停滞检测 (stagnation detection)
@@ -141,7 +141,7 @@ class StageRunner:
         )
 
     async def run_gate(self, stage_node: StageNode, state: WorkflowState) -> GateRunResult:
-        """执行 GATE 阶段 (F-112)。"""
+        """执行 GATE 阶段。"""
         mode = stage_node.gate_mode
         max_retries = stage_node.max_retries
 
@@ -175,7 +175,7 @@ class StageRunner:
         )
 
     async def run_decision(self, stage_node: StageNode, state: WorkflowState) -> DecisionRunResult:
-        """执行 DECISION 阶段 (F-113)。"""
+        """执行 DECISION 阶段。"""
         max_retries = stage_node.max_retries
 
         for attempt in range(max_retries + 1):

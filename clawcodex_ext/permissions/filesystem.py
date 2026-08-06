@@ -363,7 +363,7 @@ def _readable_internal_dirs(context: Any) -> list[Path]:
 
 
 def check_readable_catalog_path(file_path: str, context: Any = None) -> bool:
-    """True when ``file_path`` is an F-56 catalog JSON under known roots.
+    """True when ``file_path`` is a resource catalog JSON under known roots.
 
     Basename must be one of ``sop-resources.json``, ``catalog.json``,
     ``resource-catalog.json``, and the resolved path must sit under
@@ -511,12 +511,12 @@ def check_read_permission_for_tool(file_path: str, context: Any) -> PermissionRe
             ),
         )
 
-    # F-56 catalog JSON under CLAWCODEX_HOME / bundle .clawcodex.
+    # catalog JSON under CLAWCODEX_HOME / bundle .clawcodex.
     if check_readable_catalog_path(abs_path, context):
         return PermissionAllowDecision(
             behavior="allow",
             decision_reason=OtherDecisionReason(
-                reason="Read of an F-56 resource catalog file",
+                reason="Read of a resource catalog file",
             ),
         )
 

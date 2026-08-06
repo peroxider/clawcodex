@@ -1,4 +1,4 @@
-"""F-108 P108-H — ``clawcodex-dev diag`` CLI tests."""
+"""``clawcodex-dev diag`` CLI tests."""
 
 from __future__ import annotations
 

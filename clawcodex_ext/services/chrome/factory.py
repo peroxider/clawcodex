@@ -1,4 +1,4 @@
-"""F-62 P62-A/B/C — :func:`build_chrome_controller` and :func:`build_chrome_tools`.
+"""build_chrome_controller and build_chrome_tools.
 
 The factory resolves the best available :class:`ChromeController`
 based on the runtime environment:

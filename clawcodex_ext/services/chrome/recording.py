@@ -1,4 +1,4 @@
-"""F-62 P62-D — :class:`RecordingChromeController` wrapper.
+"""RecordingChromeController wrapper.
 
 A recording wrapper is *not* a standalone controller: it accepts
 any :class:`ChromeController` and layers GIF capture on top of it.

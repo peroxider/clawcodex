@@ -1,4 +1,4 @@
-"""Community digest generator for SR-5.1.
+"""Community digest generator for the community feature radar.
 
 Implements the ``CommunityDigest`` output format
 (Markdown for humans, JSON for automation)
@@ -11,7 +11,7 @@ plus the Phase 3 Jinja2 template rendering.
   the deterministic inline renderer that Phase 1 used.
 * The dual-write pattern (workspace + persistent) mirrors
   ``extensions/orchestrator/report_writer.py``.
-* A Phase 4 hook (:func:`render_proposals`) emits the SR-5.2-friendly
+* A Phase 4 hook (:func:`render_proposals`) emits the
   ``proposals.json`` file alongside the digest.
 """
 
@@ -960,7 +960,7 @@ class CommunityReporter:
         ``community-digest-<period>-<timestamp>`` convention.
 
         When ``write_proposals`` is True (the default) the reporter also
-        emits ``<stem>.proposals.json`` in the SR-5.2-friendly schema.
+        emits ``<stem>.proposals.json`` in the friendly schema.
 
         When ``compare`` is True, the reporter finds the most recent
         previous JSON digest in *output_dir* and renders a "变化对比"
@@ -1059,12 +1059,12 @@ def copy_to_persistent(
 
 
 # ---------------------------------------------------------------------------
-# Phase 4: SR-5.2-friendly proposals schema
+# Phase 4: proposals schema
 # ---------------------------------------------------------------------------
 
 
 def render_proposals(digest: CommunityDigest) -> dict[str, Any]:
-    """Render the ``proposals.json`` payload consumed by SR-5.2.
+    """Render the ``proposals.json`` payload consumed by the proposal pipeline.
 
     Each trending record becomes a :class:`FeatureProposal` with:
 
@@ -1077,7 +1077,7 @@ def render_proposals(digest: CommunityDigest) -> dict[str, Any]:
     * ``source_projects`` — which projects shipped it.
 
     The schema is intentionally additive to the main ``digest.json`` so
-    SR-5.2 can evolve without breaking Phase-1 readers.
+    the proposal pipeline can evolve without breaking Phase-1 readers.
     """
     proposals: list[dict[str, Any]] = []
     for item in digest.trending:

@@ -9,7 +9,7 @@ up adapters by name and gates every call through
 The legacy webhook channels (``BaseChannel`` subclasses) are wrapped by
 :class:`WebhookChannelAdapter`, which adapts their ``send -> bool``
 interface to the uniform ``ChannelSendResult`` contract. This keeps the
-existing F-63 channels and their tests untouched while bringing them
+existing webhook channels and their tests untouched while bringing them
 under the common contract.
 """
 

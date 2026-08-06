@@ -1,4 +1,4 @@
-# clawcodex-visualizer (F-167)
+# clawcodex-visualizer
 
 Standalone web visualizer for ClawCodex agent sessions — Gantt charts,
 timelines, performance analytics, and the live agent dashboard.
@@ -7,10 +7,9 @@ timelines, performance analytics, and the live agent dashboard.
 
 | Item | Value |
 |---|---|
-| **F-track** | F-167 (Visualizer Package Extraction) |
-| **Decoupling** | F-167-A/B/C/D/E/F/G — all landed on the `dev-decoupling-refactor` branch |
+| **Decoupling track** | Visualizer Package Extraction — all landed on the `dev-decoupling-refactor` branch |
 | **Upstream dep** | None (zero coupling to `src/`, `clawcodex_ext/`, or `extensions.capabilities`) |
-| **Reverse deps** | `extensions.recording.visualizer_dashboard_source` (F-167-D, adapter only) |
+| **Reverse deps** | `extensions.recording.visualizer_dashboard_source` (adapter only) |
 | **Entry point** | `clawcodex.commands → viz` |
 | **Install** | Currently rides in the monorepo `clawcodex-dev-mind` distribution; standalone PyPI metadata is staged in `extensions/visualizer/pyproject.toml` |
 
@@ -20,19 +19,19 @@ timelines, performance analytics, and the live agent dashboard.
 as a *low-cost extraction*: 25 Python files, ~6k lines, with hard
 two-layer coupling only in **1 file**
 (`asciicast_dashboard_source.py`, now relocated to `extensions.recording`
-under F-167-D). Every other file already depends only on `fastapi` /
+under the recorder adapter extraction). Every other file already depends only on `fastapi` /
 `pydantic` / the standard library, so it lifts into a standalone
 distribution with no surgery.
 
-## What lives here after F-167
+## What lives here after extraction
 
 - `extensions/visualizer/server.py` — FastAPI app (`create_app`)
 - `extensions/visualizer/ws.py` — WebSocket routers
 - `extensions/visualizer/orchestrator_link.py` — orchestrator proxy
 - `extensions/visualizer/import_router.py` — SSRF-protected session import
 - `extensions/visualizer/cli.py` — `clawcodex viz` entry point
-- `extensions/visualizer/_rendering.py` — **F-167-C** `panel()` helper (private)
-- `extensions/visualizer/protocols/` — **F-167-A/B** local copies of
+- `extensions/visualizer/_rendering.py` — **`panel()` helper** (private)
+- `extensions/visualizer/protocols/` — **local copies of**
   `extensions.capabilities.dashboard_entry` and
   `extensions.capabilities.recorder` Protocol dataclasses
 - `extensions/visualizer/builders/` — timeline / stats / agent-tree / anomaly / export
@@ -40,14 +39,14 @@ distribution with no surgery.
 - `extensions/visualizer/models/viz_models.py` — pydantic models
 - `extensions/visualizer/templates/` + `static/` — Jinja2 + frontend assets
 
-## What moved out under F-167
+## What moved out under extraction
 
-| Path (old) | Path (new) | F-track |
+| Path (old) | Path (new) | Component |
 |---|---|---|
-| `extensions/visualizer/asciicast_dashboard_source.py` | `extensions/recording/visualizer_dashboard_source.py` | F-167-D |
-| `extensions/recording/renderers.panel` | `extensions/visualizer/_rendering.panel` | F-167-C |
-| `extensions.capabilities.dashboard_entry` (visualizer deps) | `extensions.visualizer.protocols.dashboard` | F-167-A |
-| `extensions.capabilities.recorder` (visualizer deps) | `extensions.visualizer.protocols.recorder` | F-167-B |
+| `extensions/visualizer/asciicast_dashboard_source.py` | `extensions/recording/visualizer_dashboard_source.py` | recorder adapter |
+| `extensions/recording/renderers.panel` | `extensions/visualizer/_rendering.panel` | `panel()` helper |
+| `extensions.capabilities.dashboard_entry` (visualizer deps) | `extensions.visualizer.protocols.dashboard` | protocols |
+| `extensions.capabilities.recorder` (visualizer deps) | `extensions.visualizer.protocols.recorder` | protocols |
 
 ## Running
 

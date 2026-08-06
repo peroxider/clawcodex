@@ -114,7 +114,7 @@ class AgentToolConstants:
             "TodoWrite",
             "StructuredOutput",
             "resource-catalog",
-            # F-57 session-macro register / promote (not in convert bundles).
+            # session-macro register / promote (not in convert bundles).
             "register-macro-workflow",
             "register-macro-from-trace",
             "promote-macro-workflow",

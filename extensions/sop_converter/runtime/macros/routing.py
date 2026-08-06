@@ -169,7 +169,7 @@ def ensure_builtin_routes(catalog: MacroRouteCatalog | None = None) -> MacroRout
         target.register_route(
             MacroRoute(
                 phrases=[
-                    # F-57 §8.2 canonical + named-bot acceptance
+                    # canonical + named-bot acceptance
                     "用已创建的 agent 回复",
                     "用 verify-bot 回复",
                     "调用已有 agent",

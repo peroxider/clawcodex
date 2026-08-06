@@ -1,4 +1,4 @@
-"""F-22-J-1 / F-22-J-2: cron command aliases and ``--deep`` integration.
+"""Cron command aliases and ``--deep`` integration.
 
 Pins the contract from
 ``docs/feature_plan/05-cron-system/f-22-cron-execution.md`` §Phase J:

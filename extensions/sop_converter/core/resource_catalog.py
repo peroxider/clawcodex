@@ -1,11 +1,11 @@
-"""F-56 SOP Resource Catalog.
+"""SOP Resource Catalog.
 
 Persistent runtime resource handles for SOP-converted SDK tools.
 
 **Write path:** create tools upsert :class:`ResourceRecord` into
 ``resource-catalog.json`` via :func:`build_resource_record_from_create`.
 
-**Read path:** resolve only from the F-56 resource catalog (bundle/user/
+**Read path:** resolve only from the resource catalog (bundle/user/
 session locations). Legacy ``agent-catalog.json`` is no longer read or written.
 """
 
@@ -63,7 +63,7 @@ _PAYLOAD_STUB_FIELDS = frozenset(
 
 
 class ResourceCatalogError(RuntimeError):
-    """Catalog lookup failure with an F-56 machine-readable error code."""
+    """Catalog lookup failure with a machine-readable error code."""
 
     def __init__(self, error_code: str, message: str) -> None:
         super().__init__(message)
@@ -481,7 +481,7 @@ def format_resource_catalog_locations_block(
     *,
     bundle_id: str = "",
 ) -> str:
-    """Prompt block listing F-56 catalog locations for SOP agents.
+    """Prompt block listing catalog locations for SOP agents.
 
     Session path is a **template** (no concrete session id at startup).
     Instructs agents to use ``resource-catalog`` + Read — not workspace Grep.
@@ -932,7 +932,7 @@ def resolve_resource_catalog_path(
     scope: str | None = None,
     home_only: bool | None = None,
 ) -> ResourceCatalogLocation:
-    """Resolve one F-56 catalog path.
+    """Resolve one catalog path.
 
     ``scope`` may be ``"bundle"``, ``"user"``, ``"session"``, or ``None``.
     With ``None`` we prefer bundle-local when a bundle is available, otherwise
@@ -1262,7 +1262,7 @@ def iter_resource_catalog_locations(
     session_id: str | None = None,
     home_only: bool | None = None,
 ) -> Iterable[ResourceCatalogLocation]:
-    """Yield read locations in F-56 priority order."""
+    """Yield read locations in catalog priority order."""
     # Normalise: empty string → None so that the "no bundle" path uses the
     # home-directory fallback rather than resolving against CWD.
     if isinstance(bundle, str) and not bundle.strip():
@@ -1293,7 +1293,7 @@ def get_resource_record(
     bundle_id: str = "",
     catalog_context: CatalogExecutionContext | None = None,
 ) -> ResourceRecord:
-    """Load one registered F-56 resource without assuming Agent semantics.
+    """Load one registered resource without assuming Agent semantics.
 
     Generic resources resolve by their stable ID. The built-in Agent handler
     additionally supports persisted names in the resource catalog.
@@ -1340,7 +1340,7 @@ def resolve_agent_record(
     catalog_context: CatalogExecutionContext | None = None,
     resource_type: str = "",
 ) -> ResolvedResource:
-    """Resolve an agent record with catalog location for F-57 materialize."""
+    """Resolve an agent record with catalog location for runtime materialize."""
     if catalog_context is None:
         if isinstance(bundle_path, str) and not bundle_path.strip():
             bundle_path = None
@@ -1412,7 +1412,7 @@ def build_resource_record_from_create(
 ) -> ResourceRecord:
     """Build a :class:`ResourceRecord` directly from create-tool outputs.
 
-    This is the canonical write-path constructor for F-56 persistence.
+    This is the canonical write-path constructor for resource catalog persistence.
     """
     meta = dict(metadata or {})
     init = dict(init_kwargs or {})

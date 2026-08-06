@@ -1,6 +1,6 @@
-"""Back-compat shim for the F-38 :class:`ProgressReporter` (F-40).
+"""Back-compat shim for the legacy :class:`ProgressReporter`.
 
-After F-40 the canonical type is :class:`extensions.orchestrator.progress_sink.ProgressSink`,
+After the stagnation fix the canonical type is :class:`extensions.orchestrator.progress_sink.ProgressSink`,
 with :class:`ToolContextProgressSink` as the default implementation that
 writes events to ``ToolContext.tasks``. This module is kept so that any
 existing code still calling the old ``ProgressReporter(context)`` /
@@ -36,7 +36,7 @@ class ProgressReporter:
     re-created on every :meth:`set_task_id` call, so two reporters
     configured for different tasks never share state. ``on_event``
     dispatches to the three ``on_*_complete`` methods based on the
-    event's runtime type, matching the original F-38 behavior.
+    event's runtime type, matching the original legacy behavior.
     """
 
     def __init__(self, context: "ToolContext") -> None:
@@ -81,7 +81,7 @@ class ProgressReporter:
 
         Recognizes :class:`PhaseComplete`, :class:`TurnComplete` and
         :class:`SessionComplete`. Other event types are ignored (the
-        original F-38 implementation behaved the same way).
+        original legacy implementation behaved the same way).
         """
         sink = self._get_sink()
         if sink is None:

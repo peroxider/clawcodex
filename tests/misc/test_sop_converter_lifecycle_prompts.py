@@ -1,4 +1,4 @@
-"""Unit tests for F-55 L3 — lifecycle prompt block + task guide rows.
+"""Unit tests for L3 — lifecycle prompt block + task guide rows.
 
 Covers:
 

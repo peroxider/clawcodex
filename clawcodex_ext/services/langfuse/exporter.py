@@ -1,4 +1,4 @@
-"""F-65 P65-C — training-data exporter for LangfuseSink buffer.
+"""Training-data exporter for LangfuseSink buffer.
 
 The :class:`LangfuseSink` keeps a bounded in-memory copy of every
 event it forwards to Langfuse (see

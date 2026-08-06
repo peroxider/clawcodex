@@ -337,10 +337,10 @@ def _resolve_operation(
 
 
 def _composite_task_guide_rows(skill: SkillSpec) -> list[tuple[str, str, str, str]]:
-    """Return executable F-56/F-57 lifecycle guidance for the current skill.
+    """Return executable lifecycle guidance for the current skill.
 
     This intentionally does not import the legacy composite registry: its
-    descriptive-only macro model is not the runtime contract used by F-57.
+    descriptive-only macro model is not the runtime contract used by executable workflows.
     The row is emitted only when the generated skill can actually call the
     macro or lifecycle create tool, so it cannot direct the model to an
     unavailable tool.
@@ -378,7 +378,7 @@ def _macro_route_task_guide_rows(
     skill: SkillSpec,
     bundle: "str | Path | None",
 ) -> list[tuple[str, str, str, str]]:
-    """Emit Task Guide rows for F-57 macros already in ``skill.allowed_tools``.
+    """Emit Task Guide rows for macros already in ``skill.allowed_tools``.
 
     Intent and search suggestions come from each macro's ``MacroRoute.phrases``
     (plus ``select:<macro>``). Notes steer the model to ToolSearch the macro
@@ -429,7 +429,7 @@ def _exclusive_covered_tool_refs(
     skill: SkillSpec,
     bundle: "str | Path | None",
 ) -> list[str]:
-    """Collect F-157 covered atomic refs for macros available to this skill."""
+    """Collect covered atomic refs for macros available to this skill."""
 
     try:
         from .macros.routing import MacroRouteCatalog, ensure_builtin_routes
@@ -467,7 +467,7 @@ def _task_guide_row_mentions_covered_tool(
 def _lifecycle_task_guide_rows(
     graph: "ToolDependencyGraph | None",
 ) -> list[tuple[str, str, str, str]]:
-    """F-55 L3 — dependency rows for the task guide table.
+    """Render the tool lifecycle hint for the task guide table.
 
     Returns rows shaped like the other task-guide rows:
     ``(intent, tool, search, note)``.  For each create→invoke edge we
@@ -543,7 +543,7 @@ def generate_task_guide_markdown(
     composite_rows = _composite_task_guide_rows(skill)
     macro_rows = _macro_route_task_guide_rows(skill, bundle)
 
-    # F-55 L3: load lifecycle dependency metadata from the bundle, if any.
+    # lifecycle: load dependency metadata from the bundle, if any.
     lifecycle_rows: list[tuple[str, str, str, str]] = []
     if bundle is not None:
         try:
@@ -554,7 +554,7 @@ def generate_task_guide_markdown(
         except Exception:  # pragma: no cover — defensive
             pass
 
-    # F-157: do not emit a lifecycle row that tells the model to use an
+    # do not emit a lifecycle row that tells the model to use an
     # atomic tool shadowed by a verified exclusive macro in the same Skill.
     covered_refs = _exclusive_covered_tool_refs(skill, bundle)
     if covered_refs:

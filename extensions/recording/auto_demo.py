@@ -1,9 +1,9 @@
-"""F-REC-AUTO: drive a real orchestrator run + visualizer tick into one ``.cast``.
+"""Drive a real orchestrator run + visualizer tick into one ``.cast``.
 
 This module is the implementation behind ``clawcodex record --auto``. It
 spins up a stub :class:`Orchestrator` against ``LocalTrackerAdapter`` +
 bare origin (the same scaffolding as
-``tests/orchestrator/manual_e2e_f38.py`` and the F-38 E2E tests), then
+``tests/orchestrator/manual_e2e_f38.py`` and the verification report E2E tests), then
 runs a batch of issues through ``GitSyncService.sync`` while emitting
 two streams into one shared :class:`AsciicastWriter`:
 
@@ -26,7 +26,7 @@ acceptance check on the output file.
 Design choices and their rationales
 -----------------------------------
 * **No code change to** ``AsciicastDashboardSource.pull`` — ``pull()``
-  remains the recording-only stub it has been since F-156. The
+  remains the recording-only stub it has been since before extraction. The
   auto-demo path calls ``record_snapshot(capture, entries, title=...)``
   directly with whatever entries the registry produced. Wiring
   ``pull()`` to the registry is left to a separate PR to keep the diff
@@ -36,7 +36,7 @@ Design choices and their rationales
   ``Orchestrator._run_issue``** — ``_run_issue`` pulls the model
   query engine / prompt / sandbox which is heavyweight and
   non-deterministic. ``GitSyncService.sync`` is the deterministic
-  surface the F-38 E2E suite already exercises; the demo's purpose is
+  surface the verification report E2E suite already exercises; the demo's purpose is
   to show the recorder handles "an orchestrator-style batch", not to
   verify model behaviour.
 * **Process-global registry cleanup** — the dashboard registry is

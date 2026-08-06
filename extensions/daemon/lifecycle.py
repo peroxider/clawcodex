@@ -1,4 +1,4 @@
-"""Worker lifecycle helpers — spawn / restart / graceful shutdown (F-84 P84-B/C).
+"""Worker lifecycle helpers — spawn / restart / graceful shutdown.
 
 This module contains the coroutines the supervisor calls to:
 
@@ -264,7 +264,7 @@ async def _on_worker_exit(
 ) -> None:
     """Decide whether to restart, park, or stop after a worker exit.
 
-    Logic mirrors F-84 §1.8.2:
+    Logic:
 
     * Permanent (78) → park.
     * Clean exit (0) → stop (no auto-restart under MVP).
@@ -366,7 +366,7 @@ async def graceful_shutdown(
 ) -> None:
     """Terminate every worker, escalate to ``SIGKILL`` on timeout.
 
-    Mirrors F-84 §1.8.3. ``proc.terminate()`` maps to ``SIGTERM`` on
+    Mirrors §1.8.3. ``proc.terminate()`` maps to ``SIGTERM`` on
     POSIX and ``CTRL_BREAK`` on Windows. ``proc.kill()`` is the
     hard-stop fallback.
     """

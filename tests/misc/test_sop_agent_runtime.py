@@ -1,4 +1,4 @@
-"""Regression tests for F-56/F-57 SDK reconstruction and secret references."""
+"""Regression tests for SDK reconstruction and secret references."""
 
 from __future__ import annotations
 
@@ -126,7 +126,7 @@ class TestAgentMaterialization(unittest.TestCase):
         self.assertEqual(agent.config.api_key, "secret-value")
 
     def test_omitted_list_factory_defaults_match_create_wrapper(self) -> None:
-        """F-56/F-57: rematerialize must apply create-wrapper ``(param or [])``.
+        """rematerialize must apply create-wrapper ``(param or [])``.
 
         Create wrappers coerce omitted ``List[...] = None`` factory args to
         ``[]`` before calling the SDK. Catalog ``init_kwargs`` only stores

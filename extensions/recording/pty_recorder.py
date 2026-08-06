@@ -1,4 +1,4 @@
-"""F-REC-M native PTY recorder.
+"""Native PTY recorder.
 
 Implements ``clawcodex record --mode pty`` without relying on the
 external ``asciinema`` CLI. This is important because the Python

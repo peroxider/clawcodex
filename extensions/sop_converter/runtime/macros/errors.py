@@ -1,4 +1,4 @@
-"""Stable error codes for F-57 Phase 4 macro convert."""
+"""Stable error codes for macro convert."""
 
 from __future__ import annotations
 

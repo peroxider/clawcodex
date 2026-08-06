@@ -1,4 +1,4 @@
-"""Tests for F-88 generic text tail follower."""
+"""Tests for generic text tail follower."""
 
 from __future__ import annotations
 

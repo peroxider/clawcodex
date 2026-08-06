@@ -1,4 +1,4 @@
-"""Tool-event audit log data contract (F-45).
+"""Tool-event audit log data contract.
 
 Per-tool decision rows persisted to
 ``~/.clawcodex/tool-events/{run_id}/events.ndjson`` by
@@ -8,10 +8,10 @@ Schema (8 fields, fixed order — keeps `tail`/`grep` greppable):
 
     ts:               float  — time.time() at write moment
     tool:             str    — event.tool_name (Bash, Read, Edit, …)
-    params:           dict   — event.params (full, not redacted — see F-45 决定 #7)
+    params:           dict   — event.params (full, not redacted — see decision #7)
     approved:         bool   — event._approved (True/False); None only if
                                 ApprovalPolicy skipped (shouldn't happen in
-                                orchestrator headless mode post F-45 wiring)
+                                orchestrator headless mode after wiring)
     deny_reason:      str|None — event._deny_reason (None on approve)
     permission_mode:  str    — session_context["permission_mode"]
                                 (bypassPermissions / dontAsk / acceptEdits /
@@ -21,7 +21,7 @@ Schema (8 fields, fixed order — keeps `tail`/`grep` greppable):
 
 Serialised as one JSON object per line (NDJSON). Append-only, no overwrite,
 no schema version field (callers must add a reader-side guard if they ever
-rev the schema — see F-45 决定 #5 for forward compat with report_writer).
+rev the schema — see decision #5 for forward compat with report_writer).
 """
 
 from __future__ import annotations

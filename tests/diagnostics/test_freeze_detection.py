@@ -1,4 +1,4 @@
-"""F-108 P108-D — FreezeDetector acceptance tests."""
+"""FreezeDetector acceptance tests."""
 
 from __future__ import annotations
 
@@ -285,7 +285,7 @@ class TestDetectorImportSurface(unittest.TestCase):
 
 
 class TestEntrypointIntegration(unittest.TestCase):
-    """F-108 P108-D entrypoint wiring: key long-running entry points call
+    """Entrypoint wiring: key long-running entry points call
     ``FreezeDetector.maybe_start_from_env()`` early enough that the env
     var can enable the watchdog.
     """

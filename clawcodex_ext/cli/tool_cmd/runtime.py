@@ -1,4 +1,4 @@
-"""CLI argv entry point for F-53.
+"""CLI argv entry point for the dynamic tool command feature.
 
 The spec calls for tool names to be routable from the CLI sieve, but
 registering each tool as its own subcommand in
@@ -153,7 +153,7 @@ def _print_root_help() -> None:
     print(
         "usage: clawcodex-dev tool [--list|--json|<tool-name> [--args ...]]\n"
         "\n"
-        "Auto-exposed F-53 tool dispatcher.\n"
+        "Auto-exposed tool dispatcher.\n"
         "\n"
         "Subcommands:\n"
         "  --list                 List discoverable tools (non-core only).\n"

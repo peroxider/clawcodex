@@ -1,4 +1,4 @@
-"""Tests for ``clawcodex_ext.dreaming.lock`` — F-100.
+"""Tests for ``clawcodex_ext.dreaming.lock``.
 
 Covers the file-based consolidation lock: readLastConsolidatedAt,
 tryAcquireConsolidationLock, rollback, recordConsolidation, and the
@@ -76,7 +76,7 @@ def test_acquire_lock_self_pid_returns_prior_mtime(memory_dir: Path) -> None:
     """If the lock is already held by our own PID, return the prior mtime
     (not ``None``) — self-acquisition is a no-op for the lock file.
 
-    This is the F-100/100.4 contract: ``record_consolidation`` (called
+    This is the consolidation-lock contract: ``record_consolidation`` (called
     by the manual ``/dream`` path) pre-stamps the lock with our own
     PID; the subsequent ``try_acquire_consolidation_lock`` inside the
     dream service must NOT block on that self-stamp.

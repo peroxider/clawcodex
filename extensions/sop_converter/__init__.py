@@ -61,7 +61,7 @@ from .core import (
     load_tool_retrieval_index,
 )
 
-# F-56 catalog write facade (canonical implementation lives in core/).
+# catalog write facade (canonical implementation lives in core/).
 from .resource_catalog import build_resource_record_from_create
 
 # ── Runtime (agent runtime integration layer) ────────────────────────────────

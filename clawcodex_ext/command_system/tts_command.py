@@ -1,4 +1,4 @@
-"""tts — ``/tts`` command (F-64 P64-E5 Text-to-Speech).
+"""tts — ``/tts`` command (Text-to-Speech).
 
 Symmetric to ``/voice`` (the STT side): toggles TTS playback on/off,
 selects the TTS backend, sets the voice id, and offers a ``say`` 试听

@@ -48,7 +48,7 @@ class CronRun:
     owner_key: str = DEFAULT_OWNER_KEY
     owner_process_id: int | None = None
     owner_session_id: str | None = None
-    owner_agent_id: str | None = None  # F-22-F: 实际执行该 run 的 agent 标识
+    owner_agent_id: str | None = None  # 实际执行该 run 的 agent 标识
     ended_at: int | None = None
 
     @classmethod

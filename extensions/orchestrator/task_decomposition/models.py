@@ -1,4 +1,4 @@
-"""Validated task graph used by F-118 swarm execution."""
+"""Validated task graph used by swarm execution."""
 
 from __future__ import annotations
 

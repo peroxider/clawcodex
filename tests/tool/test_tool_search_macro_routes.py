@@ -1,4 +1,4 @@
-"""Tests for F-57 Phase 3 MacroRoute direct routing."""
+"""Tests for Phase 3 MacroRoute direct routing."""
 
 from __future__ import annotations
 

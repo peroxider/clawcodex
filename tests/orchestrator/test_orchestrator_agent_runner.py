@@ -79,7 +79,7 @@ class _CommentTracker:
 
 
 class _ProgressReporter:
-    """F-40: implements the new :class:`ProgressSink` protocol.
+    """implements the new :class:`ProgressSink` protocol.
 
     The old ``on_event`` shim is no longer used by
     :class:`AgentRunner`; the runner now dispatches the three
@@ -303,7 +303,7 @@ class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
                         progress_reporter=progress,
                     )
 
-                # F-49 unified storage: headless agent and REPL sessions
+                # Unified storage: headless agent and REPL sessions
                 # both write to ~/.clawcodex/sessions/{run_id}/transcript.jsonl
                 # via SessionStorage.  The legacy .event_logs/{id}.ndjson
                 # reader is gone — assert on the unified transcript.
@@ -319,7 +319,7 @@ class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
         # (turn_number is incremented to 1 *before* the
         # turn_number >= max_turns check, so a 1-turn run with
         # max_turns=1 lands in the budget_exhausted path).  This
-        # pre-existed the F-49 storage unification; the original
+        # pre-existed the storage unification; the original
         # test's ``status == "completed"`` assertion only "passed"
         # because the FileNotFoundError on .event_logs/77.ndjson
         # short-circuited the test before the status check ran.
@@ -331,14 +331,14 @@ class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
             [("77", "## ClawCodex Run Summary\n\n⏳ Run in progress.")],
         )
         self.assertEqual(session.turn_count, 1)
-        # F-40: AgentRunner dispatches three events per turn
+        # AgentRunner dispatches three events per turn
         # (PhaseComplete, TurnComplete, SessionComplete) before
         # the early return inside the SessionComplete handler.
         self.assertEqual(len(progress.events), 3)
         self.assertEqual(progress.events[0][0], "phase")
         self.assertEqual(progress.events[1][0], "turn")
         self.assertEqual(progress.events[2][0], "session")
-        # Transcript: the user prompt (turn 0) was written by F-49
+        # Transcript: the user prompt (turn 0) was written by the storage layer
         # Phase 0; the stub yielded only SessionComplete(success)
         # with no TextDelta / ToolCallEvent, so no assistant
         # message is written.  The transcript must therefore
@@ -350,7 +350,7 @@ class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
             metadata.get("title", ""),
             "orchestrator-ISSUE-77",
         )
-        # F-49 storage unification: the legacy .event_logs/ tree
+        # Storage unification: the legacy .event_logs/ tree
         # must NOT be created on disk anywhere under the workspace.
         self.assertFalse(
             (workspace.path / ".event_logs").exists(),
@@ -841,7 +841,7 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
 #
 # The new ``max_no_op_turns`` / ``loop_detection_window`` /
 # ``loop_detection_threshold`` knobs in ``AgentConfig`` guard against
-# the SessionComplete infinite loop observed in F-09's repeated 30-min
+# the SessionComplete infinite loop observed in the repeated 30-min
 # timeouts (debug log run-06 had 328 SessionComplete events with zero
 # real tool calls).  These tests pin the four exit paths so future
 # refactors can't silently regress them.
@@ -895,7 +895,7 @@ class TestAgentRunnerStagnationAndLoop(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(session.status, "stagnation")
             self.assertEqual(session.session_end_reason, "stagnation")
             self.assertIn("3 consecutive", session.session_end_summary)
-            # F-09 pattern: only 3 turns consumed before break.
+            # Stagnation pattern: only 3 turns consumed before break.
             self.assertLessEqual(stub.call_count, 4)
 
     async def test_loop_detected_breaks_on_repeated_signature(self) -> None:
@@ -1070,7 +1070,7 @@ class _ActiveTrackerStub:
 
 
 class _MultiToolTurnStub:
-    """F-49 Phase 0.1 stub: one LLM turn with leading text + 2 tool calls
+    """Phase 0.1 stub: one LLM turn with leading text + 2 tool calls
     (Read then Bash) + 2 results in matching order + SessionComplete."""
 
     def __init__(self, config) -> None:
@@ -1102,7 +1102,7 @@ class _MultiToolTurnStub:
 
 
 class _OutOfOrderResultStub:
-    """F-49 Phase 0.1 stub: 2 tool calls but Bash result arrives BEFORE
+    """Phase 0.1 stub: 2 tool calls but Bash result arrives BEFORE
     Read result. Verifies the helper pairs by tool_use_id and emits the
     UserMessage in tool_use order, not arrival order."""
 
@@ -1135,7 +1135,7 @@ class _OutOfOrderResultStub:
 
 
 class _ApprovalRejectedStub:
-    """F-49 Phase 0.1 stub: a single tool call whose result carries
+    """Phase 0.1 stub: a single tool call whose result carries
     is_error=True (rejected / error). Verifies the rejected result is
     captured with is_error preserved in the transcript."""
 
@@ -1160,7 +1160,7 @@ class _ApprovalRejectedStub:
 
 
 class TestAgentRunnerTranscriptPhase01(unittest.IsolatedAsyncioTestCase):
-    """F-49 Phase 0.1: one AssistantMessage per turn + tool_use_id pairing.
+    """Phase 0.1: one AssistantMessage per turn + tool_use_id pairing.
 
     Regression pin for the spec deviations that the buffer-based rewrite
     fixes. These tests do NOT depend on the legacy ``.event_logs/`` tree.

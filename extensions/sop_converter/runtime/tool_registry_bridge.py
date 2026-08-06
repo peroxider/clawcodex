@@ -64,7 +64,7 @@ from ..core.tool_dependencies import (
     to_kebab_tool_name,
 )
 
-# F-55 L1 / L2 helpers — lifecycle catalog hook + tool-dependencies.yaml generation.
+# lifecycle helpers — catalog hook + tool-dependencies.yaml generation.
 from ..core.heuristics.lifecycle import (
     infer_lifecycle_kind,
     inject_resource_ref_schema,
@@ -845,7 +845,7 @@ def _format_wrapper_imports(
 
 
 # ---------------------------------------------------------------------------
-# CLI handler detection (F-52 subprocess bridge — mirrors F-50-F CLI mode)
+# CLI handler detection (subprocess bridge — mirrors CLI mode)
 # ---------------------------------------------------------------------------
 
 _CLI_EXCLUDED_HANDLER_NAMES = frozenset(
@@ -979,7 +979,7 @@ def _resolve_cli_argv_prefix(
     *,
     cli_prefix_override: str | None = None,
 ) -> list[str]:
-    """CLI argv prefix for subprocess dispatch (reuses F-50 cli_discovery)."""
+    """CLI argv prefix for subprocess dispatch (reuses cli_discovery)."""
     import sys
 
     from extensions.sop_converter.workflow_mode.bridge.cli_discovery import (
@@ -1499,7 +1499,7 @@ if __name__ == "__main__":
         sys.exit(1)
     method_name = sys.argv[1]
 
-    # F-55 L1: optional agent-catalog hooks.  Created via
+    # optional agent-catalog hooks.  Created via
     # ``--catalog-metadata '<json>'`` on create-kind tools and
     # ``--catalog-fallback '<json>'`` on invoke-kind tools.
     catalog_meta = None
@@ -1794,7 +1794,7 @@ if __name__ == "__main__":
                     error="create result did not include a stable resource handle; not persisted to catalog",
                 )
                 # A lifecycle create is not successful unless the returned
-                # resource can be recovered by a later F-57 invocation.
+                # resource can be recovered by a later invocation.
                 # Do not let the Agent summarize this opaque in-memory object
                 # as a usable, persistent Agent.
                 print(_dumps_sdk_result(_payload), file=sys.stderr)
@@ -2503,7 +2503,7 @@ def operation_to_spec(
         }
         required = ["args"]
     else:
-        # F-55 property ops (e.g. DeepAgent.loop_coordinator) carry no method
+        # property ops (e.g. DeepAgent.loop_coordinator) carry no method
         # params themselves but MUST expose the owning class's __init__ params
         # (e.g. ``card``) so the agent knows to supply them at call time.
         schema_params = (
@@ -3002,7 +3002,7 @@ def register_component_tools(
                     module_path=module_path,
                 )
 
-                # F-55 L1: create-kind tools get a ``--catalog-metadata`` payload so
+                # create-kind tools get a ``--catalog-metadata`` payload so
                 # the wrapper subprocess can persist the resulting ``agent_id`` to
                 # the bundle-local AgentCatalog.  This makes the create→invoke
                 # workflow recoverable across independent wrapper processes.
@@ -3195,7 +3195,7 @@ def register_component_tools(
         len(script_paths),
     )
 
-    # ── Phase 5: F-55 L2 lifecycle dependency metadata ──
+    # ── Phase 5: lifecycle dependency metadata ──
     if bundle_path is not None:
         try:
             lifecycle_graph = ToolDependencyGraph.detect_from_components(components)
@@ -3212,7 +3212,7 @@ def register_component_tools(
 
 
 # ---------------------------------------------------------------------------
-# HTTP Tool Registration (F-52)
+# HTTP Tool Registration (subprocess bridge)
 # ---------------------------------------------------------------------------
 
 

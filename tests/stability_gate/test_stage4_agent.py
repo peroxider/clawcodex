@@ -5,7 +5,7 @@
 - Message types 类型构建和 API payload 转换
 - Session 创建/保存/加载
 - 子 agent transcript 在主 agent session 目录的 subagents/ 下
-  （F-49 / S-R4-A：与主 session 共享 ~/.clawcodex/sessions/ 父路径，
+  （与主 session 共享 ~/.clawcodex/sessions/ 父路径，
    依赖 src.init.init() 注册 nested resolver；resolver 缺失时
    兜底写到 ~/.clawcodex/transcripts/）
 - ToolUseBlock / TextBlock 构建
@@ -409,7 +409,7 @@ class TestStage4Session:
 class TestStage4SubagentInParentSession:
     """子 agent transcript 必须落在主 agent session 目录的 subagents/ 子目录下。
 
-    设计要求（g1 session 治理基本保证，F-49/S-R4-A 演进）：
+    设计要求（session 治理基本保证）：
 
     - 子 agent 与主 agent 共享父路径 ``~/.clawcodex/sessions/``，方便
       ``list_sessions`` / ``cleanup_sessions`` 一起扫描、一起清理。
@@ -756,7 +756,7 @@ class TestStage4Resilience:
 
 
 class TestStage4CrossModePersistence:
-    """F-103: Recapitulate & Forecast 跨 REPL↔TUI 模式切换时内容保持。
+    """Recapitulate & Forecast 跨 REPL↔TUI 模式切换时内容保持。
 
     Recapitulate（away_summary）和 Forecast（intent_forecast）在 REPL 中触发后
     被持久化为 ``SystemMessage(subtype=...)`` 追加到 conversation，切换至 TUI

@@ -1,4 +1,4 @@
-"""F-81: Native 原生模块系统 — 统一注册表与懒加载基础设施.
+"""Native 原生模块系统 — 统一注册表与懒加载基础设施.
 
 对标 CCB Rust/NAPI 原生模块（audio-capture-napi / color-diff-napi /
 image-processor-napi / url-handler-napi / modifiers-napi），用纯 Python
@@ -11,7 +11,7 @@ image-processor-napi / url-handler-napi / modifiers-napi），用纯 Python
   ``modifiers``）不在 ``__init__`` 中导入，仅在 ``load()`` 调用时按需
   实例化。可选依赖（``pyaudio`` / ``Pillow`` / ``numpy`` / ``pynput``）
   缺失时 ``is_available()`` 返回 ``False``，``load()`` 返回 ``None``。
-* **降级 (F-81.6)** —— 每个模块实现一个 ``fallback`` 类方法，在可选依赖
+* **降级** —— 每个模块实现一个 ``fallback`` 类方法，在可选依赖
   缺失时返回纯 Python 兜底实例，调用方可通过 ``load_or_fallback(name)``
   拿到一个总是可用的对象（功能受限但不抛 ``ImportError``）。
 * **注册模式 (Golden Rule #5)** —— 模块通过 ``@NativeModuleRegistry.register``
@@ -137,7 +137,7 @@ class NativeModuleRegistry:
 
 
 def _register_builtin_modules() -> None:
-    """登记 F-81 内置模块（懒加载占位）.
+    """登记内置模块（懒加载占位）.
 
     为保持懒加载语义（不在 ``__init__`` 导入时拉入 ``pyaudio`` / ``Pillow``
     等重型可选依赖），这里登记一个 *延迟绑定* 的占位类：当且仅当某模块
@@ -202,7 +202,7 @@ def load(name: str) -> NativeModule | None:
         - 实例化期间抛 ``ImportError`` → ``None``（吞掉并记日志）
         - 其它异常向上冒泡（调用方应处理 :class:`NativeModuleError`）
 
-    语义对齐 F-81 §1.4 ``NativeModuleRegistry.load``.
+    语义对齐 §1.4 ``NativeModuleRegistry.load``.
     """
     if not NativeModuleRegistry.is_registered(name):
         return None
@@ -227,7 +227,7 @@ def load(name: str) -> NativeModule | None:
 
 
 def load_or_fallback(name: str) -> NativeModule:
-    """加载原生模块；若不可用则返回其纯 Python fallback 实例 (F-81.6).
+    """加载原生模块；若不可用则返回其纯 Python fallback 实例.
 
     与 :func:`load` 的区别：永远返回一个非 ``None`` 对象。若底层实现类
     提供了 ``fallback()`` 类方法则使用之；否则抛 :class:`NativeModuleError`

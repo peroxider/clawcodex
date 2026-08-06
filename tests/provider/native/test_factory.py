@@ -1,4 +1,4 @@
-"""Tests for the F-72 native provider factory (P72-D)."""
+"""Tests for the native provider factory."""
 
 from __future__ import annotations
 

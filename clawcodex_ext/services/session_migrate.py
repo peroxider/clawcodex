@@ -1,4 +1,4 @@
-"""F-49 P5-H: session format migration tool.
+"""Session format migration tool.
 
 Converts legacy 3-file sessions (session.json + metadata.json +
 transcript.jsonl) into the unified 2-file format introduced by Phase 5
@@ -402,7 +402,7 @@ def migrate_all(
 
 # ---------------------------------------------------------------------------
 # CLI helper — invoked by ``clawcodex-dev session migrate --from-3-file``
-# and the F-49 P5 subcommand sieve.
+# and the Phase-5 subcommand sieve.
 # ---------------------------------------------------------------------------
 
 

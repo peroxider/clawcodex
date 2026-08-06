@@ -7,7 +7,7 @@ from .models import WorkflowGraph
 
 
 def format_discrimination_summary(disc: DiscriminationResult) -> str:
-    """Human-readable F-50-A mode selection report."""
+    """Human-readable mode selection report."""
     lines: list[str] = []
     forced = " (forced via --mode)" if disc.forced else ""
     lines.append(f"Workflow discrimination{forced}:")

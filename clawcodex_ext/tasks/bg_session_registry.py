@@ -1,4 +1,4 @@
-"""F-94 P94-B — BG_SESSIONS 全局 registry。
+"""BG_SESSIONS 全局 registry。
 
 跨进程后台会话索引。扫描 ``~/.clawcodex/sessions/*/.background-runner.json``
 重建内存视图，并持久化缓存到 ``~/.clawcodex/bg_sessions/index.json``。

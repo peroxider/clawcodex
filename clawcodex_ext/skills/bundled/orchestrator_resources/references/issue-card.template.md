@@ -8,9 +8,9 @@
 # 字段说明（必读 frontmatter 由 extensions/orchestrator/local_tracker/parser.py 解析）：
 #
 #   id              内部 ID，文件内唯一。建议用 "<FEATURE>-<SUB>" 形式，
-#                   例如 F-37.1 → "F-37.1-pr-auto-fix"
+#                   例如 <ID> → "<id>-pr-auto-fix"
 #   identifier      对外标识（branch 命名、Jinja 模板里 {{ issue.identifier }}），
-#                   短而稳定，例如 "F-37.1"
+#                   短而稳定，例如 "<IDENTIFIER>"
 #   title           一句话标题，issue 列表和 commit message 都会用
 #   state           决定是否被轮询：
 #                     - open / ready      活跃，orchestrator 会拉
@@ -18,11 +18,11 @@
 #                     - completed / closed / cancelled / failed / abandoned  终态，跳过
 #                   详见 tracker.py: default_active_states_for_kind / terminal_states_for_kind
 #   priority        数字越小越靠前（0/1 = P0/P1）。可选，留空则按 id 字典序
-#   labels          标签列表。F-39 / F-120 重用意图（写在 labels 里）：
+#   labels          标签列表。重用意图（写在 labels 里）：
 #                     - agent:retry       重置 + 清旧 PR 字段、重跑
 #                     - agent:follow-up   保留分支，追加 commit
 #                     - agent:blocked     永久跳过（最高优先级，unblock 才会放开）
-#                     - agent:rebase     F-120: orchestrator 自行 rebase PR
+#                     - agent:rebase     orchestrator 自行 rebase PR
 #                                       （fetch + rebase + push --force-with-lease），
 #                                       内容冲突时回退到 agent 介入
 #                   也可放普通分类标签：feature / bug / refactor / docs ...
@@ -39,8 +39,8 @@
 #   ## 背景 / 目标 / 验收标准 / 风险与约束 / 不要做 / 关联
 # =============================================================================
 
-id: <ID>                                # 例如 F-37.1-pr-auto-fix
-identifier: <IDENTIFIER>                # 例如 F-37.1
+id: <ID>                                # 例如 <id>-pr-auto-fix
+identifier: <IDENTIFIER>                # 例如 <IDENTIFIER>
 title: <TITLE>                          # 一句话标题，例如 "实现 PR review 评论自动修复的最小闭环"
 state: open                             # open | ready | in_progress | completed | closed | cancelled | failed | abandoned
 priority: <0|1|2|3>                     # 可选，越小越靠前

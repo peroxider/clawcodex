@@ -1,4 +1,4 @@
-"""F-97 LODESTONE — data models.
+"""LODESTONE — data models.
 
 Frozen dataclasses describing the core types used by the parser, target
 registry, resolver and renderer. Designed to be import-side-effect-free

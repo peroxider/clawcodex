@@ -1,4 +1,4 @@
-"""F-95 /template command family."""
+"""/template command family."""
 
 from __future__ import annotations
 

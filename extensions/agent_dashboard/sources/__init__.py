@@ -1,6 +1,6 @@
-"""F-120 Agent Dashboard — built-in data sources.
+"""Agent Dashboard — built-in data sources.
 
-This package ships the two data sources the F-120 plan §3 commits
+This package ships the two data sources the plan §3 commits
 to in Phase 2: :class:`GoalDashboardSource` (reads from
 ``GoalService``) and :class:`TasksDashboardSource` (reads from
 ``ToolContext.tasks``). Optional Orchestrator / SOP sources live in

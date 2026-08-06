@@ -1,4 +1,4 @@
-"""F-120 Step 8: CLI `orchestrator issue rebase --id [--force] [--reason]`.
+"""Step 8: CLI `orchestrator issue rebase --id [--force] [--reason]`.
 
 Covers:
   - argparse: `rebase` subcommand registered with --id / --force / --reason / --operator
@@ -54,7 +54,7 @@ def _make_args(**overrides: Any) -> argparse.Namespace:
 
 
 def _make_registry_with_pr(tmp: Path, issue_id: str = "7") -> IssueRegistry:
-    """Create a registry with a record that has the F-120 preconditions
+    """Create a registry with a record that has the rebase preconditions
     (pr_number, workspace_path, branch_name)."""
     reg_path = Path(tmp) / "registry.json"
     reg = IssueRegistry(reg_path)

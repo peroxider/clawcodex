@@ -1,15 +1,15 @@
-"""Orchestrator link generator (F-95-A).
+"""Orchestrator link generator.
 
-Generates links to F-38 reports, F-45 tool events, and F-54 debug logs
+Generates links to verification reports, tool events, and debug logs
 from session data, using the new ClawCodeX on-disk layout:
 
-- Tool events (F-45) live at ``~/.clawcodex/tool-events/<run_id>/events.ndjson``.
-- Debug logs (F-54) live at ``~/.clawcodex/tool-events/<run_id>/debug.ndjson``.
-- Reports (F-38) live alongside the session at ``<session_dir>/report.{md,json}``.
+- Tool events live at ``~/.clawcodex/tool-events/<run_id>/events.ndjson``.
+- Debug logs live at ``~/.clawcodex/tool-events/<run_id>/debug.ndjson``.
+- Reports live alongside the session at ``<session_dir>/report.{md,json}``.
 
 The old fallback path ``<session_dir>/.orchestrator_control/runs/<run_id>/``
 is no longer consulted — that layout was retired when the orchestrator
-moved to the F-45 canonical tool-events root.
+moved to the canonical tool-events root.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Canonical tool-events root in the new format (F-45).
+# Canonical tool-events root in the new format.
 TOOL_EVENTS_ROOT = Path.home() / ".clawcodex" / "tool-events"
 
 
@@ -50,7 +50,7 @@ class OrchestratorLink:
 
         links["available"] = True
 
-        # F-38: Verification report
+        # Verification report
         report_md = session_dir / "report.md"
         report_json = session_dir / "report.json"
         if report_md.exists() or report_json.exists():
@@ -61,7 +61,7 @@ class OrchestratorLink:
                 "available": True,
             }
 
-        # F-45: Tool events audit log
+        # Tool events audit log
         # Canonical path: ``~/.clawcodex/tool-events/<run_id>/events.ndjson``.
         # The session_id is the run_id (the new orchestrator key is the
         # session id from bootstrap, not a separate ``run_*``).
@@ -83,7 +83,7 @@ class OrchestratorLink:
                 "event_count": self._count_ndjson_lines(events_file),
             }
 
-        # F-54: Debug timeline log
+        # Debug timeline log
         debug_file = TOOL_EVENTS_ROOT / session_id / "debug.ndjson"
         if not debug_file.exists():
             fallback = session_dir / "debug.ndjson"

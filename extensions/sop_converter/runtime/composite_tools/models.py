@@ -23,7 +23,7 @@ class CompositeToolSpec:
     A composite tool is registered as an ``AgentToolSpec`` (so the agent can
     invoke it) **and** can emit a ``workflow.yaml`` sidecar for the orchestrator.
 
-    F-55 L1: ``call_impl`` / ``call_type`` may be set to make the tool
+    L1: ``call_impl`` / ``call_type`` may be set to make the tool
     executable (e.g. ``invoke-existing-agent``).  When unset, the default
     stage-echo behaviour is preserved for backwards compatibility.
     """
@@ -39,6 +39,6 @@ class CompositeToolSpec:
     output_schema: dict[str, Any] | None = None
     query_arg: str = "query"
     extra_metadata: dict = field(default_factory=dict)
-    # F-57 executable workflow specification. ``Any`` avoids a dependency
+    # executable workflow specification. ``Any`` avoids a dependency
     # cycle between the registry model and the runtime model.
     workflow_spec: Any | None = None

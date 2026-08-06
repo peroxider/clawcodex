@@ -1,4 +1,4 @@
-"""阶段契约验证器 (F-114)。
+"""阶段契约验证器。
 
 执行阶段输出的机器可验证 DoD 检查。
 内置类型: file_exists, file_size, regex, json_schema, line_count, llm_judge, custom

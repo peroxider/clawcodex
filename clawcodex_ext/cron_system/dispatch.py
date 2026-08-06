@@ -1,4 +1,4 @@
-"""Typed dispatch bridge for cron fire events (F-22-G-2).
+"""Typed dispatch bridge for cron fire events.
 
 Replaces ad-hoc outbox-drain logic in REPL, headless, and TUI
 frontends with a unified :class:`CronDispatchBridge`.

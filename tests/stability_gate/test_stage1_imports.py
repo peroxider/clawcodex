@@ -150,7 +150,7 @@ class TestStage1CoreImports:
         assert callable(src.prefetch.get_or_start_keychain_prefetch)
 
     def test_telemetry_import(self):
-        """F-97: telemetry package importable; default-off path zero-cost."""
+        """Telemetry package importable; default-off path zero-cost."""
         import telemetry
         from telemetry import recorder
 

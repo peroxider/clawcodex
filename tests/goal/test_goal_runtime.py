@@ -1,4 +1,4 @@
-"""Goal runtime continuation and lifecycle tests for F-122 Spec 5."""
+"""Goal runtime continuation and lifecycle tests for Spec 5."""
 
 from __future__ import annotations
 

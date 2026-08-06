@@ -358,6 +358,6 @@ Examples:
         "  login    Configure API keys or ChatGPT OAuth (interactive)\n"
         "  config   Show current configuration\n"
         "  autonomy Show scheduled-task status and runs\n"
-        "  feature  Manage runtime feature flags (F-68)\n"
+        "  feature  Manage runtime feature flags\n"
     )
     return parser

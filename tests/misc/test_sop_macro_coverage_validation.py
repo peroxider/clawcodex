@@ -1,4 +1,4 @@
-"""F-157 macro coverage contract validation tests."""
+"""Macro coverage contract validation tests."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""F-129 Phase 1 tests: socket persistence + event broadcasting.
+"""Phase 1 tests: socket persistence + event broadcasting.
 
 Covers:
   * ``_event_to_broadcast_dict`` handles PhaseComplete / TurnComplete /

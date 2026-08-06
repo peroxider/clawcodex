@@ -91,7 +91,7 @@ def ensure_eager_extensions_installed() -> None:
     _install_provider_patches()
     install_stale_registry_patch()
 
-    # F-94 BG_SESSIONS — wrap launch_background_runner to upsert the global
+    # BG_SESSIONS — wrap launch_background_runner to upsert the global
     # index after the per-session marker is written. No-op when
     # CLAWCODEX_BG_SESSIONS=off (验收标准 1).
     try:
@@ -101,7 +101,7 @@ def ensure_eager_extensions_installed() -> None:
     except Exception:  # noqa: BLE001 — never break agent init
         pass
 
-    # F-84 P84-H — register ``daemon`` subcommand behind the
+    # register ``daemon`` subcommand behind the
     # DAEMON feature gate. No-op when the flag is disabled.
     try:
         from clawcodex_ext.daemon import install_daemon_gate
@@ -116,7 +116,7 @@ def ensure_eager_extensions_installed() -> None:
 
     _init_provider_extensions()
 
-    # F-88 Monitor — install runtime hooks (TUI keybinding, stall watchdog
+    # Monitor — install runtime hooks (TUI keybinding, stall watchdog
     # exemption) after upstream modules are fully loaded.
     try:
         from clawcodex_ext.services.monitor.install import install_monitor_extensions

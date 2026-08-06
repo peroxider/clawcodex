@@ -1,4 +1,4 @@
-"""F-88 P88-C — prompt-to-subagent-type classifier.
+"""Prompt-to-subagent-type classifier.
 
 When the Agent tool is invoked without an explicit ``subagent_type``,
 this module decides whether the user's prompt semantically points at

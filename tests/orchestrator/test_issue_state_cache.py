@@ -1,4 +1,4 @@
-"""F-105 — Unit tests for ``extensions.orchestrator.issue_state_cache``.
+"""Unit tests for ``extensions.orchestrator.issue_state_cache``.
 
 Exercises the skip policy, the forced-poll conditions, and the
 invalidation paths in isolation from the orchestrator. Mirrors the

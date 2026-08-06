@@ -1,4 +1,4 @@
-"""E2E integration test for F-55 create → catalog → invoke lifecycle.
+"""E2E integration test for create → catalog → invoke lifecycle.
 
 This test exercises the full L1 chain that the plan describes:
 
@@ -7,7 +7,7 @@ This test exercises the full L1 chain that the plan describes:
 2. ``register_component_tools`` emits a wrapper for ``build_agent`` with the
    ``--catalog-metadata`` flag and writes the spec to the bundle-local tool dir.
 3. Running the create wrapper writes ``agent_id`` into
-   ``<bundle>/.clawcodex/resource-catalog.json`` (F-56 only).
+   ``<bundle>/.clawcodex/resource-catalog.json`` (resource catalog only).
 4. The ``invoke-existing-agent`` composite macro wrapper reads the resource
    catalog via ResourceHandler, materializes the SDK class, and invokes.
 
@@ -234,7 +234,7 @@ class TestCreateToInvokeLifecycleE2E(unittest.TestCase):
         self.assertEqual(quoted_result.get("agent_id"), "agent-1")
         self.assertEqual(quoted_result.get("query"), "it's fine")
 
-        # Canonical catalog is F-56 resource-catalog.json only.
+        # Canonical catalog is resource-catalog.json only.
         catalog_path = self.bundle / ".clawcodex" / "agent-catalog.json"
         self.assertFalse(
             catalog_path.exists(),
@@ -316,7 +316,7 @@ class TestCreateToInvokeLifecycleE2E(unittest.TestCase):
 
 
 class TestFactoryResultCatalogE2E(unittest.TestCase):
-    """F-56 regression: factories return agent objects, not an agent_id dict."""
+    """Regression: factories return agent objects, not an agent_id dict."""
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()

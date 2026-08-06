@@ -1,8 +1,8 @@
-"""Constants for the daemon subsystem (F-84).
+"""Constants for the daemon subsystem.
 
 All exit codes and timing tunables live here so worker implementations
 and the supervisor agree on a single set of values. Mirrors the
-behavior described in the F-84 design (§1.5 and §1.8).
+behavior described in the design (§1.5 and §1.8).
 """
 
 from __future__ import annotations

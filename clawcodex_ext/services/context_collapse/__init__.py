@@ -1,9 +1,9 @@
-"""Context collapse service layer (F-84) — ClawCodex subsystem.
+"""Context collapse service layer — ClawCodex subsystem.
 
 This package complements the existing ``src/services/compact/context_collapse.py``
 module, which ships a :class:`ContextCollapseStore` data model and a
 ``project_view`` placeholder-injection step. The new service layer
-adds the missing primitives from the F-84 spec:
+adds the missing primitives:
 
 * :mod:`tokens` — pluggable token counter with a tiktoken-default +
   heuristic-fallback chain (P84-A).

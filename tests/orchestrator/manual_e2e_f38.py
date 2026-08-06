@@ -1,4 +1,4 @@
-"""Offline E2E for F-38 — verification gate + report dual-write + single summary comment.
+"""Offline E2E for verification gate + report dual-write + single summary comment.
 
 Runs three rounds in temp dirs against a local bare origin + LocalTrackerAdapter.
 No network, no GitHub/GitCode credentials, no risk to public repos.
@@ -302,7 +302,7 @@ class TestRound1EmptyVerification(unittest.IsolatedAsyncioTestCase):
             comment_body = comments[0].body or ""
             # Summary comment header
             self.assertIn("## ClawCodex Run Summary", comment_body)
-            # 5 F-38 sections: Issue(=Run) / Branch / Commit / Verification / Report
+            # 5 sections: Issue(=Run) / Branch / Commit / Verification / Report
             self.assertIn("- Run:", comment_body)
             self.assertIn("- Branch:", comment_body)
             self.assertIn("- Commit:", comment_body)

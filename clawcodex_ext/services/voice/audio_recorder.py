@@ -1,4 +1,4 @@
-"""Cross-platform audio recorder — F-64 P64-B.
+"""Cross-platform audio recorder.
 
 Mirrors TS ``src/hooks/useVoice.ts`` audio-capture backend: prefer
 PyAudio (low latency, cross-platform) and fall back to SoX (Sound

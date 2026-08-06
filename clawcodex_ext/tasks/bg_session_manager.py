@@ -1,4 +1,4 @@
-"""F-94 P94-C — BG_SESSIONS 生命周期控制。
+"""BG_SESSIONS 生命周期控制。
 
 ``BgSessionManager`` 提供 list / inspect / attach / stop / cleanup /
 ``background_current_session`` 与 ``upsert_after_launch`` 协调入口。

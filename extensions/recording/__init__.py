@@ -1,4 +1,4 @@
-"""F-REC: asciicast v2 recorder for ClawCodex subsystems.
+"""Asciicast v2 recorder for ClawCodex subsystems.
 
 Public surface re-exports the writer, capture handle, source registry,
 and self-contained validator. Adapters live next to the subsystems they

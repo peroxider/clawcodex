@@ -1,4 +1,4 @@
-"""F-45: Tool-call audit bypass tests.
+"""Tool-call audit bypass tests.
 
 Covers the per-tool NDJSON bypass and the report_writer field
 that registers the audit path on the run report.  Mirrors the
@@ -620,7 +620,7 @@ class TestWorkspaceConfigDefaults(unittest.TestCase):
         wf = WorkflowConfig.from_dict({})
         self.assertIn(".operator_hints.md", wf.workspace.gitignore_patterns)
         self.assertIn(".reports", wf.workspace.gitignore_patterns)
-        # F-49 unified storage: headless agent and REPL sessions both
+        # Unified storage: headless agent and REPL sessions both
         # write to ~/.clawcodex/sessions/{run_id}/transcript.jsonl
         # (outside the workspace), so the legacy .event_logs/
         # gitignore entry is no longer needed.
@@ -646,7 +646,7 @@ class TestWorkspaceConfigDefaults(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# F-46.0: audit_log schema + runtime gating
+# Audit_log schema + runtime gating
 # ---------------------------------------------------------------------------
 
 

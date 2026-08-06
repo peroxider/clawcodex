@@ -1,4 +1,4 @@
-"""端到端测试 F-52: OpenAPI Spec → 解析 → 工具注册 → Agent 生成"""
+"""端到端测试: OpenAPI Spec → 解析 → 工具注册 → Agent 生成"""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def load_test_spec() -> dict:
 
 
 class TestF52E2E:
-    """F-52 端到端测试"""
+    """端到端测试"""
 
     def test_openapi_spec_parsing(self):
         """测试 OpenAPI spec 解析"""

@@ -185,7 +185,7 @@ def build_command_suggestions(
         from clawcodex_ext.multimodel.runtime_command import register_multimodel_runtime_command
 
         # Use a fresh private registry so we don't clobber the global
-        # registry's LocalCommand for /model and /provider (F-43).
+        # registry's LocalCommand for /model and /provider (runtime slash commands).
         # register_builtin_commands(None) would overwrite them with
         # InteractiveCommand / PromptCommand variants that can't run
         # through execute_command_sync.
@@ -200,7 +200,7 @@ def build_command_suggestions(
         # registered on this private completion registry as well.
         register_multimodel_runtime_command(private_reg)
 
-        # F-53: auto-expose non-core tools as /<tool-name> slash commands
+        # Auto-expose non-core tools: auto-expose non-core tools as /<tool-name> slash commands
         # in the TUI command registry. Mirrors the REPL wiring in
         # ``clawcodex_ext/repl/app.py`` / ``clawcodex_ext/repl/core.py``.
         tool_command_names: set[str] = set()

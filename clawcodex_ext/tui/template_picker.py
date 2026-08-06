@@ -1,4 +1,4 @@
-"""Minimal F-95 template picker helpers.
+"""Minimal template picker helpers.
 
 The full interactive picker can grow on top of this adapter; for now it
 exposes the same catalogue ordering that the TUI can render in a select list.

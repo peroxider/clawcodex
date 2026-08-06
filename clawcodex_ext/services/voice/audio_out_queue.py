@@ -1,4 +1,4 @@
-"""Async audio output queue — F-64 P64-E8.
+"""Async audio output queue.
 
 The mirror of :class:`AudioChunkQueue` (P64-C) for the playback direction.
 A TTS provider's background task *pushes* decoded PCM frames as they
@@ -115,7 +115,7 @@ class AudioOutQueue:
     def clear(self) -> int:
         """Drop every buffered frame without changing the closed state.
 
-        Used by the full-duplex dialogue interrupt path (F-65 P65-C): the
+        Used by the full-duplex dialogue interrupt path: the
         user barges in mid-playback, we cancel the response on the
         server side AND discard whatever PCM frames haven't been written
         to the device yet — otherwise the speaker would play a 200ms

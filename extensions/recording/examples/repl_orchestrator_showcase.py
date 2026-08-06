@@ -1,7 +1,7 @@
 """REPL showcase: real orchestrator batch + REPL ``/dashboard`` → one ``.cast``.
 
-This example composes F-REC-AUTO (real ``GitSyncService.sync``) with
-F-REC-L (REPL-style prompt markers) and the live ``/dashboard``
+This example composes the auto-demo path (real ``GitSyncService.sync``) with
+REPL-style prompt markers and the live ``/dashboard``
 formatter from ``clawcodex_ext.command_system.dashboard_command`` so
 that a single ``.cast`` file shows a developer running
 ``clawcodex-dev --record`` while a real orchestrator batch executes in
@@ -25,8 +25,8 @@ What the script writes into the ``.cast``:
 
 Note: the prompt_toolkit prompt bar itself (``❯`` glyph, line edit,
 status row) is rendered by prompt_toolkit and not captured by
-``install_repl_capture`` — see ``repl_source.py`` for that F-REC-L
-limitation. The markers + the rendered snapshot together reconstruct
+``install_repl_capture`` — see ``repl_source.py`` for that REPL
+capture limitation. The markers + the rendered snapshot together reconstruct
 the user-perceived ``/dashboard`` event flow in playback.
 
 Layer rule (CLAUDE.md): this file lives in Layer 2 alongside the
@@ -283,7 +283,7 @@ async def run(
     out_path = Path(out_path).expanduser().resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Defensive input validation (same rules as F-REC-AUTO).
+    # Defensive input validation (same rules as the auto-demo path).
     import math
 
     if not math.isfinite(duration_s) or duration_s < 0:
@@ -329,7 +329,7 @@ async def run(
     writer.open()
     capture = writer.capture
 
-    # Wire OrchestratorDashboardSource as in F-REC-AUTO so the registry
+    # Wire OrchestratorDashboardSource as in the auto-demo path so the registry
     # also exposes a live source for any other in-process puller; the
     # REPL showcase itself reads entries from a synthetic mirror to
     # avoid coupling the demo to a real orchestrator_provider.

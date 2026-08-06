@@ -14,7 +14,7 @@ The demo session is written in the new ClawCodeX envelope:
   ``isCompactSummary``, ``origin``, and (for assistant) ``model`` /
   ``usage`` / ``stop_reason``. No legacy ``tool_calls`` / ``tool_call_id``
   envelope remains.
-* ``events.ndjson`` keeps the F-45 tool-events shape (unchanged).
+* ``events.ndjson`` keeps the tool-events shape (unchanged).
 """
 
 import json
@@ -289,7 +289,7 @@ def create_demo_session(output_dir: Path | None = None) -> str:
         "\n".join(transcript_lines) + "\n", encoding="utf-8"
     )
 
-    # events.ndjson — F-45 tool-events log (unchanged shape)
+    # events.ndjson — tool-events log (unchanged shape)
     events = [
         {
             "event": "tool_call",

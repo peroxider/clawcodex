@@ -1,4 +1,4 @@
-"""Redaction and secret scanning for F-97 telemetry events.
+"""Redaction and secret scanning for telemetry events.
 
 Privacy boundary:
 
@@ -46,7 +46,7 @@ _SECRET_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
 
 _REDACTION_PLACEHOLDER: Final[str] = "[REDACTED]"
 
-# F-97-J: keys that may never survive inside the analytics ``extra`` dict
+# Keys that may never survive inside the analytics ``extra`` dict
 # (case-insensitive). Same surface as the prompt/output block-list used
 # by ``redact_event`` so a caller cannot smuggle user data into the
 # payload via the analytics metadata bridge.
@@ -59,7 +59,7 @@ _BLOCKED_EXTRA_KEYS: Final[frozenset[str]] = frozenset(
 class RedactionConfig:
     """Toggles that callers can opt into.
 
-    Defaults match the F-97 spec — everything sensitive is off. Tests
+    Defaults are privacy-first — everything sensitive is off. Tests
     can flip individual toggles to exercise the path.
     """
 
@@ -227,7 +227,7 @@ class Redactor:
             return {str(k): _REDACTION_PLACEHOLDER for k in value.keys()}
         if key == "stacktrace" and isinstance(value, (list, tuple)):
             return [str(line) for line in value][: self.cfg.stacktrace_max_lines]
-        # F-97-J: ``extra`` is a caller-supplied dict from
+        # ``extra`` is a caller-supplied dict from
         # ``SessionAnalyticsMetadata``. It must NEVER smuggle prompts,
         # outputs, transcripts, or messages into the payload. Recurse
         # through the dict after dropping blocked keys, so a sneaky
@@ -239,7 +239,7 @@ class Redactor:
                     continue
                 safe[str(sub_key)] = self._redact_value(str(sub_key), sub_value)
             return safe
-        # F-97-L: v2 ``fingerprint`` is a structured dict whose ``hash``
+        # v2 ``fingerprint`` is a structured dict whose ``hash``
         # field is a 16-char digest (low risk) and whose ``version`` /
         # ``method`` fields are low-cardinality identifiers. Run the
         # hash through ``redact_text`` so any embedded secret pattern

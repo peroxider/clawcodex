@@ -85,7 +85,7 @@ def build_workflow_stages_with_map(
     *,
     skill_agent_map: dict[str, str],
 ) -> list[WorkflowStage]:
-    """Build workflow stages preferring F-50-C StageAgentMap mappings."""
+    """Build workflow stages preferring StageAgentMap mappings."""
 
     stage_by_id = {s.id: s for s in graph.stages}
     merged_map = dict(skill_agent_map)

@@ -1,4 +1,4 @@
-"""F-50-F source bridge generator."""
+"""Source bridge generator."""
 
 from .generator import BridgeGenerator
 

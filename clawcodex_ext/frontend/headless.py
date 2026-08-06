@@ -14,7 +14,7 @@ class HeadlessFrontend(FrontendPlugin):
     def run(self, ctx, argv: list[str]) -> int:
         from src.entrypoints.headless import HeadlessOptions, run_headless
 
-        # F-125: forward resume / fork / resume-session-at from the
+        # Resume/fork support: forward resume / fork / resume-session-at from the
         # RuntimeContext that ``dispatch.py`` already built. The pre-
         # resolved session on ``ctx.session`` is passed as
         # ``external_session`` so ``run_headless`` skips its own
@@ -56,7 +56,7 @@ class HeadlessFrontend(FrontendPlugin):
             record_width=getattr(ctx.options, "record_width", None),
             record_height=getattr(ctx.options, "record_height", None),
         )
-        # F-125 C14: release the TailFollower that ``RuntimeContext.build``
+        # Resume/fork support: release the TailFollower that ``RuntimeContext.build``
         # obtained from ``resume_session_with_tail``. Headless never
         # iterates it — without an explicit release the follower keeps a
         # reference to the transcript path and asyncio event state for

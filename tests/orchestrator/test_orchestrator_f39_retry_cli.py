@@ -1,4 +1,4 @@
-"""F-39 Sub-E: CLI 兜底命令 — `orchestrator issue retry`.
+"""Sub-E: CLI 兜底命令 — `orchestrator issue retry`.
 
 Covers:
   - IssueRegistry.unblock(): rolls ABANDONED → PENDING, clears intent
@@ -142,7 +142,7 @@ class TestIssueRegistryUnblock(unittest.TestCase):
             self.assertIsNone(reloaded.run_workspace_dirty)
 
     def test_preserves_retry_count(self) -> None:
-        # F-39 design note: rate limit still applies after unblock.
+        # Design note: rate limit still applies after unblock.
         with tempfile.TemporaryDirectory() as tmp:
             reg = IssueRegistry(Path(tmp) / "r.json")
             reg.register(issue_id="1", issue_identifier="ISSUE-1")

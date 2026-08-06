@@ -1,4 +1,4 @@
-"""``dream`` task type — F-100.
+"""``dream`` task type.
 
 Mirrors ``typescript/src/tasks/DreamTask/DreamTask.ts`` in shape: a
 typed ``DreamTaskState`` dataclass with extension fields plus a

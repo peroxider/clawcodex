@@ -1,4 +1,4 @@
-"""Safe, expression-free rendering for F-95 templates."""
+"""Safe, expression-free rendering for templates."""
 
 from __future__ import annotations
 

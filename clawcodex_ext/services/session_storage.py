@@ -27,7 +27,7 @@ from src.utils.clawcodex_dirs import get_sessions_dir
 logger = logging.getLogger(__name__)
 
 
-# F-125 C13: cross-process file lock for JSONL append writes.
+# Cross-process file lock for JSONL append writes.
 # ``fcntl.flock`` is available on POSIX (Linux/macOS/WSL). On Windows
 # the import fails and we degrade to unlocked writes — the same
 # behaviour as before this change. The lock is held for the duration
@@ -86,7 +86,7 @@ LARGE_CONTENT_THRESHOLD = 10_000  # 10KB — store separately
 DEFAULT_RETENTION_DAYS = 30
 MAX_FLUSH_BATCH = 50
 
-# F-11: sessionStorage 容量限制
+# sessionStorage 容量限制
 # Prevents unbounded memory growth from tracking too many session
 # directories in long-running daemon/swarm processes.
 MAX_CACHED_SESSION_FILES = 1000
@@ -133,7 +133,7 @@ def clear_session_cache() -> None:
 class SessionMetadata:
     """Metadata for a session.
 
-    F-49 P5-F: ``cwd``, ``total_cost``, ``last_user_input``, ``agent_name``,
+    ``cwd``, ``total_cost``, ``last_user_input``, ``agent_name``,
     and ``cost`` are kept as in-memory attributes (for backward compatibility
     with callers that read them) but are no longer **written** to
     ``metadata.json``. The on-disk shape is now limited to list-summary
@@ -183,7 +183,7 @@ class SessionMetadata:
     def to_dict(self) -> dict[str, Any]:
         """Serialize session metadata for disk persistence.
 
-        ``last_user_input`` is included here (despite F-49 P5-F's original
+        ``last_user_input`` is included here (despite the original
         intent) because the session browser (``/resume``) relies on it for
         display — reading it from the transcript JSONL for every session in
         the listing would be O(n) file reads with unacceptable latency.
@@ -246,7 +246,7 @@ class SessionStorage:
         # the de-dup baseline instead of re-appending everything.
         self._flushed_uuids: set[str] | None = None
 
-        # F-11: Register in the session file LRU cache.
+        # Register in the session file LRU cache.
         register_session_file(self.session_id, self._session_dir)
 
     @property
@@ -255,7 +255,7 @@ class SessionStorage:
 
     # --- Metadata ---
 
-    # F-49 P5-F: fields that are kept in memory but no longer written
+    # Fields that are kept in memory but no longer written
     # to ``metadata.json``. ``cwd`` is preserved here for caller
     # compatibility (extensions may still pass it); it is simply not
     # persisted. The same applies to total_cost / last_user_input /
@@ -291,7 +291,7 @@ class SessionStorage:
         contains (see visualizer screenshot repro for
         ``02cba64e-…``).
 
-        F-49 P5-F: ``cwd`` and other legacy metadata fields
+        ``cwd`` and other legacy metadata fields
         (``total_cost`` / ``last_user_input`` / ``agent_name`` /
         ``cost``) are accepted for caller compatibility but are NOT
         written to ``metadata.json``. They live in the transcript
@@ -346,7 +346,7 @@ class SessionStorage:
     def update_metadata(self, **kwargs: Any) -> None:
         """Update metadata fields.
 
-        F-49 P5-F: legacy fields (``cwd``, ``total_cost``,
+        Legacy fields (``cwd``, ``total_cost``,
         ``last_user_input``, ``agent_name``, ``cost``) are still
         updated on the in-memory ``SessionMetadata`` so callers that
         read them keep working, but they are NOT written to
@@ -432,7 +432,7 @@ class SessionStorage:
             self._write_buffer.clear()
             return
         self._session_dir.mkdir(parents=True, exist_ok=True)
-        # F-125 C13: hold an exclusive flock for the append batch so
+        # Hold an exclusive flock for the append batch so
         # two processes resuming the same session don't interleave
         # their JSONL lines. The lock is per-call (acquired+released
         # inside _locked_append); long-held locks would block the
@@ -634,7 +634,7 @@ class SessionStorage:
         """Delete this session's directory."""
         if self._session_dir.exists():
             shutil.rmtree(self._session_dir, ignore_errors=True)
-        # F-11: Evict from the LRU cache.
+        # Evict from the LRU cache.
         _session_file_cache.pop(self.session_id, None)
 
 

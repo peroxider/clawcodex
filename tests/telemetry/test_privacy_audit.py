@@ -144,7 +144,7 @@ def test_issue_secret_scan_blocks_upload_without_persisting_body(tmp_path) -> No
 
 
 # ---------------------------------------------------------------------------
-# F-97-I: analytics bridge privacy audit
+# analytics bridge privacy audit
 # ---------------------------------------------------------------------------
 
 
@@ -231,7 +231,7 @@ def test_analytics_bridge_redacts_prompt_output_and_secrets(tmp_path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# F-97-L: cross-version privacy + dedup invariant
+# cross-version privacy + dedup invariant
 # ---------------------------------------------------------------------------
 
 
@@ -240,7 +240,7 @@ def test_v1_v2_fingerprint_redact_and_migrate_hash_equivalent() -> None:
     ERROR event with a structured fingerprint dict (same ``hash``)
     must remain dedupable after the redaction + migration pipeline.
 
-    This is the single invariant the F-97-L rollout rests on: even
+    This is the single invariant the rollout rests on: even
     after the reda``tor scrubs secret-like patterns out of the hash
     and the migrator normalizes the v1 string into the v2 dict form,
     the two events must end up in the same crash bucket — so the

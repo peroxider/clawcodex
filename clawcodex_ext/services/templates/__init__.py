@@ -1,7 +1,7 @@
-"""Templates service layer (F-85).
+"""Templates service layer.
 
 This package provides a thin service layer for reusable agent
-configuration templates. F-85 ships a full surface:
+configuration templates. It ships a full surface:
 
 * :mod:`models` — :class:`Template` dataclass with strict validation
   and ``to_dict`` / ``from_dict`` round-trip.

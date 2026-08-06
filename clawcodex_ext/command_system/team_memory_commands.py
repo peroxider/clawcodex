@@ -1,10 +1,10 @@
-"""F-93 TeamMem — ``/team memory`` debug command family (P93-F).
+"""TeamMem — ``/team memory`` debug command family.
 
 Human-facing CLI for inspecting and mutating team shared memory. The
 agent uses the :class:`TeamMemoryTool`; this command is for developers
 debugging the store live.
 
-Subcommands (F-93 §1.9)::
+Subcommands::
 
     /team memory status
     /team memory recall "deployment checklist"
@@ -316,7 +316,7 @@ class TeamMemoryCommand(LocalCommand):
 
 TEAM_MEMORY_COMMAND = TeamMemoryCommand(
     name="team memory",
-    description="Inspect and mutate the team's shared memory (F-93).",
+    description="Inspect and mutate the team's shared memory.",
     argument_hint="[status|recall|remember|list|delete|compact] ...",
     supports_non_interactive=True,
     is_enabled=is_team_memory_enabled,

@@ -1,4 +1,4 @@
-"""Tests for F-120 GoalDashboardSource + TasksDashboardSource."""
+"""Tests for GoalDashboardSource + TasksDashboardSource."""
 
 from __future__ import annotations
 

@@ -1,9 +1,9 @@
-"""F-99 regression test: ``ClawcodexAnthropicProvider`` must be registered
+"""Regression test: ``ClawcodexAnthropicProvider`` must be registered
 in ``_EXTRA_PROVIDER_CLASSES`` before any ``get_provider_class(...)`` lookup.
 
 Background
 ----------
-F-99 added three cancel-latency mechanisms (httpx ``read_timeout``,
+The cancel-latency fix added three cancel-latency mechanisms (httpx ``read_timeout``,
 transport close, tool-stage ``FIRST_COMPLETED`` poll). They were all
 unit-tested in isolation and 100 regression tests passed. Despite
 that, a user reported the production CLI still hangs at "Cancelling…"
@@ -44,7 +44,7 @@ def _purge_provider_registry() -> None:
     """Reset both ``_EXTRA_PROVIDER_CLASSES`` and the cached module
     registrations to a true cold-start state.
 
-    The F-99 fix relies on ``_init_provider_extensions()`` being called
+    The fix relies on ``_init_provider_extensions()`` being called
     by ``ensure_eager_extensions_installed()`` from
     ``clawcodex_ext/init.py:init()``. To prove the registration
     actually happens on a cold start (which is the production

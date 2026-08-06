@@ -1,4 +1,4 @@
-"""Doubao ASR STT provider — F-64 P64-A.
+"""Doubao ASR STT provider.
 
 Mirrors TS ``src/services/doubaoSTT.ts``: an adapter that bridges the
 ``doubaoime-asr`` package's ``AsyncGenerator`` protocol to the

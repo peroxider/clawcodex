@@ -1,10 +1,10 @@
-"""F-93 TeamMem — permission & scope policy (P93-D).
+"""TeamMem — permission & scope policy.
 
 Single authority on team-memory visibility. The :class:`TeamMemoryService`
 calls into :class:`TeamMemoryPolicy` on every read/write/delete so the
-scope rules from F-93 §1.7 are enforced in exactly one place.
+scope rules from §1.7 are enforced in exactly one place.
 
-Rules (F-93 §1.7)::
+Rules (§1.7)::
 
     | scenario                      | rule                                            |
     |-------------------------------|-------------------------------------------------|
@@ -103,7 +103,7 @@ class TeamMemoryPolicy:
         - ``team``: any member writes.
         - ``lead_only``: lead writes freely; a non-lead member may only
           write ``lead_only`` when ``require_lead_approval`` is False
-          (config-driven escape hatch — F-93 §1.5
+          (config-driven escape hatch — §1.5
           ``require_lead_approval_for_lead_only``). Otherwise the
           caller must downgrade to ``team`` scope.
         - ``agent_pair``: any member may write (the related_agents

@@ -1,17 +1,17 @@
-"""F-108 acceptance §7 — 0 src/ files modified.
+"""Decoupling acceptance §7 — 0 src/ files modified.
 
-This test pins the F-108 decoupling invariant by *structural*
-inspection: every F-108 module must live under
+This test pins the decoupling invariant by *structural*
+inspection: every diagnostics module must live under
 ``clawcodex_ext/``, ``extensions/``, or ``tests/`` — never under
 ``src/``. Run via:
 
     python -m pytest tests/diagnostics/test_decoupling_guard.py
 
 It does NOT diff the working tree against HEAD because other
-features (F-65, F-64, refactor batches) modify ``src/`` on this
+features (langfuse, templates, refactor batches) modify ``src/`` on this
 branch. The structural check is what actually enforces the
 constraint: ``import clawcodex_ext.diagnostics.freeze_detector``
-must work, and the source path of every F-108 module must resolve
+must work, and the source path of every diagnostics module must resolve
 to a non-``src/`` directory.
 
 It also exercises the public surface used by extensions at a
@@ -31,8 +31,8 @@ from clawcodex_ext.utils.abort_controller import AbortController
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-# F-108 implementation modules. Each entry is the dotted import
-# path used to look up the module's source file. Adding a new F-108
+# diagnostics implementation modules. Each entry is the dotted import
+# path used to look up the module's source file. Adding a new diagnostics
 # module = adding an entry here.
 F108_MODULES = (
     "clawcodex_ext.diagnostics",
@@ -46,7 +46,7 @@ F108_MODULES = (
 
 
 class TestDecouplingGuard(unittest.TestCase):
-    """0 src/ F-108 modules — the structural guard."""
+    """0 src/ diagnostics modules — the structural guard."""
 
     def _resolve(self, dotted: str) -> Path:
         """Return the on-disk path of an importable module."""
@@ -81,12 +81,12 @@ class TestDecouplingGuard(unittest.TestCase):
         self.assertEqual(
             offenders,
             [],
-            "F-108 §十八 acceptance #7 forbids src/ implementations; "
+            "Acceptance #7 forbids src/ implementations; "
             "offending modules: " + ", ".join(f"{m}->{p}" for m, p in offenders),
         )
 
     def test_f108_extensions_modules_importable(self):
-        """Sanity: every F-108 module imports cleanly."""
+        """Sanity: every diagnostics module imports cleanly."""
         for dotted in F108_MODULES:
             with self.subTest(module=dotted):
                 try:
@@ -116,7 +116,7 @@ class TestExtensionsAbortionPath(unittest.TestCase):
         self.assertTrue(ac.signal.aborted)
 
     def test_tool_context_unchanged(self):
-        """The F-108 layer does NOT mutate ToolContext defaults.
+        """The diagnostics layer does NOT mutate ToolContext defaults.
 
         We rely on the existing ``abort_controller`` field. A
         regression that adds a new required field would break

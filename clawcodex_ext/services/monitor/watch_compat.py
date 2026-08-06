@@ -1,6 +1,6 @@
 """Cross-platform ``watch -n <sec> <cmd>`` normalisation.
 
-On Windows the ``watch`` utility is not generally available, so F-88 converts
+On Windows the ``watch`` utility is not generally available, so this feature converts
 it to a PowerShell ``while(1)`` loop.  On POSIX/macOS the command is returned
 unchanged.
 """

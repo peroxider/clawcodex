@@ -1,4 +1,4 @@
-"""F-50-C stage capability mapping."""
+"""Stage capability mapping."""
 
 from .models import (
     Capability,

@@ -1,4 +1,4 @@
-"""F-167-A/B: combined Protocol surface for the visualizer package.
+"""Combined Protocol surface for the visualizer package.
 
 Both modules are *local copies* of the corresponding
 ``extensions.capabilities`` modules; see ``dashboard.py`` and

@@ -1,6 +1,6 @@
-"""Registration hooks for F-53.
+"""Registration hooks.
 
-This module glues F-53 to the two existing command surfaces:
+This module glues the dynamic tool command feature to the two existing command surfaces:
 
 1. **CLI argv level** (:mod:`clawcodex_ext.cli.subcommand_registry`):
    A single ``tool`` subcommand is registered that dispatches to any
@@ -12,7 +12,7 @@ This module glues F-53 to the two existing command surfaces:
    the REPL. See :func:`register_tool_commands` below.
 
 The CLI hook is wired from ``subcommand_registry.load_builtin_subcommands``
-(per the F-53 spec §1.6). The REPL/TUI hook is exposed as a public
+(per the spec §1.6). The REPL/TUI hook is exposed as a public
 function and called from the REPL/TUI startup code in the same place
 ``register_runtime_commands`` is called.
 """
@@ -38,7 +38,7 @@ def install_tool_subcommand() -> None:
 
     Idempotent — calling more than once is a no-op. Wired from
     :func:`clawcodex_ext.cli.subcommand_registry.load_builtin_subcommands`
-    per F-53 spec §1.6.
+    per spec §1.6.
     """
     global _INSTALLED
     if _INSTALLED:
@@ -53,7 +53,7 @@ def install_tool_subcommand() -> None:
         return run_tool_subcommand(args)
 
     _INSTALLED = True
-    log.debug("F-53: installed 'tool' CLI subcommand")
+    log.debug("Installed 'tool' CLI subcommand")
 
 
 def register_tool_commands(
@@ -84,12 +84,12 @@ def register_tool_commands(
     registered = 0
     for local_cmd in disc.discover():
         # Skip if a command with this name is already registered (e.g.
-        # by a skill, plugin, or F-49 agent command). F-53 is purely
+        # by a skill, plugin, or agent command). The dynamic tool command is purely
         # additive — it never overwrites an existing handler.
         try:
             if command_registry.has(local_cmd.name):
                 log.debug(
-                    "F-53: skipping %r — already registered in command registry",
+                    "Skipping %r — already registered in command registry",
                     local_cmd.name,
                 )
                 continue
@@ -98,7 +98,7 @@ def register_tool_commands(
         try:
             command_registry.register(local_cmd)
         except Exception as exc:  # noqa: BLE001
-            log.debug("F-53: failed to register %r: %s", local_cmd.name, exc)
+            log.debug("Failed to register %r: %s", local_cmd.name, exc)
             continue
         registered += 1
     return registered

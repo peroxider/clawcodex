@@ -1,4 +1,4 @@
-"""F-88 P88-D — disk-backed Explore/Plan report store.
+"""Disk-backed Explore/Plan report store.
 
 The Agent tool's one-shot agents (Explore, Plan) emit a high-leverage
 markdown report. Without this store, that report lives only in the

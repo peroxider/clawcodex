@@ -10,7 +10,7 @@ from typing import Literal
 class MacroRoute:
     """Direct route for macro tool recall.
 
-    MacroRoute is independent of F-55 PriorityRoute. It can actively recall
+    MacroRoute is independent of PriorityRoute. It can actively recall
     a target tool that would not otherwise appear in normal ToolSearch results.
     """
 
@@ -23,13 +23,13 @@ class MacroRoute:
     priority: int = 100
     verified: bool = False
     enabled: bool = True
-    # F-157: narrow retrieval intent and the atomic tools shadowed by this
-    # macro.  These are deliberately separate from F-55 lifecycle groups,
+    # narrow retrieval intent and the atomic tools shadowed by this
+    # macro.  These are deliberately separate from lifecycle groups,
     # which may contain several actions (for example create + invoke).
     intent_key: str = ""
     covered_tools: list[str] = field(default_factory=list)
     unavailable_policy: Literal["restore-covered"] = "restore-covered"
-    # F-57 §8.4: session > bundle > builtin (builtin safety exclusives protected)
+    # §8.4: session > bundle > builtin (builtin safety exclusives protected)
     scope: Literal["session", "bundle", "builtin"] = "bundle"
 
 

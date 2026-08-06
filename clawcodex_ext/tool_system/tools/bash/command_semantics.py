@@ -3,7 +3,7 @@
 Many commands use exit codes to convey information other than success/failure.
 For example, grep returns 1 when no matches are found, which is not an error.
 
-F-107: Extended with PowerShell-specific exit-code semantics when
+Extended with PowerShell-specific exit-code semantics when
 ``shell="powershell"``.
 """
 
@@ -61,7 +61,7 @@ def _test_semantic(exit_code: int, _stdout: str, _stderr: str) -> CommandInterpr
 
 
 # ---------------------------------------------------------------------------
-# F-107: PowerShell-specific semantics
+# PowerShell-specific semantics
 # ---------------------------------------------------------------------------
 
 
@@ -93,7 +93,7 @@ COMMAND_SEMANTICS: dict[str, CommandSemantic] = {
 }
 
 # ---------------------------------------------------------------------------
-# F-107: PowerShell command semantics map
+# PowerShell command semantics map
 # ---------------------------------------------------------------------------
 
 PWSH_COMMAND_SEMANTICS: dict[str, CommandSemantic] = {

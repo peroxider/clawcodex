@@ -1,6 +1,6 @@
 """Prompt generation and timeout configuration for the bash tool.
 
-F-107: Extended with shell selection guidance and PowerShell syntax tips.
+Extended with shell selection guidance and PowerShell syntax tips.
 """
 
 from __future__ import annotations

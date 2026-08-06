@@ -1,6 +1,6 @@
 """Stage 3d — /model 和 /provider 运行时命令可用性测试（< 5 秒）。
 
-覆盖 F-43 的 /model 和 /provider 斜杠命令在两种场景下的正确性：
+覆盖 /model 和 /provider 斜杠命令在两种场景下的正确性：
 
 - **有 runtime_context**：命令应显示当前 provider/model + 可用列表
 - **无 runtime_context**：命令应降级显示列表（不抛异常 / 不报 Unknown command）
@@ -205,13 +205,13 @@ class TestRuntimeCommandsWithRuntimeContext:
 
 
 # ---------------------------------------------------------------------------
-# F-100 / 100.4 — /dream slash skill
+# /dream slash skill
 # ---------------------------------------------------------------------------
 
 
 class TestDreamCommandRegistration:
     """``register_dream_skill`` wires ``/dream`` as a LocalCommand in the
-    global command registry (F-100 / 100.4)."""
+    global command registry."""
 
     def test_register_dream_skill_adds_dream(self):
         """register_dream_skill adds a LocalCommand named ``dream``."""
@@ -228,7 +228,7 @@ class TestDreamCommandRegistration:
 
 
 class TestDreamCommandExecution:
-    """``/dream`` subcommands run via execute_command_sync (F-100 / 100.4)."""
+    """``/dream`` subcommands run via execute_command_sync."""
 
     @pytest.fixture(autouse=True)
     def _isolate_dream_service(self):
@@ -304,7 +304,7 @@ class TestDreamCommandExecution:
         assert "frobnicate" in result_text
 
     def test_dream_command_no_unknown_command(self):
-        """``/dream`` must not return ``Unknown command`` (F-100/100.4 验收 #5)."""
+        """``/dream`` must not return ``Unknown command`` (验收 #5)."""
         self._ensure_registered()
         from clawcodex_ext.command_system.builtins import execute_command_sync
 

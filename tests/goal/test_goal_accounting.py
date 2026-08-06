@@ -1,4 +1,4 @@
-"""Goal runtime accounting tests for F-122 Spec 5."""
+"""Goal runtime accounting tests for Spec 5."""
 
 from __future__ import annotations
 

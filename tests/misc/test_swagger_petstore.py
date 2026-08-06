@@ -1,4 +1,4 @@
-"""使用 Swagger Petstore API 验证 F-52 功能"""
+"""使用 Swagger Petstore API 验证 OpenAPI 功能"""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def load_local_petstore_spec() -> dict:
 
 
 class TestSwaggerPetstore:
-    """使用 Swagger Petstore 验证 F-52 功能"""
+    """使用 Swagger Petstore 验证 OpenAPI 功能"""
 
     def test_petstore_spec_parsing(self):
         """测试解析 Petstore OpenAPI spec"""

@@ -1,4 +1,4 @@
-"""F-50.11.4 Interactive completion mode — TODO template generation.
+"""Interactive completion mode — TODO template generation.
 
 When workflow extraction fails (empty graph) in hybrid/fwa mode,
 ``--interactive`` flag triggers generation of structured TODO templates
@@ -249,7 +249,7 @@ def generate_completion_todo(
     Parameters
     ----------
     disc:
-        Discrimination result from F-50-A (carries scan context and
+        Discrimination result from the discriminator (carries scan context and
         heuristic matches that inform the template).
     source_dir:
         Path to the source directory being converted.

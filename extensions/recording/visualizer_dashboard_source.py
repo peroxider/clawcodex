@@ -1,7 +1,7 @@
-"""F-167-D: Visualizer dashboard adapter for asciicast recording.
+"""Visualizer dashboard adapter for asciicast recording.
 
 Originally lived at ``extensions/visualizer/asciicast_dashboard_source.py``
-as part of the visualizer package. F-167 moved it here because its
+as part of the visualizer package. It moved here because its
 real consumer is :func:`extensions.recording._factories._visualizer_factory`,
 not the visualizer Web UI — the recording CLI polls snapshots on a 1 Hz
 tick and renders them as ASCII panels via :func:`extensions.visualizer._rendering.panel`.

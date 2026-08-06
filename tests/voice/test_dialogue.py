@@ -1,13 +1,13 @@
-"""Tests for F-65 (Voice Dialogue Mode) components.
+"""Tests for Voice Dialogue Mode components.
 
 Covers:
 * :class:`DialogueConfig` / :class:`DialogueEvent` dataclasses.
 * :class:`FullDuplexDialogueProvider` ABC (registered in registry).
 * :class:`InterruptDetector` (energy-based VAD for barge-in).
 * :class:`AudioOutQueue.clear` and :class:`AudioPlayer` ``stop_nowait`` /
-  ``stop_and_close`` for the F-65 interrupt path.
+  ``stop_and_close`` for the interrupt path.
 * :class:`DialogueSessionManager` state machine with a stub provider.
-* :mod:`voice_mode_enabled` F-65 gate (DIALOGUE_PROVIDERS,
+* :mod:`voice_mode_enabled` gate (DIALOGUE_PROVIDERS,
   has_dialogue_auth, is_dialogue_feature_enabled, is_dialogue_available,
   is_dialogue_enabled, get_dialogue_provider).
 * :mod:`provider_registry` dialogue registration round-trip.
@@ -259,7 +259,7 @@ class TestDialogueProviderRegistry(unittest.TestCase):
             DIALOGUE_REGISTRY.pop("unique-stub", None)
 
 
-# ── voice-mode gating (F-65) ──────────────────────────────────────────────
+# ── voice-mode gating ──────────────────────────────────────────────
 
 
 class TestDialogueGate(unittest.TestCase):
@@ -943,7 +943,7 @@ class TestDialogueConfigSetters(unittest.TestCase):
 
 class TestVoicePackageExports(unittest.TestCase):
     def test_lazy_attribute_resolution(self) -> None:
-        # Resolve each F-65 export via the package __getattr__ hook.
+        # Resolve each export via the package __getattr__ hook.
         from clawcodex_ext.services import voice as vp
 
         for name in (

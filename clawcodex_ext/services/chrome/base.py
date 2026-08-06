@@ -1,4 +1,4 @@
-"""F-62 P62-A/B/C — :class:`ChromeController` abstract base.
+"""ChromeController abstract base.
 
 Mirrors the layered pattern used by :mod:`src.services.computer_use`
 and :mod:`src.services.channels`: an ABC declares the contract, and

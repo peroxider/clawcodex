@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-# --- F-47: PermissionsConfig replaces the legacy `list[PermissionRule]` ---
+# --- PermissionsConfig replaces the legacy `list[PermissionRule]` ---
 
 
 @dataclass
@@ -32,7 +32,7 @@ _PERMISSIONS_KNOWN_SUBKEYS: frozenset[str] = frozenset(
     }
 )
 
-# F-108 P108-E — keys covered by ``FreezeSettings``. Unknown
+# keys covered by ``FreezeSettings``. Unknown
 # ``freeze.*`` sub-keys flow into ``FreezeSettings.additional`` (forward-
 # compat bag) so the on-disk JSON can carry schema additions without a
 # code change.
@@ -52,7 +52,7 @@ _FREEZE_KNOWN_SUBKEYS: frozenset[str] = frozenset(
 class PermissionsConfig:
     """Structured `permissions` block — matches on-disk + TS upstream contract.
 
-    F-47 (2026-06-02): replaces the legacy ``list[PermissionRule]`` shape that
+    Replaces the legacy ``list[PermissionRule]`` shape that
     was drifting from the on-disk dict format
     (``src/permissions/updates.py:persist_permission_update``) and the TS
     upstream ``permissions.*`` contract. Field names are Python snake_case;
@@ -183,11 +183,11 @@ class SpinnerVerbsSettings:
 
 @dataclass
 class FreezeSettings:
-    """Layer-2/Layer-1 freeze-detection timeouts (F-108 §十八 P108-E).
+    """Layer-2/Layer-1 freeze-detection timeouts.
 
     Each knob is the wall-clock budget (in seconds) for an outer /
     middle / inner watchdog. ``0`` disables that layer and lets the
-    underlying loop run indefinitely (F-108 §十八 design decision #5).
+    underlying loop run indefinitely (design decision #5).
 
     Resolution order (handled by :mod:`clawcodex_ext.diagnostics.freeze_config`):
 
@@ -198,13 +198,13 @@ class FreezeSettings:
     3. Built-in default (the dataclass default itself).
 
     The TUI/agent_bridge honors ``permission_timeout_s`` for modal
-    auto-deny (risk #2 #3 in F-108 §十八). The headless / API runner
+    auto-deny (risk #2 #3 in the freeze timeout design). The headless / API runner
     honors ``agent_loop_timeout_s``. The query loop layer-2 stack
     uses ``turn_timeout_s`` and ``tool_timeout_s``. The freeze
     watchdog uses ``threshold_s`` (staggered below the
     ``stream_idle_timeout`` to avoid double-killing).
 
-    F-108 §十八 design decisions:
+    freeze timeout design decisions:
 
     * 30 s for permission modal — below plausible render time but
       long enough for the user to react.
@@ -395,15 +395,15 @@ class SettingsSchema:
     # Provider
     provider: str = "anthropic"
 
-    # Permission mode — F-47 back-compat reading channel.
+    # Permission mode — back-compat reading channel.
     # Reads through ``permissions.defaultMode`` first; this top-level
     # field is kept for older binaries that wrote the mode outside the
     # ``permissions`` block. Empty string means "unset" and is skipped
-    # by ``validate_settings``. F-46.2 will mark this deprecated.
+    # by ``validate_settings``. A future revision will mark this deprecated.
     permission_mode: str = ""
 
-    # Permission configuration — F-47 dict-shaped block.
-    # Replaces the legacy ``list[PermissionRule]`` (deleted in F-47 Sub-H).
+    # Permission configuration — dict-shaped block.
+    # Replaces the legacy ``list[PermissionRule]`` (deleted in the permissions refactor).
     # Matches on-disk format produced by
     # ``src/permissions/updates.py:persist_permission_update`` and the
     # TS upstream ``permissions.*`` contract.
@@ -424,7 +424,7 @@ class SettingsSchema:
     # Compact
     compact: CompactSettings = field(default_factory=CompactSettings)
 
-    # F-108 P108-E — freeze / layer-1 / layer-2 budgets. Declared as a
+    # freeze / layer-1 / layer-2 budgets. Declared as a
     # structured block (mirrors ``compact``) so per-knob reset / env-var
     # resolution stays inside the dataclass — ``from_dict`` reads it back
     # automatically when the on-disk JSON matches the dataclass shape.
@@ -489,7 +489,7 @@ class SettingsSchema:
     # framework's default (focus_next / completion-menu cycling).
     accept_suggestion_tab_alias: bool = True
 
-    # ── F-64 Voice Mode ───────────────────────────────────────────────
+    # ── Voice Mode ───────────────────────────────────────────────
     # Mirrors TS ``settings.voiceProvider`` (``utils/settings/types.ts``).
     # ``""`` (default) = unset; persisted values: ``"anthropic"`` | ``"doubao"``.
     # The active STT backend is selected by :func:`clawcodex_ext.services.voice.
@@ -504,16 +504,16 @@ class SettingsSchema:
     # flip both atomically while ``/voice anthropic`` only touches the provider.
     voice_enabled: bool = False
 
-    # ── F-64 P64-E TTS (Text-to-Speech) ────────────────────────────────
+    # ── TTS (Text-to-Speech) ────────────────────────────────
     tts_provider: str = ""
     tts_enabled: bool = False
     tts_voice: str = ""
     tts_silent_text_output: bool = False
 
-    # ── F-65 P65-D Voice Dialogue (full-duplex) ─────────────────────────
-    # Decoupled from the F-64 voice_* / tts_* knobs so the two voice modes
-    # can ship independently: a F-64 user can keep their STT setup while
-    # ignoring dialogue, and vice versa. Defaults match the F-65 plan
+    # ── Voice Dialogue (full-duplex) ─────────────────────────
+    # Decoupled from the voice_* / tts_* knobs so the two voice modes
+    # can ship independently: a voice user can keep their STT setup while
+    # ignoring dialogue, and vice versa. Defaults match the dialogue plan
     # ("minimax" primary backend, text-modality for the first iteration so
     # the caller routes through its own LLM before TTS — easier to debug
     # than the audio modality in MVP).
@@ -540,7 +540,7 @@ class SettingsSchema:
     def from_dict(cls, data: dict[str, Any]) -> SettingsSchema:
         """Deserialize from dict.
 
-        F-47: ``permissions`` is now a structured dict (PermissionsConfig)
+        permissions block is now a structured dict (PermissionsConfig)
         matching the on-disk + TS upstream contract. ``from_dict`` accepts
         any of dict / list / None / missing and degrades safely to an
         empty :class:`PermissionsConfig`; unknown sub-keys land in

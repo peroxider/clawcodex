@@ -1,4 +1,4 @@
-"""AST helpers shared by F-50-A discriminator and F-50-B extractors."""
+"""AST helpers shared by the discriminator and workflow extractors."""
 
 from __future__ import annotations
 

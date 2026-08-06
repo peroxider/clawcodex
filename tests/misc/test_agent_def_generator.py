@@ -1,4 +1,4 @@
-"""Tests for F-50-E agent definition generator."""
+"""Tests for the agent definition generator."""
 
 from __future__ import annotations
 
@@ -154,7 +154,7 @@ class TestAgentDefinitionGenerator:
         assert "`normalized.json`" in preprocess
 
     def test_stage_agent_survives_coarse_write(self, tmp_path: Path):
-        """Coarse write_agent must not replace F-50-E stage agent markdown."""
+        """Coarse write_agent must not replace stage agent markdown."""
         from extensions.sop_converter.agent_md_writer import AgentMarkdownWriter
 
         path = FIXTURES / "fixture_fwa_project"

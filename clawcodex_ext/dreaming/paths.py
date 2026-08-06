@@ -37,7 +37,7 @@ __all__ = [
 def is_kairos_active() -> bool:
     """Whether the KAIROS feature gate is active for this session.
 
-    clawcodex does not yet implement KAIROS (deferred — F-100 design
+    clawcodex does not yet implement KAIROS (deferred — design
     decision #1 in PROGRESS.md §十三). Returns ``False`` unless
     explicitly opted in via the ``CLAWCODEX_KAIROS`` env var so
     dream can still be tested in isolation.

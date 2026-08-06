@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-# F-99 fix: importing the package (not just ``factory``) triggers
+# fix: importing the package (not just ``factory``) triggers
 # ``clawcodex_ext/providers/__init__.py``, which registers the
 # cancel-latency-fixed ``ClawcodexAnthropicProvider`` /
 # ``ClawcodexMinimaxProvider`` overrides via

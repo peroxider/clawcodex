@@ -1,9 +1,9 @@
-"""WebSocket live tail for session events (F-92-B) + Agent Dashboard (F-120).
+"""WebSocket live tail for session events + Agent Dashboard.
 
 Provides real-time push of new TimelineBar entries as a session runs.
 Connect to ``/api/viz/ws/sessions/{session_id}``.
 
-Also exposes ``/api/viz/ws/dashboard/live`` for the F-120 Agent Dashboard.
+Also exposes ``/api/viz/ws/dashboard/live`` for the Agent Dashboard.
 """
 
 from __future__ import annotations
@@ -363,7 +363,7 @@ def create_ws_router() -> APIRouter:
 
 
 # ---------------------------------------------------------------------------
-# F-96-E: Orchestrator State Journal live tail
+# Orchestrator State Journal live tail
 # ---------------------------------------------------------------------------
 
 
@@ -448,7 +448,7 @@ _active_orch_tails: dict[str, OrchestratorJournalTail] = {}
 
 
 def create_orch_ws_router() -> APIRouter:
-    """Create the WebSocket router for orchestrator state journal tailing (F-96-E)."""
+    """Create the WebSocket router for orchestrator state journal tailing."""
     router = APIRouter()
 
     @router.websocket("/ws/orchestrator/{run_id}")
@@ -511,7 +511,7 @@ def create_orch_ws_router() -> APIRouter:
 
 
 # ---------------------------------------------------------------------------
-# F-120: Agent Dashboard live snapshot push
+# Agent Dashboard live snapshot push
 # ---------------------------------------------------------------------------
 
 
@@ -618,7 +618,7 @@ _active_dashboard_tails: dict[int, DashboardLiveTail] = {}
 
 
 def create_dashboard_ws_router() -> APIRouter:
-    """Create the WebSocket router for live dashboard snapshots (F-120)."""
+    """Create the WebSocket router for live dashboard snapshots."""
     router = APIRouter()
 
     @router.websocket("/ws/dashboard/live")

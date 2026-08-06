@@ -1,4 +1,4 @@
-"""Thread goal protocol facade tests for F-122 Spec 3."""
+"""Thread goal protocol facade tests for Spec 3."""
 
 from __future__ import annotations
 

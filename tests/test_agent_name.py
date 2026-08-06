@@ -1,6 +1,6 @@
-"""F-89 — ``@agent-name`` 多入口统一支持测试。
+"""``@agent-name`` 多入口统一支持测试。
 
-Covers the three code paths that the F-89 rollout touched:
+Covers the three code paths that the rollout touched:
 
 1. **Shared helpers** (``src.command_system.input_processing``) — the
    single source of truth that drives consistent behaviour across all

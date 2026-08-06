@@ -6,7 +6,7 @@ from .composite_runtime import CompositeWorkflowSpec, CompositeWorkflowStep
 
 
 def invoke_existing_agent_workflow() -> CompositeWorkflowSpec:
-    """Agent-facing facade over the F-56 ResourceHandler recovery chain.
+    """Agent-facing facade over the ResourceHandler recovery chain.
 
     Product inputs/outputs stay agent-shaped (``agent_ref`` / ``agent_id`` /
     ``method``). Steps go through ``resolve_agent_record`` and the same
@@ -16,7 +16,7 @@ def invoke_existing_agent_workflow() -> CompositeWorkflowSpec:
     """
     return CompositeWorkflowSpec(
         name="invoke-existing-agent",
-        description="Invoke an SOP-created agent from its F-56 catalog record by name or ID.",
+        description="Invoke an SOP-created agent from its catalog record by name or ID.",
         inputs={
             "agent_ref": {"type": "string", "required": False},
             "agent_id": {"type": "string", "required": False},
@@ -82,11 +82,11 @@ def invoke_existing_agent_workflow() -> CompositeWorkflowSpec:
 
 
 def resume_resource_workflow() -> CompositeWorkflowSpec:
-    """Return the F-57 generic resume workflow over F-56 ResourceHandler rows."""
+    """Return the generic resume workflow over ResourceHandler rows."""
     return CompositeWorkflowSpec(
         name="resume-resource",
         description=(
-            "Resume any registered F-56 catalog resource by resource_type and "
+            "Resume any registered catalog resource by resource_type and "
             "resource_ref, then invoke it through its ResourceHandler."
         ),
         inputs={

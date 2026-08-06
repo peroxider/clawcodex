@@ -1,4 +1,4 @@
-"""Diagnostics primitives (F-108 §十八).
+"""Diagnostics primitives (§十八).
 
 This package houses the freeze-detection watchdog (Layer 1) and its
 dump / resolution helpers. Nothing in here modifies behaviour of the

@@ -8,7 +8,7 @@ snapshot (visual screenshots would require a real browser runtime, which
 is out of scope for the builtin tool).
 
 Uses the standard-library ``urllib`` to avoid introducing a ``playwright``
-dependency (F-71 listed ``playwright`` as optional). SSRF protection is
+dependency (the design listed ``playwright`` as optional). SSRF protection is
 delegated to the same private-host guard used by ``WebFetchTool`` so the
 two tools stay consistent.
 

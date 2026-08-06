@@ -1,4 +1,4 @@
-"""Tests for F-50-C stage capability mapper."""
+"""Tests for the stage capability mapper."""
 
 from __future__ import annotations
 

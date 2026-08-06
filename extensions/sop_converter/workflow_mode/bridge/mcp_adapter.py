@@ -1,4 +1,4 @@
-"""Register bridge script as AgentToolSpec (F-52 pattern)."""
+"""Register bridge script as AgentToolSpec (subprocess bridge pattern)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 def bridge_tool_name(project_name: str) -> str:
-    """Kebab-case execute-stage tool name (aligned with F-50-E stage agent templates)."""
+    """Kebab-case execute-stage tool name (aligned with stage agent templates)."""
     kebab = project_name.replace("_", "-").lower()
     return f"{kebab}-execute-stage"
 

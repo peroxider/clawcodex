@@ -120,7 +120,7 @@ class StartupHeader(Static):
 
         footer = Text(self._slash_hints, style="dim")
 
-        # F-97 telemetry notice — show when both stats collection and error
+        # Telemetry notice — show when both stats collection and error
         # reporting are enabled.  Best-effort & swallowed on failure so a
         # misconfigured telemetry package never blocks TUI startup.
         try:

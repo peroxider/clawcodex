@@ -1,4 +1,4 @@
-"""SOP converter adapter for asciicast recording (F-REC).
+"""SOP converter adapter for asciicast recording (asciicast recording feature).
 
 The SOP converter pipeline has no native event stream — it writes
 artifacts to disk and the CLI wrapper (``clawcodex_ext/cli/sop_cmd/commands.py``)

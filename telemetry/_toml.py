@@ -1,4 +1,4 @@
-"""Private TOML helpers for F-97 telemetry config loading.
+"""Private TOML helpers for telemetry config loading.
 
 The :mod:`telemetry.config` layer probes the on-disk TOML
 config files for a ``[tool.clawcodex.telemetry]`` table or a

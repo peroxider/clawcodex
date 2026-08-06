@@ -1,10 +1,10 @@
-"""dialogue — ``/dialogue`` command (F-65 Voice Dialogue Mode).
+"""dialogue — ``/dialogue`` command (Voice Dialogue Mode).
 
-Symmetric to ``/voice`` (F-64) and ``/tts`` (F-64 P64-E): toggles
+Symmetric to ``/voice`` and ``/tts``: toggles
 full-duplex voice dialogue mode on/off, selects the dialogue backend,
 sets voice / modality preferences, and reports status.
 
-F-65 differs from F-64 in two important ways:
+Dialogue differs from voice mode in two important ways:
 
 * **No "say" or one-shot preview** — dialogue is session-only; an MVP
   preview would require spinning up a WebSocket, sending fake audio,
@@ -22,7 +22,7 @@ Persisted state lives in ``settings.dialogue_enabled`` /
 ``settings.dialogue_modality``, written via :func:`src.config
 .set_dialogue_*` which invalidate the settings cache so the next
 ``get_settings()`` reflects the change mid-session — same pattern as
-the F-64 ``/voice`` and F-64 ``/tts`` commands.
+the ``/voice`` and ``/tts`` commands.
 
 Usage
 -----
@@ -186,7 +186,7 @@ def _status_text() -> str:
 def dialogue_command_call(
     args: str, context: CommandContext
 ) -> LocalCommandResult:
-    """``/dialogue`` handler — toggle / configure / start / stop the F-65 path."""
+    """``/dialogue`` handler — toggle / configure / start / stop the dialogue path."""
     raw = (args or "").strip()
     a = raw.lower()
 
@@ -194,7 +194,7 @@ def dialogue_command_call(
     if a in ("help", "-h", "--help"):
         return LocalCommandResult(type="text", value=_HELP)
 
-    # 2. status (headless) — diagnostics for the F-65 gate layers.
+    # 2. status (headless) — diagnostics for the dialogue gate layers.
     if a in ("status", "current", "show"):
         return LocalCommandResult(type="text", value=_status_text())
 
@@ -308,7 +308,7 @@ def dialogue_command_call(
 # ── session lifecycle helpers ─────────────────────────────────────────────
 #
 # These are intentionally thin wrappers in the MVP. A full integration
-# would hand off to a long-lived session manager (F-65 P65-B) that
+# would hand off to a long-lived session manager (dialogue session manager) that
 # lives across multiple REPL turns; the command-path integration with
 # the dialogue session manager is the next iteration's work. Here we
 # validate that a session *can* be assembled (provider is registered,

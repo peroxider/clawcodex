@@ -1,4 +1,4 @@
-"""F-94 BG_SESSIONS — 后台会话统一管理。
+"""BG_SESSIONS — 后台会话统一管理。
 
 整合现有 ``background_runner`` / ``RuntimeTaskRegistry`` / ``ResumeAgent``
 零散能力，提供全局 index、跨进程 discover、统一状态机、orphan cleanup、

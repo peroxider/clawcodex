@@ -1,17 +1,17 @@
-"""F-93 TeamMem — lifecycle & prompt integration (P93-E / P93-G).
+"""TeamMem — lifecycle & prompt integration.
 
 Thin integration layer that wires :class:`TeamMemoryService` into the
 Team / Coordinator / Agent runtime without touching ``src/``. The hooks
 here are called from the existing TeamCreate / TeamDelete / SendMessage
 paths (or their downstream wrappers in ``clawcodex_ext/``).
 
-Three integration points (F-93 §1.6 / §1.8 / §4):
+Three integration points (§1.6 / §1.8 / §4):
 
   * **TeamCreate** → :func:`initialize_team_memory` ensures the
     ``<auto_mem>/team/`` dir exists and writes an empty ``MEMORY.md``.
   * **TeamDelete** → :func:`archive_team_memory` snapshots the store
     into ``archive/<ts>.jsonl`` *before* the team file is removed
-    (default: archive, never delete — F-93 §0.2 / acceptance #9).
+    (default: archive, never delete — §0.2 / acceptance #9).
   * **SendMessage** → :func:`sink_send_message_summary` records a
     compact summary of broadcast / key peer messages as a
     ``source=send_message`` entry.
@@ -23,7 +23,7 @@ returns ``""`` when disabled (the builder drops empty sections).
 
 All hooks are **no-ops when team memory is disabled** (env
 ``CLAUDE_CODE_TEAM_MEMORY`` off or auto-memory off) — they neither
-raise nor write files (F-93 §1.10 ``TeamMemoryDisabledError`` is for
+raise nor write files (§1.10 ``TeamMemoryDisabledError`` is for
 explicit tool calls; background hooks fail silent).
 """
 
@@ -144,7 +144,7 @@ def archive_team_memory(
 ) -> Path | None:
     """Snapshot team memory before TeamDelete removes the team file.
 
-    Default behavior is **archive, not delete** (F-93 §0.2 / acceptance
+    Default behavior is **archive, not delete** (§0.2 / acceptance
     #9). Returns the archive path, or ``None`` when disabled or no
     team file. The caller (TeamDelete tool wrapper) is responsible for
     the actual team-file removal — this hook only snapshots.
@@ -203,7 +203,7 @@ def build_team_memory_prompt_section(
     """Assemble the ``<team_memory>`` prompt section for a teammate.
 
     Empty string when disabled, no team file, or no recall hits. The
-    context builder is expected to skip empty sections (F-93 §1.8 /
+    context builder is expected to skip empty sections (§1.8 /
     acceptance #1).
     """
     service = get_team_memory_service(workspace_root, config=config)

@@ -165,7 +165,7 @@ class OrchestratorState:
     claimed: set[str] = field(default_factory=set)
     retry_queue: list[RetryItem] = field(default_factory=list)
     retry_attempts: dict[str, int] = field(default_factory=dict)
-    # F-120: throttle marker for the optional PR conflict scan. Wall-clock
+    # Throttle marker for the optional PR conflict scan. Wall-clock
     # seconds (not ms) of the last scan — compared against
     # ``time.monotonic()`` so a backwards clock jump is benign.
     pr_conflict_scan_last_run: float = 0.0
@@ -216,7 +216,7 @@ class Orchestrator:
         self._workflow_yaml_path = workflow_yaml_path
         self._workflow_orchestrator = None
 
-        # F-96-A completion: the StateJournalWriter existed but was never
+        # The StateJournalWriter existed but was never
         # instantiated anywhere, so the visualizer's orchestrator dashboard
         # (reads ``~/.clawcodex/reports/run_*/state_journal.ndjson``) always
         # showed "no runs". One journal per daemon lifetime; writes are
@@ -242,7 +242,7 @@ class Orchestrator:
             logger.exception("state journal init failed — dashboard disabled")
             self._viz_journal = None
 
-        # F-110: 初始化声明式工作流引擎
+        # 初始化声明式工作流引擎
         if workflow_yaml_path:
             from .workflow_orchestrator import WorkflowOrchestrator
 
@@ -384,7 +384,7 @@ class Orchestrator:
                 workspace_focus_callback=self._compute_workspace_focus_for_clarifier,
             )
             logger.info(
-                "F-124 issue clarifier enabled (block=%s, author_first=%s)",
+                "Issue clarifier enabled (block=%s, author_first=%s)",
                 clarifier_config.block_on_unclear,
                 clarifier_config.author_first,
             )
@@ -395,7 +395,7 @@ class Orchestrator:
         self.im_event_deliver: "object | None" = None
         self.im_event_channel: str = ""
         self._im_emitters: dict = {}
-        # F-40: do NOT keep a single :class:`ProgressReporter` here.
+        # Do NOT keep a single :class:`ProgressReporter` here.
         # Per-session progress is fanned out via
         # :meth:`_build_session_sink` (a fresh
         # :class:`CompositeProgressSink` rooted in a private
@@ -412,10 +412,10 @@ class Orchestrator:
         :class:`ToolContextProgressSink` instance. Two sinks built for
         different task ids share the underlying ``ToolContext`` (so
         progress stages land in the right place) but have independent
-        phase counters, eliminating the F-38-era single-instance
+        phase counters, eliminating the legacy single-instance
         cross-talk.
 
-        Future issues (F-37 PRReviewAutoFixSink, F-39 RetryLabelSink)
+        Future issues (PR review auto-fix sink, retry label sink)
         can register additional sinks on the returned composite via
         :meth:`CompositeProgressSink.add` without touching
         :class:`AgentRunner` or ``progress_reporter.py``.
@@ -868,7 +868,7 @@ class Orchestrator:
             self._state.max_concurrent_agents,
         )
 
-        # F-97: best-effort session_start at the top of the polling
+        # Best-effort session_start at the top of the polling
         # loop. The session id is the workflow root path's basename
         # plus a stable hash so the per-day aggregator can group all
         # orchestrator daemons across the day. Failures are swallowed.
@@ -909,7 +909,7 @@ class Orchestrator:
             await self._cancel_all_tasks()
             exit_status = 0
         except Exception as exc:
-            # F-97: best-effort error event with stable fingerprint.
+            # Best-effort error event with stable fingerprint.
             # Failures are swallowed.
             try:
                 from telemetry import record_error
@@ -920,7 +920,7 @@ class Orchestrator:
             exit_status = 1
             raise
         finally:
-            # F-97: best-effort session_end + command_run.
+            # Best-effort session_end + command_run.
             try:
                 from telemetry import (
                     record_command_run,
@@ -1027,9 +1027,9 @@ class Orchestrator:
 
             await self._process_review_feedback()
 
-            # F-120: launch agent_rebase for PRs with content conflicts
+            # Launch agent_rebase for PRs with content conflicts
             await self._process_pending_rebase_conflicts()
-            # F-120: optional PR mergeable-state scan (opt-in via workflow.md)
+            # Optional PR mergeable-state scan (opt-in via workflow.md)
             await self._process_pr_conflict_scan()
 
             # Fetch new candidate issues
@@ -1089,7 +1089,7 @@ class Orchestrator:
                 if issue.id in self._state.claimed:
                     continue
 
-                # F-39 Sub-A + Sub-D + Sub-E: intent resolution must
+                # Intent resolution must
                 # happen BEFORE the completed/pending_review skip so
                 # operators can trigger RETRY / FOLLOWUP on completed
                 # issues via labels, comments, or CLI.
@@ -1099,14 +1099,14 @@ class Orchestrator:
                     if intent not in (Intent.RETRY, Intent.FOLLOWUP):
                         continue
                 # `command_intent_obj` may carry the comment author
-                # for F-39 Sub-F role checks; the bare `Command` value
+                # for role checks; the bare `Command` value
                 # is in `command_intent_obj.command`.
                 command = command_intent_obj.command if command_intent_obj is not None else None
                 command_author = (
                     command_intent_obj.author_login if command_intent_obj is not None else None
                 )
 
-                # F-39 Sub-F: role check. If a comment command is
+                # Role check. If a comment command is
                 # what triggered the intent, only the issue author or
                 # a maintainer (or `allow_anyone_to_retry=True`) is
                 # allowed to fire it. The check happens BEFORE the
@@ -1120,7 +1120,7 @@ class Orchestrator:
                     await self._reject_unauthorized_command(issue, command_intent_obj)
                     continue
 
-                # F-39 Sub-F: rate limit on RETRY intent. If the issue
+                # Rate limit on RETRY intent. If the issue
                 # has hit `max_retries_per_issue`, refuse the reset
                 # (even with `--force`; only the label-based retry
                 # honors force in the daemon path).
@@ -1128,7 +1128,7 @@ class Orchestrator:
                     if not self._check_retry_rate_limit(issue, force=False):
                         continue
 
-                # F-39 Sub-D: when a comment command is honored, post
+                # When a comment command is honored, post
                 # a bot acknowledgement so the operator sees the
                 # intent was received, and record the command on the
                 # registry for audit.
@@ -1175,7 +1175,7 @@ class Orchestrator:
                     self._registry.mark_intent(
                         issue.id or "",
                         intent,
-                        # F-39 Sub-E: preserve the source from
+                        # Preserve the source from
                         # _resolve_intent so CLI / comment / label
                         # origin is recorded on the record. The
                         # fallback only fires if intent_source is
@@ -1198,7 +1198,7 @@ class Orchestrator:
                     self._registry.mark_intent(
                         issue.id or "",
                         intent,
-                        # F-39 Sub-E: preserve the source from
+                        # Preserve the source from
                         # _resolve_intent so CLI / comment / label
                         # origin is recorded on the record. The
                         # fallback only fires if intent_source is
@@ -1208,7 +1208,7 @@ class Orchestrator:
                         source=(intent_source or ("command" if command is not None else "label")),
                         command=(f"/agent {command.value}" if command is not None else None),
                     )
-                    # F-39 Sub-B will perform the actual reset+close.
+                    # The reset+close path performs the actual reset.
                 elif intent is Intent.FOLLOWUP:
                     logger.info(
                         "Issue %s follow-up intent detected, will reuse branch",
@@ -1217,7 +1217,7 @@ class Orchestrator:
                     self._registry.mark_intent(
                         issue.id or "",
                         intent,
-                        # F-39 Sub-E: preserve the source from
+                        # Preserve the source from
                         # _resolve_intent so CLI / comment / label
                         # origin is recorded on the record. The
                         # fallback only fires if intent_source is
@@ -1227,10 +1227,10 @@ class Orchestrator:
                         source=(intent_source or ("command" if command is not None else "label")),
                         command=(f"/agent {command.value}" if command is not None else None),
                     )
-                    # F-39 Sub-C will perform the actual follow-up.
+                    # The follow-up path performs the actual follow-up.
 
                 if intent is Intent.REBASE:
-                    # F-120: REBASE intent — the orchestrator itself
+                    # REBASE intent — the orchestrator itself
                     # performs the rebase (no agent for clean rebases).
                     # On content conflict, has_conflict is set and the
                     # next ``_process_pending_rebase_conflicts`` cycle
@@ -1268,10 +1268,10 @@ class Orchestrator:
                 if self._clarification_gate is not None:
                     try:
                         if not await self._clarification_gate.should_dispatch(issue):
-                            logger.info("Issue %s is waiting for F-124 clarification", issue.id)
+                            logger.info("Issue %s is waiting for issue-clarifier clarification", issue.id)
                             continue
                     except Exception:
-                        logger.exception("F-124 clarity gate failed for issue %s", issue.id)
+                        logger.exception("Issue-clarifier clarity gate failed for issue %s", issue.id)
                         if not bool(getattr(self.workflow.clarifier, "fail_open", True)):
                             continue
                 self._state.claimed.add(issue.id)
@@ -1286,7 +1286,7 @@ class Orchestrator:
                 await self._launch_issue(issue)
                 if issue.id in self._state.running:
                     launched_this_poll += 1
-                    # F-39 Sub-E: CLI retry is a one-shot. The
+                    # CLI retry is a one-shot. The
                     # operator's `clawcodex-dev orchestrator issue
                     # retry --mode reset` already wrote `registry.intent`
                     # with `intent_source="cli"`; now that the launch
@@ -1300,7 +1300,7 @@ class Orchestrator:
         finally:
             self._state.poll_check_in_progress = False
             self.status_dashboard.on_poll_end()
-            # F-124-P3: poll 结束后广播澄清状态到 dashboard
+            # Poll 结束后广播澄清状态到 dashboard
             self._broadcast_clarification_status()
 
     async def _dependencies_satisfied(self, issue: Issue) -> bool:
@@ -1328,7 +1328,7 @@ class Orchestrator:
     ) -> tuple[Intent, "CommandIntent | None", str | None]:
         """Resolve the current operator intent for an issue.
 
-        Merges three sources (F-39 Sub-A + Sub-D + Sub-E):
+        Merges three intent sources:
           1. Label-based intent (Sub-A: `agent:retry` / `agent:follow-up`
              / `agent:blocked`).
           2. Comment-based command (Sub-D: `/agent retry` / `/agent
@@ -1345,7 +1345,7 @@ class Orchestrator:
         Returns ``(intent, command_intent_obj, intent_source)``:
           * ``intent`` — merged Intent for the launch.
           * ``command_intent_obj`` — the raw CommandIntent (with the
-            comment's author login for the F-39 Sub-F role check) if a
+            comment's author login for the role check) if a
             comment command was honored, else None.
           * ``intent_source`` — the source that won the merge
             (``"cli"`` | ``"command"`` | ``"label"`` | None) so the
@@ -1364,12 +1364,12 @@ class Orchestrator:
                     exc,
                 )
 
-        # F-39 Sub-D: comment command intent.
+        # Comment command intent.
         command_intent_obj = await self._resolve_command_intent(issue)
         command = command_intent_obj.command if command_intent_obj is not None else None
         command_intent = command_to_intent(command) if command is not None else Intent.NONE
 
-        # F-39 Sub-E: CLI fallback intent. The CLI is the operator's
+        # CLI fallback intent. The CLI is the operator's
         # authoritative local command, so we read it directly from
         # `registry.intent` whenever the record carries
         # `intent_source="cli"`. The CLI path does NOT require the
@@ -1414,9 +1414,9 @@ class Orchestrator:
         return merged, command_intent_obj, intent_source
 
     async def _resolve_command_intent(self, issue: Issue) -> "CommandIntent | None":
-        """F-39 Sub-D: fetch and parse the most recent /agent command.
+        """Fetch and parse the most recent /agent command.
 
-        F-39 Sub-F: the returned `CommandIntent` carries the comment
+        The returned `CommandIntent` carries the comment
         author so the caller can perform the role check. Adapters that
         don't expose author info will return `author_login=None`, in
         which case `_is_command_author_eligible` will reject the
@@ -1444,7 +1444,7 @@ class Orchestrator:
         issue: Issue,
         command: "Command",
     ) -> str | None:
-        """F-39 Sub-D: post a bot confirmation comment and update cursor.
+        """Post a bot confirmation comment and update cursor.
 
         The confirmation comment includes a metadata HTML comment
         with `command_cursor` so the next poll knows where to resume
@@ -1471,7 +1471,7 @@ class Orchestrator:
         return comment_id
 
     # ------------------------------------------------------------------
-    # F-39 Sub-F: role check + rate-limit guard
+    # Role check + rate-limit guard
     # ------------------------------------------------------------------
 
     def _is_command_author_eligible(
@@ -1481,7 +1481,7 @@ class Orchestrator:
     ) -> bool:
         """Return True if `author_login` may trigger a retry/follow-up.
 
-        Per the F-39 Sub-F design doc: "comment 命令默认要求「issue
+        Per the design doc: "comment 命令默认要求「issue
         作者」或「仓库 maintainer」才能触发". The check has three
         short-circuits:
 
@@ -1523,7 +1523,7 @@ class Orchestrator:
         issue: Issue,
         command_intent: "CommandIntent",
     ) -> None:
-        """F-39 Sub-F: post a comment rejecting an unauthorized command.
+        """Post a comment rejecting an unauthorized command.
 
         Per the design acceptance criteria: "用户在 issue comment 发
         `/agent retry`,且非原作者时,**daemon 拒绝执行**并发评论
@@ -1564,7 +1564,7 @@ class Orchestrator:
         *,
         force: bool = False,
     ) -> bool:
-        """F-39 Sub-F: refuse a RETRY when retry_count >= max_retries_per_issue.
+        """Refuse a RETRY when retry_count >= max_retries_per_issue.
 
         Returns True if the retry is allowed (and bumps
         `retry_count` for the record), or False if the rate limit
@@ -1625,7 +1625,7 @@ class Orchestrator:
         current: int,
         max_retries: int,
     ) -> None:
-        """F-39 Sub-F: best-effort label + comment for rate-limit hits."""
+        """Best-effort label + comment for rate-limit hits."""
         body = (
             f"## ClawCodex: retry rate limit reached\n\n"
             f"This issue has been retried {current} times "
@@ -1669,7 +1669,7 @@ class Orchestrator:
         reason: str,
         author: str,
     ) -> None:
-        """F-39 Sub-F: write a daemon-side audit log entry.
+        """Write a daemon-side audit log entry.
 
         Best-effort: writes to `~/.clawcodex/orchestrator/audit.jsonl`
         (the same file the CLI uses). Failure to write is logged
@@ -1702,7 +1702,7 @@ class Orchestrator:
             )
 
     async def _prepare_intent_reset(self, issue: Issue) -> None:
-        """F-39 Sub-B: apply registry-side reset before launching an issue.
+        """Apply registry-side reset before launching an issue.
 
         Reads the persisted intent from the registry (set in
         `_poll_and_dispatch`) and, when intent == RETRY:
@@ -1765,7 +1765,7 @@ class Orchestrator:
         )
 
     # ------------------------------------------------------------------
-    # F-120 PR Conflict Auto-Resolution
+    # PR Conflict Auto-Resolution
     # ------------------------------------------------------------------
 
     def _check_rebase_rate_limit(
@@ -1774,7 +1774,7 @@ class Orchestrator:
         *,
         force: bool = False,
     ) -> bool:
-        """F-120: refuse a rebase when rebase_attempt_count exceeds the cap.
+        """Refuse a rebase when rebase_attempt_count exceeds the cap.
 
         Returns True if the rebase is allowed (and bumps the
         counter on the registry record), or False if the rate
@@ -1814,7 +1814,7 @@ class Orchestrator:
         *,
         force: bool | None = None,
     ) -> PRRebaseResult | None:
-        """F-120: the built-in non-agent rebase path.
+        """The built-in non-agent rebase path.
 
         Direct ``asyncio.to_thread(rebase_for_pr, ...)`` — no
         agent / session / provider involved. On a clean rebase
@@ -1902,7 +1902,7 @@ class Orchestrator:
         return result
 
     async def _process_pending_rebase_conflicts(self) -> None:
-        """F-120: launch ``agent_rebase`` for records with content conflicts.
+        """Launch ``agent_rebase`` for records with content conflicts.
 
         Iterates the registry, picks records with ``has_conflict=True``
         that are not already running/claimed and not rate-limited, and
@@ -1952,7 +1952,7 @@ class Orchestrator:
             await self._launch_rebase_resolution(issue_obj)
 
     async def _process_pr_conflict_scan(self) -> None:
-        """F-120: optional daemon scan of PR mergeable state.
+        """Optional daemon scan of PR mergeable state.
 
         Default-disabled (opt-in via ``workflow.pr_conflict_scan.enabled``).
         When enabled, polls each open PR in the registry, asks the
@@ -2012,7 +2012,7 @@ class Orchestrator:
             await self._process_rebase_intent(issue_obj)
 
     async def _launch_rebase_resolution(self, issue: Issue) -> None:
-        """F-120: launch an ``agent_rebase`` session to resolve a content conflict.
+        """Launch an ``agent_rebase`` session to resolve a content conflict.
 
         Mirrors ``_launch_issue`` for the conflict-resolution path.
         The session is tagged with ``run_kind="agent_rebase"`` so the
@@ -2051,7 +2051,7 @@ class Orchestrator:
                     f"- {question}" for question in clarification_record.question_history
                 )
         session.run_kind = "agent_rebase"
-        # F-120: route the run through the purpose-built rebase prompt
+        # Route the run through the purpose-built rebase prompt
         # (resolve markers -> git add -> git rebase --continue ->
         # --force-with-lease push, "do NOT open a new PR"). Without this
         # the session ran the generic issue prompt and the agent never
@@ -2096,7 +2096,7 @@ class Orchestrator:
             )
         finally:
             self._state.running.pop(issue.id or "", None)
-            # F-120: completion handling. Without this the record kept
+            # Completion handling. Without this the record kept
             # has_conflict=True forever -> the next poll re-launched an
             # agent_rebase run in an infinite loop (repeated "Run in
             # progress" placeholder comments + 任务已启动/任务完成
@@ -2117,7 +2117,7 @@ class Orchestrator:
         issue: Issue,
         session: AgentSession,
     ) -> None:
-        """F-120: post-run completion handling for an ``agent_rebase`` session.
+        """Post-run completion handling for an ``agent_rebase`` session.
 
         ``_launch_rebase_resolution`` historically popped the session out of
         ``_state.running`` and did nothing else. That left ``has_conflict``
@@ -2206,7 +2206,7 @@ class Orchestrator:
         base_branch: str | None = None,
         branch_name: str | None = None,
     ) -> tuple[bool, str | None]:
-        """F-120: check git ground-truth for whether the agent finished the rebase.
+        """Check git ground-truth for whether the agent finished the rebase.
 
         Returns ``(resolved, new_head_sha)``. ``resolved=True`` only when
         there are no unmerged files or active sequencer, the expected base
@@ -2298,7 +2298,7 @@ class Orchestrator:
         return await asyncio.to_thread(_check)
 
     def _prepare_rebase_session(self, session: AgentSession) -> None:
-        """F-120: copy registry conflict metadata onto the session.
+        """Copy registry conflict metadata onto the session.
 
         Sets ``session.conflict_files`` from the registry so the
         agent runner / prompt builder can read which files git
@@ -2374,7 +2374,7 @@ class Orchestrator:
         await self._process_rebase_intent(issue_obj, force=force)
 
     def _prepare_intent_session(self, session: AgentSession) -> None:
-        """F-39 Sub-C: wire the session for an intent-driven run.
+        """Wire the session for an intent-driven run.
 
         Called from `_launch_issue` immediately after the AgentSession
         is constructed. Reads the registry's intent field and:
@@ -2388,7 +2388,7 @@ class Orchestrator:
             session is a fresh issue-style run.
           - Intent.NONE / Intent.BLOCKED → no-op.
 
-        Sub-C mirrors the F-37 review_followup pattern (see
+        Sub-C mirrors the review_followup pattern (see
         `_launch_review_followup`): we reuse the same branch + PR
         and append a commit via git_sync(mode="followup").
         """
@@ -2432,7 +2432,7 @@ class Orchestrator:
                     issue_id,
                 )
 
-        # F-121: wire feedback metadata so git_sync writes review-id /
+        # Wire feedback metadata so git_sync writes review-id /
         # review-body into the commit message.  pending_feedback_ids
         # are the unprocessed review comments that prompted this
         # follow-up; feedback_commit_body is unavailable here (the
@@ -2562,7 +2562,7 @@ class Orchestrator:
             self._state.claimed.discard(issue.id)
             return
 
-        # F-39 Sub-B: if the registry carries a RETRY intent for this
+        # If the registry carries a RETRY intent for this
         # issue, close the existing remote PR (best-effort) and reset
         # the local record so the new run starts from a clean slate.
         # This must happen BEFORE workspace creation so the new run
@@ -2601,7 +2601,7 @@ class Orchestrator:
             previous_record = self._registry.latest_sequential_record()
             previous_issue_id = previous_record.issue_id if previous_record else None
             sequence_index = (previous_record.sequence_index or 0) + 1 if previous_record else 1
-        # F-42: in sequential mode the registry's workspace_path must
+        # In sequential mode the registry's workspace_path must
         # record the configured root (not whatever WorkspaceManager
         # happened to return for the current issue), so that subsequent
         # issues can resolve the previous commit chain against the same
@@ -2734,7 +2734,7 @@ class Orchestrator:
             event_queue=asyncio.Queue(),
         )
 
-        # F-129 wire pause-state notification so the socket path
+        # Wire pause-state notification so the socket path
         # (_drain_control_commands in agent_runner) can sync the
         # registry when pause/resume is processed.
         def _on_pause_change(issue_id: str, paused: bool, reason: str) -> None:
@@ -2811,7 +2811,7 @@ class Orchestrator:
                     "phase": f"mode:{mode_decision.mode}",
                 }
             )
-        # F-39 Sub-C: if the registry intent is FOLLOWUP, wire the
+        # If the registry intent is FOLLOWUP, wire the
         # session so the agent + git_sync know to reuse the existing
         # branch / PR rather than create a new run.
         self._prepare_intent_session(session)
@@ -2893,7 +2893,7 @@ class Orchestrator:
         session: AgentSession,
         progress_sink: Any,
     ) -> None:
-        """F-110: 使用声明式工作流引擎处理 issue。
+        """使用声明式工作流引擎处理 issue。
 
         通过 WorkflowOrchestrator 按 workflow.yaml 定义的 DAG 阶段
         执行 issue，每个阶段由 AgentRunner 驱动的合成 Issue 执行。
@@ -2931,7 +2931,7 @@ class Orchestrator:
                 exc,
             )
 
-        # F-116: 将编排器的 ProgressSink 注入工作流引擎，
+        # 将编排器的 ProgressSink 注入工作流引擎，
         # 使阶段进度实时反映到 StatusDashboard
         workflow_orch.set_progress_sink(progress_sink)
         workflow_orch._stage_runner._progress_reporter = progress_sink
@@ -3117,10 +3117,10 @@ class Orchestrator:
                 )
                 ran_agent = True
                 try:
-                    # F-40: build a fresh per-session progress sink so
+                    # Build a fresh per-session progress sink so
                     # concurrent issues no longer share the
                     # ``_current_task_id`` / ``_phase_count`` mutable
-                    # state of the F-38-era :class:`ProgressReporter`
+                    # state of the legacy :class:`ProgressReporter`
                     # singleton. ``AgentRunner.run`` is duck-typed on
                     # the kwarg: anything with ``on_phase_complete`` /
                     # ``on_turn_complete`` / ``on_session_complete``
@@ -3137,7 +3137,7 @@ class Orchestrator:
                         if not gate_open:
                             return
 
-                    # F-110: 如果配置了 workflow.yaml，使用声明式工作流引擎
+                    # 如果配置了 workflow.yaml，使用声明式工作流引擎
                     # review_followup 使用专用 prompt（render_review_feedback），
                     # 不走 workflow.yaml 的完整 stage 流程，避免循环。
                     if (
@@ -3256,7 +3256,7 @@ class Orchestrator:
                                 session.session_end_summary = (
                                     "Agent reported completed but workspace has no file changes"
                                 )
-                        # F-39 Sub-C: a followup run passes mode="followup"
+                        # A followup run passes mode="followup"
                         # to git_sync so it reuses the existing branch + PR
                         # instead of creating a new one.
                         sync_mode = (
@@ -3273,7 +3273,7 @@ class Orchestrator:
                             else "default"
                         )
                         sync_result = await self.git_sync.sync(session, mode=sync_mode)
-                        # F-40 / F-38 补遗：daemon 触发了 read-only loop /
+                        # 补遗：daemon 触发了 read-only loop /
                         # stagnation 等终止场景时，git_sync 不会创建 PR，
                         # 并在 session_end_reason 中标记 empty_branch_no_commits。
                         # 这时不能走 mark_synced（会标 SYNCED + 无 PR），
@@ -3323,7 +3323,7 @@ class Orchestrator:
                                 await self._post_feedback_summary(session, sync_result)
                                 await self._apply_review_rules(session)
                             elif session.run_kind in ("agent_followup", "review_retry"):
-                                # F-39 Sub-C: a follow-up keeps the
+                                # A follow-up keeps the
                                 # existing pr_number / pr_url / status;
                                 # only the followup_attempt_count and
                                 # last_followup_commit_sha change.
@@ -3382,7 +3382,7 @@ class Orchestrator:
                                         commit=getattr(sync_result, "commit_sha", None),
                                     ),
                                 )
-                            # F-44 review gate: after commit, await human review before completion.
+                            # Review gate: after commit, await human review before completion.
                             # Triggered when GitSyncResult.pending_review is True (LocalTracker
                             # by default, or any tracker when agent.review_required=True in workflow).
                             if sync_result.pending_review:
@@ -3683,7 +3683,7 @@ class Orchestrator:
                     except Exception:
                         logger.debug("viz journal final event failed", exc_info=True)
 
-                # F-44 review gate: if the issue is already in pending_review
+                # Review gate: if the issue is already in pending_review
                 # (set by the early return above), skip the final status
                 # transition so the outer finally does NOT overwrite it with
                 # COMPLETED. The human must run `orchestrator issue review
@@ -3931,7 +3931,7 @@ class Orchestrator:
             )
 
     async def _apply_review_rules(self, session: AgentSession) -> None:
-        """F-121: 确保 review commit 包含 review metadata。
+        """确保 review commit 包含 review metadata。
 
         规则提取已从 follow-up 流水线中移除，改为 CLI 命令
         ``clawcodex rules extract`` 手动触发。
@@ -4170,7 +4170,7 @@ class Orchestrator:
         )
 
     def _broadcast_clarification_status(self) -> None:
-        """F-124-P3: 收集所有 issue 的澄清状态，推送到 dashboard。"""
+        """收集所有 issue 的澄清状态，推送到 dashboard。"""
         if self.status_dashboard is None:
             return
         from .status_dashboard import ClarificationEntry
@@ -4200,7 +4200,7 @@ class Orchestrator:
         self.status_dashboard.on_clarification_update(entries)
 
     def _compute_workspace_focus_for_clarifier(self, issue: "Issue") -> list[dict]:
-        """F-124-L: 计算 workspace focus 作为澄清上下文富化。
+        """计算 workspace focus 作为澄清上下文富化。
 
         仅在 follow-up 分支已建时调用。新 issue 场景（分支未建）返回 []。
         """
@@ -4387,7 +4387,7 @@ class Orchestrator:
                     if cmd == "review_followup":
                         await self._handle_review_followup_control(issue_id, extra)
                     elif cmd == "rebase":
-                        # F-120: route CLI-written rebase control files to
+                        # Route CLI-written rebase control files to
                         # the built-in rebase path. Format::
                         #   rebase\n<id>\nforce=0|1\n<reason>
                         await self._handle_rebase_control(issue_id, extra)

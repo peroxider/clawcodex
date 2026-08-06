@@ -1,6 +1,6 @@
-"""ProgressSink protocol and concrete sinks (F-40).
+"""ProgressSink protocol and concrete sinks.
 
-This module replaces the F-38-era single-instance :class:`ProgressReporter`
+This module replaces the legacy-era single-instance :class:`ProgressReporter`
 with a per-session :class:`ProgressSink` protocol so that the orchestrator
 can fan out agent progress events to multiple consumers without sharing
 mutable state between concurrent issues.
@@ -102,8 +102,8 @@ class CompositeProgressSink:
     out of its ``on_*_complete`` methods.
 
     Sinks are mutable: :meth:`add` lets the orchestrator register
-    additional consumers (e.g. F-37 :class:`PRReviewAutoFixSink` or
-    F-39 :class:`RetryLabelSink`) without touching the runner.
+    additional consumers (e.g. the CI auto-fix sink :class:`PRReviewAutoFixSink` or
+    the retry label sink :class:`RetryLabelSink`) without touching the runner.
     """
 
     def __init__(self, sinks: Iterable[ProgressSink] = ()) -> None:
@@ -183,13 +183,13 @@ class ToolContextProgressSink:
     :func:`_task_update_call`) but holds its own private state, so two
     sinks can run concurrently without cross-talk.
 
-    Progress percentage policy (F-40 decision table):
+    Progress percentage policy (stagnation fix decision table):
 
     * When ``workflow_phases`` is configured, the nth phase receives
       ``(n / total) * 100`` so users see a meaningful number that
       tracks real workflow progress.
     * When ``fallback_to_phase_step`` is True, fall back to
-      ``min(idx * 25, 100)`` (the old F-38 behavior) for soft migration.
+      ``min(idx * 25, 100)`` (the old legacy behavior) for soft migration.
     * Otherwise the sink writes ``None`` so the dashboard displays
       "Phase N (progress unknown)" instead of the misleading
       ``25 / 50 / 75 / 100`` sequence.
@@ -247,7 +247,7 @@ class ToolContextProgressSink:
         if not self.task_id:
             return
         self._phase_count += 1
-        # F-40: use ``event.phase`` (the 1-based phase number reported
+        # Stagnation fix: use ``event.phase`` (the 1-based phase number reported
         # by the runner) as the authoritative phase index so the stage
         # name and progress percentage stay aligned with what the
         # agent actually completed. ``self._phase_count`` is still
@@ -297,7 +297,7 @@ class ToolContextProgressSink:
     ) -> None:
         if not self.task_id:
             return
-        # F-40 decision: only "success" gets progress=100. Every other
+        # Decision: only "success" gets progress=100. Every other
         # termination reason leaves progress=None so the dashboard does
         # not show a misleading "100%" on failed / aborted sessions.
         progress = 100 if event.reason == "success" else None

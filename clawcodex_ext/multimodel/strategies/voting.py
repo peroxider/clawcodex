@@ -16,7 +16,7 @@ class VotingStrategy(ParallelStrategy):
     """Run candidates in parallel; the router's aggregator picks a response.
 
     ``aggregator`` is optional to support a self-contained strategy while
-    retaining the router-level aggregator injection documented for F-157.
+    retaining the router-level aggregator injection documented for multi-model dispatch.
     """
 
     aggregator: AggregatorProtocol | None = None

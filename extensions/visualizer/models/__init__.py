@@ -1,4 +1,4 @@
-"""Visualizer data models (F-91-A)."""
+"""Visualizer data models."""
 
 from .viz_models import (
     AgentTreeNode,

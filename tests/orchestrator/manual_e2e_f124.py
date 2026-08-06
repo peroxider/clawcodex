@@ -1,4 +1,4 @@
-"""F-124 Issue Clarifier — manual E2E with real provider + LocalTracker.
+"""Issue Clarifier — manual E2E with real provider + LocalTracker.
 
 Requires:
   CLAWCODEX_TEST_PROVIDER=openai (or any configured provider name)
@@ -37,7 +37,7 @@ from extensions.orchestrator.local_tracker.adapter import LocalTrackerAdapter
     reason="set CLAWCODEX_TEST_PROVIDER to run real-provider E2E tests",
 )
 class TestF124LongRunningE2E:
-    """Real-provider E2E tests for the F-124 issue clarifier pipeline.
+    """Real-provider E2E tests for the issue clarifier pipeline.
 
     These tests exercise the full endpoint-to-endpoint flow:
       issue → analyze → block → answer → unblock → dispatch

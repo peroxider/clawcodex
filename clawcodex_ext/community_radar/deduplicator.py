@@ -1,4 +1,4 @@
-"""Cross-project feature deduplicator for SR-5.1.
+"""Cross-project feature deduplicator for the community feature radar.
 
 Mirrors the cross-project deduplication contract:
 

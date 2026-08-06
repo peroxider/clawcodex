@@ -1,4 +1,4 @@
-"""CLI integration tests for F-50-A/B."""
+"""CLI integration tests for workflow discriminator and extractor."""
 
 from __future__ import annotations
 

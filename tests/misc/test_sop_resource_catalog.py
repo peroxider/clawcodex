@@ -1,4 +1,4 @@
-"""Tests for F-56 SOP ResourceCatalog."""
+"""Tests for SOP ResourceCatalog."""
 
 from __future__ import annotations
 

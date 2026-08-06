@@ -1,4 +1,4 @@
-"""F-REC: ``clawcodex record`` CLI subcommand.
+"""``clawcodex record`` CLI subcommand.
 
 Standalone entry point that opens an asciicast v2 ``.cast`` file and
 plumbs it into one or more subsystem adapters via the
@@ -284,11 +284,11 @@ def build_record_parser() -> argparse.ArgumentParser:
             "Number of issues to dispatch under --auto, 1..3 (default: %(default)s)."
         ),
     )
-    # F-REC-M: full-PTY capture. The structured mode (default) routes
+    # full-PTY capture. The structured mode (default) routes
     # per-subsystem events through the in-process source registry; pty
     # mode forks a real pseudo-terminal and captures the *entire screen*
     # — including prompt_toolkit's `❯` glyph, line editing, cursor
-    # moves, and any Rich output — which F-REC-L's Rich tee cannot
+    # moves, and any Rich output — which the Rich tee cannot
     # capture because prompt_toolkit renders directly to the TTY, not
     # through Rich. The native backend uses only the standard-library
     # `pty` module; an optional `asciinema` backend is available for
@@ -460,7 +460,7 @@ def _restore_sigint_handler(stop_event: threading.Event) -> None:
 
 
 # ---------------------------------------------------------------------------
-# F-REC-M: full-PTY capture via external asciinema
+# full-PTY capture via external asciinema
 # ---------------------------------------------------------------------------
 
 
@@ -484,12 +484,12 @@ def _run_pty_recording_asciinema(
 ) -> int:
     """Drive ``asciinema rec`` to capture the full PTY screen.
 
-    Optional F-REC-M backend. asciinema 2.x writes asciicast v2 NDJSON
+    Optional full-PTY backend. asciinema 2.x writes asciicast v2 NDJSON
     directly, so the file can be re-validated by :func:`validate_cast`
     and converted to MP4 by the existing ``cast-to-mp4``
     post-processor. The .cast produced by this mode includes the
     prompt_toolkit prompt bar (``❯`` glyph, line edit, cursor moves) —
-    which F-REC-L's Rich tee cannot capture because prompt_toolkit
+    which the Rich tee cannot capture because prompt_toolkit
     renders directly to the TTY, not via Rich.
 
     asciinema is treated as a soft dependency: a clear error message is
@@ -596,7 +596,7 @@ def _run_pty_recording_native(
     input_delay_s: float,
     input_script_raw: str,
 ) -> int:
-    """Native PTY backend for F-REC-M (Python stdlib only).
+    """Native PTY backend for full-PTY capture (Python stdlib only).
 
     Forks the command into a pseudo-terminal and writes all terminal
     output as asciicast v2 ``"o"`` events. Input script bytes are sent
@@ -650,7 +650,7 @@ def run_record_command(args: list[str] | None = None) -> int:
 
     out_path = Path(parsed.out).expanduser().resolve()
 
-    # F-REC-AUTO: mutually exclusive with --sources. Drives a real
+    # mutually exclusive with --sources. Drives a real
     # orchestrator batch + dashboard ticks into one .cast file.
     if parsed.auto:
         if parsed.sources:
@@ -668,7 +668,7 @@ def run_record_command(args: list[str] | None = None) -> int:
             )
         )
 
-    # F-REC-M: full-PTY capture. Native backend (default) forks a real
+    # full-PTY capture. Native backend (default) forks a real
     # pseudo-terminal via the Python standard library; optional
     # asciinema backend delegates to the external CLI. Mutually
     # exclusive with --sources and --auto. --list-sources is

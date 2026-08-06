@@ -1,4 +1,4 @@
-"""F-121 问题 1 验收：apply() 异常隔离。
+"""问题 1 验收：apply() 异常隔离。
 
 验证 _apply_review_rules 在 RuleEngine.apply 抛错（OSError / YAMLError /
 ValueError 等）时仅 log warning，不冒泡阻塞 session 流程。
@@ -19,7 +19,7 @@ from extensions.orchestrator.orchestrator import Orchestrator
 
 
 def _make_orchestrator(workflow: WorkflowConfig, workflow_path: str) -> Orchestrator:
-    """绕过 __init__ 构造轻量 orchestrator，仅 wire F-121 所需字段。"""
+    """绕过 __init__ 构造轻量 orchestrator，仅 wire 所需字段。"""
     orch = Orchestrator.__new__(Orchestrator)
     orch.workflow = workflow
     orch._workflow_path = workflow_path
@@ -35,7 +35,7 @@ def _make_session() -> AgentSession:
 
 
 class TestApplyReviewRulesIsolation(unittest.IsolatedAsyncioTestCase):
-    """F-121: _apply_review_rules 已简化为无操作（规则提取改为 CLI 触发）。"""
+    """_apply_review_rules 已简化为无操作（规则提取改为 CLI 触发）。"""
 
     async def test_apply_review_rules_is_noop(self) -> None:
         """_apply_review_rules 不再调用 RuleEngine.apply，只是空返回。"""

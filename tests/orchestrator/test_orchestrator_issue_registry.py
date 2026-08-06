@@ -15,7 +15,7 @@ Covers the issue→commit→PR mapping registry, including:
 * Feedback mutations: ``mark_feedback_pending``, ``mark_feedback_processed``,
   ``clear_stale_pending``, ``mark_feedback_checked``,
   ``increment_followup_attempt``.
-* F-39 intent / retry bookkeeping: ``mark_intent``, ``clear_intent``,
+* intent / retry bookkeeping: ``mark_intent``, ``clear_intent``,
   ``increment_retry_count``, ``reset_for_retry``, ``unblock``.
 * Query helpers: ``get``, ``get_by_identifier``, ``get_by_issue_ref``,
   ``get_by_branch``, ``is_completed``, ``is_terminal``,
@@ -687,7 +687,7 @@ class TestFeedbackMutations(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# IssueRegistry — F-39 intent / retry bookkeeping
+# IssueRegistry — intent / retry bookkeeping
 # ---------------------------------------------------------------------------
 
 

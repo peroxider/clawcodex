@@ -1,4 +1,4 @@
-"""F-39 Sub-D: comment command parsing (`/agent retry|follow-up|unblock`).
+"""Sub-D: comment command parsing (`/agent retry|follow-up|unblock`).
 
 Covers:
   - parse_agent_command: regex recognition + case-insensitivity + arg tolerance
@@ -85,7 +85,7 @@ class TestParseAgentCommand(unittest.TestCase):
         self.assertIsNone(parse_agent_command("/rerun"))
 
     def test_unrecognized_subcommand_returns_none(self) -> None:
-        # `agent run` is not a valid F-39 command.
+        # `agent run` is not a valid command.
         self.assertIsNone(parse_agent_command("/agent run"))
         self.assertIsNone(parse_agent_command("/agent dance"))
 

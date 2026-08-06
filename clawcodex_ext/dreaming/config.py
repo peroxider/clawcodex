@@ -1,4 +1,4 @@
-"""Dream thresholds + enable flag — F-100.
+"""Dream thresholds + enable flag.
 
 Mirrors ``typescript/src/services/autoDream/config.ts`` +
 ``autoDream.ts::getConfig()``.
@@ -14,7 +14,7 @@ Two layers:
 
 Note: clawcodex does **not** model the upstream ``KAIROS`` /
 ``KAIROS_DREAM`` feature flags. Decision #1 in PROGRESS.md §十三 —
-F-100 ships dream unconditionally under the user setting (no
+Dream ships unconditionally under the user setting (no
 A/B gate). KAIROS branches stay available via
 :func:`clawcodex_ext.dreaming.paths.is_kairos_active` for follow-up
 work.

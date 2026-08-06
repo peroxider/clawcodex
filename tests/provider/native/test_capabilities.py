@@ -1,4 +1,4 @@
-"""Tests for the F-72 capability constants module."""
+"""Tests for the capability constants module."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ def test_capability_descriptions_cover_all_constants() -> None:
 
 def test_capability_strings_use_snake_case() -> None:
     """Capability identifiers should be snake_case to match the
-    F-72 plan's naming convention (``structured_output``,
+    native provider plan's naming convention (``structured_output``,
     ``streaming_tools``, ...)."""
     for cap in (
         CAP_STRUCTURED_OUTPUT,

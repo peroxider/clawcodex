@@ -1,4 +1,4 @@
-"""F-93 P93-H — unit tests for TeamMemoryStore (P93-B).
+"""Unit tests for TeamMemoryStore.
 
 Covers append-only JSONL, atomic writes, tombstone delete, compact,
 archive, corrupt-line tolerance (acceptance #6), and entry rebuild.

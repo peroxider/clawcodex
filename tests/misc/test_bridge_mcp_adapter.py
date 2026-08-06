@@ -1,4 +1,4 @@
-"""Tests for F-50-F bridge MCP adapter (AgentToolSpec registration)."""
+"""Tests for the bridge MCP adapter (AgentToolSpec registration)."""
 
 from __future__ import annotations
 

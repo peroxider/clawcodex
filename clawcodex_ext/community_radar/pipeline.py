@@ -1,4 +1,4 @@
-"""End-to-end pipeline orchestrator for SR-5.1.
+"""End-to-end pipeline orchestrator for the community feature radar.
 
 Glues :class:`SourceRegistry`, :class:`Fetcher`, :class:`FeatureExtractor`,
 :class:`FeatureClassifier`, :class:`FeatureDeduplicator`,
@@ -870,7 +870,7 @@ def run_community_scan(
 ) -> ScanResult:
     """Run a single scan and return the result.
 
-    Both ``clawcodex-dev community-radar scan`` and the F-22 Cron
+    Both ``clawcodex-dev community-radar scan`` and the Cron
     durable task (``run_community_scan``) call this. It is intentionally
     side-effect-free aside from the dual-write performed by the
     pipeline, so tests can call it against a temp directory.
