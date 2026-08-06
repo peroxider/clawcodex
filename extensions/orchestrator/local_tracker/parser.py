@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # common ``--`` typo are still parsed correctly.
 _FRONTMATTER_DELIMITER = "---"
 _FRONTMATTER_DELIMITER_RE = re.compile(r"^\s*-{2,}\s*$")
+_DEFAULT_BRANCH_NAME_TRUNCATE_LENGTH = 48
 
 
 @dataclass(frozen=True)
@@ -166,7 +167,7 @@ def _title_and_description(
 
 
 def _default_branch_name(identifier: str, title: str) -> str:
-    return f"local/{_slugify(f'{identifier}-{title}')[:48]}"
+    return f"local/{_slugify(f'{identifier}-{title}')[:_DEFAULT_BRANCH_NAME_TRUNCATE_LENGTH]}"
 
 
 def _slugify(value: str) -> str:

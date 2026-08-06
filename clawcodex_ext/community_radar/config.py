@@ -1,6 +1,6 @@
 """Runtime configuration for SR-5.1 Community Feature Radar.
 
-Mirrors the workflow.md block in FEATURE_PLAN.md §10.1.8:
+Mirrors the workflow.md block for the radar:
 
     community_radar:
       enabled: false
@@ -62,7 +62,7 @@ DEFAULT_WEIGHTS: dict[str, float] = {
     "architecture_fit": 0.15,
 }
 # Tokens that suggest a feature aligns with the ClawCodex roadmap
-# (FEATURE_PLAN.md/ROADMAP headings). The scorer matches tokens against
+# (ROADMAP.md headings). The scorer matches tokens against
 # the free-form ``title + description`` text after lowercasing.
 DEFAULT_ROADMAP_KEYWORDS: list[str] = [
     "agent",

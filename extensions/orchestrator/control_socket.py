@@ -11,9 +11,8 @@ multiple concurrent clients. Incoming lines are newline-delimited JSON
     now (Phase 2 wires ``inject`` to ``operator_hints.md``; ``detach`` is
     a Phase 3 hook).
   * No auth: workspace filesystem permissions are the only gate.
-  * No Windows support: Unix-domain-socket only. Per the FEATURE_PLAN
-    §3.1.11 risk table (line 1306) Windows falls back to a TCP localhost
-    socket in a later phase.
+  * No Windows support: Unix-domain-socket only; a TCP localhost
+    fallback is planned for a later phase.
   * Long content (transcript, large tool outputs) does NOT flow over
     this socket — that lives in ``transcript.jsonl``. The socket carries
     small control + small event frames only (typical < 1 KB).

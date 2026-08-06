@@ -11,8 +11,7 @@ Claw Codex 是 Claude Code 的 Python 移植版，并在其之上构建了自主
 
 本文档映射每个抽象到其规范路径，使读者能从架构概念一步定位到源码。
 
-关于子系统深度的内容，请参见 `docs/` 下的 F-N 特性计划
-（`FEATURE_PLAN.md`、`PROGRESS.md`）。
+关于子系统深度的内容，请参见 `docs/feature_plan/` 下的 F-N 特性计划。
 
 ---
 

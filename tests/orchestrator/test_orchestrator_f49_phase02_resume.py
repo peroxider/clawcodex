@@ -16,8 +16,8 @@ This test is the cross-validation: write the transcript the way
 :class:`AgentRunner` writes it, then read it back the way
 ``--resume`` reads it. The two paths share the on-disk format
 (JSONL) and the typed ``Message`` schema, so the round-trip
-exercises the full integration surface described in
-``docs/FEATURE_PLAN.md`` §3.1.11 Phase 0.2.
+exercises the full integration surface of the F-49 resume path
+(Phase 0.2).
 
 Sets ``CLAWCODEX_SESSIONS_DIR`` to a tmp dir so the test does not touch
 the user's real ``~/.clawcodex/sessions``. Both :class:`SessionStorage`

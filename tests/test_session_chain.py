@@ -6,7 +6,7 @@ Test coverage for the decoupled F-103 implementation:
 * Read side (``clawcodex_ext/agent/chain_filter.py``)
 * Integration (``clawcodex_ext/agent/session.py::_load_from_enhanced_transcript``)
 
-Acceptance scenarios from FEATURE_PLAN §1.4.6:
+Acceptance scenarios for F-103:
 1. New-format write produces a correct parentUuid chain.
 2. ``/rewind`` → new messages form a branch on disk.
 3. ``walkChainBeforeParse`` drops dead-branch lines above the

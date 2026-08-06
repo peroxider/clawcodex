@@ -1,6 +1,6 @@
 """Source registry for SR-5.1 Community Feature Radar.
 
-Implements the ``SourceRegistry`` sketched in FEATURE_PLAN.md §10.1.5.
+Implements the ``SourceRegistry`` for SR-5.1.
 The registry owns the set of :class:`WatchSource` records the radar
 tracks, persists them as YAML, and ships with a sensible default set
 derived from the Phase-1 project list.
@@ -11,7 +11,7 @@ Design decisions:
   but fall back to JSON if the import fails (e.g. on a slim CI image).
 * ``with_defaults()`` is the factory used by the CLI when no
   ``sources.yaml`` exists yet. The default list mirrors the Phase-1
-  table in FEATURE_PLAN.md §10.1.2.
+  project table.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from .models import SourceDomain, WatchSource
 _log = logging.getLogger(__name__)
 
 
-# Default sources — keep in sync with FEATURE_PLAN.md §10.1.2.
+# Default sources — the Phase-1 project set.
 PHASE1_SOURCES: list[dict[str, Any]] = [
     {
         "name": "claude-code",

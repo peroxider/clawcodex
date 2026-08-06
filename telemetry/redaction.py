@@ -1,6 +1,6 @@
 """Redaction and secret scanning for F-97 telemetry events.
 
-Privacy boundary — see ``docs/FEATURE_PLAN.md`` §9.4:
+Privacy boundary:
 
 * No prompt / output / transcript / file content ever enters the payload.
 * No API key, token, cookie, env var, full shell args, absolute path,

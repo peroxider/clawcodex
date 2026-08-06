@@ -1,7 +1,8 @@
 """CreateAgentTool — enables agents to dynamically create new tools.
 
-Mirrors the architecture described in docs/FEATURE_PLAN.md §3.9 and
-docs/PROGRESS.md §F-18.
+Agents analyse a CLI/API spec, generate
+an ``AgentToolSpec``, and call CreateAgentTool to build and register a
+new tool.
 
 Agent flow::
 

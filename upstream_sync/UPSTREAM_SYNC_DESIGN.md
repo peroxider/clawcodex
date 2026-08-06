@@ -3,7 +3,7 @@
 > 文档路径: `docs/UPSTREAM_SYNC_DESIGN-decoupling.md`
 > 版本: v1.2
 > 更新日期: 2026-06-02
-> 关联文档: [UPSTREAM_SYNC_DESIGN.md](UPSTREAM_SYNC_DESIGN.md), [FEATURE_PLAN.md](../docs/FEATURE_PLAN.md), [PROGRESS.md](../docs/PROGRESS.md)
+> 关联文档: [UPSTREAM_SYNC_DESIGN.md](UPSTREAM_SYNC_DESIGN.md)
 
 ## v1.2 变更日志 (2026-06-02)
 

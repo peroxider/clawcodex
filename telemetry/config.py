@@ -1,9 +1,8 @@
 """TelemetryConfig — the F-97 configuration surface.
 
 The default is fully disabled; users opt in by writing a ``telemetry``
-section into their merged config (see
-``docs/FEATURE_PLAN.md`` §9.3 for the TOML shape — the JSON config
-mirrors it field-for-field).
+section into their merged config (the TOML shape is mirrored by the
+JSON config field-for-field).
 
 Environment variables override the on-disk config for the current
 process only:

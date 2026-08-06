@@ -1,6 +1,6 @@
 """Data models for SR-5.1 Community Feature Radar.
 
-Mirrors the dataclasses declared in FEATURE_PLAN.md §10.1.5-10.1.7 so the
+Declares the shared dataclasses for the radar so the
 rest of the pipeline (registry → fetcher → extractor → classifier →
 deduplicator → scorer → reporter) can speak a single shared vocabulary.
 
@@ -161,7 +161,7 @@ class SourceDomain(str, Enum):
 class WatchSource:
     """A single upstream project being tracked by the radar.
 
-    Matches the dataclass sketched in FEATURE_PLAN.md §10.1.5. Only fields
+    Matches the radar's ``WatchSource`` dataclass. Only fields
     with defaults can be omitted from YAML; ``name`` and ``repo`` are
     required.
     """
@@ -176,7 +176,7 @@ class WatchSource:
     release_tag_filter: str | None = None
     changelog_path: str | None = None
     notes: str | None = None
-    # Tags used by the strategic-value scorer (FEATURE_PLAN.md §10.1.7).
+    # Tags used by the strategic-value scorer.
     # Optional project-side metadata that helps the keyword match decide
     # whether a feature aligns with a ClawCodex roadmap item.
     roadmap_keywords: list[str] = field(default_factory=list)
@@ -353,7 +353,7 @@ def make_feature_id(source: str, title: str, kind: str) -> str:
 class FeatureRecord:
     """A single community-feature candidate produced by the pipeline.
 
-    Mirrors the dataclass in FEATURE_PLAN.md §10.1.6. Fields are kept
+    Mirrors the radar's ``FeatureRecord`` dataclass. Fields are kept
     loose (``category`` defaults to UNKNOWN) so the rule-based
     extractor can construct records before the classifier has had a
     chance to label them.

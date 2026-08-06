@@ -1,8 +1,8 @@
 """Community digest generator for SR-5.1.
 
-Implements the ``CommunityDigest`` output format from
-FEATURE_PLAN.md §10.1.7 (Markdown for humans, JSON for automation)
-plus the Phase 3 Jinja2 template rendering from §10.1.12.
+Implements the ``CommunityDigest`` output format
+(Markdown for humans, JSON for automation)
+plus the Phase 3 Jinja2 template rendering.
 
 * The default template lookup walks ``clawcodex_ext/community_radar/templates``
   for ``weekly_digest.md.j2`` / ``monthly_digest.md.j2``. When a custom

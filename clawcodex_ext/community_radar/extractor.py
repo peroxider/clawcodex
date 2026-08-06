@@ -1,6 +1,6 @@
 """Rule-first feature extractor for SR-5.1.
 
-Mirrors the contract sketched in FEATURE_PLAN.md §10.1.6. The extractor
+Mirrors the SR-5.1 extraction contract. The extractor
 takes a release ``body`` (and metadata) and produces a list of
 :class:`FeatureRecord` candidates using Markdown heuristics:
 

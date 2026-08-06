@@ -1,6 +1,6 @@
 """Cross-project feature deduplicator for SR-5.1.
 
-Mirrors the contract sketched in FEATURE_PLAN.md §10.1.6:
+Mirrors the cross-project deduplication contract:
 
 > 跨项目去重: 基于 title + description 的语义相似度 (TF-IDF + cosine),
 > 同一特性在不同项目出现时合并为一个 FeatureRecord 并填充 related_projects.

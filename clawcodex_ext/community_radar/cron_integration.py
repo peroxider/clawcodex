@@ -1,7 +1,7 @@
 """Cron integration helpers for SR-5.1.
 
-FEATURE_PLAN.md §10.1.8 calls for wiring the radar into the existing
-F-22 Cron system. The actual scheduling is done by the F-22 scheduler
+Wires the radar into the existing F-22 Cron system. The actual
+scheduling is done by the F-22 scheduler
 (``clawcodex_ext.cron_system``) calling
 :func:`clawcodex_ext.community_radar.run_community_scan`. This module
 provides the thin adapter so a user (or the bootstrap script) can:

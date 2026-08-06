@@ -263,7 +263,7 @@ def _build_issue_body(
         f"- [ ] **可行性评估**：确认可在 ClawCodex 架构中实现\n"
         f"- [ ] **优先级判定**：P0 立即跟进 / P1 下个迭代 / P2 观望 / P3 暂不采纳\n"
         f"- [ ] **指派负责人**：\n"
-        f"- [ ] **关联 Roadmap**：对应 FEATURE_PLAN.md 中的哪个章节？\n"
+        f"- [ ] **关联 Roadmap**：对应设计文档中的哪个章节？\n"
         f"\n"
         f"---\n"
         f"\n"

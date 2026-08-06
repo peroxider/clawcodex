@@ -1,6 +1,6 @@
 """Keyword-based feature classifier for SR-5.1.
 
-Implements the ``classifier`` module from FEATURE_PLAN.md §10.1.6.
+Implements the rule-first ``classifier`` module for SR-5.1.
 Classification is rule-first: every :class:`FeatureCategory` has a list
 of keyword signals that score ``title + description`` after lowercasing.
 
@@ -10,7 +10,7 @@ Design notes:
   most strategic area for ClawCodex) so the digest skews towards
   impactful features instead of infrastructure noise.
 * The taxonomy is intentionally shallow — only the 12 top-level
-  categories from FEATURE_PLAN.md are emitted. Sub-categories
+  categories are emitted. Sub-categories
   (``agent_loop/prompt_engineering`` etc.) are recorded as ``tags``
   so callers can drill down without expanding the enum.
 * The classifier never mutates the input list; it returns a fresh list

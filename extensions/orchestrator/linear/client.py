@@ -12,6 +12,7 @@ from ..issue import Issue
 
 logger = logging.getLogger(__name__)
 
+LINEAR_ENDPOINT = "https://api.linear.app/graphql"
 _ISSUE_PAGE_SIZE = 50
 _MAX_ERROR_BODY_LOG_BYTES = 1_000
 
@@ -80,7 +81,7 @@ query SymphonyLinearViewer {
 class LinearGraphQLClient:
     """Async Linear GraphQL client."""
 
-    def __init__(self, api_key: str, endpoint: str = "https://api.linear.app/graphql") -> None:
+    def __init__(self, api_key: str, endpoint: str = LINEAR_ENDPOINT) -> None:
         self.api_key = api_key
         self.endpoint = endpoint
 
@@ -190,11 +191,6 @@ class LinearGraphQLClient:
 
 class LinearAPIError(Exception):
     """Raised when a Linear API request fails."""
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 def _decode_page(

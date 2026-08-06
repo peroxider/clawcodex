@@ -1,7 +1,7 @@
 """Telemetry event types and core data model.
 
-F-97 deliberately keeps the event model small and stable; see
-``docs/FEATURE_PLAN.md`` §9.4 (event table) and §9.4 (privacy boundary).
+F-97 deliberately keeps the event model small and stable. The event
+table and privacy boundary are defined in the telemetry data model.
 Prompts, model outputs, transcripts, file contents, API keys, env vars,
 absolute paths and full shell args are **never** recorded here.
 """

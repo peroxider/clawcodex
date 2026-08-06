@@ -1,6 +1,6 @@
 """LLM-assisted classification for SR-5.1 (Phase 2).
 
-Implements the LLM hook described in FEATURE_PLAN.md §10.1.6 and §10.1.7:
+Implements the LLM-assisted classification hook:
 
 > 2. LLM 辅助: 当规则匹配失败或置信度低时, 调用 LLM 从 release body 中抽取
 

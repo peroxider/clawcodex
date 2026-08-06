@@ -1,6 +1,6 @@
 """ProgressReportTool - Agent 阶段性进度汇报工具。
 
-Port of the phase-based progress reporting design from FEATURE_PLAN.md F-20.
+Port of the phase-based progress reporting design from F-20.
 Provides a dedicated tool for agents to report stage-based progress to the task board,
 complementing the existing TaskUpdateTool with a progress-specific interface.
 

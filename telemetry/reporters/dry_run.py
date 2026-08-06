@@ -53,8 +53,8 @@ class DryRunReporter(Reporter):
 def _render_markdown(summary: dict[str, Any], date: str) -> str:
     """Render the F-97 daily summary as Markdown.
 
-    Pure function. Mirrors the Issue body template in
-    ``docs/FEATURE_PLAN.md`` §9.5 (issue body example) but is fully
+    Pure function. Mirrors the F-97 daily summary Issue body template
+    but is fully
     local-only — no issue creation, no remote upload.
 
     When the report contains crashes or errors the error section is

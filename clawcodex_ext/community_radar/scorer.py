@@ -1,6 +1,6 @@
 """Multi-dimension feature scorer for SR-5.1.
 
-Implements the scoring model from FEATURE_PLAN.md §10.1.7:
+Implements the multi-dimension scoring model:
 
 | dimension           | default weight | inputs                                      |
 |---------------------|---------------:|---------------------------------------------|

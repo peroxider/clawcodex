@@ -1,6 +1,6 @@
 """MCP 增强功能模块。
 
-提供三个轻量级增强（对应 FEATURE_PLAN §2.4.1）：
+提供三个轻量级增强：
 
 1. **MCP 资源缓存** — 对 ``ReadMcpResourceTool`` 和 ``ListMcpResourcesTool``
    的 ``read_resource`` / ``list_resources`` 调用添加 LRU 缓存 + TTL，

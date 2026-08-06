@@ -68,8 +68,7 @@ class _IssueSnapshot:
 class IssueStateCache:
     """Skip the tracker poll when issue state has been stable for N turns.
 
-    Default ``stable_skip_turns=3`` matches the §11.3.1 P0 design choice
-    in ``docs/FEATURE_PLAN.md``: three consecutive identical active
+    Default ``stable_skip_turns=3``: three consecutive identical active
     polls are enough evidence that the issue is stable, so subsequent
     ``_should_continue`` calls return the cached active state without
     issuing the tracker HTTP request.

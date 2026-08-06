@@ -6,13 +6,16 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from ..tracker import Comment, TrackerAdapter
+from ..issue import Issue
 from .client import LinearGraphQLClient
-from .issue import Issue
 
 if TYPE_CHECKING:
     from ..tracker import Intent, PullRequestRef
 
 logger = logging.getLogger(__name__)
+
+LINEAR_ENDPOINT = "https://api.linear.app/graphql"
+LINEAR_ACTIVE_STATES_LIST = ["Todo", "In Progress"]
 
 _CREATE_COMMENT_MUTATION = """
 mutation SymphonyCreateComment($issueId: String!, $body: String!) {
@@ -72,14 +75,14 @@ class LinearAdapter(TrackerAdapter):
         self,
         api_key: str,
         project_slug: str | None = None,
-        endpoint: str = "https://api.linear.app/graphql",
+        endpoint: str = LINEAR_ENDPOINT,
         active_states: list[str] | None = None,
         assignee: str | None = None,
         intent_labels: dict[str, str] | None = None,
     ) -> None:
         self.client = LinearGraphQLClient(api_key=api_key, endpoint=endpoint)
         self.project_slug = project_slug
-        self.active_states = active_states or ["Todo", "In Progress"]
+        self.active_states = active_states or LINEAR_ACTIVE_STATES_LIST
         self.assignee = assignee
         # same label conventions as the other adapters.
         from ..tracker import DEFAULT_INTENT_LABELS, intent_from_label_set
@@ -114,32 +117,6 @@ class LinearAdapter(TrackerAdapter):
             "local registry will still be reset"
         )
         return False
-
-    async def _resolve_assignee_filter(self) -> dict[str, Any] | None:
-        if self._assignee_filter is not None:
-            return self._assignee_filter
-
-        if not self.assignee:
-            self._assignee_filter = None
-            return None
-
-        normalized = self.assignee.strip()
-        if normalized.lower() == "me":
-            viewer_id = await self.client.resolve_viewer_id()
-            if viewer_id:
-                self._assignee_filter = {
-                    "configured_assignee": "me",
-                    "match_values": {viewer_id},
-                }
-            else:
-                logger.warning("Could not resolve Linear viewer for assignee='me'")
-                self._assignee_filter = None
-        else:
-            self._assignee_filter = {
-                "configured_assignee": normalized,
-                "match_values": {normalized},
-            }
-        return self._assignee_filter
 
     async def fetch_candidate_issues(self) -> list[Issue]:
         assignee_filter = await self._resolve_assignee_filter()
@@ -229,6 +206,32 @@ class LinearAdapter(TrackerAdapter):
             if state_id:
                 return state_id
         raise LinearAdapterError(f"state_not_found: {state_name}")
+
+    async def _resolve_assignee_filter(self) -> dict[str, Any] | None:
+        if self._assignee_filter is not None:
+            return self._assignee_filter
+
+        if not self.assignee:
+            self._assignee_filter = None
+            return None
+
+        normalized = self.assignee.strip()
+        if normalized.lower() == "me":
+            viewer_id = await self.client.resolve_viewer_id()
+            if viewer_id:
+                self._assignee_filter = {
+                    "configured_assignee": "me",
+                    "match_values": {viewer_id},
+                }
+            else:
+                logger.warning("Could not resolve Linear viewer for assignee='me'")
+                self._assignee_filter = None
+        else:
+            self._assignee_filter = {
+                "configured_assignee": normalized,
+                "match_values": {normalized},
+            }
+        return self._assignee_filter
 
 
 def _comment_from_node(node: Any) -> Comment | None:

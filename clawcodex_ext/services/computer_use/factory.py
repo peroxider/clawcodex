@@ -3,7 +3,7 @@
 The factory is intentionally a thin shim. It does *not* import the
 ``clawcodex_ext.tool_system`` Tool type so that this package can be used in
 unit tests and in environments where the Tool factory is not available. The
-deferred integration is documented in the FEATURE_PLAN §7.2 and will be wired
+deferred integration will be wired
 in a later iteration.
 """
 

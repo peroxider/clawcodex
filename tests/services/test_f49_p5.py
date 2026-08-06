@@ -16,7 +16,7 @@ introduced by Phase 5:
 * ``session_migrate.migrate_session()`` converts the legacy 3-file
   format to the unified 2-file format.
 
-Acceptance scenarios from docs/FEATURE_PLAN.md §1.4.5:
+Acceptance scenarios for F-49 P5:
 
 1. REPL 交互 → exit → Session.load(): provider + 全量消息 + cost 正确恢复,无 session.json 依赖
 2. cost_restore.restore_cost_state_for_session(): 从 transcript.jsonl tail -1 恢复 cost

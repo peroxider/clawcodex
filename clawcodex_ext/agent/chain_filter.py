@@ -3,7 +3,7 @@
 This module is the read-side counterpart of F-103. The write side lives
 in :mod:`extensions.agent.session_persist` (``_inject_parent_uuids``).
 
-Design (mirrors docs/FEATURE_PLAN.md §1.4.6):
+Design:
 
     transcript.jsonl
         ↓ (raw bytes)

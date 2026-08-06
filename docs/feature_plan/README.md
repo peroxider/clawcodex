@@ -1,7 +1,7 @@
 # ClawCodex 特性规划目录
 
 > 本目录是 ClawCodex **特性规划与进度**的唯一事实源。
-> 融合自 `FEATURE_PLAN.md`、`PROGRESS.md`、`ARCHIVED_FEATURES.md`、`ARCHIVED_PROGRESS.md` 四份文档。
+> 融合自历史规划文档四份（FEATURE_PLAN / PROGRESS / ARCHIVED_FEATURES / ARCHIVED_PROGRESS）。
 > 融合日期: 2026-06-24 | 参照: MERGE_GUIDE.md
 
 ## 目录结构

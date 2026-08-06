@@ -4,7 +4,7 @@ Mirrors CCB's ``printResumeHint()`` (typescript/src/utils/gracefulShutdown.ts
 L141-176). Centralised so the REPL, TUI upstream/downstream, and headless
 text mode all share one implementation.
 
-Gating rules (from FEATURE_PLAN §6.2.1):
+Gating rules:
   * Skip when ``session_id`` is empty (transient / non-resumable runs).
   * Skip when the stream is not a TTY (don't pollute piped output,
     machine-readable JSON, or stream-json consumers — those paths

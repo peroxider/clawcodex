@@ -23,7 +23,7 @@
 #   5. CLAW_TELEMETRY_* environment variables
 #
 # All toggles default to off — you must opt in explicitly. F-97 is
-# privacy-first; see `docs/FEATURE_PLAN.md §9.4` for the data model.
+# privacy-first; see the telemetry data model for the event schema.
 #
 # Token auto-detection (when api_key / token_env are unset):
 #   platform=github  → $GITHUB_TOKEN, $GH_TOKEN

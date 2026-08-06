@@ -71,7 +71,7 @@ def test_default_sources_shape() -> None:
 def test_phase1_sources_shape() -> None:
     for item in PHASE1_SOURCES:
         WatchSource.from_dict(item)
-    # Exactly 7 Phase-1 sources per FEATURE_PLAN §10.1.2.
+    # Exactly 7 Phase-1 sources.
     assert len(PHASE1_SOURCES) == 7
 
 
@@ -80,7 +80,7 @@ def test_phase2_sources_shape() -> None:
     for item in PHASE2_SOURCES:
         WatchSource.from_dict(item)
         names.add(item["name"])
-    # Phase 2 should cover the named projects in FEATURE_PLAN §10.1.2.
+    # Phase 2 should cover the named projects.
     for required in ("cline", "continue", "goose", "openclaw"):
         assert required in names, f"missing Phase 2 source: {required}"
 

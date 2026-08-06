@@ -1336,5 +1336,4 @@ from the last 3 path segments of the workspace root.
   a workflow.yaml for the declarative workflow engine.
 - `docs/feature_plan/02-orchestrator/f-110-workflow-engine.md` — design doc
   for the declarative workflow engine.
-- `docs/FEATURE_PLAN.md` (F-37, F-38, F-39) — design docs.
-- `docs/PROGRESS.md` — per-feature status and acceptance criteria.
+- `docs/feature_plan/` — per-feature design docs and status.

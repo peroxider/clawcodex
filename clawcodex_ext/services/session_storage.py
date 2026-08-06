@@ -163,7 +163,7 @@ class SessionMetadata:
     cost: dict[str, Any] | None = None  # Full cost block (matches _snapshot_cost_block shape)
 
     # Fields that ``to_dict`` will serialize. Anything not in this set is
-    # kept in memory only — see P5-F in docs/FEATURE_PLAN.md.
+    # kept in memory only.
     _SERIALIZED_FIELDS: tuple[str, ...] = field(
         default=(
             "session_id",

@@ -8,8 +8,8 @@ avoids the 20-500ms cost of allocating, traversing, and emitting
 
 Design rationale
 ----------------
-§11.2.1 of ``docs/FEATURE_PLAN.md`` identifies the per-turn compression
-pipeline as a P0 perf hotspot (cost #3). The TS upstream skips the
+The per-turn compression pipeline is a P0 perf hotspot (cost #3).
+The TS upstream skips the
 pipeline when the message list is small; this module ports that
 behaviour without touching ``clawcodex_ext/query/query.py`` — the
 gate is invoked inside :class:`CompressionPipeline` itself.

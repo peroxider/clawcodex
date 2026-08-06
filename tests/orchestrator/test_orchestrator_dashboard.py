@@ -22,7 +22,7 @@ from extensions.orchestrator.config.schema import (
     WorkflowConfig,
     WorkspaceConfig,
 )
-from extensions.orchestrator.linear.issue import Issue
+from extensions.orchestrator.issue import Issue
 from extensions.orchestrator.orchestrator import Orchestrator
 from extensions.orchestrator.status_dashboard import SessionStatus, StatusDashboard
 from extensions.orchestrator.tracker import TrackerAdapter
