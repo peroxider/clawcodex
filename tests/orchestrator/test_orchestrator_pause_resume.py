@@ -14,9 +14,10 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from extensions.orchestrator.agent_runner import AgentSession
+from extensions.orchestrator.agent_runner import AgentRunner, AgentSession
 from extensions.orchestrator.issue import Issue
 from extensions.orchestrator.issue_registry import IssueRegistry, IssueStatus
+from extensions.orchestrator.issue_state_cache import IssueStateCache
 from extensions.orchestrator.workspace import Workspace
 
 
@@ -172,6 +173,52 @@ class TestRegistryPausedStatus(unittest.TestCase):
 
     def test_mark_resumed_missing_returns_none(self) -> None:
         self.assertIsNone(self.registry.mark_resumed("missing"))
+
+
+# ---------------------------------------------------------------------------
+# F-105: pause must invalidate the per-session state cache
+# ---------------------------------------------------------------------------
+
+
+class TestPauseInvalidatesStateCache(unittest.TestCase):
+    """An operator pause is a user-interrupt: cached tracker snapshots
+    must be dropped so the post-resume ``_should_continue`` re-polls the
+    tracker instead of trusting pre-pause state."""
+
+    def _session_with_populated_cache(self) -> AgentSession:
+        session = _make_session()
+        session.state_cache = IssueStateCache(stable_skip_turns=2)
+        for turn in range(2):
+            session.state_cache.record(
+                issue_id=session.issue.id,
+                is_active=True,
+                state="open",
+                observed_at_turn=turn,
+            )
+        # Precondition: the cache would skip the poll at turn 2.
+        self.assertTrue(session.state_cache.should_skip_poll(session.issue.id, turn=2))
+        return session
+
+    def test_pause_invalidates_state_cache(self) -> None:
+        session = self._session_with_populated_cache()
+
+        AgentRunner._apply_pause_session(session, "operator_interrupt")
+
+        self.assertTrue(session.paused)
+        self.assertEqual(session.state_cache.stats()["tracked_issues"], 0)
+        self.assertEqual(session.state_cache.stats()["total_snapshots"], 0)
+        self.assertFalse(session.state_cache.should_skip_poll(session.issue.id, turn=2))
+
+    def test_pause_without_state_cache_is_safe(self) -> None:
+        """Sessions created before F-105 (or with the cache disabled)
+        have ``state_cache=None``; pause must not crash."""
+        session = _make_session()
+        self.assertIsNone(session.state_cache)
+
+        AgentRunner._apply_pause_session(session, "operator_interrupt")
+
+        self.assertTrue(session.paused)
+        self.assertIsNone(session.state_cache)
 
 
 if __name__ == "__main__":

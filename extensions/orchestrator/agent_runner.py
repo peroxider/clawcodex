@@ -604,6 +604,12 @@ class AgentRunner:
             session.pause_resume_event.clear()
         if session._pause_gate is not None:
             session._pause_gate.clear()
+        # Drop cached tracker snapshots on operator pause so the
+        # post-resume ``_should_continue`` re-polls the tracker instead of
+        # trusting pre-pause state (the operator may have mutated the
+        # issue while the session was paused).
+        if session.state_cache is not None:
+            session.state_cache.invalidate()
 
     @staticmethod
     def _apply_resume_session(session: "AgentSession", prompt_override: str | None = None) -> None:
