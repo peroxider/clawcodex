@@ -172,6 +172,8 @@ class IntentMixin:
         record.commit_sha = None
         record.pr_number = None
         record.pr_url = None
+        # A deliberate retry restarts the "first PR created" clock.
+        record.pr_created_at = None
         record.report_path = None
         record.summary_comment_id = None
         record.verification_status = None

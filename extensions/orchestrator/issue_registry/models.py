@@ -48,6 +48,14 @@ class IssueRecord:
     commit_sha: str | None = None
     pr_number: str | None = None
     pr_url: str | None = None
+    # Wall-clock timestamp of the FIRST PR creation for this issue.
+    # Set by mark_synced() only when the record had no pr_number yet, so
+    # follow-up / review-feedback runs that reuse the same PR do NOT
+    # overwrite the original "first PR created" time. Cleared by
+    # reset_for_retry() so a deliberate retry restarts the clock.
+    # Absent from registry.json files written before this field — _load()
+    # handles back-compat via the known_fields filter (default None).
+    pr_created_at: float | None = None
     base_branch: str = "main"
     workspace_strategy: str | None = None
     workspace_path: str | None = None
