@@ -34,18 +34,26 @@ logger = logging.getLogger(__name__)
 
 _CLARIFICATION_MARKER_PREFIX = "<!-- clawcodex-clarification:"
 
+# Default tuning values shared by ClarificationConfig and the workflow-agent
+# fallbacks in orchestrator.py — keep them in one place to avoid drift.
+_DEFAULT_TIMEOUT_LOCAL_SECONDS = 30 * 60  # 30 minutes for local channels
+_DEFAULT_TIMEOUT_AUTHOR_SECONDS = 72 * 3600  # 72 hours for author channel
+_DEFAULT_MAX_QUESTIONS_PER_ISSUE = 3
+_DEFAULT_CONFIDENCE_THRESHOLD = 0.7
+_DEFAULT_SIMULTANEOUS_GRACE_MS = 5000  # 5 seconds for "tied" answers
+
 
 @dataclass
 class ClarificationConfig:
     """Configuration for clarification flow."""
 
     enabled: bool = True
-    timeout_local_seconds: float = 30 * 60  # 30 minutes for local channels
-    timeout_author_seconds: float = 72 * 3600  # 72 hours for author channel
-    max_questions_per_issue: int = 3
-    confidence_threshold: float = 0.7
+    timeout_local_seconds: float = _DEFAULT_TIMEOUT_LOCAL_SECONDS
+    timeout_author_seconds: float = _DEFAULT_TIMEOUT_AUTHOR_SECONDS
+    max_questions_per_issue: int = _DEFAULT_MAX_QUESTIONS_PER_ISSUE
+    confidence_threshold: float = _DEFAULT_CONFIDENCE_THRESHOLD
     operator_priority: bool = True  # operator answers beat author
-    simultaneous_grace_ms: float = 5000  # 5ms window for simultaneous
+    simultaneous_grace_ms: float = _DEFAULT_SIMULTANEOUS_GRACE_MS
     stale_notification: str = "all"  # "all" | "operator_only" | "none"
 
     # Escalation policy when all channels timeout
@@ -208,7 +216,7 @@ class ClarificationResolver:
             self._apply_answer(issue_id, winner)
         else:
             # Multiple candidates — resolve conflict
-            winner, loser = self._resolve_conflict(candidates, item)
+            winner, loser = self._resolve_conflict(candidates)
             self._apply_answer(issue_id, winner)
             self._notify_rejected(loser, issue_id)
 
@@ -306,7 +314,6 @@ class ClarificationResolver:
     def _resolve_conflict(
         self,
         candidates: list[tuple[str, str, float]],
-        item: "ClarificationItem",
     ) -> tuple[tuple[str, str, float], tuple[str, str, float]]:
         """Resolve simultaneous answers from different channels.
 

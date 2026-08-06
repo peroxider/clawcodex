@@ -320,7 +320,14 @@ class Orchestrator:
 
         self._clarification_queue = ClarificationQueue(clarification_queue_path)
 
-        from .clarification import ClarificationResolver, ClarificationConfig
+        from .clarification import (
+            ClarificationConfig,
+            ClarificationResolver,
+            _DEFAULT_MAX_QUESTIONS_PER_ISSUE,
+            _DEFAULT_SIMULTANEOUS_GRACE_MS,
+            _DEFAULT_TIMEOUT_AUTHOR_SECONDS,
+            _DEFAULT_TIMEOUT_LOCAL_SECONDS,
+        )
 
         self._clarification_resolver = ClarificationResolver(
             clarification_queue=self._clarification_queue,
@@ -328,15 +335,17 @@ class Orchestrator:
             config=ClarificationConfig(
                 enabled=getattr(workflow.agent, "clarification_enabled", True),
                 timeout_local_seconds=getattr(
-                    workflow.agent, "clarification_timeout_local", 30 * 60
+                    workflow.agent, "clarification_timeout_local", _DEFAULT_TIMEOUT_LOCAL_SECONDS
                 ),
                 timeout_author_seconds=getattr(
-                    workflow.agent, "clarification_timeout_author", 72 * 3600
+                    workflow.agent, "clarification_timeout_author", _DEFAULT_TIMEOUT_AUTHOR_SECONDS
                 ),
-                max_questions_per_issue=getattr(workflow.agent, "max_questions_per_issue", 3),
+                max_questions_per_issue=getattr(
+                    workflow.agent, "max_questions_per_issue", _DEFAULT_MAX_QUESTIONS_PER_ISSUE
+                ),
                 operator_priority=getattr(workflow.agent, "clarification_operator_priority", True),
                 simultaneous_grace_ms=getattr(
-                    workflow.agent, "clarification_simultaneous_grace_ms", 5000
+                    workflow.agent, "clarification_simultaneous_grace_ms", _DEFAULT_SIMULTANEOUS_GRACE_MS
                 ),
                 escalation=getattr(workflow.agent, "clarification_escalation", "skip"),
             ),
