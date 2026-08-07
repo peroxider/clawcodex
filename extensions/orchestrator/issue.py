@@ -39,7 +39,11 @@ class Issue:
     python_executable: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dict for template rendering."""
+        """Convert the issue to a plain dict for template rendering.
+
+        Datetime fields are serialized to ISO-8601 strings so the result
+        is JSON-friendly.
+        """
         result: dict[str, Any] = {}
         for key, value in self.__dict__.items():
             if isinstance(value, datetime):
@@ -49,4 +53,4 @@ class Issue:
         return result
 
     def label_names(self) -> list[str]:
-        return list(self.labels)
+        """Return a copy of the issue's label names."""

@@ -94,7 +94,11 @@ _TRACKER_KIND_INFO: dict[str, TrackerKindInfo] = {
 
 
 def normalize_tracker_kind(kind: str | None) -> str:
-    """Normalize user-provided tracker kind values."""
+    """Normalize a user-provided tracker kind (lowercase, stripped).
+
+    Defaults to ``"linear"`` when ``kind`` is falsy and raises
+    ``TrackerConfigError`` for unsupported kinds.
+    """
     normalized = (kind or "linear").strip().lower()
     if normalized not in SUPPORTED_TRACKERS:
         raise TrackerConfigError(
@@ -105,7 +109,10 @@ def normalize_tracker_kind(kind: str | None) -> str:
 
 
 def tracker_kind_info(kind: str) -> TrackerKindInfo:
-    """Return static metadata for a tracker kind."""
+    """Return the static ``TrackerKindInfo`` metadata for a tracker kind.
+
+    Raises ``TrackerConfigError`` if the kind is unsupported.
+    """
     normalized = normalize_tracker_kind(kind)
     try:
         return _TRACKER_KIND_INFO[normalized]
@@ -117,7 +124,7 @@ def tracker_kind_info(kind: str) -> TrackerKindInfo:
 
 
 def default_active_states_for_kind(kind: str) -> list[str]:
-    """Return sane active-state defaults per tracker."""
+    """Return per-tracker default active states when config omits them."""
     normalized = normalize_tracker_kind(kind)
     if normalized == "linear":
         return ["Todo", "In Progress"]
@@ -129,7 +136,7 @@ def default_active_states_for_kind(kind: str) -> list[str]:
 
 
 def default_terminal_states_for_kind(kind: str) -> list[str]:
-    """Return sane terminal-state defaults per tracker."""
+    """Return per-tracker default terminal states when config omits them."""
     normalized = normalize_tracker_kind(kind)
     if normalized == "linear":
         return ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
@@ -139,7 +146,11 @@ def default_terminal_states_for_kind(kind: str) -> list[str]:
 
 
 def validate_tracker_config(config: Any) -> None:
-    """Validate tracker configuration before adapter creation."""
+    """Validate tracker configuration before adapter creation.
+
+    Raises ``TrackerConfigError`` with actionable messages for missing
+    API keys, project slugs, repositories, or local issues paths.
+    """
     info = tracker_kind_info(getattr(config, "kind", None))
     if info.kind == "local":
         if not getattr(config, "issues_path", None):
@@ -171,7 +182,20 @@ def create_tracker_adapter(
     *,
     http_client: "httpx.AsyncClient | None" = None,
 ) -> "TrackerAdapter":
-    """Create a tracker adapter from workflow tracker config."""
+    """Create a tracker adapter from workflow tracker config.
+
+    Dispatches to ``LinearAdapter`` / ``LocalTrackerAdapter`` /
+    ``RepositoryTrackerAdapter`` based on the normalized kind.
+
+    Args:
+        config: the tracker config (e.g. the ``tracker`` section of the
+            workflow document).
+        http_client: optional pre-configured HTTP client reused by
+            repository-backed adapters.
+
+    Returns:
+        A concrete ``TrackerAdapter`` instance.
+    """
     kind = normalize_tracker_kind(getattr(config, "kind", None))
     validate_tracker_config(config)
     if kind == "linear":
@@ -218,7 +242,12 @@ def create_tracker_adapter(
 
 
 def repository_clone_url_for_tracker(config: Any) -> str | None:
-    """Resolve clone URL for repository-backed trackers."""
+    """Resolve the git clone URL for a repository-backed tracker.
+
+    An explicit ``config.clone_url`` wins; otherwise the URL is built
+    from the kind's default clone base plus ``owner``/``repo``.  Returns
+    ``None`` for non-repository trackers or when owner/repo are missing.
+    """
     clone_url = getattr(config, "clone_url", None)
     if clone_url:
         return clone_url

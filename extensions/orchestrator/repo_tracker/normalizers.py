@@ -48,6 +48,15 @@ def _normalize_issue(
     *,
     active_states: list[str],
 ) -> Issue | None:
+    """Normalize a raw issue payload into an ``Issue``.
+
+    Args:
+        payload: Raw platform issue payload.
+        active_states: Issue states treated as active candidates.
+
+    Returns:
+        The normalized ``Issue``, or None for non-dict or PR payloads.
+    """
     if not isinstance(payload, dict):
         return None
     if payload.get("pull_request"):
@@ -76,6 +85,7 @@ def _normalize_issue(
 
 
 def _normalize_pull_request(payload: Any) -> PullRequestRef | None:
+    """Normalize a raw pull request payload into a ``PullRequestRef``."""
     if not isinstance(payload, dict):
         return None
     number = payload.get("number") or payload.get("iid") or payload.get("id")
@@ -119,6 +129,7 @@ def _build_issue_comment_url(
 
 
 def _normalize_conversation_feedback(payload: dict[str, Any]) -> PullRequestFeedback | None:
+    """Normalize a conversation comment payload into feedback, or None."""
     body = payload.get("body")
     feedback_id = payload.get("id")
     if not isinstance(body, str) or not body.strip() or feedback_id is None:
@@ -136,6 +147,7 @@ def _normalize_conversation_feedback(payload: dict[str, Any]) -> PullRequestFeed
 
 
 def _normalize_inline_feedback(payload: dict[str, Any]) -> PullRequestFeedback | None:
+    """Normalize an inline review comment payload into feedback, or None."""
     body = payload.get("body")
     feedback_id = payload.get("id")
     if not isinstance(body, str) or not body.strip() or feedback_id is None:
@@ -158,6 +170,7 @@ def _normalize_inline_feedback(payload: dict[str, Any]) -> PullRequestFeedback |
 
 
 def _normalize_review_feedback(payload: dict[str, Any]) -> PullRequestFeedback | None:
+    """Normalize a review-summary payload into feedback, or None."""
     body = payload.get("body")
     feedback_id = payload.get("id")
     if not isinstance(body, str) or not body.strip() or feedback_id is None:
@@ -184,6 +197,16 @@ def _normalize_ci_feedback(
     commit_sha: str,
     max_log_chars_per_check: int,
 ) -> PullRequestFeedback | None:
+    """Normalize a failing CI check payload into feedback, or None.
+
+    Args:
+        payload: Raw CI check payload.
+        commit_sha: Commit SHA the check belongs to.
+        max_log_chars_per_check: Max body length before truncation.
+
+    Returns:
+        The normalized CI feedback, or None when the check did not fail.
+    """
     state = str(payload.get("conclusion") or payload.get("state") or "").strip().lower()
     if state not in {"failure", "failed", "error", "cancelled", "timed_out"}:
         return None
@@ -243,6 +266,7 @@ def _normalize_ci_feedback(
 
 
 def _normalize_feedback_status(payload: dict[str, Any]) -> str:
+    """Normalize a comment payload into "resolved", "outdated" or "open"."""
     if payload.get("resolved") is True:
         return "resolved"
     if payload.get("outdated") is True:
@@ -274,6 +298,7 @@ def _coerce_bool(value: Any) -> bool | None:
 
 
 def _coerce_int(value: Any) -> int | None:
+    """Coerce an integer value (int or numeric string) to int, else None."""
     if value is None:
         return None
     if isinstance(value, bool):
@@ -382,14 +407,17 @@ def _normalize_mergeable_status(
 
 
 def _string_value(value: Any) -> str | None:
+    """Return a non-empty string value, else None."""
     return value if isinstance(value, str) and value.strip() else None
 
 
 def _int_value(value: Any) -> int | None:
+    """Return an integer value, else None."""
     return value if isinstance(value, int) else None
 
 
 def _build_identifier(payload: dict[str, Any], issue_number: Any) -> str | None:
+    """Build a human-readable ``repo#number`` identifier for an issue."""
     if issue_number is None:
         return None
     repo_name = payload.get("repository") or payload.get("repo") or payload.get("repository_name")
@@ -403,6 +431,12 @@ def _choose_issue_state(
     labels: list[str],
     active_states: list[str],
 ) -> str | None:
+    """Pick the issue state from active-state labels, falling back to raw.
+
+    Returns:
+        The first active state found among labels, the normalized raw
+        state, or None when neither is available.
+    """
     normalized_active = [state.strip().lower() for state in active_states if state.strip()]
     label_set = {label.lower() for label in labels}
     for state_name in normalized_active:
@@ -414,6 +448,7 @@ def _choose_issue_state(
 
 
 def _extract_labels(payload: dict[str, Any]) -> list[str]:
+    """Extract lowercased label names from a raw issue payload."""
     labels = payload.get("labels", [])
     result: list[str] = []
     if not isinstance(labels, list):
@@ -429,6 +464,7 @@ def _extract_labels(payload: dict[str, Any]) -> list[str]:
 
 
 def _extract_branch_name(payload: dict[str, Any]) -> str | None:
+    """Extract the branch name from an issue body directive, or None."""
     body = payload.get("body") or payload.get("description")
     if not isinstance(body, str) or not body.strip():
         return None
@@ -445,6 +481,7 @@ def _extract_branch_name(payload: dict[str, Any]) -> str | None:
 
 
 def _matches_assignee(issue: Issue, assignee: str | None) -> bool:
+    """Return whether an issue is assigned to the given assignee (or any)."""
     if not assignee:
         return True
     normalized = assignee.strip().lower()
@@ -454,6 +491,7 @@ def _matches_assignee(issue: Issue, assignee: str | None) -> bool:
 
 
 def _assignee_value(assignee: Any) -> str | None:
+    """Extract an assignee identifier from a dict or string payload."""
     if isinstance(assignee, dict):
         for key in ("login", "name", "username", "id"):
             value = assignee.get(key)
@@ -465,6 +503,11 @@ def _assignee_value(assignee: Any) -> str | None:
 
 
 def _repository_label_filter(active_states: list[str]) -> list[str]:
+    """Map active states to candidate labels, skipping state-name aliases.
+
+    Returns:
+        The active state names that are not plain open/terminal aliases.
+    """
     labels: list[str] = []
     for state_name in active_states:
         normalized = state_name.strip().lower()
@@ -522,6 +565,18 @@ def _find_pull_request_in_payload(
     base_branch: str,
     allow_unique_unmatched: bool = False,
 ) -> PullRequestRef | None:
+    """Find a pull request matching head/base branches in a list payload.
+
+    Args:
+        payload: Raw list payload of pull requests.
+        head_branch: Branch carrying the changes.
+        base_branch: Branch the changes target.
+        allow_unique_unmatched: When True, return the sole PR whose payload
+            carries no branch fields.
+
+    Returns:
+        The matching ``PullRequestRef``, or None when not found.
+    """
     if not isinstance(payload, list):
         return None
     unmatched_without_branches: list[PullRequestRef] = []
@@ -546,6 +601,7 @@ def _pull_request_matches(
     head_branch: str,
     base_branch: str,
 ) -> bool:
+    """Return whether a PR payload's head/base refs match the branches."""
     head = _extract_ref_name(payload.get("head") or payload.get("source_branch"))
     base = _extract_ref_name(payload.get("base") or payload.get("target_branch"))
     if head is None and base is None:
@@ -558,10 +614,12 @@ def _pull_request_matches(
 
 
 def _payload_has_branch_fields(payload: dict[str, Any]) -> bool:
+    """Return whether a PR payload exposes any branch reference fields."""
     return any(key in payload for key in ("head", "base", "source_branch", "target_branch"))
 
 
 def _extract_ref_name(value: Any) -> str | None:
+    """Extract a branch ref name from a string or ref-object value."""
     if isinstance(value, str):
         return value or None
     if isinstance(value, dict):
@@ -574,10 +632,12 @@ def _extract_ref_name(value: Any) -> str | None:
 
 
 def _is_not_found_error(exc: RepositoryTrackerError) -> bool:
+    """Return whether the error indicates a 404 Not Found response."""
     return "status=404" in str(exc)
 
 
 def _parse_datetime(value: Any) -> datetime | None:
+    """Parse an ISO-8601 timestamp into a timezone-aware datetime, or None."""
     if not isinstance(value, str) or not value:
         return None
     try:
@@ -587,6 +647,7 @@ def _parse_datetime(value: Any) -> datetime | None:
 
 
 def _comment_sort_key(comment: dict[str, Any]) -> tuple[float, int, int | str]:
+    """Sort key ordering comments oldest-first with stable ID tie-breaking."""
     created_at = _parse_datetime(comment.get("created_at") or comment.get("createdAt"))
     timestamp = created_at.timestamp() if created_at is not None else 0.0
     raw_id = comment.get("id")

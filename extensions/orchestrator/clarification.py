@@ -92,6 +92,13 @@ class ClarificationResolver:
         tracker: TrackerAdapter,
         config: ClarificationConfig | None = None,
     ) -> None:
+        """Store the queue, tracker and configuration for the flow.
+
+        Args:
+            clarification_queue: the file-backed queue holding pending items
+            tracker: the issue tracker adapter used to post comments
+            config: clarification tuning options; defaults when None
+        """
         self._queue = clarification_queue
         self._tracker = tracker
         self._config = config or ClarificationConfig()
@@ -119,15 +126,23 @@ class ClarificationResolver:
     ) -> ClarificationResult:
         """Request clarification for an issue via the three-channel flow.
 
+        Enqueues a new request when the issue has none in flight, or
+        returns the resolved answer / current status for an existing one.
+
         Args:
-            issue_id: issue identifier
+            issue_id: internal issue identifier
             issue_identifier: human-readable identifier (e.g. "owner/repo#42")
             question: the clarification question
             context: summary of issue context for operator/author
             options: optional multiple-choice options
+            start_with_author: when True, skip local channels and ask the
+                author directly via an @mention comment
+            since_comment_id: lowest comment id already seen for the issue
+            author_login: login of the issue author for the @mention channel
 
         Returns:
-            ClarificationResult with answer + source, or timeout status.
+            ClarificationResult with the answer and source, or an
+            in-progress / timeout status.
         """
         existing = self._queue.get(issue_id)
         if existing is not None:
@@ -290,7 +305,7 @@ class ClarificationResolver:
         issue_id: str,
         since_comment_id: str | None,
     ) -> list[Comment]:
-        """Fetch new comments since last checked comment."""
+        """Fetch issue comments newer than the last checked comment id."""
         if not supports(self._tracker, CommentHistoryCapability):
             return []
         try:
@@ -501,7 +516,7 @@ class ClarificationResolver:
             pass
 
     def _parse_comment_timestamp(self, created_at: str | None) -> float:
-        """Parse comment created_at string to Unix timestamp."""
+        """Parse a tracker ``created_at`` string into a Unix timestamp."""
         if not created_at:
             return time.time()
         try:
@@ -534,9 +549,11 @@ class ClarificationResolver:
         return len(self._queue.poll_pending())
 
     def get_item(self, issue_id: str) -> "ClarificationItem | None":
+        """Return the queue item for an issue, or None when absent."""
         return self._queue.get(issue_id)
 
     def clear(self, issue_id: str) -> None:
+        """Remove the clarification item for an issue from the queue."""
         self._queue.remove(issue_id)
 
     def get_stale_answers(self, issue_id: str) -> list[str]:

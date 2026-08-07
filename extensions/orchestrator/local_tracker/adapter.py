@@ -50,6 +50,16 @@ class LocalTrackerAdapter(TrackerAdapter):
         title_prefixes: list[str] | None = None,
         title_prefix_match: str = "any",
     ) -> None:
+        """Initialize the local filesystem tracker adapter.
+
+        Args:
+            issues_path: Directory holding the local issue markdown files.
+            active_states: Issue states treated as active candidates.
+            terminal_states: Issue states treated as terminal.
+            intent_labels: Mapping of label names to intents.
+            title_prefixes: Optional title prefixes for candidate filtering.
+            title_prefix_match: "any" or "all" match policy for prefixes.
+        """
         self.issues_path = Path(issues_path).expanduser()
         self._active_states = tuple(
             active_states if active_states is not None else ["open", "ready"]
@@ -68,19 +78,27 @@ class LocalTrackerAdapter(TrackerAdapter):
 
     @property
     def active_states(self) -> list[str]:
+        """Return the list of configured active issue states."""
         return list(self._active_states)
 
     @property
     def terminal_states(self) -> list[str]:
+        """Return the list of configured terminal issue states."""
         return list(self._terminal_states)
 
     def configure_title_prefix_filter(
         self, prefixes: list[str] | None, match: str = "any"
     ) -> None:
+        """Configure the title-prefix filter used when polling issues."""
         self._title_prefixes = normalize_title_prefixes(prefixes)
         self._title_prefix_match = normalize_title_prefix_match(match)
 
     async def fetch_candidate_issues(self) -> list[Issue]:
+        """Fetch issues in an active state, matching the title-prefix filter.
+
+        Returns:
+            The candidate issues sorted by priority then identifier.
+        """
         documents = self._load_documents()
         issues = []
         for document in documents:
@@ -107,6 +125,7 @@ class LocalTrackerAdapter(TrackerAdapter):
         self,
         issue_ids: list[str],
     ) -> dict[str, Issue]:
+        """Fetch current snapshots for the requested local issues."""
         requested = set(issue_ids)
         issues: dict[str, Issue] = {}
         for document in self._load_documents():
@@ -116,6 +135,7 @@ class LocalTrackerAdapter(TrackerAdapter):
         return issues
 
     async def create_comment(self, issue_id: str, body: str) -> Comment | None:
+        """Append a comment to the issue's local comment log."""
         return self._append_comment(issue_id, body)
 
     async def update_comment(
@@ -124,6 +144,12 @@ class LocalTrackerAdapter(TrackerAdapter):
         comment_id: str,
         body: str,
     ) -> Comment | None:
+        """Update a stored comment body in place.
+
+        Returns:
+            The updated comment, or None when the issue has no comment log
+            or the comment ID was not found.
+        """
         comment_path = self._comments_path(issue_id)
         if not comment_path.exists():
             return None
@@ -158,6 +184,7 @@ class LocalTrackerAdapter(TrackerAdapter):
         return updated_comment
 
     async def update_issue_state(self, issue_id: str, state: str) -> None:
+        """Persist a new state and updated timestamp in the issue frontmatter."""
         document = self._document_for_issue(issue_id)
         write_markdown_frontmatter(
             document.path,
@@ -176,6 +203,18 @@ class LocalTrackerAdapter(TrackerAdapter):
         title: str,
         body: str,
     ) -> PullRequestRef | None:
+        """Record PR metadata in the issue frontmatter and locate it back.
+
+        Args:
+            issue: The issue the pull request belongs to.
+            head_branch: Branch carrying the changes.
+            base_branch: Branch the changes target.
+            title: Pull request title.
+            body: Pull request description.
+
+        Returns:
+            The matching ``PullRequestRef`` after the metadata is written.
+        """
         issue_id = issue.id or issue.identifier
         if issue_id:
             document = self._document_for_issue(issue_id)
@@ -198,6 +237,12 @@ class LocalTrackerAdapter(TrackerAdapter):
         head_branch: str,
         base_branch: str,
     ) -> PullRequestRef | None:
+        """Find a local issue whose frontmatter records a matching PR.
+
+        Returns:
+            The matching ``PullRequestRef``, or None when no issue pairs
+            the head branch, base branch and a recorded PR URL.
+        """
         for document in self._load_documents():
             issue = document.issue
             if issue.branch_name != head_branch:
@@ -218,6 +263,7 @@ class LocalTrackerAdapter(TrackerAdapter):
         return []
 
     async def fetch_issue_comments(self, issue_id: str) -> list[Comment]:
+        """Return all comments stored for an issue, oldest first."""
         comment_path = self._comments_path(issue_id)
         if not comment_path.exists():
             return []
@@ -247,6 +293,12 @@ class LocalTrackerAdapter(TrackerAdapter):
         issue_id: str,
         since_comment_id: str | None,
     ) -> list[Comment]:
+        """Return comments newer than ``since_comment_id`` for polling.
+
+        Returns:
+            All comments when ``since_comment_id`` is None, otherwise the
+            comments that follow the cursor (inclusive of nothing beyond).
+        """
         comments = await self.fetch_issue_comments(issue_id)
         if since_comment_id is None:
             return comments
@@ -261,6 +313,7 @@ class LocalTrackerAdapter(TrackerAdapter):
         body: str,
         mentions: list[str] | None = None,
     ) -> Comment | None:
+        """Create a comment that mentions users and asks for clarification."""
         prefix = " ".join(f"@{mention}" for mention in mentions or [])
         comment_body = f"{prefix}\n\n{body}".strip() if prefix else body
         return self._append_comment(issue_id, comment_body)
@@ -269,6 +322,7 @@ class LocalTrackerAdapter(TrackerAdapter):
         self,
         labels: list[str] | None,
     ) -> Intent:
+        """Resolve the operator intent from a set of issue labels."""
         return intent_from_label_set(labels, self.intent_labels)
 
     async def add_label(self, issue_id: str, label: str) -> bool:
@@ -328,6 +382,14 @@ class LocalTrackerAdapter(TrackerAdapter):
         self,
         pull_request: PullRequestRef,
     ) -> bool:
+        """Close a local pull request.
+
+        The local tracker has no remote PR; closing is a no-op because
+        the orchestrator resets the frontmatter fields directly.
+
+        Returns:
+            True, since the operation always succeeds.
+        """
         # LocalTracker has no remote PR — issue_registry tracks the
         # "PR" via frontmatter (pr_number / pr_url). Closing a local
         # PR is a no-op; the orchestrator's reset_for_retry will clear
@@ -343,6 +405,12 @@ class LocalTrackerAdapter(TrackerAdapter):
         issue_id: str,
         since_comment_id: str | None,
     ) -> "CommandIntent | None":
+        """Scan new comments for a parseable agent command.
+
+        Returns:
+            The first ``CommandIntent`` found among comments newer than
+            ``since_comment_id``, or None when none is present.
+        """
         from ..tracker import CommandIntent, parse_agent_command
 
         comments = await self.fetch_new_comments_since(issue_id, since_comment_id)
@@ -359,6 +427,7 @@ class LocalTrackerAdapter(TrackerAdapter):
         return None
 
     def _load_documents(self) -> list[LocalIssueDocument]:
+        """Load and parse all non-ignored issue documents, sorted by path."""
         if not self.issues_path.exists():
             return []
         documents: list[LocalIssueDocument] = []
@@ -369,6 +438,11 @@ class LocalTrackerAdapter(TrackerAdapter):
         return documents
 
     def _document_for_issue(self, issue_id: str) -> LocalIssueDocument:
+        """Return the document whose id or identifier matches ``issue_id``.
+
+        Raises:
+            FileNotFoundError: When no local issue matches ``issue_id``.
+        """
         for document in self._load_documents():
             issue = document.issue
             if issue.id == issue_id or issue.identifier == issue_id:
@@ -376,6 +450,7 @@ class LocalTrackerAdapter(TrackerAdapter):
         raise FileNotFoundError(f"Local issue not found: {issue_id}")
 
     def _append_comment(self, issue_id: str, body: str) -> Comment:
+        """Append a comment record to the issue's NDJSON comment log."""
         self.issues_path.mkdir(parents=True, exist_ok=True)
         now = utc_now_iso()
         comment = Comment(
@@ -397,18 +472,22 @@ class LocalTrackerAdapter(TrackerAdapter):
         return comment
 
     def _comments_path(self, issue_id: str) -> Path:
+        """Return the NDJSON comment-log path for an issue ID."""
         return self.issues_path / f"{_safe_file_stem(issue_id)}.comments.ndjson"
 
 
 def _normalize_states(states: tuple[str, ...]) -> set[str]:
+    """Normalize a collection of state names into a lowercased set."""
     return {_normalize_state(state) for state in states if _normalize_state(state)}
 
 
 def _normalize_state(state: str | None) -> str:
+    """Normalize a state name to a stripped, lowercased string."""
     return (state or "").strip().lower()
 
 
 def _is_ignored_issue_path(path: Path) -> bool:
+    """Return whether a file name is a non-issue artifact (temp/comment)."""
     name = path.name
     return (
         name.startswith(".")
@@ -419,6 +498,7 @@ def _is_ignored_issue_path(path: Path) -> bool:
 
 
 def _safe_file_stem(value: str) -> str:
+    """Build a filesystem-safe stem from an arbitrary issue identifier."""
     safe = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip())
     stem = safe.strip("-._") or "issue"
     digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
@@ -426,6 +506,7 @@ def _safe_file_stem(value: str) -> str:
 
 
 def _string_or_none(value: Any) -> str | None:
+    """Return a stripped string, or None for empty or missing values."""
     if value is None:
         return None
     text = str(value).strip()

@@ -14,41 +14,50 @@ class StateMachineMixin:
     """
 
     def get(self, issue_id: str) -> IssueRecord | None:
+        """Return the record for an issue id, or ``None`` if unknown."""
         return self._records.get(issue_id)
 
     def get_by_identifier(self, issue_identifier: str) -> IssueRecord | None:
+        """Return the record whose ``issue_identifier`` matches, or ``None``."""
         for record in self._records.values():
             if record.issue_identifier == issue_identifier:
                 return record
         return None
 
     def get_by_issue_ref(self, issue_ref: str) -> IssueRecord | None:
+        """Resolve a record by issue id OR tracker identifier (either ref form)."""
         return self.get(issue_ref) or self.get_by_identifier(issue_ref)
 
     def get_by_branch(self, branch_name: str) -> IssueRecord | None:
+        """Return the record owning a feature branch, or ``None``."""
         for record in self._records.values():
             if record.branch_name == branch_name:
                 return record
         return None
 
     def has_pr(self, issue_id: str) -> bool:
+        """Whether the issue record currently has a registered PR number."""
         record = self._records.get(issue_id)
         return record is not None and record.pr_number is not None
 
     def is_completed(self, issue_id: str) -> bool:
+        """Whether the issue is in the COMPLETED state."""
         record = self._records.get(issue_id)
         return record is not None and record.status == IssueStatus.COMPLETED
 
     def is_terminal(self, issue_id: str) -> bool:
+        """Whether the issue is in any terminal state (won't run again)."""
         record = self._records.get(issue_id)
         return record is not None and record.status in TERMINAL_STATUSES
 
     def iter_records_with_pr(self) -> list[IssueRecord]:
+        """Return records that have both a PR number and a branch name."""
         return [
             record for record in self._records.values() if record.pr_number and record.branch_name
         ]
 
     def latest_sequential_record(self) -> IssueRecord | None:
+        """Return the highest ``sequence_index`` among sequential records."""
         sequential_records = (
             record
             for record in self._records.values()
@@ -61,13 +70,16 @@ class StateMachineMixin:
         )
 
     def running_records(self) -> list[IssueRecord]:
+        """Return all records currently in the RUNNING state."""
         return [record for record in self._records.values() if record.status == IssueStatus.RUNNING]
 
     def has_processed_feedback(self, issue_id: str, feedback_id: str) -> bool:
+        """Whether a feedback id has already been processed for the issue."""
         record = self._records.get(issue_id)
         return record is not None and feedback_id in record.processed_feedback_ids
 
     def can_follow_up(self, issue_id: str, max_attempts: int) -> bool:
+        """Whether the issue's follow-up attempt budget is not exhausted."""
         record = self._records.get(issue_id)
         if record is None:
             return False
@@ -188,7 +200,13 @@ class StateMachineMixin:
         pr_number: str | None = None,
         pr_url: str | None = None,
     ) -> IssueRecord | None:
-        """Update record after git sync has run."""
+        """Update the record after a git sync (commit + push + PR) run.
+
+        Applies the new branch / commit / PR metadata and moves the
+        record to SYNCED.  The first PR number seen starts the
+        ``pr_created_at`` clock; follow-up runs reusing the same PR do
+        not overwrite it.
+        """
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -212,7 +230,11 @@ class StateMachineMixin:
         return record
 
     def mark_running(self, issue_id: str) -> IssueRecord | None:
-        """Mark an issue as actively running by an agent session."""
+        """Mark the issue as RUNNING and reset per-run diagnostics.
+
+        Clears ``run_id`` / counters / deadline fields so the next run
+        starts from a clean slate.
+        """
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -244,6 +266,12 @@ class StateMachineMixin:
         timeout_deadline_at: float | None = None,
         workspace_dirty: bool | None = None,
     ) -> IssueRecord | None:
+        """Update high-frequency run diagnostics fields (throttled save).
+
+        Only non-``None`` kwargs are applied.  Persists through the
+        throttled ``_save_diagnostics`` path because this fires on every
+        agent event.
+        """
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -270,7 +298,11 @@ class StateMachineMixin:
         return record
 
     def mark_pending_review(self, issue_id: str) -> IssueRecord | None:
-        """Mark an issue as awaiting human review (LocalTracker git commit done)."""
+        """Mark the issue as PENDING_REVIEW (awaiting human review).
+
+        Used by LocalTracker after the git commit lands, before a human
+        merges the branch.
+        """
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -280,6 +312,7 @@ class StateMachineMixin:
         return record
 
     def mark_completed(self, issue_id: str) -> IssueRecord | None:
+        """Mark the issue as COMPLETED (session finished successfully)."""
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -289,6 +322,7 @@ class StateMachineMixin:
         return record
 
     def mark_failed(self, issue_id: str) -> IssueRecord | None:
+        """Mark the issue as FAILED and increment the attempt count."""
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -303,6 +337,11 @@ class StateMachineMixin:
         issue_id: str,
         reason: str,
     ) -> IssueRecord | None:
+        """Mark the issue as FAILED with an explicit verification reason.
+
+        Stores the reason in ``verification_status`` / ``verification_output``
+        / ``last_hook_error`` and increments the attempt count.
+        """
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -322,6 +361,11 @@ class StateMachineMixin:
         output: str | None = None,
         hook_error: str | None = None,
     ) -> IssueRecord | None:
+        """Mark the issue as VERIFICATION_FAILED (pre-commit gate failed).
+
+        Records the verification output / hook error and increments the
+        attempt count so retry budgets apply.
+        """
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -357,6 +401,7 @@ class StateMachineMixin:
         return record
 
     def mark_abandoned(self, issue_id: str) -> IssueRecord | None:
+        """Mark the issue as ABANDONED (retry limit reached, gave up)."""
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -366,6 +411,7 @@ class StateMachineMixin:
         return record
 
     def update_branch(self, issue_id: str, branch_name: str) -> IssueRecord | None:
+        """Record the feature branch name for an issue."""
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -385,6 +431,10 @@ class StateMachineMixin:
         session_end_reason: str | None = None,
         session_end_summary: str | None = None,
     ) -> IssueRecord | None:
+        """Update report / verification / session-end fields.
+
+        Only non-``None`` kwargs are applied.
+        """
         record = self._records.get(issue_id)
         if record is None:
             return None

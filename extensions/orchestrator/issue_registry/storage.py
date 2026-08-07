@@ -36,6 +36,14 @@ class StorageMixin:
             self._save()
 
     def _load(self) -> None:
+        """Load registry records from the JSON file on disk.
+
+        Missing files are treated as an empty registry; files with a
+        newer ``schema_version`` are rejected loudly, and status/intent
+        strings are converted back to their enum values.  Strict
+        construction means unknown values or fields raise instead of
+        being silently dropped.
+        """
         if not self._path.exists():
             return
         data = json.loads(self._path.read_text(encoding="utf-8"))
@@ -61,6 +69,14 @@ class StorageMixin:
             self._records[k] = IssueRecord(**v)
 
     def _save(self) -> None:
+        """Atomically persist all records to the JSON file.
+
+        Writes to a temp file in the same directory, then moves it into
+        place with ``os.replace``.  On failure the temp file is cleaned
+        up and a warning is logged; throttle bookkeeping is only reset
+        on success so a failed write does not swallow a pending
+        diagnostics flush.
+        """
         tmp_path: Path | None = None
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)

@@ -38,6 +38,15 @@ class LocalIssueDocument:
 
 
 def parse_markdown_issue(path: Path) -> LocalIssueDocument:
+    """Parse a markdown issue document into a ``LocalIssueDocument``.
+
+    Args:
+        path: Path to the markdown issue file.
+
+    Returns:
+        The parsed document, including metadata, body and a normalized
+        ``Issue`` model.
+    """
     text = path.read_text(encoding="utf-8")
     metadata, body = _split_frontmatter(text)
     title, description = _title_and_description(path, metadata, body)
@@ -83,6 +92,12 @@ def parse_markdown_issue(path: Path) -> LocalIssueDocument:
 
 
 def write_markdown_frontmatter(path: Path, updates: dict[str, Any]) -> None:
+    """Merge ``updates`` into the frontmatter and atomically rewrite the file.
+
+    Args:
+        path: Path to the markdown issue file.
+        updates: Frontmatter key/value pairs; None values are skipped.
+    """
     text = path.read_text(encoding="utf-8")
     metadata, body = _split_frontmatter(text)
     metadata.update({k: v for k, v in updates.items() if v is not None})
@@ -154,6 +169,16 @@ def _title_and_description(
     metadata: dict[str, Any],
     body: str,
 ) -> tuple[str, str]:
+    """Derive (title, description) from frontmatter, a heading, or the path.
+
+    Args:
+        path: The issue file path (used as a title fallback).
+        metadata: Parsed YAML frontmatter.
+        body: The markdown body text.
+
+    Returns:
+        A tuple of the title and the remaining description text.
+    """
     metadata_title = _string_or_none(metadata.get("title"))
     if metadata_title:
         return metadata_title, body.strip()
@@ -167,16 +192,19 @@ def _title_and_description(
 
 
 def _default_branch_name(identifier: str, title: str) -> str:
+    """Build a default local branch name from an identifier and title."""
     return f"local/{_slugify(f'{identifier}-{title}')[:_DEFAULT_BRANCH_NAME_TRUNCATE_LENGTH]}"
 
 
 def _slugify(value: str) -> str:
+    """Convert arbitrary text into a lowercase URL/branch-safe slug."""
     slug = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip().lower())
     slug = re.sub(r"-+", "-", slug).strip("-._")
     return slug or "issue"
 
 
 def _string_or_none(value: Any) -> str | None:
+    """Return a stripped string, or None for empty or missing values."""
     if value is None:
         return None
     text = str(value).strip()
@@ -184,6 +212,7 @@ def _string_or_none(value: Any) -> str | None:
 
 
 def _int_or_none(value: Any) -> int | None:
+    """Coerce an integer value (int or numeric string) to int, else None."""
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
@@ -197,6 +226,7 @@ def _int_or_none(value: Any) -> int | None:
 
 
 def _string_list(value: Any) -> list[str]:
+    """Normalize a value into a list of non-None strings."""
     if value is None:
         return []
     if isinstance(value, str):
@@ -207,6 +237,7 @@ def _string_list(value: Any) -> list[str]:
 
 
 def _datetime_or_none(value: Any) -> datetime | None:
+    """Parse a datetime value (object or ISO string) into a datetime, or None."""
     if isinstance(value, datetime):
         return value
     if not isinstance(value, str) or not value.strip():
@@ -221,10 +252,12 @@ def _datetime_or_none(value: Any) -> datetime | None:
 
 
 def utc_now_iso() -> str:
+    """Return the current UTC time as an ISO-8601 string."""
     return datetime.now(timezone.utc).isoformat()
 
 
 def _atomic_write(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` atomically via a temp file and rename."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(
         prefix=f".{path.name}.",

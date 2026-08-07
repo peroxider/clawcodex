@@ -46,6 +46,15 @@ class RepositoryPullRequestMixin:
         head_branch: str,
         base_branch: str,
     ) -> PullRequestRef | None:
+        """Find an open pull request matching the given branches.
+
+        Args:
+            head_branch: Branch carrying the changes.
+            base_branch: Branch the changes target.
+
+        Returns:
+            The matching ``PullRequestRef``, or None when not found.
+        """
         params: dict[str, Any] = {
             "state": self.platform.open_state,
             "base": base_branch,
@@ -94,6 +103,17 @@ class RepositoryPullRequestMixin:
         include_ci_failures: bool = True,
         max_log_chars_per_check: int = 12_000,
     ) -> list[PullRequestFeedback]:
+        """Fetch conversation, inline, review and (optionally) CI feedback.
+
+        Args:
+            pull_request: The pull request to inspect.
+            issue_id: Optional issue ID used for conversation comments.
+            include_ci_failures: Whether to include failing CI checks.
+            max_log_chars_per_check: Max CI body length before truncation.
+
+        Returns:
+            The collected ``PullRequestFeedback`` items.
+        """
         if pull_request.number is None:
             return []
 
@@ -148,6 +168,11 @@ class RepositoryPullRequestMixin:
         body: str,
         issue_id: str | None = None,
     ) -> dict[str, Any] | None:
+        """Post a reply to a pull request feedback item.
+
+        Returns:
+            The created reply payload, or None on a non-dict response.
+        """
         if pull_request.number is None:
             return None
         if feedback.source == "inline_review" and feedback.id:
@@ -173,6 +198,12 @@ class RepositoryPullRequestMixin:
         title: str | None = None,
         body: str | None = None,
     ) -> PullRequestRef | None:
+        """Update a pull request's title and/or body.
+
+        Returns:
+            The updated ``PullRequestRef``, or the original reference when
+            there is nothing to update, or None for a missing PR number.
+        """
         if pull_request.number is None:
             return None
         payload: dict[str, Any] = {}
@@ -235,6 +266,20 @@ class RepositoryPullRequestMixin:
         base_branch: str,
         body: str,
     ) -> PullRequestRef:
+        """Create a pull request and wait for it to be discoverable.
+
+        Args:
+            title: Pull request title.
+            head_branch: Branch carrying the changes.
+            base_branch: Branch the changes target.
+            body: Pull request description.
+
+        Returns:
+            The created ``PullRequestRef``.
+
+        Raises:
+            RepositoryTrackerError: When the response is invalid.
+        """
         payload = {
             "title": title,
             "head": head_branch,
@@ -291,6 +336,7 @@ class RepositoryPullRequestMixin:
         self,
         pr_number: str,
     ) -> list[PullRequestFeedback]:
+        """Fetch normalized conversation comments for a pull request."""
         comments = await self.fetch_comments(pr_number)
         feedback = [
             feedback
@@ -303,6 +349,7 @@ class RepositoryPullRequestMixin:
         self,
         pr_number: str,
     ) -> list[PullRequestFeedback]:
+        """Fetch normalized inline review comments for a pull request."""
         payload = await self._fetch_paginated(
             f"/repos/{self.owner}/{self.repo}/pulls/{pr_number}/comments"
         )
@@ -317,6 +364,7 @@ class RepositoryPullRequestMixin:
         self,
         pr_number: str,
     ) -> list[PullRequestFeedback]:
+        """Fetch normalized review summaries for a pull request."""
         payload = await self._fetch_paginated(
             f"/repos/{self.owner}/{self.repo}/pulls/{pr_number}/reviews"
         )
@@ -332,6 +380,15 @@ class RepositoryPullRequestMixin:
         *,
         max_log_chars_per_check: int,
     ) -> list[PullRequestFeedback]:
+        """Fetch normalized failing CI feedback for a pull request.
+
+        Args:
+            pr_number: Pull request number.
+            max_log_chars_per_check: Max body length before truncation.
+
+        Returns:
+            The normalized CI feedback for failing checks.
+        """
         payload = await self._request_json(
             "GET",
             f"/repos/{self.owner}/{self.repo}/pulls/{pr_number}",
@@ -372,6 +429,7 @@ class RepositoryPullRequestMixin:
         ]
 
     async def _fetch_ci_checks(self, sha: str) -> list[dict[str, Any]]:
+        """Fetch CI check/status payloads for a commit SHA."""
         if self.platform.name == "github":
             payload = await self._request_json(
                 "GET",

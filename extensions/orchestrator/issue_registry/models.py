@@ -147,4 +147,5 @@ class IssueRecord:
     pause_reason: str = ""
 
     def touch(self) -> None:
+        """Stamp ``updated_at`` with the current wall-clock time."""
         self.updated_at = time.time()

@@ -69,9 +69,17 @@ class ClarificationItem:
     author_login: str | None = None
 
     def touch(self) -> None:
+        """Refresh ``updated_at`` to the current time."""
         self.updated_at = time.time()
 
     def is_expired(self, now: float | None = None) -> bool:
+        """Return True when ``now`` has reached the item's deadline.
+
+        An item without a deadline (``expires_at`` is None) is never expired.
+
+        Args:
+            now: reference timestamp; defaults to the current time.
+        """
         if self.expires_at is None:
             return False
         if now is None:
@@ -84,6 +92,14 @@ class ClarificationItem:
         source: str,
         answered_at: float | None = None,
     ) -> None:
+        """Record the answer text, source and timestamp on the item.
+
+        Args:
+            answer: the answer text
+            source: where the answer came from ("dashboard",
+                "clarification_queue" or "author")
+            answered_at: timestamp of the answer; defaults to the current time
+        """
         self.answer = answer
         self.answer_source = source
         self.answered_at = answered_at or time.time()
@@ -98,11 +114,13 @@ class ClarificationQueue:
     """
 
     def __init__(self, queue_path: Path | None = None) -> None:
+        """Initialise the queue from ``queue_path`` (defaults to ``DEFAULT_QUEUE_PATH``)."""
         self._path = queue_path or DEFAULT_QUEUE_PATH
         self._records: dict[str, ClarificationItem] = {}
         self._load()
 
     def get(self, issue_id: str) -> ClarificationItem | None:
+        """Return the item for ``issue_id``, or None when absent."""
         return self._records.get(issue_id)
 
     def get_pending_feedback(self, issue_id: str) -> ClarificationItem | None:
@@ -121,6 +139,7 @@ class ClarificationQueue:
         return item
 
     def list_items(self) -> list[ClarificationItem]:
+        """Return all queue items sorted by creation time."""
         return sorted(self._records.values(), key=lambda item: item.created_at)
 
     def poll_pending(self) -> list[ClarificationItem]:
@@ -153,7 +172,7 @@ class ClarificationQueue:
         ]
 
     def get_resolved(self, issue_id: str) -> ClarificationItem | None:
-        """Return resolved item if one exists (for answer retrieval)."""
+        """Return the resolved item for an issue, if one exists."""
         item = self._records.get(issue_id)
         if item is None:
             return None
@@ -165,7 +184,7 @@ class ClarificationQueue:
         return None
 
     def get_stale(self, issue_id: str) -> list[str]:
-        """Return list of stale (rejected) answers for an issue."""
+        """Return the stale (rejected) answers recorded for an issue."""
         item = self._records.get(issue_id)
         if item is None:
             return []
@@ -183,7 +202,22 @@ class ClarificationQueue:
         since_comment_id: str | None = None,
         author_login: str | None = None,
     ) -> ClarificationItem:
-        """Create a pending clarification item."""
+        """Create a new pending clarification item for an issue.
+
+        Args:
+            issue_id: internal issue identifier
+            issue_identifier: human-readable identifier (e.g. "owner/repo#42")
+            question: the clarification question
+            options: optional multiple-choice options
+            context_summary: issue context shared with the operator/author
+            timeout_seconds: how long the item stays answerable; None means
+                no deadline
+            since_comment_id: lowest comment id already seen for the issue
+            author_login: login of the issue author for the @mention channel
+
+        Returns:
+            The newly created ClarificationItem.
+        """
         now = time.time()
         expires_at = None
         if timeout_seconds is not None:
@@ -238,6 +272,15 @@ class ClarificationQueue:
         issue_id: str,
         comment_id: str | None,
     ) -> ClarificationItem | None:
+        """Record the highest comment id already inspected for an issue.
+
+        Args:
+            issue_id: the issue being tracked
+            comment_id: the last comment id seen; None clears the marker
+
+        Returns:
+            The updated item, or None when the issue is not in the queue.
+        """
         item = self._records.get(issue_id)
         if item is None:
             return None
@@ -442,6 +485,7 @@ class ClarificationQueue:
         return item
 
     def _load(self) -> None:
+        """Reload the queue from disk; missing or corrupt files start empty."""
         if not self._path.exists():
             return
         try:
@@ -454,6 +498,7 @@ class ClarificationQueue:
             )
 
     def _save(self) -> None:
+        """Persist the current queue to disk as JSON, best-effort."""
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             self._path.write_text(

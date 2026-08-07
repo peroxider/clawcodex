@@ -81,6 +81,7 @@ class IssueStateCache:
     _snapshots: dict[str, list[_IssueSnapshot]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        """Normalise ``stable_skip_turns`` to a non-negative integer."""
         # Normalise the knob to a non-negative integer. Negative values
         # would otherwise silently disable the cache, which is a foot-gun.
         self.stable_skip_turns = max(0, int(self.stable_skip_turns))
@@ -184,7 +185,7 @@ class IssueStateCache:
     # ------------------------------------------------------------------
 
     def stats(self) -> dict[str, int]:
-        """Return a snapshot of cache sizes for debugging / logs."""
+        """Return a snapshot of cache sizes for debugging and logs."""
         return {
             "tracked_issues": len(self._snapshots),
             "total_snapshots": sum(len(h) for h in self._snapshots.values()),

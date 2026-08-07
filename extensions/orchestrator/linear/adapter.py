@@ -82,6 +82,18 @@ class LinearAdapter(TrackerAdapter):
         title_prefixes: list[str] | None = None,
         title_prefix_match: str = "any",
     ) -> None:
+        """Initialize the Linear-backed tracker adapter.
+
+        Args:
+            api_key: Linear API key used for GraphQL authentication.
+            project_slug: Project slug to poll candidate issues from.
+            endpoint: Linear GraphQL endpoint URL.
+            active_states: Issue states treated as active candidates.
+            assignee: Optional assignee filter ("me" or a display name).
+            intent_labels: Mapping of label names to intents.
+            title_prefixes: Optional title prefixes for candidate filtering.
+            title_prefix_match: "any" or "all" match policy for prefixes.
+        """
         self.client = LinearGraphQLClient(
             api_key=api_key,
             endpoint=endpoint,
@@ -103,12 +115,14 @@ class LinearAdapter(TrackerAdapter):
     def configure_title_prefix_filter(
         self, prefixes: list[str] | None, match: str = "any"
     ) -> None:
+        """Configure the title-prefix filter used when polling issues."""
         self.client.configure_title_prefix_filter(prefixes, match)
 
     async def extract_intent_from_labels(
         self,
         labels: list[str] | None,
     ) -> "Intent":
+        """Resolve the operator intent from a set of issue labels."""
         from ..tracker import Intent
 
         return self._resolve_intent(labels, self.intent_labels) or Intent.NONE
@@ -117,6 +131,15 @@ class LinearAdapter(TrackerAdapter):
         self,
         pull_request: "PullRequestRef",
     ) -> bool:
+        """Close a remote pull request.
+
+        Linear has no explicit pull-request model, so this reports the
+        operation as unsupported and lets the orchestrator record the
+        intent as failed while still resetting the local registry.
+
+        Returns:
+            False, because Linear does not support remote PR closing.
+        """
         # TODO LinearAdapter does not have a
         # remote GitHub-style PR to close. Linear's PR model is
         # implicit; the issue's state transitions to "Cancelled" or
@@ -131,6 +154,7 @@ class LinearAdapter(TrackerAdapter):
         return False
 
     async def fetch_candidate_issues(self) -> list[Issue]:
+        """Fetch issues matching the project, active states and assignee."""
         assignee_filter = await self._resolve_assignee_filter()
         return await self.client.fetch_candidate_issues(
             project_slug=self.project_slug or "",
@@ -139,6 +163,7 @@ class LinearAdapter(TrackerAdapter):
         )
 
     async def fetch_issue_states_by_ids(self, issue_ids: list[str]) -> dict[str, Issue]:
+        """Fetch current state snapshots for the given issue IDs."""
         assignee_filter = await self._resolve_assignee_filter()
         issues = await self.client.fetch_issue_states_by_ids(
             issue_ids, assignee_filter=assignee_filter
@@ -146,6 +171,7 @@ class LinearAdapter(TrackerAdapter):
         return {issue.id: issue for issue in issues if issue.id}
 
     async def create_comment(self, issue_id: str, body: str) -> Comment | None:
+        """Create a comment on an issue and return the created comment."""
         body_resp = await self.client.graphql(
             _CREATE_COMMENT_MUTATION,
             {"issueId": issue_id, "body": body},
@@ -161,6 +187,7 @@ class LinearAdapter(TrackerAdapter):
         comment_id: str,
         body: str,
     ) -> Comment | None:
+        """Update an existing comment body and return the updated comment."""
         body_resp = await self.client.graphql(
             _UPDATE_COMMENT_MUTATION,
             {"commentId": comment_id, "body": body},
@@ -176,6 +203,7 @@ class LinearAdapter(TrackerAdapter):
         body: str,
         mentions: list[str] | None = None,
     ) -> Comment | None:
+        """Create a comment that mentions users and asks for clarification."""
         mention_prefix = " ".join(
             f"@{login.strip()}" for login in (mentions or []) if login.strip()
         )
@@ -183,6 +211,7 @@ class LinearAdapter(TrackerAdapter):
         return await self.create_comment(issue_id, comment_body)
 
     async def update_issue_state(self, issue_id: str, state: str) -> None:
+        """Update an issue to the given workflow state."""
         # Map orchestrator-internal terminal states to Linear-compatible
         # workflow state names. Linear teams commonly name their final
         # state "Cancelled" (or a variant); falling back to the raw
@@ -206,6 +235,7 @@ class LinearAdapter(TrackerAdapter):
             raise LinearAdapterError("issue_update_failed")
 
     async def _resolve_state_id(self, issue_id: str, state_name: str) -> str:
+        """Resolve a Linear state ID for the issue's team by state name."""
         body = await self.client.graphql(
             _STATE_LOOKUP_QUERY,
             {"issueId": issue_id, "stateName": state_name},
@@ -220,6 +250,7 @@ class LinearAdapter(TrackerAdapter):
         raise LinearAdapterError(f"state_not_found: {state_name}")
 
     async def _resolve_assignee_filter(self) -> dict[str, Any] | None:
+        """Resolve and cache the assignee filter for candidate queries."""
         if self._assignee_filter is not None:
             return self._assignee_filter
 
@@ -247,6 +278,7 @@ class LinearAdapter(TrackerAdapter):
 
 
 def _comment_from_node(node: Any) -> Comment | None:
+    """Build a normalized ``Comment`` from a Linear GraphQL comment node."""
     if not isinstance(node, dict):
         return None
     user = node.get("user") if isinstance(node.get("user"), dict) else {}
@@ -264,6 +296,7 @@ def _comment_from_node(node: Any) -> Comment | None:
 
 
 def _string_or_none(value: Any) -> str | None:
+    """Return a stripped non-empty string, or None for falsy/empty input."""
     if value is None:
         return None
     text = str(value).strip()

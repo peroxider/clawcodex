@@ -22,6 +22,12 @@ class FeedbackMixin:
         cursor: str | None = None,
         feedback_urls: Mapping[str, str] | None = None,
     ) -> IssueRecord | None:
+        """Record newly discovered feedback ids as pending.
+
+        Skips already-processed ids, deduplicates against the pending
+        set, stores canonical URLs when provided, and starts the
+        staleness clock when the pending set was previously empty.
+        """
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -56,6 +62,12 @@ class FeedbackMixin:
         commit_sha: str | None = None,
         cursor: str | None = None,
     ) -> IssueRecord | None:
+        """Move feedback ids from pending to processed.
+
+        Removes their URL lookups, clears the staleness clock once
+        nothing remains pending, and records the follow-up commit sha /
+        cursor when provided.
+        """
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -83,6 +95,7 @@ class FeedbackMixin:
         return record
 
     def increment_followup_attempt(self, issue_id: str) -> IssueRecord | None:
+        """Increment the follow-up attempt counter for an issue."""
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -92,6 +105,11 @@ class FeedbackMixin:
         return record
 
     def clear_stale_pending(self, issue_id: str, timeout_seconds: int = 600) -> int:
+        """Drop pending feedback older than ``timeout_seconds``.
+
+        Returns:
+            The number of dropped ids, or ``0`` when nothing was stale.
+        """
         record = self._records.get(issue_id)
         if record is None or not record.pending_feedback_ids:
             return 0
@@ -109,6 +127,7 @@ class FeedbackMixin:
         return count
 
     def mark_feedback_checked(self, issue_id: str) -> IssueRecord | None:
+        """Stamp ``last_feedback_checked_at`` with the current time."""
         record = self._records.get(issue_id)
         if record is None:
             return None

@@ -27,7 +27,14 @@ class ClarificationMixin:
         clarification_replies: list[str] | None = None,
         clarifier_comment_cursor: str | None = None,
     ) -> IssueRecord | None:
-        """Update clarification-related fields on an issue record."""
+        """Update clarification-related fields on an issue record.
+
+        Only non-``None`` kwargs are applied; ``question`` is appended
+        to the audit trail ``question_history``.
+
+        Returns:
+            The updated record, or ``None`` if the issue is unknown.
+        """
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -65,7 +72,12 @@ class ClarificationMixin:
         fingerprint: str,
         round_number: int,
     ) -> IssueRecord | None:
-        """Record a clarification wait without abandoning the issue."""
+        """Record a clarification wait without abandoning the issue.
+
+        Sets ``clarification_status`` to ``awaiting_author``, stores the
+        open questions / fingerprint / round number, and appends new
+        questions to the audit trail.
+        """
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -90,6 +102,12 @@ class ClarificationMixin:
         status: str = "resolved",
         replies: list[str] | None = None,
     ) -> IssueRecord | None:
+        """Mark the issue's clarification as resolved.
+
+        Clears the open questions, records the answer and its source
+        (also stored as the first response source when given), and sets
+        the resolution status.
+        """
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -114,6 +132,11 @@ class ClarificationMixin:
         questions: list[str],
         fingerprint: str,
     ) -> IssueRecord | None:
+        """Mark the issue as requiring manual clarification.
+
+        Stores the open questions and fingerprint with
+        ``clarification_status`` set to ``manual_required``.
+        """
         record = self._records.get(issue_id)
         if record is None:
             return None
@@ -125,7 +148,11 @@ class ClarificationMixin:
         return record
 
     def add_stale_answer(self, issue_id: str, stale_answer: str) -> IssueRecord | None:
-        """Record a stale (rejected) answer for notification."""
+        """Record a stale (rejected) answer for later notification.
+
+        Appends the answer to ``stale_answers`` for surface to the
+        operator (e.g. by the IM/CLI feedback flow).
+        """
         record = self._records.get(issue_id)
         if record is None:
             return None

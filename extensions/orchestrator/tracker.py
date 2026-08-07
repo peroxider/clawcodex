@@ -190,22 +190,35 @@ class TrackerAdapter(ABC):
 
     @abstractmethod
     async def fetch_candidate_issues(self) -> list[Issue]:
-        """Poll for issues in active states."""
+        """Poll the tracker for issues currently in active states.
+
+        Called on every poll cycle; the orchestrator filters and ranks
+        the returned candidates before dispatching any of them.
+        """
 
     @abstractmethod
     async def fetch_issue_states_by_ids(self, issue_ids: list[str]) -> dict[str, Issue]:
-        """Refresh current state for running issues.
+        """Refresh the current state of running issues by ID.
 
-        Returns a mapping from issue_id to Issue.
+        Args:
+            issue_ids: the issue ids to refresh.
+
+        Returns:
+            Mapping from each issue id to its freshest ``Issue`` snapshot.
         """
 
     @abstractmethod
     async def create_comment(self, issue_id: str, body: str) -> "Comment | None":
-        """Post comment to issue (used by agent to report progress)."""
+        """Post a comment on an issue (used by the agent to report progress).
+
+        Returns:
+            The created comment, or ``None`` if the backend cannot
+            create comments.
+        """
 
     @abstractmethod
     async def update_issue_state(self, issue_id: str, state: str) -> None:
-        """Transition issue to a new state."""
+        """Transition an issue to a new tracker state (e.g. open → in_progress)."""
 
     # -- comment & clarification (implemented by every backend) --
 
@@ -216,7 +229,12 @@ class TrackerAdapter(ABC):
         comment_id: str,
         body: str,
     ) -> "Comment | None":
-        """Update an existing issue comment."""
+        """Update the body of an existing issue comment.
+
+        Returns:
+            The updated comment, or ``None`` if the backend cannot
+            update comments.
+        """
 
     @abstractmethod
     async def create_clarification_comment(
@@ -252,10 +270,11 @@ class TrackerAdapter(ABC):
         self,
         pull_request: "PullRequestRef",
     ) -> bool:
-        """Close a remote pull request (reset path).
+        """Close a remote pull request (used by the reset/retry path).
 
-        Returns True if the PR was closed (or was already closed),
-        False if the platform does not support PR closure.
+        Returns:
+            ``True`` if the PR was closed (or was already closed),
+            ``False`` if the platform does not support PR closure.
         """
 
 
@@ -291,7 +310,12 @@ class PullRequestCapability(Protocol):
         title: str,
         body: str,
     ) -> "PullRequestRef | None":
-        """Ensure a pull request exists for the branch."""
+        """Ensure a pull request exists for the branch, creating one if needed.
+
+        Returns:
+            The PR reference, or ``None`` if the adapter cannot
+            create pull requests.
+        """
 
     async def find_pull_request(
         self,
@@ -299,7 +323,11 @@ class PullRequestCapability(Protocol):
         head_branch: str,
         base_branch: str,
     ) -> "PullRequestRef | None":
-        """Check if a pull request already exists for the given branch."""
+        """Look up an existing pull request for the given branch pair.
+
+        Returns:
+            The PR reference if found, otherwise ``None``.
+        """
 
 
 @runtime_checkable
@@ -316,13 +344,23 @@ class PullRequestMaintenanceCapability(Protocol):
         title: str | None = None,
         body: str | None = None,
     ) -> "PullRequestRef | None":
-        """Update pull request metadata."""
+        """Update pull request metadata (title and/or body).
+
+        Returns:
+            The updated PR reference, or ``None`` if the update
+            is not supported.
+        """
 
     async def fetch_pull_request_mergeable(
         self,
         pull_request: "PullRequestRef",
     ) -> "MergeableStatus | None":
-        """Fetch a normalized PR mergeability report."""
+        """Fetch a normalized PR mergeability report.
+
+        Returns:
+            The mergeability report, or ``None`` when the platform
+            cannot report mergeability for the PR.
+        """
 
 
 @runtime_checkable
@@ -340,7 +378,17 @@ class PullRequestFeedbackCapability(Protocol):
         include_ci_failures: bool = True,
         max_log_chars_per_check: int = 12_000,
     ) -> list["PullRequestFeedback"]:
-        """Fetch review feedback and CI failures for a pull request."""
+        """Fetch review feedback and CI failures for a pull request.
+
+        Args:
+            pull_request: the PR to fetch feedback for.
+            issue_id: optional originating issue id for context.
+            include_ci_failures: whether to include CI check failures.
+            max_log_chars_per_check: cap on CI log characters per check.
+
+        Returns:
+            Normalized feedback items across all supported sources.
+        """
 
     async def reply_to_pull_request_feedback(
         self,
@@ -350,7 +398,12 @@ class PullRequestFeedbackCapability(Protocol):
         body: str,
         issue_id: str | None = None,
     ) -> "Comment | None":
-        """Reply to a pull request feedback item after a follow-up run."""
+        """Reply to a pull request feedback item after a follow-up run.
+
+        Returns:
+            The created comment, or ``None`` if the backend cannot
+            post replies.
+        """
 
 
 @runtime_checkable
@@ -358,7 +411,11 @@ class UserIdentityCapability(Protocol):
     """Platform identity of the token owner (repo trackers)."""
 
     async def get_authenticated_user(self) -> str | None:
-        """Return the platform login of the token owner, if detectable."""
+        """Return the platform login of the token owner.
+
+        Returns:
+            The login string, or ``None`` if it cannot be detected.
+        """
 
 
 @runtime_checkable
@@ -404,7 +461,7 @@ class CommentHistoryCapability(Protocol):
     """Issue comment history for clarification polling."""
 
     async def fetch_issue_comments(self, issue_id: str) -> list["Comment"]:
-        """Fetch all comments on an issue for clarification polling."""
+        """Fetch all comments on an issue (used by clarification polling)."""
 
     async def fetch_new_comments_since(
         self,

@@ -123,9 +123,10 @@ def find_missing_paths(workspace_root: Path | str, paths: list[str]) -> list[str
 
 
 def _basename_exists(root: Path, name: str) -> bool:
-    """True when any file with this basename exists under ``root``
-    (ignoring ``.git``). Short-circuits on the first hit so the scan
-    stays cheap on the common resolvable-reference case."""
+    """Return True when any file with this basename exists under
+    ``root`` (ignoring ``.git``). Short-circuits on the first hit so
+    the scan stays cheap on the common resolvable-reference case.
+    """
     if not name:
         return False
     try:
@@ -139,9 +140,17 @@ def _basename_exists(root: Path, name: str) -> bool:
 
 
 def check_issue_premise(issue: Any, workspace_root: Path | str | None) -> list[str]:
-    """Convenience wrapper: extract references from an issue and report
-    the ones missing from the workspace. Returns ``[]`` when there is
-    nothing suspicious (or no workspace to check against)."""
+    """Convenience wrapper: extract path references from an issue and
+    report the ones missing from the workspace.
+
+    Args:
+        issue: the issue object or dict to inspect
+        workspace_root: repository root to check against; None skips
+
+    Returns:
+        The missing paths, or ``[]`` when nothing is suspicious (or no
+        workspace to check against).
+    """
     if workspace_root is None:
         return []
     title = getattr(issue, "title", None) or (

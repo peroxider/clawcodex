@@ -59,6 +59,13 @@ class IssueRegistry(
         *,
         diagnostics_min_save_interval_s: float | None = None,
     ) -> None:
+        """Initialize an empty registry backed by ``storage_path``.
+
+        Args:
+            storage_path: path to the registry JSON file.
+            diagnostics_min_save_interval_s: minimum interval between
+                throttled diagnostics writes (default 2.0s).
+        """
         self._path = storage_path
         self._records: dict[str, IssueRecord] = {}
         self._diagnostics_min_save_interval_s = (

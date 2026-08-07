@@ -111,6 +111,20 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         title_prefixes: list[str] | None = None,
         title_prefix_match: str = "any",
     ) -> None:
+        """Initialize the repository issue client.
+
+        Args:
+            platform: Repository platform name ("github", "gitee", "gitcode").
+            owner: Repository owner (user or organization).
+            repo: Repository name.
+            api_key: Optional API key for authenticated requests.
+            endpoint: Optional API endpoint override.
+            http_client: Optional shared httpx async client.
+            skip_labels: Labels that exclude an issue from candidates.
+            require_any_labels: Labels; at least one must be present.
+            title_prefixes: Optional title prefixes for candidate filtering.
+            title_prefix_match: "any" or "all" match policy for prefixes.
+        """
         try:
             self.platform = _PLATFORMS[platform]
         except KeyError as exc:
@@ -132,6 +146,7 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
     def configure_title_prefix_filter(
         self, prefixes: list[str] | None, match: str = "any"
     ) -> None:
+        """Configure the title-prefix filter used when polling issues."""
         self._title_prefixes = normalize_title_prefixes(prefixes)
         self._title_prefix_match = normalize_title_prefix_match(match)
 
@@ -141,6 +156,15 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         active_states: list[str],
         assignee: str | None = None,
     ) -> list[Issue]:
+        """Fetch open issues as candidates, paginating until exhausted.
+
+        Args:
+            active_states: Issue states treated as active candidates.
+            assignee: Optional assignee filter.
+
+        Returns:
+            The normalized issues passing the title-prefix and label filters.
+        """
         page = 1
         issues: list[Issue] = []
         labels = _repository_label_filter(active_states)
@@ -198,6 +222,16 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         active_states: list[str],
         assignee: str | None = None,
     ) -> list[Issue]:
+        """Fetch current snapshots for the requested issue IDs.
+
+        Args:
+            issue_ids: IDs of the issues to fetch.
+            active_states: Issue states treated as active candidates.
+            assignee: Optional assignee filter.
+
+        Returns:
+            The normalized issues passing the title-prefix and label filters.
+        """
         issues: list[Issue] = []
         for issue_id in dict.fromkeys(issue_ids):
             payload = await self._request_json(
@@ -230,6 +264,11 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         return issues
 
     async def create_comment(self, issue_id: str, body: str) -> dict[str, Any] | None:
+        """Create a comment on an issue.
+
+        Returns:
+            The created comment payload, or None on a non-dict response.
+        """
         data: dict[str, Any] = {"body": body}
         result = await self._request_json(
             "POST",
@@ -240,6 +279,11 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         return result if isinstance(result, dict) else None
 
     async def update_comment(self, comment_id: str, body: str) -> dict[str, Any] | None:
+        """Update an existing comment's body.
+
+        Returns:
+            The updated comment payload, or None on a non-dict response.
+        """
         data: dict[str, Any] = {"body": body}
         result = await self._request_json(
             "PATCH",
@@ -302,6 +346,11 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         body: str,
         labels: list[str] | None = None,
     ) -> dict[str, Any] | None:
+        """Create a new issue on the remote repository.
+
+        Returns:
+            The created issue payload, or None on a non-dict response.
+        """
         payload: dict[str, Any] = {"title": title, "body": body}
         if labels:
             payload["labels"] = labels
@@ -370,6 +419,12 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         body: str | None = None,
         labels: list[str] | None = None,
     ) -> dict[str, Any] | None:
+        """Update an issue's title, body and/or labels.
+
+        Returns:
+            The updated issue payload, or None when there is nothing to
+            update or the response is not a dict.
+        """
         payload: dict[str, Any] = {}
         if title is not None:
             payload["title"] = title
@@ -442,6 +497,11 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         *,
         state: str = "open",
     ) -> dict[str, Any] | None:
+        """Find an open issue by exact title.
+
+        Returns:
+            The first matching issue payload, or None when not found.
+        """
         page = 1
         while True:
             payload = await self._request_json(
@@ -475,6 +535,7 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         return None
 
     def _matches_title_prefixes(self, issue: Issue) -> bool:
+        """Return whether the issue title matches the configured prefixes."""
         return matches_title_prefixes(
             issue.title, self._title_prefixes, self._title_prefix_match
         )
@@ -518,6 +579,11 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         return _extract_labels(payload)
 
     async def _fetch_paginated(self, path: str) -> list[dict[str, Any]]:
+        """Fetch every page of a paginated list endpoint.
+
+        Returns:
+            The collected dict payloads across all pages.
+        """
         page = 1
         items: list[dict[str, Any]] = []
         while True:
@@ -543,6 +609,21 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         json: dict[str, Any] | None = None,
         data: dict[str, Any] | None = None,
     ) -> Any:
+        """Perform an authenticated request and parse the JSON response.
+
+        Args:
+            method: HTTP method to use.
+            path: API path relative to the endpoint.
+            params: Optional query parameters.
+            json: Optional JSON body (bearer-auth platforms).
+            data: Optional form body (access-token platforms).
+
+        Returns:
+            The parsed JSON response, or None for empty success bodies.
+
+        Raises:
+            RepositoryTrackerError: On invalid JSON response bodies.
+        """
         headers = {"User-Agent": "clawcodex-orchestrator"}
         if self.platform.accept_header:
             headers["Accept"] = self.platform.accept_header
@@ -580,6 +661,11 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
             ) from None
 
     async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        """Execute an HTTP request, raising on transport or HTTP errors.
+
+        Raises:
+            RepositoryTrackerError: On transport failures or status >= 400.
+        """
         client = self._http_client
         should_close = client is None
         if client is None:
@@ -600,6 +686,7 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
 
 
 def _summarize_body(response: httpx.Response) -> str:
+    """Collapse a response body into a compact, truncated string."""
     text = " ".join(response.text.split())
     if len(text) > _SUMMARIZE_BODY_MAX_LEN:
         return text[:_SUMMARIZE_BODY_MAX_LEN] + "...<truncated>"

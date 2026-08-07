@@ -65,6 +65,24 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         title_prefixes: list[str] | None = None,
         title_prefix_match: str = "any",
     ) -> None:
+        """Initialize the repository-backed tracker adapter.
+
+        Args:
+            platform: Repository platform name ("github", "gitee", "gitcode").
+            owner: Repository owner (user or organization).
+            repo: Repository name.
+            api_key: Optional API key for authenticated requests.
+            endpoint: Optional API endpoint override.
+            active_states: Issue states treated as active candidates.
+            terminal_states: Issue states treated as terminal.
+            assignee: Optional assignee filter for candidate issues.
+            intent_labels: Mapping of label names to intents.
+            http_client: Optional shared httpx async client.
+            skip_labels: Labels that exclude an issue from candidates.
+            require_any_labels: Labels; at least one must be present.
+            title_prefixes: Optional title prefixes for candidate filtering.
+            title_prefix_match: "any" or "all" match policy for prefixes.
+        """
         self.platform = platform
         self.owner = owner
         self.repo = repo
@@ -96,6 +114,7 @@ class RepositoryTrackerAdapter(TrackerAdapter):
     def configure_title_prefix_filter(
         self, prefixes: list[str] | None, match: str = "any"
     ) -> None:
+        """Configure the title-prefix filter used when polling issues."""
         self.title_prefixes = list(prefixes or [])
         self.title_prefix_match = match
         self.client.configure_title_prefix_filter(prefixes, match)
@@ -104,15 +123,23 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         self,
         labels: list[str] | None,
     ) -> Intent:
+        """Resolve the operator intent from a set of issue labels."""
         return intent_from_label_set(labels, self.intent_labels)
 
     async def get_authenticated_user(self) -> str | None:
+        """Return the login of the authenticated token owner, or None."""
         return await self.client.get_authenticated_user()
 
     async def close_pull_request(
         self,
         pull_request: PullRequestRef,
     ) -> bool:
+        """Close a remote pull request, best-effort.
+
+        Returns:
+            True when the close succeeded (or was already merged),
+            False on failure.
+        """
         return await self.client.close_pull_request(pull_request)
 
     async def fetch_issue_command_intent(
@@ -120,6 +147,12 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         issue_id: str,
         since_comment_id: str | None,
     ) -> "CommandIntent | None":
+        """Scan new issue comments for a parseable agent command.
+
+        Returns:
+            The first ``CommandIntent`` found, or None when none is present
+            or the comment fetch fails.
+        """
         from ..tracker import CommandIntent, parse_agent_command
 
         try:
@@ -144,12 +177,14 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         return None
 
     async def fetch_candidate_issues(self) -> list[Issue]:
+        """Fetch issues in active states matching assignee and filters."""
         return await self.client.fetch_candidate_issues(
             active_states=self.active_states,
             assignee=self.assignee,
         )
 
     async def fetch_issue_states_by_ids(self, issue_ids: list[str]) -> dict[str, Issue]:
+        """Fetch current snapshots for the requested issue IDs."""
         issues = await self.client.fetch_issue_states_by_ids(
             issue_ids,
             active_states=self.active_states,
@@ -158,6 +193,7 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         return {issue.id: issue for issue in issues if issue.id}
 
     async def create_comment(self, issue_id: str, body: str) -> Comment | None:
+        """Create a comment on an issue and return the created comment."""
         created = await self.client.create_comment(issue_id, body)
         if created is None:
             return None
@@ -176,6 +212,7 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         comment_id: str,
         body: str,
     ) -> Comment | None:
+        """Update an existing comment body and return the updated comment."""
         updated = await self.client.update_comment(comment_id, body)
         if updated is None:
             return None
@@ -189,6 +226,7 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         )
 
     async def update_issue_state(self, issue_id: str, state: str) -> None:
+        """Update a remote issue's state, mirroring it via lifecycle labels."""
         issue = await self.client.fetch_issue_states_by_ids(
             [issue_id],
             active_states=self.active_states,
@@ -234,6 +272,7 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         head_branch: str,
         base_branch: str,
     ) -> PullRequestRef | None:
+        """Find an open pull request matching head and base branches."""
         return await self.client.find_pull_request(
             head_branch=head_branch,
             base_branch=base_branch,
@@ -248,6 +287,20 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         title: str,
         body: str,
     ) -> PullRequestRef | None:
+        """Ensure a pull request exists for the given branches.
+
+        Returns the existing PR when one matches, otherwise creates a new one.
+
+        Args:
+            issue: The issue the pull request belongs to.
+            head_branch: Branch carrying the changes.
+            base_branch: Branch the changes target.
+            title: Pull request title.
+            body: Pull request description.
+
+        Returns:
+            The matched or created ``PullRequestRef``, or None on failure.
+        """
         existing = await self.client.find_pull_request(
             head_branch=head_branch,
             base_branch=base_branch,
@@ -268,6 +321,12 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         title: str | None = None,
         body: str | None = None,
     ) -> PullRequestRef | None:
+        """Update a pull request's title and/or body.
+
+        Returns:
+            The updated ``PullRequestRef``, or None when the PR has no
+            remote number.
+        """
         return await self.client.update_pull_request(
             pull_request=pull_request,
             title=title,
@@ -298,6 +357,7 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         include_ci_failures: bool = True,
         max_log_chars_per_check: int = 12_000,
     ) -> list[PullRequestFeedback]:
+        """Fetch all available feedback for a pull request."""
         return await self.client.fetch_pull_request_feedback(
             pull_request=pull_request,
             issue_id=issue_id,
@@ -313,6 +373,7 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         body: str,
         issue_id: str | None = None,
     ) -> Comment | None:
+        """Reply to a pull request feedback item with the given body."""
         created = await self.client.reply_to_pull_request_feedback(
             pull_request=pull_request,
             feedback=feedback,
@@ -331,6 +392,7 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         )
 
     async def fetch_issue_comments(self, issue_id: str) -> list[Comment]:
+        """Return all non-empty comments on an issue, oldest first."""
         raw_comments = await self.client.fetch_comments(issue_id)
         return [
             Comment(
@@ -350,6 +412,12 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         issue_id: str,
         since_comment_id: str | None,
     ) -> list[Comment]:
+        """Return non-empty comments newer than ``since_comment_id``.
+
+        Returns:
+            All comments when ``since_comment_id`` is None, otherwise the
+            comments that follow the cursor.
+        """
         raw_comments = await self.client.fetch_comments_since(
             issue_id,
             since_comment_id,
@@ -373,6 +441,10 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         body: str,
         mentions: list[str] | None = None,
     ) -> Comment | None:
+        """Create a comment that mentions users and asks for clarification.
+
+        Uses the POST response directly to avoid races with fast replies.
+        """
         mention_prefix = " ".join(
             f"@{login.strip()}" for login in (mentions or []) if login.strip()
         )

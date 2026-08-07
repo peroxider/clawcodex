@@ -89,6 +89,14 @@ class LinearGraphQLClient:
         title_prefixes: list[str] | None = None,
         title_prefix_match: str = "any",
     ) -> None:
+        """Initialize the Linear GraphQL client.
+
+        Args:
+            api_key: Linear API key used as the authorization header.
+            endpoint: Linear GraphQL endpoint URL.
+            title_prefixes: Optional title prefixes for candidate filtering.
+            title_prefix_match: "any" or "all" match policy for prefixes.
+        """
         self.api_key = api_key
         self.endpoint = endpoint
         self.configure_title_prefix_filter(title_prefixes, title_prefix_match)
@@ -96,6 +104,7 @@ class LinearGraphQLClient:
     def configure_title_prefix_filter(
         self, prefixes: list[str] | None, match: str = "any"
     ) -> None:
+        """Configure the title-prefix filter used when polling issues."""
         self._title_prefixes = normalize_title_prefixes(prefixes)
         self._title_prefix_match = normalize_title_prefix_match(match)
 
@@ -105,6 +114,19 @@ class LinearGraphQLClient:
         variables: dict[str, Any] | None = None,
         operation_name: str | None = None,
     ) -> dict[str, Any]:
+        """Execute a GraphQL request against the Linear API.
+
+        Args:
+            query: The GraphQL query or mutation string.
+            variables: Optional variable bindings for the request.
+            operation_name: Optional named operation selector.
+
+        Returns:
+            The parsed JSON response body.
+
+        Raises:
+            LinearAPIError: On HTTP or transport failures.
+        """
         payload: dict[str, Any] = {"query": query, "variables": variables or {}}
         if operation_name:
             payload["operationName"] = operation_name
@@ -141,6 +163,16 @@ class LinearGraphQLClient:
         active_states: list[str],
         assignee_filter: dict[str, Any] | None = None,
     ) -> list[Issue]:
+        """Fetch candidate issues for a project, paginating until exhausted.
+
+        Args:
+            project_slug: Linear project slug to query.
+            active_states: Issue states considered active candidates.
+            assignee_filter: Optional assignee restriction from the adapter.
+
+        Returns:
+            The list of normalized candidate issues.
+        """
         if not self.api_key:
             raise LinearAPIError("Missing Linear API token")
         if not project_slug:
@@ -176,6 +208,15 @@ class LinearGraphQLClient:
         issue_ids: list[str],
         assignee_filter: dict[str, Any] | None = None,
     ) -> list[Issue]:
+        """Fetch issue snapshots by IDs, preserving the requested order.
+
+        Args:
+            issue_ids: IDs of the issues to fetch.
+            assignee_filter: Optional assignee restriction from the adapter.
+
+        Returns:
+            The normalized issues, ordered like ``issue_ids`` (deduplicated).
+        """
         if not issue_ids:
             return []
 
@@ -204,6 +245,7 @@ class LinearGraphQLClient:
         return all_issues
 
     async def resolve_viewer_id(self) -> str | None:
+        """Return the ID of the authenticated Linear viewer, or None."""
         body = await self.graphql(_VIEWER_QUERY, {})
         viewer = body.get("data", {}).get("viewer")
         if viewer and isinstance(viewer, dict):
@@ -219,6 +261,16 @@ def _decode_page(
     body: dict[str, Any],
     assignee_filter: dict[str, Any] | None,
 ) -> tuple[list[Issue], dict[str, Any]]:
+    """Decode one page of a Linear issues response.
+
+    Args:
+        body: The raw GraphQL response body.
+        assignee_filter: Optional assignee restriction to apply.
+
+    Returns:
+        A tuple of the normalized issues and page info
+        (``has_next_page`` / ``end_cursor``).
+    """
     data = body.get("data", {}).get("issues", {})
     nodes = data.get("nodes", [])
     page_info = data.get("pageInfo", {})
@@ -239,6 +291,7 @@ def _normalize_issue(
     issue: dict[str, Any],
     assignee_filter: dict[str, Any] | None,
 ) -> Issue | None:
+    """Normalize a raw Linear issue node into an ``Issue``."""
     assignee = issue.get("assignee")
     return Issue(
         id=issue.get("id"),
@@ -259,6 +312,7 @@ def _normalize_issue(
 
 
 def _extract_labels(issue: dict[str, Any]) -> list[str]:
+    """Extract lowercased label names from a Linear issue node."""
     labels = issue.get("labels", {}).get("nodes", [])
     return [
         str(label["name"]).lower()
@@ -268,6 +322,7 @@ def _extract_labels(issue: dict[str, Any]) -> list[str]:
 
 
 def _extract_blockers(issue: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract blocking-relation issues from a Linear issue node."""
     relations = issue.get("inverseRelations", {}).get("nodes", [])
     blockers = []
     for rel in relations:
@@ -290,6 +345,7 @@ def _assigned_to_worker(
     assignee: dict[str, Any] | None,
     assignee_filter: dict[str, Any] | None,
 ) -> bool:
+    """Return whether the assignee satisfies the optional assignee filter."""
     if assignee_filter is None:
         return True
     match_values = assignee_filter.get("match_values")
@@ -300,12 +356,14 @@ def _assigned_to_worker(
 
 
 def _parse_priority(value: Any) -> int | None:
+    """Return the issue priority when it is an integer, else None."""
     if isinstance(value, int):
         return value
     return None
 
 
 def _parse_datetime(value: str | None) -> Any:
+    """Parse an ISO-8601 timestamp into a timezone-aware datetime, or None."""
     from datetime import datetime
 
     if not value:
@@ -317,6 +375,7 @@ def _parse_datetime(value: str | None) -> Any:
 
 
 def _summarize_error_body(body: Any) -> str:
+    """Collapse an error response body into a compact, truncated string."""
     text = json.dumps(body, ensure_ascii=False) if isinstance(body, dict) else str(body)
     text = " ".join(text.split())
     if len(text) > _MAX_ERROR_BODY_LOG_BYTES:
