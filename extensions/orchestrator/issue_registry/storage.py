@@ -25,6 +25,16 @@ class StorageMixin:
     / ``_pending_diagnostics_save``.
     """
 
+    def flush(self) -> None:
+        """Persist any pending throttled diagnostics write.
+
+        Call at the end of a run (including paths that don't end in a
+        durable status mutation, e.g. ``pending_review``) so the final
+        diagnostics snapshot reaches disk.
+        """
+        if self._pending_diagnostics_save:
+            self._save()
+
     def _load(self) -> None:
         if not self._path.exists():
             return
@@ -100,13 +110,3 @@ class StorageMixin:
             self._save()  # resets pending flag + timestamp on success
         else:
             self._pending_diagnostics_save = True
-
-    def flush(self) -> None:
-        """Persist any pending throttled diagnostics write.
-
-        Call at the end of a run (including paths that don't end in a
-        durable status mutation, e.g. ``pending_review``) so the final
-        diagnostics snapshot reaches disk.
-        """
-        if self._pending_diagnostics_save:
-            self._save()

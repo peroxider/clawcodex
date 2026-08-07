@@ -27,6 +27,21 @@ class RepositoryTrackerError(Exception):
 # Page size for paginated list endpoints, shared by client + PR mixin.
 _PAGE_SIZE = 100
 
+# State aliases used by the normalization helpers above.
+_OPEN_STATE_ALIASES = {"open", "opened", "reopen", "reopened"}
+_TERMINAL_STATE_ALIASES = {
+    "closed",
+    "close",
+    "done",
+    "completed",
+    "cancelled",
+    "canceled",
+    "duplicate",
+    "failed",
+    "abandoned",
+    "verification_failed",
+}
+
 
 def _normalize_issue(
     payload: Any,
@@ -599,19 +614,3 @@ def _extract_issue_author(issue: dict[str, Any]) -> str | None:
     if isinstance(user, str) and user.strip():
         return user
     return None
-
-
-# State aliases used by the normalization helpers above.
-_OPEN_STATE_ALIASES = {"open", "opened", "reopen", "reopened"}
-_TERMINAL_STATE_ALIASES = {
-    "closed",
-    "close",
-    "done",
-    "completed",
-    "cancelled",
-    "canceled",
-    "duplicate",
-    "failed",
-    "abandoned",
-    "verification_failed",
-}

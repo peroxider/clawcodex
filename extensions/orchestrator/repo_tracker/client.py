@@ -38,6 +38,10 @@ from .pull_requests import RepositoryPullRequestMixin
 
 logger = logging.getLogger(__name__)
 
+# Max characters of an HTTP error-response body kept in a raised
+# RepositoryTrackerError message; longer bodies are truncated.
+_SUMMARIZE_BODY_MAX_LEN = 500
+
 
 @dataclass(frozen=True)
 class RepositoryPlatform:
@@ -130,26 +134,6 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
     ) -> None:
         self._title_prefixes = normalize_title_prefixes(prefixes)
         self._title_prefix_match = normalize_title_prefix_match(match)
-
-    def _matches_title_prefixes(self, issue: Issue) -> bool:
-        return matches_title_prefixes(
-            issue.title, self._title_prefixes, self._title_prefix_match
-        )
-
-    def _matched_skip_label(self, issue: Issue) -> str | None:
-        """Return the first skip_label hit on this issue, or None."""
-        if not self._skip_labels:
-            return None
-        issue_labels = {label.lower() for label in issue.labels}
-        matched = issue_labels & self._skip_labels
-        return next(iter(matched), None) if matched else None
-
-    def _matches_any_required_label(self, issue: Issue) -> bool:
-        """True if at least one required label is on the issue (OR)."""
-        if not self._require_any_labels:
-            return True
-        issue_labels = {label.lower() for label in issue.labels}
-        return bool(issue_labels & self._require_any_labels)
 
     async def fetch_candidate_issues(
         self,
@@ -403,29 +387,6 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         )
         return result if isinstance(result, dict) else None
 
-    async def _fetch_issue_labels(self, issue_id: str) -> list[str]:
-        """Read the current label list for one issue.
-
-        Returns the list of label names as strings. On HTTP error
-        or unparseable payload, returns an empty list (the caller
-        treats this as "no labels" rather than as a hard failure).
-        """
-        try:
-            payload = await self._request_json(
-                "GET",
-                f"/repos/{self.owner}/{self.repo}/issues/{issue_id}",
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "_fetch_issue_labels: GET failed for issue %s: %s",
-                issue_id,
-                exc,
-            )
-            return []
-        if not isinstance(payload, dict):
-            return []
-        return _extract_labels(payload)
-
     async def add_label(self, issue_id: str, label: str) -> bool:
         """Mirror the CLI retry intent onto the remote issue.
 
@@ -512,6 +473,49 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         if isinstance(payload, dict):
             return payload.get("login") or payload.get("username") or payload.get("name")
         return None
+
+    def _matches_title_prefixes(self, issue: Issue) -> bool:
+        return matches_title_prefixes(
+            issue.title, self._title_prefixes, self._title_prefix_match
+        )
+
+    def _matched_skip_label(self, issue: Issue) -> str | None:
+        """Return the first skip_label hit on this issue, or None."""
+        if not self._skip_labels:
+            return None
+        issue_labels = {label.lower() for label in issue.labels}
+        matched = issue_labels & self._skip_labels
+        return next(iter(matched), None) if matched else None
+
+    def _matches_any_required_label(self, issue: Issue) -> bool:
+        """True if at least one required label is on the issue (OR)."""
+        if not self._require_any_labels:
+            return True
+        issue_labels = {label.lower() for label in issue.labels}
+        return bool(issue_labels & self._require_any_labels)
+
+    async def _fetch_issue_labels(self, issue_id: str) -> list[str]:
+        """Read the current label list for one issue.
+
+        Returns the list of label names as strings. On HTTP error
+        or unparseable payload, returns an empty list (the caller
+        treats this as "no labels" rather than as a hard failure).
+        """
+        try:
+            payload = await self._request_json(
+                "GET",
+                f"/repos/{self.owner}/{self.repo}/issues/{issue_id}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "_fetch_issue_labels: GET failed for issue %s: %s",
+                issue_id,
+                exc,
+            )
+            return []
+        if not isinstance(payload, dict):
+            return []
+        return _extract_labels(payload)
 
     async def _fetch_paginated(self, path: str) -> list[dict[str, Any]]:
         page = 1

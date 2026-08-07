@@ -73,10 +73,6 @@ class StateMachineMixin:
             return False
         return record.followup_attempt_count < max_attempts
 
-    # ------------------------------------------------------------------
-    # Mutations
-    # ------------------------------------------------------------------
-
     def register(
         self,
         issue_id: str,
