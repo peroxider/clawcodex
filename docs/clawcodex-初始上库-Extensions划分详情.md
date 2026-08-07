@@ -51,12 +51,12 @@
 - `extensions/orchestrator/issue.py`（Issue 数据模型）
 - `extensions/orchestrator/tracker.py`（`TrackerAdapter` 核心契约 + 数据模型 + 7 个能力 Protocol + `supports()`，facade re-export）＋ `intent.py`（`Intent`/`Command` 语义、标签与 `/agent` 命令解析、优先级合并）＋ `tracker_kinds.py`（kind 注册表 / 配置校验 / `create_tracker_adapter` 工厂）
 - `extensions/orchestrator/issue_registry/`（子包：`models.py` / `storage.py` / `state_machine.py` / `clarification.py` / `feedback.py` / `intent.py` + `__init__.py` facade，`IssueRegistry` 组合 5 个 mixin）
-- `extensions/orchestrator/issue_state_cache.py` / `clarification.py` / `clarification_queue.py` / `premise_check.py`
+- `extensions/orchestrator/issue_state_cache.py` / `clarification.py` / `clarification_queue.py` / `premise_check.py` / `title_prefix_filter.py`（标题前缀过滤共享纯函数，linear / local_tracker / repo_tracker 适配器共用）
 - 子包 `linear/` / `local_tracker/` / `repo_tracker/`（后者按能力拆为 `client.py`（HTTP+issue 层）/ `normalizers.py`（归一化纯函数）/ `pull_requests.py`（PR 生命周期 mixin）/ `adapter.py`）（**`issue_clarifier/` 子包迁至 A.13**）
 
 **对外接口**：`TrackerAdapter` / `Intent` / `Command` / `PullRequestRef` / `IssueRegistry` / `IssueStatus` / `create_tracker_adapter`
 
-**抽出后边界**：仅负责"拉取 / 注册 / 状态缓存 / 前提校验"，澄清交互下沉至 A.13。
+**抽出后边界**：仅负责"拉取 / 注册 / 状态缓存 / 前提校验"，澄清分析下沉至 A.13（澄清队列 / 交互编排保留在 A.1）。
 
 #### Part A.2 — Agent Runtime（代理运行时 / 多模式执行）
 
@@ -212,7 +212,7 @@ CLI / 控制接口 / 日志 / 事件总线 / 视图 / 配置 schema；供外部�
 
 | 子特性 | 对应文件（项目相对路径） |
 |---|---|
-| **A.1** Issue Intake | `extensions/orchestrator/{issue.py, tracker.py, intent.py, tracker_kinds.py, issue_state_cache.py, clarification.py, clarification_queue.py, premise_check.py}` + 子包 `issue_registry/`（`models.py` / `storage.py` / `state_machine.py` / `clarification.py` / `feedback.py` / `intent.py` + facade）/ `linear/` / `local_tracker/` / `repo_tracker/`（`client.py` / `normalizers.py` / `pull_requests.py` / `adapter.py`） |
+| **A.1** Issue Intake | `extensions/orchestrator/{issue.py, tracker.py, intent.py, tracker_kinds.py, issue_state_cache.py, clarification.py, clarification_queue.py, premise_check.py, title_prefix_filter.py}` + 子包 `issue_registry/`（`models.py` / `storage.py` / `state_machine.py` / `clarification.py` / `feedback.py` / `intent.py` + facade）/ `linear/` / `local_tracker/` / `repo_tracker/`（`client.py` / `normalizers.py` / `pull_requests.py` / `adapter.py`） |
 | **A.2** Agent Runtime | `extensions/orchestrator/{agent_runner.py, approval_policy.py, prompt_builder.py, tool_event_log.py, debug_log.py}` |
 | **A.3** Git Sync | `extensions/orchestrator/git_sync.py` |
 | **A.4** Verification Gate | `extensions/orchestrator/repro_gate.py` |
