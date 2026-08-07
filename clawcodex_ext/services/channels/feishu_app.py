@@ -399,7 +399,7 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         if chat_id:
             self._last_inbound_chat_id = str(chat_id)
 
-    # -- reaction / card-update capability (F-??? activity sink) ---------
+    # -- reaction / card-update capability (Activity sink) ---------
 
     async def set_reaction(
         self,

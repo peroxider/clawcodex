@@ -836,7 +836,7 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
 
 
 # ---------------------------------------------------------------------------
-# F-?? root-cause fix: stagnation / loop / budget exit paths
+# Root-cause fix: stagnation / loop / budget exit paths
 # ---------------------------------------------------------------------------
 #
 # The new ``max_no_op_turns`` / ``loop_detection_window`` /

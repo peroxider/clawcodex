@@ -1,4 +1,4 @@
-"""Unit tests for the Feishu activity sink (F-??? activity visibility).
+"""Unit tests for the Feishu activity sink (Activity visibility).
 
 Processing reactions are owned by the IM gateway. This sink translates
 orchestrator lifecycle events into progress updates to a placeholder card.

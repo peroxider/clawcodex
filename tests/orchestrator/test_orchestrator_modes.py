@@ -1,6 +1,6 @@
 """Phase-1 unit tests for the collaboration-mode framework.
 
-These cover the new abstractions added in F-?? (multi-agent modes):
+These cover the new abstractions added in (multi-agent modes):
 
 * ``extensions.orchestrator.modes`` — registry (register / get / available)
 * ``extensions.orchestrator.modes.base`` — Protocol + ``ModeDecision``

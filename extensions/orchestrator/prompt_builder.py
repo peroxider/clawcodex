@@ -296,7 +296,7 @@ class PromptBuilder:
 
         return rendered
 
-    # F-?? prompt split: marker that separates the constant workflow
+    # Prompt split: marker that separates the constant workflow
     # background (system prompt candidate) from the per-issue data
     # (user message candidate) in workflow.md. Lives in workflow.md
     # between the system section and the issue section. The marker is
@@ -891,7 +891,7 @@ def _get_git_log_summary(session: Any) -> str:
 
 
 # ─── Python interpreter detection + cascade resolver ────────────────
-# F-?? workspace-level python_executable: detect the interpreter
+# Workspace-level python_executable: detect the interpreter
 # inside the target repo via project-level signals, then expose a
 # cascade so the prompt builder can pick the most specific value.
 

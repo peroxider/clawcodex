@@ -487,7 +487,7 @@ class WorkspaceConfig:
     preserve_on_abandoned: bool = True
     preserve_on_timeout: bool = True
     sequential_lock: bool = True
-    # F-?? python interpreter resolution cascade (level 2):
+    # Python interpreter resolution cascade (level 2):
     # workspace-scoped Python interpreter. When ``python_executable``
     # is set, it overrides the ``agent.python_executable`` default.
     # When empty, the resolver will try ``python_auto_detect`` to
@@ -656,7 +656,7 @@ class AgentConfig:
     # flag merely flips the env var (CLAUDE_CODE_COORDINATOR_MODE)
     # that activates them before AgentRunner.run().
     coordinator_mode: bool = False
-    # F-?? root-cause fix: stagnation / loop guards. After
+    # Root-cause fix: stagnation / loop guards. After
     # ``max_no_op_turns`` consecutive turns where the LLM made zero
     # tool calls and produced empty output, the runner emits
     # session_end_reason="stagnation" and breaks the outer while
@@ -686,7 +686,7 @@ class AgentConfig:
     # calls) for percentage.
     phases: list[str] = field(default_factory=list)
     fallback_to_phase_step: bool = False
-    # F-?? root-cause fix: per-turn tool call cap. When the LLM
+    # Root-cause fix: per-turn tool call cap. When the LLM
     # produces more than this many tool calls in a single turn,
     # the agent runner stops processing tool events and waits for
     # SessionComplete to force a turn boundary. This prevents

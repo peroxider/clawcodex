@@ -170,7 +170,7 @@ class TestRenderPythonExecutable(unittest.TestCase):
 
 
 class TestRenderParts(unittest.TestCase):
-    """F-?? prompt split: ``render_parts()`` returns (system, user) tuples
+    """ Prompt split: ``render_parts()`` returns (system, user) tuples
     when the workflow template contains the USER_MESSAGE_MARKER."""
 
 

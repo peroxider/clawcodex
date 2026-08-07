@@ -13,10 +13,6 @@ class StateMachineMixin:
     The host class provides ``_records`` and ``_save`` (from StorageMixin).
     """
 
-    # ------------------------------------------------------------------
-    # Queries
-    # ------------------------------------------------------------------
-
     def get(self, issue_id: str) -> IssueRecord | None:
         return self._records.get(issue_id)
 

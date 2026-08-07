@@ -69,7 +69,7 @@ class IssueRecord:
     verification_output: str | None = None
     last_hook_error: str | None = None
     summary_comment_id: str | None = None
-    # F-?? root-cause fix: explicit end-of-session reason captured by
+    # Root-cause fix: explicit end-of-session reason captured by
     # AgentRunner before returning. Possible values:
     #   None | "stagnation" | "loop_detected" | "noop_completed" |
     #   "budget_exhausted" | "user_abort" | "task_complete"
@@ -97,7 +97,7 @@ class IssueRecord:
     stale_answers: list[str] = field(default_factory=list)
     processed_feedback_ids: list[str] = field(default_factory=list)
     pending_feedback_ids: list[str] = field(default_factory=list)
-    # F-?? feedback URL persistence: parallel lookup of the canonical
+    # Feedback URL persistence: parallel lookup of the canonical
     # comment/check URL for each pending feedback id, so the IM/CLI
     # ``issue feedback --list`` surface can show a clickable link instead
     # of the internal source-prefixed id. Keyed by the same id string
@@ -125,7 +125,7 @@ class IssueRecord:
     run_output_len: int = 0
     run_timeout_deadline_at: float | None = None
     run_workspace_dirty: bool | None = None
-    # F-?? retry context: list of run_ids from previous attempts for this
+    # Retry context: list of run_ids from previous attempts for this
     # issue.  The retrying agent can Read() the transcript at
     # ~/.clawcodex/sessions/<run_id>/transcript.jsonl to learn what was
     # attempted before.  Populated by _schedule_retry in orchestrator.py.

@@ -111,7 +111,7 @@ class StatusDashboard:
         self._last_rendered_at: float = 0.0
         self._pending_lines: list[str] = []
         self._last_snapshot_fingerprint: str = ""
-        # F-??? session-start listeners: external sinks (e.g. the Feishu
+        # Session-start listeners: external sinks (e.g. the Feishu
         # activity sink) can register a callback here without inheriting
         # from or monkey-patching the dashboard. Listeners receive the
         # :class:`SessionStatus` already populated by :meth:`on_session_start`.

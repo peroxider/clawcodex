@@ -206,7 +206,7 @@ class Orchestrator:
         # ``None`` (the default) preserves the existing behaviour — no
         # recording happens, no extra import cost.
         self.asciicast_capture = asciicast_capture
-        # F-?? collaboration modes — Phase 2 wires the registry +
+        # Collaboration modes — Phase 2 wires the registry +
         # ``ModeSelector`` + ``Router`` based on the ``modes:`` YAML
         # section. ``ModesConfig`` defaults (no router, only "single"
         # enabled) preserve byte-identical behavior for workflows that
@@ -263,7 +263,7 @@ class Orchestrator:
 
         self.status_dashboard = status_dashboard or StatusDashboard()
         self._agent_config = workflow.agent
-        # F-??? IM-side channel adapter (e.g. FeishuAppChannelAdapter). When
+        # IM-side channel adapter (e.g. FeishuAppChannelAdapter). When
         # set, :meth:`_build_session_sink` attaches a
         # :class:`FeishuActivitySink` so the bot's reactions + placeholder
         # progress card track the agent lifecycle for users on IM. None
@@ -290,7 +290,7 @@ class Orchestrator:
         self._semaphore = asyncio.Semaphore(workflow.agent.max_concurrent_agents)
         self._shutdown_event = asyncio.Event()
         self._tasks: set[asyncio.Task] = set()
-        # F-?? root-cause fix: map issue_id → asyncio.Task so the stop
+        # Root-cause fix: map issue_id → asyncio.Task so the stop
         # command can cancel a specific running issue by task.cancel().
         self._issue_tasks: dict[str, asyncio.Task] = {}
         # Store workflow path for metadata
@@ -2546,7 +2546,7 @@ class Orchestrator:
         task = asyncio.create_task(self._run_issue(session))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
-        # F-?? root-cause fix: register issue_id → task mapping so the
+        # Root-cause fix: register issue_id → task mapping so the
         # stop command can cancel a specific running issue.
         issue_id = issue.id or ""
         self._issue_tasks[issue_id] = task
@@ -2763,7 +2763,7 @@ class Orchestrator:
         session.sequence_index = sequence_index
         session.integration_branch = integration_branch
         session.base_branch = base_branch
-        # F-?? collaboration mode selection. Phase 1 ships only the
+        # Collaboration mode selection. Phase 1 ships only the
         # ``single`` mode; ModeSelector returns "single" unless the issue
         # carries a ``mode:<name>`` label that maps to a registered
         # runner. The decision is recorded on the session for the
@@ -2815,7 +2815,7 @@ class Orchestrator:
         # session so the agent + git_sync know to reuse the existing
         # branch / PR rather than create a new run.
         self._prepare_intent_session(session)
-        # F-?? retry context: propagate previous_run_ids from the registry
+        # Retry context: propagate previous_run_ids from the registry
         # to the session so the prompt builder can inject them.
         prev_record = self._registry.get(issue.id or "")
         if prev_record and prev_record.previous_run_ids:
@@ -3146,7 +3146,7 @@ class Orchestrator:
                     ):
                         await self._run_issue_with_workflow(session, progress_sink)
                     else:
-                        # F-?? collaboration-mode dispatch. For the
+                        # Collaboration-mode dispatch. For the
                         # default ``single`` mode (the only one
                         # registered in Phase 1) we keep the legacy
                         # ``stage_runners[run_kind] or agent_runner``
@@ -3305,7 +3305,7 @@ class Orchestrator:
                                 verification_status=getattr(session, "verification_status", None),
                                 verification_output=getattr(session, "verification_output", None),
                                 summary_comment_id=getattr(session, "summary_comment_id", None),
-                                # F-?? root-cause fix: persist
+                                # Root-cause fix: persist
                                 # explicit session-end reason so the
                                 # dashboard / verification can
                                 # distinguish stagnation / loop from
@@ -3572,7 +3572,7 @@ class Orchestrator:
                     ),
                 )
             except asyncio.CancelledError:
-                # F-?? root-cause fix: clean cancellation path.
+                # Root-cause fix: clean cancellation path.
                 # When the stop command cancels the task, capture
                 # the reason so the registry marks the issue as
                 # cancelled instead of silently dropping it.
@@ -3797,7 +3797,7 @@ class Orchestrator:
                     "stagnation",
                     "loop_detected",
                 ):
-                    # F-?? root-cause fix: the agent loop detected it
+                    # Root-cause fix: the agent loop detected it
                     # was no longer making progress (stagnation =
                     # consecutive no-op turns; loop_detected = same
                     # tool-call signature repeated within window).
@@ -4117,7 +4117,7 @@ class Orchestrator:
         attempt = self._state.retry_attempts.get(issue_id, 0) + 1
         self._state.retry_attempts[issue_id] = attempt
 
-        # F-?? retry context: persist the just-failed run_id so the next
+        # Retry context: persist the just-failed run_id so the next
         # attempt's agent can Read() the previous transcript to understand
         # what was tried and where it failed.
         if session.run_id:
@@ -4742,7 +4742,7 @@ class Orchestrator:
             session.status = "failed"
             session.pause_resume_event.set()  # Unblock if paused
             self._emit_im_event(issue_id, "control.stop", EventLevel.WARN, "stop requested")
-            # F-?? root-cause fix: cancel the asyncio task so the
+            # Root-cause fix: cancel the asyncio task so the
             # CancelledError handler in _run_issue fires immediately
             # instead of leaving the agent running until the next
             # session end check.

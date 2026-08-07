@@ -287,7 +287,7 @@ class AgentSession:
     # silently inheriting ``status="completed"``.
     session_end_reason: str | None = None
     session_end_summary: str = ""
-    # F-?? retry context: list of run_ids from previous failed attempts.
+    #  Retry context: list of run_ids from previous failed attempts.
     # Populated by orchestrator._launch_issue from the registry; consumed
     # by PromptBuilder.render() to inject a hint into the agent's prompt
     # so it can Read() past transcripts.
@@ -444,7 +444,7 @@ class AgentRunner:
     ) -> None:
         self.agent_config = agent_config
         self.sandbox_config = sandbox_config
-        # F-?? workspace-level python_executable resolver input. When
+        #  Workspace-level python_executable resolver input. When
         # None (the default for legacy callers and unit tests) we
         # substitute an empty ``WorkspaceConfig()`` so the cascade
         # resolver still works: workspace explicit → detect → agent
@@ -1509,7 +1509,7 @@ class AgentRunner:
         # ``None`` for tests / direct call sites that don't wire a
         # reporter.
         sink = progress_reporter
-        # F-?? root-cause fix: stagnation + loop guards. Independent of
+        #  Root-cause fix: stagnation + loop guards. Independent of
         # the workspace-dirty heuristic above (which never fires when
         # the workspace has untracked files — the exact pattern observed
         # in the repeated 30-min timeouts). no_work_streak counts
@@ -1641,7 +1641,7 @@ class AgentRunner:
                             # caller forgets to set the override.
                             conflict_files=getattr(session, "conflict_files", None),
                         )
-                    # F-?? prompt split: keep the constant workflow background
+                    #  Prompt split: keep the constant workflow background
                     # in the system prompt across every turn; only the
                     # per-issue data lands in the user message.
                     session._system_prompt_append = system_prompt_append
@@ -1769,7 +1769,7 @@ class AgentRunner:
                         getattr(self.agent_config, "stall_timeout_ms", 300_000) / 1000.0
                     ),
                     stall_warn_s=(getattr(self.agent_config, "stall_warn_ms", 30_000) / 1000.0),
-                    # F-?? prompt split: keep the constant workflow background
+                    #  Prompt split: keep the constant workflow background
                     # in the system prompt across every turn (turn 0 sets it
                     # via render_parts; turn > 0 reads it from the session).
                     # This mirrors CCB's "rich system + short user" structure
@@ -1800,10 +1800,10 @@ class AgentRunner:
                 turn_has_tool_calls = False
                 turn_output = ""
                 turn_has_modifying_tool = False
-                # F-?? root-cause fix: per-turn tool-name accumulator feeding
+                # Root-cause fix: per-turn tool-name accumulator feeding
                 # the loop-detection signature history.
                 turn_tool_names: list[str] = []
-                # F-?? root-cause fix: per-turn tool call cap to prevent
+                # Root-cause fix: per-turn tool call cap to prevent
                 # infinite read-only exploration spirals in a single turn.
                 turn_tool_count = 0
                 # Track in-flight tool results so we can force a clean turn
@@ -1896,7 +1896,7 @@ class AgentRunner:
                             turn_tool_count += 1
                             pending_tool_results += 1
                             update_diagnostics()
-                            # F-?? root-cause fix: collect tool names for the
+                            # Root-cause fix: collect tool names for the
                             # turn signature so the loop-detection guard can
                             # spot repeated tool-call patterns across turns.
                             if event.tool_name:
@@ -2094,7 +2094,7 @@ class AgentRunner:
                                 except Exception:
                                     pass
 
-                            # F-?? root-cause fix: if the per-turn tool cap
+                            # Root-cause fix: if the per-turn tool cap
                             # was reached and all in-flight results have been
                             # consumed, force a turn boundary now. This breaks
                             # infinite read-only exploration spirals while
@@ -2374,7 +2374,7 @@ class AgentRunner:
                                         )
                                         is_active, refreshed_issue = True, issue
                                     if is_active and turn_number < self.max_turns:
-                                        # F-?? Fix 4: include the running noop
+                                        # Fix 4: include the running noop
                                         # streak in the continuation log so
                                         # operators can spot stuck-on-finished
                                         # runs from the daemon log alone
@@ -2390,7 +2390,7 @@ class AgentRunner:
                                             no_work_streak,
                                             max_no_op_turns,
                                         )
-                                        # F-?? root-cause fix: stagnation guard.
+                                        # Root-cause fix: stagnation guard.
                                         # Counts consecutive turns where the LLM
                                         # produced zero tool calls AND empty
                                         # output — the exact pattern observed in
@@ -2559,7 +2559,7 @@ class AgentRunner:
                                             )
                                             return
 
-                                        # F-?? root-cause fix: loop guard.
+                                        # Root-cause fix: loop guard.
                                         # Records this turn's tool-call
                                         # signature and breaks if the same
                                         # signature repeats >= threshold
@@ -2737,7 +2737,7 @@ class AgentRunner:
                                         )
                                         continue
 
-                                # F-?? root-cause fix: pre-existing bug
+                                # Root-cause fix: pre-existing bug
                                 # that conflated "issue is no longer
                                 # active" with "we ran out of turns".  When
                                 # the issue is still active but
@@ -3014,7 +3014,7 @@ class AgentRunner:
                         session.control_socket = None
                     return
 
-                # F-?? root-cause fix: when the per-turn tool cap fires we
+                # Root-cause fix: when the per-turn tool cap fires we
                 # break out of the QueryRunner stream above.  Without this
                 # block the outer loop would re-issue the *same* turn (turn
                 # number not incremented), resetting ``turn_tool_count`` and

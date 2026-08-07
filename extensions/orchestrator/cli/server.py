@@ -1163,7 +1163,7 @@ def _run_orchestrator(
     except Exception:
         logger.debug("Failed to register orchestrator dashboard source", exc_info=True)
 
-    # F-?? Fix 2: write the real daemon PID to <workspace>/daemon.pid
+    # Fix 2: write the real daemon PID to <workspace>/daemon.pid
     # so external tools (cron monitor, stop scripts) can locate the
     # running daemon.  The previous shell-wrapper pattern
     # ``nohup ... & disown; echo $! > pidfile`` captured the nohup

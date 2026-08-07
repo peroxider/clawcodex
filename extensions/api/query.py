@@ -66,7 +66,7 @@ class QueryConfig:
     # Environment variables merged into the headless session's Bash
     # subprocess env. Values override inherited daemon env.
     env: dict[str, str] | None = None
-    # F-?? prompt split: when set, this text is appended to the
+    # Prompt split: when set, this text is appended to the
     # ``effective_system_prompt`` built by ``run_headless``. The daemon's
     # ``agent_runner`` uses this to keep the constant workflow background
     # (project, conventions, decoupling principles) in the system prompt

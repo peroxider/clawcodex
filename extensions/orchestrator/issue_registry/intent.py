@@ -75,10 +75,6 @@ class IntentMixin:
         self._save()
         return record
 
-    # ------------------------------------------------------------------
-    # PR conflict persistence
-    # ------------------------------------------------------------------
-
     def mark_conflict(
         self,
         issue_id: str,
