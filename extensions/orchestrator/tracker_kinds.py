@@ -184,6 +184,8 @@ def create_tracker_adapter(
             or tracker_kind_info("linear").default_endpoint,
             active_states=list(getattr(config, "active_states", []) or []),
             assignee=getattr(config, "assignee", None),
+            title_prefixes=list(getattr(config, "title_prefixes", []) or []),
+            title_prefix_match=getattr(config, "title_prefix_match", "any"),
         )
     if kind == "local":
         from .local_tracker.adapter import LocalTrackerAdapter
@@ -192,6 +194,8 @@ def create_tracker_adapter(
             issues_path=getattr(config, "issues_path", None) or "",
             active_states=list(getattr(config, "active_states", []) or []),
             terminal_states=list(getattr(config, "terminal_states", []) or []),
+            title_prefixes=list(getattr(config, "title_prefixes", []) or []),
+            title_prefix_match=getattr(config, "title_prefix_match", "any"),
         )
 
     from .repo_tracker.adapter import RepositoryTrackerAdapter
@@ -208,6 +212,8 @@ def create_tracker_adapter(
         http_client=http_client,
         skip_labels=list(getattr(config, "skip_labels", []) or []),
         require_any_labels=list(getattr(config, "require_any_labels", []) or []),
+        title_prefixes=list(getattr(config, "title_prefixes", []) or []),
+        title_prefix_match=getattr(config, "title_prefix_match", "any"),
     )
 
 

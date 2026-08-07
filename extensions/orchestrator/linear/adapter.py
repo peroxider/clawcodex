@@ -79,8 +79,15 @@ class LinearAdapter(TrackerAdapter):
         active_states: list[str] | None = None,
         assignee: str | None = None,
         intent_labels: dict[str, str] | None = None,
+        title_prefixes: list[str] | None = None,
+        title_prefix_match: str = "any",
     ) -> None:
-        self.client = LinearGraphQLClient(api_key=api_key, endpoint=endpoint)
+        self.client = LinearGraphQLClient(
+            api_key=api_key,
+            endpoint=endpoint,
+            title_prefixes=title_prefixes,
+            title_prefix_match=title_prefix_match,
+        )
         self.project_slug = project_slug
         self.active_states = active_states or LINEAR_ACTIVE_STATES_LIST
         self.assignee = assignee
@@ -92,6 +99,11 @@ class LinearAdapter(TrackerAdapter):
         )
         self._resolve_intent = intent_from_label_set
         self._assignee_filter: dict[str, Any] | None = None
+
+    def configure_title_prefix_filter(
+        self, prefixes: list[str] | None, match: str = "any"
+    ) -> None:
+        self.client.configure_title_prefix_filter(prefixes, match)
 
     async def extract_intent_from_labels(
         self,

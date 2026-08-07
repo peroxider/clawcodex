@@ -297,6 +297,7 @@ class Orchestrator:
         self._workflow_path: str | None = getattr(workflow, "source_path", None) or getattr(
             workflow, "_source_path", None
         )
+        self._dynamic_tracker_config_mtime_ns: int | None = self._workflow_mtime_ns()
         # Workspace root for control command polling
         workspace_root = Path(workspace.config.root)
         self._workspace_root = workspace_root
@@ -1007,12 +1008,65 @@ class Orchestrator:
 
         clear_orchestrator_metadata(self._workspace_root)
 
+    def _workflow_mtime_ns(self) -> int | None:
+        """Return the workflow modification time, if this daemon has a file."""
+        if not self._workflow_path:
+            return None
+        try:
+            return Path(self._workflow_path).stat().st_mtime_ns
+        except OSError:
+            return None
+
+    def _refresh_dynamic_title_prefix_filter(self) -> None:
+        """Apply changed title-prefix settings before fetching candidates.
+
+        Only this lightweight tracker setting is hot-reloaded.  Other workflow
+        settings can affect running work and retain the daemon-start snapshot.
+        """
+        mtime_ns = self._workflow_mtime_ns()
+        if mtime_ns is None or mtime_ns == self._dynamic_tracker_config_mtime_ns:
+            return
+        # Record first so a malformed edit does not generate a warning every
+        # polling interval. A subsequent file save will be retried.
+        self._dynamic_tracker_config_mtime_ns = mtime_ns
+        try:
+            from .workflow import WorkflowLoader
+
+            refreshed, _ = WorkflowLoader.load(self._workflow_path or "")
+        except Exception as exc:
+            logger.warning("workflow title-prefix reload failed: %s", exc)
+            return
+
+        if refreshed.tracker.kind != self.workflow.tracker.kind:
+            logger.warning(
+                "workflow tracker kind changed from %s to %s; title-prefix reload ignored",
+                self.workflow.tracker.kind,
+                refreshed.tracker.kind,
+            )
+            return
+        configure = getattr(self.tracker, "configure_title_prefix_filter", None)
+        if not callable(configure):
+            logger.warning("tracker does not support dynamic title-prefix filtering")
+            return
+        configure(
+            refreshed.tracker.title_prefixes,
+            refreshed.tracker.title_prefix_match,
+        )
+        self.workflow.tracker.title_prefixes = refreshed.tracker.title_prefixes
+        self.workflow.tracker.title_prefix_match = refreshed.tracker.title_prefix_match
+        logger.info(
+            "reloaded title-prefix filter: mode=%s prefixes=%s",
+            refreshed.tracker.title_prefix_match,
+            refreshed.tracker.title_prefixes,
+        )
+
     async def _poll_and_dispatch(self) -> None:
         """Fetch candidates, respect concurrency limit, launch runs."""
         self.status_dashboard.on_poll_start()
         self._state.poll_check_in_progress = True
 
         try:
+            self._refresh_dynamic_title_prefix_filter()
             # Process lifecycle control commands (pause/resume/stop/takeover)
             await self._process_control_commands()
 

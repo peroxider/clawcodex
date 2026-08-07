@@ -62,6 +62,8 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         http_client: httpx.AsyncClient | None = None,
         skip_labels: list[str] | None = None,
         require_any_labels: list[str] | None = None,
+        title_prefixes: list[str] | None = None,
+        title_prefix_match: str = "any",
     ) -> None:
         self.platform = platform
         self.owner = owner
@@ -71,6 +73,8 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         self.terminal_states = terminal_states or default_terminal_states_for_kind(platform)
         self.skip_labels: list[str] = list(skip_labels or [])
         self.require_any_labels: list[str] = list(require_any_labels or [])
+        self.title_prefixes: list[str] = list(title_prefixes or [])
+        self.title_prefix_match = title_prefix_match
         # Intent label conventions (operator-driven retry/followup/blocked).
         # If caller passes None, fall back to the standard "agent:*" set.
         self.intent_labels: dict[str, str] = (
@@ -85,7 +89,16 @@ class RepositoryTrackerAdapter(TrackerAdapter):
             http_client=http_client,
             skip_labels=skip_labels,
             require_any_labels=require_any_labels,
+            title_prefixes=title_prefixes,
+            title_prefix_match=title_prefix_match,
         )
+
+    def configure_title_prefix_filter(
+        self, prefixes: list[str] | None, match: str = "any"
+    ) -> None:
+        self.title_prefixes = list(prefixes or [])
+        self.title_prefix_match = match
+        self.client.configure_title_prefix_filter(prefixes, match)
 
     async def extract_intent_from_labels(
         self,

@@ -16,6 +16,11 @@ from typing import Any
 import httpx
 
 from ..issue import Issue
+from ..title_prefix_filter import (
+    matches_title_prefixes,
+    normalize_title_prefix_match,
+    normalize_title_prefixes,
+)
 from .normalizers import (
     _PAGE_SIZE,
     _build_issue_comment_url,
@@ -99,6 +104,8 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         http_client: httpx.AsyncClient | None = None,
         skip_labels: list[str] | None = None,
         require_any_labels: list[str] | None = None,
+        title_prefixes: list[str] | None = None,
+        title_prefix_match: str = "any",
     ) -> None:
         try:
             self.platform = _PLATFORMS[platform]
@@ -115,6 +122,18 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         )
         self._require_any_labels: frozenset[str] = frozenset(
             label.strip().lower() for label in (require_any_labels or []) if label and label.strip()
+        )
+        self.configure_title_prefix_filter(title_prefixes, title_prefix_match)
+
+    def configure_title_prefix_filter(
+        self, prefixes: list[str] | None, match: str = "any"
+    ) -> None:
+        self._title_prefixes = normalize_title_prefixes(prefixes)
+        self._title_prefix_match = normalize_title_prefix_match(match)
+
+    def _matches_title_prefixes(self, issue: Issue) -> bool:
+        return matches_title_prefixes(
+            issue.title, self._title_prefixes, self._title_prefix_match
         )
 
     def _matched_skip_label(self, issue: Issue) -> str | None:
@@ -162,6 +181,9 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
             for issue in (_normalize_issue(item, active_states=active_states) for item in payload):
                 if issue is None or not _matches_assignee(issue, assignee):
                     continue
+                if not self._matches_title_prefixes(issue):
+                    logger.info("skip_issue_title_prefix issue_id=%s", issue.id)
+                    continue
                 if not self._matches_any_required_label(issue):
                     logger.info(
                         "skip_issue_require_any issue_id=%s have=%s",
@@ -200,6 +222,9 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
             )
             issue = _normalize_issue(payload, active_states=active_states)
             if issue is None or not _matches_assignee(issue, assignee):
+                continue
+            if not self._matches_title_prefixes(issue):
+                logger.info("skip_issue_title_prefix issue_id=%s", issue.id)
                 continue
             if not self._matches_any_required_label(issue):
                 logger.info(
@@ -572,6 +597,6 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
 
 def _summarize_body(response: httpx.Response) -> str:
     text = " ".join(response.text.split())
-    if len(text) > 500:
-        return text[:500] + "...<truncated>"
+    if len(text) > _SUMMARIZE_BODY_MAX_LEN:
+        return text[:_SUMMARIZE_BODY_MAX_LEN] + "...<truncated>"
     return text

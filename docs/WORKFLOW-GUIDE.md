@@ -1176,6 +1176,22 @@ relative to the workspace unless noted.
 | `issues_path` | none | Local-tracker markdown directory |
 | `active_states` | per-kind | Issue states that trigger a run |
 | `terminal_states` | per-kind | Issue states that skip polling |
+| `title_prefixes` | `[]` | Candidate title prefixes. Empty disables title filtering; changes are picked up on the next poll. |
+| `title_prefix_match` | `any` | `any` (OR/union) or `all` (AND/intersection) across `title_prefixes`. |
+
+Title-prefix filtering is available for repository, local, and Linear
+trackers. The daemon checks `workflow.md` before every candidate poll, so
+saving this block applies it without a restart:
+
+```yaml
+tracker:
+  title_prefixes: ["[agent]", "feat:"]
+  title_prefix_match: any  # any = OR; all = AND
+```
+
+`all` only admits a title that begins with every configured prefix (useful
+when prefixes overlap, such as `"[agent]"` and `"[agent] feat:"`); `any`
+admits a title matching at least one.
 
 ### `polling.*`
 

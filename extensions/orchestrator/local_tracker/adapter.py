@@ -12,6 +12,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..issue import Issue
+from ..title_prefix_filter import (
+    matches_title_prefixes,
+    normalize_title_prefix_match,
+    normalize_title_prefixes,
+)
 
 logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
@@ -42,6 +47,8 @@ class LocalTrackerAdapter(TrackerAdapter):
         active_states: list[str] | None = None,
         terminal_states: list[str] | None = None,
         intent_labels: dict[str, str] | None = None,
+        title_prefixes: list[str] | None = None,
+        title_prefix_match: str = "any",
     ) -> None:
         self.issues_path = Path(issues_path).expanduser()
         self._active_states = tuple(
@@ -53,6 +60,7 @@ class LocalTrackerAdapter(TrackerAdapter):
             else ["completed", "closed", "cancelled", "failed", "abandoned"]
         )
         self._active_state_set = _normalize_states(self._active_states)
+        self.configure_title_prefix_filter(title_prefixes, title_prefix_match)
         # same label conventions as the repository-backed adapters.
         self.intent_labels: dict[str, str] = (
             dict(intent_labels) if intent_labels else dict(DEFAULT_INTENT_LABELS)
@@ -66,6 +74,12 @@ class LocalTrackerAdapter(TrackerAdapter):
     def terminal_states(self) -> list[str]:
         return list(self._terminal_states)
 
+    def configure_title_prefix_filter(
+        self, prefixes: list[str] | None, match: str = "any"
+    ) -> None:
+        self._title_prefixes = normalize_title_prefixes(prefixes)
+        self._title_prefix_match = normalize_title_prefix_match(match)
+
     async def fetch_candidate_issues(self) -> list[Issue]:
         documents = self._load_documents()
         issues = []
@@ -76,7 +90,10 @@ class LocalTrackerAdapter(TrackerAdapter):
                     document.issue.id or document.path.stem,
                 )
             if _normalize_state(document.issue.state or "open") in self._active_state_set:
-                issues.append(document.issue)
+                if matches_title_prefixes(
+                    document.issue.title, self._title_prefixes, self._title_prefix_match
+                ):
+                    issues.append(document.issue)
         return sorted(
             issues,
             key=lambda issue: (

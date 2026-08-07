@@ -411,6 +411,14 @@ def permission_mode_to_triple(
     return result
 
 
+def _normalize_title_prefix_match(value: Any) -> str:
+    mode = str(value or "any").strip().lower()
+    if mode not in {"any", "all"}:
+        logger.warning("tracker.title_prefix_match=%r is invalid; using 'any'", value)
+        return "any"
+    return mode
+
+
 def _default_tmp_workspace() -> str:
     return os.path.join(os.environ.get("TMPDIR", "/tmp"), "symphony_workspaces")
 
@@ -454,6 +462,11 @@ class TrackerConfig:
     # `priority/high` or `priority/urgent`). Empty list = no
     # requirement. Evaluated before `skip_labels`.
     require_any_labels: list[str] = field(default_factory=list)
+    # A candidate title must start with configured prefixes. ``any`` is
+    # OR/union semantics and ``all`` is AND/intersection semantics. Empty
+    # prefixes disable this filter.
+    title_prefixes: list[str] = field(default_factory=list)
+    title_prefix_match: str = "any"
 
 
 @dataclass
@@ -1037,6 +1050,13 @@ class WorkflowConfig:
             tracker_raw.get("require_any_labels"),
             [],
         )
+        tracker_title_prefixes = _normalize_string_list(tracker_raw.get("title_prefixes"), [])
+        tracker_title_prefix_match = _normalize_title_prefix_match(
+            tracker_raw.get(
+                "title_prefix_match",
+                tracker_raw.get("title_prefix_match_mode", tracker_raw.get("title_prefix_mode")),
+            )
+        )
 
         tracker = TrackerConfig(
             kind=tracker_kind,
@@ -1058,6 +1078,8 @@ class WorkflowConfig:
             terminal_states=tracker_terminal_states,
             skip_labels=tracker_skip_labels,
             require_any_labels=tracker_require_any_labels,
+            title_prefixes=tracker_title_prefixes,
+            title_prefix_match=tracker_title_prefix_match,
         )
 
         workspace_root = _expand_path(workspace_raw.get("root"), _default_tmp_workspace())

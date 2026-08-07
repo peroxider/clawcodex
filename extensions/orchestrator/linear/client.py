@@ -9,6 +9,7 @@ from typing import Any
 import aiohttp
 
 from ..issue import Issue
+from ..title_prefix_filter import matches_title_prefixes, normalize_title_prefix_match, normalize_title_prefixes
 
 logger = logging.getLogger(__name__)
 
@@ -81,9 +82,22 @@ query SymphonyLinearViewer {
 class LinearGraphQLClient:
     """Async Linear GraphQL client."""
 
-    def __init__(self, api_key: str, endpoint: str = LINEAR_ENDPOINT) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        endpoint: str = LINEAR_ENDPOINT,
+        title_prefixes: list[str] | None = None,
+        title_prefix_match: str = "any",
+    ) -> None:
         self.api_key = api_key
         self.endpoint = endpoint
+        self.configure_title_prefix_filter(title_prefixes, title_prefix_match)
+
+    def configure_title_prefix_filter(
+        self, prefixes: list[str] | None, match: str = "any"
+    ) -> None:
+        self._title_prefixes = normalize_title_prefixes(prefixes)
+        self._title_prefix_match = normalize_title_prefix_match(match)
 
     async def graphql(
         self,
@@ -146,6 +160,10 @@ class LinearGraphQLClient:
                 },
             )
             issues, page_info = _decode_page(body, assignee_filter)
+            issues = [
+                issue for issue in issues
+                if matches_title_prefixes(issue.title, self._title_prefixes, self._title_prefix_match)
+            ]
             all_issues.extend(issues)
             if page_info.get("has_next_page") and page_info.get("end_cursor"):
                 after_cursor = page_info["end_cursor"]
@@ -174,6 +192,10 @@ class LinearGraphQLClient:
                 },
             )
             issues, _ = _decode_page(body, assignee_filter)
+            issues = [
+                issue for issue in issues
+                if matches_title_prefixes(issue.title, self._title_prefixes, self._title_prefix_match)
+            ]
             all_issues.extend(issues)
 
         # Sort by original requested order
