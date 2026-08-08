@@ -54,3 +54,4 @@ class Issue:
 
     def label_names(self) -> list[str]:
         """Return a copy of the issue's label names."""
+        return list(self.labels)

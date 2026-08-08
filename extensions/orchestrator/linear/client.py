@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 LINEAR_ENDPOINT = "https://api.linear.app/graphql"
 _ISSUE_PAGE_SIZE = 50
 _MAX_ERROR_BODY_LOG_BYTES = 1_000
+_HTTP_TIMEOUT_SECONDS = 30
 
 _CANDIDATE_QUERY = """
 query SymphonyLinearPoll($projectSlug: String!, $stateNames: [String!]!, $first: Int!, $relationFirst: Int!, $after: String) {
@@ -142,7 +143,7 @@ class LinearGraphQLClient:
                     self.endpoint,
                     headers=headers,
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=30),
+                    timeout=aiohttp.ClientTimeout(total=_HTTP_TIMEOUT_SECONDS),
                 ) as resp:
                     body = await resp.json()
                     if resp.status != 200:

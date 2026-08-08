@@ -31,6 +31,9 @@ from .normalizers import (
 
 logger = logging.getLogger(__name__)
 
+# How many poll cycles to wait for a just-created PR to become visible.
+_PR_FIND_RETRY_ATTEMPTS = 12
+
 
 class RepositoryPullRequestMixin:
     """PR lifecycle operations shared by GitHub / Gitee / GitCode.
@@ -296,7 +299,7 @@ class RepositoryPullRequestMixin:
         if pr is None:
             raise RepositoryTrackerError("invalid_pull_request_response")
         if not pr.number or not pr.url:
-            for _ in range(12):
+            for _ in range(_PR_FIND_RETRY_ATTEMPTS):
                 found = await self.find_pull_request(
                     head_branch=head_branch,
                     base_branch=base_branch,

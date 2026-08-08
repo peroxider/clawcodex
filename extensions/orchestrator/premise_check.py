@@ -53,6 +53,9 @@ _PATH_TOKEN_RE = re.compile(
 )
 
 _MAX_REFERENCES = 20
+# cannot_proceed 详情截断上限；检查清单展示列表上限。
+_DETAILS_MAX_CHARS = 2000
+_MAX_CHECKED_ITEMS = 10
 
 
 def extract_referenced_paths(text: str | None) -> list[str]:
@@ -226,9 +229,9 @@ def read_cannot_proceed(workspace_root: Path | str | None) -> dict[str, Any] | N
         payload = json.loads(raw)
     except json.JSONDecodeError:
         logger.warning("cannot_proceed marker is not valid JSON — honoring it anyway")
-        return {"reason": "cannot_proceed", "details": raw.strip()[:2000]}
+        return {"reason": "cannot_proceed", "details": raw.strip()[:_DETAILS_MAX_CHARS]}
     if not isinstance(payload, dict):
-        return {"reason": "cannot_proceed", "details": str(payload)[:2000]}
+        return {"reason": "cannot_proceed", "details": str(payload)[:_DETAILS_MAX_CHARS]}
     payload.setdefault("reason", "cannot_proceed")
     return payload
 
@@ -247,7 +250,7 @@ def format_cannot_proceed_comment(issue: Any, payload: dict[str, Any]) -> str:
     if details:
         lines += ["", details]
     if isinstance(checked, list) and checked:
-        lines += ["", "**Checked**:"] + [f"- {item}" for item in checked[:10]]
+        lines += ["", "**Checked**:"] + [f"- {item}" for item in checked[:_MAX_CHECKED_ITEMS]]
     lines += [
         "",
         "_No merge request was opened. If the premise is actually valid,"

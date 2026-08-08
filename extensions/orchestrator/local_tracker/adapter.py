@@ -19,6 +19,10 @@ from ..title_prefix_filter import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Length of the sha256 digest suffix appended to filesystem-safe stems.
+_STEM_DIGEST_LENGTH = 12
+
 if TYPE_CHECKING:
     from ..tracker import CommandIntent
 
@@ -501,7 +505,7 @@ def _safe_file_stem(value: str) -> str:
     """Build a filesystem-safe stem from an arbitrary issue identifier."""
     safe = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip())
     stem = safe.strip("-._") or "issue"
-    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:_STEM_DIGEST_LENGTH]
     return f"{stem}-{digest}"
 
 

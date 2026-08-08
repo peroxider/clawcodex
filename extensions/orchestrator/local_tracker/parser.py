@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 _FRONTMATTER_DELIMITER = "---"
 _FRONTMATTER_DELIMITER_RE = re.compile(r"^\s*-{2,}\s*$")
 _DEFAULT_BRANCH_NAME_TRUNCATE_LENGTH = 48
+# 日志中预览文件头的字符数。
+_LOG_PREVIEW_CHARS = 80
 
 
 @dataclass(frozen=True)
@@ -128,9 +130,9 @@ def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     span = _find_frontmatter_span(lines)
     if span is None:
         if logger.isEnabledFor(logging.WARNING):
-            head = text[:80].replace("\n", "\\n")
+            head = text[:_LOG_PREVIEW_CHARS].replace("\n", "\\n")
             logger.warning(
-                "Local issue parser found no YAML frontmatter (first 80 chars=%r); "
+                f"Local issue parser found no YAML frontmatter (first {_LOG_PREVIEW_CHARS} chars=%r); "
                 "the issue will be treated as a no-state candidate and rejected "
                 "by the active-state filter",
                 head,

@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 # Max characters of an HTTP error-response body kept in a raised
 # RepositoryTrackerError message; longer bodies are truncated.
 _SUMMARIZE_BODY_MAX_LEN = 500
+_HTTP_TIMEOUT_SECONDS = 30
 
 
 @dataclass(frozen=True)
@@ -669,7 +670,7 @@ class RepositoryIssueClient(RepositoryPullRequestMixin):
         client = self._http_client
         should_close = client is None
         if client is None:
-            client = httpx.AsyncClient(timeout=30.0)
+            client = httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS)
         try:
             response = await client.request(method, url, **kwargs)
         except httpx.HTTPError as exc:

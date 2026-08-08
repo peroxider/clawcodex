@@ -11,7 +11,7 @@ Escalation:
   Channel 3 timeout → escalation policy (skip / mark_failed / notify)
 
 Conflict handling:
-  - Simultaneous answers: timestamp comparison, operator_priority within 5ms grace
+  - Simultaneous answers: timestamp comparison, operator_priority within 5s grace
   - Late answers after escalation: STALE_REJECTED
   - Duplicate submissions: DUPLICATE_REJECTED
 """
@@ -41,6 +41,9 @@ _DEFAULT_TIMEOUT_AUTHOR_SECONDS = 72 * 3600  # 72 hours for author channel
 _DEFAULT_MAX_QUESTIONS_PER_ISSUE = 3
 _DEFAULT_CONFIDENCE_THRESHOLD = 0.7
 _DEFAULT_SIMULTANEOUS_GRACE_MS = 5000  # 5 seconds for "tied" answers
+
+# Unix timestamps in candidate tuples are seconds; grace window is ms.
+_MS_PER_SECOND = 1000
 
 
 @dataclass
@@ -332,7 +335,7 @@ class ClarificationResolver:
             return candidates[0], candidates[0]
 
         c0, c1 = candidates[0], candidates[1]
-        delta_ms = abs(c0[2] - c1[2]) * 1000
+        delta_ms = abs(c0[2] - c1[2]) * _MS_PER_SECOND
 
         if delta_ms < self._config.simultaneous_grace_ms and self._config.operator_priority:
             # Within grace window + operator priority
