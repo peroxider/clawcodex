@@ -131,6 +131,21 @@ def _render_markdown(summary: dict[str, Any], date: str) -> str:
     providers = totals.get("providers", {}) or {}
     if providers:
         lines.append("- Providers: " + ", ".join(f"{k} {v}" for k, v in sorted(providers.items())))
+    turns = totals.get("turns", {}) or {}
+    if turns.get("total", 0):
+        lines.append(f"- Turns: {turns.get('total', 0)} (failed: {turns.get('failed', 0)})")
+    usage = totals.get("usage", {}) or {}
+    token_total = sum(int(usage.get(key, 0) or 0) for key in ("input_tokens", "output_tokens"))
+    if token_total:
+        lines.append(
+            f"- Tokens: input={usage.get('input_tokens', 0)}, output={usage.get('output_tokens', 0)}, "
+            f"cache-read={usage.get('cache_read_tokens', 0)}"
+        )
+    if usage.get("cost_usd", 0):
+        lines.append(f"- Estimated cost (USD): {usage['cost_usd']}")
+    tool_timing = (totals.get("tools", {}) or {}).get("duration_s", {}) or {}
+    if tool_timing.get("samples", 0):
+        lines.append(f"- Tool time (s): {tool_timing.get('total', 0)}")
     lines.append("")
 
     # Show top meaningful commands (excludes infrastructure noise).
@@ -175,28 +190,30 @@ def _render_markdown(summary: dict[str, Any], date: str) -> str:
         lines.append("")
         lines.append("## Session statistics")
         lines.append("")
-        lines.append("| Session | Commands | Tool calls | Duration (s) | Crashes | Exit statuses |")
-        lines.append("|---------|---------:|-----------:|-------------:|--------:|---------------|")
+        lines.append("| Session | Commands | Turns | Tokens | Cost (USD) | Tool time (s) | Duration (s) | Crashes | Exit statuses |")
+        lines.append("|---------|---------:|------:|-------:|-----------:|--------------:|-------------:|--------:|---------------|")
         for stat in session_stats:
             if not isinstance(stat, dict):
                 continue
             tools = stat.get("tools", {}) or {}
-            tool_calls = sum(
-                entry.get("count", 0)
-                for entry in tools.get("top", [])
-                if isinstance(entry, dict)
-            )
             session_duration = stat.get("duration_s", {}) or {}
             session_crashes = stat.get("crashes", {}) or {}
+            session_usage = stat.get("usage", {}) or {}
+            session_tokens = int(session_usage.get("input_tokens", 0) or 0) + int(session_usage.get("output_tokens", 0) or 0)
+            session_tool_timing = tools.get("duration_s", {}) or {}
+            session_turns = stat.get("turns", {}) or {}
             statuses = stat.get("exit_status_counts", {}) or {}
             status_text = ", ".join(
                 f"{key}={value}" for key, value in sorted(statuses.items())
             ) or "—"
             lines.append(
-                "| {session_id} | {commands} | {tool_calls} | {duration} | {crashes} | {statuses} |".format(
+                "| {session_id} | {commands} | {turns} | {tokens} | {cost} | {tool_time} | {duration} | {crashes} | {statuses} |".format(
                     session_id=stat.get("session_id", "unknown"),
                     commands=stat.get("commands", 0),
-                    tool_calls=tool_calls,
+                    turns=session_turns.get("total", 0),
+                    tokens=session_tokens,
+                    cost=session_usage.get("cost_usd", 0),
+                    tool_time=session_tool_timing.get("total", 0),
                     duration=session_duration.get("total", 0),
                     crashes=session_crashes.get("total", 0),
                     statuses=status_text,

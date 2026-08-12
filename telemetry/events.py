@@ -39,6 +39,8 @@ class EventType(str, Enum):
     SESSION_END = "session_end"
     COMMAND_RUN = "command_run"
     TOOL_SUMMARY = "tool_summary"
+    TURN = "turn"
+    USAGE = "usage"
     ERROR = "error"
     CRASH = "crash"
     DAILY_SUMMARY = "daily_summary"

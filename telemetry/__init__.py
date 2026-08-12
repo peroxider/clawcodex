@@ -103,3 +103,11 @@ def record_error(**kwargs) -> None:
 
 def record_tool_summary(**kwargs) -> None:
     _recorder().record_tool_summary(**kwargs)
+
+
+def record_turn(**kwargs) -> None:
+    _recorder().record_turn(**kwargs)
+
+
+def record_usage(**kwargs) -> None:
+    _recorder().record_usage(**kwargs)

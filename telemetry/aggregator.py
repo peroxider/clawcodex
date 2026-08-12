@@ -156,6 +156,19 @@ class DailyAggregator:
         tool_counts: Counter[str] = Counter()
         tool_success: Counter[str] = Counter()
         tool_failure: Counter[str] = Counter()
+        outcomes: Counter[str] = Counter()
+        entrypoints: Counter[str] = Counter()
+        run_count = 0
+        resume_count = 0
+        turn_count = 0
+        turn_failure_count = 0
+        turn_duration_total = 0.0
+        tool_duration_total = 0.0
+        tool_duration_count = 0
+        tool_timeout_count = 0
+        error_count = 0
+        error_fingerprints: set[str] = set()
+        usage = Counter[str]()
         duration_total = 0.0
         duration_count = 0
 
@@ -168,6 +181,10 @@ class DailyAggregator:
             fields = raw.get("fields", {}) or {}
             sid = raw.get("session_id", "")
             if etype == EventType.SESSION_START.value:
+                run_count += 1
+                if fields.get("is_resume") is True:
+                    resume_count += 1
+                entrypoints[str(fields.get("entrypoint") or "unknown")] += 1
                 if sid:
                     sessions_seen.add(sid)
                 platform = fields.get("platform") or "unknown"
@@ -204,6 +221,7 @@ class DailyAggregator:
                 if isinstance(duration, (int, float)):
                     duration_total += float(duration)
                     duration_count += 1
+                outcomes[str(fields.get("outcome") or "unknown")] += 1
             elif etype == EventType.TOOL_SUMMARY.value:
                 tool = fields.get("tool_name") or "unknown"
                 tool_counts[tool] += 1
@@ -212,8 +230,33 @@ class DailyAggregator:
                     tool_success[tool] += 1
                 elif success is False:
                     tool_failure[tool] += 1
+                duration = fields.get("duration_s")
+                if isinstance(duration, (int, float)):
+                    tool_duration_total += float(duration)
+                    tool_duration_count += 1
+                if fields.get("timed_out") is True:
+                    tool_timeout_count += 1
+            elif etype == EventType.TURN.value:
+                turn_count += 1
+                if fields.get("success") is False:
+                    turn_failure_count += 1
+                duration = fields.get("duration_s")
+                if isinstance(duration, (int, float)):
+                    turn_duration_total += float(duration)
+            elif etype == EventType.USAGE.value:
+                for field in (
+                    "input_tokens", "output_tokens", "cache_read_tokens",
+                    "cache_creation_tokens", "cost_usd",
+                ):
+                    value = fields.get(field)
+                    if isinstance(value, (int, float)):
+                        usage[field] += value
             elif etype == EventType.ERROR.value:
                 exit_status_counts["error"] += 1
+                error_count += 1
+                fingerprint = _fingerprint_dict_to_hash(fields.get("fingerprint"))
+                if fingerprint:
+                    error_fingerprints.add(fingerprint)
 
         crash_summary = DailyAggregator._build_crash_summary(crashes)
 
@@ -223,6 +266,28 @@ class DailyAggregator:
             "duration_s": {
                 "total": round(duration_total, 3),
                 "samples": duration_count,
+            },
+            "lifecycle": {
+                "runs": run_count,
+                "resumes": resume_count,
+                "entrypoints": dict(entrypoints),
+                "outcomes": dict(outcomes),
+            },
+            "turns": {
+                "total": turn_count,
+                "failed": turn_failure_count,
+                "duration_s": round(turn_duration_total, 3),
+            },
+            "usage": {
+                "input_tokens": int(usage["input_tokens"]),
+                "output_tokens": int(usage["output_tokens"]),
+                "cache_read_tokens": int(usage["cache_read_tokens"]),
+                "cache_creation_tokens": int(usage["cache_creation_tokens"]),
+                "cost_usd": round(float(usage["cost_usd"]), 6),
+            },
+            "reliability": {
+                "errors": error_count,
+                "distinct_error_fingerprints": len(error_fingerprints),
             },
             "exit_status_counts": dict(exit_status_counts),
             "platforms": dict(platform_counts),
@@ -241,6 +306,11 @@ class DailyAggregator:
                 ],
                 "success": dict(tool_success),
                 "failure": dict(tool_failure),
+                "duration_s": {
+                    "total": round(tool_duration_total, 3),
+                    "samples": tool_duration_count,
+                },
+                "timeouts": tool_timeout_count,
             },
             "crashes": crash_summary,
         }

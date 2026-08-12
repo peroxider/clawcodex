@@ -136,6 +136,51 @@ def test_aggregate_uses_command_duration_when_session_end_is_absent(tmp_path):
     assert summary["duration_s"] == {"total": 42.0, "samples": 1}
 
 
+def test_aggregate_collects_session_lifecycle_usage_and_execution_metrics(tmp_path):
+    storage = _storage(tmp_path)
+    storage.append("events", _session_start("s1", {"is_resume": True}))
+    storage.append(
+        "events",
+        {"type": "turn", "timestamp": time.time(), "session_id": "s1",
+         "fields": {"success": False, "duration_s": 3.5}},
+    )
+    storage.append(
+        "events",
+        {"type": "usage", "timestamp": time.time(), "session_id": "s1",
+         "fields": {"input_tokens": 100, "output_tokens": 20,
+                    "cache_read_tokens": 40, "cache_creation_tokens": 5, "cost_usd": 0.1234567}},
+    )
+    storage.append(
+        "events",
+        {"type": "tool_summary", "timestamp": time.time(), "session_id": "s1",
+         "fields": {"tool_name": "bash", "success": False, "duration_s": 2.0, "timed_out": True}},
+    )
+    storage.append(
+        "events",
+        {"type": "error", "timestamp": time.time(), "session_id": "s1",
+         "fields": {"fingerprint": "abc"}},
+    )
+    storage.append(
+        "events",
+        {"type": "session_end", "timestamp": time.time(), "session_id": "s1",
+         "fields": {"duration_s": 4.0, "exit_status": 1, "outcome": "failed"}},
+    )
+
+    stats = DailyAggregator(storage).aggregate(utc_date(utc_now()))["session_stats"][0]
+
+    assert stats["lifecycle"] == {
+        "runs": 1, "resumes": 1, "entrypoints": {"cli": 1}, "outcomes": {"failed": 1},
+    }
+    assert stats["turns"] == {"total": 1, "failed": 1, "duration_s": 3.5}
+    assert stats["usage"] == {
+        "input_tokens": 100, "output_tokens": 20, "cache_read_tokens": 40,
+        "cache_creation_tokens": 5, "cost_usd": 0.123457,
+    }
+    assert stats["tools"]["duration_s"] == {"total": 2.0, "samples": 1}
+    assert stats["tools"]["timeouts"] == 1
+    assert stats["reliability"] == {"errors": 1, "distinct_error_fingerprints": 1}
+
+
 def test_aggregate_collects_crashes(tmp_path):
     storage = _storage(tmp_path)
     storage.append("crashes", _crash("s1", fingerprint="deadbeef", error_class="RuntimeError"))

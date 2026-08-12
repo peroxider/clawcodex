@@ -57,6 +57,7 @@ def record_api_usage(model: str, usage: Any) -> float:
         ),
         cost_usd=cost,
     )
+    usage_delta = bootstrap_usage
     # ch07 round-4 (critic MAJOR) — hold the accumulator lock across the
     # whole read-modify-write. N parallel subagent threads (Agent is now
     # concurrency-safe; workflow parallel() pre-existing) would otherwise
@@ -80,6 +81,24 @@ def record_api_usage(model: str, usage: Any) -> float:
                 cost_usd=existing.cost_usd + cost,
             )
         add_to_total_cost_state(cost, bootstrap_usage, model)
+    # Telemetry receives only aggregate numeric usage.  Resolve the current
+    # session lazily so cost accounting remains independent of telemetry.
+    try:
+        from src.bootstrap.state import get_session_id
+        from telemetry import record_usage
+
+        session_id = get_session_id()
+        if isinstance(session_id, str) and session_id:
+            record_usage(
+                session_id=session_id,
+                input_tokens=usage_delta.input_tokens,
+                output_tokens=usage_delta.output_tokens,
+                cache_read_tokens=usage_delta.cache_read_input_tokens,
+                cache_creation_tokens=usage_delta.cache_creation_input_tokens,
+                cost_usd=cost,
+            )
+    except Exception:
+        pass
     return cost
 
 

@@ -97,6 +97,12 @@ class _NullRecorder:
     def record_tool_summary(self, **_: Any) -> None:
         return None
 
+    def record_turn(self, **_: Any) -> None:
+        return None
+
+    def record_usage(self, **_: Any) -> None:
+        return None
+
     def record_event(self, event: TelemetryEvent, kind: str = "events") -> None:
         return None
 
@@ -275,6 +281,7 @@ class _TelemetryRecorderImpl:
         session_id: str,
         duration_s: float,
         exit_status: int,
+        outcome: str | None = None,
     ) -> None:
         if self._closed:
             return
@@ -285,6 +292,7 @@ class _TelemetryRecorderImpl:
             fields={
                 "duration_s": float(duration_s),
                 "exit_status": int(exit_status),
+                "outcome": outcome or ("completed" if exit_status == 0 else "failed"),
             },
         )
         self._enqueue_event(event)
@@ -322,6 +330,7 @@ class _TelemetryRecorderImpl:
         tool_name: str,
         success: bool = True,
         duration_s: float = 0.0,
+        timed_out: bool = False,
     ) -> None:
         if self._closed:
             return
@@ -333,9 +342,45 @@ class _TelemetryRecorderImpl:
                 "tool_name": tool_name,
                 "success": bool(success),
                 "duration_s": float(duration_s),
+                "timed_out": bool(timed_out),
             },
         )
         self._enqueue_event(event)
+
+    def record_turn(
+        self, *, session_id: str, success: bool = True, duration_s: float = 0.0
+    ) -> None:
+        """Record one completed agent turn without retaining its content."""
+        if self._closed:
+            return
+        self._enqueue_event(TelemetryEvent(
+            type=EventType.TURN, timestamp=time.time(), session_id=_short_session_id(session_id),
+            fields={"success": bool(success), "duration_s": float(duration_s)},
+        ))
+
+    def record_usage(
+        self,
+        *,
+        session_id: str,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        cache_read_tokens: int = 0,
+        cache_creation_tokens: int = 0,
+        cost_usd: float = 0.0,
+    ) -> None:
+        """Record aggregate usage for a session; no prompts or outputs."""
+        if self._closed:
+            return
+        self._enqueue_event(TelemetryEvent(
+            type=EventType.USAGE, timestamp=time.time(), session_id=_short_session_id(session_id),
+            fields={
+                "input_tokens": max(0, int(input_tokens)),
+                "output_tokens": max(0, int(output_tokens)),
+                "cache_read_tokens": max(0, int(cache_read_tokens)),
+                "cache_creation_tokens": max(0, int(cache_creation_tokens)),
+                "cost_usd": max(0.0, float(cost_usd)),
+            },
+        ))
 
     def record_error(
         self,

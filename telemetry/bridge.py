@@ -52,17 +52,12 @@ _DROPPED_ANALYTICS_TYPES: frozenset[str] = frozenset(
     }
 )
 
-# Analytics EventType values that map to ``COMMAND_RUN`` rather than to
-# a more specific telemetry type. We preserve the original type name in
-# ``fields["subtype"]`` so the daily summary still carries the
-# distinction.
+# Analytics event types that become completed-turn telemetry events.
 _COMMAND_RUN_SUBTYPES: frozenset[str] = frozenset(
     {
-        "turn_start",
-        "turn_end",
         "agent_spawn",
         "agent_complete",
-    }
+        }
 )
 
 
@@ -214,6 +209,18 @@ class AnalyticsTelemetrySink(AnalyticsSink):
                 session_id=session_id,
                 fields=fields,
             )
+
+        if type_name == "turn_end":
+            success = data.pop("success", True)
+            duration_s = data.pop("duration_s", 0.0)
+            return TelemetryEvent(
+                type=EventType.TURN,
+                timestamp=timestamp,
+                session_id=session_id,
+                fields={"success": bool(success), "duration_s": float(duration_s)},
+            )
+        if type_name == "turn_start":
+            return None
 
         if type_name in ("tool_use", "tool_result"):
             tool_name = _coerce_str(data.pop("tool", "")) or type_name
