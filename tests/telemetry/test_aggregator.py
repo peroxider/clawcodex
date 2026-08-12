@@ -87,6 +87,55 @@ def test_aggregate_counts_sessions_and_commands(tmp_path):
     assert summary["command_failure"].get("headless", 0) == 1
 
 
+def test_aggregate_includes_per_session_metrics_and_totals(tmp_path):
+    storage = _storage(tmp_path)
+    storage.append("events", _session_start("s1"))
+    storage.append("events", _session_start("s2"))
+    storage.append("events", _command_run("s1", name="repl", duration_s=1.25))
+    storage.append("events", _command_run("s2", name="headless", success=False, duration_s=2.5))
+    storage.append("crashes", _crash("s2"))
+
+    summary = DailyAggregator(storage).aggregate(utc_date(utc_now()))
+
+    assert summary["totals"]["sessions"] == 2
+    assert summary["totals"]["commands"] == 2
+    by_session = {row["session_id"]: row for row in summary["session_stats"]}
+    assert by_session["s1"]["commands"] == 1
+    assert by_session["s1"]["duration_s"]["total"] == 1.25
+    assert by_session["s2"]["commands"] == 1
+    assert by_session["s2"]["command_failure"]["headless"] == 1
+    assert by_session["s2"]["crashes"]["total"] == 1
+
+
+def test_aggregate_uses_session_end_duration_without_double_counting_command(tmp_path):
+    storage = _storage(tmp_path)
+    storage.append("events", _session_start("s1"))
+    storage.append("events", _command_run("s1", duration_s=3600.0))
+    storage.append(
+        "events",
+        {
+            "type": "session_end",
+            "timestamp": time.time(),
+            "session_id": "s1",
+            "fields": {"duration_s": 3600.0, "exit_status": 0},
+        },
+    )
+
+    summary = DailyAggregator(storage).aggregate(utc_date(utc_now()))
+
+    assert summary["duration_s"] == {"total": 3600.0, "samples": 1}
+    assert summary["session_stats"][0]["duration_s"] == {"total": 3600.0, "samples": 1}
+
+
+def test_aggregate_uses_command_duration_when_session_end_is_absent(tmp_path):
+    storage = _storage(tmp_path)
+    storage.append("events", _command_run("s1", duration_s=42.0))
+
+    summary = DailyAggregator(storage).aggregate(utc_date(utc_now()))
+
+    assert summary["duration_s"] == {"total": 42.0, "samples": 1}
+
+
 def test_aggregate_collects_crashes(tmp_path):
     storage = _storage(tmp_path)
     storage.append("crashes", _crash("s1", fingerprint="deadbeef", error_class="RuntimeError"))

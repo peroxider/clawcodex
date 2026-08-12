@@ -62,13 +62,16 @@ def _render_markdown(summary: dict[str, Any], date: str) -> str:
     with a warning indicator so the Issue is immediately identifiable
     as an error report.
     """
+    # ``totals`` was added with per-session reporting.  Falling back to the
+    # root preserves rendering of summaries persisted by older versions.
+    totals = summary.get("totals") if isinstance(summary.get("totals"), dict) else summary
     version = summary.get("version", "unknown")
-    sessions = summary.get("sessions", 0)
-    commands = summary.get("commands", 0)
-    platforms = summary.get("platforms", {}) or {}
-    exit_status_counts = summary.get("exit_status_counts", {}) or {}
-    duration = summary.get("duration_s", {}) or {}
-    crashes = summary.get("crashes", {}) or {}
+    sessions = totals.get("sessions", 0)
+    commands = totals.get("commands", 0)
+    platforms = totals.get("platforms", {}) or {}
+    exit_status_counts = totals.get("exit_status_counts", {}) or {}
+    duration = totals.get("duration_s", {}) or {}
+    crashes = totals.get("crashes", {}) or {}
     top_crashes = crashes.get("top", []) if isinstance(crashes, dict) else []
     has_crashes = bool(top_crashes)
 
@@ -125,13 +128,13 @@ def _render_markdown(summary: dict[str, Any], date: str) -> str:
         )
     if platforms:
         lines.append("- Platforms: " + ", ".join(f"{k} {v}" for k, v in sorted(platforms.items())))
-    providers = summary.get("providers", {}) or {}
+    providers = totals.get("providers", {}) or {}
     if providers:
         lines.append("- Providers: " + ", ".join(f"{k} {v}" for k, v in sorted(providers.items())))
     lines.append("")
 
     # Show top meaningful commands (excludes infrastructure noise).
-    top_commands = summary.get("top_commands", []) or []
+    top_commands = totals.get("top_commands", []) or []
     _NOISE_COMMANDS = frozenset(
         {
             "version",
@@ -150,7 +153,7 @@ def _render_markdown(summary: dict[str, Any], date: str) -> str:
         }
     )
     sig_commands = [e for e in top_commands if e.get("name") not in _NOISE_COMMANDS][:10]
-    cmd_failures = summary.get("command_failure", {}) or {}
+    cmd_failures = totals.get("command_failure", {}) or {}
     if sig_commands:
         lines.append("## Top commands")
         lines.append("*(meaningful user-facing commands; infrastructure noise excluded)*")
@@ -163,9 +166,42 @@ def _render_markdown(summary: dict[str, Any], date: str) -> str:
             if failed:
                 parts.append(f"({failed} failed)")
             lines.append("- " + " ".join(parts))
-    elif summary.get("exit_status_counts", {}).get("error", 0) > 0:
-        err_count = summary["exit_status_counts"]["error"]
+    elif totals.get("exit_status_counts", {}).get("error", 0) > 0:
+        err_count = totals["exit_status_counts"]["error"]
         lines.append(f"- Error exits: {err_count}")
+
+    session_stats = summary.get("session_stats", [])
+    if isinstance(session_stats, list) and session_stats:
+        lines.append("")
+        lines.append("## Session statistics")
+        lines.append("")
+        lines.append("| Session | Commands | Tool calls | Duration (s) | Crashes | Exit statuses |")
+        lines.append("|---------|---------:|-----------:|-------------:|--------:|---------------|")
+        for stat in session_stats:
+            if not isinstance(stat, dict):
+                continue
+            tools = stat.get("tools", {}) or {}
+            tool_calls = sum(
+                entry.get("count", 0)
+                for entry in tools.get("top", [])
+                if isinstance(entry, dict)
+            )
+            session_duration = stat.get("duration_s", {}) or {}
+            session_crashes = stat.get("crashes", {}) or {}
+            statuses = stat.get("exit_status_counts", {}) or {}
+            status_text = ", ".join(
+                f"{key}={value}" for key, value in sorted(statuses.items())
+            ) or "—"
+            lines.append(
+                "| {session_id} | {commands} | {tool_calls} | {duration} | {crashes} | {statuses} |".format(
+                    session_id=stat.get("session_id", "unknown"),
+                    commands=stat.get("commands", 0),
+                    tool_calls=tool_calls,
+                    duration=session_duration.get("total", 0),
+                    crashes=session_crashes.get("total", 0),
+                    statuses=status_text,
+                )
+            )
 
     lines.append("")
     lines.append(

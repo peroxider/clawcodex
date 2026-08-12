@@ -84,7 +84,67 @@ class DailyAggregator:
         events = self._storage.read_day("events", date)
         crashes = self._storage.read_day("crashes", date)
 
-        sessions_seen: set[str] = set()
+        # Keep a reportable breakdown for every session that contributed an
+        # event.  Session ids have already been shortened by the recorder, so
+        # they are stable join keys without exposing the original id.
+        sessions: dict[str, tuple[list[dict[str, Any]], list[dict[str, Any]]]] = {}
+        for raw in events:
+            sid = str(raw.get("session_id") or "")
+            if not sid:
+                continue
+            session_events, _ = sessions.setdefault(sid, ([], []))
+            session_events.append(raw)
+        for raw in crashes:
+            sid = str(raw.get("session_id") or "")
+            if not sid:
+                continue
+            _, session_crashes = sessions.setdefault(sid, ([], []))
+            session_crashes.append(raw)
+
+        totals = self._build_metrics(events, crashes)
+        session_stats = [
+            {"session_id": session_id, **self._build_metrics(session_events, session_crashes)}
+            for session_id, (session_events, session_crashes) in sorted(sessions.items())
+        ]
+
+        # The top-level metric fields are retained for readers of summaries
+        # written by older releases.  New reporters should consume ``totals``
+        # and ``session_stats`` so they can send both scopes explicitly.
+        return {
+            "schema_version": SCHEMA_VERSION_V2,
+            "date": date,
+            "version": __version__,
+            "generated_at": utc_now(),
+            "totals": totals,
+            "session_stats": session_stats,
+            **totals,
+        }
+
+    @staticmethod
+    def _build_metrics(
+        events: list[dict[str, Any]], crashes: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Build one statistics object for a session or all sessions."""
+
+        # Standard entrypoints emit both ``session_end`` and ``command_run``
+        # for one process run, each carrying the same duration.  The end
+        # event is canonical; command duration is only a compatibility
+        # fallback for integrations that do not emit a session end event.
+        sessions_with_end_duration: set[str] = set()
+        for raw in events:
+            normalized = normalize_event(raw)
+            if normalized.get("type") != EventType.SESSION_END.value:
+                continue
+            duration = (normalized.get("fields") or {}).get("duration_s")
+            sid = str(normalized.get("session_id") or "")
+            if sid and isinstance(duration, (int, float)):
+                sessions_with_end_duration.add(sid)
+
+        sessions_seen = {
+            str(raw["session_id"])
+            for raw in [*events, *crashes]
+            if raw.get("session_id")
+        }
         commands_total = 0
         command_counts: Counter[str] = Counter()
         command_success: Counter[str] = Counter()
@@ -128,7 +188,9 @@ class DailyAggregator:
                 elif success is False:
                     command_failure[name] += 1
                 duration = fields.get("duration_s")
-                if isinstance(duration, (int, float)):
+                # See ``sessions_with_end_duration`` above: do not add the
+                # duplicate process duration carried by command_run.
+                if sid not in sessions_with_end_duration and isinstance(duration, (int, float)):
                     duration_total += float(duration)
                     duration_count += 1
                 exit_status = fields.get("exit_status")
@@ -153,13 +215,9 @@ class DailyAggregator:
             elif etype == EventType.ERROR.value:
                 exit_status_counts["error"] += 1
 
-        crash_summary = self._build_crash_summary(crashes)
+        crash_summary = DailyAggregator._build_crash_summary(crashes)
 
         return {
-            "schema_version": SCHEMA_VERSION_V2,
-            "date": date,
-            "version": __version__,
-            "generated_at": utc_now(),
             "sessions": len(sessions_seen),
             "commands": commands_total,
             "duration_s": {

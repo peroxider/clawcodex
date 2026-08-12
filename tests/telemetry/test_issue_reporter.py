@@ -10,6 +10,7 @@ from telemetry.reporters.issue import (
     IssueReporter,
     _replace_or_append_date_block,
     _wrap_date_block,
+    issue_cursor_name,
 )
 from telemetry.storage import LocalJsonlStorage
 
@@ -100,7 +101,7 @@ def test_replace_or_append_date_block_replaces_existing_block() -> None:
 
 def test_update_or_create_creates_inbox_issue_when_missing(tmp_path) -> None:
     client = _FakeClient(existing=None)
-    reporter, storage = _reporter(tmp_path, client)
+    reporter, storage = _reporter(tmp_path, client, mode="update_or_create")
 
     assert reporter.emit("# Summary\n", date="2026-06-15") is True
 
@@ -115,7 +116,7 @@ def test_update_or_create_updates_existing_date_block(tmp_path) -> None:
     client = _FakeClient(
         existing={"number": 7, "title": "ClawCodex Telemetry Inbox", "body": existing_body}
     )
-    reporter, _storage = _reporter(tmp_path, client)
+    reporter, _storage = _reporter(tmp_path, client, mode="update_or_create")
 
     assert reporter.emit("new\n", date="2026-06-15") is True
 
@@ -136,6 +137,19 @@ def test_create_daily_creates_daily_issue(tmp_path) -> None:
     assert client.created[0]["title"] == "Telemetry — 2026-06-15"
 
 
+def test_create_daily_keeps_different_dates_in_separate_issues(tmp_path) -> None:
+    client = _FakeClient(existing=None)
+    reporter, _storage = _reporter(tmp_path, client, mode="create_daily", issue_title="Telemetry")
+
+    assert reporter.emit("first day\n", date="2026-06-15") is True
+    assert reporter.emit("second day\n", date="2026-06-16") is True
+
+    assert [issue["title"] for issue in client.created] == [
+        "Telemetry — 2026-06-15",
+        "Telemetry — 2026-06-16",
+    ]
+
+
 def test_cursor_skip_avoids_http_call(tmp_path) -> None:
     client = _FakeClient(existing=None)
     reporter, storage = _reporter(tmp_path, client)
@@ -146,6 +160,38 @@ def test_cursor_skip_avoids_http_call(tmp_path) -> None:
     assert len(client.find_titles) == 1
     assert len(client.created) == 1
     assert storage.read_reporter_cursor("issue")["date"] == "2026-06-15"
+
+
+def test_cursor_is_scoped_to_repository_but_survives_token_rotation(tmp_path) -> None:
+    """A shared local telemetry store must not suppress another repo's upload.
+
+    Tokens are intentionally not part of the cursor identity: two valid
+    tokens for the same repository must keep merging the same daily Issue.
+    """
+    first_client = _FakeClient(existing=None)
+    reporter, storage = _reporter(tmp_path, first_client, repo="first")
+    assert reporter.emit("first summary\n", date="2026-06-15") is True
+
+    second_client = _FakeClient(existing=None)
+    other_reporter, _ = _reporter(tmp_path, second_client, repo="second")
+    assert other_reporter.emit("second summary\n", date="2026-06-15") is True
+    assert len(second_client.created) == 1
+
+    first_cursor = issue_cursor_name(reporter._config)
+    second_cursor = issue_cursor_name(other_reporter._config)
+    assert first_cursor != second_cursor
+    assert storage.read_reporter_cursor(first_cursor)["repo"] == "first"
+    assert storage.read_reporter_cursor(second_cursor)["repo"] == "second"
+
+    rotated_token_client = _FakeClient(existing=None)
+    rotated_reporter, _ = _reporter(
+        tmp_path,
+        rotated_token_client,
+        repo="first",
+        api_key="rotated-token",
+    )
+    assert rotated_reporter.emit("first summary\n", date="2026-06-15") is True
+    assert not rotated_token_client.find_titles
 
 
 def test_secret_scan_blocks_upload_and_records_error(tmp_path) -> None:

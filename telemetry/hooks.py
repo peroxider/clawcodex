@@ -63,7 +63,11 @@ def _emit(exc: BaseException) -> None:
                 storage = LocalJsonlStorage(
                     recorder.config.storage_dir, recorder.config.retention_days
                 )
-                cursor = storage.read_reporter_cursor("issue")
+                from .reporters.issue import issue_cursor_name
+
+                cursor = storage.read_reporter_cursor(
+                    issue_cursor_name(recorder.config.reporting)
+                )
                 issue_id = cursor.get("issue_id", "")
                 if issue_id:
                     platform = cursor.get("platform", "")

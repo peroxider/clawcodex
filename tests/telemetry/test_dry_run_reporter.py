@@ -68,6 +68,8 @@ def test_dry_run_reporter_renders(tmp_path):
     rendered = reporter.render(summary, today)
     assert "ClawCodex Telemetry" in rendered and "⚠️" in rendered
     assert "Sessions: 1" in rendered
+    assert "Session statistics" in rendered
+    assert "| abc | 1 |" in rendered
     assert "Error report" in rendered
     assert reporter.emit(rendered, date=today) is True
     assert reporter.last_rendered == rendered

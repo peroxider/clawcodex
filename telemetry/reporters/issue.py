@@ -76,7 +76,7 @@ class IssueReporter:
             return False
 
         content_hash = _content_hash(rendered)
-        cursor = self._storage.read_reporter_cursor("issue")
+        cursor = self._read_cursor()
         if (
             cursor.get("date") == date
             and cursor.get("content_hash") == content_hash
@@ -99,21 +99,31 @@ class IssueReporter:
             return False
 
         issue_id = _issue_id(issue)
-        self._storage.write_reporter_cursor(
-            "issue",
-            {
-                "reporter": "issue",
-                "date": date,
-                "content_hash": content_hash,
-                "issue_id": issue_id,
-                "mode": self._config.mode,
-                "platform": self._config.platform,
-                "owner": self._config.owner,
-                "repo": self._config.repo,
-                "updated_at": utc_now(),
-            },
-        )
+        new_cursor = {
+            "reporter": "issue",
+            "date": date,
+            "content_hash": content_hash,
+            "issue_id": issue_id,
+            "mode": self._config.mode,
+            "platform": self._config.platform,
+            "owner": self._config.owner,
+            "repo": self._config.repo,
+            "endpoint": self._config.endpoint or "",
+            "updated_at": utc_now(),
+        }
+        self._storage.write_reporter_cursor(issue_cursor_name(self._config), new_cursor)
+        # Keep the legacy cursor updated for existing status/hook consumers.
+        # It is never used to deduplicate a different repository.
+        self._storage.write_reporter_cursor("issue", new_cursor)
         return True
+
+    def _read_cursor(self) -> dict[str, Any]:
+        """Read this repository's cursor, migrating a matching legacy one."""
+        cursor = self._storage.read_reporter_cursor(issue_cursor_name(self._config))
+        if cursor:
+            return cursor
+        legacy = self._storage.read_reporter_cursor("issue")
+        return legacy if _cursor_matches_target(legacy, self._config) else {}
 
     async def _upsert(
         self, rendered: str, *, date: str, labels: list[str] | None = None
@@ -211,6 +221,35 @@ def _content_hash(rendered: str) -> str:
     return hashlib.sha256(rendered.encode("utf-8", errors="replace")).hexdigest()
 
 
+def issue_cursor_name(config: ReportingConfig) -> str:
+    """Return a non-secret cursor name scoped to one remote repository.
+
+    API tokens are deliberately excluded: rotating a token must keep updating
+    the same daily Issue, while the endpoint is included to distinguish
+    self-hosted installations using the same owner/repository names.
+    """
+    target = "\0".join(
+        (
+            config.platform.strip().lower(),
+            config.owner.strip(),
+            config.repo.strip(),
+            (config.endpoint or "").rstrip("/"),
+        )
+    )
+    digest = hashlib.sha256(target.encode("utf-8", errors="replace")).hexdigest()[:16]
+    return f"issue-{digest}"
+
+
+def _cursor_matches_target(cursor: dict[str, Any], config: ReportingConfig) -> bool:
+    return bool(cursor) and (
+        cursor.get("platform") == config.platform
+        and cursor.get("owner") == config.owner
+        and cursor.get("repo") == config.repo
+        and str(cursor.get("endpoint") or "").rstrip("/")
+        == (config.endpoint or "").rstrip("/")
+    )
+
+
 def _wrap_date_block(rendered: str, date: str) -> str:
     return f"{_BEGIN.format(date=date)}\n{rendered.rstrip()}\n{_END.format(date=date)}\n"
 
@@ -262,6 +301,7 @@ def _run_coro_sync(coro):
 
 __all__ = [
     "IssueReporter",
+    "issue_cursor_name",
     "_replace_or_append_date_block",
     "_wrap_date_block",
 ]

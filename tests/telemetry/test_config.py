@@ -78,7 +78,7 @@ def test_reporting_config_defaults():
     assert rc.reporting_enabled is True  # dev-default
     assert rc.kind == "local_file"
     assert rc.platform == "github"
-    assert rc.mode == "update_or_create"
+    assert rc.mode == "create_daily"
     assert rc.interval_hours == 24
 
 

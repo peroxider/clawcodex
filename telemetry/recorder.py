@@ -508,7 +508,7 @@ def _configure_reporters(
     reporters: CompositeReporter,
 ) -> None:
     kind = (cfg.reporting.kind or "local_file").strip().lower()
-    mode = (cfg.reporting.mode or "update_or_create").strip().lower()
+    mode = (cfg.reporting.mode or "create_daily").strip().lower()
     if kind == "dry_run":
         reporters.add(DryRunReporter())
         return

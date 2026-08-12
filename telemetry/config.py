@@ -48,7 +48,9 @@ class ReportingConfig:
     repo: str = ""
     endpoint: str | None = None
     issue_title: str = "ClawCodex Telemetry Inbox"
-    mode: str = "update_or_create"
+    # A daily title makes each repository's upload independently auditable;
+    # repeated uploads for the same day update that day's Issue.
+    mode: str = "create_daily"
     interval_hours: int = 24
     api_key: str = ""
     token_env: str = ""
