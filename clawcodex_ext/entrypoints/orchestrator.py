@@ -29,6 +29,19 @@ def run_orchestrator_subcommand(rest: list[str]) -> int:
 
     Returns the process exit code.
     """
+    # Register telemetry shutdown-flush so the orchestrator daemon (and
+    # every orchestrator subcommand) aggregates + emits telemetry on
+    # process exit. The CLI fast-path for ``orchestrator`` in
+    # dispatch.py returns before ``run_pre_action``/``init()`` runs, so
+    # without this the daemon would never upload telemetry data.
+    try:
+        from clawcodex_ext.telemetry_lifecycle import install_telemetry_shutdown_flush
+
+        install_telemetry_shutdown_flush()
+    except Exception:
+        # Best-effort — telemetry must never block orchestration.
+        pass
+
     # Find subcommand token position (everything else is passed through)
     subcommand_tokens = {
         "dashboard",

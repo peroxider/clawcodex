@@ -88,7 +88,9 @@ class IssueReporter:
             return True
 
         try:
-            issue = _run_coro_sync(self._upsert(rendered, date=date, labels=labels))
+            issue = _run_coro_sync(
+                self._upsert_with_label_fallback(rendered, date=date, labels=labels)
+            )
         except Exception as exc:  # noqa: BLE001
             self._record_error(
                 date=date,
@@ -136,6 +138,29 @@ class IssueReporter:
             return await self._upsert_inbox_issue(rendered, date=date, labels=labels)
         self._record_error(date=date, reason="unsupported_mode", rendered=rendered)
         return None
+
+    async def _upsert_with_label_fallback(
+        self, rendered: str, *, date: str, labels: list[str] | None = None
+    ) -> dict[str, Any] | None:
+        """Upsert the issue, retrying without labels when the platform
+        rejects the ``labels`` field (e.g. the token lacks label permission,
+        which GitCode surfaces as an HTTP 403).
+
+        The retry drops labels so a label-permission failure does not
+        silently lose the whole telemetry report; the issue is still
+        created/updated with its stats, just without the ``telemetry-crash``
+        marker. Failures that are unrelated to labels propagate unchanged.
+        """
+        try:
+            return await self._upsert(rendered, date=date, labels=labels)
+        except Exception as exc:  # noqa: BLE001
+            err = str(exc)
+            if labels and ("status=403" in err or "403" in err and "Forbidden" in err):
+                logger.warning(
+                    "telemetry: labels rejected (%s), retrying without labels", err
+                )
+                return await self._upsert(rendered, date=date, labels=None)
+            raise
 
     async def _upsert_daily_issue(
         self, rendered: str, *, date: str, labels: list[str] | None = None

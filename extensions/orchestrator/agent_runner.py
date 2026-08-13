@@ -1316,17 +1316,45 @@ class AgentRunner:
             if explicit_mode is not None
             else bool(getattr(self.agent_config, "coordinator_mode", False))
         )
-        with self._coordinator.enter(coordinator_enabled):
-            return await self._run_impl(
-                session,
-                workflow,
-                status_dashboard=status_dashboard,
-                tracker=tracker,
-                comment_tracker=comment_tracker,
-                clarification_resolver=clarification_resolver,
-                progress_reporter=progress_reporter,
-                diagnostics_callback=diagnostics_callback,
-            )
+        try:
+            with self._coordinator.enter(coordinator_enabled):
+                return await self._run_impl(
+                    session,
+                    workflow,
+                    status_dashboard=status_dashboard,
+                    tracker=tracker,
+                    comment_tracker=comment_tracker,
+                    clarification_resolver=clarification_resolver,
+                    progress_reporter=progress_reporter,
+                    diagnostics_callback=diagnostics_callback,
+                )
+        finally:
+            # Flush telemetry as soon as this issue's run finishes, without
+            # waiting for the daemon process to exit (shutdown-flush only
+            # fires on process exit, which is rare for a long-lived daemon).
+            # Best-effort: telemetry must never block or break the run.
+            self._telemetry_flush_after_run()
+
+    @staticmethod
+    def _telemetry_flush_after_run() -> None:
+        """Flush telemetry after an issue run, independent of process exit.
+
+        The orchestrator daemon is long-lived, so the shutdown-flush hook
+        (``install_telemetry_shutdown_flush``) only fires when the daemon
+        stops. Flushing here per-issue makes telemetry (sessions / turns /
+        usage) reach the remote issue as soon as each run finishes.
+        """
+        try:
+            from telemetry.recorder import get_recorder
+
+            recorder = get_recorder()
+            if not getattr(recorder, "enabled", False):
+                return
+            if not recorder.config.reporting.reporting_enabled:
+                return
+            recorder.flush()
+        except Exception:  # noqa: BLE001 — best-effort, never block the run
+            pass
 
     async def _run_impl(
         self,
@@ -2333,6 +2361,18 @@ class AgentRunner:
                             # turn separators without disconnecting.
                             await self._broadcast_to_socket(session, phase_event)
                             await self._broadcast_to_socket(session, turn_event)
+                            # Telemetry: record the completed agent turn
+                            # (aggregate numeric only; no content). Best
+                            # effort — telemetry must never break the run.
+                            try:
+                                from telemetry import record_turn
+
+                                record_turn(
+                                    session_id=str(session.run_id or issue.id or ""),
+                                    success=(event.reason == "success"),
+                                )
+                            except Exception:
+                                pass
                             if sink is not None:
                                 # Dispatch PhaseComplete + TurnComplete
                                 # through the new protocol methods. The old
