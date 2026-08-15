@@ -173,6 +173,21 @@ def _decision_payload(result: Any) -> dict[str, Any]:
     }
 
 
+def _tool_payload(result: Any) -> dict[str, Any]:
+    """Model-facing decision fields for @tool returns.
+
+    The ToolRuntime enforces each tool's output schema against the returned
+    value, so the tool surface carries only domain fields: `decision` plus
+    `reason` (the denial explanation a model needs to recover, normalized to
+    a string). RPC bookkeeping (`commandId`) and store versioning
+    (`revision`) stay on the programmatic service API (`_decision_payload`).
+    """
+    return {
+        "decision": result.decision,
+        "reason": result.reason or "",
+    }
+
+
 @service(name="lkb")
 @dataclass
 class LkbService:
@@ -273,6 +288,7 @@ class LkbService:
         "properties": {
             "task": {"type": "object", "additionalProperties": True},
             "decision": {"type": "string"},
+            "reason": {"type": "string"},
         },
     },
 )
@@ -290,7 +306,7 @@ def lkb_create_task(subject: str, description: str = "", active_form: str = "") 
         },
         task_id=task_id,
     )
-    return {"task": {"id": task_id, "subject": subject}, **_decision_payload(result)}
+    return {"task": {"id": task_id, "subject": subject}, **_tool_payload(result)}
 
 
 @tool(
@@ -325,6 +341,7 @@ def lkb_list_tasks() -> dict:
             "taskId": {"type": "string"},
             "status": {"type": "string"},
             "decision": {"type": "string"},
+            "reason": {"type": "string"},
         },
     },
 )
@@ -336,9 +353,9 @@ def lkb_update_task(task_id: str, status: str) -> dict:
     if kind == "start_task":
         claim = core.execute("claim_task", {"task_id": task_id}, task_id=task_id)
         if claim.decision != "committed":
-            return {"taskId": task_id, "status": status, **_decision_payload(claim)}
+            return {"taskId": task_id, "status": status, **_tool_payload(claim)}
     result = core.execute(kind, {"task_id": task_id}, task_id=task_id)
-    return {"taskId": task_id, "status": status, **_decision_payload(result)}
+    return {"taskId": task_id, "status": status, **_tool_payload(result)}
 
 
 @tool(
