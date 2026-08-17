@@ -1306,7 +1306,85 @@ def _run_show(registry_path: Path | None, args: argparse.Namespace) -> int:
     print(f"  Updated        : {updated}")
     if record.clarification_status:
         print(f"  Clarification  : {record.clarification_status}")
+    _print_session_usage(record)
     return 0
+
+
+def _print_session_usage(record: "IssueRecord") -> None:
+    """Print token/cost usage for the issue, aggregating all runs.
+
+    Session snapshots are written by AgentRunner to
+    ``~/.clawcodex/sessions/<run_id>/session.json``; the JSONL telemetry
+    events carry the same usage data when telemetry is enabled. Aggregates
+    every run of the issue (``previous_run_ids`` + current ``run_id``) and
+    prints the total, then the most recent run's per-model detail. Pure
+    read: missing/unreadable snapshots are skipped silently.
+    """
+    import json
+
+    run_ids: list[str] = []
+    prev = getattr(record, "previous_run_ids", None) or []
+    if isinstance(prev, (list, tuple)):
+        run_ids.extend(str(r) for r in prev)
+    run_id = getattr(record, "run_id", None)
+    if run_id and str(run_id) not in run_ids:
+        run_ids.append(str(run_id))
+
+    totals: dict[str, float] = {
+        "input_tokens": 0.0,
+        "output_tokens": 0.0,
+        "cache_creation_input_tokens": 0.0,
+        "cache_read_input_tokens": 0.0,
+        "cost_usd": 0.0,
+    }
+    last_detail: str | None = None
+    for rid in run_ids:
+        try:
+            snapshot_path = (
+                Path.home() / ".clawcodex" / "sessions" / rid / "session.json"
+            )
+            if not snapshot_path.exists():
+                continue
+            data = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            model = data.get("model", "")
+            cost_block = data.get("cost") or {}
+            usage = (
+                cost_block.get("model_usage")
+                if isinstance(cost_block, dict)
+                else None
+            )
+            if not usage:
+                usage = data.get("model_usage") or {}
+            if isinstance(usage, dict) and usage:
+                for m, u in usage.items():
+                    for key in totals:
+                        totals[key] += float(u.get(key, 0) or 0)
+                    last_detail = (
+                        f"model={m} input={u.get('input_tokens', 0)} "
+                        f"output={u.get('output_tokens', 0)} "
+                        f"cache_in={u.get('cache_creation_input_tokens', 0)} "
+                        f"cache_read={u.get('cache_read_input_tokens', 0)} "
+                        f"cost=${float(u.get('cost_usd', 0) or 0):.4f}"
+                    )
+            else:
+                total = cost_block.get("total_cost_usd", 0.0)
+                if total:
+                    totals["cost_usd"] += float(total)
+                    last_detail = f"model={model or '-'} total_cost=${float(total):.4f}"
+        except Exception:
+            continue  # Skip unreadable snapshots; never fail issue show.
+
+    if not totals["input_tokens"] and not totals["output_tokens"] and not totals["cost_usd"]:
+        return
+    print(
+        f"  Usage (total)  : runs={len(run_ids)} input={totals['input_tokens']:.0f} "
+        f"output={totals['output_tokens']:.0f} "
+        f"cache_in={totals['cache_creation_input_tokens']:.0f} "
+        f"cache_read={totals['cache_read_input_tokens']:.0f} "
+        f"cost=${totals['cost_usd']:.4f}"
+    )
+    if last_detail:
+        print(f"  Usage (last)   : {last_detail}")
 
 
 def _resolve_issue_workspace_path(issue_id: str) -> Path | None:
