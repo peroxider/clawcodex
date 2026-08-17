@@ -138,6 +138,7 @@ _MEGATURN_IDLE_STOP_S = 1800.0
 
 _ORCHESTRATOR_INTERNAL_PATH_PREFIXES = (
     ".orchestrator_control/",
+    ".orchestrator_workspace/",
     ".run_control/",
     ".reports/",
     ".event_logs/",
@@ -355,22 +356,25 @@ class AgentSession:
             try:
                 import time as _time
 
-                # Phase 3: route through Protocol-injected BootstrapState
-                # when available; otherwise fall back to legacy direct
-                # import.
-                self._resolve_protocols()
-                bootstrap = self._bootstrap_state
+                # This method lives on AgentSession (not AgentRunner), so
+                # there is no _resolve_protocols/_bootstrap_state here.
+                # Read the canonical bootstrap singleton directly —
+                # record_api_usage writes to src.bootstrap.state and
+                # ClawcodexBootstrapState forwards to the same module, so
+                # values recorded during the run are visible.
+                from src.bootstrap import state as _bootstrap_state
 
                 cost_block = {
-                    "total_cost_usd": bootstrap.get_total_cost_usd(),
-                    "total_api_duration": bootstrap.get_total_api_duration(),
+                    "total_cost_usd": _bootstrap_state.get_total_cost_usd(),
+                    "total_api_duration": _bootstrap_state.get_total_api_duration(),
                     "total_api_duration_without_retries": (
-                        bootstrap.get_total_api_duration_without_retries()
+                        _bootstrap_state.get_total_api_duration_without_retries()
                     ),
-                    "total_tool_duration": bootstrap.get_total_tool_duration(),
-                    "total_lines_added": bootstrap.get_total_lines_added(),
-                    "total_lines_removed": bootstrap.get_total_lines_removed(),
-                    "last_duration": _time.time() - (bootstrap.get_start_time() or _time.time()),
+                    "total_tool_duration": _bootstrap_state.get_total_tool_duration(),
+                    "total_lines_added": _bootstrap_state.get_total_lines_added(),
+                    "total_lines_removed": _bootstrap_state.get_total_lines_removed(),
+                    "last_duration": _time.time()
+                    - (_bootstrap_state.get_start_time() or _time.time()),
                     "model_usage": {
                         model: {
                             "input_tokens": u.input_tokens,
@@ -379,13 +383,15 @@ class AgentSession:
                             "cache_read_input_tokens": u.cache_read_input_tokens,
                             "cost_usd": u.cost_usd,
                         }
-                        for model, u in bootstrap.get_model_usage().items()
+                        for model, u in _bootstrap_state.get_model_usage().items()
                     },
                 }
             except Exception:
                 # Best-effort: cost block is optional; restore tolerates
-                # missing fields with defaults of 0.
-                pass
+                # missing fields with defaults of 0. But keep the failure
+                # visible — a silent `pass` here yields an empty cost {}
+                # in session.json with no trace for operators.
+                logger.warning("cost_block build failed", exc_info=True)
 
             # Write the .json snapshot directly — do NOT call
             # CoreSession.save() because it triggers

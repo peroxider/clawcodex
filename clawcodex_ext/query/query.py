@@ -1457,7 +1457,7 @@ async def _call_model_sync(
     # Empty usage (a stream whose final-message read failed) records zeros.
     try:
         from ..bootstrap.state import add_to_total_duration_state
-        from ..cost_tracker import record_api_usage
+        from src.cost_tracker import record_api_usage
 
         record_api_usage(
             getattr(response, "model", None) or getattr(provider, "model", "unknown"),
@@ -1473,7 +1473,10 @@ async def _call_model_sync(
         _api_ms = int((time.monotonic() - _t0) * 1000)
         add_to_total_duration_state(_api_ms, _api_ms)
     except Exception:
-        logger.debug("cost recording failed", exc_info=True)
+        # Keep cost failures visible: a silent drop here surfaces as an
+        # empty cost block in session.json with no trace. Warning level so
+        # operators can find the root cause (e.g. malformed usage payload).
+        logger.warning("cost recording failed", exc_info=True)
 
     assistant_msg = AssistantMessage(
         content=assistant_blocks if assistant_blocks else "",
