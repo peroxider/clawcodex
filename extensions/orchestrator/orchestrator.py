@@ -1535,9 +1535,13 @@ class Orchestrator:
     ) -> bool:
         """Return True if `author_login` may trigger a retry/follow-up.
 
-        Per the design doc: "comment 命令默认要求「issue
-        作者」或「仓库 maintainer」才能触发". The check has three
-        short-circuits:
+        Only the issue author may trigger. The maintainer role is not
+        consulted: deploy tokens have heterogeneous permission levels and
+        the platform collaborators API is not reliably reachable with a
+        regular token, so a maintainer check cannot be certified
+        uniformly. Keep the check fail-closed on the issue author.
+
+        Short-circuits:
 
           1. `workflow.agent.allow_anyone_to_retry` — disables the
              role check entirely (trusted-team mode).
@@ -1553,12 +1557,6 @@ class Orchestrator:
              branch is only here to be lenient on platform quirks
              where the bot appears as the author of its own ack
              comment.
-
-        Otherwise, the author must equal the issue author login
-        (kept in `IssueRecord.author_login`, populated by the
-        clarification flow) or a maintainer login (platform
-        metadata; we fall back to None for now and rely on the
-        author check).
         """
         if getattr(self.workflow.agent, "allow_anyone_to_retry", False):
             return True
@@ -1598,6 +1596,16 @@ class Orchestrator:
                 issue_id,
                 exc,
             )
+        # Advance the command cursor past this rejected comment so the
+        # next poll does not re-scan it and re-print the rejection.
+        # Without this, an unauthorized comment is re-processed every
+        # poll until a human deletes it.
+        rejected_comment_id = command_intent.comment_id
+        if rejected_comment_id:
+            record = self._registry.get(issue_id)
+            if record is not None:
+                record.command_cursor = rejected_comment_id
+                self._registry._save()
         logger.info(
             "Issue %s command rejected: /agent %s by %s (not authorized)",
             issue_id,
