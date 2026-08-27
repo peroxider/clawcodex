@@ -15,8 +15,10 @@ def main():
     reason this lives here, not in the package ``__init__``.
     """
     from clawcodex_ext import ensure_nested_transcript_initialized
+    from clawcodex_ext.latent_memory.environment import load_passive_memory_environment
 
     ensure_nested_transcript_initialized()
+    load_passive_memory_environment()
     from clawcodex_ext.cli.dispatch import run_cli
 
     return run_cli()

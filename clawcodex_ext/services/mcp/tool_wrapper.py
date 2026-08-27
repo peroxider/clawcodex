@@ -21,7 +21,6 @@ Phase 8 improvements (ch15-mcp WIs 8.1, 8.3, 8.4):
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import logging
@@ -33,6 +32,7 @@ from src.tool_system.build_tool import McpInfo, Tool, build_tool
 from src.tool_system.context import ToolContext
 from clawcodex_ext.tool_system.protocol import ToolResult
 
+from .call_bridge import run_mcp_coro
 from .client import McpClient
 from .mcp_string_utils import build_mcp_tool_name
 from .output_storage import (
@@ -212,30 +212,20 @@ def wrap_mcp_tool(
 
     def _call(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
         manager_loop = getattr(ctx, "mcp_manager_loop", None)
-        if manager_loop is not None and not manager_loop.is_closed():
-            return _run_on_mcp_loop(_async_call(args, ctx), manager_loop)
-
-        # Detect whether we're inside a running event loop. In 3.14+,
-        # ``get_event_loop()`` raises when no loop is set in the current
-        # thread, so use ``get_running_loop()`` (the running-only API)
-        # and fall back to ``asyncio.run`` if there isn't one.
-        try:
-            asyncio.get_running_loop()
-            running = True
-        except RuntimeError:
-            running = False
-
-        if running:
-            # Cannot await our coroutine on the active loop without
-            # blocking; run it in a worker thread with its own loop.
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, _async_call(args, ctx))
-                return future.result()
-        return asyncio.run(_async_call(args, ctx))
+        return run_mcp_coro(_async_call(args, ctx), manager_loop)
 
     async def _async_call(args: dict[str, Any], ctx: ToolContext) -> ToolResult:
+        # Run generic MCP arg interceptors (e.g. passive-memory user_id injection).
+        from clawcodex_ext.services.mcp.call_bridge import run_mcp_arg_interceptors
+
+        args = run_mcp_arg_interceptors(
+            args,
+            server_name=server_name,
+            tool_name=mcp_tool.name,
+            input_schema=input_schema,
+            context=ctx,
+        )
+
         # WI-8.1: validate args against the closure-captured validator.
         if bound_validator is not None:
             errors = list(bound_validator.iter_errors(args))
@@ -359,25 +349,6 @@ def wrap_mcp_tool(
         always_load=always_load_val,
         input_json_schema=input_schema,
     )
-
-
-def _run_on_mcp_loop(
-    coroutine: Any,
-    loop: asyncio.AbstractEventLoop,
-) -> ToolResult:
-    """Run a wrapped MCP call on the loop that owns its client transport."""
-    import concurrent.futures
-
-    try:
-        if loop.is_running():
-            return asyncio.run_coroutine_threadsafe(coroutine, loop).result()
-
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            return pool.submit(loop.run_until_complete, coroutine).result()
-    except Exception:
-        if hasattr(coroutine, "close"):
-            coroutine.close()
-        raise
 
 
 def wrap_mcp_tools_for_server(

@@ -486,6 +486,27 @@ Feature-state precedence is runtime CLI override, environment variable, persiste
 /lkb plan reopen <plan_id> # Reopen and bind a stopped Plan
 ```
 
+### Bundled Long-Term Memory
+
+The opt-in passive-memory integration now ships with its Mem0-compatible backend and
+embedded Qdrant storage. No external repository, Docker service, or native Qdrant
+binary is required.
+
+```bash
+uv sync --extra dev --extra memory
+export OPENAI_API_KEY=...
+clawcodex-dev memory enable
+clawcodex-dev memory status
+clawcodex-dev
+```
+
+Use `clawcodex-dev memory logs -f` for backend diagnostics and
+`clawcodex-dev memory disable` to stop the managed process and remove the project-local
+memory integration. `memory enable` creates a gitignored `.mcp.json` entry and enables
+passive memory in the project's `.env`. Data is stored under
+`~/.clawcodex/memory/` by default; external Qdrant remains supported through
+`QDRANT_HOST`/`QDRANT_PORT`.
+
 ---
 
 ## Architecture (this fork only)

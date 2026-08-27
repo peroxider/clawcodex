@@ -28,13 +28,18 @@ class TUIFrontend(FrontendPlugin):
             workspace_root=ctx.workspace_root,
             append_system_prompt=ctx.options.append_system_prompt,
         )
-        return run_tui(
-            options,
-            provider=ctx.provider,
-            session=ctx.session,
-            tool_registry=ctx.tool_registry,
-            tool_context=ctx.tool_context,
-            runtime_context=ctx,
-            resume_session_id=ctx.options.resume_session_id,
-            resume_browse=ctx.options.resume_browse,
-        )
+        try:
+            return run_tui(
+                options,
+                provider=ctx.provider,
+                session=ctx.session,
+                tool_registry=ctx.tool_registry,
+                tool_context=ctx.tool_context,
+                runtime_context=ctx,
+                resume_session_id=ctx.options.resume_session_id,
+                resume_browse=ctx.options.resume_browse,
+            )
+        finally:
+            close = getattr(ctx, "close", None)
+            if callable(close):
+                close()

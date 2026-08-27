@@ -4,6 +4,9 @@
 统一管理 pre_llm / post_llm / pre_tool / post_tool / on_turn_end / on_turn_start
 等阶段的钩子注册与去注册。
 
+Query 生命周期钩子（on_query_start / on_query_end）在整个 query() 调用
+的开始/结束时各触发一次，适用于插件化的被动记忆、会话分析等场景。
+
 用法::
 
     from clawcodex_ext.query.hook_registry import register_loop_hook, call_hooks
@@ -13,6 +16,13 @@
         return (messages, system_prompt)
 
     register_loop_hook("budget_mode", my_pre_llm_hook, "pre_llm", priority=10)
+
+    # Query 生命周期钩子（支持 async）
+    async def my_query_start_hook(params):
+        # 在 query 开始前执行（如被动记忆 recall）
+        ...
+
+    register_loop_hook("my_plugin", my_query_start_hook, "on_query_start")
 """
 
 from __future__ import annotations
@@ -30,6 +40,9 @@ LoopHookPhase = Literal[
     "post_tool",
     "on_turn_start",
     "on_turn_end",
+    # Query 生命周期：整个 query() 调用的开始/结束，各触发一次。
+    "on_query_start",
+    "on_query_end",
 ]
 
 
@@ -51,6 +64,8 @@ _REGISTRY: dict[LoopHookPhase, list[LoopHook]] = {
     "post_tool": [],
     "on_turn_start": [],
     "on_turn_end": [],
+    "on_query_start": [],
+    "on_query_end": [],
 }
 
 
@@ -98,6 +113,33 @@ def call_hooks(phase: LoopHookPhase, *args: Any, **kwargs: Any) -> tuple[Any, ..
             result = hook.fn(*current_args, **kwargs)
         except Exception:
             logger.exception("Loop hook %r at phase %r raised an error", hook.name, phase)
+            continue
+        if result is not None:
+            if isinstance(result, tuple):
+                current_args = result
+            else:
+                current_args = (result,)
+    return current_args
+
+
+async def call_hooks_async(phase: LoopHookPhase, *args: Any, **kwargs: Any) -> tuple[Any, ...]:  # noqa: ANN401
+    """异步版本的 call_hooks，支持 async def hook。
+
+    与 call_hooks 语义相同：hook 返回值替换 args 供后续 hook 使用。
+    如果 hook 是普通函数，直接调用；如果是协程函数，await 其结果。
+    用于 on_query_start 等需要异步 I/O（如 MCP 调用）的生命周期钩子。
+    """
+    import asyncio
+
+    hooks = _REGISTRY.get(phase, [])
+    current_args: tuple[Any, ...] = args
+    for hook in hooks:
+        try:
+            result = hook.fn(*current_args, **kwargs)
+            if asyncio.iscoroutine(result):
+                result = await result
+        except Exception:
+            logger.exception("Async loop hook %r at phase %r raised an error", hook.name, phase)
             continue
         if result is not None:
             if isinstance(result, tuple):

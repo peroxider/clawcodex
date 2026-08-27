@@ -10,6 +10,7 @@ from ..build_tool import Tool, ValidationResult, build_tool
 from ..context import ToolContext
 from ..errors import ToolInputError
 from ..protocol import ToolResult
+from clawcodex_ext.services.mcp.call_bridge import run_mcp_coro, run_mcp_arg_interceptors
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +184,13 @@ def _mcp_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     if not isinstance(args, dict):
         raise ToolInputError("input must be an object when provided")
 
+    args = run_mcp_arg_interceptors(
+        args,
+        server_name=server,
+        tool_name=tool_name,
+        context=context,
+    )
+
     client = context.mcp_clients.get(server)
     if client is None:
         return ToolResult(
@@ -198,10 +206,7 @@ def _mcp_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     coro = _async_call()
     manager_loop = getattr(context, "mcp_manager_loop", None)
     try:
-        if manager_loop is not None and not manager_loop.is_closed():
-            result = _run_on_loop(coro, manager_loop)
-        else:
-            result = _run_async(coro)
+        result = run_mcp_coro(coro, manager_loop)
     except Exception as exc:
         return ToolResult(
             name="MCP",
@@ -214,42 +219,13 @@ def _mcp_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
 
 
 def _run_on_loop(coro: Any, loop: asyncio.AbstractEventLoop) -> Any:
-    """Run a coroutine on a specific event loop (which owns the MCP stdio
-    transport) and block for the result.
-
-    The loop is kept open for the runtime lifetime, so each tool call drives
-    it with ``run_until_complete`` in a worker thread rather than creating a
-    fresh loop that would not share the transport.
-    """
-    import concurrent.futures
-
-    def runner() -> Any:
-        return loop.run_until_complete(coro)
-
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        return pool.submit(runner).result()
+    """Backward-compatible wrapper used by the MCP resource tools."""
+    return run_mcp_coro(coro, loop)
 
 
 def _run_async(coro: Any) -> Any:
-    """Run an async coroutine from a possibly sync context.
-
-    Mirrors the pattern used by the per-server MCP tool wrappers so the
-    generic ``MCP`` tool works whether it is invoked from a synchronous
-    headless loop or an already-running async event loop.
-    """
-    try:
-        asyncio.get_running_loop()
-        running = True
-    except RuntimeError:
-        running = False
-
-    if running:
-        import concurrent.futures
-
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            future = pool.submit(asyncio.run, coro)
-            return future.result()
-    return asyncio.run(coro)
+    """Backward-compatible wrapper for MCP clients without an owner loop."""
+    return run_mcp_coro(coro, None)
 
 
 def _serialize_mcp_result(result: Any) -> Any:

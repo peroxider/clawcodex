@@ -162,8 +162,12 @@ def _check_permissions(tool_input: dict[str, Any], context: ToolContext) -> Perm
     # Memory carve-out: writes inside the auto-memory directory bypass
     # the workspace allowlist. Without this, the model would prompt the
     # user on every "save a memory" attempt.
+    # Must return Allow (not Passthrough) so headless mode doesn't deny.
     if _is_auto_memory_write(file_path):
-        return PermissionPassthroughResult()
+        return PermissionAllowDecision(
+            behavior="allow",
+            updated_input=tool_input,
+        )
 
     # NB: no docs gate. The port used to raise an explicit ask for
     # ``.md``/``.markdown`` writes unless ``allow_docs`` — the original

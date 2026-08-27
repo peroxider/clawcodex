@@ -127,12 +127,18 @@ feishu = [
     "lark-oapi==1.7.0",
     "qrcode==7.4.2",
 ]
+memory = [
+    "mem0ai==2.0.4",
+    "qdrant-client>=1.18.0,<2",
+    "ollama>=0.6.0,<1",
+    "requests>=2.31.0",
+]
 # ``all`` is the catch-all extra consumed by ``install.sh`` (one-click
 # installer). NOTE: an earlier draft used a self-reference
 # (``all = ["clawcodex-dev-mind[dev]"]``) which deadlocks editable
 # installs because pip/setuptools wait for the package to exist on disk to
 # read its metadata, but the package is what's being built. List the deps
-# explicitly instead. Keep in sync with ``dev`` above.
+# explicitly instead. Keep the memory dependencies in sync with ``memory`` above.
 all = [
     "build>=1.0.0",
     "twine>=5.0.0",
@@ -145,6 +151,10 @@ all = [
     "import-linter>=2.0",
     "lark-oapi==1.7.0",
     "qrcode==7.4.2",
+    "mem0ai==2.0.4",
+    "qdrant-client>=1.18.0,<2",
+    "ollama>=0.6.0,<1",
+    "requests>=2.31.0",
 ]
 
 [project.scripts]
@@ -258,6 +268,7 @@ module = [
     "clawcodex_ext.entrypoints.*",
     "clawcodex_ext.frontend.*",
     "clawcodex_ext.hooks.*",
+    "clawcodex_ext.latent_memory.*",
     "clawcodex_ext.memory.*",
     "clawcodex_ext.permissions.*",
     "clawcodex_ext.providers.*",
