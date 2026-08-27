@@ -1143,8 +1143,16 @@ async def _call_model_sync(
             getattr(provider, "model", None),
             base_url=getattr(provider, "base_url", None),
         )
-    elif max_output_tokens_override is not None:
-        call_kwargs["max_tokens"] = max_output_tokens_override
+    else:
+        from src.models.context import resolve_max_output_tokens
+
+        resolved = resolve_max_output_tokens(
+            max_output_tokens_override,
+            getattr(provider, "model", None),
+            base_url=getattr(provider, "base_url", None),
+        )
+        if max_output_tokens_override is not None or resolved:
+            call_kwargs["max_tokens"] = resolved
 
     # Extended thinking (Claude 4.x family). Forwarded straight through
     # the provider's kwargs pass-through to client.messages.stream(
@@ -3506,12 +3514,30 @@ async def query(
     *,
     terminal_holder: TerminalHolder | None = None,
 ) -> AsyncGenerator[Message | StreamEvent, None]:
+    from .hook_registry import call_hooks, call_hooks_async
+
     context = params.tool_use_context
     _begin_skill_runtime_scope(context)
+    # 确保始终有一个 holder，供 on_query_end 钩子读取 terminal reason。
+    holder = terminal_holder or TerminalHolder()
+    # P102-F: query 生命周期钩子 — 插件化被动记忆等扩展的接入点。
+    # on_query_start 支持 async hook（如 MCP 检索），可修改 params.system_prompt。
+    hook_result = await call_hooks_async("on_query_start", params)
+    if hook_result and hook_result[0] is not None:
+        params = hook_result[0]
+    # 收集循环中产生的消息，供 on_query_end 钩子使用（如被动记忆 capture）。
+    _conversation_messages: list = list(params.messages)
     try:
-        async for item in _query_impl(params, terminal_holder=terminal_holder):
+        async for item in _query_impl(params, terminal_holder=holder):
+            # 只收集 Message 类型（跳过 StreamEvent）
+            if hasattr(item, "role"):
+                _conversation_messages.append(item)
             yield item
     finally:
+        # on_query_end: 同步钩子，用于 capture/flush 等收尾操作。
+        # 传入完整会话消息（初始 + 循环中产生的）。
+        params.messages = _conversation_messages
+        call_hooks("on_query_end", params, holder)
         _restore_skill_runtime_scope(context)
 
 

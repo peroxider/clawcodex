@@ -57,9 +57,7 @@ def _parse_server_capabilities(caps: Any) -> ServerCapabilities:
         tools=bool(tools_cap),
         prompts=bool(caps.get("prompts")),
         resources=bool(caps.get("resources")),
-        tools_list_changed=bool(
-            isinstance(tools_cap, dict) and tools_cap.get("listChanged")
-        ),
+        tools_list_changed=bool(isinstance(tools_cap, dict) and tools_cap.get("listChanged")),
     )
 
 
@@ -186,8 +184,7 @@ class McpClient:
         try:
             handler(msg.method, getattr(msg, "params", None) or {})
         except Exception:  # noqa: BLE001
-            logger.debug("MCP notification handler failed: %s",
-                         msg.method, exc_info=True)
+            logger.debug("MCP notification handler failed: %s", msg.method, exc_info=True)
 
     def set_auth_provider(self, provider: Any) -> None:
         """Inject the McpAuthProvider used for HTTP/SSE/WS auth flows.
@@ -261,9 +258,7 @@ class McpClient:
             )
 
             if init_result and isinstance(init_result, dict):
-                self._capabilities = _parse_server_capabilities(
-                    init_result.get("capabilities", {})
-                )
+                self._capabilities = _parse_server_capabilities(init_result.get("capabilities", {}))
                 server_info_raw = init_result.get("serverInfo")
                 if server_info_raw and isinstance(server_info_raw, dict):
                     self._server_info = ServerInfo(
@@ -386,6 +381,8 @@ class McpClient:
                     break
                 if msg.id is not None and msg.id in self._pending_requests:
                     future = self._pending_requests.pop(msg.id)
+                    if future.cancelled():
+                        continue
                     if msg.error:
                         future.set_exception(
                             McpToolCallError(
@@ -398,9 +395,7 @@ class McpClient:
                 elif msg.method is not None and msg.id is not None:
                     # Incoming server→client REQUEST (e.g. elicitation/create).
                     # Handle out-of-band so the loop keeps draining, then reply.
-                    asyncio.get_event_loop().create_task(
-                        self._handle_incoming_request(msg)
-                    )
+                    asyncio.get_event_loop().create_task(self._handle_incoming_request(msg))
                 elif msg.method is not None and msg.id is None:
                     # ch15 round-4 — server→client NOTIFICATION (method set, no
                     # id, per JSON-RPC 2.0): e.g. notifications/tools/list_changed.
@@ -429,9 +424,7 @@ class McpClient:
                 )
         except Exception as e:  # never let a handler crash the receive loop
             try:
-                await self._send_response(
-                    msg.id, error={"code": -32603, "message": str(e)}
-                )
+                await self._send_response(msg.id, error={"code": -32603, "message": str(e)})
             except Exception:
                 pass
 
@@ -458,9 +451,7 @@ class McpClient:
     ) -> None:
         if self._transport is None or request_id is None:
             return
-        await self._transport.send(
-            JsonRpcMessage(id=request_id, result=result, error=error)
-        )
+        await self._transport.send(JsonRpcMessage(id=request_id, result=result, error=error))
 
     async def _send_request(
         self,
@@ -483,6 +474,11 @@ class McpClient:
             return await asyncio.wait_for(future, timeout=timeout_s)
         except asyncio.TimeoutError:
             self._pending_requests.pop(request_id, None)
+            raise
+        except asyncio.CancelledError:
+            self._pending_requests.pop(request_id, None)
+            if not future.done():
+                future.cancel()
             raise
 
     async def _send_notification(

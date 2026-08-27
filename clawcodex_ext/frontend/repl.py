@@ -53,5 +53,10 @@ class REPLFrontend(FrontendPlugin):
             # Recorder extension is optional; a missing/broken recording
             # package must not prevent the REPL from starting.
             pass
-        repl.run()
-        return 0
+        try:
+            repl.run()
+            return 0
+        finally:
+            close = getattr(ctx, "close", None)
+            if callable(close):
+                close()

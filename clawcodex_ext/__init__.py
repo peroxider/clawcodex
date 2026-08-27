@@ -60,6 +60,7 @@ def __getattr__(name: str):
         return BaseProvider
     raise AttributeError(name)
 
+
 # ---------------------------------------------------------------------------
 # Lazy extension installations
 # ---------------------------------------------------------------------------
@@ -83,11 +84,13 @@ def ensure_eager_extensions_installed() -> None:
 
     from clawcodex_ext.permissions import install_permission_extensions
     from clawcodex_ext.memory.scope_aware_prompt import install_memory_extension
+    from clawcodex_ext.latent_memory.plugin import install_passive_memory_plugin
     from clawcodex_ext.providers.patches import install as _install_provider_patches
     from clawcodex_ext.orchestrator import install_stale_registry_patch
 
     install_permission_extensions()
     install_memory_extension()
+    install_passive_memory_plugin()
     _install_provider_patches()
     install_stale_registry_patch()
 

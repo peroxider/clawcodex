@@ -24,6 +24,7 @@ Also exports ``build_effective_system_prompt`` (CLAWCODEX.md + style +
 git status assembly) so the cutover code can pre-build the system
 prompt before calling the adapter — ``query()`` expects it pre-built.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -178,7 +179,9 @@ def run_query_as_agent_loop_sync(
         getattr(tool_context, "output_style_dir", None),
     ).prompt
     effective_system_prompt = build_effective_system_prompt(
-        style_prompt, tool_context, provider=provider,
+        style_prompt,
+        tool_context,
+        provider=provider,
     )
 
     def _persist(msg: Any) -> None:
@@ -194,32 +197,31 @@ def run_query_as_agent_loop_sync(
             conversation.add_message(msg.role, msg.content)
         except Exception:
             import logging
+
             logging.getLogger(__name__).exception(
                 "Failed to persist message into conversation: role=%s",
                 getattr(msg, "role", "?"),
             )
             raise
 
-    compat_result = _asyncio.run(run_query_as_agent_loop(
-        initial_messages=list(conversation.messages),
-        provider=provider,
-        tool_registry=tool_registry,
-        tool_context=tool_context,
-        system_prompt=effective_system_prompt,
-        max_turns=max_turns,
-        on_event=on_event,
-        on_text_chunk=on_text_chunk,
-        on_thinking_chunk=on_thinking_chunk,
-        on_message=_persist,
-        cancel_signal=cancel_signal,
-    ))
+    compat_result = _asyncio.run(
+        run_query_as_agent_loop(
+            initial_messages=list(conversation.messages),
+            provider=provider,
+            tool_registry=tool_registry,
+            tool_context=tool_context,
+            system_prompt=effective_system_prompt,
+            max_turns=max_turns,
+            on_event=on_event,
+            on_text_chunk=on_text_chunk,
+            on_thinking_chunk=on_thinking_chunk,
+            on_message=_persist,
+            cancel_signal=cancel_signal,
+        )
+    )
     return AgentLoopResult(
         response_text=compat_result.response_text,
-        usage=(
-            compat_result.usage
-            if compat_result.num_turns > 0
-            else None
-        ),
+        usage=(compat_result.usage if compat_result.num_turns > 0 else None),
         num_turns=compat_result.num_turns,
     )
 
@@ -303,17 +305,21 @@ def build_effective_system_prompt(
         from ..coordinator.prompt import get_coordinator_system_prompt
         from ..state.cache_state import should_1h_cache_ttl
 
-        blocks: list[dict[str, Any]] = [{
-            "type": "text",
-            "text": get_coordinator_system_prompt(),
-            "_cache_scope": CacheScope.SESSION.value,
-        }]
-        if style_prompt:
-            blocks.append({
+        blocks: list[dict[str, Any]] = [
+            {
                 "type": "text",
-                "text": style_prompt,
+                "text": get_coordinator_system_prompt(),
                 "_cache_scope": CacheScope.SESSION.value,
-            })
+            }
+        ]
+        if style_prompt:
+            blocks.append(
+                {
+                    "type": "text",
+                    "text": style_prompt,
+                    "_cache_scope": CacheScope.SESSION.value,
+                }
+            )
         # One cache marker on the LAST stable block — the same convention
         # build_full_system_prompt_blocks applies to each scope-group's
         # final block (prompt_assembly.py:699-761), reusing its TTL selector.
@@ -321,17 +327,39 @@ def build_effective_system_prompt(
             "type": "ephemeral",
             "ttl": "1h" if should_1h_cache_ttl(query_source) else "5m",
         }
+        # Auto-memory (MEMORY.md) injection for coordinator mode.
+        # The non-coordinator path gets this via build_full_system_prompt_blocks
+        # → section_registry; coordinator replaces the base blocks entirely so
+        # it needs an explicit injection here.
+        try:
+            from clawcodex_ext.memdir.paths import is_auto_memory_enabled
+
+            if is_auto_memory_enabled():
+                from clawcodex_ext.memdir.memdir import load_memory_prompt
+
+                _mem_prompt = load_memory_prompt() or ""
+                if _mem_prompt.strip():
+                    blocks.append(
+                        {
+                            "type": "text",
+                            "text": _mem_prompt,
+                            "_cache_scope": CacheScope.REQUEST.value,
+                        }
+                    )
+        except Exception:
+            pass
     else:
         # Skills listing (best-effort; mirrors engine.py:183).
         try:
             from ..command_system import get_skill_tool_commands
+
             skills = get_skill_tool_commands(cwd)
         except Exception:
             skills = None
 
         blocks = build_full_system_prompt_blocks(
             cwd=cwd,
-            output_style="default",          # style is appended below (mirror engine.py:169)
+            output_style="default",  # style is appended below (mirror engine.py:169)
             append_system_prompt=style_prompt,
             query_source=query_source,
             provider=provider,
@@ -376,6 +404,7 @@ def build_effective_system_prompt(
 
         try:
             from ..permissions.filesystem import get_scratchpad_dir
+
             scratchpad_dir: str | None = get_scratchpad_dir()
         except Exception:
             scratchpad_dir = None
@@ -385,16 +414,16 @@ def build_effective_system_prompt(
         ).get("workerToolsContext", "")
         if worker_ctx:
             entry = f"# workerToolsContext\n{worker_ctx}"
-            context_prompt = (
-                f"{context_prompt}\n\n{entry}" if context_prompt.strip() else entry
-            )
+            context_prompt = f"{context_prompt}\n\n{entry}" if context_prompt.strip() else entry
 
     if context_prompt.strip():
-        blocks = blocks + [{
-            "type": "text",
-            "text": context_prompt,
-            "_cache_scope": CacheScope.REQUEST.value,
-        }]
+        blocks = blocks + [
+            {
+                "type": "text",
+                "text": context_prompt,
+                "_cache_scope": CacheScope.REQUEST.value,
+            }
+        ]
 
     return blocks
 
@@ -406,6 +435,7 @@ class AgentLoopRunResult:
     callers that previously consumed ``run_agent_loop``, AND adds a
     typed ``terminal`` so wrappers can discriminate exit reason.
     """
+
     response_text: str
     usage: dict[str, int]
     num_turns: int
@@ -424,7 +454,8 @@ def _last_user_text(messages: list[Message]) -> str:
             return content
         if isinstance(content, list):
             parts = [
-                str(b.get("text", "")) for b in content
+                str(b.get("text", ""))
+                for b in content
                 if isinstance(b, dict) and b.get("type") == "text"
             ]
             if parts:
@@ -470,7 +501,10 @@ async def _maybe_recall_memories(
         memdir = str(get_auto_mem_path())
         surfaced = memory_surfaced if memory_surfaced is not None else set()
         reminder = await get_relevant_memory_reminder(
-            query_text, memdir, provider=provider, already_surfaced=surfaced,
+            query_text,
+            memdir,
+            provider=provider,
+            already_surfaced=surfaced,
         )
         if not reminder:
             return None
@@ -571,9 +605,7 @@ async def _run_query_as_agent_loop_impl(
             # both pre- and per-iteration (legacy fallback path).
             abort_controller = AbortController()
             if cancel_signal.aborted:
-                abort_controller.abort(
-                    cancel_signal.reason or "user_interrupt"
-                )
+                abort_controller.abort(cancel_signal.reason or "user_interrupt")
         else:
             abort_controller = AbortController()
 
@@ -590,15 +622,18 @@ async def _run_query_as_agent_loop_impl(
     try:
         recall_msg = (
             await _maybe_recall_memories(
-                messages_for_query, provider, tool_context, memory_surfaced,
+                messages_for_query,
+                provider,
+                tool_context,
+                memory_surfaced,
             )
-            if memory_recall_enabled else None
+            if memory_recall_enabled
+            else None
         )
         if recall_msg is not None:
             messages_for_query.append(recall_msg)
     except Exception:  # noqa: BLE001 — recall must never block a turn
-        logging.getLogger(__name__).debug("memory recall wiring failed",
-                                          exc_info=True)
+        logging.getLogger(__name__).debug("memory recall wiring failed", exc_info=True)
 
     # R5 round-5 (ch17) — date-change (midnight-rollover) companion to the
     # memoized env date. On a real turn where the date has rolled over since
@@ -612,12 +647,9 @@ async def _run_query_as_agent_loop_impl(
 
             dc = get_date_change_reminder()
             if dc:
-                messages_for_query.append(
-                    create_user_message(content=dc, isMeta=True)
-                )
+                messages_for_query.append(create_user_message(content=dc, isMeta=True))
         except Exception:  # noqa: BLE001 — must never block a turn
-            logging.getLogger(__name__).debug("date-change wiring failed",
-                                              exc_info=True)
+            logging.getLogger(__name__).debug("date-change wiring failed", exc_info=True)
 
     # Plan-mode attachments (port of getPlanModeAttachments +
     # getPlanModeExitAttachment, typescript/src/utils/attachments.ts:882-883,
@@ -640,19 +672,21 @@ async def _run_query_as_agent_loop_impl(
             mode = str(getattr(pc, "mode", "default")) if pc is not None else "default"
             agent_id = getattr(tool_context, "agent_id", None)
             texts = build_plan_mode_attachments(
-                messages_for_query, mode, agent_id=agent_id,
+                messages_for_query,
+                mode,
+                agent_id=agent_id,
             )
             texts += build_plan_mode_exit_attachment(mode, agent_id=agent_id)
             for text in texts:
                 attachment_msg = create_user_message(
-                    content=wrap_in_system_reminder(text), isMeta=True,
+                    content=wrap_in_system_reminder(text),
+                    isMeta=True,
                 )
                 messages_for_query.append(attachment_msg)
                 if on_attachment is not None:
                     on_attachment(attachment_msg)
         except Exception:  # noqa: BLE001 — must never block a turn
-            logging.getLogger(__name__).debug("plan-mode attachment wiring failed",
-                                              exc_info=True)
+            logging.getLogger(__name__).debug("plan-mode attachment wiring failed", exc_info=True)
 
     effective_tools = get_team_aware_tool_list(
         tool_registry,
@@ -779,9 +813,7 @@ async def _run_query_as_agent_loop_impl(
                             last_api_error_text = _err_content.strip()
                         elif isinstance(_err_content, list):
                             _err_parts = [
-                                block.text
-                                for block in _err_content
-                                if isinstance(block, TextBlock)
+                                block.text for block in _err_content if isinstance(block, TextBlock)
                             ]
                             if _err_parts:
                                 last_api_error_text = " ".join(_err_parts).strip()
@@ -854,9 +886,7 @@ async def _run_query_as_agent_loop_impl(
                         continue
                     content = msg.content
                     if isinstance(content, list):
-                        has_tool_result = any(
-                            _is_tool_result_block(block) for block in content
-                        )
+                        has_tool_result = any(_is_tool_result_block(block) for block in content)
                         if has_tool_result and on_message is not None:
                             on_message(msg)
                         for block in content:
@@ -931,9 +961,7 @@ async def _run_query_as_agent_loop_impl(
         reason = getattr(terminal, "reason", None) or ""
         if reason in ("aborted_streaming", "aborted_tools", "interrupted"):
             raise AbortError(
-                getattr(abort_controller.signal, "reason", None)
-                or reason
-                or "user_interrupt"
+                getattr(abort_controller.signal, "reason", None) or reason or "user_interrupt"
             )
         if reason == "model_error":
             error = getattr(terminal, "error", None)
@@ -961,19 +989,14 @@ async def _run_query_as_agent_loop_impl(
     # Tests pin this — see test_max_turns_respected.
     if terminal is not None and getattr(terminal, "reason", None) == "max_turns":
         response_text = "[Max tool turns reached]"
-    elif (
-        terminal is not None
-        and getattr(terminal, "reason", None) == "tool_failure_loop"
-    ):
+    elif terminal is not None and getattr(terminal, "reason", None) == "tool_failure_loop":
         # Graceful guard stop: the loop yielded the trip explanation as an
         # isApiErrorMessage assistant message, which the S1 filter above
         # deliberately keeps out of on_message/last_assistant_text. Surface
         # it as response_text (same shape as the max_turns sentinel) so the
         # TUI/headless caller shows WHY the run stopped instead of a silent
         # empty success.
-        response_text = (
-            last_api_error_text or "[Stopped: repeated tool failures detected]"
-        )
+        response_text = last_api_error_text or "[Stopped: repeated tool failures detected]"
     else:
         response_text = last_assistant_text or " ".join(response_text_parts).strip()
 
