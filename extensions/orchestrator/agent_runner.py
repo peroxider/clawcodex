@@ -86,7 +86,15 @@ _TOOL_EVENT_LOG_ROTATE_BYTES = 50 * 1024 * 1024
 # because genuine development also involves exploration; the guard is
 # meant to catch degenerate cases (the 100+ Python-debug Bash calls
 # that spanned multiple outer-loop turns without any code change).
-_MAX_READ_ONLY_TURNS = 4
+_MAX_READ_ONLY_TURNS = 8
+
+# Graded intervention thresholds for the read-only spiral guard. Instead
+# of killing the run at the first hint of exploration, inject an
+# operator-style hint at the soft threshold so the agent gets a chance to
+# correct course (start writing files / running commands) before the hard
+# kill at ``_MAX_READ_ONLY_TURNS``.
+_READ_ONLY_SOFT_HINT_TURNS = 3
+_READ_ONLY_STRONG_HINT_TURNS = 6
 
 # Root-cause fix: tool names that modify workspace files.
 # Only Write / Edit tools count toward ``has_made_progress`` so the
@@ -2565,14 +2573,96 @@ class AgentRunner:
                                         # check ``turn_output`` here —
                                         # the absence of modifying tools
                                         # is the reliable indicator.
+                                        #
+                                        # However, a modifying tool is not
+                                        # the only sign of progress: Bash
+                                        # (git checkout / git rm / mv …) can
+                                        # change the workspace without
+                                        # Write/Edit.  So also treat a dirty
+                                        # git status as progress — otherwise
+                                        # git-only tasks (e.g. initializing a
+                                        # branch from upstream) are wrongly
+                                        # killed as "read-only loops".
+                                        _ws_dirty = False
+                                        _ws = getattr(session, "workspace", None)
+                                        _ws_path = (
+                                            getattr(_ws, "path", None)
+                                            if _ws is not None
+                                            else None
+                                        )
+                                        if _ws_path is not None:
+                                            try:
+                                                import subprocess as _subprocess
+
+                                                _proc = _subprocess.run(
+                                                    ["git", "status", "--porcelain"],
+                                                    cwd=str(_ws_path),
+                                                    capture_output=True,
+                                                    text=True,
+                                                    timeout=10,
+                                                )
+                                                _ws_dirty = bool(_proc.stdout.strip())
+                                            except Exception:
+                                                _ws_dirty = False
                                         if (
                                             turn_number > 0
                                             and turn_has_tool_calls
                                             and not turn_has_modifying_tool
+                                            and not _ws_dirty
                                         ):
                                             read_only_streak += 1
                                         else:
                                             read_only_streak = 0
+
+                                        # Graded intervention: give the agent a
+                                        # chance to correct course before the hard
+                                        # kill. Inject an operator-style hint at
+                                        # the soft/strong thresholds; only kill at
+                                        # ``_MAX_READ_ONLY_TURNS``.
+                                        if read_only_streak in (
+                                            _READ_ONLY_SOFT_HINT_TURNS,
+                                            _READ_ONLY_STRONG_HINT_TURNS,
+                                        ):
+                                            _hint = (
+                                                "You have spent %d consecutive turns "
+                                                "only reading/exploring without "
+                                                "changing any files. If you understand "
+                                                "the task, START WRITING now: modify "
+                                                "files (Write/Edit) or run commands "
+                                                "(Bash) to produce actual changes."
+                                            ) % read_only_streak
+                                            if (
+                                                session._runtime_tasks is not None
+                                                and session.run_id
+                                            ):
+                                                try:
+                                                    from src.tasks.local_agent import (
+                                                        queue_pending_message,
+                                                    )
+
+                                                    if not queue_pending_message(
+                                                        session.run_id,
+                                                        _hint,
+                                                        session._runtime_tasks,
+                                                    ):
+                                                        AgentRunner._write_operator_hint(
+                                                            session, _hint
+                                                        )
+                                                except Exception:
+                                                    AgentRunner._write_operator_hint(
+                                                        session, _hint
+                                                    )
+                                            else:
+                                                AgentRunner._write_operator_hint(
+                                                    session, _hint
+                                                )
+                                            logger.warning(
+                                                "Read-only spiral hint issue_id=%s — "
+                                                "%d consecutive read-only turns, "
+                                                "injecting course-correction hint",
+                                                issue.id,
+                                                read_only_streak,
+                                            )
 
                                         if read_only_streak >= _MAX_READ_ONLY_TURNS:
                                             session.session_end_reason = "read_only_loop"
