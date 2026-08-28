@@ -86,6 +86,115 @@ logger = logging.getLogger(__name__)
 _CONTINUATION_RETRY_DELAY_MS = 1_000
 _FAILURE_RETRY_BASE_MS = 10_000
 
+# User-facing failure guidance keyed by ``session_end_reason``. When a run
+# fails, the Run Summary comment appends a human-readable reason and the
+# next action the issue author can take, so users can self-serve most
+# failures instead of contacting the orchestrator operator.
+_END_REASON_USER_GUIDANCE: dict[str, tuple[str, str]] = {
+    # Guidance principles:
+    # - Failures auto-retry (up to max_retry_attempts with backoff), so
+    #   the advice is: check the likely cause, the orchestrator will
+    #   auto-retry; if the user wants an immediate retry they can comment
+    #   /agent retry.
+    # - Uniform format across all reasons: "检查 X 是否正确/清晰；编排器会
+    #   自动重试，如需立即重试可在 issue 评论 /agent retry。"
+    "read_only_loop": (
+        "Agent 只读探索未产生代码修改",
+        "请检查 issue 描述是否清晰（补充具体实现要求）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "no_changes_produced": (
+        "Agent 未产生任何文件修改",
+        "请检查 issue 描述是否清晰（补充具体改动要求）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "rate_limited": (
+        "请求频率超限（限流）",
+        "请检查模型 API 额度/限流是否正常（余额、每分钟请求数上限）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "stagnation": (
+        "处理停滞（模型响应慢或无输出）",
+        "请检查网络连接与模型服务状态是否正常（是否过载/超时）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "llm_gave_up": (
+        "模型判断无法完成该任务",
+        "请检查 issue 信息是否充分（补充上下文或拆分需求）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "budget_exhausted": (
+        "轮次/预算耗尽",
+        "请检查 workflow.md 轮次/预算配置是否合理（调大或拆分任务）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "loop_detected": (
+        "Agent 重复循环无进展",
+        "请检查 issue 上下文是否充分（补充信息）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "megaturn_workspace_idle": (
+        "长时间无工作区变化",
+        "请检查模型服务与网络是否正常；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "noop_completed": (
+        "无文件变化但被判定为完成",
+        "请确认需求是否已满足；若未满足可评论 `/agent follow-up` 继续处理。",
+    ),
+    "empty_branch_no_commits": (
+        "分支为空，未产生任何提交",
+        "请检查 issue 描述是否清晰（补充具体实现要求）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "not_reproducible": (
+        "问题无法复现",
+        "请检查 issue 描述是否清晰（补充复现步骤）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "premise_not_met": (
+        "前提条件不满足",
+        "请检查前置条件是否满足（环境/依赖/前置状态）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "operator_stopped": (
+        "被操作者手动停止",
+        "无需处理（人工主动停止）。",
+    ),
+    "operator_stop": (
+        "被操作者手动停止",
+        "无需处理（人工主动停止）。",
+    ),
+    "operator_takeover": (
+        "被操作者接管",
+        "无需处理（人工主动接管）。",
+    ),
+    "task_complete": (
+        "任务正常完成",
+        "无需处理。",
+    ),
+    "already_completed": (
+        "该 issue 已处理完成",
+        "无需处理。",
+    ),
+    # session.status values that get copied directly into
+    # session_end_reason on failure paths (orchestrator.py): without
+    # entries here they would surface as generic "未知错误".
+    "agent_timeout": (
+        "Agent 执行超时",
+        "请检查模型服务/网络是否正常，或拆分任务降低规模；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "max_turns_exceeded": (
+        "轮次上限超限",
+        "请检查 workflow.md 轮次上限配置是否合理（调大或拆分任务）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "rate_limit_circuit_open": (
+        "限流熔断（连续请求被限）",
+        "请检查模型 API 额度/限流是否正常（余额、并发限制）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "verification_failed": (
+        "本地验证未通过",
+        "请检查测试命令与环境配置是否正确（test_command、依赖）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "before_run_failed": (
+        "运行前失败（环境/配置问题）",
+        "请检查环境与配置是否正确（token 权限、workflow 配置、网络）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+    ),
+    "cancelled": (
+        "被取消",
+        "无需处理（人工取消或系统取消）。",
+    ),
+}
+
 
 def _operator_failure_detail(exc: BaseException) -> str:
     """Return a concise failure detail suitable for IM and registry records."""
@@ -3982,8 +4091,52 @@ class Orchestrator:
             f"- Turns: {getattr(session, 'turn_count', 0)}",
             f"- Tool calls: {getattr(session, 'tool_count', 0)}",
         ]
-        if getattr(session, "last_hook_error", None):
-            body_lines.append(f"- Error: `{session.last_hook_error}`")
+        # Failure paths set session_end_reason / session_end_summary
+        # (22 sites in agent_runner), while last_hook_error is only set
+        # on a few exception paths — so most failed runs had NO Error
+        # line at all. Fall back through reason → summary → hook_error so
+        # every failed run carries a reason, and surface hook_error as an
+        # extra Detail line when it adds something.
+        end_reason = getattr(session, "session_end_reason", None)
+        end_summary = getattr(session, "session_end_summary", None)
+        hook_error = getattr(session, "last_hook_error", None)
+        reason_text = end_reason or end_summary or hook_error
+        if reason_text:
+            body_lines.append(f"- Error: `{reason_text}`")
+        if hook_error and hook_error != reason_text:
+            body_lines.append(f"- Detail: `{hook_error}`")
+        # User-facing guidance: map the end reason to a readable
+        # explanation plus the next action the issue author can take, so
+        # most failures can be self-served without the operator.
+        if end_reason:
+            guidance = _END_REASON_USER_GUIDANCE.get(end_reason)
+            # Dynamic reasons (exit_code=N, salvaged_after_*) and any
+            # unknown reason still get guidance instead of silently
+            # degrading to an Error-only comment.
+            if guidance is None and end_reason.startswith("exit_code="):
+                code = end_reason.split("=", 1)[1]
+                guidance = (
+                    f"工具/命令执行失败（退出码 {code}）",
+                    f"请检查对应命令/环境是否正确（退出码 {code}）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+                )
+            elif guidance is None and end_reason.startswith("salvaged_after_"):
+                guidance = (
+                    "恢复处理失败",
+                    "请检查环境与配置是否正常；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+                )
+            elif guidance is None:
+                guidance = (
+                    "未知错误",
+                    "请检查环境与配置是否正确（token 权限、workflow 配置、网络）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry，仍失败请附运行日志（含上方 `Run` 的 run_id）。",
+                )
+            if guidance:
+                readable, action = guidance
+                body_lines.append("")
+                body_lines.append(f"❌ 失败原因：{readable}")
+                body_lines.append(f"👉 建议操作：{action}")
+                body_lines.append(
+                    "> 仍无法解决时，请将编排器运行日志（含上方 `Run` 的 run_id）提供给编排器维护者，以便定位。"
+                )
         body = "\n".join(body_lines)
         try:
             await self.tracker.update_comment(session.issue.id, comment_id, body)
@@ -4202,6 +4355,19 @@ class Orchestrator:
             self._state.claimed.discard(issue_id)
             self._registry.mark_abandoned(issue_id)
             await self._sync_tracker_issue_state(issue_id, "abandoned")
+            # Auto-retry is exhausted — tell the user once how to trigger a
+            # manual retry, without cluttering every failure comment.
+            try:
+                await self.tracker.create_comment(
+                    issue_id,
+                    "> 编排器自动重试已耗尽。如需再次尝试，可在 issue 评论 `/agent retry`。",
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to post retry-exhausted notice for %s: %s",
+                    issue_id,
+                    exc,
+                )
             return
 
         # Exponential backoff capped at max_retry_backoff_ms
