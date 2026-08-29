@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -4115,10 +4116,30 @@ class Orchestrator:
             # degrading to an Error-only comment.
             if guidance is None and end_reason.startswith("exit_code="):
                 code = end_reason.split("=", 1)[1]
-                guidance = (
-                    f"工具/命令执行失败（退出码 {code}）",
-                    f"请检查对应命令/环境是否正确（退出码 {code}）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+                # exit_code=N hides the real cause (e.g. a model API 401
+                # becomes exit_code=1 with the actual error only in the
+                # logs/output). Detect API-auth/service signatures and give
+                # the user the concrete check instead of a generic
+                # "check command/env" line.
+                _err_blob = (
+                    f"{hook_error or ''} {end_summary or ''} "
+                    f"{(getattr(session, 'output_text', '') or '')[:2000]}"
                 )
+                if re.search(
+                    r"401|Invalid Authentication|invalid_authentication|"
+                    r"Unauthorized|API key|authentication error",
+                    _err_blob,
+                    re.IGNORECASE,
+                ):
+                    guidance = (
+                        f"模型 API 认证失败（退出码 {code}）",
+                        "请检查模型 API key 是否正确/有效（provider 的 api_key 配置）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+                    )
+                else:
+                    guidance = (
+                        f"工具/命令执行失败（退出码 {code}）",
+                        f"请检查对应命令/环境是否正确（退出码 {code}）；编排器会自动重试，如需立即重试可在 issue 评论 /agent retry。",
+                    )
             elif guidance is None and end_reason.startswith("salvaged_after_"):
                 guidance = (
                     "恢复处理失败",
