@@ -1471,6 +1471,36 @@ async def _call_model_sync(
             getattr(response, "model", None) or getattr(provider, "model", "unknown"),
             response.usage,
         )
+        # Also record usage into telemetry (daily token/cost stats). The
+        # goal path (_goal_record_usage) only covers CLI/headless
+        # sessions; the orchestrator agent path goes through
+        # _call_model_sync, so without this the orchestrator's real token
+        # consumption never reached the telemetry issue.
+        try:
+            from telemetry.events import EventType, TelemetryEvent
+            from telemetry.recorder import get_recorder
+
+            _rec = get_recorder()
+            if getattr(_rec, "enabled", True):
+                _u = response.usage or {}
+                _rec.record_event(
+                    TelemetryEvent(
+                        type=EventType.USAGE,
+                        fields={
+                            "input_tokens": int(_u.get("input_tokens", 0) or 0),
+                            "output_tokens": int(_u.get("output_tokens", 0) or 0),
+                            "cache_read_tokens": int(
+                                _u.get("cache_read_input_tokens", 0) or 0
+                            ),
+                            "cache_creation_tokens": int(
+                                _u.get("cache_creation_input_tokens", 0) or 0
+                            ),
+                            "cost_usd": float(_u.get("cost_usd", 0) or 0),
+                        },
+                    )
+                )
+        except Exception:
+            logger.debug("telemetry usage record failed", exc_info=True)
         # The original records per-request API duration alongside cost
         # (addToTotalDuration beside addToTotalSessionCost); this feeds
         # /cost's "Total duration (API)". This layer can't split retries:
