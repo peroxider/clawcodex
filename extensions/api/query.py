@@ -712,6 +712,60 @@ class QueryRunner:
             forward_event(capture, SessionComplete(reason=reason))
         yield SessionComplete(reason=reason)
 
+    @staticmethod
+    def probe_transcript(
+        session_id: str,
+        *,
+        workspace: str | Path | None = None,
+    ) -> bool:
+        """Probe whether a resumable transcript exists for ``session_id``.
+
+        Mirrors the validation the CLI's ``--resume`` flag performs at
+        ``clawcodex_ext/cli/dispatch.py``: checks ``resolve_sessions_dir()``
+        for a direct session-id directory hit, then falls back to a
+        tag-prefix lookup via ``SessionStorage.list_sessions``. Any
+        exception (missing storage, I/O error, malformed metadata) is
+        swallowed and reported as ``False`` so the probe never raises
+        into the caller — this matches the documented contract used by
+        ``orchestratord-clawcodex/session.py:probe_resume``.
+
+        ``workspace`` is accepted for API compatibility with the
+        orchestrator's caller but is currently advisory: clawcodex
+        sessions live under a single ``resolve_sessions_dir()``
+        (overridable via the ``CLAWCODEX_SESSIONS_DIR`` env var), not
+        per-workspace. Callers that need workspace isolation should
+        scope ``CLAWCODEX_SESSIONS_DIR`` themselves before invoking.
+        """
+        if not session_id or not session_id.strip():
+            return False
+        try:
+            from clawcodex_ext.services.session_storage import (
+                SessionStorage,
+                resolve_sessions_dir,
+            )
+        except Exception:
+            logger.debug(
+                "QueryRunner.probe_transcript: session_storage import failed",
+                exc_info=True,
+            )
+            return False
+        try:
+            session_dir = resolve_sessions_dir() / session_id
+            if session_dir.is_dir():
+                return True
+            # Tag-prefix fallback — matches the CLI's `--resume` semantics
+            # where `--resume cron:task:build` resolves to the most
+            # recent session whose tags start with ``cron:task:build``.
+            metas = SessionStorage.list_sessions(tag_filter=session_id, limit=1)
+            return bool(metas)
+        except Exception:
+            logger.debug(
+                "QueryRunner.probe_transcript: probe raised for session_id=%s",
+                session_id,
+                exc_info=True,
+            )
+            return False
+
     async def run(self) -> dict[str, Any]:
         """Run to completion, return final result."""
         text_parts: list[str] = []
